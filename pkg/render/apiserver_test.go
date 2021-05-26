@@ -239,6 +239,10 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		clusterRole = rtest.GetResource(resources, "tigera-ui-user", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(clusterRole.Rules).To(ConsistOf(uiUserPolicyRules))
+
+		clusterRoleBinding := rtest.GetResource(resources, "tigera-extension-apiserver-auth-access", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+		Expect(clusterRoleBinding.RoleRef.Name).To(Equal("tigera-extension-apiserver-auth-access"))
+
 	},
 		Entry("default cluster domain", dns.DefaultClusterDomain),
 		Entry("custom cluster domain", "custom-domain.internal"),
@@ -1102,6 +1106,9 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 
 		clusterRole = rtest.GetResource(resources, "tigera-ui-user", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")
 		Expect(clusterRole).To(BeNil())
+
+		clusterRoleBinding := rtest.GetResource(resources, "calico-extension-apiserver-auth-access", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+		Expect(clusterRoleBinding.RoleRef.Name).To(Equal("calico-extension-apiserver-auth-access"))
 	},
 		Entry("default cluster domain", dns.DefaultClusterDomain),
 		Entry("custom cluster domain", "custom-domain.internal"),

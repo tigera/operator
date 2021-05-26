@@ -78,7 +78,7 @@ VALIDARCHES = $(filter-out $(EXCLUDEARCH),$(ARCHES))
 
 ###############################################################################
 
-PACKAGE_NAME?=github.com/tigera/operator
+PACKAGE_NAME?=github.com/tigera/operator-cloud
 LOCAL_USER_ID?=$(shell id -u $$USER)
 GO_BUILD_VER?=v0.50
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)
@@ -120,13 +120,13 @@ CONTAINERIZED= mkdir -p .go-pkg-cache $(GOMOD_CACHE) && \
 		$(EXTRA_DOCKER_ARGS) \
 		$(CALICO_BUILD)
 
-BUILD_IMAGE?=tigera/operator
-BUILD_INIT_IMAGE?=tigera/operator-init
+BUILD_IMAGE?=tigera-cc-dev/operator-cloud
+BUILD_INIT_IMAGE?=tigera-cc-dev/operator-cloud-init
 
 BINDIR?=build/_output/bin
 
-IMAGE_REGISTRY?=quay.io
-PUSH_IMAGE_PREFIXES?=quay.io/
+IMAGE_REGISTRY?=gcr.io
+PUSH_IMAGE_PREFIXES?=gcr.io/
 RELEASE_PREFIXES?=
 # If this is a release, also tag and push additional images.
 ifeq ($(RELEASE),true)
@@ -134,7 +134,7 @@ PUSH_IMAGE_PREFIXES+=$(RELEASE_PREFIXES)
 endif
 
 # remove from the list to push to manifest any registries that do not support multi-arch
-EXCLUDE_MANIFEST_REGISTRIES?=quay.io/
+EXCLUDE_MANIFEST_REGISTRIES?=gcr.io/
 PUSH_MANIFEST_IMAGE_PREFIXES=$(PUSH_IMAGE_PREFIXES:$(EXCLUDE_MANIFEST_REGISTRIES)%=)
 PUSH_NONMANIFEST_IMAGE_PREFIXES=$(filter-out $(PUSH_MANIFEST_IMAGE_PREFIXES),$(PUSH_IMAGE_PREFIXES))
 

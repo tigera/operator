@@ -28,16 +28,18 @@ blocks:
                 make maybe-build-release;
               fi
       secrets:
-        - name: quay-robot-semaphore_v2
-        - name: operator-redhat-connect
+        - name: docker
+        - name: google-service-account-for-gcr
       prologue:
         commands:
           - checkout
           - >-
             if [[ -v SEMAPHORE_GIT_PR_NUMBER ]]; then
-              unset QUAY_USERNAME QUAY_TOKEN; docker logout; docker logout quay.io;
+              unset DOCKER_USER DOCKER_TOKEN; docker logout; docker logout gcr.io;
             else
-              docker login -u="$QUAY_USERNAME" -p="$QUAY_TOKEN" quay.io;
+              gcloud auth activate-service-account --key-file=/home/semaphore/secrets/secret.google-service-account-key.json
+              # Login to docker in order to pull images.
+              docker login --username casey@tigera.io -u _json_key -p "$(cat ~/secrets/secret.google-service-account-key.json)" https://gcr.io
             fi
           - cache restore go-pkg-cache
           - cache restore go-mod-cache

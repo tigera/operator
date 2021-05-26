@@ -27,6 +27,9 @@ if [[ ! "$(git rev-parse --abbrev-ref HEAD)" =~ (cloud-dev) ]]; then
 	exit 0
 fi
 
+# skipping the remaining code because the operator-cloud won't be submitted to RedHat
+exit 0
+
 echo "Tagging and pushing operator images to RedHat Connect for certification..."
 
 docker login -u unused scan.connect.redhat.com --password-stdin <<< ${OPERATOR_RH_REGISTRY_KEY}

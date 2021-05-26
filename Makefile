@@ -322,7 +322,7 @@ format-check:
 .PHONY: dirty-check
 dirty-check:
 	@if [ "$$(git diff --stat)" = "" ]; then exit 0; fi; \
-	echo "The following files are dirty"; git diff --stat
+	echo "The following files are dirty"; git diff --stat; exit 1
 
 foss-checks:
 	@echo Running $@...
@@ -338,10 +338,11 @@ foss-checks:
 ###############################################################################
 .PHONY: ci
 ## Run what CI runs
-ci: clean format-check images test $(BINDIR)/gen-versions validate-gen-versions dirty-check
+ci: clean format-check images test dirty-check validate-gen-versions
 
 validate-gen-versions:
-	./hack/gen-versions/validate.sh
+	make gen-versions
+	make dirty-check
 
 ## Deploys images to registry
 cd:

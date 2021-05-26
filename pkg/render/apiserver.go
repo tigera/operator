@@ -633,7 +633,7 @@ func (c *apiServerComponent) authClusterRoleBinding() (client.Object, client.Obj
 			},
 			RoleRef: rbacv1.RoleRef{
 				Kind:     "ClusterRole",
-				Name:     "calico-extension-apiserver-auth-access",
+				Name:     name,
 				APIGroup: "rbac.authorization.k8s.io",
 			},
 		}, &rbacv1.ClusterRoleBinding{

@@ -165,20 +165,21 @@ type apiServerComponent struct {
 func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.installation.Registry
 	path := c.installation.ImagePath
+	prefix := c.installation.ImagePrefix
 	var err error
 	errMsgs := []string{}
 
 	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {
-		c.apiServerImage, err = components.GetReference(components.ComponentAPIServer, reg, path, is)
+		c.apiServerImage, err = components.GetReference(components.ComponentAPIServer, reg, path, prefix, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
-		c.queryServerImage, err = components.GetReference(components.ComponentQueryServer, reg, path, is)
+		c.queryServerImage, err = components.GetReference(components.ComponentQueryServer, reg, path, prefix, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
 	} else {
-		c.apiServerImage, err = components.GetReference(components.ComponentCalicoAPIServer, reg, path, is)
+		c.apiServerImage, err = components.GetReference(components.ComponentCalicoAPIServer, reg, path, prefix, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}

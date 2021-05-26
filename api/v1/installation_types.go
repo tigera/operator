@@ -38,7 +38,7 @@ type InstallationSpec struct {
 	// the default registries will be used.
 	//
 	// Image format:
-	//    `<registry>/<imagePath>/<imageName>:<image-tag>`
+	//    `<registry>/<imagePath>/<imagePrefix><imageName>:<image-tag>`
 	//
 	// This option allows configuring the `<registry>` portion of the above format.
 	// +optional
@@ -51,11 +51,22 @@ type InstallationSpec struct {
 	// image path will be used for each image.
 	//
 	// Image format:
-	//    `<registry>/<imagePath>/<imageName>:<image-tag>`
+	//    `<registry>/<imagePath>/<imagePrefix><imageName>:<image-tag>`
 	//
 	// This option allows configuring the `<imagePath>` portion of the above format.
 	// +optional
 	ImagePath string `json:"imagePath,omitempty"`
+
+	// ImagePrefix allows for the prefix part of an image to be specified. If specified
+	// then the given value will be used as a prefix on each image. If not specified
+	// or empty, no prefix will be used.
+	//
+	// Image format:
+	//    `<registry>/<imagePath>/<imagePrefix><imageName>:<image-tag>`
+	//
+	// This option allows configuring the `<imagePrefix>` portion of the above format.
+	// +optional
+	ImagePrefix string `json:"imagePrefix,omitempty"`
 
 	// ImagePullSecrets is an array of references to container registry pull secrets to use. These are
 	// applied to all images to be pulled.

@@ -56,6 +56,8 @@ If the release includes new Calico CRDs, add the new CRDs to `hack/gen-bundle/ge
 We currently only publish operator releases targeting Calico. If the release targets Calico, continue onto the following steps to generate the
 operator bundle for it, and publish the release on the RH Catalog.
 
+Before beginning, ensure that the docs at docs.projectcalico.org for the Calico version this operator release targets is live.
+
 1. After the semaphore job in the releasing steps is complete, and images have been tagged and pushed, checkout the tag you released and create a new branch.
 
 1. Login to our operator project on connect.redhat.com and publish the operator image on the RH Catalog. This step needs to happen before we generate and submit the operator metadata bundle.

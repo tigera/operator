@@ -29,7 +29,7 @@ type component struct {
 const UseDefault = "UseDefault"
 
 // GetReference returns the fully qualified image to use, including registry and version.
-func GetReference(c component, registry, imagepath string, is *operator.ImageSet) (string, error) {
+func GetReference(c component, registry, imagePath, imagePrefix string, is *operator.ImageSet) (string, error) {
 	// If a user did not supply a registry, use the default registry
 	// based on component
 	if registry == "" || registry == UseDefault {
@@ -52,8 +52,11 @@ func GetReference(c component, registry, imagepath string, is *operator.ImageSet
 	}
 
 	image := c.Image
-	if imagepath != "" && imagepath != UseDefault {
-		image = ReplaceImagePath(image, imagepath)
+	if imagePrefix != "" {
+		image = insertPrefix(image, imagePrefix)
+	}
+	if imagePath != "" && imagePath != UseDefault {
+		image = ReplaceImagePath(image, imagePath)
 	}
 
 	if is == nil {
@@ -69,10 +72,16 @@ func GetReference(c component, registry, imagepath string, is *operator.ImageSet
 	return "", fmt.Errorf("ImageSet did not contain image %s", c.Image)
 }
 
-func ReplaceImagePath(image, imagepath string) string {
+func ReplaceImagePath(image, imagePath string) string {
 	subs := strings.SplitAfterN(image, "/", 2)
 	if len(subs) == 2 {
-		return fmt.Sprintf("%s/%s", imagepath, subs[1])
+		return fmt.Sprintf("%s/%s", imagePath, subs[1])
 	}
-	return fmt.Sprintf("%s/%s", imagepath, subs[0])
+	return fmt.Sprintf("%s/%s", imagePath, subs[0])
+}
+
+func insertPrefix(image, prefix string) string {
+	subs := strings.Split(image, "/")
+	subs = append(subs[:len(subs)-1], fmt.Sprintf("%s%s", prefix, subs[len(subs)-1]))
+	return strings.Join(subs, "/")
 }

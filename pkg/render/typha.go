@@ -83,11 +83,12 @@ type typhaComponent struct {
 func (c *typhaComponent) ResolveImages(is *operator.ImageSet) error {
 	reg := c.installation.Registry
 	path := c.installation.ImagePath
+	prefix := c.installation.ImagePrefix
 	var err error
 	if c.installation.Variant == operator.TigeraSecureEnterprise {
-		c.typhaImage, err = components.GetReference(components.ComponentTigeraTypha, reg, path, is)
+		c.typhaImage, err = components.GetReference(components.ComponentTigeraTypha, reg, path, prefix, is)
 	} else {
-		c.typhaImage, err = components.GetReference(components.ComponentCalicoTypha, reg, path, is)
+		c.typhaImage, err = components.GetReference(components.ComponentCalicoTypha, reg, path, prefix, is)
 	}
 	errMsgs := []string{}
 	if err != nil {

@@ -81,6 +81,9 @@ var _ = Describe("test GetReference", func() {
 		It("should render an operator init image correctly", func() {
 			Expect(GetReference(ComponentOperatorInit, "gcr.io/", "", "pref", nil)).To(Equal("gcr.io/tigera/prefoperator:" + ComponentOperatorInit.Version))
 		})
+		It("should render a calico image with UseDefault", func() {
+			Expect(GetReference(ComponentCalicoNode, "gcr.io/", "", "UseDefault", nil)).To(Equal("gcr.io/calico/node:" + ComponentCalicoNode.Version))
+		})
 	})
 
 	Context("imagepath override", func() {

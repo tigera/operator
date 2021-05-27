@@ -60,6 +60,8 @@ type InstallationSpec struct {
 	// ImagePrefix allows for the prefix part of an image to be specified. If specified
 	// then the given value will be used as a prefix on each image. If not specified
 	// or empty, no prefix will be used.
+	// A special case value, UseDefault, is supported to explicitly specify the default
+	// image prefix will be used for each image.
 	//
 	// Image format:
 	//    `<registry>/<imagePath>/<imagePrefix><imageName>:<image-tag>`

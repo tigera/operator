@@ -53,7 +53,7 @@ func GetReference(c component, registry, imagePath, imagePrefix string, is *oper
 	}
 
 	image := c.Image
-	if imagePrefix != "" {
+	if imagePrefix != "" && imagePrefix != UseDefault {
 		image = insertPrefix(image, imagePrefix)
 	}
 	if imagePath != "" && imagePath != UseDefault {
@@ -83,6 +83,10 @@ func ReplaceImagePath(image, imagePath string) string {
 
 func insertPrefix(image, prefix string) string {
 	subs := strings.Split(image, "/")
+	if len(subs) == 1 {
+		// The given image is just a single image with no prefix.
+		return fmt.Sprintf("%s%s", prefix, image)
+	}
 	subs = append(subs[:len(subs)-1], fmt.Sprintf("%s%s", prefix, subs[len(subs)-1]))
 	return strings.Join(subs, "/")
 }

@@ -49,6 +49,11 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		inst.ImagePath = override.ImagePath
 	}
 
+	switch compareFields(inst.ImagePrefix, override.ImagePrefix) {
+	case BOnlySet, Different:
+		inst.ImagePrefix = override.ImagePrefix
+	}
+
 	switch compareFields(inst.ImagePullSecrets, override.ImagePullSecrets) {
 	case BOnlySet, Different:
 		inst.ImagePullSecrets = make([]v1.LocalObjectReference, len(override.ImagePullSecrets))

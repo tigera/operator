@@ -63,8 +63,9 @@ type amazonCloudIntegrationComponent struct {
 func (c *amazonCloudIntegrationComponent) ResolveImages(is *operator.ImageSet) error {
 	reg := c.installation.Registry
 	path := c.installation.ImagePath
+	prefix := c.installation.ImagePrefix
 	var err error
-	c.image, err = components.GetReference(components.ComponentCloudControllers, reg, path, is)
+	c.image, err = components.GetReference(components.ComponentCloudControllers, reg, path, prefix, is)
 	return err
 }
 

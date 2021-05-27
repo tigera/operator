@@ -44,8 +44,9 @@ func (c *awsSGSetupComponent) SupportedOSType() rmeta.OSType {
 func (c *awsSGSetupComponent) ResolveImages(is *operator.ImageSet) error {
 	reg := c.installcr.Registry
 	path := c.installcr.ImagePath
+	prefix := c.installcr.ImagePrefix
 	var err error
-	c.image, err = components.GetReference(components.ComponentOperatorInit, reg, path, is)
+	c.image, err = components.GetReference(components.ComponentOperatorInit, reg, path, prefix, is)
 	return err
 }
 

@@ -112,7 +112,7 @@ func main() {
 			cmpnts = append(cmpnts, components.CommonComponents...)
 
 			for _, x := range cmpnts {
-				ref, _ := components.GetReference(x, "", "", nil)
+				ref, _ := components.GetReference(x, "", "", "", nil)
 				fmt.Println(ref)
 			}
 			os.Exit(0)

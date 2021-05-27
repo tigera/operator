@@ -90,6 +90,7 @@ func ResolveCSRInitImage(inst *operator.InstallationSpec, is *operator.ImageSet)
 		components.ComponentCSRInitContainer,
 		inst.Registry,
 		inst.ImagePath,
+		inst.ImagePrefix,
 		is,
 	)
 }

@@ -145,15 +145,16 @@ type fluentdComponent struct {
 func (c *fluentdComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.installation.Registry
 	path := c.installation.ImagePath
+	prefix := c.installation.ImagePrefix
 
 	if c.osType == rmeta.OSTypeWindows {
 		var err error
-		c.image, err = components.GetReference(components.ComponentFluentdWindows, reg, path, is)
+		c.image, err = components.GetReference(components.ComponentFluentdWindows, reg, path, prefix, is)
 		return err
 	}
 
 	var err error
-	c.image, err = components.GetReference(components.ComponentFluentd, reg, path, is)
+	c.image, err = components.GetReference(components.ComponentFluentd, reg, path, prefix, is)
 	return err
 }
 

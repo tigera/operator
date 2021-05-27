@@ -72,8 +72,9 @@ type dexComponent struct {
 func (c *dexComponent) ResolveImages(is *oprv1.ImageSet) error {
 	reg := c.installation.Registry
 	path := c.installation.ImagePath
+	prefix := c.installation.ImagePrefix
 	var err error
-	c.image, err = components.GetReference(components.ComponentDex, reg, path, is)
+	c.image, err = components.GetReference(components.ComponentDex, reg, path, prefix, is)
 	return err
 }
 

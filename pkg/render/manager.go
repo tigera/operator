@@ -153,19 +153,20 @@ type managerComponent struct {
 func (c *managerComponent) ResolveImages(is *operator.ImageSet) error {
 	reg := c.installation.Registry
 	path := c.installation.ImagePath
+	prefix := c.installation.ImagePrefix
 	var err error
-	c.managerImage, err = components.GetReference(components.ComponentManager, reg, path, is)
+	c.managerImage, err = components.GetReference(components.ComponentManager, reg, path, prefix, is)
 	errMsgs := []string{}
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.proxyImage, err = components.GetReference(components.ComponentManagerProxy, reg, path, is)
+	c.proxyImage, err = components.GetReference(components.ComponentManagerProxy, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.esProxyImage, err = components.GetReference(components.ComponentEsProxy, reg, path, is)
+	c.esProxyImage, err = components.GetReference(components.ComponentEsProxy, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}

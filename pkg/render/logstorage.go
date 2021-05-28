@@ -233,24 +233,25 @@ type elasticsearchComponent struct {
 func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := es.installation.Registry
 	path := es.installation.ImagePath
+	prefix := es.installation.ImagePrefix
 	var err error
-	es.esImage, err = components.GetReference(components.ComponentElasticsearch, reg, path, is)
+	es.esImage, err = components.GetReference(components.ComponentElasticsearch, reg, path, prefix, is)
 	errMsgs := []string{}
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	es.esOperatorImage, err = components.GetReference(components.ComponentElasticsearchOperator, reg, path, is)
+	es.esOperatorImage, err = components.GetReference(components.ComponentElasticsearchOperator, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	es.kibanaImage, err = components.GetReference(components.ComponentKibana, reg, path, is)
+	es.kibanaImage, err = components.GetReference(components.ComponentKibana, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	es.curatorImage, err = components.GetReference(components.ComponentEsCurator, reg, path, is)
+	es.curatorImage, err = components.GetReference(components.ComponentEsCurator, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}

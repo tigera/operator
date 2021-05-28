@@ -2778,7 +2778,11 @@ var _ = Describe("Node rendering tests", func() {
 // verifyProbes asserts the expected node liveness and readiness probe.
 func verifyProbes(ds *apps.DaemonSet, isOpenshift, isEnterprise bool) {
 	// Verify readiness and liveness probes.
-	expectedReadiness := &v1.Probe{Handler: v1.Handler{Exec: &v1.ExecAction{Command: []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}}}}
+	expectedReadiness := &v1.Probe{
+		Handler:        v1.Handler{Exec: &v1.ExecAction{Command: []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}}},
+		TimeoutSeconds: 5,
+		PeriodSeconds:  10,
+	}
 	expectedLiveness := &v1.Probe{Handler: v1.Handler{
 		HTTPGet: &v1.HTTPGetAction{
 			Host: "localhost",

@@ -1296,7 +1296,8 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 	}
 	rp := &v1.Probe{
 		Handler: v1.Handler{Exec: &v1.ExecAction{Command: readinessCmd}},
-		//period is default but timeout is half to account for some slow machines
+		// Set the TimeoutSeconds greater than the default of 1 to allow additional time on loaded nodes.
+		// This timeout should be less than the PeriodSeconds.
 		TimeoutSeconds: 5,
 		PeriodSeconds:  10,
 	}

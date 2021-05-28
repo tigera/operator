@@ -108,11 +108,12 @@ type kubeControllersComponent struct {
 func (c *kubeControllersComponent) ResolveImages(is *operator.ImageSet) error {
 	reg := c.cr.Registry
 	path := c.cr.ImagePath
+	prefix := c.cr.ImagePrefix
 	var err error
 	if c.cr.Variant == operator.TigeraSecureEnterprise {
-		c.image, err = components.GetReference(components.ComponentTigeraKubeControllers, reg, path, is)
+		c.image, err = components.GetReference(components.ComponentTigeraKubeControllers, reg, path, prefix, is)
 	} else {
-		c.image, err = components.GetReference(components.ComponentCalicoKubeControllers, reg, path, is)
+		c.image, err = components.GetReference(components.ComponentCalicoKubeControllers, reg, path, prefix, is)
 	}
 	return err
 }

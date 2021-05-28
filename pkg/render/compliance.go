@@ -118,30 +118,31 @@ type complianceComponent struct {
 func (c *complianceComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.installation.Registry
 	path := c.installation.ImagePath
+	prefix := c.installation.ImagePrefix
 	var err error
-	c.benchmarkerImage, err = components.GetReference(components.ComponentComplianceBenchmarker, reg, path, is)
+	c.benchmarkerImage, err = components.GetReference(components.ComponentComplianceBenchmarker, reg, path, prefix, is)
 
 	errMsgs := []string{}
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.snapshotterImage, err = components.GetReference(components.ComponentComplianceSnapshotter, reg, path, is)
+	c.snapshotterImage, err = components.GetReference(components.ComponentComplianceSnapshotter, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.serverImage, err = components.GetReference(components.ComponentComplianceServer, reg, path, is)
+	c.serverImage, err = components.GetReference(components.ComponentComplianceServer, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.controllerImage, err = components.GetReference(components.ComponentComplianceController, reg, path, is)
+	c.controllerImage, err = components.GetReference(components.ComponentComplianceController, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.reporterImage, err = components.GetReference(components.ComponentComplianceReporter, reg, path, is)
+	c.reporterImage, err = components.GetReference(components.ComponentComplianceReporter, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}

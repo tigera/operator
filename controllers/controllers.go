@@ -66,6 +66,13 @@ func AddToManager(mgr ctrl.Manager, options options.AddOptions) error {
 	}).SetupWithManager(mgr, options); err != nil {
 		return fmt.Errorf("failed to create controller %s: %v", "Compliance", err)
 	}
+	if err := (&MonitorReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("Monitor"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr, options); err != nil {
+		return fmt.Errorf("failed to create controller %s: %v", "Monitor", err)
+	}
 	if err := (&ManagerReconciler{
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("Manager"),

@@ -188,7 +188,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
-			r.status.OnCRFound()
+			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
 		reqLogger.V(3).Info("failed to get IntrusionDetection CR", "err", err)

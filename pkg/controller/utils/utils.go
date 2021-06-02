@@ -210,7 +210,7 @@ func isLicenseKeyReady(client kubernetes.Interface) bool {
 		return false
 	}
 	for _, group := range res {
-		if group.GroupVersion == "projectcalico.org" {
+		if group.GroupVersion == "projectcalico.org/v3" {
 			for _, r := range group.APIResources {
 				if r.Kind == "LicenseKey" {
 					return true

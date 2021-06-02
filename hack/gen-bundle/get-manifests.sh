@@ -51,11 +51,19 @@ function downloadOperatorManifests() {
     curl ${CALICO_BASE_URL}/manifests/ocp/01-cr-installation.yaml --output ${BUNDLE_DEPLOY_DIR}/cr-installation.yaml
 }
 
-# Download the installation and tigerastatus CRDs.
-function downloadOperatorCRDs() {
-    curl ${CALICO_BASE_URL}/manifests/ocp/crds/01-crd-installation.yaml --output ${BUNDLE_CRD_DIR}/operator.tigera.io_installations_crd.yaml
-    curl ${CALICO_BASE_URL}/manifests/ocp/crds/01-crd-tigerastatus.yaml --output ${BUNDLE_CRD_DIR}/operator.tigera.io_tigerastatuses_crd.yaml
-    curl ${CALICO_BASE_URL}/manifests/ocp/crds/01-crd-imageset.yaml --output ${BUNDLE_CRD_DIR}/operator.tigera.io_imagesets_crd.yaml
+# Copy over and update the v1beta1 operator crds required for Calico.
+function generateOperatorCRDs() {
+	# Copy the crds we need to the bundle.
+	cp config/crd/bases/operator.tigera.io_installations.yaml ${BUNDLE_CRD_DIR}/
+	cp config/crd/bases/operator.tigera.io_tigerastatuses.yaml ${BUNDLE_CRD_DIR}/
+    cp config/crd/bases/operator.tigera.io_imagesets.yaml ${BUNDLE_CRD_DIR}/
+
+	# Clean up the crds.
+    for f in `find ${BUNDLE_CRD_DIR}/ -name 'operator.tigera.io*'`; do
+	  # Remove empty lines and the three dashes that separate directives.
+	  sed -i '/^$/d' ${f}
+	  sed -i '/^---$/d' ${f}
+    done
 }
 
 function downloadCalicoCRDs() {
@@ -84,5 +92,5 @@ networksets
 }
 
 downloadOperatorManifests
-downloadOperatorCRDs
+generateOperatorCRDs
 downloadCalicoCRDs

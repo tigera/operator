@@ -64,11 +64,9 @@ yq write -i ${CSV} --style double 'metadata.annotations[olm.skipRange]' \<${VERS
 sed -i 's/\(operators\.operatorframework\.\io\.bundle\.package\.v1\)=operator/\1=tigera-operator/' bundle.Dockerfile
 
 # Add in required labels
-# For v4.6+, com.redhat.delivery.backport must be false
-# For older versions of the operator, we use v4.5,v4.6 and com.redhat.delivery.backport is true
 cat <<EOF >> bundle.Dockerfile
-LABEL com.redhat.openshift.versions="v4.6,v4.7"
-LABEL com.redhat.delivery.backport=false
+LABEL com.redhat.openshift.versions="v4.5-v4.7"
+LABEL com.redhat.delivery.backport=true
 LABEL com.redhat.delivery.operator.bundle=true
 EOF
 
@@ -106,4 +104,3 @@ sed -i 's/.*operators\.operatorframework\.io\.test.*//' bundle/${VERSION}/metada
 
 # Remove unneeded empty lines
 sed -i '/^$/d' bundle/${VERSION}/metadata/annotations.yaml
-

@@ -18,6 +18,9 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
+	"github.com/stretchr/testify/mock"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/kubernetes"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	. "github.com/onsi/ginkgo"
@@ -85,3 +88,49 @@ var _ = Describe("Utils elasticsearch license type tests", func() {
 	})
 
 })
+
+var _ = Describe("Tigera License polling test", func() {
+
+	It("should be able to check if the LicenseKey is ready", func() {
+		client := new(fakeClient)
+		By("checking what happens if resource is present")
+		client.On("ServerGroupsAndResources").Return(nil, []*metav1.APIResourceList{
+			{
+				GroupVersion: "projectcalico.org/v3",
+				APIResources: []metav1.APIResource{
+					{Kind: "LicenseKey"},
+				},
+			},
+		})
+		Expect(isLicenseKeyReady(client)).To(BeTrue())
+		client.AssertExpectations(GinkgoT())
+
+		By("checking what happens if resource is not present")
+		client = new(fakeClient)
+		client.On("ServerGroupsAndResources").Return(nil, []*metav1.APIResourceList{
+			{
+				GroupVersion: "apps/v1",
+				APIResources: []metav1.APIResource{
+					{Kind: "Deployment"},
+				},
+			},
+		})
+		Expect(isLicenseKeyReady(client)).To(BeFalse())
+		client.AssertExpectations(GinkgoT())
+	})
+})
+
+type fakeClient struct {
+	mock.Mock
+	kubernetes.Interface
+	discovery.DiscoveryInterface
+}
+
+func (m fakeClient) Discovery() discovery.DiscoveryInterface {
+	return m
+}
+
+func (m fakeClient) ServerGroupsAndResources() ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
+	args := m.Called()
+	return nil, args.Get(1).([]*metav1.APIResourceList), nil
+}

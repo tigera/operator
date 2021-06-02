@@ -49,37 +49,40 @@ You should have no local changes and tests should be passing.
 
 ## Updates for new Calico CRDs
 
-If the release includes new Calico CRDs, add the new CRDs to `hack/gen-csv/get-manifests.sh` and `hack/gen-csv/clusterserviceversion.template`.
+If the release includes new Calico CRDs, add the new CRDs to `hack/gen-bundle/get-manifests.sh` and `config/manifests/bases/operator.clusterserviceversion.yaml`.
 
 ## Publishing a release on RH Catalog
 
 We currently only publish operator releases targeting Calico. If the release targets Calico, continue onto the following steps to generate the
-ClusterServiceVersion for it, and publish the release on the RH Catalog.
+operator bundle for it, and publish the release on the RH Catalog.
 
-1. After the semaphore job in the releasing steps is complete, and images have been tagged and pushed, checkout the tag you released.
+Before beginning, ensure that the docs at docs.projectcalico.org for the Calico version this operator release targets is live.
 
-1. Create the ClusterServiceVersion (CSV), using the tag version for VERSION and the version that this replaces in PREV_VERSION.
-   The versions are semver strings. For example:
+1. After the semaphore job in the releasing steps is complete, and images have been tagged and pushed, checkout the tag you released and create a new branch.
 
-   ```
-   make gen-csv VERSION=1.3.1 PREV_VERSION=1.3.0
-   ```
+1. Login to our operator project on connect.redhat.com and publish the operator image on the RH Catalog. This step needs to happen before we generate and submit the operator metadata bundle.
 
-   This step will create the CSV and copy over its crds into `build/_output/bundle/tigera-operator/$VERSION` which will be used in the next step,
-   on master.
-
-3. Checkout `master` and create a new branch.
-
-4. Create the CSV bundle:
+1. Create the operator metadata bundle, using the tag version for VERSION and the version that the release replaces in PREV_VERSION. The versions are semver strings.
+   CHANNELS and DEFAULT_CHANNEL should be set to the release stream.
+   For example:
 
    ```
-   make gen-bundle
+   make bundle VERSION=1.13.1 PREV_VERSION=1.13.0 CHANNELS=release-v1.13 DEFAULT_CHANNEL=release-v1.13
    ```
 
-   This step will add the CSV we generated earlier to `deploy/olm-catalog` and create a zip file in `build/_output/bundle/bundle.zip`.
+   This step will create the bundle `bundle/1.13.1`.
 
-5. `git add deploy/olm-catalog`, commit the changes, and have the PR reviewed and merged into master.
+1. Login to our operator bundle project on connect.redhat.com
 
-6. Login to our operator project metadata [submission page](https://connect.redhat.com/project/2072901/operator-metadata) and upload the bundle.zip
+1. Tag and push the operator bundle image to connect.redhat.com
+   ```
+   docker login -u unused scan.connect.redhat.com # Use the registry key found on our operator bundle project page at connect.redhat.com
+   docker tag tigera-operator-bundle:1.13.1 scan.connect.redhat.com/<project_id>/operator:1.13.1 # Replace the <project_id> with the PID found on our operator bundle project page at connect.redhat.com
+   docker push !$
+   ```
 
-7. The metadata validation job takes 1-2 hours if it runs successfully. When it passes, go back to the same submission page and publish the new operator version.
+3. Add the new bundle in `bundle/`, push the branch, submit a PR, and get it reviewed.
+
+4. Wait until the operator bundle has passed validation tests on our operator bundle project page at connect.redhat.com. Once that has
+   happened, publish the new bundle in the UI, and merge the operator PR.
+

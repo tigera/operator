@@ -553,19 +553,17 @@ $(BINDIR)/kustomize:
 
 
 # Options for 'bundle-build'
-ifneq ($(origin CHANNELS), undefined)
+CHANNELS ?= release-v1.13
+DEFAULT_CHANNEL ?= release-v1.13
 BUNDLE_CHANNELS := --channels=$(CHANNELS)
-endif
-ifneq ($(origin DEFAULT_CHANNEL), undefined)
 BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
-endif
 BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 
 BUNDLE_CRD_DIR ?= build/_output/bundle/$(VERSION)/crds
 BUNDLE_DEPLOY_DIR ?= build/_output/bundle/$(VERSION)/deploy
 
 ## Create an operator bundle image.
-# E.g., make bundle VERSION=1.13.1 PREV_VERSION=1.13.0 CHANNELS=release-v1.13 DEFAULT_CHANNEL=release-v1.13
+# E.g., make bundle VERSION=1.13.1 PREV_VERSION=1.13.0
 .PHONY: bundle
 bundle: bundle-generate bundle-crd-clean update-bundle bundle-validate bundle-image
 

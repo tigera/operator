@@ -56,7 +56,6 @@ function generateOperatorCRDs() {
     # Copy the crds we need to the bundle.
     cp config/crd/bases/operator.tigera.io_installations.yaml ${BUNDLE_CRD_DIR}/
     cp config/crd/bases/operator.tigera.io_tigerastatuses.yaml ${BUNDLE_CRD_DIR}/
-    cp config/crd/bases/operator.tigera.io_imagesets.yaml ${BUNDLE_CRD_DIR}/
 
     # Clean up the crds.
     for f in `find ${BUNDLE_CRD_DIR}/ -name 'operator.tigera.io*'`; do

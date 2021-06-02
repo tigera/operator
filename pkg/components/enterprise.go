@@ -122,6 +122,16 @@ var (
 		Image:   "tigera/voltron",
 	}
 
+	ComponentPrometheus = component{
+		Version: "v2.17.2",
+		Image:   "prometheus/prometheus",
+	}
+
+	ComponentPrometheusAlertmanager = component{
+		Version: "v0.20.0",
+		Image:   "prometheus/alertmanager",
+	}
+
 	ComponentQueryServer = component{
 		Version: "master",
 		Image:   "tigera/cnx-queryserver",
@@ -179,6 +189,8 @@ var (
 		ComponentManager,
 		ComponentDex,
 		ComponentManagerProxy,
+		ComponentPrometheus,
+		ComponentPrometheusAlertmanager,
 		ComponentQueryServer,
 		ComponentTigeraKubeControllers,
 		ComponentTigeraNode,

@@ -385,6 +385,14 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				},
 				Verbs: []string{"create"},
 			},
+			{
+				// Tigera Secure updates status for packet captures.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{
+					"packetcaptures",
+				},
+				Verbs: []string{"update"},
+			},
 		}
 		role.Rules = append(role.Rules, extraRules...)
 	}

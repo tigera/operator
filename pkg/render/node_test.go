@@ -177,6 +177,7 @@ var _ = Describe("Node rendering tests", func() {
 		expectedNodeEnv := []v1.EnvVar{
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
+			{Name: "CALICO_MANAGE_CNI", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp"},
@@ -285,6 +286,7 @@ var _ = Describe("Node rendering tests", func() {
 		// Verify volume mounts.
 		expectedNodeVolumeMounts := []v1.VolumeMount{
 			{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
+			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 			{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
 			{MountPath: "/var/run/calico", Name: "var-run-calico"},
 			{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
@@ -417,6 +419,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
+			{Name: "CALICO_MANAGE_CNI", Value: "true"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp"},
 			{Name: "IP", Value: "autodetect"},
@@ -528,6 +531,7 @@ var _ = Describe("Node rendering tests", func() {
 		// Verify volume mounts.
 		expectedNodeVolumeMounts := []v1.VolumeMount{
 			{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
+			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 			{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
 			{MountPath: "/var/run/calico", Name: "var-run-calico"},
 			{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
@@ -653,6 +657,7 @@ var _ = Describe("Node rendering tests", func() {
 			// Default envvars.
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
+			{Name: "CALICO_MANAGE_CNI", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp"},
 			{Name: "IP", Value: "autodetect"},
@@ -815,6 +820,7 @@ var _ = Describe("Node rendering tests", func() {
 		expectedNodeEnv := []v1.EnvVar{
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
+			{Name: "CALICO_MANAGE_CNI", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "vxlan"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,ecs"},
@@ -923,6 +929,7 @@ var _ = Describe("Node rendering tests", func() {
 		// Verify volume mounts.
 		expectedNodeVolumeMounts := []v1.VolumeMount{
 			{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
+			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 			{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
 			{MountPath: "/var/run/calico", Name: "var-run-calico"},
 			{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
@@ -990,6 +997,7 @@ var _ = Describe("Node rendering tests", func() {
 		expectedNodeEnv := []v1.EnvVar{
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
+			{Name: "CALICO_MANAGE_CNI", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "none"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,ecs"},
@@ -1080,6 +1088,7 @@ var _ = Describe("Node rendering tests", func() {
 		// Verify volume mounts.
 		expectedNodeVolumeMounts := []v1.VolumeMount{
 			{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
+			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 			{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
 			{MountPath: "/var/run/calico", Name: "var-run-calico"},
 			{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
@@ -1252,6 +1261,7 @@ var _ = Describe("Node rendering tests", func() {
 		expectedNodeEnv := []v1.EnvVar{
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
+			{Name: "CALICO_MANAGE_CNI", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "vxlan"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,ecs"},
@@ -1360,6 +1370,7 @@ var _ = Describe("Node rendering tests", func() {
 		// Verify volume mounts.
 		expectedNodeVolumeMounts := []v1.VolumeMount{
 			{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
+			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 			{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
 			{MountPath: "/var/run/calico", Name: "var-run-calico"},
 			{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
@@ -1426,6 +1437,7 @@ var _ = Describe("Node rendering tests", func() {
 		expectedNodeEnv := []v1.EnvVar{
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
+			{Name: "CALICO_MANAGE_CNI", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "none"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,ecs"},
@@ -1516,6 +1528,7 @@ var _ = Describe("Node rendering tests", func() {
 		// Verify volume mounts.
 		expectedNodeVolumeMounts := []v1.VolumeMount{
 			{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
+			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 			{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
 			{MountPath: "/var/run/calico", Name: "var-run-calico"},
 			{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
@@ -1608,6 +1621,7 @@ var _ = Describe("Node rendering tests", func() {
 			// Default envvars.
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
+			{Name: "CALICO_MANAGE_CNI", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,openshift,bgp"},
 			{Name: "IP", Value: "autodetect"},
@@ -1704,6 +1718,7 @@ var _ = Describe("Node rendering tests", func() {
 			// Default envvars.
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
+			{Name: "CALICO_MANAGE_CNI", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,openshift,bgp"},
 			{Name: "IP", Value: "autodetect"},
@@ -2599,6 +2614,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "none"},
+			{Name: "CALICO_MANAGE_CNI", Value: "true"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator"},
 			{Name: "IP", Value: "autodetect"},

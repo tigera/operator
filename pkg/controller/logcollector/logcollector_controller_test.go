@@ -32,6 +32,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -116,7 +117,7 @@ var _ = Describe("LogCollector controller tests", func() {
 		Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      relasticsearch.PublicCertSecret,
+				Name:      esgateway.EsGatewayElasticPublicCertSecret,
 				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{

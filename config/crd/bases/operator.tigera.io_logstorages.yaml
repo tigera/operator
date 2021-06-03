@@ -105,6 +105,11 @@ spec:
                     format: int32
                     type: integer
                 type: object
+              ingestReplicaCount:
+                description: IngestReplicaCount can be used to adjust the replica
+                  count for ES Gateway.
+                format: int32
+                type: integer
               nodes:
                 description: Nodes defines the configuration for a set of identical
                   Elasticsearch cluster nodes, each of type master, data, and ingest.

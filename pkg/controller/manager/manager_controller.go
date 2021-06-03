@@ -32,6 +32,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -117,8 +118,8 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	// Watch the given secrets in each both the manager and operator namespaces
 	for _, namespace := range []string{rmeta.OperatorNamespace(), render.ManagerNamespace} {
 		for _, secretName := range []string{
-			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret,
-			render.ElasticsearchManagerUserSecret, render.KibanaPublicCertSecret,
+			render.ManagerTLSSecretName, esgateway.EsGatewayElasticPublicCertSecret,
+			render.ElasticsearchManagerUserSecret, esgateway.EsGatewayKibanaPublicCertSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret,
 			render.ManagerInternalTLSSecretName, render.DexCertSecretName,
 		} {
@@ -393,7 +394,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	kibanaPublicCertSecret := &corev1.Secret{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.KibanaPublicCertSecret, Namespace: rmeta.OperatorNamespace()}, kibanaPublicCertSecret); err != nil {
+	if err := r.client.Get(ctx, types.NamespacedName{Name: esgateway.EsGatewayKibanaPublicCertSecret, Namespace: rmeta.OperatorNamespace()}, kibanaPublicCertSecret); err != nil {
 		reqLogger.Error(err, "Failed to read Kibana public cert secret")
 		r.status.SetDegraded("Failed to read Kibana public cert secret", err.Error())
 		return reconcile.Result{}, err

@@ -30,6 +30,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -91,7 +92,7 @@ func ElasticsearchSecrets(ctx context.Context, userSecretNames []string, cli cli
 
 	esCertSecret := &corev1.Secret{}
 	err := cli.Get(ctx, types.NamespacedName{
-		Name:      relasticsearch.PublicCertSecret,
+		Name:      esgateway.EsGatewayElasticPublicCertSecret,
 		Namespace: rmeta.OperatorNamespace(),
 	}, esCertSecret)
 	if err != nil {
@@ -310,7 +311,7 @@ func getClientCredentials(client client.Client, ctx context.Context) (string, st
 	}
 
 	esPublicCert := &corev1.Secret{}
-	if err := client.Get(ctx, types.NamespacedName{Name: relasticsearch.PublicCertSecret, Namespace: rmeta.OperatorNamespace()}, esPublicCert); err != nil {
+	if err := client.Get(ctx, types.NamespacedName{Name: esgateway.EsGatewayElasticPublicCertSecret, Namespace: rmeta.OperatorNamespace()}, esPublicCert); err != nil {
 		return "", "", nil, err
 	}
 

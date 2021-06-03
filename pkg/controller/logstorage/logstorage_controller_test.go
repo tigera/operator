@@ -1127,6 +1127,7 @@ var _ = Describe("LogStorage controller", func() {
 		var sr int32 = 91
 		var crr int32 = 91
 		var replicas int32 = render.DefaultElasticsearchReplicas
+		var esGatewayReplicaCount int32 = 1
 		limits := corev1.ResourceList{}
 		requests := corev1.ResourceList{}
 		limits[corev1.ResourceMemory] = resource.MustParse(defaultEckOperatorMemorySetting)
@@ -1153,6 +1154,7 @@ var _ = Describe("LogStorage controller", func() {
 					},
 				},
 			},
+			EsGatewayReplicaCount: &esGatewayReplicaCount,
 		}
 		It("should have initialized all LogStorageSpec fields with default values", func() {
 			Expect(ls.Spec).To(Equal(expectedSpec))
@@ -1209,7 +1211,8 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 		toSecrets(createKibanaSecrets()),
 		[]*corev1.Secret{
 			{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-		}, operatorv1.ProviderNone,
+		}, nil,
+		operatorv1.ProviderNone,
 		[]*corev1.Secret{
 			{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: rmeta.OperatorNamespace()}},
 		},

@@ -32,6 +32,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/test"
 
@@ -232,7 +233,7 @@ var _ = Describe("LogStorage controller", func() {
 						Expect(err).ShouldNot(HaveOccurred())
 						svc := &corev1.Service{}
 						Expect(
-							cli.Get(ctx, client.ObjectKey{Name: render.ElasticsearchServiceName, Namespace: render.ElasticsearchNamespace}, svc),
+							cli.Get(ctx, client.ObjectKey{Name: esgateway.EsGatewayElasticServiceName, Namespace: render.ElasticsearchNamespace}, svc),
 						).ShouldNot(HaveOccurred())
 
 						Expect(svc.Spec.ExternalName).Should(Equal(expectedSvcName))
@@ -283,7 +284,7 @@ var _ = Describe("LogStorage controller", func() {
 						Expect(err).ShouldNot(HaveOccurred())
 						Expect(result).Should(Equal(reconcile.Result{}))
 
-						By("expecting not to find the tigera-secure Elasticsearch or Kibana resources")
+						By("expecting not to find the tigera-secure-internal Elasticsearch or Kibana resources")
 						err = cli.Get(ctx, esObjKey, &esv1.Elasticsearch{})
 						Expect(errors.IsNotFound(err)).Should(BeTrue())
 						err = cli.Get(ctx, kbObjKey, &kbv1.Kibana{})
@@ -422,6 +423,21 @@ var _ = Describe("LogStorage controller", func() {
 					kbPublicSecret := createPubSecret(render.KibanaPublicCertSecret, render.KibanaNamespace, secret.Data["tls.crt"], "tls.crt")
 					Expect(cli.Create(ctx, kbPublicSecret)).ShouldNot(HaveOccurred())
 
+					esGatewayPublicSecret := createPubSecret(esgateway.EsGatewayElasticPublicCertSecret, rmeta.OperatorNamespace(), secret.Data["tls.crt"], "tls.crt")
+					Expect(cli.Create(ctx, esGatewayPublicSecret)).ShouldNot(HaveOccurred())
+
+					esAdminUserSecret := &corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      render.ElasticsearchAdminUserSecret,
+							Namespace: render.ElasticsearchNamespace,
+						},
+						Data: map[string][]byte{
+							"username": []byte("elastic"),
+							"password": []byte("password"),
+						},
+					}
+					Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
+
 					mockStatus.On("SetDegraded", "Waiting for curator secrets to become available", "").Return()
 					result, err = r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
@@ -547,6 +563,21 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(cli.Get(ctx, kbCertSecretKey, secret)).ShouldNot(HaveOccurred())
 					kbPublicSecret := createPubSecret(render.KibanaPublicCertSecret, render.KibanaNamespace, secret.Data["tls.crt"], "tls.crt")
 					Expect(cli.Create(ctx, kbPublicSecret)).ShouldNot(HaveOccurred())
+
+					esGatewayPublicSecret := createPubSecret(esgateway.EsGatewayElasticPublicCertSecret, rmeta.OperatorNamespace(), secret.Data["tls.crt"], "tls.crt")
+					Expect(cli.Create(ctx, esGatewayPublicSecret)).ShouldNot(HaveOccurred())
+
+					esAdminUserSecret := &corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      render.ElasticsearchAdminUserSecret,
+							Namespace: render.ElasticsearchNamespace,
+						},
+						Data: map[string][]byte{
+							"username": []byte("elastic"),
+							"password": []byte("password"),
+						},
+					}
+					Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
 
 					mockStatus.On("SetDegraded", "Waiting for curator secrets to become available", "").Return()
 					result, err = r.Reconcile(ctx, reconcile.Request{})
@@ -823,6 +854,8 @@ var _ = Describe("LogStorage controller", func() {
 							&corev1.Secret{ObjectMeta: esMetricsUsrSecretObjMeta},
 							&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
 								Name: render.ElasticsearchCuratorUserSecret, Namespace: render.ElasticsearchNamespace}},
+							&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+								Name: esgateway.EsGatewayElasticPublicCertSecret, Namespace: rmeta.OperatorNamespace()}},
 						}
 						resources = append(resources, createESSecrets()...)
 						resources = append(resources, createKibanaSecrets()...)
@@ -906,6 +939,22 @@ var _ = Describe("LogStorage controller", func() {
 							fmt.Sprintf("some.registry.org/%s:%s",
 								components.ComponentElasticsearchOperator.Image,
 								components.ComponentElasticsearchOperator.Version)))
+
+						dp := appsv1.Deployment{
+							TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      esgateway.EsGatewayName,
+								Namespace: render.ElasticsearchNamespace,
+							},
+						}
+						Expect(test.GetResource(cli, &dp)).To(BeNil())
+						Expect(dp.Spec.Template.Spec.Containers).To(HaveLen(1))
+						gateway := test.GetContainer(dp.Spec.Template.Spec.Containers, esgateway.EsGatewayName)
+						Expect(gateway).ToNot(BeNil())
+						Expect(gateway.Image).To(Equal(
+							fmt.Sprintf("some.registry.org/%s:%s",
+								components.ComponentEsGateway.Image,
+								components.ComponentEsGateway.Version)))
 					})
 					It("should use images from ImageSet", func() {
 						Expect(cli.Create(ctx, &operatorv1.ImageSet{
@@ -917,6 +966,7 @@ var _ = Describe("LogStorage controller", func() {
 									{Image: "eck/eck-operator", Digest: "sha256:eckoperatorhash"},
 									{Image: "tigera/es-curator", Digest: "sha256:escuratorhash"},
 									{Image: "tigera/elasticsearch-metrics", Digest: "sha256:esmetricshash"},
+									{Image: "tigera/es-gateway", Digest: "sha256:esgatewayhash"},
 								},
 							},
 						})).ToNot(HaveOccurred())
@@ -994,6 +1044,22 @@ var _ = Describe("LogStorage controller", func() {
 							fmt.Sprintf("some.registry.org/%s@%s",
 								components.ComponentElasticsearchOperator.Image,
 								"sha256:eckoperatorhash")))
+
+						dp := appsv1.Deployment{
+							TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      esgateway.EsGatewayName,
+								Namespace: render.ElasticsearchNamespace,
+							},
+						}
+						Expect(test.GetResource(cli, &dp)).To(BeNil())
+						Expect(dp.Spec.Template.Spec.Containers).To(HaveLen(1))
+						gateway := test.GetContainer(dp.Spec.Template.Spec.Containers, esgateway.EsGatewayName)
+						Expect(gateway).ToNot(BeNil())
+						Expect(gateway.Image).To(Equal(
+							fmt.Sprintf("some.registry.org/%s@%s",
+								components.ComponentEsGateway.Image,
+								"sha256:esgatewayhash")))
 					})
 				})
 			})
@@ -1038,6 +1104,20 @@ var _ = Describe("LogStorage controller", func() {
 				It("deletes Elasticsearch and Kibana then removes the finalizers on the LogStorage CR", func() {
 					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain)
 					Expect(err).ShouldNot(HaveOccurred())
+					esGatewayPublicSecret := createPubSecret(esgateway.EsGatewayElasticPublicCertSecret, rmeta.OperatorNamespace(), []byte{}, "tls.crt")
+					Expect(cli.Create(ctx, esGatewayPublicSecret)).ShouldNot(HaveOccurred())
+
+					esAdminUserSecret := &corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      render.ElasticsearchAdminUserSecret,
+							Namespace: render.ElasticsearchNamespace,
+						},
+						Data: map[string][]byte{
+							"username": []byte("elastic"),
+							"password": []byte("password"),
+						},
+					}
+					Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
 
 					By("making sure LogStorage has successfully reconciled")
 					result, err := r.Reconcile(ctx, reconcile.Request{})
@@ -1059,7 +1139,7 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(err).ShouldNot(HaveOccurred())
 					Expect(result).Should(Equal(reconcile.Result{}))
 
-					By("expecting not to find the tigera-secure Elasticsearch or Kibana resources")
+					By("expecting not to find the tigera-secure-internal Elasticsearch or Kibana resources")
 					err = cli.Get(ctx, esObjKey, &esv1.Elasticsearch{})
 					Expect(errors.IsNotFound(err)).Should(BeTrue())
 					err = cli.Get(ctx, kbObjKey, &kbv1.Kibana{})
@@ -1127,6 +1207,7 @@ var _ = Describe("LogStorage controller", func() {
 		var sr int32 = 91
 		var crr int32 = 91
 		var replicas int32 = render.DefaultElasticsearchReplicas
+		var esGatewayReplicaCount int32 = 1
 		limits := corev1.ResourceList{}
 		requests := corev1.ResourceList{}
 		limits[corev1.ResourceMemory] = resource.MustParse(defaultEckOperatorMemorySetting)
@@ -1153,6 +1234,7 @@ var _ = Describe("LogStorage controller", func() {
 					},
 				},
 			},
+			EsGatewayReplicaCount: &esGatewayReplicaCount,
 		}
 		It("should have initialized all LogStorageSpec fields with default values", func() {
 			Expect(ls.Spec).To(Equal(expectedSpec))
@@ -1176,6 +1258,7 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 	}
 
 	retention := int32(1)
+	replicaCount := int32(1)
 	ls := &operatorv1.LogStorage{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "tigera-secure",
@@ -1190,7 +1273,8 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 				Snapshots:         &retention,
 				ComplianceReports: &retention,
 			},
-			StorageClassName: storageClass,
+			StorageClassName:      storageClass,
+			EsGatewayReplicaCount: &replicaCount,
 		},
 	}
 
@@ -1209,7 +1293,8 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 		toSecrets(createKibanaSecrets()),
 		[]*corev1.Secret{
 			{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-		}, operatorv1.ProviderNone,
+		},
+		operatorv1.ProviderNone,
 		[]*corev1.Secret{
 			{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: rmeta.OperatorNamespace()}},
 		},

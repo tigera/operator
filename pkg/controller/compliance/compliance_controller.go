@@ -32,6 +32,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -113,7 +114,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	// Watch the given secrets in each both the compliance and operator namespaces
 	for _, namespace := range []string{rmeta.OperatorNamespace(), render.ComplianceNamespace} {
 		for _, secretName := range []string{
-			relasticsearch.PublicCertSecret, render.ElasticsearchComplianceBenchmarkerUserSecret,
+			esgateway.EsGatewayElasticPublicCertSecret, render.ElasticsearchComplianceBenchmarkerUserSecret,
 			render.ElasticsearchComplianceControllerUserSecret, render.ElasticsearchComplianceReporterUserSecret,
 			render.ElasticsearchComplianceSnapshotterUserSecret, render.ElasticsearchComplianceServerUserSecret,
 			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, render.DexCertSecretName} {

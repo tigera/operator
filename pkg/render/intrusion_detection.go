@@ -32,6 +32,7 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/common/esgateway"
 	rkibana "github.com/tigera/operator/pkg/render/common/kibana"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
@@ -184,7 +185,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 				Name: "kibana-ca-cert-volume",
 				VolumeSource: v1.VolumeSource{
 					Secret: &v1.SecretVolumeSource{
-						SecretName: KibanaPublicCertSecret,
+						SecretName: esgateway.EsGatewayKibanaPublicCertSecret,
 						Items: []v1.KeyToPath{
 							{Key: "tls.crt", Path: "ca.pem"},
 						},

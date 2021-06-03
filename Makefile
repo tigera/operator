@@ -575,12 +575,10 @@ $(BINDIR)/kustomize:
 
 
 # Options for 'bundle-build'
-ifneq ($(origin CHANNELS), undefined)
+CHANNELS ?= release-v1.17
+DEFAULT_CHANNEL ?= release-v1.17
 BUNDLE_CHANNELS := --channels=$(CHANNELS)
-endif
-ifneq ($(origin DEFAULT_CHANNEL), undefined)
 BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
-endif
 BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 
 BUNDLE_CRD_DIR ?= build/_output/bundle/$(VERSION)/crds

@@ -45,6 +45,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/ptr"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/common/esgateway"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -61,20 +62,19 @@ const (
 
 	TigeraElasticsearchCertSecret = "tigera-secure-elasticsearch-cert"
 
-	ElasticsearchName                     = "tigera-secure"
-	ElasticsearchServiceName              = "tigera-secure-es-http"
+	ElasticsearchName                     = "tigera-secure-internal"
+	ElasticsearchServiceName              = "tigera-secure-internal-es-http"
 	ElasticsearchSecureSettingsSecretName = "tigera-elasticsearch-secure-settings"
 	ElasticsearchOperatorUserSecret       = "tigera-ee-operator-elasticsearch-access"
-	ElasticsearchAdminUserSecret          = "tigera-secure-es-elastic-user"
+	ElasticsearchAdminUserSecret          = "tigera-secure-internal-es-elastic-user"
 
-	KibanaHTTPSEndpoint    = "https://tigera-secure-kb-http.tigera-kibana.svc.%s:5601"
-	KibanaName             = "tigera-secure"
+	KibanaName             = "tigera-secure-internal"
 	KibanaNamespace        = "tigera-kibana"
-	KibanaPublicCertSecret = "tigera-secure-kb-http-certs-public"
+	KibanaPublicCertSecret = "tigera-secure-internal-kb-http-certs-public"
 	TigeraKibanaCertSecret = "tigera-secure-kibana-cert"
 	KibanaDefaultCertPath  = "/etc/ssl/kibana/ca.pem"
 	KibanaBasePath         = "tigera-kibana"
-	KibanaServiceName      = "tigera-secure-kb-http"
+	KibanaServiceName      = "tigera-secure-internal-kb-http"
 
 	DefaultElasticsearchClusterName = "cluster"
 	DefaultElasticsearchReplicas    = 0
@@ -183,7 +183,6 @@ func LogStorage(
 	dexCfg DexRelyingPartyConfig,
 	elasticLicenseType ElasticsearchLicenseType,
 ) Component {
-
 	return &elasticsearchComponent{
 		logStorage:                  logStorage,
 		installation:                installation,
@@ -437,7 +436,7 @@ func (es elasticsearchComponent) elasticsearchExternalService() *corev1.Service 
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ElasticsearchServiceName,
+			Name:      esgateway.EsGatewayElasticServiceName,
 			Namespace: ElasticsearchNamespace,
 		},
 		Spec: corev1.ServiceSpec{
@@ -451,7 +450,7 @@ func (es elasticsearchComponent) kibanaExternalService() *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      KibanaServiceName,
+			Name:      esgateway.EsGatewayKibanaServiceName,
 			Namespace: KibanaNamespace,
 		},
 		Spec: corev1.ServiceSpec{

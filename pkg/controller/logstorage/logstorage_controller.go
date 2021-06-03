@@ -17,6 +17,9 @@ package logstorage
 import (
 	"context"
 	"fmt"
+	"time"
+
+	"github.com/tigera/operator/pkg/common"
 
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
@@ -32,6 +35,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 
 	apps "k8s.io/api/apps/v1"
@@ -167,10 +171,23 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch all the secrets created by this controller so we can regenerate any that are deleted
 	for _, secretName := range []string{
 		render.TigeraElasticsearchCertSecret, render.TigeraKibanaCertSecret,
-		render.OIDCSecretName, render.DexObjectName} {
+		render.OIDCSecretName, render.DexObjectName, esgateway.EsGatewayElasticPublicCertSecret,
+		esgateway.EsGatewayKibanaPublicCertSecret, esgateway.EsGatewayTLSSecret} {
 		if err = utils.AddSecretsWatch(c, secretName, rmeta.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 		}
+	}
+
+	if err = utils.AddSecretsWatch(c, esgateway.EsGatewayTLSSecret, render.ElasticsearchNamespace); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
+	}
+
+	if err = utils.AddSecretsWatch(c, esgateway.EsGatewayElasticPublicCertSecret, render.ElasticsearchNamespace); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
+	}
+
+	if err = utils.AddSecretsWatch(c, esgateway.EsGatewayKibanaPublicCertSecret, render.KibanaNamespace); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 	}
 
 	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, rmeta.OperatorNamespace()); err != nil {
@@ -297,6 +314,11 @@ func fillDefaults(opr *operatorv1.LogStorage) {
 			},
 		}
 	}
+
+	if opr.Spec.EsGatewayReplicaCount == nil {
+		var replicaCount int32 = 1
+		opr.Spec.EsGatewayReplicaCount = &replicaCount
+	}
 }
 
 func validateComponentResources(spec *operatorv1.LogStorageSpec) error {
@@ -408,6 +430,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	var kibanaSecrets, curatorSecrets []*corev1.Secret
 	var clusterConfig *relasticsearch.ClusterConfig
 	var esLicenseType render.ElasticsearchLicenseType
+	var tlsSecret *corev1.Secret
 
 	if managementClusterConnection == nil {
 		var flowShards = calculateFlowShards(ls.Spec.Nodes, defaultElasticsearchShards)
@@ -452,6 +475,40 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		if err != nil && !errors.IsNotFound(err) {
 			r.status.SetDegraded("Failed to get curator credentials", err.Error())
 			return reconcile.Result{}, err
+		}
+
+		// Check that if the ES Gateway certpair secret exists that it is valid (has key and cert fields)
+		// If it does not exist then this function returns a nil secret but no error and a self-signed
+		// certificate will be generated when rendering below.
+		tlsSecret, err = utils.ValidateCertPair(r.client,
+			rmeta.OperatorNamespace(),
+			esgateway.EsGatewayTLSSecret,
+			esgateway.EsGatewaySecretKeyName,
+			esgateway.EsGatewaySecretCertName,
+		)
+
+		// An error is returned in case the read cannot be performed of the secret does not match the expected format
+		// In case the secret is not found, the error and the secret will be nil.
+		if err != nil {
+			r.status.SetDegraded("Error validating ES Gateway TLS certificate", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		if tlsSecret == nil {
+			// Create the ES Gateway cert if doesn't exist. If the cert exists, check that the cert
+			// has the expected DNS names. If the cert doesn't exist, the cert is recreated and returned.
+			svcDNSNames := dns.GetServiceDNSNames(esgateway.EsGatewayElasticServiceName, render.ElasticsearchNamespace, r.clusterDomain)
+			svcDNSNames = append(svcDNSNames, dns.GetServiceDNSNames(esgateway.EsGatewayKibanaServiceName, render.KibanaNamespace, r.clusterDomain)...)
+			svcDNSNames = append(svcDNSNames, "localhost")
+			certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
+			tlsSecret, err = utils.EnsureCertificateSecret(
+				esgateway.EsGatewayTLSSecret, tlsSecret, esgateway.EsGatewaySecretKeyName, esgateway.EsGatewaySecretCertName, certDur, svcDNSNames...,
+			)
+
+			if err != nil {
+				r.status.SetDegraded(fmt.Sprintf("Error ensuring ES Gateway TLS certificate %q exists and has valid DNS names", esgateway.EsGatewayTLSSecret), err.Error())
+				return reconcile.Result{}, err
+			}
 		}
 
 		if esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger); err != nil {
@@ -559,6 +616,35 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		if kibana == nil || kibana.Status.AssociationStatus != cmnv1.AssociationEstablished {
 			r.status.SetDegraded("Waiting for Kibana cluster to be operational", "")
 			return reconcile.Result{}, nil
+		}
+
+		var kibanaPublicCertSecret *corev1.Secret
+		for _, s := range kibanaSecrets {
+			if s.Name == render.KibanaPublicCertSecret && s.Namespace == rmeta.OperatorNamespace() {
+				kibanaPublicCertSecret = s
+			}
+		}
+
+		kubeControllersUserSecret, err := utils.GetSecret(context.Background(), r.client, render.ElasticsearchKubeControllersUserSecret, common.CalicoNamespace)
+		if err != nil {
+			r.status.SetDegraded("Failed to retrieve Elasticsearch kube-controllers user secret.", err.Error())
+			return reconcile.Result{}, err
+		} else if kubeControllersUserSecret == nil {
+			r.status.SetDegraded("Waiting for elasticsearch kube-controllers user secret to become available", "")
+			return reconcile.Result{}, nil
+		}
+
+		esGatewayComponent := esgateway.EsGateway(ls, install, pullSecrets, esAdminUserSecret, kibanaPublicCertSecret, tlsSecret, kubeControllersUserSecret, r.clusterDomain)
+		if err = imageset.ApplyImageSet(ctx, r.client, variant, esGatewayComponent); err != nil {
+			reqLogger.Error(err, "Error with images from ImageSet")
+			r.status.SetDegraded("Error with images from ImageSet", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		if err := hdler.CreateOrUpdateOrDelete(ctx, esGatewayComponent, r.status); err != nil {
+			reqLogger.Error(err, err.Error())
+			r.status.SetDegraded("Error creating / updating resource", err.Error())
+			return reconcile.Result{}, err
 		}
 
 		if len(curatorSecrets) == 0 {

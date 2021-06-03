@@ -19,6 +19,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tigera/operator/pkg/render/common/esgateway"
+
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -184,7 +186,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 				Name: "kibana-ca-cert-volume",
 				VolumeSource: v1.VolumeSource{
 					Secret: &v1.SecretVolumeSource{
-						SecretName: KibanaPublicCertSecret,
+						SecretName: esgateway.EsGatewayKibanaPublicCertSecret,
 						Items: []v1.KeyToPath{
 							{Key: "tls.crt", Path: "ca.pem"},
 						},

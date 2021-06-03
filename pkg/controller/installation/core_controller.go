@@ -855,14 +855,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			return reconcile.Result{}, err
 		}
 
-		elasticsearchSecret, err = utils.GetSecret(ctx, r.client, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
+		elasticsearchSecret, err = utils.GetSecret(ctx, r.client, relasticsearch.EsGatewayTLSSecretName, rmeta.OperatorNamespace())
 		if err != nil {
 			log.Error(err, err.Error())
 			r.status.SetDegraded("Failed to get Elasticsearch pub cert secret", err.Error())
 			return reconcile.Result{}, err
 		}
 
-		kibanaSecret, err = utils.GetSecret(ctx, r.client, render.KibanaPublicCertSecret, rmeta.OperatorNamespace())
+		kibanaSecret, err = utils.GetSecret(ctx, r.client, render.EsGatewayTLSSecretName, rmeta.OperatorNamespace())
 		if err != nil {
 			log.Error(err, err.Error())
 			r.status.SetDegraded("Failed to get Kibana pub cert secret", err.Error())

@@ -364,10 +364,10 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 			VolumeSource: tlsVolumeSource,
 		},
 		{
-			Name: KibanaPublicCertSecret,
+			Name: EsGatewayVolumeName,
 			VolumeSource: v1.VolumeSource{
 				Secret: &v1.SecretVolumeSource{
-					SecretName: KibanaPublicCertSecret,
+					SecretName: EsGatewayTLSSecretName,
 				},
 			},
 		},
@@ -539,7 +539,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		{Name: "VOLTRON_LOGLEVEL", Value: "info"},
 		{Name: "VOLTRON_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.clusterDomain)},
 		{Name: "VOLTRON_KIBANA_BASE_PATH", Value: fmt.Sprintf("/%s/", KibanaBasePath)},
-		{Name: "VOLTRON_KIBANA_CA_BUNDLE_PATH", Value: "/certs/kibana/tls.crt"},
+		{Name: "VOLTRON_KIBANA_CA_BUNDLE_PATH", Value: "/certs/kibana/cert"},
 		{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.managementCluster != nil)},
 		{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
 	}
@@ -565,7 +565,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 func (c *managerComponent) volumeMountsForProxyManager() []v1.VolumeMount {
 	var mounts = []corev1.VolumeMount{
 		{Name: ManagerTLSSecretName, MountPath: "/certs/https", ReadOnly: true},
-		{Name: KibanaPublicCertSecret, MountPath: "/certs/kibana", ReadOnly: true},
+		{Name: EsGatewayVolumeName, MountPath: "/certs/kibana", ReadOnly: true},
 	}
 
 	if c.complianceServerCertSecret != nil {

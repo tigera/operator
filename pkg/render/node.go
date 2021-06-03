@@ -929,6 +929,7 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 		{MountPath: "/var/run/nodeagent", Name: "policysync"},
 		{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
 		{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
+		{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 	}
 	if c.bpfDataplaneEnabled() {
 		nodeVolumeMounts = append(nodeVolumeMounts, v1.VolumeMount{MountPath: "/sys/fs/bpf", Name: "bpffs"})
@@ -1021,6 +1022,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 		{Name: "CLUSTER_TYPE", Value: clusterType},
 		{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
+		{Name: "CALICO_MANAGE_CNI", Value: "true"},
 		{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 		{Name: "FELIX_HEALTHENABLED", Value: "true"},
 		{

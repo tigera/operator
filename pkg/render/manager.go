@@ -364,10 +364,10 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 			VolumeSource: tlsVolumeSource,
 		},
 		{
-			Name: KibanaPublicCertSecret,
+			Name: EsGatewayVolumeName,
 			VolumeSource: v1.VolumeSource{
 				Secret: &v1.SecretVolumeSource{
-					SecretName: KibanaPublicCertSecret,
+					SecretName: EsGatewayKibanaPublicCertSecret,
 				},
 			},
 		},
@@ -565,7 +565,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 func (c *managerComponent) volumeMountsForProxyManager() []v1.VolumeMount {
 	var mounts = []corev1.VolumeMount{
 		{Name: ManagerTLSSecretName, MountPath: "/certs/https", ReadOnly: true},
-		{Name: KibanaPublicCertSecret, MountPath: "/certs/kibana", ReadOnly: true},
+		{Name: EsGatewayVolumeName, MountPath: "/certs/kibana", ReadOnly: true},
 	}
 
 	if c.complianceServerCertSecret != nil {

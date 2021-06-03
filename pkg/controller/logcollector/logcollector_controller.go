@@ -113,7 +113,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 
 	for _, secretName := range []string{
 		render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret,
-		relasticsearch.PublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret,
+		render.EsGatewayElasticPublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret,
 		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName} {
 		if err = utils.AddSecretsWatch(c, secretName, rmeta.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-collector-controller failed to watch the Secret resource(%s): %v", secretName, err)

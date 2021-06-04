@@ -512,7 +512,7 @@ func setManagerCloudEnvs(envs []corev1.EnvVar) []corev1.EnvVar {
 	// this allows us to run with portal integration disabled e.g. for external idp customers.
 	if CloudPortalAPIURL != "" {
 		envs = append(envs,
-			v1.EnvVar{Name: "CNX_PORTAL_API_URL", Value: CloudPortalAPIURL},
+			v1.EnvVar{Name: "CNX_PORTAL_URL", Value: CloudPortalAPIURL},
 			v1.EnvVar{Name: "ENABLE_PORTAL_SUPPORT", Value: "true"},
 		)
 	}

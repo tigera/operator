@@ -2,7 +2,7 @@ title: v3.7.0
 components:
   cnx-manager:
     image: tigera/cnx-manager
-    version: master
+    version: release-calient-v3.7
   voltron:
     image: tigera/voltron
     version: v3.7.0

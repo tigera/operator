@@ -14,6 +14,8 @@
 
 package ptr
 
+import "time"
+
 func BoolToPtr(b bool) *bool {
 	return &b
 }
@@ -24,4 +26,8 @@ func Int64ToPtr(i int64) *int64 {
 
 func Int32ToPtr(i int32) *int32 {
 	return &i
+}
+
+func DurationToPtr(x time.Duration) *time.Duration {
+	return &x
 }

@@ -104,3 +104,18 @@ sed -i 's/.*operators\.operatorframework\.io\.test.*//' bundle/${VERSION}/metada
 
 # Remove unneeded empty lines
 sed -i '/^$/d' bundle/${VERSION}/metadata/annotations.yaml
+
+# Finally, we need to convert the CRDs to apiextensions.k8s.io/v1beta1 until we
+# stop supporting OCP 4.5 or RH Connect supports v1 CRDs.
+for f in `find bundle/${VERSION}/manifests/ -name 'crd\.projectcalico\.org*'`; do
+  # Change apiVersion to v1beta1
+  yq write -i ${f} apiVersion apiextensions.k8s.io/v1beta1
+  # Set spec.version
+  yq write -i ${f} spec.version v1
+  # Save the schema value
+  yq read ${f} 'spec.versions[0].schema' > build/_output/bundle/schema.temp
+  # Replace spec.versions with spec.validation
+  yq delete -i ${f} 'spec.versions'
+  yq write -i ${f} spec.validation -f build/_output/bundle/schema.temp
+done
+

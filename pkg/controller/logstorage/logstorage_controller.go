@@ -17,6 +17,7 @@ package logstorage
 import (
 	"context"
 	"fmt"
+	"time"
 
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
@@ -167,10 +168,14 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch all the secrets created by this controller so we can regenerate any that are deleted
 	for _, secretName := range []string{
 		render.TigeraElasticsearchCertSecret, render.TigeraKibanaCertSecret,
-		render.OIDCSecretName, render.DexObjectName} {
+		render.OIDCSecretName, render.DexObjectName, render.EsGatewayTLSSecretName} {
 		if err = utils.AddSecretsWatch(c, secretName, rmeta.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 		}
+	}
+
+	if err = utils.AddSecretsWatch(c, render.EsGatewayTLSSecretName, render.ElasticsearchNamespace); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 	}
 
 	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, rmeta.OperatorNamespace()); err != nil {
@@ -297,6 +302,11 @@ func fillDefaults(opr *operatorv1.LogStorage) {
 			},
 		}
 	}
+
+	if opr.Spec.EsGatewayReplicaCount == nil {
+		var replicaCount int32 = 1
+		opr.Spec.EsGatewayReplicaCount = &replicaCount
+	}
 }
 
 func validateComponentResources(spec *operatorv1.LogStorageSpec) error {
@@ -408,6 +418,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	var kibanaSecrets, curatorSecrets []*corev1.Secret
 	var clusterConfig *relasticsearch.ClusterConfig
 	var esLicenseType render.ElasticsearchLicenseType
+	var tlsSecret *corev1.Secret
 
 	if managementClusterConnection == nil {
 		var flowShards = calculateFlowShards(ls.Spec.Nodes, defaultElasticsearchShards)
@@ -452,6 +463,40 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		if err != nil && !errors.IsNotFound(err) {
 			r.status.SetDegraded("Failed to get curator credentials", err.Error())
 			return reconcile.Result{}, err
+		}
+
+		// Check that if the ES Gateway certpair secret exists that it is valid (has key and cert fields)
+		// If it does not exist then this function returns a nil secret but no error and a self-signed
+		// certificate will be generated when rendering below.
+		tlsSecret, err = utils.ValidateCertPair(r.client,
+			render.ElasticsearchNamespace,
+			render.EsGatewayTLSSecretName,
+			render.EsGatewaySecretKeyName,
+			render.EsGatewaySecretCertName,
+		)
+
+		// An error is returned in case the read cannot be performed of the secret does not match the expected format
+		// In case the secret is not found, the error and the secret will be nil.
+		if err != nil {
+			r.status.SetDegraded("Error validating ES Gateway TLS certificate", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		if tlsSecret == nil {
+			// Create the ES Gateway cert if doesn't exist. If the cert exists, check that the cert
+			// has the expected DNS names. If the cert doesn't exist, the cert is recreated and returned.
+			svcDNSNames := dns.GetServiceDNSNames(render.EsGatewayElasticServiceName, render.ElasticsearchNamespace, r.clusterDomain)
+			svcDNSNames = append(svcDNSNames, dns.GetServiceDNSNames(render.EsGatewayKibanaServiceName, render.KibanaNamespace, r.clusterDomain)...)
+			svcDNSNames = append(svcDNSNames, "localhost")
+			certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
+			tlsSecret, err = utils.EnsureCertificateSecret(
+				render.EsGatewayTLSSecretName, tlsSecret, render.EsGatewaySecretKeyName, render.EsGatewaySecretCertName, certDur, svcDNSNames...,
+			)
+
+			if err != nil {
+				r.status.SetDegraded(fmt.Sprintf("Error ensuring ES Gateway TLS certificate %q exists and has valid DNS names", render.EsGatewayTLSSecretName), err.Error())
+				return reconcile.Result{}, err
+			}
 		}
 
 		if esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger); err != nil {
@@ -529,6 +574,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		[]*corev1.Secret{esCertSecret, esCertSecretESCopy, esPubCertSecret, esAdminUserSecret},
 		kibanaSecrets,
 		pullSecrets,
+		tlsSecret,
 		r.provider,
 		curatorSecrets,
 		esService,

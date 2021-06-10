@@ -139,9 +139,9 @@ func DefaultVolume() corev1.Volume {
 		Name: "elastic-ca-cert-volume",
 		VolumeSource: v1.VolumeSource{
 			Secret: &v1.SecretVolumeSource{
-				SecretName: PublicCertSecret,
+				SecretName: EsGatewayTLSSecretName,
 				Items: []v1.KeyToPath{
-					{Key: "tls.crt", Path: "ca.pem"},
+					{Key: "cert", Path: "ca.pem"},
 				},
 			},
 		},

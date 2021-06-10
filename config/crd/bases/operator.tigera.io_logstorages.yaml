@@ -95,6 +95,11 @@ spec:
                   the indicated key-value pairs as labels as well as access to the
                   specified StorageClassName.
                 type: object
+              esGatewayReplicaCount:
+                description: EsGatewayReplicaCount can be used to adjust the replica
+                  count for ES Gateway.
+                format: int32
+                type: integer
               indices:
                 description: Index defines the configuration for the indices in the
                   Elasticsearch cluster.

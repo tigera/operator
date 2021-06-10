@@ -91,7 +91,7 @@ func ElasticsearchSecrets(ctx context.Context, userSecretNames []string, cli cli
 
 	esCertSecret := &corev1.Secret{}
 	err := cli.Get(ctx, types.NamespacedName{
-		Name:      relasticsearch.PublicCertSecret,
+		Name:      relasticsearch.EsGatewayPublicCertSecret,
 		Namespace: rmeta.OperatorNamespace(),
 	}, esCertSecret)
 	if err != nil {

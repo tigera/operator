@@ -23,6 +23,7 @@ import (
 	"os"
 	goruntime "runtime"
 	"strings"
+	"time"
 
 	"github.com/cloudflare/cfssl/log"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -47,6 +48,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/version"
 	// +kubebuilder:scaffold:imports
 )
@@ -171,6 +173,11 @@ func main() {
 		ClientDisableCacheFor: []client.Object{
 			&v3.LicenseKey{},
 		},
+
+		// Cloud tweaks: All the following are multiplying the defaults by 4
+		LeaseDuration: ptr.DurationToPtr(60 * time.Second),
+		RenewDeadline: ptr.DurationToPtr(40 * time.Second),
+		RetryPeriod:   ptr.DurationToPtr(8 * time.Second),
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")

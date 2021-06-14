@@ -61,20 +61,23 @@ const (
 
 	TigeraElasticsearchCertSecret = "tigera-secure-elasticsearch-cert"
 
-	ElasticsearchName                     = "tigera-secure"
-	ElasticsearchServiceName              = "tigera-secure-es-http"
+	ElasticsearchHTTPSEndpoint            = "https://tigera-secure-internal-es-http.tigera-elasticsearch.svc:9200"
+	ElasticsearchName                     = "tigera-secure-internal"
+	ElasticsearchServiceName              = "tigera-secure-internal-es-http"
 	ElasticsearchSecureSettingsSecretName = "tigera-elasticsearch-secure-settings"
 	ElasticsearchOperatorUserSecret       = "tigera-ee-operator-elasticsearch-access"
-	ElasticsearchAdminUserSecret          = "tigera-secure-es-elastic-user"
+	ElasticsearchAdminUserSecret          = "tigera-secure-internal-es-elastic-user"
+	ElasticsearchPort                     = 9200
 
-	KibanaHTTPSEndpoint    = "https://tigera-secure-kb-http.tigera-kibana.svc.%s:5601"
-	KibanaName             = "tigera-secure"
+	KibanaHTTPSEndpoint    = "https://tigera-secure-internal-kb-http.tigera-kibana.svc:5601"
+	KibanaName             = "tigera-secure-internal"
 	KibanaNamespace        = "tigera-kibana"
-	KibanaPublicCertSecret = "tigera-secure-kb-http-certs-public"
+	KibanaPublicCertSecret = "tigera-secure-internal-kb-http-certs-public"
 	TigeraKibanaCertSecret = "tigera-secure-kibana-cert"
 	KibanaDefaultCertPath  = "/etc/ssl/kibana/ca.pem"
 	KibanaBasePath         = "tigera-kibana"
-	KibanaServiceName      = "tigera-secure-kb-http"
+	KibanaServiceName      = "tigera-secure-internal-kb-http"
+	KibanaPort             = 5601
 
 	DefaultElasticsearchClusterName = "cluster"
 	DefaultElasticsearchReplicas    = 0
@@ -84,6 +87,20 @@ const (
 
 	EsCuratorName           = "elastic-curator"
 	EsCuratorServiceAccount = "tigera-elastic-curator"
+
+	EsGatewayName                    = "tigera-es-gateway"
+	EsGatewayServiceAccountName      = "tigera-es-gateway"
+	EsGatewaySecretKeyName           = "key"
+	EsGatewaySecretCertName          = "tls.crt"
+	EsGatewayVolumeName              = "tigera-es-gateway-certs"
+	EsGatewayElasticServiceName      = "tigera-secure-es-http"
+	EsGatewayKibanaServiceName       = "tigera-secure-kb-http"
+	EsGatewayKibanaPublicCertSecret  = "tigera-secure-kb-http-certs-public"
+	EsGatewayElasticPublicCertSecret = "tigera-secure-es-http-certs-public"
+	EsGatewayElasticUserSecret       = "tigera-es-gateway-elasticsearch-access"
+	EsGatewayTLSSecret               = "tigera-es-gateway-tls"
+	EsGatewayPortName                = "es-gateway-port"
+	EsGatewayPort                    = 5554
 
 	OIDCUsersConfigMapName = "tigera-known-oidc-users"
 	OIDCUsersEsSecreteName = "tigera-oidc-users-elasticsearch-credentials"
@@ -175,6 +192,7 @@ func LogStorage(
 	elasticsearchSecrets []*corev1.Secret,
 	kibanaSecrets []*corev1.Secret,
 	pullSecrets []*corev1.Secret,
+	esGatewayTLSSecret *corev1.Secret,
 	provider operatorv1.Provider,
 	curatorSecrets []*corev1.Secret,
 	esService *corev1.Service,
@@ -183,6 +201,55 @@ func LogStorage(
 	dexCfg DexRelyingPartyConfig,
 	elasticLicenseType ElasticsearchLicenseType,
 ) Component {
+	var esGatewayTLSSecrets []*corev1.Secret
+	esGatewayTLSAnnotations := map[string]string{}
+	if managementClusterConnection == nil {
+		// tigera-es-gateway-elasticsearch-access
+		for _, s := range elasticsearchSecrets {
+			if s != nil && s.ObjectMeta.Name == ElasticsearchAdminUserSecret {
+				esGatewayElasticUserSecret := &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      EsGatewayElasticUserSecret,
+						Namespace: ElasticsearchNamespace,
+					},
+					Data: map[string][]byte{
+						"username": []byte("elastic"),
+						"password": s.Data["elastic"],
+					},
+				}
+				esGatewayTLSSecrets = append(esGatewayTLSSecrets, esGatewayElasticUserSecret)
+			}
+		}
+
+		// tigera-es-gateway-tls
+		esGatewayTLSSecrets = append(esGatewayTLSSecrets, esGatewayTLSSecret)
+		esGatewayTLSSecrets = append(esGatewayTLSSecrets, secret.CopyToNamespace(ElasticsearchNamespace, esGatewayTLSSecret)...)
+		esGatewayTLSAnnotations[tlsSecretHashAnnotation] = rmeta.AnnotationHash(esGatewayTLSSecret.Data)
+
+		cert := esGatewayTLSSecret.Data[EsGatewaySecretCertName]
+
+		// tigera-secure-es-http-certs-public
+		esGatewayElasticCertSecret := esGatewayTLSSecret.DeepCopy()
+		esGatewayElasticCertSecret.ObjectMeta = metav1.ObjectMeta{Name: EsGatewayElasticPublicCertSecret, Namespace: rmeta.OperatorNamespace()}
+		esGatewayElasticCertSecret.Data = map[string][]byte{EsGatewaySecretCertName: cert}
+		esGatewayTLSSecrets = append(esGatewayTLSSecrets, esGatewayElasticCertSecret)
+		esGatewayTLSSecrets = append(esGatewayTLSSecrets, secret.CopyToNamespace(ElasticsearchNamespace, esGatewayElasticCertSecret)...)
+		esGatewayTLSAnnotations[ElasticsearchTLSHashAnnotation] = rmeta.SecretsAnnotationHash(append(elasticsearchSecrets, esGatewayElasticCertSecret)...)
+
+		// tigera-secure-kb-http-certs-public
+		esGatewayKibanaTLSSecret := esGatewayElasticCertSecret.DeepCopy()
+		esGatewayKibanaTLSSecret.ObjectMeta = metav1.ObjectMeta{Name: EsGatewayKibanaPublicCertSecret, Namespace: rmeta.OperatorNamespace()}
+		esGatewayTLSSecrets = append(esGatewayTLSSecrets, esGatewayKibanaTLSSecret)
+		esGatewayTLSSecrets = append(esGatewayTLSSecrets, secret.CopyToNamespace(KibanaNamespace, esGatewayKibanaTLSSecret)...)
+
+		// tigera-secure-internal-kb-http-certs-public, mounted by ES Gateway.
+		for _, s := range kibanaSecrets {
+			if s.Name == KibanaPublicCertSecret && s.Namespace == rmeta.OperatorNamespace() {
+				esGatewayTLSSecrets = append(esGatewayTLSSecrets, secret.CopyToNamespace(ElasticsearchNamespace, s)...)
+				esGatewayTLSAnnotations[KibanaTLSAnnotationHash] = rmeta.SecretsAnnotationHash(esGatewayKibanaTLSSecret, s)
+			}
+		}
+	}
 
 	return &elasticsearchComponent{
 		logStorage:                  logStorage,
@@ -196,6 +263,8 @@ func LogStorage(
 		kibanaSecrets:               kibanaSecrets,
 		curatorSecrets:              curatorSecrets,
 		pullSecrets:                 pullSecrets,
+		esGatewayTLSSecrets:         esGatewayTLSSecrets,
+		esGatewayTLSAnnotations:     esGatewayTLSAnnotations,
 		provider:                    provider,
 		esService:                   esService,
 		kbService:                   kbService,
@@ -217,6 +286,8 @@ type elasticsearchComponent struct {
 	kibanaSecrets               []*corev1.Secret
 	curatorSecrets              []*corev1.Secret
 	pullSecrets                 []*corev1.Secret
+	esGatewayTLSSecrets         []*corev1.Secret
+	esGatewayTLSAnnotations     map[string]string
 	provider                    operatorv1.Provider
 	esService                   *corev1.Service
 	kbService                   *corev1.Service
@@ -228,6 +299,7 @@ type elasticsearchComponent struct {
 	kibanaImage                 string
 	curatorImage                string
 	csrImage                    string
+	esGatewayImage              string
 }
 
 func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -252,6 +324,11 @@ func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	es.curatorImage, err = components.GetReference(components.ComponentEsCurator, reg, path, prefix, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	es.esGatewayImage, err = components.GetReference(components.ComponentEsGateway, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -379,6 +456,15 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 		toCreate = append(toCreate, es.kibanaCR())
 
+		// ES Gateway CRs.
+		toCreate = append(toCreate, es.esGatewayTLSObjects()...)
+		toCreate = append(toCreate, es.esGatewayElasticsearchService())
+		toCreate = append(toCreate, es.esGatewayKibanaExternalService())
+		toCreate = append(toCreate, es.esGatewayKibanaService())
+		toCreate = append(toCreate, es.esGatewayServiceAccount())
+		toCreate = append(toCreate, csrClusterRoleBinding(EsGatewayServiceAccountName, ElasticsearchNamespace))
+		toCreate = append(toCreate, es.esGatewayDeployment())
+
 		// Curator CRs
 		// If we have the curator secrets then create curator
 		if len(es.curatorSecrets) > 0 {
@@ -437,7 +523,7 @@ func (es elasticsearchComponent) elasticsearchExternalService() *corev1.Service 
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ElasticsearchServiceName,
+			Name:      EsGatewayElasticServiceName,
 			Namespace: ElasticsearchNamespace,
 		},
 		Spec: corev1.ServiceSpec{
@@ -451,7 +537,7 @@ func (es elasticsearchComponent) kibanaExternalService() *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      KibanaServiceName,
+			Name:      EsGatewayKibanaServiceName,
 			Namespace: KibanaNamespace,
 		},
 		Spec: corev1.ServiceSpec{
@@ -1699,6 +1785,192 @@ func (es elasticsearchComponent) oidcUserRoleBinding() []client.Object {
 					Kind:      "ServiceAccount",
 					Name:      "calico-kube-controllers",
 					Namespace: common.CalicoNamespace,
+				},
+			},
+		},
+	}
+}
+
+func (es elasticsearchComponent) esGatewayDeployment() *appsv1.Deployment {
+	envVars := []corev1.EnvVar{
+		{Name: "ES_GATEWAY_LOG_LEVEL", Value: "DEBUG"},
+		{Name: "ES_GATEWAY_ELASTIC_ENDPOINT", Value: ElasticsearchHTTPSEndpoint},
+		{Name: "ES_GATEWAY_KIBANA_ENDPOINT", Value: KibanaHTTPSEndpoint},
+		{Name: "ES_GATEWAY_HTTPS_CERT", Value: "/certs/https/tls.crt"},
+		{Name: "ES_GATEWAY_HTTPS_KEY", Value: "/certs/https/key"},
+		{
+			Name:      "ES_GATEWAY_ELASTIC_USER",
+			ValueFrom: secret.GetEnvVarSource(EsGatewayElasticUserSecret, "username", false),
+		},
+		{
+			Name:      "ES_GATEWAY_ELASTIC_PASSWORD",
+			ValueFrom: secret.GetEnvVarSource(EsGatewayElasticUserSecret, "password", false),
+		},
+	}
+
+	dnsSvcNames := dns.GetServiceDNSNames(EsGatewayElasticServiceName, ElasticsearchNamespace, es.clusterDomain)
+	dnsSvcNames = append(dnsSvcNames, dns.GetServiceDNSNames(EsGatewayKibanaServiceName, KibanaNamespace, es.clusterDomain)...)
+	var initContainers []corev1.Container
+	if es.installation.CertificateManagement != nil {
+		initContainers = append(initContainers, CreateCSRInitContainer(
+			es.installation.CertificateManagement,
+			es.csrImage,
+			EsGatewayTLSSecret,
+			EsGatewayElasticServiceName,
+			EsGatewaySecretKeyName,
+			EsGatewaySecretCertName,
+			dnsSvcNames,
+			ElasticsearchNamespace))
+	}
+
+	volumes := []corev1.Volume{
+		{
+			Name: EsGatewayVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: EsGatewayTLSSecret,
+				},
+			},
+		},
+		{
+			Name: KibanaPublicCertSecret,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: KibanaPublicCertSecret,
+				},
+			},
+		},
+		{
+			Name: relasticsearch.PublicCertSecret,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: relasticsearch.PublicCertSecret,
+				},
+			},
+		},
+	}
+
+	volumeMounts := []corev1.VolumeMount{
+		{Name: EsGatewayVolumeName, MountPath: "/certs/https", ReadOnly: true},
+		{Name: KibanaPublicCertSecret, MountPath: "/certs/kibana", ReadOnly: true},
+		{Name: relasticsearch.PublicCertSecret, MountPath: "/certs/elasticsearch", ReadOnly: true},
+	}
+
+	podTemplate := &corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      EsGatewayName,
+			Namespace: ElasticsearchNamespace,
+			Labels: map[string]string{
+				"k8s-app": EsGatewayName,
+			},
+			Annotations: es.esGatewayTLSAnnotations,
+		},
+		Spec: corev1.PodSpec{
+			ServiceAccountName: EsGatewayServiceAccountName,
+			ImagePullSecrets:   secret.GetReferenceList(es.pullSecrets),
+			InitContainers:     initContainers,
+			Volumes:            volumes,
+			Containers: []corev1.Container{
+				{
+					Name:         EsGatewayName,
+					Image:        es.esGatewayImage,
+					Env:          envVars,
+					VolumeMounts: volumeMounts,
+				},
+			},
+		},
+	}
+	return &appsv1.Deployment{
+		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      EsGatewayName,
+			Namespace: ElasticsearchNamespace,
+			Labels: map[string]string{
+				"k8s-app": EsGatewayName,
+			},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: es.logStorage.Spec.EsGatewayReplicaCount,
+			Strategy: appsv1.DeploymentStrategy{
+				Type: appsv1.RecreateDeploymentStrategyType,
+			},
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": EsGatewayName}},
+			Template: *podTemplate,
+		},
+	}
+}
+
+func (es elasticsearchComponent) esGatewayServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      EsGatewayServiceAccountName,
+			Namespace: ElasticsearchNamespace,
+		},
+	}
+}
+
+func (es elasticsearchComponent) esGatewayTLSObjects() []client.Object {
+	objs := []client.Object{}
+	for _, s := range es.esGatewayTLSSecrets {
+		objs = append(objs, s)
+	}
+	return objs
+}
+
+func (es elasticsearchComponent) esGatewayElasticsearchService() *corev1.Service {
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      EsGatewayElasticServiceName,
+			Namespace: ElasticsearchNamespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: map[string]string{"k8s-app": EsGatewayName},
+			Type:     corev1.ServiceTypeClusterIP,
+			Ports: []corev1.ServicePort{
+				{
+					Name:       EsGatewayPortName,
+					Port:       int32(ElasticsearchPort),
+					TargetPort: intstr.FromInt(EsGatewayPort),
+					Protocol:   corev1.ProtocolTCP,
+				},
+			},
+		},
+	}
+}
+
+// In order to reach ES Gateway, components calling tigera-secure-kb-http.tigera-kibana.svc are redirected to
+// tigera-secure-kb-http.tigera-elasticsearch.svc
+func (es elasticsearchComponent) esGatewayKibanaExternalService() *corev1.Service {
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      EsGatewayKibanaServiceName,
+			Namespace: KibanaNamespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Type:         corev1.ServiceTypeExternalName,
+			ExternalName: fmt.Sprintf("%s.%s.svc.%s", EsGatewayKibanaServiceName, ElasticsearchNamespace, es.clusterDomain),
+		},
+	}
+}
+
+func (es elasticsearchComponent) esGatewayKibanaService() *corev1.Service {
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      EsGatewayKibanaServiceName,
+			Namespace: ElasticsearchNamespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: map[string]string{"k8s-app": EsGatewayName},
+			Type:     corev1.ServiceTypeClusterIP,
+			Ports: []corev1.ServicePort{
+				{
+					Name:       EsGatewayPortName,
+					Port:       int32(KibanaPort),
+					TargetPort: intstr.FromInt(EsGatewayPort),
+					Protocol:   corev1.ProtocolTCP,
 				},
 			},
 		},

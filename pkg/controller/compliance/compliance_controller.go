@@ -113,7 +113,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	// Watch the given secrets in each both the compliance and operator namespaces
 	for _, namespace := range []string{rmeta.OperatorNamespace(), render.ComplianceNamespace} {
 		for _, secretName := range []string{
-			relasticsearch.PublicCertSecret, render.ElasticsearchComplianceBenchmarkerUserSecret,
+			render.EsGatewayElasticPublicCertSecret, render.ElasticsearchComplianceBenchmarkerUserSecret,
 			render.ElasticsearchComplianceControllerUserSecret, render.ElasticsearchComplianceReporterUserSecret,
 			render.ElasticsearchComplianceSnapshotterUserSecret, render.ElasticsearchComplianceServerUserSecret,
 			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, render.DexCertSecretName} {

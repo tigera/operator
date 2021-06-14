@@ -91,7 +91,7 @@ func ElasticsearchSecrets(ctx context.Context, userSecretNames []string, cli cli
 
 	esCertSecret := &corev1.Secret{}
 	err := cli.Get(ctx, types.NamespacedName{
-		Name:      relasticsearch.PublicCertSecret,
+		Name:      relasticsearch.EsGatewayPublicCertSecret,
 		Namespace: rmeta.OperatorNamespace(),
 	}, esCertSecret)
 	if err != nil {
@@ -310,7 +310,7 @@ func getClientCredentials(client client.Client, ctx context.Context) (string, st
 	}
 
 	esPublicCert := &corev1.Secret{}
-	if err := client.Get(ctx, types.NamespacedName{Name: relasticsearch.PublicCertSecret, Namespace: rmeta.OperatorNamespace()}, esPublicCert); err != nil {
+	if err := client.Get(ctx, types.NamespacedName{Name: render.EsGatewayElasticPublicCertSecret, Namespace: rmeta.OperatorNamespace()}, esPublicCert); err != nil {
 		return "", "", nil, err
 	}
 

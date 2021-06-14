@@ -184,7 +184,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 				Name: "kibana-ca-cert-volume",
 				VolumeSource: v1.VolumeSource{
 					Secret: &v1.SecretVolumeSource{
-						SecretName: KibanaPublicCertSecret,
+						SecretName: EsGatewayKibanaPublicCertSecret,
 						Items: []v1.KeyToPath{
 							{Key: "tls.crt", Path: "ca.pem"},
 						},

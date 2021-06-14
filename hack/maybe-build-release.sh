@@ -6,8 +6,8 @@ if ! tag=$(git describe --exact-match --tags HEAD); then
 	exit 0
 fi
 
-if [[ ! "${tag}" =~ ^cloud-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-	echo "tag ${tag} does not match the format vX.Y.Z"
+if [[ ! "${tag}" =~ ^cloud-v[0-9]+\.[0-9]+\.[0-9]+-[0-9]+$ ]]; then
+	echo "tag ${tag} does not match the format cloud-vX.Y.Z-<release>"
 	exit 1
 fi
 

@@ -45,6 +45,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 
 	configv1 "github.com/openshift/api/config/v1"
 
@@ -855,14 +856,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			return reconcile.Result{}, err
 		}
 
-		elasticsearchSecret, err = utils.GetSecret(ctx, r.client, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
+		elasticsearchSecret, err = utils.GetSecret(ctx, r.client, esgateway.EsGatewayElasticPublicCertSecret, rmeta.OperatorNamespace())
 		if err != nil {
 			log.Error(err, err.Error())
 			r.status.SetDegraded("Failed to get Elasticsearch pub cert secret", err.Error())
 			return reconcile.Result{}, err
 		}
 
-		kibanaSecret, err = utils.GetSecret(ctx, r.client, render.KibanaPublicCertSecret, rmeta.OperatorNamespace())
+		kibanaSecret, err = utils.GetSecret(ctx, r.client, esgateway.EsGatewayKibanaPublicCertSecret, rmeta.OperatorNamespace())
 		if err != nil {
 			log.Error(err, err.Error())
 			r.status.SetDegraded("Failed to get Kibana pub cert secret", err.Error())

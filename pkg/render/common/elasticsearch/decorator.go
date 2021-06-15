@@ -17,6 +17,7 @@ package elasticsearch
 import (
 	"strconv"
 
+	"github.com/tigera/operator/pkg/render/common/esgateway"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/url"
@@ -139,7 +140,7 @@ func DefaultVolume() corev1.Volume {
 		Name: "elastic-ca-cert-volume",
 		VolumeSource: v1.VolumeSource{
 			Secret: &v1.SecretVolumeSource{
-				SecretName: PublicCertSecret,
+				SecretName: esgateway.EsGatewayElasticPublicCertSecret,
 				Items: []v1.KeyToPath{
 					{Key: "tls.crt", Path: "ca.pem"},
 				},

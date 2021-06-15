@@ -986,7 +986,8 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	// Set the clusterType.
 	clusterType := "k8s,operator"
 
-	// Felix relies on the CLUSTER_TYPE env var containing the kubernetes provider.
+	// Note: Felix now activates certain special-case logic based on the provider in the cluster type;
+	// avoid changing these unless you also update Felix's parsing logic.
 	switch c.cr.KubernetesProvider {
 	case operator.ProviderOpenShift:
 		clusterType = clusterType + ",openshift"

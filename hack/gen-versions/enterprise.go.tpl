@@ -142,6 +142,18 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "prometheus" }}
+	ComponentPrometheus = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
+{{ with index .Components "prometheus-alertmanager" }}
+	ComponentPrometheusAlertmanager = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "cnx-queryserver" }}
 	ComponentQueryServer = component{
 		Version: "{{ .Version }}",
@@ -207,6 +219,8 @@ var (
 		ComponentManager,
 		ComponentDex,
 		ComponentManagerProxy,
+		ComponentPrometheus,
+		ComponentPrometheusAlertmanager,
 		ComponentQueryServer,
 		ComponentTigeraKubeControllers,
 		ComponentTigeraNode,

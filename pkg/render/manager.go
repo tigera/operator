@@ -19,6 +19,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/tigera/operator/pkg/render/common/esgateway"
+
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
 
 	"github.com/tigera/operator/pkg/render/common/authentication"
@@ -364,10 +366,10 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 			VolumeSource: tlsVolumeSource,
 		},
 		{
-			Name: KibanaPublicCertSecret,
+			Name: esgateway.EsGatewayVolumeName,
 			VolumeSource: v1.VolumeSource{
 				Secret: &v1.SecretVolumeSource{
-					SecretName: KibanaPublicCertSecret,
+					SecretName: esgateway.EsGatewayKibanaPublicCertSecret,
 				},
 			},
 		},
@@ -565,7 +567,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 func (c *managerComponent) volumeMountsForProxyManager() []v1.VolumeMount {
 	var mounts = []corev1.VolumeMount{
 		{Name: ManagerTLSSecretName, MountPath: "/certs/https", ReadOnly: true},
-		{Name: KibanaPublicCertSecret, MountPath: "/certs/kibana", ReadOnly: true},
+		{Name: esgateway.EsGatewayVolumeName, MountPath: "/certs/kibana", ReadOnly: true},
 	}
 
 	if c.complianceServerCertSecret != nil {

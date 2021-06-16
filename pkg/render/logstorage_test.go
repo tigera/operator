@@ -33,6 +33,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/common/esgateway"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	corev1 "k8s.io/api/core/v1"
@@ -503,7 +504,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 				createResources, _ := component.Objects()
 
-				oldNodeSetName := rtest.GetResource(createResources, "tigera-secure", "tigera-elasticsearch", "elasticsearch.k8s.elastic.co", "v1", "Elasticsearch").(*esv1.Elasticsearch).Spec.NodeSets[0].Name
+				oldNodeSetName := rtest.GetResource(createResources, "tigera-secure-internal", "tigera-elasticsearch", "elasticsearch.k8s.elastic.co", "v1", "Elasticsearch").(*esv1.Elasticsearch).Spec.NodeSets[0].Name
 
 				// update resource requirements
 				ls.Spec.Nodes.ResourceRequirements = &corev1.ResourceRequirements{
@@ -540,7 +541,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				Expect(updatedResources[0].(*operatorv1.LogStorage).Spec.Nodes.ResourceRequirements).
 					Should(Equal(ls.Spec.Nodes.ResourceRequirements))
 
-				newNodeName := rtest.GetResource(updatedResources, "tigera-secure", "tigera-elasticsearch", "elasticsearch.k8s.elastic.co", "v1", "Elasticsearch").(*esv1.Elasticsearch).Spec.NodeSets[0].Name
+				newNodeName := rtest.GetResource(updatedResources, "tigera-secure-internal", "tigera-elasticsearch", "elasticsearch.k8s.elastic.co", "v1", "Elasticsearch").(*esv1.Elasticsearch).Spec.NodeSets[0].Name
 				Expect(newNodeName).NotTo(Equal(oldNodeSetName))
 			})
 		})
@@ -758,13 +759,13 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				expectedCreateResources := []resourceTestObj{
 					{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
 					{render.KibanaNamespace, "", &corev1.Namespace{}, nil},
-					{render.ElasticsearchServiceName, render.ElasticsearchNamespace, &corev1.Service{}, func(resource runtime.Object) {
+					{esgateway.EsGatewayElasticServiceName, render.ElasticsearchNamespace, &corev1.Service{}, func(resource runtime.Object) {
 						svc := resource.(*corev1.Service)
 
 						Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeExternalName))
 						Expect(svc.Spec.ExternalName).Should(Equal(fmt.Sprintf("%s.%s.svc.%s", render.GuardianServiceName, render.GuardianNamespace, dns.DefaultClusterDomain)))
 					}},
-					{render.KibanaServiceName, render.KibanaNamespace, &corev1.Service{}, func(resource runtime.Object) {
+					{esgateway.EsGatewayKibanaServiceName, render.KibanaNamespace, &corev1.Service{}, func(resource runtime.Object) {
 						svc := resource.(*corev1.Service)
 
 						Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeExternalName))
@@ -1622,7 +1623,7 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 }
 
 func getElasticsearch(resources []client.Object) *esv1.Elasticsearch {
-	resource := rtest.GetResource(resources, "tigera-secure", "tigera-elasticsearch", "elasticsearch.k8s.elastic.co", "v1", "Elasticsearch")
+	resource := rtest.GetResource(resources, "tigera-secure-internal", "tigera-elasticsearch", "elasticsearch.k8s.elastic.co", "v1", "Elasticsearch")
 	Expect(resource).ShouldNot(BeNil())
 
 	return resource.(*esv1.Elasticsearch)

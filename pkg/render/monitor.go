@@ -47,16 +47,19 @@ const (
 
 func Monitor(
 	installation *operatorv1.InstallationSpec,
+	provider operatorv1.Provider,
 	pullSecrets []*corev1.Secret,
 ) Component {
 	return &monitorComponent{
 		installation: installation,
+		provider:     provider,
 		pullSecrets:  pullSecrets,
 	}
 }
 
 type monitorComponent struct {
 	installation      *operatorv1.InstallationSpec
+	provider          operatorv1.Provider
 	pullSecrets       []*corev1.Secret
 	alertmanagerImage string
 	prometheusImage   string
@@ -101,9 +104,12 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		mc.prometheus(),
 		mc.prometheusRule(),
 		mc.serviceMonitorCalicoNode(),
-		mc.serviceMonitorElasicsearch(),
-		mc.podMonitor(),
 	)
+
+	if mc.provider != operatorv1.ProviderAKS && mc.provider != operatorv1.ProviderEKS {
+		objs = append(objs, mc.serviceMonitorElasicsearch())
+		objs = append(objs, mc.podMonitor())
+	}
 
 	return objs, nil
 }

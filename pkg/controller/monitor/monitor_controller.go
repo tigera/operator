@@ -175,7 +175,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	hdler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	// render prometheus components
-	component := render.Monitor(install, pullSecrets)
+	component := render.Monitor(install, r.provider, pullSecrets)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
 		r.setDegraded(reqLogger, err, "Error with images from ImageSet")

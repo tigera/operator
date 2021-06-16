@@ -35,6 +35,7 @@ var _ = Describe("monitor rendering tests", func() {
 	It("Should render Prometheus resources", func() {
 		component := render.Monitor(
 			&operatorv1.InstallationSpec{},
+			operatorv1.ProviderNone,
 			[]*corev1.Secret{
 				{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 			},
@@ -77,6 +78,47 @@ var _ = Describe("monitor rendering tests", func() {
 				com := components.ComponentPrometheus
 				expectedImage := fmt.Sprintf("%s%s:%s", components.PrometheusRegistry, com.Image, com.Version)
 				Expect(*prometheusObj.Spec.Image).To(Equal(expectedImage))
+			}
+		}
+	})
+
+	It("Should not render Elasticserach and Fluentd metrics on AKS and EKS", func() {
+		providers := []operatorv1.Provider{operatorv1.ProviderAKS, operatorv1.ProviderEKS}
+		for _, provider := range providers {
+			component := render.Monitor(
+				&operatorv1.InstallationSpec{},
+				provider,
+				[]*corev1.Secret{
+					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+				},
+			)
+
+			Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+			toCreate, toDelete := component.Objects()
+
+			Expect(toDelete).To(BeNil())
+
+			// should render correct resources
+			expectedResources := []struct {
+				name    string
+				ns      string
+				group   string
+				version string
+				kind    string
+			}{
+				{common.TigeraPrometheusNamespace, "", "", "v1", "Namespace"},
+				{"tigera-pull-secret", common.TigeraPrometheusNamespace, "", "", ""},
+				{render.CalicoNodeAlertmanager, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.AlertmanagersKind},
+				{render.CalicoNodePrometheus, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind},
+				{render.TigeraPrometheusDPRate, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusRuleKind},
+				{render.CalicoNodeMonitor, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
+			}
+
+			Expect(len(toCreate)).To(Equal(len(expectedResources)))
+
+			for i, expectedRes := range expectedResources {
+				obj := toCreate[i]
+				rtest.ExpectResource(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 		}
 	})

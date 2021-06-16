@@ -108,7 +108,6 @@ var _ = Describe("Monitor controller tests", func() {
 		)
 
 		BeforeEach(func() {
-
 			// Prometheus related objects should not exist.
 			Expect(cli.Get(ctx, client.ObjectKey{Name: render.CalicoNodeAlertmanager, Namespace: common.TigeraPrometheusNamespace}, am)).To(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: render.CalicoNodePrometheus, Namespace: common.TigeraPrometheusNamespace}, p)).To(HaveOccurred())

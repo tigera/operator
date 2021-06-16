@@ -15,9 +15,16 @@
 package monitor
 
 import (
+	"fmt"
+	"time"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/clock"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
+	"github.com/go-logr/logr"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 
 	"github.com/tigera/operator/pkg/common"
@@ -65,4 +72,88 @@ func addServiceMonitorElasticsearchWatch(c controller.Controller) error {
 		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: render.MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace},
 	})
+}
+
+func requiresPrometheusResources(client kubernetes.Interface) error {
+	resources, err := client.Discovery().ServerResourcesForGroupVersion("monitoring.coreos.com/v1")
+	if err != nil {
+		return err
+	}
+
+	expectedResources := map[string]bool{
+		monitoringv1.AlertmanagersKind:   false,
+		monitoringv1.PodMonitorsKind:     false,
+		monitoringv1.PrometheusesKind:    false,
+		monitoringv1.ServiceMonitorsKind: false,
+	}
+
+	for _, r := range resources.APIResources {
+		switch r.Kind {
+		case monitoringv1.AlertmanagersKind,
+			monitoringv1.PodMonitorsKind,
+			monitoringv1.PrometheusesKind,
+			monitoringv1.ServiceMonitorsKind:
+			expectedResources[r.Kind] = true
+		}
+	}
+
+	for k, v := range expectedResources {
+		if !v {
+			return fmt.Errorf("expected Prometheus related resource %s not found", k)
+		}
+	}
+
+	return nil
+}
+
+func waitToAddWatch(c controller.Controller, client kubernetes.Interface, log logr.Logger, readyFlag *utils.ReadyFlag) error {
+	const (
+		initBackoff   = 30 * time.Second
+		maxBackoff    = 8 * time.Minute
+		resetDuration = time.Hour
+		backoffFactor = 2.0
+		jitter        = 0.1
+	)
+	clock := &clock.RealClock{}
+
+	backoffMgr := wait.NewExponentialBackoffManager(initBackoff, maxBackoff, resetDuration, backoffFactor, jitter, clock)
+	defer backoffMgr.Backoff().Stop()
+
+	for {
+		if err := requiresPrometheusResources(client); err != nil {
+			log.Info("failed to find Prometheus related resources. Will retry.")
+		} else {
+			var err error
+
+			// watch for prometheus resource changes
+			if err = addAlertmanagerWatch(c); err != nil {
+				return fmt.Errorf("failed to watch Alertmanager resource: %w", err)
+			}
+
+			if err = addPrometheusWatch(c); err != nil {
+				return fmt.Errorf("failed to watch Prometheus resource: %w", err)
+			}
+
+			if err = addPrometheusRuleWatch(c); err != nil {
+				return fmt.Errorf("failed to watch PrometheusRule resource: %w", err)
+			}
+
+			if err = addServiceMonitorCalicoNodeWatch(c); err != nil {
+				return fmt.Errorf("failed to watch ServiceMonitor calico-node-monitor resource: %w", err)
+			}
+
+			if err = addServiceMonitorElasticsearchWatch(c); err != nil {
+				return fmt.Errorf("failed to watch ServiceMonitor elasticsearch-metrics resource: %w", err)
+			}
+
+			if err = addPodMonitorWatch(c); err != nil {
+				return fmt.Errorf("failed to watch PodMonitor resource: %w", err)
+			}
+
+			readyFlag.MarkAsReady()
+			return nil
+		}
+
+		<-backoffMgr.Backoff().C()
+	}
 }

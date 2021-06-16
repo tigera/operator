@@ -19,10 +19,10 @@ import (
 	"fmt"
 	"time"
 
-	apps "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -47,25 +47,48 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if !opts.EnterpriseCRDExists {
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, opts))
+
+	var prometheusReady = &utils.ReadyFlag{}
+
+	// Create the reconciler
+	reconciler := newReconciler(mgr, opts, prometheusReady)
+
+	// Create a new controller
+	controller, err := controller.New("monitor-controller", mgr, controller.Options{Reconciler: reconciler})
+	if err != nil {
+		return fmt.Errorf("failed to create monitor-controller: %w", err)
+	}
+
+	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		log.Error(err, "Failed to establish a connection to k8s")
+		return err
+	}
+	go waitToAddWatch(controller, k8sClient, log, prometheusReady)
+
+	return add(mgr, controller)
 }
 
-func newReconciler(mgr manager.Manager, opts options.AddOptions) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady *utils.ReadyFlag) reconcile.Reconciler {
 	r := &ReconcileMonitor{
-		client:   mgr.GetClient(),
-		scheme:   mgr.GetScheme(),
-		provider: opts.DetectedProvider,
-		status:   status.New(mgr.GetClient(), "monitor", opts.KubernetesVersion),
+		client:          mgr.GetClient(),
+		scheme:          mgr.GetScheme(),
+		provider:        opts.DetectedProvider,
+		status:          status.New(mgr.GetClient(), "monitor", opts.KubernetesVersion),
+		prometheusReady: prometheusReady,
 	}
+
+	r.status.AddStatefulSets([]types.NamespacedName{
+		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("alertmanager-%s", render.CalicoNodeAlertmanager)},
+		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("prometheus-%s", render.CalicoNodePrometheus)},
+	})
+
 	r.status.Run()
 	return r
 }
 
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
-	c, err := controller.New("monitor-controller", mgr, controller.Options{Reconciler: r})
-	if err != nil {
-		return fmt.Errorf("failed to create monitor-controller: %w", err)
-	}
+func add(mgr manager.Manager, c controller.Controller) error {
+	var err error
 
 	// watch for primary resource changes
 	if err = c.Watch(&source.Kind{Type: &operatorv1.Monitor{}}, &handler.EnqueueRequestForObject{}); err != nil {
@@ -80,42 +103,6 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("monitor-controller failed to watch ImageSet: %w", err)
 	}
 
-	// watch for prometheus resource changes
-	if err = addAlertmanagerWatch(c); err != nil {
-		return fmt.Errorf("monitor-controller failed to watch Alertmanager resource: %w", err)
-	}
-
-	if err = addPrometheusWatch(c); err != nil {
-		return fmt.Errorf("monitor-controller failed to watch Prometheus resource: %w", err)
-	}
-
-	if err = addPrometheusRuleWatch(c); err != nil {
-		return fmt.Errorf("monitor-controller failed to watch PrometheusRule resource: %w", err)
-	}
-
-	if err = addServiceMonitorCalicoNodeWatch(c); err != nil {
-		return fmt.Errorf("monitor-controller failed to watch ServiceMonitor calico-node-monitor resource: %w", err)
-	}
-
-	if err = addServiceMonitorElasticsearchWatch(c); err != nil {
-		return fmt.Errorf("monitor-controller failed to watch ServiceMonitor elasticsearch-metrics resource: %w", err)
-	}
-
-	if err = addPodMonitorWatch(c); err != nil {
-		return fmt.Errorf("monitor-controller failed to watch PodMonitor resource: %w", err)
-	}
-
-	if err = c.Watch(&source.Kind{Type: &apps.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{Name: "alertmanager-" + render.CalicoNodeAlertmanager, Namespace: common.TigeraPrometheusNamespace},
-	}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("monitor-controller failed to watch StatefulSet resource: %w", err)
-	}
-
-	if err = c.Watch(&source.Kind{Type: &apps.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{Name: "prometheus-" + render.CalicoNodePrometheus, Namespace: common.TigeraPrometheusNamespace},
-	}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("monitor-controller failed to watch StatefulSet resource: %w", err)
-	}
 	return nil
 }
 
@@ -123,10 +110,11 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 var _ reconcile.Reconciler = &ReconcileMonitor{}
 
 type ReconcileMonitor struct {
-	client   client.Client
-	scheme   *runtime.Scheme
-	provider operatorv1.Provider
-	status   status.StatusManager
+	client          client.Client
+	scheme          *runtime.Scheme
+	provider        operatorv1.Provider
+	status          status.StatusManager
+	prometheusReady *utils.ReadyFlag
 }
 
 func (r *ReconcileMonitor) getMonitor(ctx context.Context) (*operatorv1.Monitor, error) {
@@ -174,6 +162,12 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	pullSecrets, err := utils.GetNetworkingPullSecrets(install, r.client)
 	if err != nil {
 		r.setDegraded(reqLogger, err, "Error retrieving pull secrets")
+		return reconcile.Result{}, err
+	}
+
+	if !r.prometheusReady.IsReady() {
+		err = fmt.Errorf("waiting for Prometheus resources")
+		r.setDegraded(reqLogger, err, "Waiting for Prometheus resources to be ready")
 		return reconcile.Result{}, err
 	}
 

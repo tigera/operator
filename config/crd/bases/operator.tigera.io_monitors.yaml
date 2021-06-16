@@ -38,7 +38,7 @@ spec:
             description: MonitorSpec defines the desired state of Tigera monitor.
             type: object
           status:
-            description: MonitorStatus defines the observed state of Tigear monitor.
+            description: MonitorStatus defines the observed state of Tigera monitor.
             properties:
               state:
                 description: State provides user-readable status.

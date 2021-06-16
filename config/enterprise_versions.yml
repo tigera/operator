@@ -20,7 +20,7 @@ components:
     version: master
   cnx-node:
     image: tigera/cnx-node
-    version: master
+    version: non-root
   fluentd:
     image: tigera/fluentd
     version: master

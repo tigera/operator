@@ -603,6 +603,8 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 
 	if c.bpfDataplaneEnabled() {
 		initContainers = append(initContainers, c.bpffsInitContainer())
+	} else {
+		initContainers = append(initContainers, c.hostpathInitContainer())
 	}
 
 	var affinity *v1.Affinity
@@ -621,6 +623,26 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 			},
 		}
 	}
+
+	/*
+		// TODO: Decide if this is still useful since it requires whitelisting unsafe sysctls
+		var psc *v1.PodSecurityContext
+		if c.cr.Variant == operator.TigeraSecureEnterprise {
+			// Add enablement for conntrack for Calico Enterprise.
+			psc = &v1.PodSecurityContext{
+				Sysctls: []v1.Sysctl{
+					{
+						Name:  "net.ipv4.ip_forward",
+						Value: "1",
+					},
+					{
+						Name:  "net.netfilter.nf_conntrack_acct",
+						Value: "1",
+					},
+				},
+			}
+		}
+	*/
 
 	ds := apps.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
@@ -647,6 +669,8 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 					InitContainers:                initContainers,
 					Containers:                    []v1.Container{c.nodeContainer()},
 					Volumes:                       c.nodeVolumes(),
+					// TODO: Decide if this needs to be removed
+					// SecurityContext:               psc,
 				},
 			},
 			UpdateStrategy: c.cr.NodeUpdateStrategy,
@@ -692,8 +716,8 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 
 	volumes := []v1.Volume{
 		{Name: "lib-modules", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/lib/modules"}}},
-		{Name: "var-run-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/calico"}}},
-		{Name: "var-lib-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
+		{Name: "var-run", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run"}}},
+		{Name: "var-lib", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/lib"}}},
 		{Name: "xtables-lock", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
 		{Name: "policysync", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 		{
@@ -853,6 +877,34 @@ func (c *nodeComponent) bpffsInitContainer() v1.Container {
 	}
 }
 
+// hostpathInitContainer creates an init container that creates some of the hostpath directories that
+// Calico will write to and assigns the proper permissions to them. This allows for calico to access
+// and write to hostpath volumes without needing to run as root.
+func (c *nodeComponent) hostpathInitContainer() v1.Container {
+	return v1.Container{
+		Name: "hostpath-init",
+		// TODO: Is there  another minimal image we use for things like this?
+		Image: "busybox:latest",
+		// TODO: Make the UID configurable. Currently set to 1010
+		Command: []string{"sh", "-c", "mkdir -p /var/lib/calico/ && chown -R 1010 /var/lib/calico/ && mkdir -p /var/run/calico/ && chown -R 1010 /var/run/calico/"},
+		SecurityContext: &v1.SecurityContext{
+			Privileged: ptr.BoolToPtr(true),
+		},
+		VolumeMounts: []v1.VolumeMount{
+			{
+				MountPath: "/var/run",
+				Name:      "var-run",
+				ReadOnly:  false,
+			},
+			{
+				MountPath: "var/lib",
+				Name:      "var-lib",
+				ReadOnly:  false,
+			},
+		},
+	}
+}
+
 // cniEnvvars creates the CNI container's envvars.
 func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
 	if c.cr.CNI.Type != operator.PluginCalico {
@@ -904,11 +956,13 @@ func (c *nodeComponent) nodeContainer() v1.Container {
 			},
 		}
 		sc.Privileged = ptr.BoolToPtr(false)
-		sc.RunAsUser = ptr.Int64ToPtr(0)
+		//sc.RunAsUser = ptr.Int64ToPtr(0)
+		sc.RunAsUser = ptr.Int64ToPtr(1010)
 	}
 	return v1.Container{
 		Name:            "calico-node",
 		Image:           c.nodeImage,
+		ImagePullPolicy: v1.PullAlways,
 		Resources:       c.nodeResources(),
 		SecurityContext: sc,
 		Env:             c.nodeEnvVars(),
@@ -928,8 +982,8 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 	nodeVolumeMounts := []v1.VolumeMount{
 		{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
 		{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
-		{MountPath: "/var/run/calico", Name: "var-run-calico"},
-		{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
+		{MountPath: "/var/run", Name: "var-run"},
+		{MountPath: "/var/lib", Name: "var-lib"},
 		{MountPath: "/var/run/nodeagent", Name: "policysync"},
 		{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
 		{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
@@ -1348,6 +1402,7 @@ func (c *nodeComponent) nodeMetricsService() *v1.Service {
 	}
 }
 
+// TODO: Need to remove hostpath permission
 func (c *nodeComponent) nodePodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 	psp := podsecuritypolicy.NewBasePolicy()
 	psp.GetObjectMeta().SetName(common.NodeDaemonSetName)

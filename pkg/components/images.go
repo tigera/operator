@@ -22,7 +22,7 @@ const (
 	// point to a testing repo but the init image will be pushed to quay, so having
 	// these separate allows pulling the proper test images for the Tigera components
 	// and Init image when testing.
-	ECKRegistry        = "docker.elastic.co/"
+	ECKRegistry        = "quay.io/"
 	InitRegistry       = "quay.io/"
 	K8sGcrRegistry     = "gcr.io/"
 	PrometheusRegistry = "quay.io/"

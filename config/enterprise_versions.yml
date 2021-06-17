@@ -39,8 +39,8 @@ components:
     image: tigera/kibana
     version: master
   elasticsearch-operator:
-    registry: docker.elastic.co
-    image: eck/eck-operator
+    registry: quay.io
+    image: tigera/eck-operator
     version: 1.2.1
   eck-elasticsearch:
     version: 7.10.1

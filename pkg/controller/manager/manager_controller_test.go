@@ -37,6 +37,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/test"
 
@@ -151,7 +152,7 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      relasticsearch.PublicCertSecret,
+					Name:      esgateway.EsGatewayElasticPublicCertSecret,
 					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
@@ -159,7 +160,7 @@ var _ = Describe("Manager controller tests", func() {
 					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.KibanaPublicCertSecret,
+					Name:      esgateway.EsGatewayKibanaPublicCertSecret,
 					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, &corev1.Secret{
@@ -380,7 +381,7 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      relasticsearch.PublicCertSecret,
+					Name:      esgateway.EsGatewayElasticPublicCertSecret,
 					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
@@ -388,7 +389,7 @@ var _ = Describe("Manager controller tests", func() {
 					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.KibanaPublicCertSecret,
+					Name:      esgateway.EsGatewayKibanaPublicCertSecret,
 					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, &corev1.Secret{

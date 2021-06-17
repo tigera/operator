@@ -85,3 +85,6 @@ components:
   elasticsearch-metrics:
     image: tigera/elasticsearch-metrics
     version: master
+  es-gateway:
+    image: tigera/es-gateway
+    version: master

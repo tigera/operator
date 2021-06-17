@@ -907,6 +907,10 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 		nodeVolumeMounts = append(nodeVolumeMounts, cniLogMount)
 	}
 
+	if c.cr.CNI.Type == operator.PluginCalico {
+		nodeVolumeMounts = append(nodeVolumeMounts, v1.VolumeMount{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"})
+	}
+
 	if c.birdTemplates != nil {
 		// create a volume mount for each bird template, but sort them alphabetically first,
 		// otherwise, since map iteration is random, they'll be added to the list of volumes in a random order,
@@ -1013,6 +1017,11 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 				Optional: ptr.BoolToPtr(true),
 			},
 		}},
+	}
+
+	if c.cr.CNI != nil && c.cr.CNI.Type == operator.PluginCalico {
+		// If using Calico CNI, we need to manage CNI credential rotation on the host.
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_MANAGE_CNI", Value: "true"})
 	}
 
 	if c.cr.CNI != nil && c.cr.CNI.Type == operator.PluginAmazonVPC {

@@ -122,6 +122,11 @@ var (
 		Image:   "tigera/voltron",
 	}
 
+	ComponentPacketCaptures = component{
+		Version: "master",
+		Image:   "tigera/packetcapture-api",
+	}
+
 	ComponentPrometheus = component{
 		Version: "v2.17.2",
 		Image:   "prometheus/prometheus",

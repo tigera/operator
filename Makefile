@@ -393,6 +393,13 @@ release-verify: release-prereqs
 	if ! docker run $(IMAGE_REGISTRY)/$(BUILD_IMAGE):$(VERSION)-$(ARCH) --version | grep '^Operator: $(VERSION)$$'; then echo "Reported version:" `docker run $(IMAGE_REGISTRY)/$(BUILD_IMAGE):$(VERSION)-$(ARCH) --version ` "\nExpected version: $(VERSION)"; false; else echo "\nVersion check passed\n"; fi
 
 release-publish-images: release-prereqs
+	@echo "Checking if $(IMAGE_REGISTRY)/$(BUILD_IMAGE):$(VERSION) exists already"; \
+	if docker manifest inspect $(IMAGE_REGISTRY)/$(BUILD_IMAGE):$(VERSION) >/dev/null; \
+		then echo "Image $(IMAGE_REGISTRY)/$(BUILD_IMAGE):$(VERSION) already exists"; \
+		false; \
+	else \
+		echo "Image tag check passed; image does not exist"; \
+	fi
 	# Push images.
 	$(MAKE) push-all push-manifests push-non-manifests RELEASE=true IMAGETAG=$(VERSION)
 

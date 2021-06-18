@@ -122,6 +122,11 @@ var (
 		Image:   "tigera/voltron",
 	}
 
+	ComponentPacketCapture = component{
+		Version: "master",
+		Image:   "tigera/packetcapture-api",
+	}
+
 	ComponentPrometheus = component{
 		Version: "v2.17.2",
 		Image:   "prometheus/prometheus",
@@ -189,6 +194,7 @@ var (
 		ComponentManager,
 		ComponentDex,
 		ComponentManagerProxy,
+		ComponentPacketCapture,
 		ComponentPrometheus,
 		ComponentPrometheusAlertmanager,
 		ComponentQueryServer,

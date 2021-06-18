@@ -477,8 +477,8 @@ func (c *managerComponent) managerProxyProbe() *v1.Probe {
 	}
 }
 
-// managerPacketCaptureProbe returns the probe for the PacketCapture API container.
-func (c *managerComponent) managerPacketCaptureProbe() *v1.Probe {
+// managerPacketCaptureLivenessProbe returns the probe for the PacketCapture API container.
+func (c *managerComponent) managerPacketCaptureLivenessProbe() *v1.Probe {
 	return &corev1.Probe{
 		Handler: corev1.Handler{
 			HTTPGet: &corev1.HTTPGetAction{
@@ -585,7 +585,7 @@ func (c *managerComponent) managerPacketCaptureContainer() corev1.Container {
 	}
 
 	env := []v1.EnvVar{
-		{Name: "PACKETCAPTURE_API_LOG_LEVEL", Value: string("Info")},
+		{Name: "PACKETCAPTURE_API_LOG_LEVEL", Value: "Info"},
 	}
 
 	if c.keyValidatorConfig != nil {
@@ -596,7 +596,7 @@ func (c *managerComponent) managerPacketCaptureContainer() corev1.Container {
 	return corev1.Container{
 		Name:            "tigera-packetcapture",
 		Image:           c.packetCaptureImage,
-		LivenessProbe:   c.managerPacketCaptureProbe(),
+		LivenessProbe:   c.managerPacketCaptureLivenessProbe(),
 		SecurityContext: podsecuritycontext.NewBaseContext(),
 		Env:             env,
 		VolumeMounts:    volumeMounts,

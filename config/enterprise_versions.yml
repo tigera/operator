@@ -90,3 +90,6 @@ components:
   alertmanager:
     image: tigera/alertmanager
     version: v0.20.0
+  packetcapture:
+    image: tigera/packetcapture-api
+    version: master

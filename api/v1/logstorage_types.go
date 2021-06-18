@@ -52,6 +52,10 @@ type LogStorageSpec struct {
 	// Only ECKOperator is supported for this spec.
 	// +optional
 	ComponentResources []LogStorageComponentResource `json:"componentResources,omitempty"`
+
+	// IngestReplicaCount can be used to adjust the replica count for ES Gateway.
+	// +optional
+	IngestReplicaCount *int32 `json:"ingestReplicaCount,omitempty"`
 }
 
 // LogStorageStatus defines the observed state of Tigera flow and DNS log storage.

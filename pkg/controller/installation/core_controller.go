@@ -45,6 +45,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 
 	configv1 "github.com/openshift/api/config/v1"
 
@@ -855,14 +856,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			return reconcile.Result{}, err
 		}
 
-		elasticsearchSecret, err = utils.GetSecret(ctx, r.client, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
+		elasticsearchSecret, err = utils.GetSecret(ctx, r.client, esgateway.EsGatewayElasticPublicCertSecret, rmeta.OperatorNamespace())
 		if err != nil {
 			log.Error(err, err.Error())
 			r.status.SetDegraded("Failed to get Elasticsearch pub cert secret", err.Error())
 			return reconcile.Result{}, err
 		}
 
-		kibanaSecret, err = utils.GetSecret(ctx, r.client, render.KibanaPublicCertSecret, rmeta.OperatorNamespace())
+		kibanaSecret, err = utils.GetSecret(ctx, r.client, esgateway.EsGatewayKibanaPublicCertSecret, rmeta.OperatorNamespace())
 		if err != nil {
 			log.Error(err, err.Error())
 			r.status.SetDegraded("Failed to get Kibana pub cert secret", err.Error())
@@ -907,9 +908,11 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	var esAdminSecret *v1.Secret
 	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
-		// Kube controllers needs the admin secret copied to it's namespace as it has administrative tasks to run on
-		// Elasticsearch.
-		esAdminSecret, err = utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, rmeta.OperatorNamespace())
+		// Kube controllers no longer uses the admin secret to run it's administrative tasks on Elasticsearch.
+		// Instead a username/password combo is randomly generated and stored in tigera-ee-kube-controllers-elasticsearch-access
+		// and passed to the ES Gateway deployment to be used to detect requests from kube-controllers and swap in admin
+		// level Elasticsearch credentials.
+		esAdminSecret, err = utils.GetSecret(ctx, r.client, render.ElasticsearchKubeControllersUserSecret, common.CalicoNamespace)
 		if err != nil {
 			return reconcile.Result{}, err
 		}

@@ -38,10 +38,6 @@ components:
   kibana:
     image: tigera/kibana
     version: master
-  elasticsearch-operator:
-    registry: docker.elastic.co
-    image: eck/eck-operator
-    version: 1.2.1
   eck-elasticsearch:
     version: 7.10.1
   elasticsearch:
@@ -71,8 +67,6 @@ components:
   compliance-benchmarker:
     image: tigera/compliance-benchmarker
     version: master
-  # Below components are all maintained by 3rd parties and thus specify a 'registry' to indicate
-  # to the docs & manifest tooling not to default to the tigera registry.
   guardian:
     image: tigera/guardian
     version: master
@@ -85,9 +79,15 @@ components:
   elasticsearch-metrics:
     image: tigera/elasticsearch-metrics
     version: master
+  # Below components are third-party images hosted by default under quay.io/tigera. If additional
+  # images require a different registry, add a registry field for the componenet and/or update the 
+  # default registries in pkg/components/images.go .
+  elasticsearch-operator:
+    image: tigera/eck-operator
+    version: 1.2.1
   prometheus:
-    image: prometheus/prometheus
+    image: tigera/prometheus
     version: v2.17.2
   prometheus-alertmanager:
-    image: prometheus/alertmanager
+    image: tigera/alertmanager
     version: v0.20.0

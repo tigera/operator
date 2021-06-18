@@ -21,6 +21,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -112,6 +113,10 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		// Expect no volume mounts for packetcapture-api
 		var packetcapture = deployment.Spec.Template.Spec.Containers[3]
 		Expect(len(packetcapture.VolumeMounts)).To(Equal(0))
+		Expect(*packetcapture.Resources.Requests.Cpu()).To(Equal(resource.MustParse("250m")))
+		Expect(*packetcapture.Resources.Limits.Cpu()).To(Equal(resource.MustParse("500m")))
+		Expect(*packetcapture.Resources.Requests.Memory()).To(Equal(resource.MustParse("64Mi")))
+		Expect(*packetcapture.Resources.Limits.Memory()).To(Equal(resource.MustParse("128Mi")))
 	})
 
 	It("should ensure cnx policy recommendation support is always set to true", func() {

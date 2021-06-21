@@ -19,8 +19,6 @@ import (
 	"strconv"
 	"strings"
 
-	"k8s.io/apimachinery/pkg/api/resource"
-
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
 
 	"github.com/tigera/operator/pkg/render/common/authentication"
@@ -601,23 +599,9 @@ func (c *managerComponent) managerPacketCaptureContainer() corev1.Container {
 		Name:            PacketCaptureServer,
 		Image:           c.packetCaptureImage,
 		LivenessProbe:   c.managerPacketCaptureLivenessProbe(),
-		Resources:       c.resourceRequirements(),
 		SecurityContext: podsecuritycontext.NewBaseContext(),
 		Env:             env,
 		VolumeMounts:    volumeMounts,
-	}
-}
-
-func (c *managerComponent) resourceRequirements() v1.ResourceRequirements {
-	return corev1.ResourceRequirements{
-		Limits: corev1.ResourceList{
-			v1.ResourceCPU:    resource.MustParse("500m"),
-			v1.ResourceMemory: resource.MustParse("128Mi"),
-		},
-		Requests: corev1.ResourceList{
-			v1.ResourceCPU:    resource.MustParse("250m"),
-			v1.ResourceMemory: resource.MustParse("64Mi"),
-		},
 	}
 }
 

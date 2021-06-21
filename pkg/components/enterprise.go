@@ -69,7 +69,7 @@ var (
 
 	ComponentElasticsearchOperator = component{
 		Version: "1.2.1",
-		Image:   "eck/eck-operator",
+		Image:   "tigera/eck-operator",
 	}
 
 	ComponentEsCurator = component{
@@ -124,12 +124,12 @@ var (
 
 	ComponentPrometheus = component{
 		Version: "v2.17.2",
-		Image:   "prometheus/prometheus",
+		Image:   "tigera/prometheus",
 	}
 
 	ComponentPrometheusAlertmanager = component{
 		Version: "v0.20.0",
-		Image:   "prometheus/alertmanager",
+		Image:   "tigera/alertmanager",
 	}
 
 	ComponentQueryServer = component{

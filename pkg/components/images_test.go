@@ -30,7 +30,7 @@ var _ = Describe("test GetReference", func() {
 			Expect(GetReference(ComponentTigeraNode, "", "", "", nil)).To(Equal(TigeraRegistry + "tigera/cnx-node:" + ComponentTigeraNode.Version))
 		})
 		It("should render an ECK image correctly", func() {
-			Expect(GetReference(ComponentElasticsearchOperator, "", "", "", nil)).To(Equal("docker.elastic.co/eck/eck-operator:" + ComponentElasticsearchOperator.Version))
+			Expect(GetReference(ComponentElasticsearchOperator, "", "", "", nil)).To(Equal("quay.io/tigera/eck-operator:" + ComponentElasticsearchOperator.Version))
 		})
 		It("should render an operator init image correctly", func() {
 			Expect(GetReference(ComponentOperatorInit, "", "", "", nil)).To(Equal(InitRegistry + "tigera/operator:" + ComponentOperatorInit.Version))
@@ -46,7 +46,7 @@ var _ = Describe("test GetReference", func() {
 			Expect(GetReference(ComponentTigeraNode, ud, ud, "", nil)).To(Equal(TigeraRegistry + "tigera/cnx-node:" + ComponentTigeraNode.Version))
 		})
 		It("should render an ECK image correctly", func() {
-			Expect(GetReference(ComponentElasticsearchOperator, ud, ud, "", nil)).To(Equal("docker.elastic.co/eck/eck-operator:" + ComponentElasticsearchOperator.Version))
+			Expect(GetReference(ComponentElasticsearchOperator, ud, ud, "", nil)).To(Equal("quay.io/tigera/eck-operator:" + ComponentElasticsearchOperator.Version))
 		})
 		It("should render an operator init image correctly", func() {
 			Expect(GetReference(ComponentOperatorInit, ud, ud, "", nil)).To(Equal(InitRegistry + "tigera/operator:" + ComponentOperatorInit.Version))
@@ -61,7 +61,7 @@ var _ = Describe("test GetReference", func() {
 			Expect(GetReference(ComponentTigeraNode, "quay.io/", "", "", nil)).To(Equal("quay.io/tigera/cnx-node:" + ComponentTigeraNode.Version))
 		})
 		It("should render an ECK image correctly", func() {
-			Expect(GetReference(ComponentElasticsearchOperator, "quay.io/", "", "", nil)).To(Equal("quay.io/eck/eck-operator:" + ComponentElasticsearchOperator.Version))
+			Expect(GetReference(ComponentElasticsearchOperator, "quay.io/", "", "", nil)).To(Equal("quay.io/tigera/eck-operator:" + ComponentElasticsearchOperator.Version))
 		})
 		It("should render an operator init image correctly", func() {
 			Expect(GetReference(ComponentOperatorInit, "gcr.io/", "", "", nil)).To(Equal("gcr.io/tigera/operator:" + ComponentOperatorInit.Version))
@@ -76,7 +76,7 @@ var _ = Describe("test GetReference", func() {
 			Expect(GetReference(ComponentTigeraNode, "quay.io/", "", "pref", nil)).To(Equal("quay.io/tigera/prefcnx-node:" + ComponentTigeraNode.Version))
 		})
 		It("should render an ECK image correctly", func() {
-			Expect(GetReference(ComponentElasticsearchOperator, "quay.io/", "", "pref", nil)).To(Equal("quay.io/eck/prefeck-operator:" + ComponentElasticsearchOperator.Version))
+			Expect(GetReference(ComponentElasticsearchOperator, "quay.io/", "", "pref", nil)).To(Equal("quay.io/tigera/prefeck-operator:" + ComponentElasticsearchOperator.Version))
 		})
 		It("should render an operator init image correctly", func() {
 			Expect(GetReference(ComponentOperatorInit, "gcr.io/", "", "pref", nil)).To(Equal("gcr.io/tigera/prefoperator:" + ComponentOperatorInit.Version))
@@ -94,7 +94,7 @@ var _ = Describe("test GetReference", func() {
 			Expect(GetReference(ComponentTigeraNode, "", "userpath", "", nil)).To(Equal(TigeraRegistry + "userpath/cnx-node:" + ComponentTigeraNode.Version))
 		})
 		It("should render an ECK image correctly", func() {
-			Expect(GetReference(ComponentElasticsearchOperator, "", "userpath", "", nil)).To(Equal("docker.elastic.co/userpath/eck-operator:" + ComponentElasticsearchOperator.Version))
+			Expect(GetReference(ComponentElasticsearchOperator, "", "userpath", "", nil)).To(Equal("quay.io/userpath/eck-operator:" + ComponentElasticsearchOperator.Version))
 		})
 		It("should render an operator init image correctly", func() {
 			Expect(GetReference(ComponentOperatorInit, "", "userpath", "", nil)).To(Equal(InitRegistry + "userpath/operator:" + ComponentOperatorInit.Version))
@@ -120,7 +120,7 @@ var _ = Describe("test GetReference", func() {
 				Images: []op.Image{
 					{Image: "calico/node", Digest: "sha256:caliconodehash"},
 					{Image: "tigera/cnx-node", Digest: "sha256:tigeracnxnodehash"},
-					{Image: "eck/eck-operator", Digest: "sha256:eckeckoperatorhash"},
+					{Image: "tigera/eck-operator", Digest: "sha256:eckeckoperatorhash"},
 					{Image: "tigera/operator", Digest: "sha256:tigeraoperatorhash"},
 				},
 			},

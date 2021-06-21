@@ -100,6 +100,23 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		for _, expected := range expectedEnvs {
 			Expect(envs).To(ContainElement(expected))
 		}
+
+		container := ds.Spec.Template.Spec.Containers[0]
+
+		Expect(container.ReadinessProbe.Exec.Command).To(ConsistOf([]string{"sh", "-c", "/bin/readiness.sh"}))
+		Expect(container.ReadinessProbe.TimeoutSeconds).To(BeEquivalentTo(5))
+		Expect(container.ReadinessProbe.PeriodSeconds).To(BeEquivalentTo(5))
+		Expect(container.ReadinessProbe.FailureThreshold).To(BeEquivalentTo(3))
+
+		Expect(container.LivenessProbe.Exec.Command).To(ConsistOf([]string{"sh", "-c", "/bin/liveness.sh"}))
+		Expect(container.LivenessProbe.TimeoutSeconds).To(BeEquivalentTo(5))
+		Expect(container.LivenessProbe.PeriodSeconds).To(BeEquivalentTo(5))
+		Expect(container.LivenessProbe.FailureThreshold).To(BeEquivalentTo(3))
+
+		Expect(container.StartupProbe.Exec.Command).To(ConsistOf([]string{"sh", "-c", "/bin/liveness.sh"}))
+		Expect(container.StartupProbe.TimeoutSeconds).To(BeEquivalentTo(10))
+		Expect(container.StartupProbe.PeriodSeconds).To(BeEquivalentTo(10))
+		Expect(container.StartupProbe.FailureThreshold).To(BeEquivalentTo(10))
 	})
 
 	It("should render for Windows nodes", func() {
@@ -169,6 +186,23 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		for _, expected := range expectedEnvs {
 			Expect(envs).To(ContainElement(expected))
 		}
+
+		container := ds.Spec.Template.Spec.Containers[0]
+
+		Expect(container.ReadinessProbe.Exec.Command).To(ConsistOf([]string{`c:\ruby26\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/readiness.sh`}))
+		Expect(container.ReadinessProbe.TimeoutSeconds).To(BeEquivalentTo(10))
+		Expect(container.ReadinessProbe.PeriodSeconds).To(BeEquivalentTo(10))
+		Expect(container.ReadinessProbe.FailureThreshold).To(BeEquivalentTo(3))
+
+		Expect(container.LivenessProbe.Exec.Command).To(ConsistOf([]string{`c:\ruby26\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/liveness.sh`}))
+		Expect(container.LivenessProbe.TimeoutSeconds).To(BeEquivalentTo(10))
+		Expect(container.LivenessProbe.PeriodSeconds).To(BeEquivalentTo(10))
+		Expect(container.LivenessProbe.FailureThreshold).To(BeEquivalentTo(3))
+
+		Expect(container.StartupProbe.Exec.Command).To(ConsistOf([]string{`c:\ruby26\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/liveness.sh`}))
+		Expect(container.StartupProbe.TimeoutSeconds).To(BeEquivalentTo(20))
+		Expect(container.StartupProbe.PeriodSeconds).To(BeEquivalentTo(20))
+		Expect(container.StartupProbe.FailureThreshold).To(BeEquivalentTo(10))
 	})
 
 	It("should render with S3 configuration", func() {

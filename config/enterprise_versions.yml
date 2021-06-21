@@ -79,9 +79,8 @@ components:
   elasticsearch-metrics:
     image: tigera/elasticsearch-metrics
     version: master
-  # Below components are third-party images hosted by default under quay.io/tigera. If additional
-  # images require a different registry, add a registry field for the componenet and/or update the 
-  # default registries in pkg/components/images.go .
+  # The components below are third-party images that have been retagged under 
+  # quay.io/tigera so all enterprise images come from the same repository and org.
   elasticsearch-operator:
     image: tigera/eck-operator
     version: 1.2.1

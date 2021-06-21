@@ -234,9 +234,16 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 			},
 			{
 				APIGroups: []string{""},
-				Resources: []string{"configmaps", "secrets"},
+				Resources: []string{"configmaps"},
 				Verbs:     []string{"watch", "list", "get", "update", "create"},
 			},
+			// Used for the creation, synchronization and deletion of elasticsearch related secrets.
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"watch", "list", "get", "update", "create", "deletecollection"},
+			},
+
 			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},

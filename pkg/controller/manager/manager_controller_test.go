@@ -450,7 +450,7 @@ var _ = Describe("Manager controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentManagerProxy.Image,
 					components.ComponentManagerProxy.Version)))
-			packetCapture := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-packetcapture")
+			packetCapture := test.GetContainer(d.Spec.Template.Spec.Containers, render.PacketCaptureServer)
 			Expect(packetCapture).ToNot(BeNil())
 			Expect(packetCapture.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
@@ -499,7 +499,7 @@ var _ = Describe("Manager controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentManagerProxy.Image,
 					"sha256:voltronhash")))
-			packetCapture := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-packetcapture")
+			packetCapture := test.GetContainer(d.Spec.Template.Spec.Containers, render.PacketCaptureServer)
 			Expect(packetCapture).ToNot(BeNil())
 			Expect(packetCapture.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",

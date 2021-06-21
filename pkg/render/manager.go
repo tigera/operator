@@ -71,6 +71,8 @@ const (
 
 	KibanaTLSHashAnnotation         = "hash.operator.tigera.io/kibana-secrets"
 	ElasticsearchUserHashAnnotation = "hash.operator.tigera.io/elasticsearch-user"
+
+	PacketCaptureServer = "tigera-packetcapture-server"
 )
 
 // ManagementClusterConnection configuration constants
@@ -579,7 +581,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 	}
 }
 
-// managerContainer returns the manager container.
+// managerPacketCaptureContainer returns the manager container.
 func (c *managerComponent) managerPacketCaptureContainer() corev1.Container {
 	var volumeMounts []corev1.VolumeMount
 	if c.managementCluster != nil {
@@ -596,7 +598,7 @@ func (c *managerComponent) managerPacketCaptureContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:            "tigera-packetcapture",
+		Name:            PacketCaptureServer,
 		Image:           c.packetCaptureImage,
 		LivenessProbe:   c.managerPacketCaptureLivenessProbe(),
 		Resources:       c.resourceRequirements(),

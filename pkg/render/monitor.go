@@ -227,7 +227,7 @@ func (mc *monitorComponent) serviceMonitorCalicoNode() *monitoringv1.ServiceMoni
 		},
 		Spec: monitoringv1.ServiceMonitorSpec{
 			Selector:          metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "calico-node"}},
-			NamespaceSelector: monitoringv1.NamespaceSelector{MatchNames: []string{"calico-node"}},
+			NamespaceSelector: monitoringv1.NamespaceSelector{MatchNames: []string{"calico-system"}},
 			Endpoints: []monitoringv1.Endpoint{
 				{
 					HonorLabels:   true,
@@ -255,8 +255,8 @@ func (mc *monitorComponent) serviceMonitorElasicsearch() *monitoringv1.ServiceMo
 			Labels:    map[string]string{"team": "network-operators"},
 		},
 		Spec: monitoringv1.ServiceMonitorSpec{
-			Selector:          metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "fluentd-node"}},
-			NamespaceSelector: monitoringv1.NamespaceSelector{MatchNames: []string{"tigera-fluentd"}},
+			Selector:          metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "tigera-elasticsearch-metrics"}},
+			NamespaceSelector: monitoringv1.NamespaceSelector{MatchNames: []string{"tigera-elasticsearch"}},
 			Endpoints: []monitoringv1.Endpoint{
 				{
 					HonorLabels:   true,

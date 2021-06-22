@@ -142,6 +142,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "packetcapture" }}
+	ComponentPacketCapture = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "prometheus" }}
 	ComponentPrometheus = component{
 		Version: "{{ .Version }}",
@@ -219,6 +225,7 @@ var (
 		ComponentManager,
 		ComponentDex,
 		ComponentManagerProxy,
+		ComponentPacketCapture,
 		ComponentPrometheus,
 		ComponentPrometheusAlertmanager,
 		ComponentQueryServer,

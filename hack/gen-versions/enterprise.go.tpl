@@ -148,7 +148,7 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index .Components "prometheus-alertmanager" }}
+{{ with index .Components "alertmanager" }}
 	ComponentPrometheusAlertmanager = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",

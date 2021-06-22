@@ -762,11 +762,6 @@ func managerClusterRole(managementCluster, managedCluster, openshift bool) *rbac
 				Resources: []string{"serviceaccounts", "namespaces", "nodes", "events"},
 				Verbs:     []string{"list"},
 			},
-			{
-				APIGroups: []string{""},
-				Resources: []string{"pod/exec"},
-				Verbs:     []string{"create"},
-			},
 			// When a request is made in the manager UI, they are proxied through the Voltron backend server. If the
 			// request is targeting a k8s api or when it is targeting a managed cluster, Voltron will authenticate the
 			// user based on the auth header and then impersonate the user.
@@ -788,10 +783,12 @@ func managerClusterRole(managementCluster, managedCluster, openshift bool) *rbac
 		)
 	}
 
-	if managementCluster {
+	if !managedCluster {
 		// For cross-cluster requests an authentication review will be done for authenticating the tigera-manager.
 		// Requests on behalf of the tigera-manager will be sent to Voltron, where an authentication review will
 		// take place with its bearer token.
+		// In addition, PacketCapture API uses authentication reviews to authenticate the users and then perform
+		// SubjectAccessReviews in order to enforce RBAC on this API
 		cr.Rules = append(cr.Rules, rbacv1.PolicyRule{
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"authenticationreviews"},

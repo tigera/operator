@@ -79,7 +79,7 @@ components:
   elasticsearch-metrics:
     image: tigera/elasticsearch-metrics
     version: master
-  # The components below are third-party images that have been retagged under 
+  # The components below are third-party images that have been retagged under
   # quay.io/tigera so all enterprise images come from the same repository and org.
   elasticsearch-operator:
     image: tigera/eck-operator
@@ -87,6 +87,6 @@ components:
   prometheus:
     image: tigera/prometheus
     version: v2.17.2
-  prometheus-alertmanager:
+  alertmanager:
     image: tigera/alertmanager
     version: v0.20.0

@@ -374,7 +374,7 @@ func (c *fluentdComponent) podExecRole() *rbacv1.Role {
 				APIGroups: []string{""},
 				Resources: []string{"pod/exec"},
 				Verbs:     []string{"create"},
-						},
+			},
 		},
 	}
 }

@@ -831,6 +831,11 @@ var (
 			Verbs: []string{"watch", "list"},
 		},
 		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"packetcaptures/files"},
+			Verbs:     []string{"get"},
+		},
+		{
 			APIGroups: []string{""},
 			Resources: []string{"pods"},
 			Verbs:     []string{"list"},
@@ -913,6 +918,11 @@ var (
 				"packetcaptures",
 			},
 			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"packetcaptures/files"},
+			Verbs:     []string{"get"},
 		},
 		{
 			APIGroups: []string{""},

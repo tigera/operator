@@ -79,6 +79,9 @@ const (
 
 	eksLogForwarderName        = "eks-log-forwarder"
 	eksLogForwarderWindowsName = "eks-log-forwarder-windows"
+
+	PodExecRole        = "pod-exec-role"
+	PodExecRoleBinding = "pod-exec-role-binding"
 )
 
 type FluentdFilters struct {
@@ -273,6 +276,7 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.esSecrets...)...)...)
 	objs = append(objs, c.fluentdServiceAccount())
+	objs = append(objs, c.podExecRole(), c.podExecRoleBinding())
 	objs = append(objs, c.daemonset())
 
 	return objs, nil
@@ -355,6 +359,45 @@ func (c *fluentdComponent) fluentdServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: c.fluentdNodeName(), Namespace: LogCollectorNamespace},
+	}
+}
+
+func (c *fluentdComponent) podExecRole() *rbacv1.Role {
+	return &rbacv1.Role{
+		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      PodExecRole,
+			Namespace: LogCollectorNamespace,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pod/exec"},
+				Verbs:     []string{"create"},
+						},
+		},
+	}
+}
+
+func (c *fluentdComponent) podExecRoleBinding() *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      PodExecRoleBinding,
+			Namespace: LogCollectorNamespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     PodExecRoleBinding,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      ManagerServiceAccount,
+				Namespace: ManagerNamespace,
+			},
+		},
 	}
 }
 

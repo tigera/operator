@@ -372,7 +372,7 @@ func (c *fluentdComponent) podExecRole() *rbacv1.Role {
 		Rules: []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{""},
-				Resources: []string{"pod/exec"},
+				Resources: []string{"pods/exec"},
 				Verbs:     []string{"create"},
 			},
 		},
@@ -389,7 +389,7 @@ func (c *fluentdComponent) podExecRoleBinding() *rbacv1.RoleBinding {
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "Role",
-			Name:     PodExecRoleBinding,
+			Name:     PodExecRole,
 		},
 		Subjects: []rbacv1.Subject{
 			{

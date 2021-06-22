@@ -362,6 +362,9 @@ func (c *fluentdComponent) fluentdServiceAccount() *corev1.ServiceAccount {
 	}
 }
 
+// podExecRole creates a role in the tigera-fluentd namespace to allow pod/exec
+// only from fluentd pods. This is being used by the PacketCapture API and created
+// by the operator after the namespace tigera-fluentd is created.
 func (c *fluentdComponent) podExecRole() *rbacv1.Role {
 	return &rbacv1.Role{
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -379,6 +382,9 @@ func (c *fluentdComponent) podExecRole() *rbacv1.Role {
 	}
 }
 
+// podExecRoleBinding creates a role binding within the tigera-fluentd namespace between the pod/exec role
+// the service account tigera-manager. This is being used by the PacketCapture API and created
+// by the operator after the namespace tigera-fluentd is created
 func (c *fluentdComponent) podExecRoleBinding() *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},

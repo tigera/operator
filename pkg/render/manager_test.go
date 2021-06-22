@@ -80,6 +80,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Containers[0].Image).Should(Equal(components.TigeraRegistry + "tigera/cnx-manager:" + components.ComponentManager.Version))
 		Expect(deployment.Spec.Template.Spec.Containers[1].Image).Should(Equal(components.TigeraRegistry + "tigera/es-proxy:" + components.ComponentEsProxy.Version))
 		Expect(deployment.Spec.Template.Spec.Containers[2].Image).Should(Equal(components.TigeraRegistry + "tigera/voltron:" + components.ComponentManagerProxy.Version))
+		Expect(deployment.Spec.Template.Spec.Containers[3].Image).Should(Equal(components.TigeraRegistry + "tigera/packetcapture-api:" + components.ComponentPacketCapture.Version))
 
 		// Expect 1 volume mounts for es proxy
 		var esProxy = deployment.Spec.Template.Spec.Containers[1]
@@ -107,6 +108,10 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal(render.ComplianceServerCertSecret))
 		Expect(deployment.Spec.Template.Spec.Volumes[3].Name).To(Equal("elastic-ca-cert-volume"))
 		Expect(deployment.Spec.Template.Spec.Volumes[3].Secret.SecretName).To(Equal(relasticsearch.PublicCertSecret))
+
+		// Expect no volume mounts for packetcapture-api
+		var packetcapture = deployment.Spec.Template.Spec.Containers[3]
+		Expect(len(packetcapture.VolumeMounts)).To(Equal(0))
 	})
 
 	It("should ensure cnx policy recommendation support is always set to true", func() {
@@ -118,7 +123,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		d := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "", "v1", "Deployment").(*appsv1.Deployment)
 
-		Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(3))
+		Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(4))
 		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-manager"))
 		Expect(d.Spec.Template.Spec.Containers[0].Env[8].Name).To(Equal("CNX_POLICY_RECOMMENDATION_SUPPORT"))
 		Expect(d.Spec.Template.Spec.Containers[0].Env[8].Value).To(Equal("true"))
@@ -153,6 +158,13 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 					"tiers",
 				},
 				Verbs: []string{"get", "list"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"packetcaptures",
+				},
+				Verbs: []string{"get"},
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},
@@ -196,6 +208,16 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				APIGroups: []string{""},
 				Resources: []string{"users", "groups", "serviceaccounts"},
 				Verbs:     []string{"impersonate"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     []string{"list"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"authenticationreviews"},
+				Verbs:     []string{"create"},
 			},
 		}))
 	})
@@ -255,6 +277,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		voltron := deployment.Spec.Template.Spec.Containers[2]
 		esProxy := deployment.Spec.Template.Spec.Containers[1]
+		packetcapture := deployment.Spec.Template.Spec.Containers[3]
 		Expect(voltron.Name).To(Equal("tigera-voltron"))
 		rtest.ExpectEnv(voltron.Env, "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", "true")
 
@@ -295,6 +318,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Volumes[6].Name).To(Equal("elastic-ca-cert-volume"))
 		Expect(deployment.Spec.Template.Spec.Volumes[6].Secret.SecretName).To(Equal(relasticsearch.PublicCertSecret))
 
+		// Expect 1 volume mounts for packetcapture
+		Expect(len(packetcapture.VolumeMounts)).To(Equal(1))
+		Expect(packetcapture.VolumeMounts[0].Name).To(Equal(render.ManagerInternalTLSSecretCertName))
+		Expect(packetcapture.VolumeMounts[0].MountPath).To(Equal("/manager-tls"))
+
 		clusterRole := rtest.GetResource(resources, render.ManagerClusterRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
 			{
@@ -325,6 +353,13 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 					"tiers",
 				},
 				Verbs: []string{"get", "list"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"packetcaptures",
+				},
+				Verbs: []string{"get"},
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},
@@ -373,6 +408,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				APIGroups: []string{""},
 				Resources: []string{"users", "groups", "serviceaccounts"},
 				Verbs:     []string{"impersonate"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     []string{"list"},
 			},
 		}))
 	})

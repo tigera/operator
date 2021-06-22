@@ -69,6 +69,8 @@ const (
 
 	KibanaTLSHashAnnotation         = "hash.operator.tigera.io/kibana-secrets"
 	ElasticsearchUserHashAnnotation = "hash.operator.tigera.io/elasticsearch-user"
+
+	PacketCaptureServer = "tigera-packetcapture-server"
 )
 
 // ManagementClusterConnection configuration constants
@@ -160,6 +162,7 @@ type managerComponent struct {
 	managerImage               string
 	proxyImage                 string
 	esProxyImage               string
+	packetCaptureImage         string
 	csrInitImage               string
 }
 
@@ -180,6 +183,11 @@ func (c *managerComponent) ResolveImages(is *operator.ImageSet) error {
 	}
 
 	c.esProxyImage, err = components.GetReference(components.ComponentEsProxy, reg, path, prefix, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	c.packetCaptureImage, err = components.GetReference(components.ComponentPacketCapture, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -306,6 +314,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 				relasticsearch.ContainerDecorate(c.managerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.clusterDomain, c.SupportedOSType()),
 				relasticsearch.ContainerDecorate(c.managerEsProxyContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.clusterDomain, c.SupportedOSType()),
 				c.managerProxyContainer(),
+				c.managerPacketCaptureContainer(),
 			},
 			Volumes: c.managerVolumes(),
 		}),
@@ -470,6 +479,21 @@ func (c *managerComponent) managerProxyProbe() *v1.Probe {
 	}
 }
 
+// managerPacketCaptureLivenessProbe returns the probe for the PacketCapture API container.
+func (c *managerComponent) managerPacketCaptureLivenessProbe() *v1.Probe {
+	return &corev1.Probe{
+		Handler: corev1.Handler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Path:   "/packetcapture/health",
+				Port:   intstr.FromInt(managerPort),
+				Scheme: corev1.URISchemeHTTPS,
+			},
+		},
+		InitialDelaySeconds: 90,
+		PeriodSeconds:       10,
+	}
+}
+
 // managerEnvVars returns the envvars for the manager container.
 func (c *managerComponent) managerEnvVars() []v1.EnvVar {
 	envs := []v1.EnvVar{
@@ -552,6 +576,32 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		VolumeMounts:    c.volumeMountsForProxyManager(),
 		LivenessProbe:   c.managerProxyProbe(),
 		SecurityContext: podsecuritycontext.NewBaseContext(),
+	}
+}
+
+// managerPacketCaptureContainer returns the manager container.
+func (c *managerComponent) managerPacketCaptureContainer() corev1.Container {
+	var volumeMounts []corev1.VolumeMount
+	if c.managementCluster != nil {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{Name: ManagerInternalTLSSecretCertName, MountPath: "/manager-tls", ReadOnly: true})
+	}
+
+	env := []v1.EnvVar{
+		{Name: "PACKETCAPTURE_API_LOG_LEVEL", Value: "Info"},
+	}
+
+	if c.keyValidatorConfig != nil {
+		env = append(env, c.keyValidatorConfig.RequiredEnv("PACKETCAPTURE_API")...)
+		volumeMounts = append(volumeMounts, c.keyValidatorConfig.RequiredVolumeMounts()...)
+	}
+
+	return corev1.Container{
+		Name:            PacketCaptureServer,
+		Image:           c.packetCaptureImage,
+		LivenessProbe:   c.managerPacketCaptureLivenessProbe(),
+		SecurityContext: podsecuritycontext.NewBaseContext(),
+		Env:             env,
+		VolumeMounts:    volumeMounts,
 	}
 }
 
@@ -681,6 +731,13 @@ func managerClusterRole(managementCluster, managedCluster, openshift bool) *rbac
 			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{
+					"packetcaptures",
+				},
+				Verbs: []string{"get"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
 					"hostendpoints",
 				},
 				Verbs: []string{"list"},
@@ -713,6 +770,11 @@ func managerClusterRole(managementCluster, managedCluster, openshift bool) *rbac
 				Resources: []string{"users", "groups", "serviceaccounts"},
 				Verbs:     []string{"impersonate"},
 			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     []string{"list"},
+			},
 		},
 	}
 
@@ -726,10 +788,12 @@ func managerClusterRole(managementCluster, managedCluster, openshift bool) *rbac
 		)
 	}
 
-	if managementCluster {
+	if !managedCluster {
 		// For cross-cluster requests an authentication review will be done for authenticating the tigera-manager.
 		// Requests on behalf of the tigera-manager will be sent to Voltron, where an authentication review will
 		// take place with its bearer token.
+		// In addition, PacketCapture API uses authentication reviews to authenticate the users and then perform
+		// SubjectAccessReviews in order to enforce RBAC on this API
 		cr.Rules = append(cr.Rules, rbacv1.PolicyRule{
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"authenticationreviews"},

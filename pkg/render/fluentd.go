@@ -80,8 +80,8 @@ const (
 	eksLogForwarderName        = "eks-log-forwarder"
 	eksLogForwarderWindowsName = "eks-log-forwarder-windows"
 
-	PodExecRole        = "pod-exec-role"
-	PodExecRoleBinding = "pod-exec-role-binding"
+	PacketCaptureAPIRole        = "packetcapture-api-role"
+	PacketCaptureAPIRoleBinding = "packetcapture-api-role-binding"
 )
 
 type FluentdFilters struct {
@@ -276,7 +276,7 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.esSecrets...)...)...)
 	objs = append(objs, c.fluentdServiceAccount())
-	objs = append(objs, c.podExecRole(), c.podExecRoleBinding())
+	objs = append(objs, c.packetCaptureApiRole(), c.packetCaptureApiRoleBinding())
 	objs = append(objs, c.daemonset())
 
 	return objs, nil
@@ -362,14 +362,14 @@ func (c *fluentdComponent) fluentdServiceAccount() *corev1.ServiceAccount {
 	}
 }
 
-// podExecRole creates a role in the tigera-fluentd namespace to allow pod/exec
+// packetCaptureApiRole creates a role in the tigera-fluentd namespace to allow pod/exec
 // only from fluentd pods. This is being used by the PacketCapture API and created
 // by the operator after the namespace tigera-fluentd is created.
-func (c *fluentdComponent) podExecRole() *rbacv1.Role {
+func (c *fluentdComponent) packetCaptureApiRole() *rbacv1.Role {
 	return &rbacv1.Role{
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      PodExecRole,
+			Name:      PacketCaptureAPIRole,
 			Namespace: LogCollectorNamespace,
 		},
 		Rules: []rbacv1.PolicyRule{
@@ -378,24 +378,29 @@ func (c *fluentdComponent) podExecRole() *rbacv1.Role {
 				Resources: []string{"pods/exec"},
 				Verbs:     []string{"create"},
 			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     []string{"list"},
+			},
 		},
 	}
 }
 
-// podExecRoleBinding creates a role binding within the tigera-fluentd namespace between the pod/exec role
+// packetCaptureApiRoleBinding creates a role binding within the tigera-fluentd namespace between the pod/exec role
 // the service account tigera-manager. This is being used by the PacketCapture API and created
 // by the operator after the namespace tigera-fluentd is created
-func (c *fluentdComponent) podExecRoleBinding() *rbacv1.RoleBinding {
+func (c *fluentdComponent) packetCaptureApiRoleBinding() *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      PodExecRoleBinding,
+			Name:      PacketCaptureAPIRoleBinding,
 			Namespace: LogCollectorNamespace,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "Role",
-			Name:     PodExecRole,
+			Name:     PacketCaptureAPIRole,
 		},
 		Subjects: []rbacv1.Subject{
 			{

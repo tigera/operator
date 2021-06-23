@@ -811,20 +811,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	var managementCluster *operator.ManagementCluster
 	var managementClusterConnection *operator.ManagementClusterConnection
-	var logStorageExists bool
-	var authentication *operator.Authentication
-	var esLicenseType render.ElasticsearchLicenseType
-	var elasticsearchSecret *corev1.Secret
-	var kibanaSecret *corev1.Secret
 	var logCollector *operator.LogCollector
 	if r.enterpriseCRDsExist {
-		logStorageExists, err = utils.LogStorageExists(ctx, r.client)
-		if err != nil {
-			log.Error(err, "Error checking if LogStorage exists")
-			r.SetDegraded("Error checking if LogStorage exists", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
 		logCollector, err = utils.GetLogCollector(ctx, r.client)
 		if logCollector != nil {
 			if err != nil {
@@ -856,42 +844,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.status.SetDegraded(err.Error(), "")
 			return reconcile.Result{}, err
 		}
-
-		authentication, err = utils.GetAuthentication(ctx, r.client)
-		if err != nil && !apierrors.IsNotFound(err) {
-			log.Error(err, err.Error())
-			r.status.SetDegraded("An error occurred retrieving the authentication configuration", err.Error())
-			return reconcile.Result{}, err
-		}
-
-		esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger)
-		if err != nil && !apierrors.IsNotFound(err) {
-			log.Error(err, err.Error())
-			r.status.SetDegraded("Failed to get Elasticsearch license type", err.Error())
-			return reconcile.Result{}, err
-		}
-
-		elasticsearchSecret, err = utils.GetSecret(ctx, r.client, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
-		if err != nil {
-			log.Error(err, err.Error())
-			r.status.SetDegraded("Failed to get Elasticsearch pub cert secret", err.Error())
-			return reconcile.Result{}, err
-		}
-
-		kibanaSecret, err = utils.GetSecret(ctx, r.client, render.KibanaPublicCertSecret, rmeta.OperatorNamespace())
-		if err != nil {
-			log.Error(err, err.Error())
-			r.status.SetDegraded("Failed to get Kibana pub cert secret", err.Error())
-			return reconcile.Result{}, err
-		}
-	}
-
-	// If the Elasticsearch license type is basic OR there is an Authentication CR with OIDC type Tigera, then
-	// enable the Elasticsearch OIDC workaround in kube controllers.
-	enableESOIDCWorkaround := false
-	if (authentication != nil && authentication.Spec.OIDC != nil && authentication.Spec.OIDC.Type == operator.OIDCTypeTigera) ||
-		esLicenseType == render.ElasticsearchLicenseTypeBasic {
-		enableESOIDCWorkaround = true
 	}
 
 	var managerInternalTLSSecret *corev1.Secret
@@ -917,14 +869,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 		if err != nil {
 			r.status.SetDegraded(fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err.Error())
-			return reconcile.Result{}, err
-		}
-	}
-
-	var kubeControllersGatewaySecret *v1.Secret
-	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
-		kubeControllersGatewaySecret, err = utils.GetSecret(ctx, r.client, render.ElasticsearchKubeControllersUserSecret, rmeta.OperatorNamespace())
-		if err != nil {
 			return reconcile.Result{}, err
 		}
 	}
@@ -1056,23 +1000,17 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	calico, err := render.Calico(
 		k8sapi.Endpoint,
 		&instance.Spec,
-		logStorageExists,
 		managementCluster,
 		managementClusterConnection,
-		authentication,
 		pullSecrets,
 		typhaNodeTLS,
 		managerInternalTLSSecret,
-		elasticsearchSecret,
-		kibanaSecret,
 		birdTemplates,
 		instance.Spec.KubernetesProvider,
 		aci,
 		needNsMigration,
 		nodeAppArmorProfile,
 		r.clusterDomain,
-		enableESOIDCWorkaround,
-		kubeControllersGatewaySecret,
 		kubeControllersMetricsPort,
 		nodeReporterMetricsPort,
 		bgpLayout,

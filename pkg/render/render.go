@@ -64,23 +64,17 @@ type TyphaNodeTLS struct {
 func Calico(
 	k8sServiceEp k8sapi.ServiceEndpoint,
 	cr *operator.InstallationSpec,
-	logStorageExists bool,
 	managementCluster *operator.ManagementCluster,
 	managementClusterConnection *operator.ManagementClusterConnection,
-	authentication *operator.Authentication,
 	pullSecrets []*corev1.Secret,
 	typhaNodeTLS *TyphaNodeTLS,
 	managerInternalTLSSecret *corev1.Secret,
-	elasticsearchSecret *corev1.Secret,
-	kibanaSecret *corev1.Secret,
 	bt map[string]string,
 	p operator.Provider,
 	aci *operator.AmazonCloudIntegration,
 	up bool,
 	nodeAppArmorProfile string,
 	clusterDomain string,
-	enableESOIDCWorkaround bool,
-	kubeControllersGatewaySecret *corev1.Secret,
 	kubeControllersMetricsPort int,
 	nodeReporterMetricsPort int,
 	bgpLayout *corev1.ConfigMap,
@@ -144,25 +138,19 @@ func Calico(
 	return calicoRenderer{
 		k8sServiceEp:                 k8sServiceEp,
 		installation:                 cr,
-		logStorageExists:             logStorageExists,
 		managementCluster:            managementCluster,
 		managementClusterConnection:  managementClusterConnection,
 		pullSecrets:                  pullSecrets,
 		typhaNodeTLS:                 typhaNodeTLS,
 		configMaps:                   cms,
 		tlsSecrets:                   tss,
-		elasticsearchSecret:          elasticsearchSecret,
-		kibanaSecret:                 kibanaSecret,
 		managerInternalTLSecret:      managerInternalTLSSecret,
 		birdTemplates:                bt,
 		provider:                     p,
 		amazonCloudInt:               aci,
 		upgrade:                      up,
-		authentication:               authentication,
 		nodeAppArmorProfile:          nodeAppArmorProfile,
-		enableESOIDCWorkaround:       enableESOIDCWorkaround,
 		clusterDomain:                clusterDomain,
-		kubeControllersGatewaySecret: kubeControllersGatewaySecret,
 		kubeControllersMetricsPort:   kubeControllersMetricsPort,
 		nodeReporterMetricsPort:      nodeReporterMetricsPort,
 		bgpLayoutHash:                bgpLayoutHash,
@@ -231,7 +219,6 @@ func createTLS() (*TyphaNodeTLS, error) {
 type calicoRenderer struct {
 	k8sServiceEp                 k8sapi.ServiceEndpoint
 	installation                 *operator.InstallationSpec
-	logStorageExists             bool
 	managementCluster            *operator.ManagementCluster
 	managementClusterConnection  *operator.ManagementClusterConnection
 	pullSecrets                  []*corev1.Secret
@@ -239,17 +226,12 @@ type calicoRenderer struct {
 	configMaps                   []*corev1.ConfigMap
 	tlsSecrets                   []*corev1.Secret
 	managerInternalTLSecret      *corev1.Secret
-	elasticsearchSecret          *corev1.Secret
-	kibanaSecret                 *corev1.Secret
 	birdTemplates                map[string]string
 	provider                     operator.Provider
 	amazonCloudInt               *operator.AmazonCloudIntegration
 	upgrade                      bool
-	authentication               *operator.Authentication
 	nodeAppArmorProfile          string
 	clusterDomain                string
-	enableESOIDCWorkaround       bool
-	kubeControllersGatewaySecret *corev1.Secret
 	kubeControllersMetricsPort   int
 	nodeReporterMetricsPort      int
 	bgpLayoutHash                string
@@ -264,9 +246,8 @@ func (r calicoRenderer) Render() []Component {
 	components = appendNotNil(components, Secrets(r.tlsSecrets))
 	components = appendNotNil(components, Typha(r.k8sServiceEp, r.installation, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.clusterDomain))
 	components = appendNotNil(components, Node(r.k8sServiceEp, r.installation, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.nodeAppArmorProfile, r.clusterDomain, r.nodeReporterMetricsPort, r.bgpLayoutHash, r.logCollector))
-	components = appendNotNil(components, KubeControllers(r.k8sServiceEp, r.installation, r.logStorageExists, r.managementCluster,
-		r.managementClusterConnection, r.managerInternalTLSecret, r.elasticsearchSecret, r.kibanaSecret, r.authentication,
-		r.enableESOIDCWorkaround, r.clusterDomain, r.kubeControllersGatewaySecret, r.kubeControllersMetricsPort))
+	components = appendNotNil(components, KubeControllers(r.k8sServiceEp, r.installation, r.managementCluster,
+		r.managementClusterConnection, r.managerInternalTLSecret, r.clusterDomain, r.kubeControllersMetricsPort))
 	return components
 }
 

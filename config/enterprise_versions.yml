@@ -79,6 +79,9 @@ components:
   elasticsearch-metrics:
     image: tigera/elasticsearch-metrics
     version: master
+  packetcapture-api:
+    image: tigera/packetcapture-api
+    version: master
   # The components below are third-party images that have been retagged under
   # quay.io/tigera so all enterprise images come from the same repository and org.
   elasticsearch-operator:
@@ -90,6 +93,4 @@ components:
   alertmanager:
     image: tigera/alertmanager
     version: v0.20.0
-  packetcapture:
-    image: tigera/packetcapture-api
-    version: master
+

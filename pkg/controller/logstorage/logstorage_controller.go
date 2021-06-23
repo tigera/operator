@@ -17,6 +17,7 @@ package logstorage
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/tigera/operator/pkg/crypto"
 
@@ -26,6 +27,8 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -524,6 +527,14 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, nil
 	}
 
+	// If the Elasticsearch license type is basic OR there is an Authentication CR with OIDC type Tigera, then
+	// enable the Elasticsearch OIDC workaround in kube controllers.
+	enableESOIDCWorkaround := false
+	if (authentication != nil && authentication.Spec.OIDC != nil && authentication.Spec.OIDC.Type == operatorv1.OIDCTypeTigera) ||
+		esLicenseType == render.ElasticsearchLicenseTypeBasic {
+		enableESOIDCWorkaround = true
+	}
+
 	var dexCfg render.DexRelyingPartyConfig
 	// If the authentication CR is available and it is not configured to use the Tigera OIDC type then configure dex.
 	if authentication != nil && (authentication.Spec.OIDC == nil || authentication.Spec.OIDC.Type != operatorv1.OIDCTypeTigera) {
@@ -540,6 +551,30 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, err
 		}
 		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexCertSecret, dexSecret, r.clusterDomain)
+	}
+
+	var managerInternalTLSSecret *corev1.Secret
+	managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
+		common.CalicoNamespace,
+		render.ManagerInternalTLSSecretName,
+		render.ManagerInternalSecretKeyName,
+		render.ManagerInternalSecretCertName,
+	)
+
+	if install.Variant == operatorv1.TigeraSecureEnterprise && managementCluster != nil {
+		var err error
+		svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
+		svcDNSNames = append(svcDNSNames, render.ManagerServiceIP)
+		certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
+
+		managerInternalTLSSecret, err = utils.EnsureCertificateSecret(
+			render.ManagerInternalTLSSecretName, managerInternalTLSSecret, render.ManagerInternalSecretKeyName, render.ManagerInternalSecretCertName, certDur, svcDNSNames...,
+		)
+
+		if err != nil {
+			r.status.SetDegraded(fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	component := render.LogStorage(
@@ -560,6 +595,10 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		r.clusterDomain,
 		dexCfg,
 		esLicenseType,
+		authentication,
+		enableESOIDCWorkaround,
+		managerInternalTLSSecret,
+		k8sapi.Endpoint,
 	)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {

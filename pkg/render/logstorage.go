@@ -59,22 +59,25 @@ const (
 
 	ElasticsearchNamespace = "tigera-elasticsearch"
 
-	TigeraElasticsearchCertSecret = "tigera-secure-elasticsearch-cert"
+	TigeraElasticsearchCertSecret         = "tigera-secure-elasticsearch-cert"
+	TigeraElasticsearchInternalCertSecret = "tigera-secure-internal-elasticsearch-cert"
 
-	ElasticsearchName                     = "tigera-secure"
+	ElasticsearchName                     = "tigera-secure-internal"
+	ElasticsearchInternalServiceName      = "tigera-secure-internal-es-http"
 	ElasticsearchServiceName              = "tigera-secure-es-http"
 	ElasticsearchSecureSettingsSecretName = "tigera-elasticsearch-secure-settings"
 	ElasticsearchOperatorUserSecret       = "tigera-ee-operator-elasticsearch-access"
-	ElasticsearchAdminUserSecret          = "tigera-secure-es-elastic-user"
+	ElasticsearchAdminUserSecret          = "tigera-secure-internal-es-elastic-user"
 
-	KibanaHTTPSEndpoint    = "https://tigera-secure-kb-http.tigera-kibana.svc.%s:5601"
-	KibanaName             = "tigera-secure"
-	KibanaNamespace        = "tigera-kibana"
-	KibanaPublicCertSecret = "tigera-secure-kb-http-certs-public"
-	TigeraKibanaCertSecret = "tigera-secure-kibana-cert"
-	KibanaDefaultCertPath  = "/etc/ssl/kibana/ca.pem"
-	KibanaBasePath         = "tigera-kibana"
-	KibanaServiceName      = "tigera-secure-kb-http"
+	KibanaName                = "tigera-secure-internal"
+	KibanaNamespace           = "tigera-kibana"
+	KibanaInternalCertSecret  = "tigera-secure-internal-kb-http-certs-public"
+	KibanaPublicCertSecret    = "tigera-secure-kb-http-certs-public"
+	TigeraKibanaCertSecret    = "tigera-secure-kibana-cert"
+	KibanaDefaultCertPath     = "/etc/ssl/kibana/ca.pem"
+	KibanaBasePath            = "tigera-kibana"
+	KibanaInternalServiceName = "tigera-secure-internal-kb-http"
+	KibanaServiceName         = "tigera-secure-kb-http"
 
 	DefaultElasticsearchClusterName = "cluster"
 	DefaultElasticsearchReplicas    = 0
@@ -183,7 +186,6 @@ func LogStorage(
 	dexCfg DexRelyingPartyConfig,
 	elasticLicenseType ElasticsearchLicenseType,
 ) Component {
-
 	return &elasticsearchComponent{
 		logStorage:                  logStorage,
 		installation:                installation,
@@ -660,10 +662,10 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			es.installation.CertificateManagement,
 			es.csrImage,
 			csrVolumeNameHTTP,
-			ElasticsearchServiceName,
+			ElasticsearchInternalServiceName,
 			corev1.TLSPrivateKeyKey,
 			corev1.TLSCertKey,
-			dns.GetServiceDNSNames(ElasticsearchServiceName, ElasticsearchNamespace, es.clusterDomain),
+			dns.GetServiceDNSNames(ElasticsearchInternalServiceName, ElasticsearchNamespace, es.clusterDomain),
 			ElasticsearchNamespace)
 		csrInitContainerHTTP.Name = "key-cert-elastic"
 
@@ -672,10 +674,10 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			es.installation.CertificateManagement,
 			es.csrImage,
 			csrVolumeNameTransport,
-			ElasticsearchServiceName,
+			ElasticsearchInternalServiceName,
 			"transport.tls.key",
 			"transport.tls.crt",
-			dns.GetServiceDNSNames(ElasticsearchServiceName, ElasticsearchNamespace, es.clusterDomain),
+			dns.GetServiceDNSNames(ElasticsearchInternalServiceName, ElasticsearchNamespace, es.clusterDomain),
 			ElasticsearchNamespace)
 		csrInitContainerTransport.Name = "key-cert-elastic-transport"
 
@@ -832,15 +834,8 @@ func (es elasticsearchComponent) elasticsearchCluster(secureSettings bool) *esv1
 			},
 		},
 		Spec: esv1.ElasticsearchSpec{
-			Version: components.ComponentEckElasticsearch.Version,
-			Image:   es.esImage,
-			HTTP: cmnv1.HTTPConfig{
-				TLS: cmnv1.TLSOptions{
-					Certificate: cmnv1.SecretRef{
-						SecretName: TigeraElasticsearchCertSecret,
-					},
-				},
-			},
+			Version:  components.ComponentEckElasticsearch.Version,
+			Image:    es.esImage,
 			NodeSets: es.nodeSets(),
 		},
 	}
@@ -1301,10 +1296,10 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 			es.installation.CertificateManagement,
 			es.csrImage,
 			csrVolumeNameHTTP,
-			ElasticsearchServiceName,
+			ElasticsearchInternalServiceName,
 			corev1.TLSPrivateKeyKey,
 			corev1.TLSCertKey,
-			dns.GetServiceDNSNames(KibanaServiceName, KibanaNamespace, es.clusterDomain),
+			dns.GetServiceDNSNames(KibanaInternalServiceName, KibanaNamespace, es.clusterDomain),
 			KibanaNamespace)
 
 		initContainers = append(initContainers, csrInitContainer)

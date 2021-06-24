@@ -87,6 +87,8 @@ func newTyphaAutoscaler(client client.Client, statusManager status.StatusManager
 
 // getExpectedReplicas gets the number of replicas expected for a given node number.
 func (t *typhaAutoscaler) getExpectedReplicas(nodes int) int {
+	// HACK to test typha scale
+	return 1
 	switch {
 	case nodes <= 1:
 		return 1

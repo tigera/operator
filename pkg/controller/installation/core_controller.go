@@ -906,10 +906,18 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	var esAdminSecret *v1.Secret
+	var kubeControllersUserSecret *v1.Secret
+	var kubeControllersVerificationSecret *v1.Secret
 	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
-		// Kube controllers needs the admin secret copied to it's namespace as it has administrative tasks to run on
-		// Elasticsearch.
-		esAdminSecret, err = utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, rmeta.OperatorNamespace())
+		kubeControllersUserSecret, err = utils.GetSecret(ctx, r.client, render.ElasticsearchKubeControllersUserSecret, common.CalicoNamespace)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+		kubeControllersVerificationSecret, err = utils.GetSecret(ctx, r.client, render.ElasticsearchKubeControllersVerificationUserSecret, render.ElasticsearchNamespace)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+		esAdminSecret, err = utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, render.ElasticsearchNamespace)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
@@ -1059,6 +1067,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		r.clusterDomain,
 		enableESOIDCWorkaround,
 		esAdminSecret,
+		kubeControllersUserSecret,
+		kubeControllersVerificationSecret,
 		kubeControllersMetricsPort,
 		nodeReporterMetricsPort,
 		bgpLayout,

@@ -15,7 +15,12 @@
 package render
 
 import (
+	"crypto/rand"
+	"encoding/base64"
+	"fmt"
 	"strings"
+
+	"golang.org/x/crypto/bcrypt"
 
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 
@@ -39,7 +44,9 @@ import (
 var replicas int32 = 1
 
 const (
-	ElasticsearchKubeControllersUserSecret = "tigera-ee-kube-controllers-elasticsearch-access"
+	ElasticsearchKubeControllersUserName         = "tigera-ee-kube-controllers"
+	ElasticsearchKubeControllersUserSecret       = "tigera-ee-kube-controllers-elasticsearch-access"
+	ElasticsearchKubeControllersSecureUserSecret = "tigera-ee-kube-controllers-elasticsearch-access-secure"
 )
 
 func KubeControllers(
@@ -54,55 +61,84 @@ func KubeControllers(
 	authentication *operator.Authentication,
 	enabledESOIDCWorkaround bool,
 	clusterDomain string,
-	esAdminSecret *v1.Secret,
+	kubeControllersUserSecret *v1.Secret,
+	esAdminUserSecret *v1.Secret,
 	metricsPort int,
 ) *kubeControllersComponent {
-	var elasticsearchUserSecret *v1.Secret
-	if esAdminSecret != nil {
-		elasticsearchUserSecret = &v1.Secret{
+	var hashedUserSecret *v1.Secret
+	var kubeControllersSecureUserSecret *v1.Secret
+	if kubeControllersUserSecret == nil {
+		password := randomString(16)
+		kubeControllersUserSecret = &v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      ElasticsearchKubeControllersUserSecret,
 				Namespace: common.CalicoNamespace,
 			},
 			Data: map[string][]byte{
+				"username": []byte(ElasticsearchKubeControllersUserName),
+				"password": []byte(password),
+			},
+		}
+		hashedUserSecret = &v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("%s-%s", ElasticsearchKubeControllersUserName, "hashed"),
+				Namespace: ElasticsearchNamespace,
+			},
+			Data: map[string][]byte{
+				"hashed": []byte(getHash(fmt.Sprintf("%s:%s", ElasticsearchKubeControllersUserName, password))),
+			},
+		}
+	}
+
+	if esAdminUserSecret != nil {
+		kubeControllersSecureUserSecret = &v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      ElasticsearchKubeControllersSecureUserSecret,
+				Namespace: ElasticsearchNamespace,
+			},
+			Data: map[string][]byte{
 				"username": []byte("elastic"),
-				"password": esAdminSecret.Data["elastic"],
+				"password": esAdminUserSecret.Data["elastic"],
 			},
 		}
 	}
 
 	return &kubeControllersComponent{
-		cr:                          cr,
-		managementCluster:           managementCluster,
-		managementClusterConnection: managementClusterConnection,
-		managerInternalSecret:       managerInternalSecret,
-		elasticsearchSecret:         elasticsearchSecret,
-		kibanaSecret:                kibanaSecret,
-		logStorageExists:            logStorageExists,
-		authentication:              authentication,
-		k8sServiceEp:                k8sServiceEp,
-		enabledESOIDCWorkaround:     enabledESOIDCWorkaround,
-		clusterDomain:               clusterDomain,
-		elasticsearchUserSecret:     elasticsearchUserSecret,
-		metricsPort:                 metricsPort,
+		cr:                              cr,
+		managementCluster:               managementCluster,
+		managementClusterConnection:     managementClusterConnection,
+		managerInternalSecret:           managerInternalSecret,
+		elasticsearchSecret:             elasticsearchSecret,
+		kibanaSecret:                    kibanaSecret,
+		logStorageExists:                logStorageExists,
+		authentication:                  authentication,
+		k8sServiceEp:                    k8sServiceEp,
+		enabledESOIDCWorkaround:         enabledESOIDCWorkaround,
+		clusterDomain:                   clusterDomain,
+		alternateUserSecret:             kubeControllersUserSecret,
+		hashedUserSecret:                hashedUserSecret,
+		kubeControllersSecureUserSecret: kubeControllersSecureUserSecret,
+		metricsPort:                     metricsPort,
 	}
 }
 
 type kubeControllersComponent struct {
-	cr                          *operator.InstallationSpec
-	managementCluster           *operator.ManagementCluster
-	managementClusterConnection *operator.ManagementClusterConnection
-	managerInternalSecret       *v1.Secret
-	elasticsearchSecret         *v1.Secret
-	kibanaSecret                *v1.Secret
-	logStorageExists            bool
-	authentication              *operator.Authentication
-	k8sServiceEp                k8sapi.ServiceEndpoint
-	enabledESOIDCWorkaround     bool
-	image                       string
-	clusterDomain               string
-	elasticsearchUserSecret     *v1.Secret
-	metricsPort                 int
+	cr                              *operator.InstallationSpec
+	managementCluster               *operator.ManagementCluster
+	managementClusterConnection     *operator.ManagementClusterConnection
+	managerInternalSecret           *v1.Secret
+	elasticsearchSecret             *v1.Secret
+	kibanaSecret                    *v1.Secret
+	logStorageExists                bool
+	authentication                  *operator.Authentication
+	k8sServiceEp                    k8sapi.ServiceEndpoint
+	enabledESOIDCWorkaround         bool
+	image                           string
+	clusterDomain                   string
+	alternateUserSecret             *v1.Secret
+	hashedUserSecret                *v1.Secret
+	kubeControllersSecureUserSecret *v1.Secret
+	metricsPort                     int
 }
 
 func (c *kubeControllersComponent) ResolveImages(is *operator.ImageSet) error {
@@ -140,8 +176,14 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 			secret.CopyToNamespace(common.CalicoNamespace, c.elasticsearchSecret)...)...)
 	}
 
-	if !c.isManagedCluster() && c.elasticsearchUserSecret != nil {
-		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(c.elasticsearchUserSecret)...)
+	if !c.isManagedCluster() && c.alternateUserSecret != nil {
+		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(c.alternateUserSecret)...)
+		if c.hashedUserSecret != nil {
+			objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(c.hashedUserSecret)...)
+		}
+		if c.kubeControllersSecureUserSecret != nil {
+			objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(c.kubeControllersSecureUserSecret)...)
+		}
 	}
 
 	if c.cr.KubernetesProvider != operator.ProviderOpenShift {
@@ -346,7 +388,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 	if c.cr.Variant == operator.TigeraSecureEnterprise {
 		enabledControllers = append(enabledControllers, "service", "federatedservices")
 
-		if c.logStorageExists && c.elasticsearchUserSecret != nil && c.elasticsearchSecret != nil {
+		if c.logStorageExists && c.alternateUserSecret != nil && c.elasticsearchSecret != nil {
 			// These controllers require that Elasticsearch exists within the cluster Kube Controllers is running in, i.e.
 			// Full Standalone and Management clusters, not Minimal Standalone and Managed clusters.
 			enabledControllers = append(enabledControllers, "authorization", "elasticsearchconfiguration")
@@ -410,7 +452,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 		VolumeMounts: kubeControllersVolumeMounts(c.managerInternalSecret),
 	}
 
-	if c.logStorageExists && c.elasticsearchUserSecret != nil && c.elasticsearchSecret != nil {
+	if c.logStorageExists && c.alternateUserSecret != nil && c.elasticsearchSecret != nil {
 		container = relasticsearch.ContainerDecorate(container, DefaultElasticsearchClusterName,
 			ElasticsearchKubeControllersUserSecret, c.clusterDomain, rmeta.OSTypeLinux)
 	}
@@ -424,7 +466,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 		Volumes:            kubeControllersVolumes(defaultMode, c.managerInternalSecret),
 	}
 
-	if c.logStorageExists && c.elasticsearchUserSecret != nil && c.elasticsearchSecret != nil {
+	if c.logStorageExists && c.alternateUserSecret != nil && c.elasticsearchSecret != nil {
 		podSpec = relasticsearch.PodSpecDecorate(podSpec)
 	}
 
@@ -507,8 +549,8 @@ func (c *kubeControllersComponent) annotations() map[string]string {
 	if c.elasticsearchSecret != nil {
 		am[tlsSecretHashAnnotation] = rmeta.AnnotationHash(c.elasticsearchSecret.Data)
 	}
-	if c.elasticsearchUserSecret != nil {
-		am[ElasticsearchUserHashAnnotation] = rmeta.AnnotationHash(c.elasticsearchUserSecret.Data)
+	if c.alternateUserSecret != nil {
+		am[ElasticsearchUserHashAnnotation] = rmeta.AnnotationHash(c.alternateUserSecret.Data)
 	}
 	if c.kibanaSecret != nil {
 		am[KibanaTLSHashAnnotation] = rmeta.AnnotationHash(c.kibanaSecret.Data)
@@ -557,4 +599,18 @@ func kubeControllersVolumes(defaultMode int32, managerSecret *v1.Secret) []v1.Vo
 	}
 
 	return []v1.Volume{}
+}
+
+func randomString(length int) string {
+	byts := make([]byte, length)
+	_, _ = rand.Read(byts)
+
+	return base64.URLEncoding.EncodeToString(byts)
+}
+
+// GetHash takes the given string value and generates a corresponding hash & salt value using
+// bcrypt.GenerateFromPassword.
+func getHash(value string) string {
+	hash, _ := bcrypt.GenerateFromPassword([]byte(value), bcrypt.MinCost)
+	return string(hash)
 }

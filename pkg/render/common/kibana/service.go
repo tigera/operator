@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	httpsEndpoint     = "https://tigera-secure-kb-http.tigera-kibana.svc:5601"
-	httpsFQDNEndpoint = "https://tigera-secure-kb-http.tigera-kibana.svc.%s:5601"
+	httpsEndpoint     = "https://tigera-secure-es-gateway-http.tigera-elasticsearch.svc:5601"
+	httpsFQDNEndpoint = "https://tigera-secure-es-gateway-http.tigera-elasticsearch.svc.%s:5601"
 )
 
 // HTTPSEndpoint returns the full endpoint for the Kibana service. For

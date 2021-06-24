@@ -68,15 +68,15 @@ const (
 	ElasticsearchOperatorUserSecret       = "tigera-ee-operator-elasticsearch-access"
 	ElasticsearchAdminUserSecret          = "tigera-secure-es-elastic-user"
 
-	KibanaHTTPSEndpoint    = "https://tigera-secure-kb-http.tigera-kibana.svc.%s:5601"
-	KibanaName             = "tigera-secure"
-	KibanaNamespace        = "tigera-kibana"
-	KibanaPublicCertSecret = "tigera-secure-kb-http-certs-public"
-	TigeraKibanaCertSecret = "tigera-secure-kibana-cert"
-	KibanaDefaultCertPath  = "/etc/ssl/kibana/ca.pem"
-	KibanaBasePath         = "tigera-kibana"
-	KibanaServiceName      = "tigera-secure-kb-http"
-	KibanaDefaultRoute     = "/app/kibana#/dashboards?%s&title=%s"
+	KibanaName               = "tigera-secure"
+	KibanaNamespace          = "tigera-kibana"
+	KibanaPublicCertSecret   = "tigera-secure-es-gateway-http-certs-public"
+	KibanaInternalCertSecret = "tigera-secure-kb-http-certs-public"
+	TigeraKibanaCertSecret   = "tigera-secure-kibana-cert"
+	KibanaDefaultCertPath    = "/etc/ssl/kibana/ca.pem"
+	KibanaBasePath           = "tigera-kibana"
+	KibanaServiceName        = "tigera-secure-kb-http"
+	KibanaDefaultRoute       = "/app/kibana#/dashboards?%s&title=%s"
 
 	DefaultElasticsearchClusterName = "cluster"
 	DefaultElasticsearchReplicas    = 0
@@ -188,7 +188,6 @@ func LogStorage(
 	dexCfg DexRelyingPartyConfig,
 	elasticLicenseType ElasticsearchLicenseType,
 ) Component {
-
 	return &elasticsearchComponent{
 		logStorage:                  logStorage,
 		installation:                installation,
@@ -416,9 +415,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 	} else {
 		toCreate = append(toCreate,
 			createNamespace(ElasticsearchNamespace, es.installation.KubernetesProvider),
-			createNamespace(KibanaNamespace, es.installation.KubernetesProvider),
 			es.elasticsearchExternalService(),
-			es.kibanaExternalService(),
 		)
 	}
 
@@ -837,15 +834,8 @@ func (es elasticsearchComponent) elasticsearchCluster(secureSettings bool) *esv1
 			},
 		},
 		Spec: esv1.ElasticsearchSpec{
-			Version: components.ComponentEckElasticsearch.Version,
-			Image:   es.esImage,
-			HTTP: cmnv1.HTTPConfig{
-				TLS: cmnv1.TLSOptions{
-					Certificate: cmnv1.SecretRef{
-						SecretName: TigeraElasticsearchCertSecret,
-					},
-				},
-			},
+			Version:  components.ComponentEckElasticsearch.Version,
+			Image:    es.esImage,
 			NodeSets: es.nodeSets(),
 		},
 	}

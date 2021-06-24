@@ -889,7 +889,7 @@ var (
 			APIGroups: []string{"lma.tigera.io"},
 			Resources: []string{"*"},
 			ResourceNames: []string{
-				"flows", "audit*", "l7", "events", "dns", "kibana_login",
+				"flows", "audit*", "l7", "events", "dns", "kibana_login", "servicegraph",
 			},
 			Verbs: []string{"get"},
 		},
@@ -982,7 +982,7 @@ var (
 			APIGroups: []string{"lma.tigera.io"},
 			Resources: []string{"*"},
 			ResourceNames: []string{
-				"flows", "audit*", "l7", "events", "dns", "elasticsearch_superuser",
+				"flows", "audit*", "l7", "events", "dns", "elasticsearch_superuser", "servicegraph",
 			},
 			Verbs: []string{"get"},
 		},

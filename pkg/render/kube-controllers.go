@@ -15,6 +15,8 @@
 package render
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"strings"
 
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -57,16 +59,18 @@ func KubeControllers(
 	esAdminSecret *v1.Secret,
 	metricsPort int,
 ) *kubeControllersComponent {
-	var elasticsearchUserSecret *v1.Secret
-	if esAdminSecret != nil {
+	elasticsearchUserSecret := esAdminSecret
+	if esAdminSecret == nil {
+		username := randomString(16)
+		password := randomString(16)
 		elasticsearchUserSecret = &v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      ElasticsearchKubeControllersUserSecret,
 				Namespace: common.CalicoNamespace,
 			},
 			Data: map[string][]byte{
-				"username": []byte("elastic"),
-				"password": esAdminSecret.Data["elastic"],
+				"username": []byte(username),
+				"password": []byte(password),
 			},
 		}
 	}
@@ -564,4 +568,11 @@ func kubeControllersVolumes(defaultMode int32, managerSecret *v1.Secret) []v1.Vo
 	}
 
 	return []v1.Volume{}
+}
+
+func randomString(length int) string {
+	byts := make([]byte, length)
+	_, _ = rand.Read(byts)
+
+	return base64.URLEncoding.EncodeToString(byts)
 }

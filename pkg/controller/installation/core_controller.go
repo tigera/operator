@@ -241,12 +241,12 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 			return fmt.Errorf("tigera-installation-controller failed to watch Secret %s: %w", render.ElasticsearchAdminUserSecret, err)
 		}
 
-		if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace()); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch Secret '%s' in '%s' namespace: %w", relasticsearch.PublicCertSecret, rmeta.OperatorNamespace(), err)
+		if err = utils.AddSecretsWatch(c, relasticsearch.InternalCertSecret, rmeta.OperatorNamespace()); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch Secret '%s' in '%s' namespace: %w", relasticsearch.InternalCertSecret, rmeta.OperatorNamespace(), err)
 		}
 
-		if err = utils.AddSecretsWatch(c, render.KibanaPublicCertSecret, rmeta.OperatorNamespace()); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch Secret '%s' in '%s' namespace: %w", render.KibanaPublicCertSecret, rmeta.OperatorNamespace(), err)
+		if err = utils.AddSecretsWatch(c, render.KibanaInternalCertSecret, rmeta.OperatorNamespace()); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch Secret '%s' in '%s' namespace: %w", render.KibanaInternalCertSecret, rmeta.OperatorNamespace(), err)
 		}
 
 		// Watch the internal manager TLS secret in the calico namespace, where it's copied for kube-controllers.
@@ -907,9 +907,11 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	var esAdminSecret *v1.Secret
 	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
-		// Kube controllers needs the admin secret copied to it's namespace as it has administrative tasks to run on
-		// Elasticsearch.
-		esAdminSecret, err = utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, rmeta.OperatorNamespace())
+		// Kube controllers no longer uses the admin secret to run it's administrative tasks on Elasticsearch.
+		// Instead a username/password combo is randomly generated and stored in tigera-ee-kube-controllers-elasticsearch-access
+		// and passed to the ES Gateway deployment to be used to detect requests from kube-controllers and swap in admin
+		// level Elasticsearch credentials.
+		esAdminSecret, err = utils.GetSecret(ctx, r.client, render.ElasticsearchKubeControllersUserSecret, common.CalicoNamespace)
 		if err != nil {
 			return reconcile.Result{}, err
 		}

@@ -133,7 +133,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	for _, secretName := range []string{
 		relasticsearch.PublicCertSecret, render.ElasticsearchIntrusionDetectionUserSecret,
 		render.ElasticsearchIntrusionDetectionJobUserSecret, render.ElasticsearchADJobUserSecret,
-		render.KibanaPublicCertSecret, render.ManagerInternalTLSSecretName,
+		render.ManagerInternalTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, rmeta.OperatorNamespace()); err != nil {
 			return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
@@ -141,6 +141,11 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	if err = utils.AddSecretsWatch(c, render.ManagerInternalTLSSecretName, render.IntrusionDetectionNamespace); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
+	}
+
+	// These watches are here to catch a modification to the resources we create in reconcile so the changes would be corrected.
+	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, render.IntrusionDetectionNamespace); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
 	}
 

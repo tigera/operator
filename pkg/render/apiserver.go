@@ -233,15 +233,15 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	// Namespaced objects that are common between Calico and Calico Enterprise. They don't need to be explicitly
 	// deleted, since they will be garbage collected on namespace deletion.
 	namespacedObjects := []client.Object{}
+	// Add in image pull secrets.
+	secrets := secret.CopyToNamespace(rmeta.APIServerNamespace(c.installation.Variant), c.pullSecrets...)
+	namespacedObjects = append(namespacedObjects, secret.ToRuntimeObjects(secrets...)...)
+
 	namespacedObjects = append(namespacedObjects,
 		c.apiServerServiceAccount(),
 		c.apiServerDeployment(),
 		c.apiServerService(),
 	)
-
-	// Add in image pull secrets.
-	secrets := secret.CopyToNamespace(rmeta.APIServerNamespace(c.installation.Variant), c.pullSecrets...)
-	namespacedObjects = append(namespacedObjects, secret.ToRuntimeObjects(secrets...)...)
 
 	// Add in certificates for API server TLS.
 	if c.installation.CertificateManagement == nil {

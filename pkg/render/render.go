@@ -81,6 +81,7 @@ func Calico(
 	clusterDomain string,
 	enableESOIDCWorkaround bool,
 	esAdminSecret *corev1.Secret,
+	kubeControllersUserSecret *corev1.Secret,
 	kubeControllersMetricsPort int,
 	nodeReporterMetricsPort int,
 	bgpLayout *corev1.ConfigMap,
@@ -162,6 +163,7 @@ func Calico(
 		enableESOIDCWorkaround:      enableESOIDCWorkaround,
 		clusterDomain:               clusterDomain,
 		esAdminSecret:               esAdminSecret,
+		kubeControllersUserSecret:   kubeControllersUserSecret,
 		kubeControllersMetricsPort:  kubeControllersMetricsPort,
 		nodeReporterMetricsPort:     nodeReporterMetricsPort,
 		bgpLayoutHash:               bgpLayoutHash,
@@ -248,6 +250,7 @@ type calicoRenderer struct {
 	clusterDomain               string
 	enableESOIDCWorkaround      bool
 	esAdminSecret               *corev1.Secret
+	kubeControllersUserSecret   *corev1.Secret
 	kubeControllersMetricsPort  int
 	nodeReporterMetricsPort     int
 	bgpLayoutHash               string
@@ -263,7 +266,7 @@ func (r calicoRenderer) Render() []Component {
 	components = appendNotNil(components, Node(r.k8sServiceEp, r.installation, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.nodeAppArmorProfile, r.clusterDomain, r.nodeReporterMetricsPort, r.bgpLayoutHash))
 	components = appendNotNil(components, KubeControllers(r.k8sServiceEp, r.installation, r.logStorageExists, r.managementCluster,
 		r.managementClusterConnection, r.managerInternalTLSecret, r.elasticsearchSecret, r.kibanaSecret, r.authentication,
-		r.enableESOIDCWorkaround, r.clusterDomain, r.esAdminSecret, r.kubeControllersMetricsPort))
+		r.enableESOIDCWorkaround, r.clusterDomain, r.kubeControllersUserSecret, r.esAdminSecret, r.kubeControllersMetricsPort))
 	return components
 }
 

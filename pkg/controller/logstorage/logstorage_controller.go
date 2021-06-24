@@ -32,6 +32,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 
 	apps "k8s.io/api/apps/v1"
@@ -167,10 +168,19 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch all the secrets created by this controller so we can regenerate any that are deleted
 	for _, secretName := range []string{
 		render.TigeraElasticsearchCertSecret, render.TigeraKibanaCertSecret,
-		render.OIDCSecretName, render.DexObjectName} {
+		render.OIDCSecretName, render.DexObjectName, relasticsearch.PublicCertSecret,
+		render.KibanaPublicCertSecret} {
 		if err = utils.AddSecretsWatch(c, secretName, rmeta.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 		}
+	}
+
+	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, render.ElasticsearchNamespace); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
+	}
+
+	if err = utils.AddSecretsWatch(c, render.KibanaPublicCertSecret, render.KibanaNamespace); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 	}
 
 	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, rmeta.OperatorNamespace()); err != nil {
@@ -404,7 +414,8 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	var esCertSecret, esCertSecretESCopy, esPubCertSecret, esAdminUserSecret *corev1.Secret
+	var gatewayCertSecret, gatewayCertSecretESCopy, publicCertSecret, publicCertSecretESCopy *corev1.Secret
+	var esInternalCertSecret, esAdminUserSecret *corev1.Secret
 	var kibanaSecrets, curatorSecrets []*corev1.Secret
 	var clusterConfig *relasticsearch.ClusterConfig
 	var esLicenseType render.ElasticsearchLicenseType
@@ -427,6 +438,12 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, nil
 		}
 
+		if gatewayCertSecret, gatewayCertSecretESCopy, publicCertSecret, publicCertSecretESCopy, err = r.getESGatewayCertificateSecrets(ctx, install); err != nil {
+			reqLogger.Error(err, err.Error())
+			r.status.SetDegraded("Failed to create ES Gateway secrets", err.Error())
+			return reconcile.Result{}, err
+		}
+
 		// Get the admin user secret to copy to the operator namespace.
 		esAdminUserSecret, err = utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, render.ElasticsearchNamespace)
 		if err != nil {
@@ -436,13 +453,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			esAdminUserSecret = rsecret.CopyToNamespace(rmeta.OperatorNamespace(), esAdminUserSecret)[0]
 		}
 
-		if esCertSecret, esCertSecretESCopy, esPubCertSecret, err = r.getElasticsearchCertificateSecrets(ctx, install); err != nil {
-			reqLogger.Error(err, err.Error())
-			r.status.SetDegraded("Failed to create elasticsearch secrets", err.Error())
-			return reconcile.Result{}, err
-		}
-
-		if kibanaSecrets, err = r.kibanaSecrets(ctx, install); err != nil {
+		if kibanaSecrets, err = r.kibanaInternalSecrets(ctx, install); err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Failed to create kibana secrets", err.Error())
 			return reconcile.Result{}, err
@@ -526,7 +537,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		elasticsearch,
 		kibana,
 		clusterConfig,
-		[]*corev1.Secret{esCertSecret, esCertSecretESCopy, esPubCertSecret, esAdminUserSecret},
+		[]*corev1.Secret{esAdminUserSecret},
 		kibanaSecrets,
 		pullSecrets,
 		r.provider,
@@ -559,6 +570,43 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		if kibana == nil || kibana.Status.AssociationStatus != cmnv1.AssociationEstablished {
 			r.status.SetDegraded("Waiting for Kibana cluster to be operational", "")
 			return reconcile.Result{}, nil
+		}
+
+		kibanaInternalCertSecret, err := utils.GetSecret(ctx, r.client, render.KibanaInternalCertSecret, rmeta.OperatorNamespace())
+		if err != nil {
+			reqLogger.Error(err, err.Error())
+			r.status.SetDegraded("Waiting for internal Kibana cert secret to be available", "")
+			return reconcile.Result{}, err
+		}
+
+		esInternalCertSecret, err = utils.GetSecret(ctx, r.client, relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
+		if err != nil {
+			reqLogger.Error(err, err.Error())
+			r.status.SetDegraded("Waiting for internal Elasticsearch cert secret to be available", "")
+			return reconcile.Result{}, err
+		}
+
+		esGatewayComponent := esgateway.EsGateway(
+			ls,
+			install,
+			pullSecrets,
+			[]*corev1.Secret{gatewayCertSecret, gatewayCertSecretESCopy, publicCertSecret, publicCertSecretESCopy},
+			esAdminUserSecret,
+			kibanaInternalCertSecret,
+			esInternalCertSecret,
+			r.clusterDomain,
+		)
+
+		if err = imageset.ApplyImageSet(ctx, r.client, variant, esGatewayComponent); err != nil {
+			reqLogger.Error(err, "Error with images from ImageSet")
+			r.status.SetDegraded("Error with images from ImageSet", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		if err := hdler.CreateOrUpdateOrDelete(ctx, esGatewayComponent, r.status); err != nil {
+			reqLogger.Error(err, err.Error())
+			r.status.SetDegraded("Error creating / updating resource", err.Error())
+			return reconcile.Result{}, err
 		}
 
 		if len(curatorSecrets) == 0 {
@@ -600,12 +648,12 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, nil
 		}
 
-		if esPubCertSecret == nil {
+		if publicCertSecretESCopy == nil {
 			r.status.SetDegraded("Waiting for elasticsearch public cert secret to become available", "")
 			return reconcile.Result{}, nil
 		}
 
-		esMetricsComponent := esmetrics.ElasticsearchMetrics(install, pullSecrets, clusterConfig, esMetricsSecret, esPubCertSecret, r.clusterDomain)
+		esMetricsComponent := esmetrics.ElasticsearchMetrics(install, pullSecrets, clusterConfig, esMetricsSecret, publicCertSecretESCopy, r.clusterDomain)
 		if err = imageset.ApplyImageSet(ctx, r.client, variant, esMetricsComponent); err != nil {
 			reqLogger.Error(err, "Error with images from ImageSet")
 			r.status.SetDegraded("Error with images from ImageSet", err.Error())
@@ -639,25 +687,33 @@ func (r *ReconcileLogStorage) deleteInvalidECKManagedPublicCertSecret(ctx contex
 	return r.client.Delete(ctx, secret)
 }
 
-// getElasticsearchCertificateSecrets retrieves Elasticsearch certificate secrets needed for Elasticsearch to run or for
-// components to communicate with Elasticsearch. The order of the secrets returned are:
-// 1) The certificate secret needed for Elasticsearch (in the operator namespace). If the user didn't create this it is
+// getESGatewayCertificateSecrets retrieves certificate secrets needed for ES Gateway to run or for
+// components to communicate with Elasticsearch/Kibana through ES Gateway. The order of the secrets returned are:
+// 1) The certificate secret needed for ES Gateway (in the operator namespace). If the user didn't create this it is
 //    created.
-// 2) The certificate secret needed for Elasticsearch (in the Elasticsearch namespace).
-// 3) The certificate mounted by other clients that connect to Elasticsearch.
-func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Context, instl *operatorv1.InstallationSpec) (oprKeyCert *corev1.Secret, esKeyCert *corev1.Secret, certSecret *corev1.Secret, err error) {
+// 2) The certificate secret needed for ES Gateway (in the Elasticsearch namespace).
+// 3) The certificate mounted by other clients that connect to Elasticsearch/Kibana through ES Gateway (in the operator namespace).
+// 4) The certificate mounted by es curator and es metrics to connect to Elasticsearch/Kibana through ES Gateway (in the Elasticsearch namespace).
+func (r *ReconcileLogStorage) getESGatewayCertificateSecrets(ctx context.Context, instl *operatorv1.InstallationSpec) (
+	oprKeyCert *corev1.Secret,
+	esKeyCert *corev1.Secret,
+	publicCertSecret *corev1.Secret,
+	publicCertSecretESCopy *corev1.Secret,
+	err error,
+) {
 	svcDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
+	svcDNSNames = append(svcDNSNames, dns.GetServiceDNSNames(esgateway.ServiceName, render.ElasticsearchNamespace, r.clusterDomain)...)
 
 	// Get the secret - might be nil
 	oprKeyCert, err = utils.GetSecret(ctx, r.client, render.TigeraElasticsearchCertSecret, rmeta.OperatorNamespace())
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	// Ensure that cert is valid.
 	oprKeyCert, err = utils.EnsureCertificateSecret(render.TigeraElasticsearchCertSecret, oprKeyCert, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, svcDNSNames...)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	// Three different certificate issuers are possible:
@@ -666,58 +722,59 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 	// - The issuer that is provided through the certificate management feature.
 	keyCertIssuer, err := utils.GetCertificateIssuer(oprKeyCert.Data[corev1.TLSCertKey])
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	customerProvidedCert := !utils.IsOperatorIssued(keyCertIssuer)
 
-	// If Certificate management is enabled, we only want to trust the CA cert andlet the init container handle private key generation.
+	// If Certificate management is enabled, we only want to trust the CA cert and let the init container handle private key generation.
 	if instl.CertificateManagement != nil {
 		cmCa := instl.CertificateManagement.CACert
 		cmIssuer, err := utils.GetCertificateIssuer(cmCa)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 
 		// If the issuer of the current secret is not the same as the certificate management issuer and also is not
 		// issued by the tigera-operator, it means that it is added to this cluster by the customer. This is not supported
 		// in combination with certificate management.
 		if customerProvidedCert && cmIssuer != keyCertIssuer {
-			return nil, nil, nil, fmt.Errorf("certificate management does not support custom Elasticsearch secrets, please delete secret %s/%s or disable certificate management", oprKeyCert.Namespace, oprKeyCert.Name)
+			return nil, nil, nil, nil, fmt.Errorf("certificate management does not support custom Elasticsearch secrets, please delete secret %s/%s or disable certificate management", oprKeyCert.Namespace, oprKeyCert.Name)
 		}
 
 		oprKeyCert.Data[corev1.TLSCertKey] = instl.CertificateManagement.CACert
 		esKeyCert = rsecret.CopyToNamespace(render.ElasticsearchNamespace, oprKeyCert)[0]
-		certSecret = render.CreateCertificateSecret(instl.CertificateManagement.CACert, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
-
+		publicCertSecret = render.CreateCertificateSecret(instl.CertificateManagement.CACert, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
 	} else {
 		esKeyCert = rsecret.CopyToNamespace(render.ElasticsearchNamespace, oprKeyCert)[0]
-		// Get the pub secret - might be nil
-		pubSecret, err := utils.GetSecret(ctx, r.client, relasticsearch.PublicCertSecret, render.ElasticsearchNamespace)
+		// Get the es gateway pub secret - might be nil
+		publicCertSecret, err = utils.GetSecret(ctx, r.client, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 
-		if pubSecret != nil {
-			// If the provided certificate secret (secret) is managed by the operator we need to check if the secret that
-			// Elasticsearch creates from that given secret (pubSecret) has the expected DNS name. If it doesn't, delete the
-			// public secret so it can get recreated.
+		if publicCertSecret != nil {
+			// If the provided certificate secret (secret) is managed by the operator we need to check if the secret has the expected DNS names.
+			// If it doesn't, delete the public secret so it can get recreated.
 			if !customerProvidedCert {
-				err = utils.SecretHasExpectedDNSNames(pubSecret, corev1.TLSCertKey, svcDNSNames)
+				err = utils.SecretHasExpectedDNSNames(publicCertSecret, corev1.TLSCertKey, svcDNSNames)
 				if err == utils.ErrInvalidCertDNSNames {
-					if err := r.deleteInvalidECKManagedPublicCertSecret(ctx, pubSecret); err != nil {
-						return nil, nil, nil, err
+					if err := r.deleteInvalidECKManagedPublicCertSecret(ctx, publicCertSecret); err != nil {
+						return nil, nil, nil, nil, err
 					}
+					publicCertSecret = render.CreateCertificateSecret(oprKeyCert.Data[corev1.TLSCertKey], relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
 				}
 			}
-
-			certSecret = rsecret.CopyToNamespace(rmeta.OperatorNamespace(), pubSecret)[0]
+		} else {
+			publicCertSecret = render.CreateCertificateSecret(oprKeyCert.Data[corev1.TLSCertKey], relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
 		}
 	}
+	// Needs to be in the Elasticsearch namespace for use by curator and es-metrics.
+	publicCertSecretESCopy = rsecret.CopyToNamespace(render.ElasticsearchNamespace, publicCertSecret)[0]
 
-	return oprKeyCert, esKeyCert, certSecret, err
+	return
 }
 
-func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context, instl *operatorv1.InstallationSpec) ([]*corev1.Secret, error) {
+func (r *ReconcileLogStorage) kibanaInternalSecrets(ctx context.Context, instl *operatorv1.InstallationSpec) ([]*corev1.Secret, error) {
 
 	var secrets []*corev1.Secret
 	svcDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
@@ -738,21 +795,21 @@ func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context, instl *operator
 		return []*corev1.Secret{
 			secret,
 			rsecret.CopyToNamespace(render.KibanaNamespace, secret)[0],
-			render.CreateCertificateSecret(instl.CertificateManagement.CACert, relasticsearch.PublicCertSecret, render.KibanaNamespace),
-			render.CreateCertificateSecret(instl.CertificateManagement.CACert, render.KibanaPublicCertSecret, rmeta.OperatorNamespace()),
+			render.CreateCertificateSecret(instl.CertificateManagement.CACert, relasticsearch.InternalCertSecret, render.KibanaNamespace),
+			render.CreateCertificateSecret(instl.CertificateManagement.CACert, render.KibanaInternalCertSecret, rmeta.OperatorNamespace()),
 		}, nil
 	}
 
 	secrets = append(secrets, secret, rsecret.CopyToNamespace(render.KibanaNamespace, secret)[0])
 
 	// Get the pub secret - might be nil
-	pubSecret, err := utils.GetSecret(ctx, r.client, render.KibanaPublicCertSecret, render.KibanaNamespace)
+	internalSecret, err := utils.GetSecret(ctx, r.client, render.KibanaInternalCertSecret, render.KibanaNamespace)
 	if err != nil {
 		return nil, err
 	}
 
-	if pubSecret == nil {
-		log.Info(fmt.Sprintf("Public cert secret %q not found yet", render.KibanaPublicCertSecret))
+	if internalSecret == nil {
+		log.Info(fmt.Sprintf("Internal cert secret %q not found yet", render.KibanaInternalCertSecret))
 		return secrets, nil
 	}
 
@@ -762,15 +819,15 @@ func (r *ReconcileLogStorage) kibanaSecrets(ctx context.Context, instl *operator
 	}
 
 	if utils.IsOperatorIssued(issuer) {
-		err = utils.SecretHasExpectedDNSNames(pubSecret, corev1.TLSCertKey, svcDNSNames)
+		err = utils.SecretHasExpectedDNSNames(internalSecret, corev1.TLSCertKey, svcDNSNames)
 		if err == utils.ErrInvalidCertDNSNames {
-			if err := r.deleteInvalidECKManagedPublicCertSecret(ctx, pubSecret); err != nil {
+			if err := r.deleteInvalidECKManagedPublicCertSecret(ctx, internalSecret); err != nil {
 				return nil, err
 			}
 		}
 	}
 	// If the cert was not deleted, copy the valid cert to operator namespace.
-	secrets = append(secrets, rsecret.CopyToNamespace(rmeta.OperatorNamespace(), pubSecret)...)
+	secrets = append(secrets, rsecret.CopyToNamespace(rmeta.OperatorNamespace(), internalSecret)...)
 
 	return secrets, nil
 }

@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/tigera/operator/pkg/common"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -32,6 +34,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/test"
 
@@ -82,8 +85,10 @@ var (
 	operatorUsrSecretObjMeta  = metav1.ObjectMeta{Name: render.ElasticsearchOperatorUserSecret, Namespace: rmeta.OperatorNamespace()}
 	storageClassName          = "test-storage-class"
 
-	esDNSNames = dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
-	kbDNSNames = dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, dns.DefaultClusterDomain)
+	esDNSNames         = dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
+	esGatewayDNSNmes   = dns.GetServiceDNSNames(esgateway.ServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
+	kbDNSNames         = dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, dns.DefaultClusterDomain)
+	kbInternalDNSNames = dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, dns.DefaultClusterDomain)
 )
 
 func mockEsCliCreator(client client.Client, ctx context.Context, elasticHTTPSEndpoint string) (utils.ElasticClient, error) {
@@ -397,24 +402,15 @@ var _ = Describe("LogStorage controller", func() {
 					kb.Status.AssociationStatus = cmnv1.AssociationEstablished
 					Expect(cli.Update(ctx, kb)).ShouldNot(HaveOccurred())
 
-					By("confirming elasticsearch certs are created")
-					secret := &corev1.Secret{}
-
-					Expect(cli.Get(ctx, esCertSecretKey, secret)).ShouldNot(HaveOccurred())
-					test.VerifyCert(secret, "tls.key", "tls.crt", esDNSNames...)
-
-					Expect(cli.Get(ctx, esCertSecretOperKey, secret)).ShouldNot(HaveOccurred())
-					test.VerifyCert(secret, "tls.key", "tls.crt", esDNSNames...)
-
 					By("confirming kibana certs are created")
+					secret := &corev1.Secret{}
 					Expect(cli.Get(ctx, kbCertSecretKey, secret)).ShouldNot(HaveOccurred())
-					test.VerifyCert(secret, "tls.key", "tls.crt", kbDNSNames...)
+					test.VerifyCert(secret, "tls.key", "tls.crt", kbInternalDNSNames...)
 
 					Expect(cli.Get(ctx, kbCertSecretOperKey, secret)).ShouldNot(HaveOccurred())
-					test.VerifyCert(secret, "tls.key", "tls.crt", kbDNSNames...)
+					test.VerifyCert(secret, "tls.key", "tls.crt", kbInternalDNSNames...)
 
 					// Create public ES and KB secrets
-					Expect(cli.Get(ctx, esCertSecretKey, secret)).ShouldNot(HaveOccurred())
 					esPublicSecret := createPubSecret(relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, secret.Data["tls.crt"], "tls.crt")
 					Expect(cli.Create(ctx, esPublicSecret)).ShouldNot(HaveOccurred())
 
@@ -422,26 +418,39 @@ var _ = Describe("LogStorage controller", func() {
 					kbPublicSecret := createPubSecret(render.KibanaPublicCertSecret, render.KibanaNamespace, secret.Data["tls.crt"], "tls.crt")
 					Expect(cli.Create(ctx, kbPublicSecret)).ShouldNot(HaveOccurred())
 
+					esAdminUserSecret := &corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      render.ElasticsearchAdminUserSecret,
+							Namespace: render.ElasticsearchNamespace,
+						},
+						Data: map[string][]byte{
+							"username": []byte("elastic"),
+							"password": []byte("password"),
+						},
+					}
+					Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
+
+					kubeControllersElasticUserSecret := &corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      render.ElasticsearchKubeControllersUserSecret,
+							Namespace: common.CalicoNamespace,
+						},
+						Data: map[string][]byte{
+							"username": []byte("username"),
+							"password": []byte("password"),
+						},
+					}
+					Expect(cli.Create(ctx, kubeControllersElasticUserSecret)).ShouldNot(HaveOccurred())
+
+					kbInternalSecret := createPubSecret(render.KibanaInternalCertSecret, render.KibanaNamespace, secret.Data["tls.crt"], "tls.crt")
+					Expect(cli.Create(ctx, kbInternalSecret)).ShouldNot(HaveOccurred())
+
 					mockStatus.On("SetDegraded", "Waiting for curator secrets to become available", "").Return()
 					result, err = r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 					// Expect to be waiting for curator secret
 					Expect(result).Should(Equal(reconcile.Result{}))
 					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: curatorUsrSecretObjMeta})).ShouldNot(HaveOccurred())
-
-					By("confirming public ES and KB certs are still valid")
-					Expect(cli.Get(ctx, esCertPubSecretKey, secret)).ShouldNot(HaveOccurred())
-					test.VerifyPublicCert(secret, "tls.crt", esDNSNames...)
-
-					Expect(cli.Get(ctx, kbCertPubSecretKey, secret)).ShouldNot(HaveOccurred())
-					test.VerifyPublicCert(secret, "tls.crt", kbDNSNames...)
-
-					By("confirming public ES and KB certs were copied to operator namespace")
-					Expect(cli.Get(ctx, esCertPubSecretOperKey, secret)).ShouldNot(HaveOccurred())
-					test.VerifyPublicCert(secret, "tls.crt", esDNSNames...)
-
-					Expect(cli.Get(ctx, kbCertPubSecretOperKey, secret)).ShouldNot(HaveOccurred())
-					test.VerifyPublicCert(secret, "tls.crt", kbDNSNames...)
 
 					mockStatus.On("SetDegraded", "Waiting for elasticsearch metrics secrets to become available", "").Return()
 					result, err = r.Reconcile(ctx, reconcile.Request{})
@@ -540,13 +549,37 @@ var _ = Describe("LogStorage controller", func() {
 
 					// Create public ES and KB secrets
 					secret := &corev1.Secret{}
-					Expect(cli.Get(ctx, esCertSecretKey, secret)).ShouldNot(HaveOccurred())
-					esPublicSecret := createPubSecret(relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, secret.Data["tls.crt"], "tls.crt")
-					Expect(cli.Create(ctx, esPublicSecret)).ShouldNot(HaveOccurred())
+					//Expect(cli.Get(ctx, esCertSecretKey, secret)).ShouldNot(HaveOccurred())
+					//esPublicSecret := createPubSecret(relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, secret.Data["tls.crt"], "tls.crt")
+					//Expect(cli.Create(ctx, esPublicSecret)).ShouldNot(HaveOccurred())
 
 					Expect(cli.Get(ctx, kbCertSecretKey, secret)).ShouldNot(HaveOccurred())
-					kbPublicSecret := createPubSecret(render.KibanaPublicCertSecret, render.KibanaNamespace, secret.Data["tls.crt"], "tls.crt")
-					Expect(cli.Create(ctx, kbPublicSecret)).ShouldNot(HaveOccurred())
+					kbInternalSecret := createPubSecret(render.KibanaInternalCertSecret, render.KibanaNamespace, secret.Data["tls.crt"], "tls.crt")
+					Expect(cli.Create(ctx, kbInternalSecret)).ShouldNot(HaveOccurred())
+
+					esAdminUserSecret := &corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      render.ElasticsearchAdminUserSecret,
+							Namespace: render.ElasticsearchNamespace,
+						},
+						Data: map[string][]byte{
+							"username": []byte("elastic"),
+							"password": []byte("password"),
+						},
+					}
+					Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
+
+					kubeControllersElasticUserSecret := &corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      render.ElasticsearchKubeControllersUserSecret,
+							Namespace: common.CalicoNamespace,
+						},
+						Data: map[string][]byte{
+							"username": []byte("username"),
+							"password": []byte("password"),
+						},
+					}
+					Expect(cli.Create(ctx, kubeControllersElasticUserSecret)).ShouldNot(HaveOccurred())
 
 					mockStatus.On("SetDegraded", "Waiting for curator secrets to become available", "").Return()
 					result, err = r.Reconcile(ctx, reconcile.Request{})
@@ -699,14 +732,6 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(cli.Update(ctx, kb)).ShouldNot(HaveOccurred())
 
 					By("deleting the existing ES and KB secrets")
-					esSecret := &corev1.Secret{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      render.TigeraElasticsearchCertSecret,
-							Namespace: rmeta.OperatorNamespace(),
-						},
-					}
-					Expect(cli.Delete(ctx, esSecret)).NotTo(HaveOccurred())
-
 					kbSecret := &corev1.Secret{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      render.TigeraKibanaCertSecret,
@@ -716,60 +741,65 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(cli.Delete(ctx, kbSecret)).NotTo(HaveOccurred())
 
 					By("creating new ES and KB secrets with an old invalid DNS name")
-					esSecret, err = secret.CreateTLSSecret(nil,
-						render.TigeraElasticsearchCertSecret, rmeta.OperatorNamespace(), "tls.key", "tls.crt",
-						rmeta.DefaultCertificateDuration, nil, "tigera-secure-es-http.tigera-elasticsearch.svc",
-					)
-					Expect(err).ShouldNot(HaveOccurred())
-
 					kbSecret, err = secret.CreateTLSSecret(nil,
 						render.TigeraKibanaCertSecret, rmeta.OperatorNamespace(), "tls.key", "tls.crt",
 						rmeta.DefaultCertificateDuration, nil, "tigera-secure-kb-http.tigera-elasticsearch.svc",
 					)
 					Expect(err).ShouldNot(HaveOccurred())
 
+					kubeControllersElasticUserSecret := &corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      render.ElasticsearchKubeControllersUserSecret,
+							Namespace: common.CalicoNamespace,
+						},
+						Data: map[string][]byte{
+							"username": []byte("username"),
+							"password": []byte("password"),
+						},
+					}
+					Expect(cli.Create(ctx, kubeControllersElasticUserSecret)).ShouldNot(HaveOccurred())
+
 					// Create the public ES and KB secrets that would come from
 					// the ECK operator. These public certs use the cert
 					// bytes from the certs above and so they have invalid DNS
 					// names.
 					Expect(cli.Create(
-						ctx, createPubSecret(render.KibanaPublicCertSecret, render.KibanaNamespace, kbSecret.Data["tls.crt"], "tls.crt")),
+						ctx, createPubSecret(render.KibanaInternalCertSecret, render.KibanaNamespace, kbSecret.Data["tls.crt"], "tls.crt")),
 					).ShouldNot(HaveOccurred())
 
-					Expect(cli.Create(
-						ctx, createPubSecret(relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, esSecret.Data["tls.crt"], "tls.crt"),
-					)).ShouldNot(HaveOccurred())
+					esAdminUserSecret := &corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      render.ElasticsearchAdminUserSecret,
+							Namespace: render.ElasticsearchNamespace,
+						},
+						Data: map[string][]byte{
+							"username": []byte("elastic"),
+							"password": []byte("password"),
+						},
+					}
+					Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
 
 					mockStatus.On("SetDegraded", "Waiting for curator secrets to become available", "").Return()
 					result, err = r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 
 					By("confirming elasticsearch certs were updated and have the expected DNS names")
-					esDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
+					combinedDNSNames := append(esGatewayDNSNmes, esDNSNames...)
 					secret := &corev1.Secret{}
 
 					Expect(cli.Get(ctx, esCertSecretKey, secret)).ShouldNot(HaveOccurred())
-					test.VerifyCert(secret, "tls.key", "tls.crt", esDNSNames...)
+					test.VerifyCert(secret, "tls.key", "tls.crt", combinedDNSNames...)
 
 					Expect(cli.Get(ctx, esCertSecretOperKey, secret)).ShouldNot(HaveOccurred())
-					test.VerifyCert(secret, "tls.key", "tls.crt", esDNSNames...)
+					test.VerifyCert(secret, "tls.key", "tls.crt", combinedDNSNames...)
 
+					kbDNSNames = dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
 					By("confirming kibana certs were updated and have the expected DNS names")
-					kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
 					Expect(cli.Get(ctx, kbCertSecretKey, secret)).ShouldNot(HaveOccurred())
 					test.VerifyCert(secret, "tls.key", "tls.crt", kbDNSNames...)
 
 					Expect(cli.Get(ctx, kbCertSecretOperKey, secret)).ShouldNot(HaveOccurred())
 					test.VerifyCert(secret, "tls.key", "tls.crt", kbDNSNames...)
-
-					By("confirming public ES and KB certs in the ES/KB namespace are deleted")
-					err = cli.Get(ctx, esCertPubSecretKey, secret)
-					Expect(err).Should(HaveOccurred())
-					Expect(errors.IsNotFound(err)).To(BeTrue())
-
-					err = cli.Get(ctx, kbCertPubSecretKey, secret)
-					Expect(err).Should(HaveOccurred())
-					Expect(errors.IsNotFound(err)).To(BeTrue())
 
 					mockStatus.AssertExpectations(GinkgoT())
 				})
@@ -834,6 +864,38 @@ var _ = Describe("LogStorage controller", func() {
 					It("should use default images", func() {
 						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain)
 						Expect(err).ShouldNot(HaveOccurred())
+
+						kubeControllersElasticUserSecret := &corev1.Secret{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      render.ElasticsearchKubeControllersUserSecret,
+								Namespace: common.CalicoNamespace,
+							},
+							Data: map[string][]byte{
+								"username": []byte("username"),
+								"password": []byte("password"),
+							},
+						}
+						Expect(cli.Create(ctx, kubeControllersElasticUserSecret)).ShouldNot(HaveOccurred())
+
+						esAdminUserSecret := &corev1.Secret{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      render.ElasticsearchAdminUserSecret,
+								Namespace: render.ElasticsearchNamespace,
+							},
+							Data: map[string][]byte{
+								"username": []byte("elastic"),
+								"password": []byte("password"),
+							},
+						}
+						Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
+
+						kibanaInternalCertSecret := &corev1.Secret{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      render.KibanaInternalCertSecret,
+								Namespace: rmeta.OperatorNamespace(),
+							},
+						}
+						Expect(cli.Create(ctx, kibanaInternalCertSecret)).ShouldNot(HaveOccurred())
 
 						By("running reconcile")
 						_, err = r.Reconcile(ctx, reconcile.Request{})
@@ -906,6 +968,22 @@ var _ = Describe("LogStorage controller", func() {
 							fmt.Sprintf("some.registry.org/%s:%s",
 								components.ComponentElasticsearchOperator.Image,
 								components.ComponentElasticsearchOperator.Version)))
+
+						dp := appsv1.Deployment{
+							TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      esgateway.DeploymentName,
+								Namespace: render.ElasticsearchNamespace,
+							},
+						}
+						Expect(test.GetResource(cli, &dp)).To(BeNil())
+						Expect(dp.Spec.Template.Spec.Containers).To(HaveLen(1))
+						gateway := test.GetContainer(dp.Spec.Template.Spec.Containers, esgateway.DeploymentName)
+						Expect(gateway).ToNot(BeNil())
+						Expect(gateway.Image).To(Equal(
+							fmt.Sprintf("some.registry.org/%s:%s",
+								components.ComponentESGateway.Image,
+								components.ComponentESGateway.Version)))
 					})
 					It("should use images from ImageSet", func() {
 						Expect(cli.Create(ctx, &operatorv1.ImageSet{
@@ -917,11 +995,44 @@ var _ = Describe("LogStorage controller", func() {
 									{Image: "tigera/eck-operator", Digest: "sha256:eckoperatorhash"},
 									{Image: "tigera/es-curator", Digest: "sha256:escuratorhash"},
 									{Image: "tigera/elasticsearch-metrics", Digest: "sha256:esmetricshash"},
+									{Image: "tigera/es-gateway", Digest: "sha256:esgatewayhash"},
 								},
 							},
 						})).ToNot(HaveOccurred())
 						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain)
 						Expect(err).ShouldNot(HaveOccurred())
+
+						kubeControllersElasticUserSecret := &corev1.Secret{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      render.ElasticsearchKubeControllersUserSecret,
+								Namespace: common.CalicoNamespace,
+							},
+							Data: map[string][]byte{
+								"username": []byte("username"),
+								"password": []byte("password"),
+							},
+						}
+						Expect(cli.Create(ctx, kubeControllersElasticUserSecret)).ShouldNot(HaveOccurred())
+
+						esAdminUserSecret := &corev1.Secret{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      render.ElasticsearchAdminUserSecret,
+								Namespace: render.ElasticsearchNamespace,
+							},
+							Data: map[string][]byte{
+								"username": []byte("elastic"),
+								"password": []byte("password"),
+							},
+						}
+						Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
+
+						kibanaInternalCertSecret := &corev1.Secret{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      render.KibanaInternalCertSecret,
+								Namespace: rmeta.OperatorNamespace(),
+							},
+						}
+						Expect(cli.Create(ctx, kibanaInternalCertSecret)).ShouldNot(HaveOccurred())
 
 						By("running reconcile")
 						_, err = r.Reconcile(ctx, reconcile.Request{})
@@ -994,6 +1105,22 @@ var _ = Describe("LogStorage controller", func() {
 							fmt.Sprintf("some.registry.org/%s@%s",
 								components.ComponentElasticsearchOperator.Image,
 								"sha256:eckoperatorhash")))
+
+						dp := appsv1.Deployment{
+							TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      esgateway.DeploymentName,
+								Namespace: render.ElasticsearchNamespace,
+							},
+						}
+						Expect(test.GetResource(cli, &dp)).To(BeNil())
+						Expect(dp.Spec.Template.Spec.Containers).To(HaveLen(1))
+						gateway := test.GetContainer(dp.Spec.Template.Spec.Containers, esgateway.DeploymentName)
+						Expect(gateway).ToNot(BeNil())
+						Expect(gateway.Image).To(Equal(
+							fmt.Sprintf("some.registry.org/%s@%s",
+								components.ComponentESGateway.Image,
+								"sha256:esgatewayhash")))
 					})
 				})
 			})
@@ -1038,6 +1165,38 @@ var _ = Describe("LogStorage controller", func() {
 				It("deletes Elasticsearch and Kibana then removes the finalizers on the LogStorage CR", func() {
 					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain)
 					Expect(err).ShouldNot(HaveOccurred())
+
+					esAdminUserSecret := &corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      render.ElasticsearchAdminUserSecret,
+							Namespace: render.ElasticsearchNamespace,
+						},
+						Data: map[string][]byte{
+							"username": []byte("elastic"),
+							"password": []byte("password"),
+						},
+					}
+					Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
+
+					kubeControllersElasticUserSecret := &corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      render.ElasticsearchKubeControllersUserSecret,
+							Namespace: common.CalicoNamespace,
+						},
+						Data: map[string][]byte{
+							"username": []byte("username"),
+							"password": []byte("password"),
+						},
+					}
+					Expect(cli.Create(ctx, kubeControllersElasticUserSecret)).ShouldNot(HaveOccurred())
+
+					kibanaInternalCertSecret := &corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      render.KibanaInternalCertSecret,
+							Namespace: rmeta.OperatorNamespace(),
+						},
+					}
+					Expect(cli.Create(ctx, kibanaInternalCertSecret)).ShouldNot(HaveOccurred())
 
 					By("making sure LogStorage has successfully reconciled")
 					result, err := r.Reconcile(ctx, reconcile.Request{})
@@ -1209,7 +1368,8 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 		toSecrets(createKibanaSecrets()),
 		[]*corev1.Secret{
 			{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-		}, operatorv1.ProviderNone,
+		},
+		operatorv1.ProviderNone,
 		[]*corev1.Secret{
 			{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: rmeta.OperatorNamespace()}},
 		},
@@ -1263,6 +1423,8 @@ func createPubSecret(name string, ns string, bytes []byte, certName string) clie
 
 func createESSecrets() []client.Object {
 	dnsNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
+	dnsNames = append(dnsNames, dns.GetServiceDNSNames(esgateway.ServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)...)
+
 	esSecret, err := secret.CreateTLSSecret(nil,
 		render.TigeraElasticsearchCertSecret, rmeta.OperatorNamespace(), "tls.key", "tls.crt",
 		rmeta.DefaultCertificateDuration, nil, dnsNames...,
@@ -1291,12 +1453,10 @@ func createKibanaSecrets() []client.Object {
 
 	kbOperNsSecret := secret.CopyToNamespace(render.KibanaNamespace, kbSecret)[0]
 
-	kbPublicOperNsSecret := createPubSecret(render.KibanaPublicCertSecret, rmeta.OperatorNamespace(), kbSecret.Data["tls.crt"], "tls.crt")
 	kbPublicSecret := createPubSecret(render.KibanaPublicCertSecret, render.KibanaNamespace, kbSecret.Data["tls.crt"], "tls.crt")
 	return []client.Object{
 		kbSecret,
 		kbOperNsSecret,
-		kbPublicOperNsSecret,
 		kbPublicSecret,
 	}
 }

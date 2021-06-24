@@ -87,25 +87,8 @@ func newTyphaAutoscaler(client client.Client, statusManager status.StatusManager
 
 // getExpectedReplicas gets the number of replicas expected for a given node number.
 func (t *typhaAutoscaler) getExpectedReplicas(nodes int) int {
-	switch {
-	case nodes <= 1:
-		return 1
-	case nodes <= 2:
-		return 2
-	case nodes <= 3:
-		return 3
-	case nodes <= 250:
-		return 4
-	case nodes <= 500:
-		return 5
-	case nodes <= 1000:
-		return 6
-	case nodes <= 1500:
-		return 7
-	case nodes <= 2000:
-		return 8
-	}
-	return 10
+	// HACK to test typha scale
+	return 1
 }
 
 // start starts the Typha autoscaler, updating the Typha deployment's replica count every sync period. The triggerRunChan

@@ -88,7 +88,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{Name: "FLOW_LOG_FILE", Value: "/var/log/calico/flowlogs/flows.log"},
 			{Name: "DNS_LOG_FILE", Value: "/var/log/calico/dnslogs/dns.log"},
 			{Name: "FLUENTD_ES_SECURE", Value: "true"},
-			{Name: "ELASTIC_HOST", Value: "tigera-secure-es-http.tigera-elasticsearch.svc"},
+			{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
 			{Name: "ELASTIC_PORT", Value: "9200"},
 			{
 				Name: "NODENAME",
@@ -136,7 +136,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{Name: "FLOW_LOG_FILE", Value: "c:/var/log/calico/flowlogs/flows.log"},
 			{Name: "DNS_LOG_FILE", Value: "c:/var/log/calico/dnslogs/dns.log"},
 			{Name: "FLUENTD_ES_SECURE", Value: "true"},
-			{Name: "ELASTIC_HOST", Value: "tigera-secure-es-http.tigera-elasticsearch.svc.cluster.local"},
+			{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc.cluster.local"},
 			{Name: "ELASTIC_PORT", Value: "9200"},
 			{
 				Name: "NODENAME",
@@ -157,7 +157,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{Name: "FLOW_LOG_FILE", Value: "c:/var/log/calico/flowlogs/flows.log"},
 			{Name: "DNS_LOG_FILE", Value: "c:/var/log/calico/dnslogs/dns.log"},
 			{Name: "FLUENTD_ES_SECURE", Value: "true"},
-			{Name: "ELASTIC_HOST", Value: "tigera-secure-es-http.tigera-elasticsearch.svc.cluster.local"},
+			{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc.cluster.local"},
 			{Name: "ELASTIC_PORT", Value: "9200"},
 			{
 				Name: "NODENAME",
@@ -584,7 +584,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		envs := deploy.Spec.Template.Spec.Containers[0].Env
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "K8S_PLATFORM", Value: "eks"}))
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "AWS_REGION", Value: eksConfig.AwsRegion}))
-		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_HOST", Value: "tigera-secure-es-http.tigera-elasticsearch.svc"}))
+		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"}))
 
 		fetchIntervalVal := "900"
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "EKS_CLOUDWATCH_LOG_FETCH_INTERVAL", Value: fetchIntervalVal}))

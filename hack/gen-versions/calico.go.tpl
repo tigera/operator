@@ -54,6 +54,18 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "calicovpp/vpp"}}
+	ComponentCalicoVpp = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
+{{ with index .Components "calicovpp/agent"}}
+	ComponentCalicoVppAgent = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 	ComponentOperatorInit = component{
 		Version: version.VERSION,
 		Image:   "tigera/operator",

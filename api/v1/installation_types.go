@@ -282,12 +282,13 @@ const (
 
 // LinuxDataplaneOption controls which dataplane is to be used on Linux nodes.
 //
-// One of: Iptables, BPF
+// One of: Iptables, BPF, VPP
 type LinuxDataplaneOption string
 
 const (
 	LinuxDataplaneIptables LinuxDataplaneOption = "Iptables"
 	LinuxDataplaneBPF      LinuxDataplaneOption = "BPF"
+	LinuxDataplaneVPP      LinuxDataplaneOption = "VPP"
 )
 
 // CalicoNetworkSpec specifies configuration options for Calico provided pod networking.
@@ -297,13 +298,17 @@ type CalicoNetworkSpec struct {
 	// If not specified, iptables mode is used.
 	// Default: Iptables
 	// +optional
-	// +kubebuilder:validation:Enum=Iptables;BPF
+	// +kubebuilder:validation:Enum=Iptables;BPF;VPP
 	LinuxDataplane *LinuxDataplaneOption `json:"linuxDataplane,omitempty"`
 
 	// BGP configures whether or not to enable Calico's BGP capabilities.
 	// +optional
 	// +kubebuilder:validation:Enum=Enabled;Disabled
 	BGP *BGPOption `json:"bgp,omitempty"`
+
+	// VPP enables and configures the VPP dataplane when present
+	// +optional
+	VPP *VPPConfiguration `json:"vpp,omitempty"`
 
 	// IPPools contains a list of IP pools to create if none exist. At most one IP pool of each
 	// address family may be specified. If omitted, a single pool will be configured if needed.
@@ -343,6 +348,76 @@ type CalicoNetworkSpec struct {
 	// +optional
 	// +kubebuilder:validation:Enum=Enabled;Disabled
 	ContainerIPForwarding *ContainerIPForwardingType `json:"containerIPForwarding,omitempty"`
+}
+
+// VPPConfiguration provides configuration options for the VPP dataplane
+type VPPConfiguration struct {
+	// UplinkInterface is the interface VPP will take to communicate with the outside
+	UplinkInterface string `json:"uplinkInterface"`
+
+	// ServicePrefix must be set to the cluster service CIDR
+	ServicePrefix string `json:"servicePrefix"`
+
+	// UplinkDriver is the driver to use for the uplink interface.
+	// Examples: af_xdp, af_packet, dpdk, avf, virtio
+	// +optional
+	UplinkDriver string `json:"uplinkDriver,omitempty"`
+
+	// Hugepages can be set to "Enabled" if hugepages are available on all nodes
+	// to allow more efficient drivers to be used
+	// +optional
+	Hugepages string `json:"hugepages,omitempty"`
+
+	// DefaultGateway can be set to configure a default route in VPP.
+	// Accepted formats are "ipv4", "ipv6" or "ipv4,ipv6"
+	// +optional
+	DefaultGateway string `json:"defaultGateway,omitempty"`
+
+	// RxMode can be used to configure the VPP Rx mode
+	// Accepted values: "default" (default), "interrupt", "polling", "adaptive"
+	// +optional
+	RxMode string `json:"rxMode,omitempty"`
+
+	// UplinkRxQueues can be used to configure the number of rx queues on the uplink interface,
+	// when supported by the driver. Default: 1
+	// +optional
+	UplinkRxQueues int `json:"uplinkRxQueues,omitempty"`
+
+	// UplinkQueueSize can be used to configure the queue size of the uplink interface
+	// Default: 1024
+	// +optional
+	UplinkQueueSize int `json:"uplinkQueueSize,omitempty"`
+
+	// TunRxQueues can be used to configure the number of Rx queues on the container tun interfaces
+	// Default: 1024
+	// +optional
+	TunRxQueues int `json:"tunRxQueues,omitempty"`
+
+	// TunTxQueues can be used to configure the number of Tx queues on the container tun interfaces
+	// Default: 1024
+	// +optional
+	TunTxQueues int `json:"tunTxQueues,omitempty"`
+
+	// TunQueueSize can be used to configure the queue size of the uplink interface
+	// Default: 1024
+	// +optional
+	TunQueueSize int `json:"tunQueueSize,omitempty"`
+
+	// IPsec can be used to enable IPsec encryption of IPIP tunnels
+	// Accepted values: "Disabled" (default), "Enabled"
+	// +optional
+	IPsec string `json:"ipsec,omitempty"`
+
+	// Workers can be set to configure the number of VPP workers. With 0 workers, VPP will run with
+	// a single main thread processing API requests and network traffic. With 1+ workers, VPP will
+	// run with one main thread processing API requests, and the configured number of workers
+	// processing container traffic. Default: 0
+	// +optional
+	Workers int `json:"workers,omitempty"`
+
+	// HookType is set to specify node distribution, only "systemctl" is supported for now
+	// +optional
+	HookType string `json:"hookType,omitempty"`
 }
 
 // NodeAddressAutodetection provides configuration options for auto-detecting node addresses. At most one option

@@ -17,6 +17,11 @@
 package render
 
 import (
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
+	"github.com/tigera/operator/pkg/render/common/secret"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -24,12 +29,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/components"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
-	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
 // The names of the components related to the Guardian related rendered objects.
@@ -62,12 +61,13 @@ func Guardian(
 }
 
 type GuardianComponent struct {
-	url          string
-	pullSecrets  []*v1.Secret
-	openshift    bool
-	installation *operatorv1.InstallationSpec
-	tunnelSecret *corev1.Secret
-	image        string
+	url                string
+	pullSecrets        []*v1.Secret
+	openshift          bool
+	installation       *operatorv1.InstallationSpec
+	tunnelSecret       *corev1.Secret
+	image              string
+	packetCaptureImage string
 }
 
 func (c *GuardianComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -76,7 +76,15 @@ func (c *GuardianComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := c.installation.ImagePrefix
 	var err error
 	c.image, err = components.GetReference(components.ComponentGuardian, reg, path, prefix, is)
-	return err
+	if err != nil {
+		return err
+	}
+	c.packetCaptureImage, err = components.GetReference(components.ComponentPacketCapture, reg, path, prefix, is)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (c *GuardianComponent) SupportedOSType() rmeta.OSType {
@@ -162,6 +170,11 @@ func (c *GuardianComponent) clusterRole() client.Object {
 				Resources: []string{"users", "groups", "serviceaccounts"},
 				Verbs:     []string{"impersonate"},
 			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"packetcaptures"},
+				Verbs:     []string{"get"},
+			},
 		},
 	}
 }
@@ -220,8 +233,11 @@ func (c *GuardianComponent) deployment() client.Object {
 					ServiceAccountName: GuardianServiceAccountName,
 					Tolerations:        append(c.installation.ControlPlaneTolerations, rmeta.TolerateMaster, rmeta.TolerateCriticalAddonsOnly),
 					ImagePullSecrets:   secret.GetReferenceList(c.pullSecrets),
-					Containers:         c.container(),
-					Volumes:            c.volumes(),
+					Containers: []corev1.Container{
+						c.container(),
+						c.packetCaptureContainer(),
+					},
+					Volumes: c.volumes(),
 				},
 			},
 		},
@@ -241,42 +257,74 @@ func (c *GuardianComponent) volumes() []v1.Volume {
 	}
 }
 
-func (c *GuardianComponent) container() []v1.Container {
-	return []corev1.Container{
-		{
-			Name:  GuardianDeploymentName,
-			Image: c.image,
-			Env: []corev1.EnvVar{
-				{Name: "GUARDIAN_PORT", Value: "9443"},
-				{Name: "GUARDIAN_LOGLEVEL", Value: "INFO"},
-				{Name: "GUARDIAN_VOLTRON_URL", Value: c.url},
-			},
-			VolumeMounts: []corev1.VolumeMount{{
-				Name:      GuardianVolumeName,
-				MountPath: "/certs/",
-				ReadOnly:  true,
-			}},
-			LivenessProbe: &corev1.Probe{
-				Handler: corev1.Handler{
-					HTTPGet: &corev1.HTTPGetAction{
-						Path: "/health",
-						Port: intstr.FromInt(9080),
-					},
-				},
-				InitialDelaySeconds: 90,
-				PeriodSeconds:       10,
-			},
-			ReadinessProbe: &corev1.Probe{
-				Handler: corev1.Handler{
-					HTTPGet: &corev1.HTTPGetAction{
-						Path: "/health",
-						Port: intstr.FromInt(9080),
-					},
-				},
-				InitialDelaySeconds: 10,
-				PeriodSeconds:       5,
-			},
-			SecurityContext: podsecuritycontext.NewBaseContext(),
+func (c *GuardianComponent) container() v1.Container {
+	return corev1.Container{
+		Name:  GuardianDeploymentName,
+		Image: c.image,
+		Env: []corev1.EnvVar{
+			{Name: "GUARDIAN_PORT", Value: "9443"},
+			{Name: "GUARDIAN_LOGLEVEL", Value: "INFO"},
+			{Name: "GUARDIAN_VOLTRON_URL", Value: c.url},
 		},
+		VolumeMounts: []corev1.VolumeMount{{
+			Name:      GuardianVolumeName,
+			MountPath: "/certs/",
+			ReadOnly:  true,
+		}},
+		LivenessProbe: &corev1.Probe{
+			Handler: corev1.Handler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/health",
+					Port: intstr.FromInt(9080),
+				},
+			},
+			InitialDelaySeconds: 90,
+			PeriodSeconds:       10,
+		},
+		ReadinessProbe: &corev1.Probe{
+			Handler: corev1.Handler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/health",
+					Port: intstr.FromInt(9080),
+				},
+			},
+			InitialDelaySeconds: 10,
+			PeriodSeconds:       5,
+		},
+		SecurityContext: podsecuritycontext.NewBaseContext(),
+	}
+}
+
+// packetCaptureContainer returns the packet capture container.
+func (c *GuardianComponent) packetCaptureContainer() corev1.Container {
+	env := []v1.EnvVar{
+		{Name: "PACKETCAPTURE_API_LOG_LEVEL", Value: "Info"},
+	}
+
+	return corev1.Container{
+		Name:  PacketCaptureServer,
+		Image: c.packetCaptureImage,
+		LivenessProbe: &corev1.Probe{
+			Handler: corev1.Handler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/health",
+					Port: intstr.FromInt(8444),
+				},
+			},
+			InitialDelaySeconds: 90,
+			PeriodSeconds:       10,
+		},
+		ReadinessProbe: &corev1.Probe{
+			Handler: corev1.Handler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path: "/health",
+					Port: intstr.FromInt(8444),
+				},
+			},
+			InitialDelaySeconds: 10,
+			PeriodSeconds:       5,
+		},
+		SecurityContext: podsecuritycontext.NewBaseContext(),
+		Env:             env,
 	}
 }

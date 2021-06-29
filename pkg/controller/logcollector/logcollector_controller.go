@@ -232,6 +232,13 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
+	if err != nil {
+		log.Error(err, "Error reading ManagementClusterConnection")
+		r.status.SetDegraded("Error reading ManagementClusterConnection", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	esClusterConfig, err := utils.GetElasticsearchClusterConfig(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -417,6 +424,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		installation,
 		r.clusterDomain,
 		rmeta.OSTypeLinux,
+		managementClusterConnection != nil,
 	)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
@@ -449,6 +457,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			installation,
 			r.clusterDomain,
 			rmeta.OSTypeWindows,
+			managementClusterConnection != nil,
 		)
 
 		if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {

@@ -150,13 +150,19 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				},
 			}
 			Expect(test.GetResource(c, &d)).To(BeNil())
-			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(2))
 			dexC := test.GetContainer(d.Spec.Template.Spec.Containers, render.GuardianDeploymentName)
 			Expect(dexC).ToNot(BeNil())
 			Expect(dexC.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentGuardian.Image,
 					components.ComponentGuardian.Version)))
+			packetCapture := test.GetContainer(d.Spec.Template.Spec.Containers, render.PacketCaptureServer)
+			Expect(packetCapture).ToNot(BeNil())
+			Expect(packetCapture.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentPacketCapture.Image,
+					components.ComponentPacketCapture.Version)))
 		})
 		It("should use images from imageset", func() {
 			Expect(c.Create(ctx, &operatorv1.ImageSet{
@@ -164,6 +170,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
 						{Image: "tigera/guardian", Digest: "sha256:guardianhash"},
+						{Image: "tigera/packetcapture-api", Digest: "sha256:packetcapturehash"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -180,13 +187,19 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				},
 			}
 			Expect(test.GetResource(c, &d)).To(BeNil())
-			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
-			apiserver := test.GetContainer(d.Spec.Template.Spec.Containers, render.GuardianDeploymentName)
-			Expect(apiserver).ToNot(BeNil())
-			Expect(apiserver.Image).To(Equal(
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(2))
+			guardian := test.GetContainer(d.Spec.Template.Spec.Containers, render.GuardianDeploymentName)
+			Expect(guardian).ToNot(BeNil())
+			Expect(guardian.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentGuardian.Image,
 					"sha256:guardianhash")))
+			packetCapture := test.GetContainer(d.Spec.Template.Spec.Containers, render.PacketCaptureServer)
+			Expect(packetCapture).ToNot(BeNil())
+			Expect(packetCapture.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentPacketCapture.Image,
+					"sha256:packetcapturehash")))
 		})
 	})
 })

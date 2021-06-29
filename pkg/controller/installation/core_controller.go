@@ -44,7 +44,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/tls"
@@ -236,27 +235,6 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		err = c.Watch(&source.Kind{Type: &operator.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
-		}
-
-		err = c.Watch(&source.Kind{Type: &operator.Authentication{}}, &handler.EnqueueRequestForObject{})
-		if err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
-		}
-
-		if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", render.ECKLicenseConfigMapName, err)
-		}
-
-		if err = utils.AddSecretsWatch(c, render.ElasticsearchAdminUserSecret, rmeta.OperatorNamespace()); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch Secret %s: %w", render.ElasticsearchAdminUserSecret, err)
-		}
-
-		if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace()); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch Secret '%s' in '%s' namespace: %w", relasticsearch.PublicCertSecret, rmeta.OperatorNamespace(), err)
-		}
-
-		if err = utils.AddSecretsWatch(c, render.KibanaPublicCertSecret, rmeta.OperatorNamespace()); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch Secret '%s' in '%s' namespace: %w", render.KibanaPublicCertSecret, rmeta.OperatorNamespace(), err)
 		}
 
 		// Watch the internal manager TLS secret in the calico namespace, where it's copied for kube-controllers.

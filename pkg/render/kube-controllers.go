@@ -186,13 +186,8 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 		extraRules := []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{""},
-				Resources: []string{"configmaps", "secrets"},
+				Resources: []string{"configmaps"},
 				Verbs:     []string{"watch", "list", "get", "update", "create"},
-			},
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"managedclusters"},
-				Verbs:     []string{"watch", "list", "get"},
 			},
 			{
 				// Needed to validate the license

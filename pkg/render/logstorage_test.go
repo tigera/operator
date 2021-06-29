@@ -388,6 +388,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					}},
 					{render.ECKOperatorNamespace, "", &corev1.Namespace{}, nil},
 					{"tigera-pull-secret", render.ECKOperatorNamespace, &corev1.Secret{}, nil},
+					{render.ElasticsearchKubeControllersUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 					{"elastic-operator", "", &rbacv1.ClusterRole{}, nil},
 					{"elastic-operator", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"elastic-operator", render.ECKOperatorNamespace, &corev1.ServiceAccount{}, nil},
@@ -404,6 +405,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{render.TigeraElasticsearchCertSecret, rmeta.OperatorNamespace(), &corev1.Secret{}, nil},
 					{render.TigeraElasticsearchCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 					{relasticsearch.PublicCertSecret, rmeta.OperatorNamespace(), &corev1.Secret{}, nil},
+					{render.ElasticsearchAdminUserSecret, rmeta.OperatorNamespace(), &corev1.Secret{}, nil},
 					{"tigera-elasticsearch", render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
 					{relasticsearch.ClusterConfigConfigMapName, rmeta.OperatorNamespace(), &corev1.ConfigMap{}, nil},
 					{render.ElasticsearchName, render.ElasticsearchNamespace, &esv1.Elasticsearch{}, nil},
@@ -438,6 +440,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: rmeta.OperatorNamespace()}},
 						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
 						{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: rmeta.OperatorNamespace()}},
+						{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchAdminUserSecret, Namespace: rmeta.OperatorNamespace()}},
 					},
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: rmeta.OperatorNamespace()}},
@@ -777,6 +780,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: rmeta.OperatorNamespace()}},
 					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
 					{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: rmeta.OperatorNamespace()}},
+					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchAdminUserSecret, Namespace: rmeta.OperatorNamespace()}},
 				},
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: rmeta.OperatorNamespace()}},

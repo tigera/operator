@@ -190,13 +190,8 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 		extraRules := []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{""},
-				Resources: []string{"configmaps", "secrets"},
+				Resources: []string{"configmaps"},
 				Verbs:     []string{"watch", "list", "get", "update", "create"},
-			},
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"managedclusters"},
-				Verbs:     []string{"watch", "list", "get"},
 			},
 			{
 				// Needed to validate the license
@@ -296,10 +291,6 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 	enabledControllers := []string{"node"}
 	if c.cr.Variant == operator.TigeraSecureEnterprise {
 		enabledControllers = append(enabledControllers, "service", "federatedservices")
-
-		if c.managementCluster != nil {
-			enabledControllers = append(enabledControllers, "managedcluster")
-		}
 
 		if c.cr.CalicoNetwork != nil && c.cr.CalicoNetwork.MultiInterfaceMode != nil {
 			env = append(env, v1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cr.CalicoNetwork.MultiInterfaceMode.Value()})

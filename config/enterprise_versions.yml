@@ -55,7 +55,7 @@ components:
     version: v3.7.0
   intrusion-detection-controller:
     image: tigera/intrusion-detection-controller
-    version: v3.7.0
+    version: v3.7.1-0
   compliance-controller:
     image: tigera/compliance-controller
     version: v3.7.0

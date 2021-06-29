@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"hash/fnv"
 	"net/url"
@@ -205,7 +204,7 @@ func LogStorage(
 	var kubeControllersGatewaySecret *corev1.Secret
 	var esAdminSecret *corev1.Secret
 	for _, elasticsearchSecret := range elasticsearchSecrets {
-		if elasticsearchSecret != nil && elasticsearchSecret.Name == relasticsearch.PublicCertSecret {
+		if elasticsearchSecret != nil && elasticsearchSecret.Name == ElasticsearchAdminUserSecret {
 			esAdminSecret = elasticsearchSecret
 			break
 		}
@@ -214,7 +213,7 @@ func LogStorage(
 		kubeControllersGatewaySecret = &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      ElasticsearchKubeControllersUserSecret,
-				Namespace: common.CalicoNamespace,
+				Namespace: ElasticsearchNamespace,
 			},
 			Data: map[string][]byte{
 				"username": []byte("elastic"),
@@ -227,6 +226,14 @@ func LogStorage(
 	for _, elasticsearchSecret := range elasticsearchSecrets {
 		if elasticsearchSecret != nil && elasticsearchSecret.Name == relasticsearch.PublicCertSecret {
 			elasticsearchPublicCertSecret = elasticsearchSecret
+			break
+		}
+	}
+
+	var kibanaPublicCertSecret *corev1.Secret
+	for _, kibanaSecret := range kibanaSecrets {
+		if kibanaSecret != nil && kibanaSecret.Name == KibanaPublicCertSecret {
+			kibanaPublicCertSecret = kibanaSecret
 			break
 		}
 	}
@@ -254,6 +261,7 @@ func LogStorage(
 		managerInternalSecret:         managerInternalTLSSecret,
 		kubeControllersGatewaySecret:  kubeControllersGatewaySecret,
 		elasticsearchPublicCertSecret: elasticsearchPublicCertSecret,
+		kibanaPublicCertSecret:        kibanaPublicCertSecret,
 		k8sServiceEp:                  k8sServiceEp,
 	}
 }
@@ -287,6 +295,7 @@ type elasticsearchComponent struct {
 	managerInternalSecret         *corev1.Secret
 	kubeControllersGatewaySecret  *corev1.Secret
 	elasticsearchPublicCertSecret *corev1.Secret
+	kibanaPublicCertSecret        *corev1.Secret
 	k8sServiceEp                  k8sapi.ServiceEndpoint
 }
 
@@ -383,6 +392,10 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		)
 
 		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ECKOperatorNamespace, es.pullSecrets...)...)...)
+
+		if es.elasticsearchUserSecret != nil {
+			toCreate = append(toCreate, secret.ToRuntimeObjects(es.elasticsearchUserSecret)...)
+		}
 
 		toCreate = append(toCreate,
 			es.eckOperatorClusterRole(),
@@ -1768,18 +1781,83 @@ func (es elasticsearchComponent) kubeControllersRole() *rbacv1.ClusterRole {
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
+				// Nodes are watched to monitor for deletions.
+				APIGroups: []string{""},
+				Resources: []string{"nodes", "endpoints", "services"},
+				Verbs:     []string{"watch", "list", "get"},
+			},
+			{
+				// Pods are queried to check for existence.
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     []string{"get"},
+			},
+			{
+				// IPAM resources are manipulated when nodes are deleted.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"ippools"},
+				Verbs:     []string{"list"},
+			},
+			{
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"blockaffinities", "ipamblocks", "ipamhandles", "networksets"},
+				Verbs:     []string{"get", "list", "create", "update", "delete", "watch"},
+			},
+			{
+				// Needs access to update clusterinformations.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"clusterinformations"},
+				Verbs:     []string{"get", "create", "update"},
+			},
+			{
+				// Needs to manage hostendpoints.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"hostendpoints"},
+				Verbs:     []string{"get", "list", "create", "update", "delete"},
+			},
+			{
+				// calico-kube-controllers requires tiers create
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"tiers"},
+				Verbs:     []string{"create"},
+			},
+			{
+				// Needed to validate the license
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"licensekeys"},
+				Verbs:     []string{"get"},
+			},
+			{
 				APIGroups: []string{"elasticsearch.k8s.elastic.co"},
 				Resources: []string{"elasticsearches"},
 				Verbs:     []string{"watch", "get", "list"},
 			},
 			{
 				APIGroups: []string{""},
-				Resources: []string{"configmaps", "secrets"},
+				Resources: []string{"configmaps"},
 				Verbs:     []string{"watch", "list", "get", "update", "create"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"watch", "list", "get", "update", "create", "deletecollection"},
 			},
 			{
 				APIGroups: []string{"rbac.authorization.k8s.io"},
 				Resources: []string{"clusterroles", "clusterrolebindings"},
+				Verbs:     []string{"watch", "list", "get"},
+			},
+			{
+				// Needs to manipulate kubecontrollersconfiguration, which contains
+				// its config.  It creates a default if none exists, and updates status
+				// as well.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"kubecontrollersconfigurations"},
+				Verbs:     []string{"get", "create", "update", "watch"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
 				Verbs:     []string{"watch", "list", "get"},
 			},
 		},
@@ -1834,6 +1912,14 @@ func (es elasticsearchComponent) kubeControllersDeployment() *appsv1.Deployment 
 
 	if es.enableESOIDCWorkaround {
 		env = append(env, corev1.EnvVar{Name: "ENABLE_ELASTICSEARCH_OIDC_WORKAROUND", Value: "true"})
+	}
+
+	if es.managementCluster != nil {
+		enabledControllers = append(enabledControllers, "managedcluster")
+	}
+
+	if es.installation.CalicoNetwork != nil && es.installation.CalicoNetwork.MultiInterfaceMode != nil {
+		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: es.installation.CalicoNetwork.MultiInterfaceMode.Value()})
 	}
 
 	// These environment variables are for the "authorization" controller, so if it's not enabled don't provide them.
@@ -1932,14 +2018,6 @@ func (es elasticsearchComponent) kubeControllersDeployment() *appsv1.Deployment 
 }
 
 func (es elasticsearchComponent) annotations() map[string]string {
-	var kibanaPublicCertSecret *corev1.Secret
-	for _, kibanaSecret := range es.kibanaSecrets {
-		if kibanaSecret != nil && kibanaSecret.Name == KibanaPublicCertSecret {
-			kibanaPublicCertSecret = kibanaSecret
-			break
-		}
-	}
-
 	am := map[string]string{}
 	if es.managerInternalSecret != nil {
 		am[ManagerInternalTLSHashAnnotation] = rmeta.AnnotationHash(es.managerInternalSecret.Data)
@@ -1950,8 +2028,8 @@ func (es elasticsearchComponent) annotations() map[string]string {
 	if es.kubeControllersGatewaySecret != nil {
 		am[ElasticsearchUserHashAnnotation] = rmeta.AnnotationHash(es.kubeControllersGatewaySecret.Data)
 	}
-	if kibanaPublicCertSecret != nil {
-		am[KibanaTLSHashAnnotation] = rmeta.AnnotationHash(kibanaPublicCertSecret.Data)
+	if es.kibanaPublicCertSecret != nil {
+		am[KibanaTLSHashAnnotation] = rmeta.AnnotationHash(es.kibanaPublicCertSecret.Data)
 	}
 	return am
 }

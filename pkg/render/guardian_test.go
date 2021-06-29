@@ -22,6 +22,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -96,6 +97,21 @@ var _ = Describe("Rendering tests", func() {
 
 		deployment := rtest.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(deployment.Spec.Template.Spec.Containers[0].Image).Should(Equal("my-reg/tigera/guardian:" + components.ComponentGuardian.Version))
+		Expect(deployment.Spec.Template.Spec.Containers[1].Image).Should(Equal("my-reg/tigera/packetcapture-api:" + components.ComponentPacketCapture.Version))
+
+		clusterRole := rtest.GetResource(resources, render.GuardianClusterRoleName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"users", "groups", "serviceaccounts"},
+				Verbs:     []string{"impersonate"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"packetcaptures"},
+				Verbs:     []string{"get"},
+			},
+		}))
 	})
 
 	It("should render controlPlaneTolerations", func() {

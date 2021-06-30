@@ -55,9 +55,9 @@ var _ = Describe("Elasticsearch decorator tests", func() {
 				Expect(c.Env).To(ContainElement(expected))
 			}
 		},
-			Entry("linux", dns.DefaultClusterDomain, "tigera-secure-es-http.tigera-elasticsearch.svc", rmeta.OSTypeLinux),
-			Entry("linux ignores cluster domain", "does.not.matter", "tigera-secure-es-http.tigera-elasticsearch.svc", rmeta.OSTypeLinux),
-			Entry("windows", "acme.internal", "tigera-secure-es-http.tigera-elasticsearch.svc.acme.internal", rmeta.OSTypeWindows),
+			Entry("linux", dns.DefaultClusterDomain, "tigera-secure-es-gateway-http.tigera-elasticsearch.svc", rmeta.OSTypeLinux),
+			Entry("linux ignores cluster domain", "does.not.matter", "tigera-secure-es-gateway-http.tigera-elasticsearch.svc", rmeta.OSTypeLinux),
+			Entry("windows", "acme.internal", "tigera-secure-es-gateway-http.tigera-elasticsearch.svc.acme.internal", rmeta.OSTypeWindows),
 		)
 	})
 })

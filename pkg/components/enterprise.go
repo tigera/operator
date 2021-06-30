@@ -132,6 +132,11 @@ var (
 		Image:   "tigera/prometheus",
 	}
 
+	ComponentPrometheusService = component{
+		Version: "v1.0.0",
+		Image:   "tigera/prometheus-service",
+	}
+
 	ComponentPrometheusAlertmanager = component{
 		Version: "v0.20.0",
 		Image:   "tigera/alertmanager",
@@ -195,6 +200,7 @@ var (
 		ComponentDex,
 		ComponentManagerProxy,
 		ComponentPacketCapture,
+		ComponentPrometheusService,
 		ComponentPrometheus,
 		ComponentPrometheusAlertmanager,
 		ComponentQueryServer,

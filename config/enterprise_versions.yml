@@ -82,6 +82,8 @@ components:
   packetcapture-api:
     image: tigera/packetcapture-api
     version: master
+  prometheus-service:
+    image: tigera-dev/edbert/prometheus-service
   # The components below are third-party images that have been retagged under
   # quay.io/tigera so all enterprise images come from the same repository and org.
   elasticsearch-operator:

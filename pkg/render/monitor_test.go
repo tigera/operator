@@ -36,6 +36,11 @@ import (
 )
 
 var _ = Describe("monitor rendering tests", func() {
+
+	const (
+		calicoNodePrometheusServiceName = "calico-node-prometheus"
+	)
+
 	It("Should render Prometheus resources", func() {
 		component := render.Monitor(
 			&operatorv1.InstallationSpec{},
@@ -67,12 +72,33 @@ var _ = Describe("monitor rendering tests", func() {
 			{render.CalicoNodeMonitor, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
 			{render.ElasticsearchMetrics, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
 			{render.FluentdMetrics, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PodMonitorsKind},
+			{render.PrometheusHTTPAPIServiceName, common.TigeraPrometheusNamespace, "", "v1", "Service"},
 		}
 
 		Expect(len(toCreate)).To(Equal(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(toCreate[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			obj := toCreate[i]
+			rtest.ExpectResource(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+
+			if alertmanagerObj, ok := obj.(*monitoringv1.Alertmanager); ok {
+				com := components.ComponentPrometheusAlertmanager
+				expectedImage := fmt.Sprintf("%s%s:%s", components.PrometheusRegistry, com.Image, com.Version)
+				Expect(*alertmanagerObj.Spec.Image).To(Equal(expectedImage))
+			} else if prometheusObj, ok := obj.(*monitoringv1.Prometheus); ok {
+				com := components.ComponentPrometheus
+				expectedImage := fmt.Sprintf("%s%s:%s", components.PrometheusRegistry, com.Image, com.Version)
+				Expect(*prometheusObj.Spec.Image).To(Equal(expectedImage))
+			} else if obj.GetName() == "prometheus-operated-http" {
+				prometheusOperatedHttpServiceManifest := obj.(*corev1.Service)
+				Expect(prometheusOperatedHttpServiceManifest.Spec.Selector["prometheus"]).To(Equal(calicoNodePrometheusServiceName))
+
+				Expect(prometheusOperatedHttpServiceManifest.Spec.Type).To(Equal(corev1.ServiceTypeClusterIP))
+				Expect(len(prometheusOperatedHttpServiceManifest.Spec.Ports)).To(Equal(1))
+				Expect(prometheusOperatedHttpServiceManifest.Spec.Ports[0].Port).To(Equal(int32(render.PrometheusDefaultPort)))
+				Expect(prometheusOperatedHttpServiceManifest.Spec.Ports[0].TargetPort.IntVal).To(Equal(int32(render.PrometheusDefaultPort)))
+
+			}
 		}
 	})
 

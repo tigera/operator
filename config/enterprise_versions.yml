@@ -30,6 +30,9 @@ components:
   es-proxy:
     image: tigera/es-proxy
     version: master
+  es-gateway:
+    image: tigera/es-gateway
+    version: master
   eck-kibana:
     version: 7.10.1
   dex:

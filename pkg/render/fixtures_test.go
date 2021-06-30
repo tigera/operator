@@ -15,6 +15,7 @@
 package render_test
 
 import (
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	v1 "k8s.io/api/core/v1"
@@ -58,10 +59,41 @@ var elasticsearchAdminUserSecret = v1.Secret{
 	},
 	ObjectMeta: metav1.ObjectMeta{
 		Name:      render.ElasticsearchAdminUserSecret,
-		Namespace: rmeta.OperatorNamespace(),
+		Namespace: render.ElasticsearchNamespace,
 	},
 	Data: map[string][]byte{
-		"elastic": []byte("password"),
+		"username": []byte("password"),
+		"password": []byte("password"),
+	},
+}
+
+var kubeControllersVerificationSecret = v1.Secret{
+	TypeMeta: metav1.TypeMeta{
+		Kind:       "Secret",
+		APIVersion: "v1",
+	},
+	ObjectMeta: metav1.ObjectMeta{
+		Name:      render.ElasticsearchKubeControllersVerificationUserSecret,
+		Namespace: render.ElasticsearchNamespace,
+	},
+	Data: map[string][]byte{
+		"username": []byte("password"),
+		"password": []byte("password"),
+	},
+}
+
+var kubeControllersUserSecret = v1.Secret{
+	TypeMeta: metav1.TypeMeta{
+		Kind:       "Secret",
+		APIVersion: "v1",
+	},
+	ObjectMeta: metav1.ObjectMeta{
+		Name:      render.ElasticsearchKubeControllersUserSecret,
+		Namespace: common.CalicoNamespace,
+	},
+	Data: map[string][]byte{
+		"username": []byte("password"),
+		"password": []byte("password"),
 	},
 }
 

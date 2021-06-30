@@ -159,11 +159,6 @@ var _ = Describe("Manager controller tests", func() {
 					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.KibanaPublicCertSecret,
-					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-
-			Expect(c.Create(ctx, &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ComplianceServerCertSecret,
 					Namespace: rmeta.OperatorNamespace(),
 				},
@@ -385,10 +380,6 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ElasticsearchManagerUserSecret,
-					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.KibanaPublicCertSecret,
 					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, &corev1.Secret{

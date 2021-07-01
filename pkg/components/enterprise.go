@@ -98,7 +98,7 @@ var (
 	}
 
 	ComponentIntrusionDetectionController = component{
-		Version: "v3.7.0",
+		Version: "v3.7.1-0",
 		Image:   "tigera/intrusion-detection-controller",
 	}
 

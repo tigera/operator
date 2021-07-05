@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
+	"net/url"
 	"strings"
 
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
@@ -75,6 +76,7 @@ const (
 	KibanaDefaultCertPath  = "/etc/ssl/kibana/ca.pem"
 	KibanaBasePath         = "tigera-kibana"
 	KibanaServiceName      = "tigera-secure-kb-http"
+	KibanaDefaultRoute     = "/app/kibana#/dashboards?%s&title=%s"
 
 	DefaultElasticsearchClusterName = "cluster"
 	DefaultElasticsearchReplicas    = 0
@@ -118,6 +120,9 @@ const (
 
 	KibanaTLSAnnotationHash        = "hash.operator.tigera.io/kb-secrets"
 	ElasticsearchTLSHashAnnotation = "hash.operator.tigera.io/es-secrets"
+
+	TimeFilter         = "_g=(time:(from:now-24h,to:now))"
+	FlowsDashboardName = "Tigera Secure EE Flow Logs"
 )
 
 const (
@@ -1276,6 +1281,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 		"server": map[string]interface{}{
 			"basePath":        fmt.Sprintf("/%s", KibanaBasePath),
 			"rewriteBasePath": true,
+			"defaultRoute":    fmt.Sprintf(KibanaDefaultRoute, TimeFilter, url.PathEscape(FlowsDashboardName)),
 		},
 		"elasticsearch.ssl.certificateAuthorities": []string{"/usr/share/kibana/config/elasticsearch-certs/tls.crt"},
 		"tigera": map[string]interface{}{

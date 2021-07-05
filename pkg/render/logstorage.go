@@ -1897,6 +1897,7 @@ func (es elasticsearchComponent) kubeControllersRoleBinding() *rbacv1.ClusterRol
 
 func (es elasticsearchComponent) kubeControllersDeployment() *appsv1.Deployment {
 	env := []corev1.EnvVar{
+		{Name: "KUBE_CONTROLLERS_CONFIG_NAME", Value: "elasticsearch"},
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 	}
 

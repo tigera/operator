@@ -279,6 +279,7 @@ func (c *kubeControllersComponent) controllersRoleBinding() *rbacv1.ClusterRoleB
 
 func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	env := []corev1.EnvVar{
+		{Name: "KUBE_CONTROLLERS_CONFIG_NAME", Value: "default"},
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 	}
 

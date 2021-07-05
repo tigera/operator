@@ -454,14 +454,6 @@ func fillDefaults(instance *operator.Installation) error {
 		}
 	}
 
-	// Default the CalicoNetworkSpec based on the CNI plugin.
-	if instance.Spec.CalicoNetwork == nil {
-		switch instance.Spec.CNI.Type {
-		case operator.PluginCalico:
-			instance.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
-		}
-	}
-
 	if instance.Spec.CNI.IPAM == nil {
 		instance.Spec.CNI.IPAM = &operator.IPAMSpec{}
 	}

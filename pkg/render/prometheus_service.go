@@ -15,32 +15,36 @@ import (
 )
 
 const (
-	prometheusPort                    = 9090
-	prometheusOperatedHttpServiceName = "prometheus-operated-http"
-	calicoNodePrometheusServiceName   = "calico-node-prometheus"
+	prometheusPort                  = 9090
+	calicoNodePrometheusServiceName = "calico-node-prometheus"
 
-	tigeraPrometheusServiceName = "tigera-prometheus-service"
+	prometheusOperatedHttpServiceName = "prometheus-operated-http"
+
+	tigeraPrometheusServiceName           = "tigera-prometheus-service"
+	prometheusEndpointUrlEnvVarName       = "PROMETHEUS_ENDPOINT_URL"
+	prometheusOperatedHttpServiceUrl      = "http://prometheus-operated-http.tigera-prometheus:9090"
+	tigeraPrometheusServiceHealthEndpoint = "/health"
 )
 
-func PrometheusService(cr *operator.InstallationSpec, pullSecrets []*corev1.Secret) Component {
+func TigeraPrometheusService(cr *operator.InstallationSpec, pullSecrets []*corev1.Secret) Component {
 
-	return &prometheusServiceComponent{
+	return &tigeraPrometheusServiceComponent{
 		pullSecrets: pullSecrets,
 	}
 }
 
-type prometheusServiceComponent struct {
+type tigeraPrometheusServiceComponent struct {
 	installation           *operatorv1.InstallationSpec
 	pullSecrets            []*corev1.Secret
 	prometheusServiceImage string
 }
 
-func (p *prometheusServiceComponent) ResolveImages(is *operator.ImageSet) error {
+func (p *tigeraPrometheusServiceComponent) ResolveImages(is *operator.ImageSet) error {
 	reg := p.installation.Registry
 	path := p.installation.ImagePath
 	prefix := p.installation.ImagePrefix
 
-	prometheusServiceImage, err := components.GetReference(components.ComponentPrometheusAlertmanager, reg, path, prefix, is)
+	prometheusServiceImage, err := components.GetReference(components.ComponentTigeraPrometheusService, reg, path, prefix, is)
 	if err != nil {
 		return err
 	}
@@ -52,7 +56,7 @@ func (p *prometheusServiceComponent) ResolveImages(is *operator.ImageSet) error 
 
 // Objects returns the lists of objects in this component that should be created and/or deleted during
 // rendering.
-func (p *prometheusServiceComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
+func (p *tigeraPrometheusServiceComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 	// tigera-prometheus-objects
 	namespacedObjects := []client.Object{}
 
@@ -71,7 +75,7 @@ func (p *prometheusServiceComponent) Objects() (objsToCreate, objsToDelete []cli
 	if isEksWithCalicoCNI {
 		namespacedObjects = append(
 			namespacedObjects,
-			p.prometheusServiceDeployment(),
+			p.tigeraPrometheusServiceDeployment(),
 			p.prometheusOperatedHttpService(),
 		)
 	}
@@ -86,19 +90,19 @@ func (p *prometheusServiceComponent) Objects() (objsToCreate, objsToDelete []cli
 }
 
 // Ready returns true if the component is ready to be created.
-func (p *prometheusServiceComponent) Ready() bool {
+func (p *tigeraPrometheusServiceComponent) Ready() bool {
 	return false
 }
 
 // SupportedOSTypes returns operating systems that is supported of the components returned by the Objects() function.
 // The "componentHandler" converts the returned OSTypes to a node selectors for the "kubernetes.io/os" label on client.Objects
 // that create pods. Return OSTypeAny means that no node selector should be set for the "kubernetes.io/os" label.
-func (p *prometheusServiceComponent) SupportedOSType() rmeta.OSType {
+func (p *tigeraPrometheusServiceComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
 
 // calicoNodePrometheusService sets up a service for the Prometheus Service/Proxy deployment
-func (p *prometheusServiceComponent) calicoNodePrometheusService(isEksWithCalicoCNI bool) *corev1.Service {
+func (p *tigeraPrometheusServiceComponent) calicoNodePrometheusService(isEksWithCalicoCNI bool) *corev1.Service {
 	prometheusDeploymentSelector := map[string]string{
 		"k8s-app": tigeraPrometheusServiceName,
 	}
@@ -137,7 +141,7 @@ func (p *prometheusServiceComponent) calicoNodePrometheusService(isEksWithCalico
 
 // TODO: reconsider this to move to render/monitor
 // prometheusOperatedHttpService sets up a service to open http connection for a prometheus instance
-func (p *prometheusServiceComponent) prometheusOperatedHttpService() *corev1.Service {
+func (p *tigeraPrometheusServiceComponent) prometheusOperatedHttpService() *corev1.Service {
 	s := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Service",
@@ -166,7 +170,8 @@ func (p *prometheusServiceComponent) prometheusOperatedHttpService() *corev1.Ser
 	return s
 }
 
-func (p *prometheusServiceComponent) prometheusServiceDeployment() *appsv1.Deployment {
+// tigeraPrometheusServiceDeployment deployment for the Prometheus Service/Proxy pod and image
+func (p *tigeraPrometheusServiceComponent) tigeraPrometheusServiceDeployment() *appsv1.Deployment {
 	var replicas int32 = 1
 	podDnsPolicy := corev1.DNSClusterFirstWithHostNet
 	podHostNetworked := true
@@ -215,11 +220,7 @@ func (p *prometheusServiceComponent) prometheusServiceDeployment() *appsv1.Deplo
 	return d
 }
 
-func (p *prometheusServiceComponent) prometheusServiceContainers() corev1.Container {
-	prometheusEndpointUrlEnvVarName := "PROMETHEUS_ENDPOINT_URL"
-	prometheusOperatedHttpServiceUrl := "http://prometheus-operated-http.tigera-prometheus:9090"
-	prometheusServiceHealthEndpoint := "/health"
-
+func (p *tigeraPrometheusServiceComponent) prometheusServiceContainers() corev1.Container {
 	c := corev1.Container{
 		Name:            tigeraPrometheusServiceName,
 		Image:           p.prometheusServiceImage,
@@ -238,7 +239,7 @@ func (p *prometheusServiceComponent) prometheusServiceContainers() corev1.Contai
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{
-					Path: prometheusServiceHealthEndpoint,
+					Path: tigeraPrometheusServiceHealthEndpoint,
 					Port: intstr.FromInt(prometheusPort),
 				},
 			},
@@ -248,7 +249,7 @@ func (p *prometheusServiceComponent) prometheusServiceContainers() corev1.Contai
 		LivenessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{
-					Path: prometheusServiceHealthEndpoint,
+					Path: tigeraPrometheusServiceHealthEndpoint,
 					Port: intstr.FromInt(prometheusPort),
 				},
 			},

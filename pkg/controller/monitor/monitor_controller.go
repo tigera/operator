@@ -176,7 +176,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 
 	// render prometheus components
 	component := render.Monitor(install, pullSecrets)
-	prometheusService := render.PrometheusService(install, pullSecrets)
+	prometheusService := render.TigeraPrometheusService(install, pullSecrets)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component, prometheusService); err != nil {
 		r.setDegraded(reqLogger, err, "Error with images from ImageSet")

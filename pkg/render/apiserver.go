@@ -1152,6 +1152,7 @@ func (c *apiServerComponent) tigeraCustomResourcesClusterRole() *rbacv1.ClusterR
 				"globalalerts",
 				"globalalerttemplates",
 				"globalthreatfeeds",
+				"globalthreatfeeds/status",
 				"globalreporttypes",
 				"globalreports",
 				"remoteclusterconfigurations",

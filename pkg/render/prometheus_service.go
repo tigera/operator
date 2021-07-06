@@ -29,7 +29,8 @@ const (
 func TigeraPrometheusService(cr *operator.InstallationSpec, pullSecrets []*corev1.Secret) Component {
 
 	return &tigeraPrometheusServiceComponent{
-		pullSecrets: pullSecrets,
+		installation: cr,
+		pullSecrets:  pullSecrets,
 	}
 }
 

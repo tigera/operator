@@ -4,7 +4,7 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	appsv1 "k8s.io/api/apps/v1"
@@ -17,19 +17,16 @@ import (
 const (
 	prometheusPort                    = 9090
 	prometheusOperatedHttpServiceName = "prometheus-operated-http"
-	calicoNodePrometheusServiceName   = ""
+	calicoNodePrometheusServiceName   = "calico-node-prometheus"
 
 	tigeraPrometheusServiceName = "tigera-prometheus-service"
 )
 
-func PrometheusService(
-	k8sServiceEp k8sapi.ServiceEndpoint,
-	cr *operator.InstallationSpec,
-	pullSecrets []*corev1.Secret,
-) (Component, error) {
+func PrometheusService(cr *operator.InstallationSpec, pullSecrets []*corev1.Secret) Component {
+
 	return &prometheusServiceComponent{
 		pullSecrets: pullSecrets,
-	}, nil
+	}
 }
 
 type prometheusServiceComponent struct {
@@ -39,6 +36,17 @@ type prometheusServiceComponent struct {
 }
 
 func (p *prometheusServiceComponent) ResolveImages(is *operator.ImageSet) error {
+	reg := p.installation.Registry
+	path := p.installation.ImagePath
+	prefix := p.installation.ImagePrefix
+
+	prometheusServiceImage, err := components.GetReference(components.ComponentPrometheusAlertmanager, reg, path, prefix, is)
+	if err != nil {
+		return err
+	}
+
+	p.prometheusServiceImage = prometheusServiceImage
+
 	return nil
 }
 
@@ -52,11 +60,21 @@ func (p *prometheusServiceComponent) Objects() (objsToCreate, objsToDelete []cli
 	secrets := secret.CopyToNamespace(rmeta.APIServerNamespace(p.installation.Variant), p.pullSecrets...)
 	namespacedObjects = append(namespacedObjects, secret.ToRuntimeObjects(secrets...)...)
 
+	isEksWithCalicoCNI := p.installation.KubernetesProvider == operatorv1.ProviderEKS &&
+		p.installation.CNI.Type == operatorv1.PluginCalico
+
 	namespacedObjects = append(
 		namespacedObjects,
-		p.prometheusOperatedHttpServiceRegistration(),
-		p.prometheusServiceDeployment(),
+		p.calicoNodePrometheusService(isEksWithCalicoCNI),
 	)
+
+	if isEksWithCalicoCNI {
+		namespacedObjects = append(
+			namespacedObjects,
+			p.prometheusServiceDeployment(),
+			p.prometheusOperatedHttpService(),
+		)
+	}
 
 	objsToCreate = []client.Object{}
 	objsToCreate = append(objsToCreate, namespacedObjects...)
@@ -79,8 +97,47 @@ func (p *prometheusServiceComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
 
-// prometheusOperatedHttpServiceRegistration sets up a serice to open http connection for a prometheus instance
-func (p *prometheusServiceComponent) prometheusOperatedHttpServiceRegistration() *corev1.Service {
+// calicoNodePrometheusService sets up a service for the Prometheus Service/Proxy deployment
+func (p *prometheusServiceComponent) calicoNodePrometheusService(isEksWithCalicoCNI bool) *corev1.Service {
+	prometheusDeploymentSelector := map[string]string{
+		"k8s-app": tigeraPrometheusServiceName,
+	}
+
+	if isEksWithCalicoCNI {
+		prometheusDeploymentSelector = map[string]string{
+			"prometheus": calicoNodePrometheusServiceName,
+		}
+	}
+
+	s := &corev1.Service{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Service",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      calicoNodePrometheusServiceName,
+			Namespace: common.TigeraPrometheusNamespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Type: corev1.ServiceTypeClusterIP,
+			Ports: []corev1.ServicePort{
+				{
+					Name:       "web",
+					Port:       prometheusPort,
+					Protocol:   corev1.ProtocolTCP,
+					TargetPort: intstr.FromInt(prometheusPort),
+				},
+			},
+			Selector: prometheusDeploymentSelector,
+		},
+	}
+
+	return s
+}
+
+// TODO: reconsider this to move to render/monitor
+// prometheusOperatedHttpService sets up a service to open http connection for a prometheus instance
+func (p *prometheusServiceComponent) prometheusOperatedHttpService() *corev1.Service {
 	s := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Service",
@@ -101,7 +158,7 @@ func (p *prometheusServiceComponent) prometheusOperatedHttpServiceRegistration()
 				},
 			},
 			Selector: map[string]string{
-				"prometheus": "calico-node-prometheus",
+				"prometheus": calicoNodePrometheusServiceName,
 			},
 		},
 	}

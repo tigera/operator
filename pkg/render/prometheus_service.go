@@ -12,10 +12,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
-	prometheusPort                  = 9090
+	prometheusDefaultPort           = 9090
 	calicoNodePrometheusServiceName = "calico-node-prometheus"
 
 	prometheusOperatedHttpServiceName = "prometheus-operated-http"
@@ -25,6 +26,8 @@ const (
 	prometheusOperatedHttpServiceUrl      = "http://prometheus-operated-http.tigera-prometheus:9090"
 	tigeraPrometheusServiceHealthEndpoint = "/health"
 )
+
+var logPS = logf.Log.WithName("prometheus_service")
 
 func TigeraPrometheusService(cr *operator.InstallationSpec, pullSecrets []*corev1.Secret) Component {
 
@@ -58,6 +61,7 @@ func (p *tigeraPrometheusServiceComponent) ResolveImages(is *operator.ImageSet) 
 // Objects returns the lists of objects in this component that should be created and/or deleted during
 // rendering.
 func (p *tigeraPrometheusServiceComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
+	logPS.Info("Starting prometehus Service object deployments")
 	// tigera-prometheus-objects
 	namespacedObjects := []client.Object{}
 
@@ -65,8 +69,10 @@ func (p *tigeraPrometheusServiceComponent) Objects() (objsToCreate, objsToDelete
 	secrets := secret.CopyToNamespace(rmeta.APIServerNamespace(p.installation.Variant), p.pullSecrets...)
 	namespacedObjects = append(namespacedObjects, secret.ToRuntimeObjects(secrets...)...)
 
-	isEksWithCalicoCNI := p.installation.KubernetesProvider == operatorv1.ProviderEKS &&
-		p.installation.CNI.Type == operatorv1.PluginCalico
+	// isEksWithCalicoCNI := p.installation.KubernetesProvider == operatorv1.ProviderEKS &&
+	// 	p.installation.CNI.Type == operatorv1.PluginCalico
+
+	isEksWithCalicoCNI := true
 
 	namespacedObjects = append(
 		namespacedObjects,
@@ -86,13 +92,15 @@ func (p *tigeraPrometheusServiceComponent) Objects() (objsToCreate, objsToDelete
 
 	objsToDelete = []client.Object{}
 
+	logPS.WithValues("objectsToCreate", objsToCreate).Info("Checking objects to create")
+
 	return objsToCreate, objsToDelete
 
 }
 
 // Ready returns true if the component is ready to be created.
 func (p *tigeraPrometheusServiceComponent) Ready() bool {
-	return false
+	return true
 }
 
 // SupportedOSTypes returns operating systems that is supported of the components returned by the Objects() function.
@@ -128,9 +136,9 @@ func (p *tigeraPrometheusServiceComponent) calicoNodePrometheusService(isEksWith
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "web",
-					Port:       prometheusPort,
+					Port:       prometheusDefaultPort,
 					Protocol:   corev1.ProtocolTCP,
-					TargetPort: intstr.FromInt(prometheusPort),
+					TargetPort: intstr.FromInt(prometheusDefaultPort),
 				},
 			},
 			Selector: prometheusDeploymentSelector,
@@ -157,9 +165,9 @@ func (p *tigeraPrometheusServiceComponent) prometheusOperatedHttpService() *core
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "web",
-					Port:       prometheusPort,
+					Port:       prometheusDefaultPort,
 					Protocol:   corev1.ProtocolTCP,
-					TargetPort: intstr.FromInt(prometheusPort),
+					TargetPort: intstr.FromInt(prometheusDefaultPort),
 				},
 			},
 			Selector: map[string]string{
@@ -228,7 +236,7 @@ func (p *tigeraPrometheusServiceComponent) prometheusServiceContainers() corev1.
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Ports: []corev1.ContainerPort{
 			{
-				ContainerPort: prometheusPort,
+				ContainerPort: prometheusDefaultPort,
 			},
 		},
 		Env: []corev1.EnvVar{
@@ -241,7 +249,7 @@ func (p *tigeraPrometheusServiceComponent) prometheusServiceContainers() corev1.
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path: tigeraPrometheusServiceHealthEndpoint,
-					Port: intstr.FromInt(prometheusPort),
+					Port: intstr.FromInt(prometheusDefaultPort),
 				},
 			},
 			InitialDelaySeconds: 10,
@@ -251,7 +259,7 @@ func (p *tigeraPrometheusServiceComponent) prometheusServiceContainers() corev1.
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path: tigeraPrometheusServiceHealthEndpoint,
-					Port: intstr.FromInt(prometheusPort),
+					Port: intstr.FromInt(prometheusDefaultPort),
 				},
 			},
 			InitialDelaySeconds: 10,

@@ -188,6 +188,11 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	if err := hdler.CreateOrUpdateOrDelete(ctx, prometheusService, r.status); err != nil {
+		r.setDegraded(reqLogger, err, "Error creating / updating Prometheus Service")
+		return reconcile.Result{}, err
+	}
+
 	// Tell the status manager that we're ready to monitor the resources we've told it about and receive statuses.
 	r.status.ReadyToMonitor()
 

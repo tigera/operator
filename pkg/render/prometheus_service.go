@@ -12,22 +12,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
-	prometheusDefaultPort           = 9090
 	calicoNodePrometheusServiceName = "calico-node-prometheus"
-
-	prometheusOperatedHttpServiceName = "prometheus-operated-http"
 
 	tigeraPrometheusServiceName           = "tigera-prometheus-service"
 	prometheusEndpointUrlEnvVarName       = "PROMETHEUS_ENDPOINT_URL"
 	prometheusOperatedHttpServiceUrl      = "http://prometheus-operated-http.tigera-prometheus:9090"
 	tigeraPrometheusServiceHealthEndpoint = "/health"
 )
-
-var logPS = logf.Log.WithName("prometheus_service")
 
 func TigeraPrometheusService(cr *operator.InstallationSpec, pullSecrets []*corev1.Secret) Component {
 
@@ -61,7 +55,6 @@ func (p *tigeraPrometheusServiceComponent) ResolveImages(is *operator.ImageSet) 
 // Objects returns the lists of objects in this component that should be created and/or deleted during
 // rendering.
 func (p *tigeraPrometheusServiceComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
-	logPS.Info("Starting prometehus Service object deployments")
 	// tigera-prometheus-objects
 	namespacedObjects := []client.Object{}
 
@@ -69,58 +62,31 @@ func (p *tigeraPrometheusServiceComponent) Objects() (objsToCreate, objsToDelete
 	secrets := secret.CopyToNamespace(rmeta.APIServerNamespace(p.installation.Variant), p.pullSecrets...)
 	namespacedObjects = append(namespacedObjects, secret.ToRuntimeObjects(secrets...)...)
 
-	// isEksWithCalicoCNI := p.installation.KubernetesProvider == operatorv1.ProviderEKS &&
-	// 	p.installation.CNI.Type == operatorv1.PluginCalico
-
-	isEksWithCalicoCNI := true
-
 	namespacedObjects = append(
 		namespacedObjects,
-		p.calicoNodePrometheusService(isEksWithCalicoCNI),
+		p.calicoNodePrometheusService(),
+		p.tigeraPrometheusServiceDeployment(),
 	)
-
-	if isEksWithCalicoCNI {
-		namespacedObjects = append(
-			namespacedObjects,
-			p.tigeraPrometheusServiceDeployment(),
-			p.prometheusOperatedHttpService(),
-		)
-	}
 
 	objsToCreate = []client.Object{}
 	objsToCreate = append(objsToCreate, namespacedObjects...)
 
 	objsToDelete = []client.Object{}
 
-	logPS.WithValues("objectsToCreate", objsToCreate).Info("Checking objects to create")
-
 	return objsToCreate, objsToDelete
 
 }
 
-// Ready returns true if the component is ready to be created.
 func (p *tigeraPrometheusServiceComponent) Ready() bool {
 	return true
 }
 
-// SupportedOSTypes returns operating systems that is supported of the components returned by the Objects() function.
-// The "componentHandler" converts the returned OSTypes to a node selectors for the "kubernetes.io/os" label on client.Objects
-// that create pods. Return OSTypeAny means that no node selector should be set for the "kubernetes.io/os" label.
 func (p *tigeraPrometheusServiceComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
 
 // calicoNodePrometheusService sets up a service for the Prometheus Service/Proxy deployment
-func (p *tigeraPrometheusServiceComponent) calicoNodePrometheusService(isEksWithCalicoCNI bool) *corev1.Service {
-	prometheusDeploymentSelector := map[string]string{
-		"k8s-app": tigeraPrometheusServiceName,
-	}
-
-	if isEksWithCalicoCNI {
-		prometheusDeploymentSelector = map[string]string{
-			"prometheus": calicoNodePrometheusServiceName,
-		}
-	}
+func (p *tigeraPrometheusServiceComponent) calicoNodePrometheusService() *corev1.Service {
 
 	s := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
@@ -136,42 +102,13 @@ func (p *tigeraPrometheusServiceComponent) calicoNodePrometheusService(isEksWith
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "web",
-					Port:       prometheusDefaultPort,
+					Port:       PrometheusDefaultPort,
 					Protocol:   corev1.ProtocolTCP,
-					TargetPort: intstr.FromInt(prometheusDefaultPort),
-				},
-			},
-			Selector: prometheusDeploymentSelector,
-		},
-	}
-
-	return s
-}
-
-// TODO: reconsider this to move to render/monitor
-// prometheusOperatedHttpService sets up a service to open http connection for a prometheus instance
-func (p *tigeraPrometheusServiceComponent) prometheusOperatedHttpService() *corev1.Service {
-	s := &corev1.Service{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Service",
-			APIVersion: "v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      prometheusOperatedHttpServiceName,
-			Namespace: common.TigeraPrometheusNamespace,
-		},
-		Spec: corev1.ServiceSpec{
-			Type: corev1.ServiceTypeClusterIP,
-			Ports: []corev1.ServicePort{
-				{
-					Name:       "web",
-					Port:       prometheusDefaultPort,
-					Protocol:   corev1.ProtocolTCP,
-					TargetPort: intstr.FromInt(prometheusDefaultPort),
+					TargetPort: intstr.FromInt(PrometheusDefaultPort),
 				},
 			},
 			Selector: map[string]string{
-				"prometheus": calicoNodePrometheusServiceName,
+				"k8s-app": tigeraPrometheusServiceName,
 			},
 		},
 	}
@@ -236,7 +173,7 @@ func (p *tigeraPrometheusServiceComponent) prometheusServiceContainers() corev1.
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Ports: []corev1.ContainerPort{
 			{
-				ContainerPort: prometheusDefaultPort,
+				ContainerPort: PrometheusDefaultPort,
 			},
 		},
 		Env: []corev1.EnvVar{
@@ -249,7 +186,7 @@ func (p *tigeraPrometheusServiceComponent) prometheusServiceContainers() corev1.
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path: tigeraPrometheusServiceHealthEndpoint,
-					Port: intstr.FromInt(prometheusDefaultPort),
+					Port: intstr.FromInt(PrometheusDefaultPort),
 				},
 			},
 			InitialDelaySeconds: 10,
@@ -259,7 +196,7 @@ func (p *tigeraPrometheusServiceComponent) prometheusServiceContainers() corev1.
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path: tigeraPrometheusServiceHealthEndpoint,
-					Port: intstr.FromInt(prometheusDefaultPort),
+					Port: intstr.FromInt(PrometheusDefaultPort),
 				},
 			},
 			InitialDelaySeconds: 10,

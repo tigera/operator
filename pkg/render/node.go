@@ -603,8 +603,14 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 
 	if c.bpfDataplaneEnabled() {
 		initContainers = append(initContainers, c.bpffsInitContainer())
-	} else {
+	} else if c.cr.Variant == operator.TigeraSecureEnterprise {
 		initContainers = append(initContainers, c.hostpathInitContainer())
+
+		/*
+			if c.cr.Variant == operator.TigeraSecureEnterprise {
+				initContainers = append(initContainers, c.sysctlInitContainer())
+			}
+		*/
 	}
 
 	var affinity *v1.Affinity
@@ -716,8 +722,8 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 
 	volumes := []v1.Volume{
 		{Name: "lib-modules", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/lib/modules"}}},
-		{Name: "var-run", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run"}}},
-		{Name: "var-lib", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/lib"}}},
+		{Name: "var-run-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/calico"}}},
+		{Name: "var-lib-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
 		{Name: "xtables-lock", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
 		{Name: "policysync", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 		{
@@ -758,8 +764,8 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 	if c.cr.Variant == operator.TigeraSecureEnterprise {
 		// Add volume for calico logs.
 		calicoLogVol := v1.Volume{
-			Name:         "var-log-calico",
-			VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/log/calico", Type: &dirOrCreate}},
+			Name:         "var-log",
+			VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/log", Type: &dirOrCreate}},
 		}
 		volumes = append(volumes, calicoLogVol)
 	}
@@ -886,21 +892,42 @@ func (c *nodeComponent) hostpathInitContainer() v1.Container {
 		// TODO: Is there  another minimal image we use for things like this?
 		Image: "busybox:latest",
 		// TODO: Make the UID configurable. Currently set to 1010
-		Command: []string{"sh", "-c", "mkdir -p /var/lib/calico/ && chown -R 1010 /var/lib/calico/ && mkdir -p /var/run/calico/ && chown -R 1010 /var/run/calico/"},
+		//Command: []string{"sh", "-c", "mkdir -p /var/lib/calico/ && chown -R 1010 /var/lib/calico/ && mkdir -p /var/run/calico/ && chown -R 1010 /var/run/calico/ && mkdir -p /var/log/calico/ && chown -R 1010 /var/log/calico/"},
+		Command: []string{"sh", "-c", "mkdir -p /var/log/calico/ && chown -R 1010 /var/log/calico/"},
 		SecurityContext: &v1.SecurityContext{
 			Privileged: ptr.BoolToPtr(true),
 		},
 		VolumeMounts: []v1.VolumeMount{
+			/*
+				{
+					MountPath: "/var/run",
+					Name:      "var-run",
+					ReadOnly:  false,
+				},
+				{
+					MountPath: "var/lib",
+					Name:      "var-lib",
+					ReadOnly:  false,
+				},
+			*/
+			// TODO: This is only for Calico Enterprise
 			{
-				MountPath: "/var/run",
-				Name:      "var-run",
+				MountPath: "/var/log",
+				Name:      "var-log",
 				ReadOnly:  false,
 			},
-			{
-				MountPath: "var/lib",
-				Name:      "var-lib",
-				ReadOnly:  false,
-			},
+		},
+	}
+}
+
+func (c *nodeComponent) sysctlInitContainer() v1.Container {
+	return v1.Container{
+		Name: "sysctl-init",
+		// TODO: Is there another minimal image we use for things like this?
+		Image:   "busybox:latest",
+		Command: []string{"sh", "-c", "sysctl", "-w", "net.ipv4.ip_forward=1", "net.netfilter.nf_conntrack_acct=1"},
+		SecurityContext: &v1.SecurityContext{
+			Privileged: ptr.BoolToPtr(true),
 		},
 	}
 }
@@ -953,6 +980,7 @@ func (c *nodeComponent) nodeContainer() v1.Container {
 			Add: []v1.Capability{
 				v1.Capability("NET_RAW"),
 				v1.Capability("NET_ADMIN"),
+				v1.Capability("NET_BIND_SERVICE"),
 			},
 		}
 		sc.Privileged = ptr.BoolToPtr(false)
@@ -982,8 +1010,8 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 	nodeVolumeMounts := []v1.VolumeMount{
 		{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
 		{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
-		{MountPath: "/var/run", Name: "var-run"},
-		{MountPath: "/var/lib", Name: "var-lib"},
+		{MountPath: "/var/run/calico", Name: "var-run-calico"},
+		{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 		{MountPath: "/var/run/nodeagent", Name: "policysync"},
 		{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
 		{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
@@ -993,7 +1021,7 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 	}
 	if c.cr.Variant == operator.TigeraSecureEnterprise {
 		extraNodeMounts := []v1.VolumeMount{
-			{MountPath: "/var/log/calico", Name: "var-log-calico"},
+			{MountPath: "/var/log", Name: "var-log"},
 		}
 		nodeVolumeMounts = append(nodeVolumeMounts, extraNodeMounts...)
 	} else if c.cr.CNI.Type == operator.PluginCalico {
@@ -1415,6 +1443,7 @@ func (c *nodeComponent) nodePodSecurityPolicy() *policyv1beta1.PodSecurityPolicy
 		psp.Spec.AllowedCapabilities = []v1.Capability{
 			v1.Capability("NET_ADMIN"),
 			v1.Capability("NET_RAW"),
+			v1.Capability("NET_BIND_SERVICE"),
 		}
 	}
 	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)

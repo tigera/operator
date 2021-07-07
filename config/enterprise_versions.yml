@@ -20,7 +20,7 @@ components:
     version: master
   cnx-node:
     image: tigera/cnx-node
-    version: non-root
+    version: nonroot-test
   fluentd:
     image: tigera/fluentd
     version: master
@@ -78,7 +78,7 @@ components:
     version: master
   tigera-cni:
     image: tigera/cni
-    version: master
+    version: nonroot-test
   cloud-controllers:
     image: tigera/cloud-controllers
     version: master

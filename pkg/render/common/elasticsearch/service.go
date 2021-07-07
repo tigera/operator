@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	httpsEndpoint     = "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
-	httpsFQDNEndpoint = "https://tigera-secure-es-http.tigera-elasticsearch.svc.%s:9200"
+	httpsEndpoint     = "https://tigera-secure-es-gateway-http.tigera-elasticsearch.svc:9200"
+	httpsFQDNEndpoint = "https://tigera-secure-es-gateway-http.tigera-elasticsearch.svc.%s:9200"
 )
 
 // HTTPSEndpoint returns the endpoint for the Elasticsearch service. For

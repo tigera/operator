@@ -33,7 +33,9 @@ require (
 	golang.org/x/oauth2 v0.0.0-20191202225959-858c2ad4c8b6
 	google.golang.org/protobuf v1.25.0 // indirect
 	gopkg.in/yaml.v2 v2.3.0
+	sigs.k8s.io/kube-storage-version-migrator v0.0.3 // indirect
 	k8s.io/klog/v2 v2.3.0 // indirect
+	sigs.k8s.io/controller-tools v0.3.0 // indirect
 )
 
 replace (

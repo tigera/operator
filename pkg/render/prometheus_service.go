@@ -2,7 +2,6 @@ package render
 
 import (
 	operator "github.com/tigera/operator/api/v1"
-	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -32,7 +31,7 @@ func TigeraPrometheusService(cr *operator.InstallationSpec, pullSecrets []*corev
 }
 
 type tigeraPrometheusServiceComponent struct {
-	installation           *operatorv1.InstallationSpec
+	installation           *operator.InstallationSpec
 	pullSecrets            []*corev1.Secret
 	prometheusServiceImage string
 }

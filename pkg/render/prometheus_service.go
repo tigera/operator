@@ -1,6 +1,9 @@
 package render
 
 import (
+	"net/url"
+	"strconv"
+
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
@@ -18,21 +21,28 @@ const (
 
 	tigeraPrometheusServiceName           = "tigera-prometheus-service"
 	prometheusEndpointUrlEnvVarName       = "PROMETHEUS_ENDPOINT_URL"
-	prometheusOperatedHttpServiceUrl      = "http://prometheus-operated-http.tigera-prometheus:9090"
+	prometheusOperatedHttpServiceScheme   = "http"
+	prometheusOperatedHttpServiceHost     = "prometheus-operated-http.tigera-prometheus"
 	tigeraPrometheusServiceHealthEndpoint = "/health"
 )
 
-func TigeraPrometheusService(cr *operator.InstallationSpec, pullSecrets []*corev1.Secret) Component {
+func TigeraPrometheusService(cr *operator.InstallationSpec, pullSecrets []*corev1.Secret, prometheusServicePort int) Component {
+
+	if prometheusServicePort < 0 {
+		prometheusServicePort = PrometheusDefaultPort
+	}
 
 	return &tigeraPrometheusServiceComponent{
-		installation: cr,
-		pullSecrets:  pullSecrets,
+		installation:          cr,
+		pullSecrets:           pullSecrets,
+		prometheusServicePort: prometheusServicePort,
 	}
 }
 
 type tigeraPrometheusServiceComponent struct {
 	installation           *operator.InstallationSpec
 	pullSecrets            []*corev1.Secret
+	prometheusServicePort  int
 	prometheusServiceImage string
 }
 
@@ -103,7 +113,7 @@ func (p *tigeraPrometheusServiceComponent) calicoNodePrometheusService() *corev1
 					Name:       "web",
 					Port:       PrometheusDefaultPort,
 					Protocol:   corev1.ProtocolTCP,
-					TargetPort: intstr.FromInt(PrometheusDefaultPort),
+					TargetPort: intstr.FromInt(p.prometheusServicePort),
 				},
 			},
 			Selector: map[string]string{
@@ -166,6 +176,11 @@ func (p *tigeraPrometheusServiceComponent) tigeraPrometheusServiceDeployment() *
 }
 
 func (p *tigeraPrometheusServiceComponent) prometheusServiceContainers() corev1.Container {
+	prometheusOperatedHttpUrl := url.URL{
+		Scheme: prometheusOperatedHttpServiceScheme,
+		Host:   prometheusOperatedHttpServiceHost + ":" + strconv.Itoa(p.prometheusServicePort),
+	}
+
 	c := corev1.Container{
 		Name:            tigeraPrometheusServiceName,
 		Image:           p.prometheusServiceImage,
@@ -178,7 +193,7 @@ func (p *tigeraPrometheusServiceComponent) prometheusServiceContainers() corev1.
 		Env: []corev1.EnvVar{
 			{
 				Name:  prometheusEndpointUrlEnvVarName,
-				Value: prometheusOperatedHttpServiceUrl,
+				Value: prometheusOperatedHttpUrl.String(),
 			},
 		},
 		ReadinessProbe: &corev1.Probe{

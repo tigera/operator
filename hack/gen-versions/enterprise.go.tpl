@@ -94,6 +94,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "es-gateway" }}
+	ComponentESGateway = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with .Components.fluentd }}
 	ComponentFluentd = component{
 		Version: "{{ .Version }}",
@@ -235,5 +241,6 @@ var (
 		ComponentTigeraCNI,
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
+		ComponentESGateway,
 	}
 )

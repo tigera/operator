@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	operator "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -129,7 +130,12 @@ func (p *tigeraPrometheusServiceComponent) calicoNodePrometheusService() *corev1
 func (p *tigeraPrometheusServiceComponent) tigeraPrometheusServiceDeployment() *appsv1.Deployment {
 	var replicas int32 = 1
 	podDnsPolicy := corev1.DNSClusterFirstWithHostNet
-	podHostNetworked := true
+	podHostNetworked := false
+
+	if p.installation.KubernetesProvider == operatorv1.ProviderEKS &&
+		p.installation.CNI.Type == operatorv1.PluginCalico {
+		podHostNetworked = true
+	}
 
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{

@@ -11,23 +11,32 @@ export KUBECONFIG=~/.kube/kind-config-kind
 
 function checkModule(){
   MODULE="$1"
-  echo "Checking kernel module $MODULE ..."
+  echo -n "Checking kernel module $MODULE ..."
   if lsmod | grep "$MODULE" &> /dev/null ; then
+    echo " yes"
     return 0
   else
+    echo " no"
     return 1
   fi
 }
 
 echo "kubernetes dualstack requires ipvs mode kube-proxy for the moment."
-MODULES=("ip_vs" "ip_vs_rr" "ip_vs_wrr" "ip_vs_sh" "nf_conntrack_ipv4")
+MODULES=("ip_vs" "ip_vs_rr" "ip_vs_wrr" "ip_vs_sh")
+# Modules could be built into kernel and not exist as a kernel module anymore.
+# For instance, kernel 4.19+ unifies nf_conntrack_ipv4 into nf_conntrack.
+# See: https://github.com/torvalds/linux/commit/a0ae2562c6c4b2721d9fddba63b7286c13517d9f
+echo "host kernel version: $(uname -r)."
+KERNEL_VER=$(uname -r | awk -F. '{ printf("%d%03d%03d%03d\n", $1,$2,$3,$4); }')
+if [[ "$KERNEL_VER" < '4019000000' ]]; then
+  MODULES+=("nf_conntrack_ipv4")
+else
+  MODULES+=("nf_conntrack")
+fi
 for m in "${MODULES[@]}"; do
   checkModule $m || {
       echo "Could not find kernel module $m. install it..."
-      # Modules could be built into kernel and not exist as a kernel module anymore.
-      # For instance, kernel 5.0.0 ubuntu has nf_conntrack_ipv4 built in.
-      # So try to install modules required and continue if it failed..
-      sudo modprobe $m || true
+      sudo modprobe $m
   }
 done
 echo

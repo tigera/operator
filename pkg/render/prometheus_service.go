@@ -72,7 +72,7 @@ func (p *tigeraPrometheusServiceComponent) Objects() (objsToCreate, objsToDelete
 	namespacedObjects := []client.Object{}
 
 	// place pullsecrets secrets under tigera-prometheus
-	secrets := secret.CopyToNamespace(rmeta.APIServerNamespace(p.installation.Variant), p.pullSecrets...)
+	secrets := secret.CopyToNamespace(common.TigeraPrometheusNamespace, p.pullSecrets...)
 	namespacedObjects = append(namespacedObjects, secret.ToRuntimeObjects(secrets...)...)
 
 	namespacedObjects = append(

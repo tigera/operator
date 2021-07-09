@@ -20,16 +20,19 @@ import (
 const (
 	calicoNodePrometheusServiceName = "calico-node-prometheus"
 
-	tigeraPrometheusServiceName           = "tigera-prometheus-service"
-	prometheusEndpointUrlEnvVarName       = "PROMETHEUS_ENDPOINT_URL"
-	prometheusOperatedHttpServiceScheme   = "http"
-	prometheusOperatedHttpServiceHost     = "prometheus-operated-http.tigera-prometheus"
+	tigeraPrometheusServiceName         = "tigera-prometheus-service"
+	prometheusEndpointUrlEnvVarName     = "PROMETHEUS_ENDPOINT_URL"
+	prometheusOperatedHttpServiceScheme = "http"
+	prometheusOperatedHttpServiceHost   = "prometheus-operated-http.tigera-prometheus"
+
+	prometheusServiceListenAddrEnvVarName = "LISTEN_ADDR"
+
 	tigeraPrometheusServiceHealthEndpoint = "/health"
 )
 
 func TigeraPrometheusService(cr *operator.InstallationSpec, pullSecrets []*corev1.Secret, prometheusServicePort int) Component {
 
-	if prometheusServicePort < 0 {
+	if prometheusServicePort <= 0 {
 		prometheusServicePort = PrometheusDefaultPort
 	}
 
@@ -74,8 +77,8 @@ func (p *tigeraPrometheusServiceComponent) Objects() (objsToCreate, objsToDelete
 
 	namespacedObjects = append(
 		namespacedObjects,
-		p.calicoNodePrometheusService(),
 		p.tigeraPrometheusServiceDeployment(),
+		p.calicoNodePrometheusService(),
 	)
 
 	objsToCreate = []client.Object{}
@@ -109,6 +112,9 @@ func (p *tigeraPrometheusServiceComponent) calicoNodePrometheusService() *corev1
 		},
 		Spec: corev1.ServiceSpec{
 			Type: corev1.ServiceTypeClusterIP,
+			Selector: map[string]string{
+				"k8s-app": tigeraPrometheusServiceName,
+			},
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "web",
@@ -116,9 +122,6 @@ func (p *tigeraPrometheusServiceComponent) calicoNodePrometheusService() *corev1
 					Protocol:   corev1.ProtocolTCP,
 					TargetPort: intstr.FromInt(p.prometheusServicePort),
 				},
-			},
-			Selector: map[string]string{
-				"k8s-app": tigeraPrometheusServiceName,
 			},
 		},
 	}
@@ -129,12 +132,13 @@ func (p *tigeraPrometheusServiceComponent) calicoNodePrometheusService() *corev1
 // tigeraPrometheusServiceDeployment deployment for the Prometheus Service/Proxy pod and image
 func (p *tigeraPrometheusServiceComponent) tigeraPrometheusServiceDeployment() *appsv1.Deployment {
 	var replicas int32 = 1
-	podDnsPolicy := corev1.DNSClusterFirstWithHostNet
+	podDnsPolicy := corev1.DNSClusterFirst
 	podHostNetworked := false
 
 	if p.installation.KubernetesProvider == operatorv1.ProviderEKS &&
 		p.installation.CNI.Type == operatorv1.PluginCalico {
 		podHostNetworked = true
+		podDnsPolicy = corev1.DNSClusterFirstWithHostNet
 	}
 
 	d := &appsv1.Deployment{
@@ -184,8 +188,10 @@ func (p *tigeraPrometheusServiceComponent) tigeraPrometheusServiceDeployment() *
 func (p *tigeraPrometheusServiceComponent) prometheusServiceContainers() corev1.Container {
 	prometheusOperatedHttpUrl := url.URL{
 		Scheme: prometheusOperatedHttpServiceScheme,
-		Host:   prometheusOperatedHttpServiceHost + ":" + strconv.Itoa(p.prometheusServicePort),
+		Host:   prometheusOperatedHttpServiceHost + ":" + strconv.Itoa(PrometheusDefaultPort),
 	}
+
+	prometheusServiceListenAddrValue := ":" + strconv.Itoa(p.prometheusServicePort)
 
 	c := corev1.Container{
 		Name:            tigeraPrometheusServiceName,
@@ -193,10 +199,14 @@ func (p *tigeraPrometheusServiceComponent) prometheusServiceContainers() corev1.
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Ports: []corev1.ContainerPort{
 			{
-				ContainerPort: PrometheusDefaultPort,
+				ContainerPort: int32(p.prometheusServicePort),
 			},
 		},
 		Env: []corev1.EnvVar{
+			{
+				Name:  prometheusServiceListenAddrEnvVarName,
+				Value: prometheusServiceListenAddrValue,
+			},
 			{
 				Name:  prometheusEndpointUrlEnvVarName,
 				Value: prometheusOperatedHttpUrl.String(),
@@ -206,21 +216,17 @@ func (p *tigeraPrometheusServiceComponent) prometheusServiceContainers() corev1.
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path: tigeraPrometheusServiceHealthEndpoint,
-					Port: intstr.FromInt(PrometheusDefaultPort),
+					Port: intstr.FromInt(p.prometheusServicePort),
 				},
 			},
-			InitialDelaySeconds: 10,
-			PeriodSeconds:       5,
 		},
 		LivenessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path: tigeraPrometheusServiceHealthEndpoint,
-					Port: intstr.FromInt(PrometheusDefaultPort),
+					Port: intstr.FromInt(p.prometheusServicePort),
 				},
 			},
-			InitialDelaySeconds: 10,
-			PeriodSeconds:       5,
 		},
 	}
 

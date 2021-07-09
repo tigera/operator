@@ -44,7 +44,7 @@ const (
 	FluentdMetrics         = "fluentd-metrics"
 	TigeraPrometheusDPRate = "tigera-prometheus-dp-rate"
 
-	prometheusOperatedHttpServiceName = "prometheus-operated-http"
+	PrometheusOperatedHttpServiceName = "prometheus-operated-http"
 	PrometheusDefaultPort             = 9090
 )
 
@@ -174,7 +174,7 @@ func (mc *monitorComponent) prometheusOperatedHttpService() *corev1.Service {
 			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      prometheusOperatedHttpServiceName,
+			Name:      PrometheusOperatedHttpServiceName,
 			Namespace: common.TigeraPrometheusNamespace,
 		},
 		Spec: corev1.ServiceSpec{

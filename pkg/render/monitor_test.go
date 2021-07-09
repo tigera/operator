@@ -63,6 +63,7 @@ var _ = Describe("monitor rendering tests", func() {
 			{render.CalicoNodeMonitor, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
 			{render.ElasticsearchMetrics, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
 			{render.FluentdMetrics, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PodMonitorsKind},
+			{"prometheus-operated-http", common.TigeraPrometheusNamespace, "", "v1", "Service"},
 		}
 
 		Expect(len(toCreate)).To(Equal(len(expectedResources)))

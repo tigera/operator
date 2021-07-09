@@ -9,6 +9,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
+	rtest "github.com/tigera/operator/pkg/render/common/test"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,6 +32,13 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 	var installationSpec *operatorv1.InstallationSpec
 	var pullSecrets []*corev1.Secret
 	var prometheusServicePort int
+	var expectedResources []struct {
+		name    string
+		ns      string
+		group   string
+		version string
+		kind    string
+	}
 
 	BeforeEach(func() {
 		installationSpec = &operatorv1.InstallationSpec{}
@@ -40,6 +48,19 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 
 		// set to 9 to trigger applying default port 9090
 		prometheusServicePort = 0
+
+		expectedResources = []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{tigeraPullSecret, common.TigeraPrometheusNamespace, "", "", ""},
+			{tigeraPrometheusServiceName, common.TigeraPrometheusNamespace, "apps", "v1", "Deployment"},
+			{calicoNodePrometheusServiceName, common.TigeraPrometheusNamespace, "", "v1", "Service"},
+		}
+
 	})
 
 	It("should render with default specs", func() {
@@ -53,19 +74,12 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 
 		By("veryfying the objects created at render")
 
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{tigeraPullSecret, common.TigeraPrometheusNamespace, "", "", ""},
-			{tigeraPrometheusServiceName, common.TigeraPrometheusNamespace, "", "v1", "Deployment"},
-			{calicoNodePrometheusServiceName, common.TigeraPrometheusNamespace, "", "v1", "Service"},
-		}
-
 		Expect(len(objectsToCreate)).To(Equal(len(expectedResources)))
+
+		for i, expectedRes := range expectedResources {
+			obj := objectsToCreate[i]
+			rtest.ExpectResource(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+		}
 
 		// check value for each resource object
 		for _, object := range objectsToCreate {
@@ -133,19 +147,12 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 
 		By("veryfying the objects created at render")
 
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{tigeraPullSecret, common.TigeraPrometheusNamespace, "", "", ""},
-			{tigeraPrometheusServiceName, common.TigeraPrometheusNamespace, "", "v1", "Deployment"},
-			{calicoNodePrometheusServiceName, common.TigeraPrometheusNamespace, "", "v1", "Service"},
-		}
-
 		Expect(len(objectsToCreate)).To(Equal(len(expectedResources)))
+
+		for i, expectedRes := range expectedResources {
+			obj := objectsToCreate[i]
+			rtest.ExpectResource(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+		}
 
 		// check value for each resource object
 		for _, object := range objectsToCreate {
@@ -198,19 +205,12 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 
 		By("veryfying the objects created at render")
 
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{tigeraPullSecret, common.TigeraPrometheusNamespace, "", "", ""},
-			{tigeraPrometheusServiceName, common.TigeraPrometheusNamespace, "", "v1", "Deployment"},
-			{calicoNodePrometheusServiceName, common.TigeraPrometheusNamespace, "", "v1", "Service"},
-		}
-
 		Expect(len(objectsToCreate)).To(Equal(len(expectedResources)))
+
+		for i, expectedRes := range expectedResources {
+			obj := objectsToCreate[i]
+			rtest.ExpectResource(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+		}
 
 		// check value for each resource object
 		for _, object := range objectsToCreate {

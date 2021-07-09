@@ -32,6 +32,11 @@ import (
 )
 
 var _ = Describe("monitor rendering tests", func() {
+
+	const (
+		calicoNodePrometheusServiceName = "calico-node-prometheus"
+	)
+
 	It("Should render Prometheus resources", func() {
 		component := render.Monitor(
 			&operatorv1.InstallationSpec{},
@@ -78,6 +83,15 @@ var _ = Describe("monitor rendering tests", func() {
 				com := components.ComponentPrometheus
 				expectedImage := fmt.Sprintf("%s%s:%s", components.PrometheusRegistry, com.Image, com.Version)
 				Expect(*prometheusObj.Spec.Image).To(Equal(expectedImage))
+			} else if obj.GetName() == "prometheus-operated-http" {
+				prometheusOperatedHttpServiceManifest := obj.(*corev1.Service)
+				Expect(prometheusOperatedHttpServiceManifest.Spec.Selector["prometheus"]).To(Equal(calicoNodePrometheusServiceName))
+
+				Expect(prometheusOperatedHttpServiceManifest.Spec.Type).To(Equal(corev1.ServiceTypeClusterIP))
+				Expect(len(prometheusOperatedHttpServiceManifest.Spec.Ports)).To(Equal(1))
+				Expect(prometheusOperatedHttpServiceManifest.Spec.Ports[0].Port).To(Equal(int32(render.PrometheusDefaultPort)))
+				Expect(prometheusOperatedHttpServiceManifest.Spec.Ports[0].TargetPort.IntVal).To(Equal(int32(render.PrometheusDefaultPort)))
+
 			}
 		}
 	})

@@ -34,6 +34,11 @@ import (
 )
 
 var _ = Describe("monitor rendering tests", func() {
+
+	const (
+		calicoNodePrometheusServiceName = "calico-node-prometheus"
+	)
+
 	It("Should render Prometheus resources", func() {
 		component := render.Monitor(
 			&operatorv1.InstallationSpec{},
@@ -63,6 +68,7 @@ var _ = Describe("monitor rendering tests", func() {
 			{render.CalicoNodeMonitor, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
 			{render.ElasticsearchMetrics, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
 			{render.FluentdMetrics, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PodMonitorsKind},
+			{"prometheus-operated-http", common.TigeraPrometheusNamespace, "", "v1", "Service"},
 		}
 
 		Expect(len(toCreate)).To(Equal(len(expectedResources)))
@@ -170,5 +176,15 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(servicemonitorObj.Spec.Endpoints[0].Interval).To(Equal("5s"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].Port).To(Equal("metrics-port"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].ScrapeTimeout).To(Equal("5s"))
+
+		prometheusOperatedHttpServiceManifest, ok := rtest.GetResource(toCreate, "prometheus-operated-http", common.TigeraPrometheusNamespace, "", "v1", "Service").(*corev1.Service)
+		Expect(ok).To(BeTrue())
+		Expect(prometheusOperatedHttpServiceManifest.Spec.Selector["prometheus"]).To(Equal(calicoNodePrometheusServiceName))
+
+		Expect(prometheusOperatedHttpServiceManifest.Spec.Type).To(Equal(corev1.ServiceTypeClusterIP))
+		Expect(len(prometheusOperatedHttpServiceManifest.Spec.Ports)).To(Equal(1))
+		Expect(prometheusOperatedHttpServiceManifest.Spec.Ports[0].Port).To(Equal(int32(render.PrometheusDefaultPort)))
+		Expect(prometheusOperatedHttpServiceManifest.Spec.Ports[0].TargetPort.IntVal).To(Equal(int32(render.PrometheusDefaultPort)))
+
 	})
 })

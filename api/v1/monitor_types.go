@@ -22,6 +22,9 @@ import (
 
 // MonitorSpec defines the desired state of Tigera monitor.
 type MonitorSpec struct {
+
+	// PrometheusServicePort defaults to 9090
+	PrometheusServicePort int `json:"prometheusServicePort,omitempty"`
 }
 
 // MonitorStatus defines the observed state of Tigera monitor.

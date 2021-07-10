@@ -21,6 +21,7 @@ require (
 	github.com/stretchr/testify v1.6.1
 	github.com/tigera/api v0.0.0-20210210003744-476f909e3f8f
 	go.uber.org/zap v1.15.0
+	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 	google.golang.org/protobuf v1.25.0 // indirect
 	gopkg.in/inf.v0 v0.9.1
 	gopkg.in/yaml.v2 v2.3.0
@@ -31,6 +32,14 @@ require (
 	k8s.io/klog/v2 v2.3.0 // indirect
 	k8s.io/kube-aggregator v0.19.2
 	sigs.k8s.io/controller-runtime v0.7.0
+)
+
+require (
+	github.com/openshift/client-go v0.0.0-20200827190008-3062137373b5 // indirect
+	github.com/operator-framework/operator-sdk v1.0.1 // indirect
+	github.com/robfig/cron v1.2.0 // indirect
+	sigs.k8s.io/controller-tools v0.3.0 // indirect
+	sigs.k8s.io/kube-storage-version-migrator v0.0.3 // indirect
 )
 
 replace (

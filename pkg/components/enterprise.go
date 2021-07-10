@@ -82,6 +82,11 @@ var (
 		Image:   "tigera/es-proxy",
 	}
 
+	ComponentESGateway = component{
+		Version: "master",
+		Image:   "tigera/es-gateway",
+	}
+
 	ComponentFluentd = component{
 		Version: "master",
 		Image:   "tigera/fluentd",
@@ -210,5 +215,6 @@ var (
 		ComponentTigeraCNI,
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
+		ComponentESGateway,
 	}
 )

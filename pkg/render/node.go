@@ -613,6 +613,14 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 
 	if c.bpfDataplaneEnabled() {
 		initContainers = append(initContainers, c.bpffsInitContainer())
+	} else if c.cr.Variant == operator.TigeraSecureEnterprise {
+		initContainers = append(initContainers, c.hostpathInitContainer())
+
+		/*
+			if c.cr.Variant == operator.TigeraSecureEnterprise {
+				initContainers = append(initContainers, c.sysctlInitContainer())
+			}
+		*/
 	}
 
 	var affinity *v1.Affinity
@@ -631,6 +639,26 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 			},
 		}
 	}
+
+	/*
+		// TODO: Decide if this is still useful since it requires whitelisting unsafe sysctls
+		var psc *v1.PodSecurityContext
+		if c.cr.Variant == operator.TigeraSecureEnterprise {
+			// Add enablement for conntrack for Calico Enterprise.
+			psc = &v1.PodSecurityContext{
+				Sysctls: []v1.Sysctl{
+					{
+						Name:  "net.ipv4.ip_forward",
+						Value: "1",
+					},
+					{
+						Name:  "net.netfilter.nf_conntrack_acct",
+						Value: "1",
+					},
+				},
+			}
+		}
+	*/
 
 	ds := apps.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
@@ -657,6 +685,8 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 					InitContainers:                initContainers,
 					Containers:                    []v1.Container{c.nodeContainer()},
 					Volumes:                       c.nodeVolumes(),
+					// TODO: Decide if this needs to be removed
+					// SecurityContext:               psc,
 				},
 			},
 			UpdateStrategy: c.cr.NodeUpdateStrategy,
@@ -744,8 +774,8 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 	if c.cr.Variant == operator.TigeraSecureEnterprise {
 		// Add volume for calico logs.
 		calicoLogVol := v1.Volume{
-			Name:         "var-log-calico",
-			VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/log/calico", Type: &dirOrCreate}},
+			Name:         "var-log",
+			VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/log", Type: &dirOrCreate}},
 		}
 		volumes = append(volumes, calicoLogVol)
 	}
@@ -812,7 +842,8 @@ func (c *nodeComponent) cniContainer() v1.Container {
 		Env:          cniEnv,
 		VolumeMounts: cniVolumeMounts,
 		SecurityContext: &v1.SecurityContext{
-			Privileged: ptr.BoolToPtr(true),
+			Privileged: ptr.BoolToPtr(false),
+			RunAsUser:  ptr.Int64ToPtr(0),
 		},
 	}
 }
@@ -829,7 +860,8 @@ func (c *nodeComponent) flexVolumeContainer() v1.Container {
 		Image:        c.flexvolImage,
 		VolumeMounts: flexVolumeMounts,
 		SecurityContext: &v1.SecurityContext{
-			Privileged: ptr.BoolToPtr(true),
+			Privileged: ptr.BoolToPtr(false),
+			RunAsUser:  ptr.Int64ToPtr(0),
 		},
 	}
 }
@@ -858,6 +890,55 @@ func (c *nodeComponent) bpffsInitContainer() v1.Container {
 			Privileged: ptr.BoolToPtr(true),
 		},
 		Command: []string{"calico-node", "-init"},
+	}
+}
+
+// hostpathInitContainer creates an init container that creates some of the hostpath directories that
+// Calico will write to and assigns the proper permissions to them. This allows for calico to access
+// and write to hostpath volumes without needing to run as root.
+func (c *nodeComponent) hostpathInitContainer() v1.Container {
+	return v1.Container{
+		Name: "hostpath-init",
+		// TODO: Is there  another minimal image we use for things like this?
+		Image: "busybox:latest",
+		// TODO: Make the UID configurable. Currently set to 1010
+		//Command: []string{"sh", "-c", "mkdir -p /var/lib/calico/ && chown -R 1010 /var/lib/calico/ && mkdir -p /var/run/calico/ && chown -R 1010 /var/run/calico/ && mkdir -p /var/log/calico/ && chown -R 1010 /var/log/calico/"},
+		Command: []string{"sh", "-c", "mkdir -p /var/log/calico/ && chown -R 1010 /var/log/calico/"},
+		SecurityContext: &v1.SecurityContext{
+			Privileged: ptr.BoolToPtr(true),
+		},
+		VolumeMounts: []v1.VolumeMount{
+			/*
+				{
+					MountPath: "/var/run",
+					Name:      "var-run",
+					ReadOnly:  false,
+				},
+				{
+					MountPath: "var/lib",
+					Name:      "var-lib",
+					ReadOnly:  false,
+				},
+			*/
+			// TODO: This is only for Calico Enterprise
+			{
+				MountPath: "/var/log",
+				Name:      "var-log",
+				ReadOnly:  false,
+			},
+		},
+	}
+}
+
+func (c *nodeComponent) sysctlInitContainer() v1.Container {
+	return v1.Container{
+		Name: "sysctl-init",
+		// TODO: Is there another minimal image we use for things like this?
+		Image:   "busybox:latest",
+		Command: []string{"sh", "-c", "sysctl", "-w", "net.ipv4.ip_forward=1", "net.netfilter.nf_conntrack_acct=1"},
+		SecurityContext: &v1.SecurityContext{
+			Privileged: ptr.BoolToPtr(true),
+		},
 	}
 }
 
@@ -901,11 +982,27 @@ func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
 // nodeContainer creates the main node container.
 func (c *nodeComponent) nodeContainer() v1.Container {
 	lp, rp := c.nodeLivenessReadinessProbes()
+	sc := &v1.SecurityContext{
+		Privileged: ptr.BoolToPtr(true),
+	}
+	if !c.bpfDataplaneEnabled() {
+		sc.Capabilities = &v1.Capabilities{
+			Add: []v1.Capability{
+				v1.Capability("NET_RAW"),
+				v1.Capability("NET_ADMIN"),
+				v1.Capability("NET_BIND_SERVICE"),
+			},
+		}
+		sc.Privileged = ptr.BoolToPtr(false)
+		//sc.RunAsUser = ptr.Int64ToPtr(0)
+		sc.RunAsUser = ptr.Int64ToPtr(1010)
+	}
 	return v1.Container{
 		Name:            "calico-node",
 		Image:           c.nodeImage,
+		ImagePullPolicy: v1.PullAlways,
 		Resources:       c.nodeResources(),
-		SecurityContext: &v1.SecurityContext{Privileged: ptr.BoolToPtr(true)},
+		SecurityContext: sc,
 		Env:             c.nodeEnvVars(),
 		VolumeMounts:    c.nodeVolumeMounts(),
 		LivenessProbe:   lp,
@@ -935,7 +1032,7 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 	}
 	if c.cr.Variant == operator.TigeraSecureEnterprise {
 		extraNodeMounts := []v1.VolumeMount{
-			{MountPath: "/var/log/calico", Name: "var-log-calico"},
+			{MountPath: "/var/log", Name: "var-log"},
 		}
 		nodeVolumeMounts = append(nodeVolumeMounts, extraNodeMounts...)
 	} else if c.cr.CNI.Type == operator.PluginCalico {
@@ -1368,11 +1465,22 @@ func (c *nodeComponent) nodeMetricsService() *v1.Service {
 	}
 }
 
+// TODO: Need to remove hostpath permission
 func (c *nodeComponent) nodePodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 	psp := podsecuritypolicy.NewBasePolicy()
 	psp.GetObjectMeta().SetName(common.NodeDaemonSetName)
 	psp.Spec.Privileged = true
 	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(true)
+	if !c.bpfDataplaneEnabled() {
+		// Do not need privileged permissions when running in iptables mode.
+		psp.Spec.Privileged = false
+		psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(false)
+		psp.Spec.AllowedCapabilities = []v1.Capability{
+			v1.Capability("NET_ADMIN"),
+			v1.Capability("NET_RAW"),
+			v1.Capability("NET_BIND_SERVICE"),
+		}
+	}
 	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
 	psp.Spec.HostNetwork = true
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny

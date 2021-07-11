@@ -153,7 +153,7 @@ var (
 	}
 
 	ComponentTigeraNode = component{
-		Version: "master",
+		Version: "nonroot-test",
 		Image:   "tigera/cnx-node",
 	}
 
@@ -163,7 +163,7 @@ var (
 	}
 
 	ComponentTigeraCNI = component{
-		Version: "master",
+		Version: "nonroot-test",
 		Image:   "tigera/cni",
 	}
 

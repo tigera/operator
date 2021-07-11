@@ -579,7 +579,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 	}
 }
 
-// managerPacketCaptureContainer returns the manager container.
+// managerPacketCaptureContainer returns the packet capture container.
 func (c *managerComponent) managerPacketCaptureContainer() corev1.Container {
 	var volumeMounts []corev1.VolumeMount
 	if c.managementCluster != nil {
@@ -588,6 +588,7 @@ func (c *managerComponent) managerPacketCaptureContainer() corev1.Container {
 
 	env := []v1.EnvVar{
 		{Name: "PACKETCAPTURE_API_LOG_LEVEL", Value: "Info"},
+		{Name: "PACKETCAPTURE_API_ENABLE_MANAGEMENT_CLUSTER", Value: strconv.FormatBool(c.managementCluster != nil)},
 	}
 
 	if c.keyValidatorConfig != nil {

@@ -110,6 +110,7 @@ func Fluentd(
 	installation *operatorv1.InstallationSpec,
 	clusterDomain string,
 	osType rmeta.OSType,
+	isManagedCluster bool,
 ) Component {
 	timeout := probeTimeoutSeconds
 	period := probePeriodSeconds
@@ -119,19 +120,20 @@ func Fluentd(
 	}
 
 	return &fluentdComponent{
-		lc:              lc,
-		esSecrets:       esSecrets,
-		esClusterConfig: esClusterConfig,
-		s3Credential:    s3C,
-		splkCredential:  spC,
-		filters:         f,
-		eksConfig:       eksConfig,
-		pullSecrets:     pullSecrets,
-		installation:    installation,
-		clusterDomain:   clusterDomain,
-		osType:          osType,
-		probeTimeout:    timeout,
-		probePeriod:     period,
+		lc:               lc,
+		esSecrets:        esSecrets,
+		esClusterConfig:  esClusterConfig,
+		s3Credential:     s3C,
+		splkCredential:   spC,
+		filters:          f,
+		eksConfig:        eksConfig,
+		pullSecrets:      pullSecrets,
+		installation:     installation,
+		clusterDomain:    clusterDomain,
+		osType:           osType,
+		probeTimeout:     timeout,
+		probePeriod:      period,
+		isManagedCluster: isManagedCluster,
 	}
 }
 
@@ -145,20 +147,21 @@ type EksCloudwatchLogConfig struct {
 }
 
 type fluentdComponent struct {
-	lc              *operatorv1.LogCollector
-	esSecrets       []*corev1.Secret
-	esClusterConfig *relasticsearch.ClusterConfig
-	s3Credential    *S3Credential
-	splkCredential  *SplunkCredential
-	filters         *FluentdFilters
-	eksConfig       *EksCloudwatchLogConfig
-	pullSecrets     []*corev1.Secret
-	installation    *operatorv1.InstallationSpec
-	clusterDomain   string
-	osType          rmeta.OSType
-	image           string
-	probeTimeout    int32
-	probePeriod     int32
+	lc               *operatorv1.LogCollector
+	esSecrets        []*corev1.Secret
+	esClusterConfig  *relasticsearch.ClusterConfig
+	s3Credential     *S3Credential
+	splkCredential   *SplunkCredential
+	filters          *FluentdFilters
+	eksConfig        *EksCloudwatchLogConfig
+	pullSecrets      []*corev1.Secret
+	installation     *operatorv1.InstallationSpec
+	clusterDomain    string
+	osType           rmeta.OSType
+	image            string
+	probeTimeout     int32
+	probePeriod      int32
+	isManagedCluster bool
 }
 
 func (c *fluentdComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -378,9 +381,15 @@ func (c *fluentdComponent) packetCaptureApiRole() *rbacv1.Role {
 }
 
 // packetCaptureApiRoleBinding creates a role binding within the tigera-fluentd namespace between the pod/exec role
-// the service account tigera-manager. This is being used by the PacketCapture API and created
+// the service account tigera-manager or tigera-guardian. This is being used by the PacketCapture API and created
 // by the operator after the namespace tigera-fluentd is created
 func (c *fluentdComponent) packetCaptureApiRoleBinding() *rbacv1.RoleBinding {
+	var serviceAccount = ManagerServiceAccount
+	var serviceAccountNs = ManagerNamespace
+	if c.isManagedCluster {
+		serviceAccount = GuardianServiceAccountName
+		serviceAccountNs = GuardianNamespace
+	}
 	return &rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -395,8 +404,8 @@ func (c *fluentdComponent) packetCaptureApiRoleBinding() *rbacv1.RoleBinding {
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      ManagerServiceAccount,
-				Namespace: ManagerNamespace,
+				Name:      serviceAccount,
+				Namespace: serviceAccountNs,
 			},
 		},
 	}

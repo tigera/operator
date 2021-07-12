@@ -74,6 +74,35 @@ func addServiceMonitorElasticsearchWatch(c controller.Controller) error {
 	})
 }
 
+func addWatch(c controller.Controller) error {
+	var err error
+	if err = addAlertmanagerWatch(c); err != nil {
+		return fmt.Errorf("failed to watch Alertmanager resource: %w", err)
+	}
+
+	if err = addPrometheusWatch(c); err != nil {
+		return fmt.Errorf("failed to watch Prometheus resource: %w", err)
+	}
+
+	if err = addPrometheusRuleWatch(c); err != nil {
+		return fmt.Errorf("failed to watch PrometheusRule resource: %w", err)
+	}
+
+	if err = addServiceMonitorCalicoNodeWatch(c); err != nil {
+		return fmt.Errorf("failed to watch ServiceMonitor calico-node-monitor resource: %w", err)
+	}
+
+	if err = addServiceMonitorElasticsearchWatch(c); err != nil {
+		return fmt.Errorf("failed to watch ServiceMonitor elasticsearch-metrics resource: %w", err)
+	}
+
+	if err = addPodMonitorWatch(c); err != nil {
+		return fmt.Errorf("failed to watch PodMonitor resource: %w", err)
+	}
+
+	return err
+}
+
 func requiresPrometheusResources(client kubernetes.Interface) error {
 	resources, err := client.Discovery().ServerResourcesForGroupVersion("monitoring.coreos.com/v1")
 	if err != nil {
@@ -121,37 +150,15 @@ func waitToAddWatch(c controller.Controller, client kubernetes.Interface, log lo
 
 	for {
 		if err := requiresPrometheusResources(client); err != nil {
-			log.Info("failed to find Prometheus related resources. Will retry.")
+			log.Info("failed to find Prometheus resources. Will retry.")
 		} else {
-			var err error
-
 			// watch for prometheus resource changes
-			if err = addAlertmanagerWatch(c); err != nil {
-				return fmt.Errorf("failed to watch Alertmanager resource: %w", err)
+			if err := addWatch(c); err != nil {
+				log.Info("failed to watch Prometheus resouces. Will retry.")
+			} else {
+				readyFlag.MarkAsReady()
+				return nil
 			}
-
-			if err = addPrometheusWatch(c); err != nil {
-				return fmt.Errorf("failed to watch Prometheus resource: %w", err)
-			}
-
-			if err = addPrometheusRuleWatch(c); err != nil {
-				return fmt.Errorf("failed to watch PrometheusRule resource: %w", err)
-			}
-
-			if err = addServiceMonitorCalicoNodeWatch(c); err != nil {
-				return fmt.Errorf("failed to watch ServiceMonitor calico-node-monitor resource: %w", err)
-			}
-
-			if err = addServiceMonitorElasticsearchWatch(c); err != nil {
-				return fmt.Errorf("failed to watch ServiceMonitor elasticsearch-metrics resource: %w", err)
-			}
-
-			if err = addPodMonitorWatch(c); err != nil {
-				return fmt.Errorf("failed to watch PodMonitor resource: %w", err)
-			}
-
-			readyFlag.MarkAsReady()
-			return nil
 		}
 
 		<-backoffMgr.Backoff().C()

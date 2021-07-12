@@ -37,7 +37,7 @@ const (
 	tigeraPrometheusServiceName         = "tigera-prometheus-service"
 	prometheusEndpointUrlEnvVarName     = "PROMETHEUS_ENDPOINT_URL"
 	prometheusOperatedHttpServiceScheme = "http"
-	prometheusOperatedHttpServiceHost   = "prometheus-operated-http.tigera-prometheus"
+	prometheusOperatedHttpServiceHost   = "prometheus-operated-http.tigera-prometheus.svc"
 
 	prometheusServiceListenAddrEnvVarName = "LISTEN_ADDR"
 
@@ -149,9 +149,14 @@ func (p *tigeraPrometheusServiceComponent) tigeraPrometheusServiceDeployment() *
 	podDnsPolicy := corev1.DNSClusterFirst
 	podHostNetworked := false
 
+	// set hostnetworked if EKS with Calico CNI due to EKS to allow other Pods to
+	// connecto to tigera-prometheus-service since Calico does not manage node network
+	// in EKS - uses Amazon VPC
 	if p.installation.KubernetesProvider == operatorv1.ProviderEKS &&
 		p.installation.CNI.Type == operatorv1.PluginCalico {
 		podHostNetworked = true
+		// corresponding dns policy for hostnetwoked pods to resolve the service
+		// hostname urls
 		podDnsPolicy = corev1.DNSClusterFirstWithHostNet
 	}
 

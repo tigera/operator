@@ -424,9 +424,10 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	var gatewayCertSecret, publicCertSecret *corev1.Secret
+	var gatewayCertSecret, gatewayPublicCertSecret *corev1.Secret
+	var kubeControllersUserSecret, kubeControllerEsPublicCertSecret, kubeControllerKibanaPublicCertSecret *corev1.Secret
 	var esInternalCertSecret, esAdminUserSecret, esCertSecret *corev1.Secret
-	var kibanaSecrets, curatorSecrets []*corev1.Secret
+	var elasticsearchSecrets, kibanaSecrets, curatorSecrets []*corev1.Secret
 	var clusterConfig *relasticsearch.ClusterConfig
 	var esLicenseType render.ElasticsearchLicenseType
 
@@ -448,7 +449,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, nil
 		}
 
-		if gatewayCertSecret, publicCertSecret, err = r.getESGatewayCertificateSecrets(ctx, install); err != nil {
+		if gatewayCertSecret, gatewayPublicCertSecret, err = r.getESGatewayCertificateSecrets(ctx, install); err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Failed to create Elasticsearch Gateway secrets", err.Error())
 			return reconcile.Result{}, err
@@ -466,6 +467,27 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		if esCertSecret, esInternalCertSecret, err = r.getElasticsearchCertificateSecrets(ctx, install); err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Failed to create Elasticsearch secrets", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		kubeControllerEsPublicCertSecret, err = utils.GetSecret(ctx, r.client, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
+		if err != nil {
+			log.Error(err, err.Error())
+			r.status.SetDegraded("Failed to get Elasticsearch pub cert secret used by kube controllers", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		kubeControllersUserSecret, err = utils.GetSecret(ctx, r.client, render.ElasticsearchKubeControllersUserSecret, rmeta.OperatorNamespace())
+		if err != nil {
+			log.Error(err, err.Error())
+			r.status.SetDegraded("Failed to get kube controllers gateway secret", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		kubeControllerKibanaPublicCertSecret, err = utils.GetSecret(ctx, r.client, render.KibanaPublicCertSecret, rmeta.OperatorNamespace())
+		if err != nil {
+			log.Error(err, err.Error())
+			r.status.SetDegraded("Failed to get Kibana pub cert secret used by kube controllers", err.Error())
 			return reconcile.Result{}, err
 		}
 
@@ -491,6 +513,18 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			}
 		}
 
+	}
+
+	elasticsearchSecrets = []*corev1.Secret{esCertSecret, esInternalCertSecret, esAdminUserSecret}
+	if kubeControllersUserSecret != nil {
+		elasticsearchSecrets = append(elasticsearchSecrets, kubeControllersUserSecret)
+	}
+	if kubeControllerEsPublicCertSecret != nil {
+		elasticsearchSecrets = append(elasticsearchSecrets, kubeControllerEsPublicCertSecret)
+	}
+
+	if kubeControllerKibanaPublicCertSecret != nil {
+		kibanaSecrets = append(kibanaSecrets, kubeControllerKibanaPublicCertSecret)
 	}
 
 	elasticsearch, err := r.getElasticsearch(ctx)
@@ -585,7 +619,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		elasticsearch,
 		kibana,
 		clusterConfig,
-		[]*corev1.Secret{esCertSecret, esInternalCertSecret, esAdminUserSecret},
+		elasticsearchSecrets,
 		kibanaSecrets,
 		pullSecrets,
 		r.provider,
@@ -641,7 +675,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		esGatewayComponent := esgateway.EsGateway(
 			install,
 			pullSecrets,
-			[]*corev1.Secret{gatewayCertSecret, publicCertSecret},
+			[]*corev1.Secret{gatewayCertSecret, gatewayPublicCertSecret},
 			[]*corev1.Secret{kubeControllersGatewaySecret, kubeControllersVerificationSecret, kubeControllersSecureUserSecret},
 			kibanaInternalCertSecret,
 			esInternalCertSecret,

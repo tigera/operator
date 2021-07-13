@@ -78,7 +78,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: "calico-kube-controllers", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-kube-controllers", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "calico-kube-controllers", ns: "calico-system", group: "apps", version: "v1", kind: "Deployment"},
-			{name: render.ElasticsearchKubeControllersUserSecret, ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "calico-kube-controllers", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
@@ -111,6 +110,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		expectedEnv := []corev1.EnvVar{
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "ENABLED_CONTROLLERS", Value: "node"},
+			{Name: "KUBE_CONTROLLERS_CONFIG_NAME", Value: "default"},
 		}
 		expectedEnv = append(expectedEnv)
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedEnv))

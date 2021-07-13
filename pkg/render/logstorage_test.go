@@ -402,9 +402,8 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{render.ECKOperatorName, render.ECKOperatorNamespace, &appsv1.StatefulSet{}, nil},
 					{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
 					{"tigera-pull-secret", render.ElasticsearchNamespace, &corev1.Secret{}, nil},
-					{render.TigeraElasticsearchCertSecret, rmeta.OperatorNamespace(), &corev1.Secret{}, nil},
 					{render.TigeraElasticsearchCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
-					{relasticsearch.PublicCertSecret, rmeta.OperatorNamespace(), &corev1.Secret{}, nil},
+					{relasticsearch.InternalCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 					{render.ElasticsearchAdminUserSecret, rmeta.OperatorNamespace(), &corev1.Secret{}, nil},
 					{"tigera-elasticsearch", render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
 					{relasticsearch.ClusterConfigConfigMapName, rmeta.OperatorNamespace(), &corev1.ConfigMap{}, nil},
@@ -414,7 +413,8 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{"tigera-pull-secret", render.KibanaNamespace, &corev1.Secret{}, nil},
 					{render.TigeraKibanaCertSecret, rmeta.OperatorNamespace(), &corev1.Secret{}, nil},
 					{render.TigeraKibanaCertSecret, render.KibanaNamespace, &corev1.Secret{}, nil},
-					{render.KibanaPublicCertSecret, rmeta.OperatorNamespace(), &corev1.Secret{}, nil},
+					{render.KibanaInternalCertSecret, render.KibanaNamespace, &corev1.Secret{}, nil},
+					{render.KibanaInternalCertSecret, rmeta.OperatorNamespace(), &corev1.Secret{}, nil},
 					{render.KibanaName, render.KibanaNamespace, &kbv1.Kibana{}, nil},
 					{render.ElasticsearchCuratorUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 					{relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
@@ -437,14 +437,17 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					installation, nil, nil, nil, nil,
 					esConfig,
 					[]*corev1.Secret{
-						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: rmeta.OperatorNamespace()}},
 						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
-						{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: rmeta.OperatorNamespace()}},
+						{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.InternalCertSecret, Namespace: render.ElasticsearchNamespace}},
 						{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchAdminUserSecret, Namespace: rmeta.OperatorNamespace()}},
+						{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchKubeControllersUserSecret, Namespace: rmeta.OperatorNamespace()}},
+						{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: rmeta.OperatorNamespace()}},
 					},
 					[]*corev1.Secret{
 						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: rmeta.OperatorNamespace()}},
 						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
+						{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: render.KibanaNamespace}},
+						{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: rmeta.OperatorNamespace()}},
 						{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaPublicCertSecret, Namespace: rmeta.OperatorNamespace()}},
 					},
 					[]*corev1.Secret{
@@ -464,7 +467,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				esEnvs := []corev1.EnvVar{
 					{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
 					{Name: "ELASTIC_SCHEME", Value: "https"},
-					{Name: "ELASTIC_HOST", Value: "tigera-secure-es-http.tigera-elasticsearch.svc"},
+					{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
 					{Name: "ELASTIC_PORT", Value: "9200", ValueFrom: nil},
 					{Name: "ELASTIC_ACCESS_MODE", Value: "serviceuser"},
 					{Name: "ELASTIC_SSL_VERIFY", Value: "true"},
@@ -507,7 +510,8 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				Expect(*kubeControllerDeployment.Spec.Replicas).To(Equal(int32(1)))
 				Expect(kubeControllerDeployment.Spec.Template.Spec.Containers[0].Env).To(ContainElements(
 					corev1.EnvVar{Name: "DATASTORE_TYPE", Value: "kubernetes"},
-					corev1.EnvVar{Name: "ENABLED_CONTROLLERS", Value: "authorization,elasticsearchconfiguration"}))
+					corev1.EnvVar{Name: "ENABLED_CONTROLLERS", Value: "authorization,elasticsearchconfiguration"},
+					corev1.EnvVar{Name: "KUBE_CONTROLLERS_CONFIG_NAME", Value: "elasticsearch"}))
 				Expect(kubeControllerDeployment.Spec.Template.Spec.Containers[0].Env).To(ContainElements(esEnvs))
 
 				Expect(len(kubeControllerDeployment.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(2))
@@ -777,14 +781,17 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				installation, nil, nil, nil, nil,
 				esConfig,
 				[]*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: rmeta.OperatorNamespace()}},
 					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
-					{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: rmeta.OperatorNamespace()}},
+					{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.InternalCertSecret, Namespace: render.ElasticsearchNamespace}},
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchAdminUserSecret, Namespace: rmeta.OperatorNamespace()}},
+					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchKubeControllersUserSecret, Namespace: rmeta.OperatorNamespace()}},
+					{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: rmeta.OperatorNamespace()}},
 				},
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: rmeta.OperatorNamespace()}},
 					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
+					{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: render.KibanaNamespace}},
+					{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: rmeta.OperatorNamespace()}},
 					{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaPublicCertSecret, Namespace: rmeta.OperatorNamespace()}},
 				},
 				[]*corev1.Secret{

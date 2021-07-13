@@ -37,7 +37,7 @@ const (
 	tigeraPrometheusServiceName         = "tigera-prometheus-service"
 	prometheusEndpointUrlEnvVarName     = "PROMETHEUS_ENDPOINT_URL"
 	prometheusOperatedHttpServiceScheme = "http"
-	prometheusOperatedHttpServiceHost   = "prometheus-operated-http.tigera-prometheus.svc"
+	prometheusOperatedHttpServiceHost   = "prometheus-operated-http.tigera-prometheus"
 
 	prometheusServiceListenAddrEnvVarName = "LISTEN_ADDR"
 

@@ -18,7 +18,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"hash/fnv"
 	"net/url"
@@ -203,40 +202,49 @@ func LogStorage(
 	k8sServiceEp k8sapi.ServiceEndpoint,
 ) Component {
 	var kubeControllersGatewaySecret *corev1.Secret
-	var esAdminSecret *corev1.Secret
-	for _, elasticsearchSecret := range elasticsearchSecrets {
-		if elasticsearchSecret != nil && elasticsearchSecret.Name == ElasticsearchAdminUserSecret {
-			esAdminSecret = elasticsearchSecret
+	kubeControllersGatewaySecretIndex := -1
+	for i, elasticsearchSecret := range elasticsearchSecrets {
+		if elasticsearchSecret != nil && elasticsearchSecret.Name == ElasticsearchKubeControllersUserSecret {
+			kubeControllersGatewaySecret = elasticsearchSecret
+			kubeControllersGatewaySecretIndex = i
 			break
 		}
 	}
-	if esAdminSecret != nil {
-		kubeControllersGatewaySecret = &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      ElasticsearchKubeControllersUserSecret,
-				Namespace: ElasticsearchNamespace,
-			},
-			Data: map[string][]byte{
-				"username": []byte("elastic"),
-				"password": esAdminSecret.Data["elastic"],
-			},
-		}
+	if kubeControllersGatewaySecret != nil {
+		kubeControllersGatewaySecret = secret.CopyToNamespace(ElasticsearchNamespace, kubeControllersGatewaySecret)[0]
+		elasticsearchSecrets[kubeControllersGatewaySecretIndex] = elasticsearchSecrets[len(elasticsearchSecrets) - 1]
+		elasticsearchSecrets[len(elasticsearchSecrets) - 1] = nil
+		elasticsearchSecrets = elasticsearchSecrets[:len(elasticsearchSecrets) - 1]
 	}
 
-	var elasticsearchPublicCertSecret *corev1.Secret
-	for _, elasticsearchSecret := range elasticsearchSecrets {
+	var kubeControllerEsPublicCertSecret *corev1.Secret
+	kubeControllerEsPublicCertSecretIndex := -1
+	for i, elasticsearchSecret := range elasticsearchSecrets {
 		if elasticsearchSecret != nil && elasticsearchSecret.Name == relasticsearch.PublicCertSecret {
-			elasticsearchPublicCertSecret = elasticsearchSecret
+			kubeControllerEsPublicCertSecret = elasticsearchSecret
+			kubeControllerEsPublicCertSecretIndex = i
 			break
 		}
 	}
+	if kubeControllerEsPublicCertSecret != nil {
+		elasticsearchSecrets[kubeControllerEsPublicCertSecretIndex] = elasticsearchSecrets[len(elasticsearchSecrets) - 1]
+		elasticsearchSecrets[len(elasticsearchSecrets) - 1] = nil
+		elasticsearchSecrets = elasticsearchSecrets[:len(elasticsearchSecrets) - 1]
+	}
 
-	var kibanaPublicCertSecret *corev1.Secret
-	for _, kibanaSecret := range kibanaSecrets {
+	var kubeControllerKibanaPublicCertSecret *corev1.Secret
+	kubeControllerKibanaPublicCertSecretIndex := -1
+	for i, kibanaSecret := range kibanaSecrets {
 		if kibanaSecret != nil && kibanaSecret.Name == KibanaPublicCertSecret {
-			kibanaPublicCertSecret = kibanaSecret
+			kubeControllerKibanaPublicCertSecret = kibanaSecret
+			kubeControllerKibanaPublicCertSecretIndex = i
 			break
 		}
+	}
+	if kubeControllerKibanaPublicCertSecret != nil {
+		kibanaSecrets[kubeControllerKibanaPublicCertSecretIndex] = kibanaSecrets[len(kibanaSecrets) - 1]
+		kibanaSecrets[len(kibanaSecrets) - 1] = nil
+		kibanaSecrets = kibanaSecrets[:len(kibanaSecrets) - 1]
 	}
 
 	return &elasticsearchComponent{
@@ -261,8 +269,8 @@ func LogStorage(
 		enableESOIDCWorkaround:        enableESOIDCWorkaround,
 		managerInternalSecret:         managerInternalTLSSecret,
 		kubeControllersGatewaySecret:  kubeControllersGatewaySecret,
-		elasticsearchPublicCertSecret: elasticsearchPublicCertSecret,
-		kibanaPublicCertSecret:        kibanaPublicCertSecret,
+		elasticsearchPublicCertSecret: kubeControllerEsPublicCertSecret,
+		kibanaPublicCertSecret:        kubeControllerKibanaPublicCertSecret,
 		k8sServiceEp:                  k8sServiceEp,
 	}
 }
@@ -394,8 +402,8 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ECKOperatorNamespace, es.pullSecrets...)...)...)
 
-		if es.elasticsearchUserSecret != nil {
-			toCreate = append(toCreate, secret.ToRuntimeObjects(es.elasticsearchUserSecret)...)
+		if es.kubeControllersGatewaySecret != nil {
+			toCreate = append(toCreate, secret.ToRuntimeObjects(es.kubeControllersGatewaySecret)...)
 		}
 
 		toCreate = append(toCreate,

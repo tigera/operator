@@ -68,7 +68,7 @@ var _ = Describe("monitor rendering tests", func() {
 			{render.CalicoNodeMonitor, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
 			{render.ElasticsearchMetrics, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
 			{render.FluentdMetrics, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PodMonitorsKind},
-			{"prometheus-operated-http", common.TigeraPrometheusNamespace, "", "v1", "Service"},
+			{render.PrometheusHttpApiServiceName, common.TigeraPrometheusNamespace, "", "v1", "Service"},
 		}
 
 		Expect(len(toCreate)).To(Equal(len(expectedResources)))
@@ -178,7 +178,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(servicemonitorObj.Spec.Endpoints[0].ScrapeTimeout).To(Equal("5s"))
 
 		// Prometheus-operated-http-service
-		prometheusOperatedHttpServiceManifest, ok := rtest.GetResource(toCreate, "prometheus-operated-http", common.TigeraPrometheusNamespace, "", "v1", "Service").(*corev1.Service)
+		prometheusOperatedHttpServiceManifest, ok := rtest.GetResource(toCreate, render.PrometheusHttpApiServiceName, common.TigeraPrometheusNamespace, "", "v1", "Service").(*corev1.Service)
 		Expect(ok).To(BeTrue())
 		Expect(prometheusOperatedHttpServiceManifest.Spec.Selector["prometheus"]).To(Equal(calicoNodePrometheusServiceName))
 		Expect(prometheusOperatedHttpServiceManifest.Spec.Type).To(Equal(corev1.ServiceTypeClusterIP))

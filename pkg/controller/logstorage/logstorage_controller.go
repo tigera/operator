@@ -180,6 +180,16 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 	}
 
+	if err = utils.AddSecretsWatch(c, render.ElasticsearchAdminUserSecret, rmeta.OperatorNamespace()); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch Secret '%s' in '%s': %w",
+			render.ElasticsearchAdminUserSecret, rmeta.OperatorNamespace(), err)
+	}
+
+	if err = utils.AddSecretsWatch(c, render.KibanaPublicCertSecret, rmeta.OperatorNamespace()); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch Secret '%s' in '%s' namespace: %w",
+			render.KibanaPublicCertSecret, rmeta.OperatorNamespace(), err)
+	}
+
 	if err = utils.AddSecretsWatch(c, render.TigeraElasticsearchInternalCertSecret, render.ElasticsearchNamespace); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 	}

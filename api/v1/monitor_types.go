@@ -26,7 +26,7 @@ type MonitorSpec struct {
 	// PrometheusServiceListenPort defines the port that tigera-prometheus-service
 	// pod listens to and the TargetPort of calico-node-prometheus service.
 	// If not set it defaults to port 9090. In the scenario that the cluster
-	// is hosted on EKS and using Calico as it's CNI, tigera-prometheu-service
+	// is hosted on EKS and using Calico as it's CNI, tigera-prometheus-service
 	// will be HostNetwoked.  Configure this, if the default port value conflicts
 	// with any other ports currently used in the cluster's node network namespace.
 	PrometheusServiceListenPort int `json:"prometheusServiceListenPort,omitempty"`

@@ -149,14 +149,13 @@ func (p *tigeraPrometheusServiceComponent) tigeraPrometheusServiceDeployment() *
 	podDnsPolicy := corev1.DNSClusterFirst
 	podHostNetworked := false
 
-	// set hostnetworked if EKS with Calico CNI due to EKS to allow other Pods to
-	// connecto to tigera-prometheus-service since Calico does not manage node network
-	// in EKS - uses Amazon VPC
+	// set to host networked if cluster is on EKS using Calico CNI since the EKS managed Kubernetes APIserver
+	// cannot reach the pod network in this configuration. This is because Calico cannot manage
+	// the managed control plane nodes' network
 	if p.installation.KubernetesProvider == operatorv1.ProviderEKS &&
 		p.installation.CNI.Type == operatorv1.PluginCalico {
 		podHostNetworked = true
-		// corresponding dns policy for hostnetwoked pods to resolve the service
-		// hostname urls
+		// corresponding dns policy for hostnetwoked pods to resolve the service hostname urls
 		podDnsPolicy = corev1.DNSClusterFirstWithHostNet
 	}
 

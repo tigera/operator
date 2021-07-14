@@ -43,6 +43,9 @@ const (
 	ElasticsearchMetrics   = "elasticearch-metrics"
 	FluentdMetrics         = "fluentd-metrics"
 	TigeraPrometheusDPRate = "tigera-prometheus-dp-rate"
+
+	PrometheusHttpApiServiceName = "prometheus-http-api-service"
+	PrometheusDefaultPort        = 9090
 )
 
 func Monitor(
@@ -103,6 +106,7 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		mc.serviceMonitorCalicoNode(),
 		mc.serviceMonitorElasicsearch(),
 		mc.podMonitor(),
+		mc.prometheusHttpApiService(),
 	)
 
 	return objs, nil
@@ -160,6 +164,36 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 			},
 		},
 	}
+}
+
+// prometheusHttpApiService sets up a service to open http connection for the prometheus instance
+func (mc *monitorComponent) prometheusHttpApiService() *corev1.Service {
+	s := &corev1.Service{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Service",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      PrometheusHttpApiServiceName,
+			Namespace: common.TigeraPrometheusNamespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Type: corev1.ServiceTypeClusterIP,
+			Ports: []corev1.ServicePort{
+				{
+					Name:       "web",
+					Port:       PrometheusDefaultPort,
+					Protocol:   corev1.ProtocolTCP,
+					TargetPort: intstr.FromInt(PrometheusDefaultPort),
+				},
+			},
+			Selector: map[string]string{
+				"prometheus": calicoNodePrometheusServiceName,
+			},
+		},
+	}
+
+	return s
 }
 
 func (mc *monitorComponent) podMonitor() *monitoringv1.PodMonitor {

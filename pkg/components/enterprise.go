@@ -138,8 +138,8 @@ var (
 	}
 
 	ComponentTigeraPrometheusService = component{
-		Version: "latest",
-		Image:   "tigera-dev/edbert/prometheus-service",
+		Version: "master",
+		Image:   "tigera/prometheus-service",
 	}
 
 	ComponentPrometheusAlertmanager = component{

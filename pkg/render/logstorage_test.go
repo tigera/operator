@@ -526,6 +526,40 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				Expect(kubeControllerDeployment.Spec.Template.Spec.Volumes[1].Name).To(Equal("elastic-ca-cert-volume"))
 				Expect(kubeControllerDeployment.Spec.Template.Spec.Volumes[1].Secret.SecretName).To(Equal(relasticsearch.PublicCertSecret))
 			})
+
+			It("should enable managed cluster controller when management cluster", func() {
+				component := render.LogStorage(
+					logStorage,
+					installation, &operatorv1.ManagementCluster{}, nil, nil, nil,
+					esConfig,
+					[]*corev1.Secret{
+						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
+						{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.InternalCertSecret, Namespace: render.ElasticsearchNamespace}},
+						{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchAdminUserSecret, Namespace: rmeta.OperatorNamespace()}},
+						{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchKubeControllersUserSecret, Namespace: rmeta.OperatorNamespace()}},
+						{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: rmeta.OperatorNamespace()}},
+					},
+					[]*corev1.Secret{
+						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: rmeta.OperatorNamespace()}},
+						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
+						{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: render.KibanaNamespace}},
+						{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: rmeta.OperatorNamespace()}},
+						{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaPublicCertSecret, Namespace: rmeta.OperatorNamespace()}},
+					},
+					[]*corev1.Secret{
+						{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+					}, operatorv1.ProviderNone,
+					[]*corev1.Secret{
+						{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: rmeta.OperatorNamespace()}},
+						{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: rmeta.OperatorNamespace()}},
+					},
+					nil, nil, dns.DefaultClusterDomain, nil, render.ElasticsearchLicenseTypeEnterpriseTrial,
+					nil, false, &internalManagerTLSSecret, k8sapi.Endpoint)
+				createResources, _ := component.Objects()
+				kubeControllerDeployment := rtest.GetResource(createResources, render.EsKubeController, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+				Expect(kubeControllerDeployment.Spec.Template.Spec.Containers[0].Env).To(ContainElement(
+					corev1.EnvVar{Name: "ENABLED_CONTROLLERS", Value: "authorization,elasticsearchconfiguration,managedcluster"}))
+			})
 		})
 
 		Context("Deleting LogStorage", deleteLogStorageTests(nil, nil))

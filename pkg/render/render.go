@@ -135,24 +135,24 @@ func Calico(
 	}
 
 	return calicoRenderer{
-		k8sServiceEp:                 k8sServiceEp,
-		installation:                 cr,
-		managementCluster:            managementCluster,
-		managementClusterConnection:  managementClusterConnection,
-		pullSecrets:                  pullSecrets,
-		typhaNodeTLS:                 typhaNodeTLS,
-		configMaps:                   cms,
-		tlsSecrets:                   tss,
-		managerInternalTLSecret:      managerInternalTLSSecret,
-		birdTemplates:                bt,
-		provider:                     p,
-		amazonCloudInt:               aci,
-		upgrade:                      up,
-		nodeAppArmorProfile:          nodeAppArmorProfile,
-		clusterDomain:                clusterDomain,
-		kubeControllersMetricsPort:   kubeControllersMetricsPort,
-		nodeReporterMetricsPort:      nodeReporterMetricsPort,
-		bgpLayoutHash:                bgpLayoutHash,
+		k8sServiceEp:                k8sServiceEp,
+		installation:                cr,
+		managementCluster:           managementCluster,
+		managementClusterConnection: managementClusterConnection,
+		pullSecrets:                 pullSecrets,
+		typhaNodeTLS:                typhaNodeTLS,
+		configMaps:                  cms,
+		tlsSecrets:                  tss,
+		managerInternalTLSecret:     managerInternalTLSSecret,
+		birdTemplates:               bt,
+		provider:                    p,
+		amazonCloudInt:              aci,
+		upgrade:                     up,
+		nodeAppArmorProfile:         nodeAppArmorProfile,
+		clusterDomain:               clusterDomain,
+		kubeControllersMetricsPort:  kubeControllersMetricsPort,
+		nodeReporterMetricsPort:     nodeReporterMetricsPort,
+		bgpLayoutHash:               bgpLayoutHash,
 	}, nil
 }
 
@@ -215,24 +215,24 @@ func createTLS() (*TyphaNodeTLS, error) {
 }
 
 type calicoRenderer struct {
-	k8sServiceEp                 k8sapi.ServiceEndpoint
-	installation                 *operator.InstallationSpec
-	managementCluster            *operator.ManagementCluster
-	managementClusterConnection  *operator.ManagementClusterConnection
-	pullSecrets                  []*corev1.Secret
-	typhaNodeTLS                 *TyphaNodeTLS
-	configMaps                   []*corev1.ConfigMap
-	tlsSecrets                   []*corev1.Secret
-	managerInternalTLSecret      *corev1.Secret
-	birdTemplates                map[string]string
-	provider                     operator.Provider
-	amazonCloudInt               *operator.AmazonCloudIntegration
-	upgrade                      bool
-	nodeAppArmorProfile          string
-	clusterDomain                string
-	kubeControllersMetricsPort   int
-	nodeReporterMetricsPort      int
-	bgpLayoutHash                string
+	k8sServiceEp                k8sapi.ServiceEndpoint
+	installation                *operator.InstallationSpec
+	managementCluster           *operator.ManagementCluster
+	managementClusterConnection *operator.ManagementClusterConnection
+	pullSecrets                 []*corev1.Secret
+	typhaNodeTLS                *TyphaNodeTLS
+	configMaps                  []*corev1.ConfigMap
+	tlsSecrets                  []*corev1.Secret
+	managerInternalTLSecret     *corev1.Secret
+	birdTemplates               map[string]string
+	provider                    operator.Provider
+	amazonCloudInt              *operator.AmazonCloudIntegration
+	upgrade                     bool
+	nodeAppArmorProfile         string
+	clusterDomain               string
+	kubeControllersMetricsPort  int
+	nodeReporterMetricsPort     int
+	bgpLayoutHash               string
 }
 
 func (r calicoRenderer) Render() []Component {

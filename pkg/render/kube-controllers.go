@@ -53,26 +53,26 @@ func KubeControllers(
 	metricsPort int,
 ) *kubeControllersComponent {
 	return &kubeControllersComponent{
-		cr:                           cr,
-		managementCluster:            managementCluster,
-		managementClusterConnection:  managementClusterConnection,
-		managerInternalSecret:        managerInternalSecret,
-		k8sServiceEp:                 k8sServiceEp,
-		clusterDomain:                clusterDomain,
-		metricsPort:                  metricsPort,
+		cr:                          cr,
+		managementCluster:           managementCluster,
+		managementClusterConnection: managementClusterConnection,
+		managerInternalSecret:       managerInternalSecret,
+		k8sServiceEp:                k8sServiceEp,
+		clusterDomain:               clusterDomain,
+		metricsPort:                 metricsPort,
 	}
 }
 
 type kubeControllersComponent struct {
-	cr                           *operator.InstallationSpec
-	managementCluster            *operator.ManagementCluster
-	managementClusterConnection  *operator.ManagementClusterConnection
-	managerInternalSecret        *v1.Secret
-	authentication               *operator.Authentication
-	k8sServiceEp                 k8sapi.ServiceEndpoint
-	image                        string
-	clusterDomain                string
-	metricsPort                  int
+	cr                          *operator.InstallationSpec
+	managementCluster           *operator.ManagementCluster
+	managementClusterConnection *operator.ManagementClusterConnection
+	managerInternalSecret       *v1.Secret
+	authentication              *operator.Authentication
+	k8sServiceEp                k8sapi.ServiceEndpoint
+	image                       string
+	clusterDomain               string
+	metricsPort                 int
 }
 
 func (c *kubeControllersComponent) ResolveImages(is *operator.ImageSet) error {

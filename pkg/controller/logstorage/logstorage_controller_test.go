@@ -19,14 +19,14 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/tigera/operator/pkg/common"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
 	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
@@ -991,6 +991,7 @@ var _ = Describe("LogStorage controller", func() {
 							Spec: operatorv1.ImageSetSpec{
 								Images: []operatorv1.Image{
 									{Image: "tigera/elasticsearch", Digest: "sha256:elasticsearchhash"},
+									{Image: "tigera/kube-controllers", Digest: "sha256:kubecontrollershash"},
 									{Image: "tigera/kibana", Digest: "sha256:kibanahash"},
 									{Image: "tigera/eck-operator", Digest: "sha256:eckoperatorhash"},
 									{Image: "tigera/es-curator", Digest: "sha256:escuratorhash"},
@@ -1177,6 +1178,14 @@ var _ = Describe("LogStorage controller", func() {
 						},
 					}
 					Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
+
+					esPublicCertSecret := &corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      relasticsearch.PublicCertSecret,
+							Namespace: rmeta.OperatorNamespace(),
+						},
+					}
+					Expect(cli.Create(ctx, esPublicCertSecret)).ShouldNot(HaveOccurred())
 
 					kubeControllersElasticUserSecret := &corev1.Secret{
 						ObjectMeta: metav1.ObjectMeta{
@@ -1373,7 +1382,8 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 		[]*corev1.Secret{
 			{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: rmeta.OperatorNamespace()}},
 		},
-		nil, nil, "cluster.local", nil, render.ElasticsearchLicenseTypeBasic)
+		nil, nil, "cluster.local", nil, render.ElasticsearchLicenseTypeBasic,
+		nil, false, nil, k8sapi.Endpoint)
 
 	createObj, _ := component.Objects()
 	for _, obj := range createObj {

@@ -211,9 +211,9 @@ func LogStorage(
 	}
 	if kubeControllersGatewaySecret != nil {
 		kubeControllersGatewaySecret = secret.CopyToNamespace(ElasticsearchNamespace, kubeControllersGatewaySecret)[0]
-		elasticsearchSecrets[kubeControllersGatewaySecretIndex] = elasticsearchSecrets[len(elasticsearchSecrets) - 1]
-		elasticsearchSecrets[len(elasticsearchSecrets) - 1] = nil
-		elasticsearchSecrets = elasticsearchSecrets[:len(elasticsearchSecrets) - 1]
+		elasticsearchSecrets[kubeControllersGatewaySecretIndex] = elasticsearchSecrets[len(elasticsearchSecrets)-1]
+		elasticsearchSecrets[len(elasticsearchSecrets)-1] = nil
+		elasticsearchSecrets = elasticsearchSecrets[:len(elasticsearchSecrets)-1]
 	}
 
 	var kubeControllerEsPublicCertSecret *corev1.Secret
@@ -226,9 +226,9 @@ func LogStorage(
 		}
 	}
 	if kubeControllerEsPublicCertSecret != nil {
-		elasticsearchSecrets[kubeControllerEsPublicCertSecretIndex] = elasticsearchSecrets[len(elasticsearchSecrets) - 1]
-		elasticsearchSecrets[len(elasticsearchSecrets) - 1] = nil
-		elasticsearchSecrets = elasticsearchSecrets[:len(elasticsearchSecrets) - 1]
+		elasticsearchSecrets[kubeControllerEsPublicCertSecretIndex] = elasticsearchSecrets[len(elasticsearchSecrets)-1]
+		elasticsearchSecrets[len(elasticsearchSecrets)-1] = nil
+		elasticsearchSecrets = elasticsearchSecrets[:len(elasticsearchSecrets)-1]
 	}
 
 	var kubeControllerKibanaPublicCertSecret *corev1.Secret
@@ -241,9 +241,9 @@ func LogStorage(
 		}
 	}
 	if kubeControllerKibanaPublicCertSecret != nil {
-		kibanaSecrets[kubeControllerKibanaPublicCertSecretIndex] = kibanaSecrets[len(kibanaSecrets) - 1]
-		kibanaSecrets[len(kibanaSecrets) - 1] = nil
-		kibanaSecrets = kibanaSecrets[:len(kibanaSecrets) - 1]
+		kibanaSecrets[kubeControllerKibanaPublicCertSecretIndex] = kibanaSecrets[len(kibanaSecrets)-1]
+		kibanaSecrets[len(kibanaSecrets)-1] = nil
+		kibanaSecrets = kibanaSecrets[:len(kibanaSecrets)-1]
 	}
 
 	return &elasticsearchComponent{

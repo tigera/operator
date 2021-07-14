@@ -44,7 +44,7 @@ const (
 	FluentdMetrics         = "fluentd-metrics"
 	TigeraPrometheusDPRate = "tigera-prometheus-dp-rate"
 
-	PrometheusHttpApiServiceName = "prometheus-api"
+	PrometheusHttpApiServiceName = "prometheus-http-api-service"
 	PrometheusDefaultPort        = 9090
 )
 
@@ -106,7 +106,7 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		mc.serviceMonitorCalicoNode(),
 		mc.serviceMonitorElasicsearch(),
 		mc.podMonitor(),
-		mc.prometheusHttpService(),
+		mc.prometheusHttpApiService(),
 	)
 
 	return objs, nil
@@ -166,8 +166,8 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 	}
 }
 
-// prometheusHttpService sets up a service to open http connection for the prometheus instance
-func (mc *monitorComponent) prometheusHttpService() *corev1.Service {
+// prometheusHttpApiService sets up a service to open http connection for the prometheus instance
+func (mc *monitorComponent) prometheusHttpApiService() *corev1.Service {
 	s := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Service",

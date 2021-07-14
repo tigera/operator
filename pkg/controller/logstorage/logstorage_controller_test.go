@@ -19,13 +19,12 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/tigera/operator/pkg/common"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
 	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -1179,6 +1178,14 @@ var _ = Describe("LogStorage controller", func() {
 						},
 					}
 					Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
+
+					esPublicCertSecret := &corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      relasticsearch.PublicCertSecret,
+							Namespace: rmeta.OperatorNamespace(),
+						},
+					}
+					Expect(cli.Create(ctx, esPublicCertSecret)).ShouldNot(HaveOccurred())
 
 					kubeControllersElasticUserSecret := &corev1.Secret{
 						ObjectMeta: metav1.ObjectMeta{

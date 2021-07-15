@@ -1,14 +1,14 @@
-title: master
+title: release-v3.20
 components:
   typha:
-    version: master
+    version: release-v3.20
   calico/node:
-    version: master
+    version: release-v3.20
   calico/cni:
-    version: master
+    version: release-v3.20
   calico/kube-controllers:
-    version: master
+    version: release-v3.20
   flexvol:
-    version: master
+    version: release-v3.20
   calico/apiserver:
-    version: master
+    version: release-v3.20

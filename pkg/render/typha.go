@@ -319,6 +319,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 					"stagednetworkpolicies",
 					"tiers",
 					"packetcaptures",
+					"deeppacketinspections",
 				},
 				Verbs: []string{"get", "list", "watch"},
 			},

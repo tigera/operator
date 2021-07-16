@@ -1836,6 +1836,11 @@ func (es elasticsearchComponent) kubeControllersRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"get"},
 			},
 			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"licensekeys"},
+				Verbs:     []string{"get", "watch", "list"},
+			},
+			{
 				APIGroups: []string{"elasticsearch.k8s.elastic.co"},
 				Resources: []string{"elasticsearches"},
 				Verbs:     []string{"watch", "get", "list"},
@@ -1848,7 +1853,7 @@ func (es elasticsearchComponent) kubeControllersRole() *rbacv1.ClusterRole {
 			{
 				APIGroups: []string{""},
 				Resources: []string{"secrets"},
-				Verbs:     []string{"watch", "list", "get", "update", "create", "deletecollection"},
+				Verbs:     []string{"watch", "list", "get", "update", "create"},
 			},
 			{
 				APIGroups: []string{"rbac.authorization.k8s.io"},
@@ -1869,6 +1874,25 @@ func (es elasticsearchComponent) kubeControllersRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"watch", "list", "get"},
 			},
 		},
+	}
+
+	if es.managementCluster != nil {
+		// For cross-cluster requests an authentication review will be done for authenticating the kube-controllers.
+		// Requests on behalf of the kube-controllers will be sent to Voltron, where an authentication review will
+		// take place with its bearer token.
+		role.Rules = append(role.Rules, rbacv1.PolicyRule{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"authenticationreviews"},
+			Verbs:     []string{"create"},
+		})
+	}
+
+	if es.managementClusterConnection != nil {
+		role.Rules = append(role.Rules, rbacv1.PolicyRule{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"licensekeys"},
+			Verbs:     []string{"create", "update"},
+		})
 	}
 
 	if es.installation.KubernetesProvider != operatorv1.ProviderOpenShift {

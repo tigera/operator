@@ -194,6 +194,11 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"watch", "list", "get", "update", "create"},
 			},
 			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"deletecollection"},
+			},
+			{
 				// Needed to validate the license
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"licensekeys"},

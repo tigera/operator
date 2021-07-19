@@ -177,13 +177,20 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	// render prometheus components
 	component := render.Monitor(install, pullSecrets)
 
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+	prometheusService := render.TigeraPrometheusAPI(install, pullSecrets, instance.Spec.PrometheusServiceListenPort)
+
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, component, prometheusService); err != nil {
 		r.setDegraded(reqLogger, err, "Error with images from ImageSet")
 		return reconcile.Result{}, err
 	}
 
 	if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 		r.setDegraded(reqLogger, err, "Error creating / updating resource")
+		return reconcile.Result{}, err
+	}
+
+	if err := hdler.CreateOrUpdateOrDelete(ctx, prometheusService, r.status); err != nil {
+		r.setDegraded(reqLogger, err, "Error creating / updating Prometheus Service")
 		return reconcile.Result{}, err
 	}
 

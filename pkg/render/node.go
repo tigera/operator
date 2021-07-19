@@ -1240,6 +1240,8 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			// We also need to configure a non-default trusted DNS server, since there's no kube-dns.
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"})
 		}
+	case operator.ProviderAKS:
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDHOSTENCRYPTIONENABLED", Value: "true"})
 	}
 
 	switch c.cr.CNI.Type {

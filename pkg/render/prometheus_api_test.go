@@ -32,7 +32,7 @@ import (
 const (
 	tigeraPullSecret                      = "tigera-pull-secret"
 	calicoNodePrometheusServiceName       = "calico-node-prometheus"
-	tigeraPrometheusServiceName           = "tigera-prometheus-service"
+	tigeraPrometheusServiceName           = "tigera-prometheus-api"
 	tigeraPrometheusServiceHealthEndpoint = "/health"
 
 	prometheusServiceListenAddrEnvVarName = "LISTEN_ADDR"
@@ -78,7 +78,7 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 	})
 
 	It("should render with default specs", func() {
-		prometheusService := render.TigeraPrometheusService(installationSpec, pullSecrets, prometheusServicePort)
+		prometheusService := render.TigeraPrometheusAPI(installationSpec, pullSecrets, prometheusServicePort)
 
 		Expect(prometheusService.ResolveImages(nil)).NotTo(HaveOccurred())
 
@@ -151,7 +151,7 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 
 	It("should render with specs accordingly when prometheuServicePort is specified ", func() {
 		prometheusServicePort = 8090
-		prometheusService := render.TigeraPrometheusService(installationSpec, pullSecrets, prometheusServicePort)
+		prometheusService := render.TigeraPrometheusAPI(installationSpec, pullSecrets, prometheusServicePort)
 
 		Expect(prometheusService.ResolveImages(nil)).NotTo(HaveOccurred())
 
@@ -209,7 +209,7 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 	})
 
 	It("should render pods as hostnetworked and hostNet dnsPolicy", func() {
-		prometheusService := render.TigeraPrometheusService(installationSpec, pullSecrets, prometheusServicePort)
+		prometheusService := render.TigeraPrometheusAPI(installationSpec, pullSecrets, prometheusServicePort)
 
 		Expect(prometheusService.ResolveImages(nil)).NotTo(HaveOccurred())
 

@@ -19,7 +19,6 @@ import (
 	"strconv"
 
 	operator "github.com/tigera/operator/api/v1"
-	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -34,37 +33,37 @@ import (
 const (
 	calicoNodePrometheusServiceName = "calico-node-prometheus"
 
-	tigeraPrometheusServiceName         = "tigera-prometheus-service"
+	tigeraPrometheusAPIName             = "tigera-prometheus-api"
 	prometheusEndpointUrlEnvVarName     = "PROMETHEUS_ENDPOINT_URL"
 	prometheusOperatedHttpServiceScheme = "http"
-	prometheusOperatedHttpServiceHost   = "prometheus-operated-http.tigera-prometheus"
+	prometheusOperatedHttpServiceHost   = PrometheusHTTPAPIServiceName + ".tigera-prometheus"
 
 	prometheusServiceListenAddrEnvVarName = "LISTEN_ADDR"
 
 	tigeraPrometheusServiceHealthEndpoint = "/health"
 )
 
-func TigeraPrometheusService(cr *operator.InstallationSpec, pullSecrets []*corev1.Secret, prometheusServicePort int) Component {
+func TigeraPrometheusAPI(cr *operator.InstallationSpec, pullSecrets []*corev1.Secret, prometheusServicePort int) Component {
 
 	if prometheusServicePort <= 0 {
 		prometheusServicePort = PrometheusDefaultPort
 	}
 
-	return &tigeraPrometheusServiceComponent{
+	return &tigeraPrometheusAPIComponent{
 		installation:          cr,
 		pullSecrets:           pullSecrets,
 		prometheusServicePort: prometheusServicePort,
 	}
 }
 
-type tigeraPrometheusServiceComponent struct {
+type tigeraPrometheusAPIComponent struct {
 	installation           *operator.InstallationSpec
 	pullSecrets            []*corev1.Secret
 	prometheusServicePort  int
 	prometheusServiceImage string
 }
 
-func (p *tigeraPrometheusServiceComponent) ResolveImages(is *operator.ImageSet) error {
+func (p *tigeraPrometheusAPIComponent) ResolveImages(is *operator.ImageSet) error {
 	reg := p.installation.Registry
 	path := p.installation.ImagePath
 	prefix := p.installation.ImagePrefix
@@ -81,7 +80,7 @@ func (p *tigeraPrometheusServiceComponent) ResolveImages(is *operator.ImageSet) 
 
 // Objects returns the lists of objects in this component that should be created and/or deleted during
 // rendering.
-func (p *tigeraPrometheusServiceComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
+func (p *tigeraPrometheusAPIComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 	// tigera-prometheus-objects
 	namespacedObjects := []client.Object{}
 
@@ -104,16 +103,16 @@ func (p *tigeraPrometheusServiceComponent) Objects() (objsToCreate, objsToDelete
 
 }
 
-func (p *tigeraPrometheusServiceComponent) Ready() bool {
+func (p *tigeraPrometheusAPIComponent) Ready() bool {
 	return true
 }
 
-func (p *tigeraPrometheusServiceComponent) SupportedOSType() rmeta.OSType {
+func (p *tigeraPrometheusAPIComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
 
 // calicoNodePrometheusService sets up a service for the Prometheus Service/Proxy deployment
-func (p *tigeraPrometheusServiceComponent) calicoNodePrometheusService() *corev1.Service {
+func (p *tigeraPrometheusAPIComponent) calicoNodePrometheusService() *corev1.Service {
 
 	s := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
@@ -127,7 +126,7 @@ func (p *tigeraPrometheusServiceComponent) calicoNodePrometheusService() *corev1
 		Spec: corev1.ServiceSpec{
 			Type: corev1.ServiceTypeClusterIP,
 			Selector: map[string]string{
-				"k8s-app": tigeraPrometheusServiceName,
+				"k8s-app": tigeraPrometheusAPIName,
 			},
 			Ports: []corev1.ServicePort{
 				{
@@ -144,7 +143,7 @@ func (p *tigeraPrometheusServiceComponent) calicoNodePrometheusService() *corev1
 }
 
 // tigeraPrometheusServiceDeployment deployment for the Prometheus Service/Proxy pod and image
-func (p *tigeraPrometheusServiceComponent) tigeraPrometheusServiceDeployment() *appsv1.Deployment {
+func (p *tigeraPrometheusAPIComponent) tigeraPrometheusServiceDeployment() *appsv1.Deployment {
 	var replicas int32 = 1
 	podDnsPolicy := corev1.DNSClusterFirst
 	podHostNetworked := false
@@ -152,8 +151,8 @@ func (p *tigeraPrometheusServiceComponent) tigeraPrometheusServiceDeployment() *
 	// set to host networked if cluster is on EKS using Calico CNI since the EKS managed Kubernetes APIserver
 	// cannot reach the pod network in this configuration. This is because Calico cannot manage
 	// the managed control plane nodes' network
-	if p.installation.KubernetesProvider == operatorv1.ProviderEKS &&
-		p.installation.CNI.Type == operatorv1.PluginCalico {
+	if p.installation.KubernetesProvider == operator.ProviderEKS &&
+		p.installation.CNI.Type == operator.PluginCalico {
 		podHostNetworked = true
 		// corresponding dns policy for hostnetwoked pods to resolve the service hostname urls
 		podDnsPolicy = corev1.DNSClusterFirstWithHostNet
@@ -165,25 +164,25 @@ func (p *tigeraPrometheusServiceComponent) tigeraPrometheusServiceDeployment() *
 			APIVersion: "apps/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      tigeraPrometheusServiceName,
+			Name:      tigeraPrometheusAPIName,
 			Namespace: common.TigeraPrometheusNamespace,
 			Labels: map[string]string{
-				"k8s-app": tigeraPrometheusServiceName,
+				"k8s-app": tigeraPrometheusAPIName,
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"k8s-app": tigeraPrometheusServiceName,
+					"k8s-app": tigeraPrometheusAPIName,
 				},
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      tigeraPrometheusServiceName,
+					Name:      tigeraPrometheusAPIName,
 					Namespace: common.TigeraPrometheusNamespace,
 					Labels: map[string]string{
-						"k8s-app": tigeraPrometheusServiceName,
+						"k8s-app": tigeraPrometheusAPIName,
 					},
 				},
 				Spec: corev1.PodSpec{
@@ -203,7 +202,7 @@ func (p *tigeraPrometheusServiceComponent) tigeraPrometheusServiceDeployment() *
 	return d
 }
 
-func (p *tigeraPrometheusServiceComponent) prometheusServiceContainers() corev1.Container {
+func (p *tigeraPrometheusAPIComponent) prometheusServiceContainers() corev1.Container {
 	prometheusOperatedHttpUrl := url.URL{
 		Scheme: prometheusOperatedHttpServiceScheme,
 		Host:   prometheusOperatedHttpServiceHost + ":" + strconv.Itoa(PrometheusDefaultPort),
@@ -212,7 +211,7 @@ func (p *tigeraPrometheusServiceComponent) prometheusServiceContainers() corev1.
 	prometheusServiceListenAddrValue := ":" + strconv.Itoa(p.prometheusServicePort)
 
 	c := corev1.Container{
-		Name:            tigeraPrometheusServiceName,
+		Name:            tigeraPrometheusAPIName,
 		Image:           p.prometheusServiceImage,
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Ports: []corev1.ContainerPort{

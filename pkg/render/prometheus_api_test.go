@@ -38,7 +38,7 @@ const (
 	prometheusServiceListenAddrEnvVarName = "LISTEN_ADDR"
 	prometheusEndpointUrlEnvVarName       = "PROMETHEUS_ENDPOINT_URL"
 
-	prometheusOperatedHttpServiceUrl = "http://prometheus-operated-http.tigera-prometheus"
+	prometheusOperatedHttpServiceUrl = "http://prometheus-http-api.tigera-prometheus"
 )
 
 var _ = Describe("Prometheus Service rendering tests", func() {

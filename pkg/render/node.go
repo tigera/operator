@@ -1210,6 +1210,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			{Name: "FELIX_FLOWLOGSFILEINCLUDESERVICE", Value: "true"},
 			{Name: "FELIX_FLOWLOGSENABLENETWORKSETS", Value: "true"},
 			{Name: "FELIX_FLOWLOGSCOLLECTPROCESSINFO", Value: "true"},
+			{Name: "FELIX_FLOWLOGSCOLLECTTCPSTATS", Value: "true"},
 			{Name: "FELIX_DNSLOGSFILEENABLED", Value: "true"},
 			{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
 		}
@@ -1217,7 +1218,6 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		if c.cr.CalicoNetwork != nil && c.cr.CalicoNetwork.MultiInterfaceMode != nil {
 			extraNodeEnv = append(extraNodeEnv, v1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cr.CalicoNetwork.MultiInterfaceMode.Value()})
 		}
-
 		nodeEnv = append(nodeEnv, extraNodeEnv...)
 	}
 

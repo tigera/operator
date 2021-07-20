@@ -39,7 +39,10 @@ import (
 var replicas int32 = 1
 
 const (
-	ElasticsearchKubeControllersUserSecret = "tigera-ee-kube-controllers-elasticsearch-access"
+	ElasticsearchKubeControllersUserName               = "tigera-ee-kube-controllers"
+	ElasticsearchKubeControllersUserSecret             = "tigera-ee-kube-controllers-elasticsearch-access"
+	ElasticsearchKubeControllersSecureUserSecret       = "tigera-ee-kube-controllers-elasticsearch-access-gateway"
+	ElasticsearchKubeControllersVerificationUserSecret = "tigera-ee-kube-controllers-gateway-verification-credentials"
 )
 
 func KubeControllers(
@@ -52,57 +55,47 @@ func KubeControllers(
 	elasticsearchSecret *v1.Secret,
 	kibanaSecret *v1.Secret,
 	authentication *operator.Authentication,
-	esLicenseType ElasticsearchLicenseType,
+	enabledESOIDCWorkaround bool,
 	clusterDomain string,
-	esAdminSecret *v1.Secret,
+	kubeControllersGatewaySecret *v1.Secret,
 	metricsPort int,
 ) *kubeControllersComponent {
-	var elasticsearchUserSecret *v1.Secret
-	if esAdminSecret != nil {
-		elasticsearchUserSecret = &v1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      ElasticsearchKubeControllersUserSecret,
-				Namespace: common.CalicoNamespace,
-			},
-			Data: map[string][]byte{
-				"username": []byte("elastic"),
-				"password": esAdminSecret.Data["elastic"],
-			},
-		}
+	if kubeControllersGatewaySecret != nil {
+		kubeControllersGatewaySecret = secret.CopyToNamespace(common.CalicoNamespace, kubeControllersGatewaySecret)[0]
 	}
 
 	return &kubeControllersComponent{
-		cr:                          cr,
-		managementCluster:           managementCluster,
-		managementClusterConnection: managementClusterConnection,
-		managerInternalSecret:       managerInternalSecret,
-		elasticsearchSecret:         elasticsearchSecret,
-		kibanaSecret:                kibanaSecret,
-		logStorageExists:            logStorageExists,
-		authentication:              authentication,
-		k8sServiceEp:                k8sServiceEp,
-		esLicenseType:               esLicenseType,
-		clusterDomain:               clusterDomain,
-		elasticsearchUserSecret:     elasticsearchUserSecret,
-		metricsPort:                 metricsPort,
+		cr:                           cr,
+		managementCluster:            managementCluster,
+		managementClusterConnection:  managementClusterConnection,
+		managerInternalSecret:        managerInternalSecret,
+		elasticsearchSecret:          elasticsearchSecret,
+		kibanaSecret:                 kibanaSecret,
+		logStorageExists:             logStorageExists,
+		authentication:               authentication,
+		k8sServiceEp:                 k8sServiceEp,
+		enabledESOIDCWorkaround:      enabledESOIDCWorkaround,
+		clusterDomain:                clusterDomain,
+		kubeControllersGatewaySecret: kubeControllersGatewaySecret,
+		metricsPort:                  metricsPort,
 	}
 }
 
 type kubeControllersComponent struct {
-	cr                          *operator.InstallationSpec
-	managementCluster           *operator.ManagementCluster
-	managementClusterConnection *operator.ManagementClusterConnection
-	managerInternalSecret       *v1.Secret
-	elasticsearchSecret         *v1.Secret
-	kibanaSecret                *v1.Secret
-	logStorageExists            bool
-	authentication              *operator.Authentication
-	k8sServiceEp                k8sapi.ServiceEndpoint
-	esLicenseType               ElasticsearchLicenseType
-	image                       string
-	clusterDomain               string
-	elasticsearchUserSecret     *v1.Secret
-	metricsPort                 int
+	cr                           *operator.InstallationSpec
+	managementCluster            *operator.ManagementCluster
+	managementClusterConnection  *operator.ManagementClusterConnection
+	managerInternalSecret        *v1.Secret
+	elasticsearchSecret          *v1.Secret
+	kibanaSecret                 *v1.Secret
+	logStorageExists             bool
+	authentication               *operator.Authentication
+	k8sServiceEp                 k8sapi.ServiceEndpoint
+	enabledESOIDCWorkaround      bool
+	image                        string
+	clusterDomain                string
+	kubeControllersGatewaySecret *v1.Secret
+	metricsPort                  int
 }
 
 func (c *kubeControllersComponent) ResolveImages(is *operator.ImageSet) error {
@@ -139,8 +132,8 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 			secret.CopyToNamespace(common.CalicoNamespace, c.elasticsearchSecret)...)...)
 	}
 
-	if !c.isManagedCluster() && c.elasticsearchUserSecret != nil {
-		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(c.elasticsearchUserSecret)...)
+	if !c.isManagedCluster() && c.kubeControllersGatewaySecret != nil {
+		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(c.kubeControllersGatewaySecret)...)
 	}
 
 	if c.cr.KubernetesProvider != operator.ProviderOpenShift {
@@ -345,12 +338,14 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 	if c.cr.Variant == operator.TigeraSecureEnterprise {
 		enabledControllers = append(enabledControllers, "service", "federatedservices")
 
-		if c.logStorageExists && c.elasticsearchUserSecret != nil && c.elasticsearchSecret != nil {
+		if c.logStorageExists && c.kubeControllersGatewaySecret != nil && c.elasticsearchSecret != nil {
 			// These controllers require that Elasticsearch exists within the cluster Kube Controllers is running in, i.e.
 			// Full Standalone and Management clusters, not Minimal Standalone and Managed clusters.
 			enabledControllers = append(enabledControllers, "authorization", "elasticsearchconfiguration")
 
-			env = append(env, v1.EnvVar{Name: "ELASTIC_LICENSE_TYPE", Value: string(c.esLicenseType)})
+			if c.enabledESOIDCWorkaround {
+				env = append(env, v1.EnvVar{Name: "ENABLE_ELASTICSEARCH_OIDC_WORKAROUND", Value: "true"})
+			}
 
 			// These environment variables are for the "authorization" controller, so if it's not enabled don't provide
 			// them.
@@ -381,6 +376,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 		Env:       env,
 		Resources: c.kubeControllersResources(),
 		ReadinessProbe: &v1.Probe{
+			PeriodSeconds: int32(10),
 			Handler: v1.Handler{
 				Exec: &v1.ExecAction{
 					Command: []string{
@@ -390,10 +386,23 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 				},
 			},
 		},
+		LivenessProbe: &v1.Probe{
+			PeriodSeconds:       int32(10),
+			InitialDelaySeconds: int32(10),
+			FailureThreshold:    int32(6),
+			Handler: v1.Handler{
+				Exec: &v1.ExecAction{
+					Command: []string{
+						"/usr/bin/check-status",
+						"-l",
+					},
+				},
+			},
+		},
 		VolumeMounts: kubeControllersVolumeMounts(c.managerInternalSecret),
 	}
 
-	if c.logStorageExists && c.elasticsearchUserSecret != nil && c.elasticsearchSecret != nil {
+	if c.logStorageExists && c.kubeControllersGatewaySecret != nil && c.elasticsearchSecret != nil {
 		container = relasticsearch.ContainerDecorate(container, DefaultElasticsearchClusterName,
 			ElasticsearchKubeControllersUserSecret, c.clusterDomain, rmeta.OSTypeLinux)
 	}
@@ -407,7 +416,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 		Volumes:            kubeControllersVolumes(defaultMode, c.managerInternalSecret),
 	}
 
-	if c.logStorageExists && c.elasticsearchUserSecret != nil && c.elasticsearchSecret != nil {
+	if c.logStorageExists && c.kubeControllersGatewaySecret != nil && c.elasticsearchSecret != nil {
 		podSpec = relasticsearch.PodSpecDecorate(podSpec)
 	}
 
@@ -490,8 +499,8 @@ func (c *kubeControllersComponent) annotations() map[string]string {
 	if c.elasticsearchSecret != nil {
 		am[tlsSecretHashAnnotation] = rmeta.AnnotationHash(c.elasticsearchSecret.Data)
 	}
-	if c.elasticsearchUserSecret != nil {
-		am[ElasticsearchUserHashAnnotation] = rmeta.AnnotationHash(c.elasticsearchUserSecret.Data)
+	if c.kubeControllersGatewaySecret != nil {
+		am[ElasticsearchUserHashAnnotation] = rmeta.AnnotationHash(c.kubeControllersGatewaySecret.Data)
 	}
 	if c.kibanaSecret != nil {
 		am[KibanaTLSHashAnnotation] = rmeta.AnnotationHash(c.kibanaSecret.Data)

@@ -122,7 +122,7 @@ var _ = Describe("compliance rendering tests", func() {
 			envs := d.Spec.Template.Spec.Containers[0].Env
 
 			expectedEnvs := []corev1.EnvVar{
-				{Name: "ELASTIC_HOST", Value: "tigera-secure-es-http.tigera-elasticsearch.svc"},
+				{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
 				{Name: "ELASTIC_PORT", Value: "9200"},
 			}
 			for _, expected := range expectedEnvs {
@@ -200,7 +200,7 @@ var _ = Describe("compliance rendering tests", func() {
 			var dpComplianceServer = rtest.GetResource(resources, "compliance-server", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
 
 			Expect(len(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
-			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("cert"))
+			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("tls"))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/code/apiserver.local.config/certificates"))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal(render.ManagerInternalTLSSecretName))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal("/manager-tls"))
@@ -208,7 +208,7 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[2].MountPath).To(Equal("/etc/ssl/elastic/"))
 
 			Expect(len(dpComplianceServer.Spec.Template.Spec.Volumes)).To(Equal(3))
-			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[0].Name).To(Equal("cert"))
+			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[0].Name).To(Equal("tls"))
 			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ComplianceServerCertSecret))
 			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[1].Name).To(Equal(render.ManagerInternalTLSSecretName))
 			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[1].Secret.SecretName).To(Equal(render.ManagerInternalTLSSecretName))
@@ -357,6 +357,73 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(dpComplianceServer.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("foo", "bar"))
 			Expect(dpComplianceController.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("foo", "bar"))
 			Expect(complianceSnapshotter.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("foo", "bar"))
+		})
+	})
+
+	Context("Certificate management enabled", func() {
+		It("should render init containers and volume changes", func() {
+			component, err := render.Compliance(nil, nil, &operatorv1.InstallationSpec{
+				KubernetesProvider:    operatorv1.ProviderNone,
+				Registry:              "testregistry.com/",
+				CertificateManagement: &operatorv1.CertificateManagement{},
+			}, complianceServerCertSecret, relasticsearch.NewClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, nil, nil, clusterDomain, false)
+			Expect(err).ShouldNot(HaveOccurred())
+			resources, _ := component.Objects()
+
+			expectedResources := []struct {
+				name    string
+				ns      string
+				group   string
+				version string
+				kind    string
+			}{
+				{ns, "", "", "v1", "Namespace"},
+				{"tigera-compliance-controller", ns, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-controller", ns, rbac, "v1", "Role"},
+				{"tigera-compliance-controller", "", rbac, "v1", "ClusterRole"},
+				{"tigera-compliance-controller", ns, rbac, "v1", "RoleBinding"},
+				{"tigera-compliance-controller", "", rbac, "v1", "ClusterRoleBinding"},
+				{"compliance-controller", ns, "apps", "v1", "Deployment"},
+				{"tigera-compliance-reporter", ns, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-reporter", "", rbac, "v1", "ClusterRole"},
+				{"tigera-compliance-reporter", "", rbac, "v1", "ClusterRoleBinding"},
+				{"tigera.io.report", ns, "", "v1", "PodTemplate"},
+				{"tigera-compliance-snapshotter", ns, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-snapshotter", "", rbac, "v1", "ClusterRole"},
+				{"tigera-compliance-snapshotter", "", rbac, "v1", "ClusterRoleBinding"},
+				{"compliance-snapshotter", ns, "apps", "v1", "Deployment"},
+				{"tigera-compliance-benchmarker", ns, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-benchmarker", "", rbac, "v1", "ClusterRole"},
+				{"tigera-compliance-benchmarker", "", rbac, "v1", "ClusterRoleBinding"},
+				{"compliance-benchmarker", ns, "apps", "v1", "DaemonSet"},
+				{"inventory", "", "projectcalico.org", "v3", "GlobalReportType"},
+				{"network-access", "", "projectcalico.org", "v3", "GlobalReportType"},
+				{"policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"},
+				{"cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"},
+				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
+				{render.ComplianceServerCertSecret, "tigera-operator", "", "v1", "Secret"},
+				{render.ComplianceServerCertSecret, ns, "", "v1", "Secret"},
+				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
+				{"compliance", ns, "", "v1", "Service"},
+				{"compliance-server", ns, "apps", "v1", "Deployment"},
+				{"tigera-compliance-server:csr-creator", "", rbac, "v1", "ClusterRoleBinding"},
+				{"compliance-benchmarker", "", "policy", "v1beta1", "PodSecurityPolicy"},
+				{"compliance-controller", "", "policy", "v1beta1", "PodSecurityPolicy"},
+				{"compliance-reporter", "", "policy", "v1beta1", "PodSecurityPolicy"},
+				{"compliance-server", "", "policy", "v1beta1", "PodSecurityPolicy"},
+				{"compliance-snapshotter", "", "policy", "v1beta1", "PodSecurityPolicy"},
+			}
+
+			for i, expectedRes := range expectedResources {
+				rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			}
+			Expect(len(resources)).To(Equal(len(expectedResources)))
+
+			server := rtest.GetResource(resources, "compliance-server", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(server.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			csrInitContainer := server.Spec.Template.Spec.InitContainers[0]
+			Expect(csrInitContainer.Name).To(Equal(render.CSRInitContainerName))
 		})
 	})
 })

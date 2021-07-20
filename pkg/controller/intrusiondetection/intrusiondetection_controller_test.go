@@ -77,6 +77,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ClearDegraded")
 		mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+		mockStatus.On("ReadyToMonitor")
 
 		// Create an object we can use throughout the test to do the compliance reconcile loops.
 		// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
@@ -131,10 +132,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		Expect(c.Create(ctx, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      render.ElasticsearchADJobUserSecret,
-				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.KibanaPublicCertSecret,
 				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{

@@ -52,16 +52,16 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, opts.DetectedProvider))
+	return add(mgr, newReconciler(mgr, opts))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, provider operatorv1.Provider) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.AddOptions) reconcile.Reconciler {
 	r := &ReconcileAmazonCloudIntegration{
 		client:   mgr.GetClient(),
 		scheme:   mgr.GetScheme(),
-		provider: provider,
-		status:   status.New(mgr.GetClient(), "amazon-cloud-integration"),
+		provider: opts.DetectedProvider,
+		status:   status.New(mgr.GetClient(), "amazon-cloud-integration", opts.KubernetesVersion),
 	}
 	r.status.Run()
 	return r

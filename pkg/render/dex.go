@@ -20,6 +20,7 @@ import (
 
 	oprv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/dns"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -35,13 +36,19 @@ import (
 
 const (
 	// Manifest object variables
-	DexNamespace     = "tigera-dex"
-	DexObjectName    = "tigera-dex"
-	DexPort          = 5556
+	DexNamespace  = "tigera-dex"
+	DexObjectName = "tigera-dex"
+	DexPort       = 5556
+	// This is the secret containing just a cert that a client should mount in order to trust Dex.
+	DexCertSecretName = "tigera-dex-tls-crt"
+	// This is the secret that Dex mounts, containing a key and a cert.
 	DexTLSSecretName = "tigera-dex-tls"
 
 	// Constants related to Dex configurations
 	DexClientId = "tigera-manager"
+
+	// Common name to add to the Dex TLS secret.
+	DexCNPattern = "tigera-dex.tigera-dex.svc.%s"
 )
 
 func Dex(
@@ -49,24 +56,31 @@ func Dex(
 	openshift bool,
 	installation *oprv1.InstallationSpec,
 	dexConfig DexConfig,
+	clusterDomain string,
+	deleteDex bool,
 ) Component {
 
 	return &dexComponent{
-		dexConfig:    dexConfig,
-		pullSecrets:  pullSecrets,
-		openshift:    openshift,
-		installation: installation,
-		connector:    dexConfig.Connector(),
+		dexConfig:     dexConfig,
+		pullSecrets:   pullSecrets,
+		openshift:     openshift,
+		installation:  installation,
+		connector:     dexConfig.Connector(),
+		clusterDomain: clusterDomain,
+		deleteDex:     deleteDex,
 	}
 }
 
 type dexComponent struct {
-	dexConfig    DexConfig
-	pullSecrets  []*corev1.Secret
-	openshift    bool
-	installation *oprv1.InstallationSpec
-	connector    map[string]interface{}
-	image        string
+	dexConfig     DexConfig
+	pullSecrets   []*corev1.Secret
+	openshift     bool
+	installation  *oprv1.InstallationSpec
+	connector     map[string]interface{}
+	image         string
+	csrInitImage  string
+	clusterDomain string
+	deleteDex     bool
 }
 
 func (c *dexComponent) ResolveImages(is *oprv1.ImageSet) error {
@@ -74,7 +88,23 @@ func (c *dexComponent) ResolveImages(is *oprv1.ImageSet) error {
 	path := c.installation.ImagePath
 	var err error
 	c.image, err = components.GetReference(components.ComponentDex, reg, path, is)
-	return err
+
+	var errMsgs []string
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	if c.installation.CertificateManagement != nil {
+		c.csrInitImage, err = ResolveCSRInitImage(c.installation, is)
+		if err != nil {
+			errMsgs = append(errMsgs, err.Error())
+		}
+	}
+
+	if len(errMsgs) != 0 {
+		return fmt.Errorf(strings.Join(errMsgs, ","))
+	}
+	return nil
 }
 
 func (*dexComponent) SupportedOSType() rmeta.OSType {
@@ -90,9 +120,26 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 		c.clusterRoleBinding(),
 		c.configMap(),
 	}
-	objs = append(objs, secret.ToRuntimeObjects(c.dexConfig.RequiredSecrets(rmeta.OperatorNamespace())...)...)
+
+	// TODO Some of the secrets created in the operator namespace are created by the customer (i.e. oidc credentials)
+	// TODO so we can't just do a blanket delete of the secrets in the operator namespace. We need to refactor
+	// TODO the RequiredSecrets in the dex condig to not pass back secrets of this type.
+	if !c.deleteDex {
+		objs = append(objs, secret.ToRuntimeObjects(c.dexConfig.RequiredSecrets(rmeta.OperatorNamespace())...)...)
+	}
+
+	objs = append(objs, c.dexConfig.CreateCertSecret())
 	objs = append(objs, secret.ToRuntimeObjects(c.dexConfig.RequiredSecrets(DexNamespace)...)...)
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(DexNamespace, c.pullSecrets...)...)...)
+
+	if c.installation.CertificateManagement != nil {
+		objs = append(objs, csrClusterRoleBinding(DexObjectName, DexNamespace))
+	}
+
+	if c.deleteDex {
+		return nil, objs
+	}
+
 	return objs, nil
 }
 
@@ -151,6 +198,18 @@ func (c *dexComponent) clusterRoleBinding() client.Object {
 }
 
 func (c *dexComponent) deployment() client.Object {
+	var initContainers []corev1.Container
+	if c.installation.CertificateManagement != nil {
+		initContainers = append(initContainers, CreateCSRInitContainer(
+			c.installation.CertificateManagement,
+			c.csrInitImage,
+			"tls",
+			DexObjectName,
+			corev1.TLSPrivateKeyKey,
+			corev1.TLSCertKey,
+			dns.GetServiceDNSNames(DexObjectName, DexNamespace, c.clusterDomain),
+			DexNamespace))
+	}
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -185,6 +244,7 @@ func (c *dexComponent) deployment() client.Object {
 					ServiceAccountName: DexObjectName,
 					Tolerations:        append(c.installation.ControlPlaneTolerations, rmeta.TolerateMaster),
 					ImagePullSecrets:   secret.GetReferenceList(c.pullSecrets),
+					InitContainers:     initContainers,
 					Containers: []corev1.Container{
 						{
 							Name:            DexObjectName,
@@ -254,20 +314,8 @@ func (c *dexComponent) probe() *corev1.Probe {
 }
 
 func (c *dexComponent) configMap() *corev1.ConfigMap {
-	redirectURIs := []string{
-		"https://localhost:9443/login/oidc/callback",
-		"https://127.0.0.1:9443/login/oidc/callback",
-		"https://localhost:9443/tigera-kibana/api/security/oidc/callback",
-		"https://127.0.0.1:9443/tigera-kibana/api/security/oidc/callback",
-	}
-	host := c.dexConfig.ManagerURI()
-	if host != "" && !strings.Contains(host, "localhost") && !strings.Contains(host, "127.0.0.1") {
-		redirectURIs = append(redirectURIs, fmt.Sprintf("%s/login/oidc/callback", host))
-		redirectURIs = append(redirectURIs, fmt.Sprintf("%s/tigera-kibana/api/security/oidc/callback", host))
-	}
-
-	data := map[string]interface{}{
-		"issuer": fmt.Sprintf("%s/dex", c.dexConfig.ManagerURI()),
+	bytes, err := yaml.Marshal(map[string]interface{}{
+		"issuer": c.dexConfig.Issuer(),
 		"storage": map[string]interface{}{
 			"type": "kubernetes",
 			"config": map[string]bool{
@@ -289,15 +337,14 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 		"staticClients": []map[string]interface{}{
 			{
 				"id":           DexClientId,
-				"redirectURIs": redirectURIs,
+				"redirectURIs": c.dexConfig.RedirectURIs(),
 				"name":         "Calico Enterprise Manager",
 				"secretEnv":    dexSecretEnv,
 			},
 		},
-	}
-
-	bytes, err := yaml.Marshal(data)
-	if err != nil { // Don't think this is possible.
+	})
+	if err != nil {
+		// Panic since this this would be a developer error, as the marshaled struct is one created by our code.
 		panic(err)
 	}
 	return &corev1.ConfigMap{

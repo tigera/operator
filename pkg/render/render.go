@@ -79,13 +79,15 @@ func Calico(
 	up bool,
 	nodeAppArmorProfile string,
 	clusterDomain string,
-	esLicenseType ElasticsearchLicenseType,
-	esAdminSecret *corev1.Secret,
+	enableESOIDCWorkaround bool,
+	kubeControllersGatewaySecret *corev1.Secret,
 	kubeControllersMetricsPort int,
 	nodeReporterMetricsPort int,
+	bgpLayout *corev1.ConfigMap,
 ) (Renderer, error) {
-	var tcms []*corev1.ConfigMap
+	var cms []*corev1.ConfigMap
 	var tss []*corev1.Secret
+	bgpLayoutHash := ""
 
 	if cr.CertificateManagement != nil {
 		typhaNodeTLS = &TyphaNodeTLS{
@@ -113,7 +115,7 @@ func Calico(
 			if err != nil {
 				return nil, fmt.Errorf("Failed to create Typha TLS: %s", err)
 			}
-			tcms = append(tcms, typhaNodeTLS.CAConfigMap)
+			cms = append(cms, typhaNodeTLS.CAConfigMap)
 			tss = append(tss, typhaNodeTLS.TyphaSecret, typhaNodeTLS.NodeSecret)
 		} else {
 			// CA ConfigMap exists
@@ -125,37 +127,44 @@ func Calico(
 		tss = append(tss, secret.CopyToNamespace(common.CalicoNamespace, typhaNodeTLS.TyphaSecret, typhaNodeTLS.NodeSecret)...)
 	}
 	// Create copy to go into Calico Namespace
-	tcms = append(tcms, configmap.CopyToNamespace(common.CalicoNamespace, typhaNodeTLS.CAConfigMap)...)
+	cms = append(cms, configmap.CopyToNamespace(common.CalicoNamespace, typhaNodeTLS.CAConfigMap)...)
 
 	// If internal manager cert secret exists add it to the renderer.
 	if managerInternalTLSSecret != nil {
 		tss = append(tss, managerInternalTLSSecret)
 	}
 
+	if bgpLayout != nil {
+		// Prepare copy in calico-system namespace.
+		cms = append(cms, configmap.CopyToNamespace(common.CalicoNamespace, bgpLayout)...)
+		bgpLayoutHash = rmeta.AnnotationHash(bgpLayout.Data)
+	}
+
 	return calicoRenderer{
-		k8sServiceEp:                k8sServiceEp,
-		installation:                cr,
-		logStorageExists:            logStorageExists,
-		managementCluster:           managementCluster,
-		managementClusterConnection: managementClusterConnection,
-		pullSecrets:                 pullSecrets,
-		typhaNodeTLS:                typhaNodeTLS,
-		tlsConfigMaps:               tcms,
-		tlsSecrets:                  tss,
-		elasticsearchSecret:         elasticsearchSecret,
-		kibanaSecret:                kibanaSecret,
-		managerInternalTLSecret:     managerInternalTLSSecret,
-		birdTemplates:               bt,
-		provider:                    p,
-		amazonCloudInt:              aci,
-		upgrade:                     up,
-		authentication:              authentication,
-		nodeAppArmorProfile:         nodeAppArmorProfile,
-		esLicenseType:               esLicenseType,
-		clusterDomain:               clusterDomain,
-		esAdminSecret:               esAdminSecret,
-		kubeControllersMetricsPort:  kubeControllersMetricsPort,
-		nodeReporterMetricsPort:     nodeReporterMetricsPort,
+		k8sServiceEp:                 k8sServiceEp,
+		installation:                 cr,
+		logStorageExists:             logStorageExists,
+		managementCluster:            managementCluster,
+		managementClusterConnection:  managementClusterConnection,
+		pullSecrets:                  pullSecrets,
+		typhaNodeTLS:                 typhaNodeTLS,
+		configMaps:                   cms,
+		tlsSecrets:                   tss,
+		elasticsearchSecret:          elasticsearchSecret,
+		kibanaSecret:                 kibanaSecret,
+		managerInternalTLSecret:      managerInternalTLSSecret,
+		birdTemplates:                bt,
+		provider:                     p,
+		amazonCloudInt:               aci,
+		upgrade:                      up,
+		authentication:               authentication,
+		nodeAppArmorProfile:          nodeAppArmorProfile,
+		enableESOIDCWorkaround:       enableESOIDCWorkaround,
+		clusterDomain:                clusterDomain,
+		kubeControllersGatewaySecret: kubeControllersGatewaySecret,
+		kubeControllersMetricsPort:   kubeControllersMetricsPort,
+		nodeReporterMetricsPort:      nodeReporterMetricsPort,
+		bgpLayoutHash:                bgpLayoutHash,
 	}, nil
 }
 
@@ -218,42 +227,43 @@ func createTLS() (*TyphaNodeTLS, error) {
 }
 
 type calicoRenderer struct {
-	k8sServiceEp                k8sapi.ServiceEndpoint
-	installation                *operator.InstallationSpec
-	logStorageExists            bool
-	managementCluster           *operator.ManagementCluster
-	managementClusterConnection *operator.ManagementClusterConnection
-	pullSecrets                 []*corev1.Secret
-	typhaNodeTLS                *TyphaNodeTLS
-	tlsConfigMaps               []*corev1.ConfigMap
-	tlsSecrets                  []*corev1.Secret
-	managerInternalTLSecret     *corev1.Secret
-	elasticsearchSecret         *corev1.Secret
-	kibanaSecret                *corev1.Secret
-	birdTemplates               map[string]string
-	provider                    operator.Provider
-	amazonCloudInt              *operator.AmazonCloudIntegration
-	upgrade                     bool
-	authentication              *operator.Authentication
-	nodeAppArmorProfile         string
-	clusterDomain               string
-	esLicenseType               ElasticsearchLicenseType
-	esAdminSecret               *corev1.Secret
-	kubeControllersMetricsPort  int
-	nodeReporterMetricsPort     int
+	k8sServiceEp                 k8sapi.ServiceEndpoint
+	installation                 *operator.InstallationSpec
+	logStorageExists             bool
+	managementCluster            *operator.ManagementCluster
+	managementClusterConnection  *operator.ManagementClusterConnection
+	pullSecrets                  []*corev1.Secret
+	typhaNodeTLS                 *TyphaNodeTLS
+	configMaps                   []*corev1.ConfigMap
+	tlsSecrets                   []*corev1.Secret
+	managerInternalTLSecret      *corev1.Secret
+	elasticsearchSecret          *corev1.Secret
+	kibanaSecret                 *corev1.Secret
+	birdTemplates                map[string]string
+	provider                     operator.Provider
+	amazonCloudInt               *operator.AmazonCloudIntegration
+	upgrade                      bool
+	authentication               *operator.Authentication
+	nodeAppArmorProfile          string
+	clusterDomain                string
+	enableESOIDCWorkaround       bool
+	kubeControllersGatewaySecret *corev1.Secret
+	kubeControllersMetricsPort   int
+	nodeReporterMetricsPort      int
+	bgpLayoutHash                string
 }
 
 func (r calicoRenderer) Render() []Component {
 	var components []Component
 	components = appendNotNil(components, PriorityClassDefinitions())
 	components = appendNotNil(components, Namespaces(r.installation, r.pullSecrets))
-	components = appendNotNil(components, ConfigMaps(r.tlsConfigMaps))
+	components = appendNotNil(components, ConfigMaps(r.configMaps))
 	components = appendNotNil(components, Secrets(r.tlsSecrets))
 	components = appendNotNil(components, Typha(r.k8sServiceEp, r.installation, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.clusterDomain))
-	components = appendNotNil(components, Node(r.k8sServiceEp, r.installation, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.nodeAppArmorProfile, r.clusterDomain, r.nodeReporterMetricsPort))
+	components = appendNotNil(components, Node(r.k8sServiceEp, r.installation, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.nodeAppArmorProfile, r.clusterDomain, r.nodeReporterMetricsPort, r.bgpLayoutHash))
 	components = appendNotNil(components, KubeControllers(r.k8sServiceEp, r.installation, r.logStorageExists, r.managementCluster,
 		r.managementClusterConnection, r.managerInternalTLSecret, r.elasticsearchSecret, r.kibanaSecret, r.authentication,
-		r.esLicenseType, r.clusterDomain, r.esAdminSecret, r.kubeControllersMetricsPort))
+		r.enableESOIDCWorkaround, r.clusterDomain, r.kubeControllersGatewaySecret, r.kubeControllersMetricsPort))
 	return components
 }
 

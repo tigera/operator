@@ -36,6 +36,7 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
@@ -248,10 +249,13 @@ func IsFeatureActive(license v3.LicenseKey, featureName string) bool {
 }
 
 // ValidateCertPair checks if the given secret exists in the given
-// namespace and if so that it contains key and cert fields. If a secret exists then it is returned.
-// If there is an error accessing the secret (except NotFound) or the cert
-// does not have both a key and cert field then an appropriate error is returned.
-// If no secret exists then nil, nil is returned to represent that no cert is valid.
+// namespace and if so that it contains key and cert fields. If an
+// empty string is passed for the keyName argument it is skipped.
+// If a secret exists then it is returned. If there is an error
+// accessing the secret (except NotFound) or the cert does not have
+// both a key and cert field then an appropriate error is returned.
+// If no secret exists then nil, nil is returned to represent that no
+// cert is valid.
 func ValidateCertPair(client client.Client, namespace, certPairSecretName, keyName, certName string) (*corev1.Secret, error) {
 	secret := &corev1.Secret{}
 	secretNamespacedName := types.NamespacedName{
@@ -270,14 +274,39 @@ func ValidateCertPair(client client.Client, namespace, certPairSecretName, keyNa
 		}
 	}
 
-	if val, ok := secret.Data[keyName]; !ok || len(val) == 0 {
-		return secret, fmt.Errorf("Secret %q does not have a field named %q", certPairSecretName, keyName)
+	if keyName != "" {
+		if val, ok := secret.Data[keyName]; !ok || len(val) == 0 {
+			return secret, fmt.Errorf("Secret %q does not have a field named %q", certPairSecretName, keyName)
+		}
 	}
+
 	if val, ok := secret.Data[certName]; !ok || len(val) == 0 {
 		return secret, fmt.Errorf("Secret %q does not have a field named %q", certPairSecretName, certName)
 	}
 
 	return secret, nil
+}
+
+// GetK8sServiceEndPoint reads the kubernetes-service-endpoint configmap and pushes
+// KUBERNETES_SERVICE_HOST, KUBERNETES_SERVICE_PORT to calico-node daemonset, typha
+// apiserver deployments
+func GetK8sServiceEndPoint(client client.Client) error {
+	cmName := render.K8sSvcEndpointConfigMapName
+	cm := &corev1.ConfigMap{}
+	cmNamespacedName := types.NamespacedName{
+		Name:      cmName,
+		Namespace: rmeta.OperatorNamespace(),
+	}
+	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
+		// If the configmap is unavailable, do not return error
+		if !kerrors.IsNotFound(err) {
+			return fmt.Errorf("Failed to read ConfigMap %q: %s", cmName, err)
+		}
+	} else {
+		k8sapi.Endpoint.Host = cm.Data["KUBERNETES_SERVICE_HOST"]
+		k8sapi.Endpoint.Port = cm.Data["KUBERNETES_SERVICE_PORT"]
+	}
+	return nil
 }
 
 func GetNetworkingPullSecrets(i *operatorv1.InstallationSpec, c client.Client) ([]*corev1.Secret, error) {

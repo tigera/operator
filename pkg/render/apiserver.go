@@ -27,7 +27,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
+	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operator "github.com/tigera/operator/api/v1"
@@ -218,17 +218,17 @@ func (c *apiServerComponent) Ready() bool {
 }
 
 // apiServiceRegistration creates an API service that registers Tigera Secure APIs (and API server).
-func (c *apiServerComponent) apiServiceRegistration(cert []byte) *v1beta1.APIService {
-	s := &v1beta1.APIService{
-		TypeMeta: metav1.TypeMeta{Kind: "APIService", APIVersion: "apiregistration.k8s.io/v1beta1"},
+func (c *apiServerComponent) apiServiceRegistration(cert []byte) *apiregv1.APIService {
+	s := &apiregv1.APIService{
+		TypeMeta: metav1.TypeMeta{Kind: "APIService", APIVersion: "apiregistration.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "v3.projectcalico.org",
 		},
-		Spec: v1beta1.APIServiceSpec{
+		Spec: apiregv1.APIServiceSpec{
 			Group:                "projectcalico.org",
 			VersionPriority:      200,
 			GroupPriorityMinimum: 1500,
-			Service: &v1beta1.ServiceReference{
+			Service: &apiregv1.ServiceReference{
 				Name:      APIServiceName,
 				Namespace: APIServerNamespace,
 			},
@@ -644,7 +644,7 @@ func (c *apiServerComponent) apiServer() *appsv1.Deployment {
 	var initContainers []corev1.Container
 	if c.installation.CertificateManagement != nil {
 		initContainers = append(initContainers, CreateCSRInitContainer(
-			c.installation,
+			c.installation.CertificateManagement,
 			c.certSignReqImage,
 			APIServerTLSSecretName, TLSSecretCertName,
 			APIServerSecretKeyName,

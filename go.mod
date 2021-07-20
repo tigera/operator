@@ -14,6 +14,9 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/stretchr/testify v1.6.1
 	github.com/tigera/api v0.0.0-20210210003744-476f909e3f8f
+	go.uber.org/zap v1.15.0
+	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
+	google.golang.org/protobuf v1.25.0 // indirect
 	gopkg.in/inf.v0 v0.9.1
 	k8s.io/api v0.19.6
 	k8s.io/apiextensions-apiserver v0.19.2
@@ -30,6 +33,7 @@ require (
 	github.com/openshift/library-go v0.0.0-20200924151131-575c4875cdbe
 	github.com/r3labs/diff/v2 v2.8.0
 	go.uber.org/zap v1.15.0
+	golang.org/x/oauth2 v0.0.0-20191202225959-858c2ad4c8b6
 	google.golang.org/protobuf v1.25.0 // indirect
 	gopkg.in/yaml.v2 v2.3.0
 	k8s.io/klog/v2 v2.3.0 // indirect

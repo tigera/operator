@@ -29,7 +29,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/kube-aggregator/pkg/apis/apiregistration/v1beta1"
+	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 
 	operator "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
@@ -99,7 +99,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		return nil, fmt.Errorf("Failed to initialize Namespace migration: %w", err)
 	}
 
-	statusManager := status.New(mgr.GetClient(), "calico")
+	statusManager := status.New(mgr.GetClient(), "calico", opts.KubernetesVersion)
 
 	// The typhaAutoscaler needs a clientset.
 	cs, err := kubernetes.NewForConfig(mgr.GetConfig())
@@ -165,9 +165,10 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		return fmt.Errorf("tigera-installation-controller failed to watch secrets: %w", err)
 	}
 
-	cm := render.BirdTemplatesConfigMapName
-	if err = utils.AddConfigMapWatch(c, cm, rmeta.OperatorNamespace()); err != nil {
-		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", cm, err)
+	for _, cm := range []string{render.BirdTemplatesConfigMapName, render.BGPLayoutConfigMapName, render.K8sSvcEndpointConfigMapName} {
+		if err = utils.AddConfigMapWatch(c, cm, rmeta.OperatorNamespace()); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", cm, err)
+		}
 	}
 
 	// Only watch the AmazonCloudIntegration if the CRD is available
@@ -272,7 +273,7 @@ func secondaryResources() []client.Object {
 		&rbacv1.ClusterRole{},
 		&rbacv1.ClusterRoleBinding{},
 		&corev1.ServiceAccount{},
-		&v1beta1.APIService{},
+		&apiregv1.APIService{},
 		&corev1.Service{},
 	}
 }
@@ -863,12 +864,20 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	// If the Elasticsearch license type is basic OR there is an Authentication CR with OIDC type Tigera, then
+	// enable the Elasticsearch OIDC workaround in kube controllers.
+	enableESOIDCWorkaround := false
+	if (authentication != nil && authentication.Spec.OIDC != nil && authentication.Spec.OIDC.Type == operator.OIDCTypeTigera) ||
+		esLicenseType == render.ElasticsearchLicenseTypeBasic {
+		enableESOIDCWorkaround = true
+	}
+
 	var managerInternalTLSSecret *corev1.Secret
 	managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
 		common.CalicoNamespace,
 		render.ManagerInternalTLSSecretName,
-		render.ManagerInternalSecretCertName,
 		render.ManagerInternalSecretKeyName,
+		render.ManagerInternalSecretCertName,
 	)
 
 	// Ensure that CA and TLS certificate for tigera-manager for internal
@@ -890,11 +899,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	// Kube controllers needs the admin secret copied to it's namespace as it has administrative tasks to run on
-	// Elasticsearch.
-	esAdminSecret, err := utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, rmeta.OperatorNamespace())
-	if err != nil {
-		return reconcile.Result{}, err
+	var kubeControllersGatewaySecret *v1.Secret
+	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
+		kubeControllersGatewaySecret, err = utils.GetSecret(ctx, r.client, render.ElasticsearchKubeControllersUserSecret, rmeta.OperatorNamespace())
+		if err != nil {
+			return reconcile.Result{}, err
+		}
 	}
 
 	var typhaNodeTLS *render.TyphaNodeTLS
@@ -911,6 +921,29 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if err != nil {
 		log.Error(err, "Error retrieving confd templates")
 		r.SetDegraded("Error retrieving confd templates", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	bgpLayout, err := getConfigMap(r.client, render.BGPLayoutConfigMapName)
+	if err != nil {
+		log.Error(err, "Error retrieving BGP layout ConfigMap")
+		r.SetDegraded("Error retrieving BGP layout ConfigMap", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	if bgpLayout != nil {
+		// Validate that BGP layout ConfigMap has the expected key.
+		if _, ok := bgpLayout.Data[render.BGPLayoutConfigMapKey]; !ok {
+			err = fmt.Errorf("BGP layout ConfigMap does not have %v key", render.BGPLayoutConfigMapKey)
+			r.SetDegraded("Error in BGP layout ConfigMap", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
+	err = utils.GetK8sServiceEndPoint(r.client)
+	if err != nil {
+		log.Error(err, "Error reading services endpoint configmap")
+		r.SetDegraded("Error reading services endpoint configmap", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -1016,10 +1049,11 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		needNsMigration,
 		nodeAppArmorProfile,
 		r.clusterDomain,
-		esLicenseType,
-		esAdminSecret,
+		enableESOIDCWorkaround,
+		kubeControllersGatewaySecret,
 		kubeControllersMetricsPort,
 		nodeReporterMetricsPort,
+		bgpLayout,
 	)
 	if err != nil {
 		log.Error(err, "Error with rendering Calico")
@@ -1139,6 +1173,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			return reconcile.Result{}, err
 		}
 	}
+
+	// Tell the status manager that we're ready to monitor the resources we've told it about and receive statuses.
+	r.status.ReadyToMonitor()
 
 	// We can clear the degraded state now since as far as we know everything is in order.
 	r.status.ClearDegraded()
@@ -1294,8 +1331,7 @@ func (r *ReconcileInstallation) validateTyphaCAConfigMap() (*corev1.ConfigMap, e
 	return cm, nil
 }
 
-func getBirdTemplates(client client.Client) (map[string]string, error) {
-	cmName := render.BirdTemplatesConfigMapName
+func getConfigMap(client client.Client, cmName string) (*corev1.ConfigMap, error) {
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{
 		Name:      cmName,
@@ -1307,7 +1343,14 @@ func getBirdTemplates(client client.Client) (map[string]string, error) {
 		}
 		return nil, fmt.Errorf("Failed to read ConfigMap %q: %s", cmName, err)
 	}
+	return cm, nil
+}
 
+func getBirdTemplates(client client.Client) (map[string]string, error) {
+	cm, err := getConfigMap(client, render.BirdTemplatesConfigMapName)
+	if err != nil || cm == nil {
+		return nil, err
+	}
 	bt := make(map[string]string)
 	for k, v := range cm.Data {
 		bt[k] = v

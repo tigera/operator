@@ -23,6 +23,7 @@ import (
 	"os"
 	goruntime "runtime"
 	"strings"
+	"time"
 
 	"github.com/cloudflare/cfssl/log"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -42,10 +43,12 @@ import (
 	"github.com/tigera/operator/controllers"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/awssgsetup"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/version"
 	// +kubebuilder:scaffold:imports
 )
@@ -170,6 +173,11 @@ func main() {
 		ClientDisableCacheFor: []client.Object{
 			&v3.LicenseKey{},
 		},
+
+		// Cloud tweaks: All the following are multiplying the defaults by 4
+		LeaseDuration: ptr.DurationToPtr(60 * time.Second),
+		RenewDeadline: ptr.DurationToPtr(40 * time.Second),
+		RetryPeriod:   ptr.DurationToPtr(8 * time.Second),
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -210,11 +218,18 @@ func main() {
 		log.Error(err, fmt.Sprintf("Couldn't find the cluster domain from the resolv.conf, defaulting to %s", clusterDomain))
 	}
 
+	kubernetesVersion, err := common.GetKubernetesVersion(clientset)
+	if err != nil {
+		log.Error(err, fmt.Sprintf("Unable to resolve Kubernetes version, defaulting to v1.18"))
+		kubernetesVersion = &common.VersionInfo{Major: 1, Minor: 18}
+	}
+
 	options := options.AddOptions{
 		DetectedProvider:    provider,
 		EnterpriseCRDExists: enterpriseCRDExists,
 		AmazonCRDExists:     amazonCRDExists,
 		ClusterDomain:       clusterDomain,
+		KubernetesVersion:   kubernetesVersion,
 	}
 
 	err = controllers.AddToManager(mgr, options)

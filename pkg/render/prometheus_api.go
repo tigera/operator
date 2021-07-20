@@ -22,9 +22,11 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -90,6 +92,7 @@ func (p *tigeraPrometheusAPIComponent) Objects() (objsToCreate, objsToDelete []c
 
 	namespacedObjects = append(
 		namespacedObjects,
+		p.tigeraPrometheusApiPodSecurityPolicy(),
 		p.tigeraPrometheusServiceDeployment(),
 		p.calicoNodePrometheusService(),
 	)
@@ -200,6 +203,12 @@ func (p *tigeraPrometheusAPIComponent) tigeraPrometheusServiceDeployment() *apps
 	}
 
 	return d
+}
+
+func (p *tigeraPrometheusAPIComponent) tigeraPrometheusApiPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	psp := podsecuritypolicy.NewBasePolicy()
+	psp.GetObjectMeta().SetName(tigeraPrometheusAPIName)
+	return psp
 }
 
 func (p *tigeraPrometheusAPIComponent) prometheusServiceContainers() corev1.Container {

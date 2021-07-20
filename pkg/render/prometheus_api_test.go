@@ -71,6 +71,7 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 			kind    string
 		}{
 			{tigeraPullSecret, common.TigeraPrometheusNamespace, "", "", ""},
+			{tigeraPrometheusServiceName, "", "policy", "v1beta1", "PodSecurityPolicy"},
 			{tigeraPrometheusServiceName, common.TigeraPrometheusNamespace, "apps", "v1", "Deployment"},
 			{calicoNodePrometheusServiceName, common.TigeraPrometheusNamespace, "", "v1", "Service"},
 		}
@@ -100,7 +101,7 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 
 			if object.GetName() == tigeraPullSecret {
 
-			} else if object.GetName() == tigeraPrometheusServiceName {
+			} else if object.GetName() == tigeraPrometheusServiceName && object.GetObjectKind().GroupVersionKind().Kind == "Deployment" {
 				tigeraPrometheusServiceDeploymentManifest := object.(*appsv1.Deployment)
 
 				Expect(tigeraPrometheusServiceDeploymentManifest.GetLabels()["k8s-app"]).To(Equal(tigeraPrometheusServiceName))
@@ -171,7 +172,7 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 		// check value for each resource object
 		for _, object := range objectsToCreate {
 
-			if object.GetName() == tigeraPrometheusServiceName {
+			if object.GetName() == tigeraPrometheusServiceName && object.GetObjectKind().GroupVersionKind().Kind == "Deployment" {
 				tigeraPrometheusServiceDeploymentManifest := object.(*appsv1.Deployment)
 
 				// validate container specs
@@ -229,7 +230,7 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 		// check value for each resource object
 		for _, object := range objectsToCreate {
 
-			if object.GetName() == tigeraPrometheusServiceName {
+			if object.GetName() == tigeraPrometheusServiceName && object.GetObjectKind().GroupVersionKind().Kind == "Deployment" {
 				tigeraPrometheusServiceDeploymentManifest := object.(*appsv1.Deployment)
 				Expect(tigeraPrometheusServiceDeploymentManifest.Spec.Template.Spec.HostNetwork).To(BeFalse())
 				Expect(tigeraPrometheusServiceDeploymentManifest.Spec.Template.Spec.DNSPolicy).To(Equal(corev1.DNSClusterFirst))

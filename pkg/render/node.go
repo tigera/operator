@@ -188,7 +188,7 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 
 	if c.cr.CertificateManagement != nil {
 		objsToCreate = append(objsToCreate, csrClusterRole())
-		objsToCreate = append(objsToCreate, csrClusterRoleBinding("calico-node", common.CalicoNamespace))
+		objsToCreate = append(objsToCreate, CsrClusterRoleBinding("calico-node", common.CalicoNamespace))
 	}
 
 	return objsToCreate, objsToDelete

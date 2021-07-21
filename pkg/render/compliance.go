@@ -223,7 +223,7 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 		)
 
 		if c.installation.CertificateManagement != nil {
-			complianceObjs = append(complianceObjs, csrClusterRoleBinding("tigera-compliance-server", ComplianceNamespace))
+			complianceObjs = append(complianceObjs, CsrClusterRoleBinding("tigera-compliance-server", ComplianceNamespace))
 		}
 
 	} else {
@@ -232,7 +232,7 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 		)
 		objsToDelete = []client.Object{c.complianceServerDeployment()}
 		if c.installation.CertificateManagement != nil {
-			objsToDelete = append(objsToDelete, csrClusterRoleBinding("tigera-compliance-server", ComplianceNamespace))
+			objsToDelete = append(objsToDelete, CsrClusterRoleBinding("tigera-compliance-server", ComplianceNamespace))
 		}
 	}
 

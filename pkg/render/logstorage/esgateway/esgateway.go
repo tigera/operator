@@ -13,6 +13,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -48,9 +49,7 @@ func EsGateway(
 	secrets := certSecrets
 
 	// Copy the Operator namespaced cert secrets to the Elasticsearch namespace.
-	for _, s := range certSecrets {
-		certSecretsESCopy = append(certSecretsESCopy, secret.CopyToNamespace(render.ElasticsearchNamespace, s)...)
-	}
+	certSecretsESCopy = append(certSecretsESCopy, secret.CopyToNamespace(render.ElasticsearchNamespace, certSecrets...)...)
 	tlsAnnotations := map[string]string{render.ElasticsearchTLSHashAnnotation: rmeta.SecretsAnnotationHash(append(certSecretsESCopy, esInternalCertSecret)...)}
 
 	secrets = append(secrets, certSecretsESCopy...)
@@ -108,6 +107,9 @@ func (e *esGateway) Objects() (toCreate, toDelete []client.Object) {
 	toCreate = append(toCreate, e.esGatewayRoleBinding())
 	toCreate = append(toCreate, e.esGatewayServiceAccount())
 	toCreate = append(toCreate, e.esGatewayDeployment())
+	if e.installation.CertificateManagement != nil {
+		toCreate = append(toCreate, render.CsrClusterRoleBinding(RoleName, render.ElasticsearchNamespace))
+	}
 	return toCreate, toDelete
 }
 
@@ -179,15 +181,35 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 		}},
 	}
 
-	volumes := []corev1.Volume{
-		{
-			Name: VolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: render.TigeraElasticsearchCertSecret,
-				},
+	certVolume := corev1.Volume{
+		Name: VolumeName,
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: render.TigeraElasticsearchCertSecret,
 			},
 		},
+	}
+
+	var initContainers []corev1.Container
+	if e.installation.CertificateManagement != nil {
+		svcDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, e.clusterDomain)
+		svcDNSNames = append(svcDNSNames, dns.GetServiceDNSNames(ServiceName, render.ElasticsearchNamespace, e.clusterDomain)...)
+
+		initContainers = append(initContainers, render.CreateCSRInitContainer(
+			e.installation.CertificateManagement,
+			e.csrImage,
+			VolumeName,
+			ServiceName,
+			corev1.TLSPrivateKeyKey,
+			corev1.TLSCertKey,
+			svcDNSNames,
+			render.ElasticsearchNamespace))
+
+		certVolume.VolumeSource = corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}
+	}
+
+	volumes := []corev1.Volume{
+		certVolume,
 		{
 			Name: render.KibanaInternalCertSecret,
 			VolumeSource: corev1.VolumeSource{
@@ -225,6 +247,7 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 			ServiceAccountName: ServiceAccountName,
 			ImagePullSecrets:   secret.GetReferenceList(e.pullSecrets),
 			Volumes:            volumes,
+			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				{
 					Name:         DeploymentName,

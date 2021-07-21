@@ -424,8 +424,8 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	if es.installation.CertificateManagement != nil {
-		toCreate = append(toCreate, csrClusterRoleBinding("tigera-elasticsearch", ElasticsearchNamespace))
-		toCreate = append(toCreate, csrClusterRoleBinding("tigera-kibana", KibanaNamespace))
+		toCreate = append(toCreate, CsrClusterRoleBinding("tigera-elasticsearch", ElasticsearchNamespace))
+		toCreate = append(toCreate, CsrClusterRoleBinding("tigera-kibana", KibanaNamespace))
 	}
 
 	return toCreate, toDelete

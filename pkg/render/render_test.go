@@ -241,7 +241,7 @@ var _ = Describe("Rendering tests", func() {
 					ds = r.(*appsv1.DaemonSet)
 				}
 			}
-			checkEnvVar := func (ds *appsv1.DaemonSet) bool {
+			checkEnvVar := func(ds *appsv1.DaemonSet) bool {
 				envPresent := false
 				for _, env := range ds.Spec.Template.Spec.Containers[0].Env {
 					if env.Name == "FELIX_FLOWLOGSCOLLECTPROCESSPATH" {

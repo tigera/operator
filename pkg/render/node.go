@@ -806,7 +806,7 @@ func (c *nodeComponent) bpfDataplaneEnabled() bool {
 func (c *nodeComponent) collectProcessPathEnabled() bool {
 	return c.logCollector != nil &&
 		c.logCollector.Spec.CollectProcessPath != nil &&
-		*c.logCollector.Spec.CollectProcessPath == "Enabled"
+		*c.logCollector.Spec.CollectProcessPath == operatorv1.CollectProcessPathEnable
 }
 
 // cniContainer creates the node's init container that installs CNI.

@@ -361,6 +361,11 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	if instance.Spec.CollectProcessPath == nil {
+		collectProcessPath := v1.CollectProcessPathEnable
+		instance.Spec.CollectProcessPath = &collectProcessPath
+		isModified = true
+	}
 	filters, err := getFluentdFilters(r.client)
 	if err != nil {
 		log.Error(err, "Error retrieving Fluentd filters")

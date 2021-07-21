@@ -127,7 +127,7 @@ func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	if c.installation.CertificateManagement != nil {
-		objs = append(objs, csrClusterRoleBinding("calico-typha", common.CalicoNamespace))
+		objs = append(objs, CsrClusterRoleBinding("calico-typha", common.CalicoNamespace))
 	}
 
 	return objs, nil

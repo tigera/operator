@@ -45,17 +45,24 @@ const (
 	tigeraPrometheusServiceHealthEndpoint = "/health"
 )
 
-func TigeraPrometheusAPI(cr *operator.InstallationSpec, pullSecrets []*corev1.Secret, prometheusServicePort int) Component {
+func TigeraPrometheusAPI(cr *operator.InstallationSpec, pullSecrets []*corev1.Secret, configMap *corev1.ConfigMap) (Component, error) {
 
-	if prometheusServicePort <= 0 {
-		prometheusServicePort = PrometheusDefaultPort
+	tigeraPrometheusAPIListenPort := common.PrometheusDefaultPort
+
+	var err error
+	if configMap != nil {
+		tigeraPrometheusAPIListenPort, err = strconv.Atoi(configMap.Data[common.MonitorConfigTigeraPrometheusAPIListenPortFieldName])
+
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &tigeraPrometheusAPIComponent{
 		installation:          cr,
 		pullSecrets:           pullSecrets,
-		prometheusServicePort: prometheusServicePort,
-	}
+		prometheusServicePort: tigeraPrometheusAPIListenPort,
+	}, nil
 }
 
 type tigeraPrometheusAPIComponent struct {
@@ -134,7 +141,7 @@ func (p *tigeraPrometheusAPIComponent) calicoNodePrometheusService() *corev1.Ser
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "web",
-					Port:       PrometheusDefaultPort,
+					Port:       common.PrometheusDefaultPort,
 					Protocol:   corev1.ProtocolTCP,
 					TargetPort: intstr.FromInt(p.prometheusServicePort),
 				},
@@ -214,7 +221,7 @@ func (p *tigeraPrometheusAPIComponent) tigeraPrometheusApiPodSecurityPolicy() *p
 func (p *tigeraPrometheusAPIComponent) prometheusServiceContainers() corev1.Container {
 	prometheusOperatedHttpUrl := url.URL{
 		Scheme: prometheusOperatedHttpServiceScheme,
-		Host:   prometheusOperatedHttpServiceHost + ":" + strconv.Itoa(PrometheusDefaultPort),
+		Host:   prometheusOperatedHttpServiceHost + ":" + strconv.Itoa(common.PrometheusDefaultPort),
 	}
 
 	prometheusServiceListenAddrValue := ":" + strconv.Itoa(p.prometheusServicePort)

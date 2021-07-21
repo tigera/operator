@@ -22,7 +22,9 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/monitor"
 	"github.com/tigera/operator/pkg/render"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -46,6 +48,7 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 	var installationSpec *operatorv1.InstallationSpec
 	var pullSecrets []*corev1.Secret
 	var prometheusServicePort int
+	var monitorConfigMap *corev1.ConfigMap
 	var expectedResources []struct {
 		name    string
 		ns      string
@@ -59,6 +62,8 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 		pullSecrets = []*corev1.Secret{
 			{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 		}
+
+		monitorConfigMap = createMonitorDefaultConfigMap()
 
 		// set to 9 to trigger applying default port 9090
 		prometheusServicePort = 0
@@ -79,8 +84,9 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 	})
 
 	It("should render with default specs", func() {
-		prometheusService := render.TigeraPrometheusAPI(installationSpec, pullSecrets, prometheusServicePort)
+		prometheusService, err := render.TigeraPrometheusAPI(installationSpec, pullSecrets, monitorConfigMap)
 
+		Expect(err).ToNot(HaveOccurred())
 		Expect(prometheusService.ResolveImages(nil)).NotTo(HaveOccurred())
 
 		objectsToCreate, objectsToDelete := prometheusService.Objects()
@@ -119,23 +125,23 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 				tigeraPrometheusServiceDeploymentContainerTemplate := tigeraPrometheusServiceDeploymentManifest.Spec.Template.Spec.Containers[0]
 
 				Expect(tigeraPrometheusServiceDeploymentContainerTemplate.Name).To(Equal(tigeraPrometheusServiceName))
-				Expect(tigeraPrometheusServiceDeploymentContainerTemplate.Ports[0].ContainerPort).To(Equal(int32(render.PrometheusDefaultPort)))
+				Expect(tigeraPrometheusServiceDeploymentContainerTemplate.Ports[0].ContainerPort).To(Equal(int32(common.PrometheusDefaultPort)))
 				Expect(len(tigeraPrometheusServiceDeploymentContainerTemplate.Env)).To(Equal(2))
 				Expect(tigeraPrometheusServiceDeploymentContainerTemplate.Env).To(ContainElements(
 					corev1.EnvVar{
 						Name:  prometheusServiceListenAddrEnvVarName,
-						Value: ":" + strconv.Itoa(render.PrometheusDefaultPort),
+						Value: ":" + strconv.Itoa(common.PrometheusDefaultPort),
 					},
 					corev1.EnvVar{
 						Name:  prometheusEndpointUrlEnvVarName,
-						Value: prometheusOperatedHttpServiceUrl + ":" + strconv.Itoa(render.PrometheusDefaultPort),
+						Value: prometheusOperatedHttpServiceUrl + ":" + strconv.Itoa(common.PrometheusDefaultPort),
 					},
 				))
 				Expect(tigeraPrometheusServiceDeploymentContainerTemplate.ReadinessProbe.HTTPGet.Path).To(Equal(tigeraPrometheusServiceHealthEndpoint))
-				Expect(tigeraPrometheusServiceDeploymentContainerTemplate.ReadinessProbe.HTTPGet.Port.IntVal).To(Equal(int32(render.PrometheusDefaultPort)))
+				Expect(tigeraPrometheusServiceDeploymentContainerTemplate.ReadinessProbe.HTTPGet.Port.IntVal).To(Equal(int32(common.PrometheusDefaultPort)))
 
 				Expect(tigeraPrometheusServiceDeploymentContainerTemplate.LivenessProbe.HTTPGet.Path).To(Equal(tigeraPrometheusServiceHealthEndpoint))
-				Expect(tigeraPrometheusServiceDeploymentContainerTemplate.LivenessProbe.HTTPGet.Port.IntVal).To(Equal(int32(render.PrometheusDefaultPort)))
+				Expect(tigeraPrometheusServiceDeploymentContainerTemplate.LivenessProbe.HTTPGet.Port.IntVal).To(Equal(int32(common.PrometheusDefaultPort)))
 
 			} else if object.GetName() == calicoNodePrometheusServiceName {
 				calicoNodePrometheusServiceManifest := object.(*corev1.Service)
@@ -143,16 +149,19 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 
 				Expect(calicoNodePrometheusServiceManifest.Spec.Type).To(Equal(corev1.ServiceTypeClusterIP))
 				Expect(len(calicoNodePrometheusServiceManifest.Spec.Ports)).To(Equal(1))
-				Expect(calicoNodePrometheusServiceManifest.Spec.Ports[0].Port).To(Equal(int32(render.PrometheusDefaultPort)))
+				Expect(calicoNodePrometheusServiceManifest.Spec.Ports[0].Port).To(Equal(int32(common.PrometheusDefaultPort)))
 				// default if not set from monitor spec
-				Expect(calicoNodePrometheusServiceManifest.Spec.Ports[0].TargetPort.IntVal).To(Equal(int32(render.PrometheusDefaultPort)))
+				Expect(calicoNodePrometheusServiceManifest.Spec.Ports[0].TargetPort.IntVal).To(Equal(int32(common.PrometheusDefaultPort)))
 			}
 		}
 	})
 
 	It("should render with specs accordingly when prometheuServicePort is specified ", func() {
 		prometheusServicePort = 8090
-		prometheusService := render.TigeraPrometheusAPI(installationSpec, pullSecrets, prometheusServicePort)
+		monitorConfigMap.Data[common.MonitorConfigTigeraPrometheusAPIListenPortFieldName] = strconv.Itoa(prometheusServicePort)
+
+		prometheusService, err := render.TigeraPrometheusAPI(installationSpec, pullSecrets, monitorConfigMap)
+		Expect(err).ToNot(HaveOccurred())
 
 		Expect(prometheusService.ResolveImages(nil)).NotTo(HaveOccurred())
 
@@ -189,7 +198,7 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 					},
 					corev1.EnvVar{
 						Name:  prometheusEndpointUrlEnvVarName,
-						Value: prometheusOperatedHttpServiceUrl + ":" + strconv.Itoa(render.PrometheusDefaultPort),
+						Value: prometheusOperatedHttpServiceUrl + ":" + strconv.Itoa(common.PrometheusDefaultPort),
 					},
 				))
 				Expect(tigeraPrometheusServiceDeploymentContainerTemplate.ReadinessProbe.HTTPGet.Path).To(Equal(tigeraPrometheusServiceHealthEndpoint))
@@ -202,7 +211,7 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 				calicoNodePrometheusServiceManifest := object.(*corev1.Service)
 
 				Expect(len(calicoNodePrometheusServiceManifest.Spec.Ports)).To(Equal(1))
-				Expect(calicoNodePrometheusServiceManifest.Spec.Ports[0].Port).To(Equal(int32(render.PrometheusDefaultPort)))
+				Expect(calicoNodePrometheusServiceManifest.Spec.Ports[0].Port).To(Equal(int32(common.PrometheusDefaultPort)))
 				// default if not set from monitor spec
 				Expect(calicoNodePrometheusServiceManifest.Spec.Ports[0].TargetPort.IntVal).To(Equal(int32(prometheusServicePort)))
 			}
@@ -210,8 +219,9 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 	})
 
 	It("should render pods as hostnetworked and hostNet dnsPolicy", func() {
-		prometheusService := render.TigeraPrometheusAPI(installationSpec, pullSecrets, prometheusServicePort)
+		prometheusService, err := render.TigeraPrometheusAPI(installationSpec, pullSecrets, monitorConfigMap)
 
+		Expect(err).ToNot(HaveOccurred())
 		Expect(prometheusService.ResolveImages(nil)).NotTo(HaveOccurred())
 
 		objectsToCreate, objectsToDelete := prometheusService.Objects()
@@ -237,5 +247,22 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 			}
 		}
 	})
-
 })
+
+func createMonitorDefaultConfigMap() *corev1.ConfigMap {
+	cm := &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ConfigMap",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      monitor.MonitorConfigMapName,
+			Namespace: rmeta.OperatorNamespace(),
+		},
+		Data: map[string]string{
+			common.MonitorConfigTigeraPrometheusAPIListenPortFieldName: strconv.Itoa(common.PrometheusDefaultPort),
+		},
+	}
+
+	return cm
+}

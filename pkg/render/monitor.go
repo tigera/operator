@@ -45,7 +45,6 @@ const (
 	TigeraPrometheusDPRate = "tigera-prometheus-dp-rate"
 
 	PrometheusHTTPAPIServiceName = "prometheus-http-api"
-	PrometheusDefaultPort        = 9090
 )
 
 func Monitor(
@@ -182,9 +181,9 @@ func (mc *monitorComponent) prometheusHTTPAPIService() *corev1.Service {
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "web",
-					Port:       PrometheusDefaultPort,
+					Port:       common.PrometheusDefaultPort,
 					Protocol:   corev1.ProtocolTCP,
-					TargetPort: intstr.FromInt(PrometheusDefaultPort),
+					TargetPort: intstr.FromInt(common.PrometheusDefaultPort),
 				},
 			},
 			Selector: map[string]string{

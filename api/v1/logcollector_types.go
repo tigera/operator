@@ -31,7 +31,7 @@ type LogCollectorSpec struct {
 	AdditionalSources *AdditionalLogSourceSpec `json:"additionalSources,omitempty"`
 
 	// Configuration for enabling/disabling process path collection in flowlogs.
-	// Default: Enable
+	// Default: Enabled
 	// +optional
 	// +kubebuilder:validation:Enum=Enabled;Disabled
 	CollectProcessPath *CollectProcessPathOption `json:"collectProcessPath,omitempty"`

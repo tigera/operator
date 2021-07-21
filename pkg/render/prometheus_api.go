@@ -49,27 +49,29 @@ func TigeraPrometheusAPI(cr *operator.InstallationSpec, pullSecrets []*corev1.Se
 
 	tigeraPrometheusAPIListenPort := common.PrometheusDefaultPort
 
-	var err error
+	// defaults to
 	if configMap != nil {
-		tigeraPrometheusAPIListenPort, err = strconv.Atoi(configMap.Data[common.MonitorConfigTigeraPrometheusAPIListenPortFieldName])
+		tigeraPrometheusAPIListenPort, _ = strconv.Atoi(configMap.Data[common.MonitorConfigTigeraPrometheusAPIListenPortFieldName])
 
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	return &tigeraPrometheusAPIComponent{
-		installation:          cr,
-		pullSecrets:           pullSecrets,
-		prometheusServicePort: tigeraPrometheusAPIListenPort,
+		installation:                cr,
+		pullSecrets:                 pullSecrets,
+		prometheusServiceListenPort: tigeraPrometheusAPIListenPort,
 	}, nil
 }
 
 type tigeraPrometheusAPIComponent struct {
-	installation           *operator.InstallationSpec
-	pullSecrets            []*corev1.Secret
-	prometheusServicePort  int
-	prometheusServiceImage string
+	installation *operator.InstallationSpec
+	pullSecrets  []*corev1.Secret
+	// prometheusServiceListenPort defines the port that tigera-prometheus-service
+	// pod listens to and the TargetPort of calico-node-prometheus service.
+	// If not set it defaults to port 9090. In the scenario that the cluster
+	// is hosted on EKS and using Calico as it's CNI, tigera-prometheus-service
+	// will be HostNetwoked. This is configurable in the configMap passed to TigeraPrometheusAPI
+	prometheusServiceListenPort int
+	prometheusServiceImage      string
 }
 
 func (p *tigeraPrometheusAPIComponent) ResolveImages(is *operator.ImageSet) error {
@@ -143,7 +145,7 @@ func (p *tigeraPrometheusAPIComponent) calicoNodePrometheusService() *corev1.Ser
 					Name:       "web",
 					Port:       common.PrometheusDefaultPort,
 					Protocol:   corev1.ProtocolTCP,
-					TargetPort: intstr.FromInt(p.prometheusServicePort),
+					TargetPort: intstr.FromInt(p.prometheusServiceListenPort),
 				},
 			},
 		},
@@ -224,7 +226,7 @@ func (p *tigeraPrometheusAPIComponent) prometheusServiceContainers() corev1.Cont
 		Host:   prometheusOperatedHttpServiceHost + ":" + strconv.Itoa(common.PrometheusDefaultPort),
 	}
 
-	prometheusServiceListenAddrValue := ":" + strconv.Itoa(p.prometheusServicePort)
+	prometheusServiceListenAddrValue := ":" + strconv.Itoa(p.prometheusServiceListenPort)
 
 	c := corev1.Container{
 		Name:            tigeraPrometheusAPIName,
@@ -232,7 +234,7 @@ func (p *tigeraPrometheusAPIComponent) prometheusServiceContainers() corev1.Cont
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Ports: []corev1.ContainerPort{
 			{
-				ContainerPort: int32(p.prometheusServicePort),
+				ContainerPort: int32(p.prometheusServiceListenPort),
 			},
 		},
 		Env: []corev1.EnvVar{
@@ -249,7 +251,7 @@ func (p *tigeraPrometheusAPIComponent) prometheusServiceContainers() corev1.Cont
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path: tigeraPrometheusServiceHealthEndpoint,
-					Port: intstr.FromInt(p.prometheusServicePort),
+					Port: intstr.FromInt(p.prometheusServiceListenPort),
 				},
 			},
 		},
@@ -257,7 +259,7 @@ func (p *tigeraPrometheusAPIComponent) prometheusServiceContainers() corev1.Cont
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path: tigeraPrometheusServiceHealthEndpoint,
-					Port: intstr.FromInt(p.prometheusServicePort),
+					Port: intstr.FromInt(p.prometheusServiceListenPort),
 				},
 			},
 		},

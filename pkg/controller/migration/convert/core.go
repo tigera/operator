@@ -218,7 +218,7 @@ func addResources(install *operatorv1.Installation, compName operatorv1.Componen
 // since Operator does not support setting custom annotations on components, these annotations
 // would otherwise be dropped.
 func handleAnnotations(c *components, _ *operatorv1.Installation) error {
-	kubectlGenerated := []string {"^kubectl\\.kubernetes\\.io"}
+	kubectlGenerated := []string{"^kubectl\\.kubernetes\\.io"}
 	if a := removeExpectedAnnotations(c.node.Annotations, map[string]string{}, kubectlGenerated); len(a) != 0 {
 		return ErrIncompatibleAnnotation(a, ComponentCalicoNode)
 	}
@@ -270,8 +270,7 @@ func removeExpectedAnnotations(existing, ignoreWithValue map[string]string, igno
 	}
 
 	for key, val := range existing {
-		if key == "kubectl.kubernetes.io/last-applied-configuration" ||
-			key == "deprecated.daemonset.template.generation" ||
+		if key == "deprecated.daemonset.template.generation" ||
 			key == "deployment.kubernetes.io/revision" ||
 			key == "scheduler.alpha.kubernetes.io/critical-pod" {
 			delete(a, key)

@@ -458,8 +458,8 @@ var _ = Describe("core handler", func() {
 			It("should not error for acceptable annotations", func() {
 				updateAnnotations(map[string]string{
 					"kubectl.kubernetes.io/last-applied-configuration": "{}",
-					"kubectl.kubernetes.io/restartedAt": time.Now().String(),
-					"kubectl.kubernetes.io/whatever": "whatever",
+					"kubectl.kubernetes.io/restartedAt":                time.Now().String(),
+					"kubectl.kubernetes.io/whatever":                   "whatever",
 				})
 				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
 			})

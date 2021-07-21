@@ -40,8 +40,8 @@ type LogCollectorSpec struct {
 type CollectProcessPathOption string
 
 const (
-	CollectProcessPathEnable  CollectProcessPathOption = "Enable"
-	CollectProcessPathDisable CollectProcessPathOption = "Disable"
+	CollectProcessPathEnable  CollectProcessPathOption = "Enabled"
+	CollectProcessPathDisable CollectProcessPathOption = "Disabled"
 )
 
 type AdditionalLogStoreSpec struct {

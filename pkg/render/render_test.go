@@ -225,6 +225,41 @@ var _ = Describe("Rendering tests", func() {
 		Expect(ds.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/bgp-layout"))
 		Expect(ds.Spec.Template.Annotations["hash.operator.tigera.io/bgp-layout"]).NotTo(BeEmpty())
 	})
+
+	It("should handle collectProcessPath in logCollector", func() {
+		testNode := func(processPath operator.CollectProcessPathOption, expectedHostPID bool) {
+			var logCollector operator.LogCollector
+			logCollector.Spec.CollectProcessPath = &processPath
+			r, err := render.Calico(k8sServiceEp, instance, true, nil, nil, nil, nil, typhaNodeTLS, nil, nil, nil, nil, operator.ProviderNone, nil, false, "", dns.DefaultClusterDomain, false, nil, 0, 0, nil, &logCollector)
+			Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
+			comps := r.Render()
+			var ds *appsv1.DaemonSet
+			for _, comp := range comps {
+				resources, _ := comp.Objects()
+				r := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+				if r != nil {
+					ds = r.(*appsv1.DaemonSet)
+				}
+			}
+			checkEnvVar := func (ds *appsv1.DaemonSet) bool {
+				envPresent := false
+				for _, env := range ds.Spec.Template.Spec.Containers[0].Env {
+					if env.Name == "FELIX_FLOWLOGSCOLLECTPROCESSPATH" {
+						envPresent = true
+						if env.Value == "true" {
+							return true
+						}
+					}
+				}
+				return !envPresent
+			}
+			Expect(ds).ToNot(BeNil())
+			Expect(ds.Spec.Template.Spec.HostPID).To(Equal(expectedHostPID))
+			Expect(checkEnvVar(ds)).To(Equal(true))
+		}
+		testNode(operator.CollectProcessPathEnable, true)
+		testNode(operator.CollectProcessPathDisable, false)
+	})
 })
 
 func componentCount(components []render.Component) int {

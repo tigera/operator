@@ -1246,6 +1246,8 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	case operator.PluginAmazonVPC:
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "eni"})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"})
+		// Don't conflict with the AWS CNI plugin's routes.
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_ROUTETABLERANGE", Value: "31-250"})
 	case operator.PluginGKE:
 		// The GKE CNI plugin uses its own interface prefix.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "gke"})

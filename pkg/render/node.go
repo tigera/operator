@@ -75,6 +75,7 @@ func Node(
 	clusterDomain string,
 	nodeReporterMetricsPort int,
 	bgpLayoutHash string,
+	logCollector *operator.LogCollector,
 ) Component {
 	return &nodeComponent{
 		k8sServiceEp:            k8sServiceEp,
@@ -87,6 +88,7 @@ func Node(
 		clusterDomain:           clusterDomain,
 		nodeReporterMetricsPort: nodeReporterMetricsPort,
 		bgpLayoutHash:           bgpLayoutHash,
+		logCollector:            logCollector,
 	}
 }
 
@@ -105,6 +107,7 @@ type nodeComponent struct {
 	certSignReqImage        string
 	nodeReporterMetricsPort int
 	bgpLayoutHash           string
+	logCollector            *operator.LogCollector
 }
 
 func (c *nodeComponent) ResolveImages(is *operator.ImageSet) error {
@@ -667,6 +670,10 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 		ds.Spec.Template.Spec.InitContainers = append(ds.Spec.Template.Spec.InitContainers, c.cniContainer())
 	}
 
+	if c.collectProcessPathEnabled() {
+		ds.Spec.Template.Spec.HostPID = true
+	}
+
 	setCriticalPod(&(ds.Spec.Template))
 	if c.migrationNeeded {
 		migration.LimitDaemonSetToMigratedNodes(&ds)
@@ -794,6 +801,12 @@ func (c *nodeComponent) bpfDataplaneEnabled() bool {
 	return c.cr.CalicoNetwork != nil &&
 		c.cr.CalicoNetwork.LinuxDataplane != nil &&
 		*c.cr.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF
+}
+
+func (c *nodeComponent) collectProcessPathEnabled() bool {
+	return c.logCollector != nil &&
+		c.logCollector.Spec.CollectProcessPath != nil &&
+		*c.logCollector.Spec.CollectProcessPath == "Enabled"
 }
 
 // cniContainer creates the node's init container that installs CNI.
@@ -1126,6 +1139,10 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 
 	if c.bpfDataplaneEnabled() {
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_BPFENABLED", Value: "true"})
+	}
+
+	if c.collectProcessPathEnabled() {
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_FLOWLOGSCOLLECTPROCESSPATH", Value: "true"})
 	}
 
 	// Determine MTU to use. If specified explicitly, use that. Otherwise, set defaults based on an overall

@@ -140,6 +140,10 @@ spec:
                     - logTypes
                     type: object
                 type: object
+              collectProcessPath:
+                description: 'Configuration for enabling/disabling process path collection
+                  in flowlogs. Default: Enable Enum=Enable;Disable'
+                type: string
             type: object
           status:
             description: Most recently observed state for Tigera log collection.

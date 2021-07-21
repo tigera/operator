@@ -1043,6 +1043,7 @@ var _ = Describe("Node rendering tests", func() {
 			}},
 			{Name: "FELIX_INTERFACEPREFIX", Value: "eni"},
 			{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"},
+			{Name: "FELIX_ROUTETABLERANGE", Value: "31-250"},
 			{Name: "FELIX_ROUTESOURCE", Value: "WorkloadIPs"},
 			{Name: "FELIX_BPFEXTTOSERVICECONNMARK", Value: "0x80"},
 		}
@@ -1481,6 +1482,7 @@ var _ = Describe("Node rendering tests", func() {
 			}},
 			{Name: "FELIX_INTERFACEPREFIX", Value: "eni"},
 			{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"},
+			{Name: "FELIX_ROUTETABLERANGE", Value: "31-250"},
 			{Name: "FELIX_ROUTESOURCE", Value: "WorkloadIPs"},
 			{Name: "FELIX_BPFEXTTOSERVICECONNMARK", Value: "0x80"},
 		}

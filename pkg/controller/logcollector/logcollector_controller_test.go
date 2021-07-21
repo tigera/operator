@@ -136,6 +136,17 @@ var _ = Describe("LogCollector controller tests", func() {
 	})
 
 	Context("image reconciliation", func() {
+		It("should set collectprocessPath to Enabled if not set", func() {
+			logCollector := operatorv1.LogCollector{}
+			fillDefaults(&logCollector)
+			Expect(*logCollector.Spec.CollectProcessPath).To(Equal(operatorv1.CollectProcessPathEnable))
+
+			logCollector = operatorv1.LogCollector{}
+			processPath := operatorv1.CollectProcessPathDisable
+			logCollector.Spec.CollectProcessPath = &processPath
+			fillDefaults(&logCollector)
+			Expect(*logCollector.Spec.CollectProcessPath).To(Equal(operatorv1.CollectProcessPathDisable))
+		})
 		It("should use builtin images", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())

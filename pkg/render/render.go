@@ -84,6 +84,7 @@ func Calico(
 	kubeControllersMetricsPort int,
 	nodeReporterMetricsPort int,
 	bgpLayout *corev1.ConfigMap,
+	logCollector *operator.LogCollector,
 ) (Renderer, error) {
 	var cms []*corev1.ConfigMap
 	var tss []*corev1.Secret
@@ -165,6 +166,7 @@ func Calico(
 		kubeControllersMetricsPort:   kubeControllersMetricsPort,
 		nodeReporterMetricsPort:      nodeReporterMetricsPort,
 		bgpLayoutHash:                bgpLayoutHash,
+		logCollector:                 logCollector,
 	}, nil
 }
 
@@ -251,6 +253,7 @@ type calicoRenderer struct {
 	kubeControllersMetricsPort   int
 	nodeReporterMetricsPort      int
 	bgpLayoutHash                string
+	logCollector                 *operator.LogCollector
 }
 
 func (r calicoRenderer) Render() []Component {
@@ -260,7 +263,7 @@ func (r calicoRenderer) Render() []Component {
 	components = appendNotNil(components, ConfigMaps(r.configMaps))
 	components = appendNotNil(components, Secrets(r.tlsSecrets))
 	components = appendNotNil(components, Typha(r.k8sServiceEp, r.installation, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.clusterDomain))
-	components = appendNotNil(components, Node(r.k8sServiceEp, r.installation, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.nodeAppArmorProfile, r.clusterDomain, r.nodeReporterMetricsPort, r.bgpLayoutHash))
+	components = appendNotNil(components, Node(r.k8sServiceEp, r.installation, r.birdTemplates, r.typhaNodeTLS, r.amazonCloudInt, r.upgrade, r.nodeAppArmorProfile, r.clusterDomain, r.nodeReporterMetricsPort, r.bgpLayoutHash, r.logCollector))
 	components = appendNotNil(components, KubeControllers(r.k8sServiceEp, r.installation, r.logStorageExists, r.managementCluster,
 		r.managementClusterConnection, r.managerInternalTLSecret, r.elasticsearchSecret, r.kibanaSecret, r.authentication,
 		r.enableESOIDCWorkaround, r.clusterDomain, r.kubeControllersGatewaySecret, r.kubeControllersMetricsPort))

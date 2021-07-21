@@ -142,7 +142,10 @@ spec:
                 type: object
               collectProcessPath:
                 description: 'Configuration for enabling/disabling process path collection
-                  in flowlogs. Default: Enable Enum=Enable;Disable'
+                  in flowlogs. Default: Enable'
+                enum:
+                - Enabled
+                - Disabled
                 type: string
             type: object
           status:

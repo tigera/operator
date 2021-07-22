@@ -192,9 +192,11 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		monitorConfigMap, err = setDefaultConfigMap(r.client)
 
 		if err != nil {
+			r.setDegraded(reqLogger, err, "Error creating default ConfigMap.")
 			return reconcile.Result{}, err
 		}
 	} else if err != nil {
+		r.setDegraded(reqLogger, err, "Error retrieving ConfigMap.")
 		return reconcile.Result{}, err
 	}
 

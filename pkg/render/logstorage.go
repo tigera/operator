@@ -65,6 +65,7 @@ const (
 
 	ElasticsearchName                     = "tigera-secure"
 	ElasticsearchServiceName              = "tigera-secure-es-http"
+	ESGatewayServiceName                  = "tigera-secure-es-gateway-http"
 	ElasticsearchSecureSettingsSecretName = "tigera-elasticsearch-secure-settings"
 	ElasticsearchOperatorUserSecret       = "tigera-ee-operator-elasticsearch-access"
 	ElasticsearchAdminUserSecret          = "tigera-secure-es-elastic-user"
@@ -440,22 +441,8 @@ func (es elasticsearchComponent) elasticsearchExternalService() *corev1.Service 
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ElasticsearchServiceName,
+			Name:      ESGatewayServiceName,
 			Namespace: ElasticsearchNamespace,
-		},
-		Spec: corev1.ServiceSpec{
-			Type:         corev1.ServiceTypeExternalName,
-			ExternalName: fmt.Sprintf("%s.%s.svc.%s", GuardianServiceName, GuardianNamespace, es.clusterDomain),
-		},
-	}
-}
-
-func (es elasticsearchComponent) kibanaExternalService() *corev1.Service {
-	return &corev1.Service{
-		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      KibanaServiceName,
-			Namespace: KibanaNamespace,
 		},
 		Spec: corev1.ServiceSpec{
 			Type:         corev1.ServiceTypeExternalName,

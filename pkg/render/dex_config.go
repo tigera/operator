@@ -291,7 +291,7 @@ func (d *dexKeyValidatorConfig) RequiredEnv(prefix string) []corev1.EnvVar {
 		{Name: fmt.Sprintf("%sDEX_JWKS_URL", prefix), Value: fmt.Sprintf(jwksURI, d.clusterDomain)},
 		{Name: fmt.Sprintf("%sDEX_CLIENT_ID", prefix), Value: DexClientId},
 		{Name: fmt.Sprintf("%sDEX_USERNAME_CLAIM", prefix), Value: d.UsernameClaim()},
-		{Name: fmt.Sprintf("%sDEX_GROUPS_CLAIM", prefix), Value: d.GroupsClaim()},
+		{Name: fmt.Sprintf("%sDEX_GROUPS_CLAIM", prefix), Value: defaultGroupsClaim},
 		{Name: fmt.Sprintf("%sDEX_USERNAME_PREFIX", prefix), Value: d.authentication.Spec.UsernamePrefix},
 		{Name: fmt.Sprintf("%sDEX_GROUPS_PREFIX", prefix), Value: d.authentication.Spec.GroupsPrefix},
 	}
@@ -478,6 +478,10 @@ func (d *dexConfig) Connector() map[string]interface{} {
 			"userIDKey":    d.UsernameClaim(),
 			"insecureSkipEmailVerified": d.authentication.Spec.OIDC.EmailVerification != nil &&
 				*d.authentication.Spec.OIDC.EmailVerification == oprv1.EmailVerificationTypeSkip,
+			// Although the field is called insecure, it no longer is. It was first introduced without proper refreshing
+			// of the groups claim, leading to stale groups. This has been addressed in Dex v2.25, yet the field retains
+			// this name.
+			"insecureEnableGroups": true,
 		}
 		promptTypes := d.authentication.Spec.OIDC.PromptTypes
 		if promptTypes != nil {
@@ -497,6 +501,12 @@ func (d *dexConfig) Connector() map[string]interface{} {
 			}
 			// RFC specifies space delimited case sensitive list: https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest
 			config["promptType"] = strings.Join(prompts, " ")
+		}
+		groupsClaim := d.authentication.Spec.OIDC.GroupsClaim
+		if groupsClaim != "" && groupsClaim != defaultGroupsClaim {
+			config["claimMapping"] = map[string]string{
+				"groups": groupsClaim,
+			}
 		}
 
 	case connectorTypeGoogle:

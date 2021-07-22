@@ -132,7 +132,7 @@ func (e esGateway) esGatewayRole() *rbacv1.Role {
 				APIGroups:     []string{""},
 				Resources:     []string{"secrets"},
 				ResourceNames: []string{},
-				Verbs:         []string{"get"},
+				Verbs:         []string{"get", "list"},
 			},
 		},
 	}

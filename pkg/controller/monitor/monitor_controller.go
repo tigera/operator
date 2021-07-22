@@ -17,9 +17,12 @@ package monitor
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -32,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/go-logr/logr"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -39,9 +43,14 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
 var log = logf.Log.WithName("controller_monitor")
+
+const (
+	MonitorConfigMapName = "tigera-monitor"
+)
 
 func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if !opts.EnterpriseCRDExists {
@@ -64,6 +73,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		log.Error(err, "Failed to establish a connection to k8s")
 		return err
 	}
+
 	go waitToAddWatch(controller, k8sClient, log, prometheusReady)
 
 	return add(mgr, controller)
@@ -101,6 +111,10 @@ func add(mgr manager.Manager, c controller.Controller) error {
 
 	if err = imageset.AddImageSetWatch(c); err != nil {
 		return fmt.Errorf("monitor-controller failed to watch ImageSet: %w", err)
+	}
+
+	if err = utils.AddConfigMapWatch(c, MonitorConfigMapName, rmeta.OperatorNamespace()); err != nil {
+		return fmt.Errorf("monitor-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
 	return nil
@@ -171,19 +185,46 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	// reconcile configmap to configure components to be rendered
+	monitorConfigMap, err := getConfigMap(r.client)
+
+	if err != nil && errors.IsNotFound(err) {
+		monitorConfigMap, err = setDefaultConfigMap(r.client)
+
+		if err != nil {
+			r.setDegraded(reqLogger, err, "Error creating default ConfigMap.")
+			return reconcile.Result{}, err
+		}
+	} else if err != nil {
+		r.setDegraded(reqLogger, err, "Error retrieving ConfigMap.")
+		return reconcile.Result{}, err
+	}
+
 	// Create a component handler to manage the rendered component.
 	hdler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	// render prometheus components
 	component := render.Monitor(install, pullSecrets)
 
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+	// renders
+	tigeraPrometheusApi, err := render.TigeraPrometheusAPI(install, pullSecrets, monitorConfigMap)
+
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, component, tigeraPrometheusApi); err != nil {
 		r.setDegraded(reqLogger, err, "Error with images from ImageSet")
 		return reconcile.Result{}, err
 	}
 
 	if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 		r.setDegraded(reqLogger, err, "Error creating / updating resource")
+		return reconcile.Result{}, err
+	}
+
+	if err := hdler.CreateOrUpdateOrDelete(ctx, tigeraPrometheusApi, r.status); err != nil {
+		r.setDegraded(reqLogger, err, "Error creating / updating tigera-prometheus-api")
 		return reconcile.Result{}, err
 	}
 
@@ -204,4 +245,39 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func getConfigMap(client client.Client) (*corev1.ConfigMap, error) {
+	cm := &corev1.ConfigMap{}
+	cmNamespacedName := types.NamespacedName{
+		Name:      MonitorConfigMapName,
+		Namespace: rmeta.OperatorNamespace(),
+	}
+
+	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
+		return nil, err
+	}
+	return cm, nil
+}
+
+func setDefaultConfigMap(client client.Client) (*corev1.ConfigMap, error) {
+	cm := &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ConfigMap",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      MonitorConfigMapName,
+			Namespace: rmeta.OperatorNamespace(),
+		},
+		Data: map[string]string{
+			common.MonitorConfigTigeraPrometheusAPIListenPortFieldName: strconv.Itoa(common.PrometheusDefaultPort),
+		},
+	}
+
+	if err := client.Create(context.Background(), cm); err != nil {
+		return nil, err
+	}
+
+	return cm, nil
 }

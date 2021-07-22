@@ -19,7 +19,10 @@ const (
 	TyphaDeploymentName = "calico-typha"
 	NodeDaemonSetName   = "calico-node"
 
-	TigeraPrometheusNamespace = "tigera-prometheus"
+	// Monitor + Prometheus related const
+	TigeraPrometheusNamespace                           = "tigera-prometheus"
+	PrometheusDefaultPort                               = 9090
+	MonitorConfigTigeraPrometheusAPIListenPortFieldName = "tigeraPrometheusAPIListenPort"
 
 	// ComplianceFeature name
 	ComplianceFeature = "compliance-reports"

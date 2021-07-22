@@ -158,6 +158,7 @@ func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCol
 		return nil, err
 	}
 
+	fillDefaults(instance)
 	if instance.Spec.AdditionalStores != nil {
 		if instance.Spec.AdditionalStores.Syslog != nil {
 			_, _, _, err := url.ParseEndpoint(instance.Spec.AdditionalStores.Syslog.Endpoint)
@@ -168,6 +169,13 @@ func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCol
 	}
 
 	return instance, nil
+}
+
+func fillDefaults(instance *operatorv1.LogCollector) {
+	if instance.Spec.CollectProcessPath == nil {
+		collectProcessPath := v1.CollectProcessPathEnable
+		instance.Spec.CollectProcessPath = &collectProcessPath
+	}
 }
 
 // Reconcile reads that state of the cluster for a LogCollector object and makes changes based on the state read

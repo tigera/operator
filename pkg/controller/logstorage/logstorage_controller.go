@@ -869,50 +869,25 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 	// Override the Operator namespace set by utils.EnsureCertificateSecret.
 	esKeyCert.Namespace = render.ElasticsearchNamespace
 
-	// Three different certificate issuers are possible:
-	// - The operator self-signed certificate
-	// - A user's BYO keypair for Elastic (uncommon)
-	// - The issuer that is provided through the certificate management feature.
-	keyCertIssuer, err := utils.GetCertificateIssuer(esKeyCert.Data[corev1.TLSCertKey])
-	if err != nil {
-		return nil, nil, err
-	}
-	customerProvidedCert := !utils.IsOperatorIssued(keyCertIssuer)
-
-	// If Certificate management is enabled, we only want to trust the CA cert andlet the init container handle private key generation.
+	// If Certificate management is enabled, we only want to trust the CA cert and let the init container handle private key generation.
 	if instl.CertificateManagement != nil {
-		cmCa := instl.CertificateManagement.CACert
-		cmIssuer, err := utils.GetCertificateIssuer(cmCa)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		// If the issuer of the current secret is not the same as the certificate management issuer and also is not
-		// issued by the tigera-operator, it means that it is added to this cluster by the customer. This is not supported
-		// in combination with certificate management.
-		if customerProvidedCert && cmIssuer != keyCertIssuer {
-			return nil, nil, fmt.Errorf("certificate management does not support custom Elasticsearch secrets, please delete secret %s/%s or disable certificate management", esKeyCert.Namespace, esKeyCert.Name)
-		}
-
 		esKeyCert.Data[corev1.TLSCertKey] = instl.CertificateManagement.CACert
 		certSecret = render.CreateCertificateSecret(instl.CertificateManagement.CACert, relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
 	} else {
-		// Get the internal public cert secret - might be nil
+		// Get the internal public cert secret - might be nil.
 		internalSecret, err := utils.GetSecret(ctx, r.client, relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
 		if err != nil {
 			return nil, nil, err
 		}
 
 		if internalSecret != nil {
-			// If the provided certificate secret (secret) is managed by the operator we need to check if the secret that
-			// Elasticsearch creates from that given secret (pubSecret) has the expected DNS name. If it doesn't, delete the
+			// When the provided certificate secret (secret) is managed by the operator we need to check if the secret that
+			// Elasticsearch creates from that given secret (internalSecret) has the expected DNS name. If it doesn't, delete the
 			// public secret so it can get recreated.
-			if !customerProvidedCert {
-				err = utils.SecretHasExpectedDNSNames(internalSecret, corev1.TLSCertKey, svcDNSNames)
-				if err == utils.ErrInvalidCertDNSNames {
-					if err := r.deleteInvalidECKManagedPublicCertSecret(ctx, internalSecret); err != nil {
-						return nil, nil, err
-					}
+			err = utils.SecretHasExpectedDNSNames(internalSecret, corev1.TLSCertKey, svcDNSNames)
+			if err == utils.ErrInvalidCertDNSNames {
+				if err := r.deleteInvalidECKManagedPublicCertSecret(ctx, internalSecret); err != nil {
+					return nil, nil, err
 				}
 			}
 		} else {

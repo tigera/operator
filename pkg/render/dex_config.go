@@ -282,7 +282,7 @@ func (d *dexKeyValidatorConfig) RequiredEnv(prefix string) []corev1.EnvVar {
 		{Name: fmt.Sprintf("%sDEX_JWKS_URL", prefix), Value: fmt.Sprintf(jwksURI, d.clusterDomain)},
 		{Name: fmt.Sprintf("%sDEX_CLIENT_ID", prefix), Value: DexClientId},
 		{Name: fmt.Sprintf("%sDEX_USERNAME_CLAIM", prefix), Value: d.UsernameClaim()},
-		{Name: fmt.Sprintf("%sDEX_GROUPS_CLAIM", prefix), Value: d.GroupsClaim()},
+		{Name: fmt.Sprintf("%sDEX_GROUPS_CLAIM", prefix), Value: defaultGroupsClaim},
 		{Name: fmt.Sprintf("%sDEX_USERNAME_PREFIX", prefix), Value: d.authentication.Spec.UsernamePrefix},
 		{Name: fmt.Sprintf("%sDEX_GROUPS_PREFIX", prefix), Value: d.authentication.Spec.GroupsPrefix},
 	}
@@ -468,6 +468,16 @@ func (d *dexConfig) Connector() map[string]interface{} {
 		d.authentication.Spec.OIDC.EmailVerification != nil &&
 		*d.authentication.Spec.OIDC.EmailVerification == oprv1.EmailVerificationTypeSkip {
 		config["insecureSkipEmailVerified"] = true
+	}
+	if connectorType == connectorTypeOIDC {
+		config["insecureEnableGroups"] = true
+		groupsClaim := d.authentication.Spec.OIDC.GroupsClaim
+		if groupsClaim != "" && groupsClaim != defaultGroupsClaim {
+
+			config["claimMapping"] = map[string]string{
+				"groups": groupsClaim,
+			}
+		}
 	}
 
 	c := map[string]interface{}{

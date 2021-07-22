@@ -64,6 +64,11 @@ const (
 	defaultElasticsearchShards         = 1
 	defaultEckOperatorMemorySetting    = "512Mi"
 	DefaultElasticsearchStorageClass   = "tigera-elasticsearch"
+
+	// Mark any secret containing credentials for ES gateway with this label key/value. This will allow ES gateway to watch only the
+	// releveant secrets it needs.
+	ESGatewaySelectorLabel      = "esgateway.tigera.io/secrets"
+	ESGatewaySelectorLabelValue = "credentials"
 )
 
 // Add creates a new LogStorage Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -740,6 +745,9 @@ func (r *ReconcileLogStorage) createKubeControllersSecrets(ctx context.Context, 
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      render.ElasticsearchKubeControllersVerificationUserSecret,
 				Namespace: render.ElasticsearchNamespace,
+				Labels: map[string]string{
+					ESGatewaySelectorLabel: ESGatewaySelectorLabelValue,
+				},
 			},
 			Data: map[string][]byte{
 				"username": []byte(render.ElasticsearchKubeControllersUserName),
@@ -757,6 +765,9 @@ func (r *ReconcileLogStorage) createKubeControllersSecrets(ctx context.Context, 
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      render.ElasticsearchKubeControllersSecureUserSecret,
 				Namespace: render.ElasticsearchNamespace,
+				Labels: map[string]string{
+					ESGatewaySelectorLabel: ESGatewaySelectorLabelValue,
+				},
 			},
 			Data: map[string][]byte{
 				"username": []byte("elastic"),

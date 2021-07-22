@@ -52,101 +52,90 @@ var _ = Describe("LogCollector controller tests", func() {
 	var scheme *runtime.Scheme
 	var mockStatus *status.MockStatus
 
-	BeforeEach(func() {
-		// The schema contains all objects that should be known to the fake client when the test runs.
-		scheme = runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
-		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-		Expect(operatorv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
-
-		// Create a client that will have a crud interface of k8s objects.
-		c = fake.NewFakeClientWithScheme(scheme)
-		ctx = context.Background()
-
-		// Create an object we can use throughout the test to do the compliance reconcile loops.
-		mockStatus = &status.MockStatus{}
-		mockStatus.On("AddDaemonsets", mock.Anything).Return()
-		mockStatus.On("AddDeployments", mock.Anything).Return()
-		mockStatus.On("AddStatefulSets", mock.Anything).Return()
-		mockStatus.On("AddCronJobs", mock.Anything)
-		mockStatus.On("IsAvailable").Return(true)
-		mockStatus.On("OnCRFound").Return()
-		mockStatus.On("ClearDegraded")
-		mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
-		mockStatus.On("ReadyToMonitor")
-
-		// Create an object we can use throughout the test to do the compliance reconcile loops.
-		// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
-		r = ReconcileLogCollector{
-			client:          c,
-			scheme:          scheme,
-			provider:        operatorv1.ProviderNone,
-			status:          mockStatus,
-			licenseAPIReady: &utils.ReadyFlag{},
-		}
-
-		// We start off with a 'standard' installation, with nothing special
-		Expect(c.Create(
-			ctx,
-			&operatorv1.Installation{
-				ObjectMeta: metav1.ObjectMeta{Name: "default"},
-				Spec: operatorv1.InstallationSpec{
-					Variant:  operatorv1.TigeraSecureEnterprise,
-					Registry: "some.registry.org/",
-				},
-				Status: operatorv1.InstallationStatus{
-					Variant: operatorv1.TigeraSecureEnterprise,
-					Computed: &operatorv1.InstallationSpec{
-						Registry: "my-reg",
-						// The test is provider agnostic.
-						KubernetesProvider: operatorv1.ProviderNone,
-					},
-				},
-			})).NotTo(HaveOccurred())
-
-		// Create resources LogCollector depends on
-		Expect(c.Create(ctx, &operatorv1.APIServer{
-			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-			Status:     operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady},
-		})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &v3.LicenseKey{
-			ObjectMeta: metav1.ObjectMeta{Name: "default"}})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      relasticsearch.PublicCertSecret,
-				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.ElasticsearchLogCollectorUserSecret,
-				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.ElasticsearchEksLogForwarderUserSecret,
-				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-
-		// Apply the logcollector CR to the fake cluster.
-		Expect(c.Create(ctx, &operatorv1.LogCollector{
-			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
-
-		// mark that the watch for license key was successful
-		r.licenseAPIReady.MarkAsReady()
-	})
-
 	Context("image reconciliation", func() {
-		It("should set collectprocessPath to Enabled if not set", func() {
-			logCollector := operatorv1.LogCollector{}
-			fillDefaults(&logCollector)
-			Expect(*logCollector.Spec.CollectProcessPath).To(Equal(operatorv1.CollectProcessPathEnable))
+		BeforeEach(func() {
+			// The schema contains all objects that should be known to the fake client when the test runs.
+			scheme = runtime.NewScheme()
+			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			Expect(operatorv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
-			logCollector = operatorv1.LogCollector{}
-			processPath := operatorv1.CollectProcessPathDisable
-			logCollector.Spec.CollectProcessPath = &processPath
-			fillDefaults(&logCollector)
-			Expect(*logCollector.Spec.CollectProcessPath).To(Equal(operatorv1.CollectProcessPathDisable))
+			// Create a client that will have a crud interface of k8s objects.
+			c = fake.NewFakeClientWithScheme(scheme)
+			ctx = context.Background()
+
+			// Create an object we can use throughout the test to do the compliance reconcile loops.
+			mockStatus = &status.MockStatus{}
+			mockStatus.On("AddDaemonsets", mock.Anything).Return()
+			mockStatus.On("AddDeployments", mock.Anything).Return()
+			mockStatus.On("AddStatefulSets", mock.Anything).Return()
+			mockStatus.On("AddCronJobs", mock.Anything)
+			mockStatus.On("IsAvailable").Return(true)
+			mockStatus.On("OnCRFound").Return()
+			mockStatus.On("ClearDegraded")
+			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+			mockStatus.On("ReadyToMonitor")
+
+			// Create an object we can use throughout the test to do the compliance reconcile loops.
+			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
+			r = ReconcileLogCollector{
+				client:          c,
+				scheme:          scheme,
+				provider:        operatorv1.ProviderNone,
+				status:          mockStatus,
+				licenseAPIReady: &utils.ReadyFlag{},
+			}
+
+			// We start off with a 'standard' installation, with nothing special
+			Expect(c.Create(
+				ctx,
+				&operatorv1.Installation{
+					ObjectMeta: metav1.ObjectMeta{Name: "default"},
+					Spec: operatorv1.InstallationSpec{
+						Variant:  operatorv1.TigeraSecureEnterprise,
+						Registry: "some.registry.org/",
+					},
+					Status: operatorv1.InstallationStatus{
+						Variant: operatorv1.TigeraSecureEnterprise,
+						Computed: &operatorv1.InstallationSpec{
+							Registry: "my-reg",
+							// The test is provider agnostic.
+							KubernetesProvider: operatorv1.ProviderNone,
+						},
+					},
+				})).NotTo(HaveOccurred())
+
+			// Create resources LogCollector depends on
+			Expect(c.Create(ctx, &operatorv1.APIServer{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Status:     operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady},
+			})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &v3.LicenseKey{
+				ObjectMeta: metav1.ObjectMeta{Name: "default"}})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      relasticsearch.PublicCertSecret,
+					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.ElasticsearchLogCollectorUserSecret,
+					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.ElasticsearchEksLogForwarderUserSecret,
+					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
+
+			// Apply the logcollector CR to the fake cluster.
+			Expect(c.Create(ctx, &operatorv1.LogCollector{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
+
+			// mark that the watch for license key was successful
+			r.licenseAPIReady.MarkAsReady()
 		})
+
 		It("should use builtin images", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -533,4 +522,19 @@ var _ = Describe("LogCollector controller tests", func() {
 			})
 		})
 	})
+	Context("should test fillDefaults for logCollector", func() {
+		logCollector := operatorv1.LogCollector{}
+		It("CollectProcessPath should be enabled if not set", func() {
+			fillDefaults(&logCollector)
+			Expect(*logCollector.Spec.CollectProcessPath).To(Equal(operatorv1.CollectProcessPathEnable))
+		})
+		It("CollectProcessPath should not be changed if set already", func() {
+
+			processPath := operatorv1.CollectProcessPathDisable
+			logCollector.Spec.CollectProcessPath = &processPath
+			fillDefaults(&logCollector)
+			Expect(*logCollector.Spec.CollectProcessPath).To(Equal(operatorv1.CollectProcessPathDisable))
+		})
+	})
+
 })

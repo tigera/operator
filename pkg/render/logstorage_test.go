@@ -757,7 +757,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			It("creates Managed cluster logstorage components", func() {
 				expectedCreateResources := []resourceTestObj{
 					{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
-					{render.ElasticsearchServiceName, render.ElasticsearchNamespace, &corev1.Service{}, func(resource runtime.Object) {
+					{render.ESGatewayServiceName, render.ElasticsearchNamespace, &corev1.Service{}, func(resource runtime.Object) {
 						svc := resource.(*corev1.Service)
 
 						Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeExternalName))

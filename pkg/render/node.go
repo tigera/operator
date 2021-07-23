@@ -1240,6 +1240,13 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			// We also need to configure a non-default trusted DNS server, since there's no kube-dns.
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"})
 		}
+	// For AKS and EKS/CalicoCNI, we must explicitly ask felix to add host IP's to wireguard ifaces
+	case operator.ProviderAKS:
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDHOSTENCRYPTIONENABLED", Value: "true"})
+	case operator.ProviderEKS:
+		if c.cr.CNI.Type == operator.PluginCalico {
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDHOSTENCRYPTIONENABLED", Value: "true"})
+		}
 	}
 
 	switch c.cr.CNI.Type {

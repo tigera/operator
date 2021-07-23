@@ -247,6 +247,12 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 
 		Rules: []rbacv1.PolicyRule{
 			{
+				// Calico uses endpoint slices for service-based network policy rules.
+				APIGroups: []string{"discovery.k8s.io"},
+				Resources: []string{"endpointslices"},
+				Verbs:     []string{"list", "watch"},
+			},
+			{
 				// The CNI plugin needs to get pods, nodes, namespaces.
 				APIGroups: []string{""},
 				Resources: []string{"pods", "nodes", "namespaces"},

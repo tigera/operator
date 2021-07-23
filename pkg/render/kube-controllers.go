@@ -186,10 +186,10 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"watch", "list", "get"},
 			},
 			{
-				// Pods are queried to check for existence.
+				// Pods are watched to check for existence as part of IPAM GC.
 				APIGroups: []string{""},
 				Resources: []string{"pods"},
-				Verbs:     []string{"get"},
+				Verbs:     []string{"get", "list", "watch"},
 			},
 			{
 				// IPAM resources are manipulated when nodes are deleted.

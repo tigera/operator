@@ -136,6 +136,13 @@ var _ = Describe("LogCollector controller tests", func() {
 	})
 
 	Context("image reconciliation", func() {
+		It("CollectProcessPath should be enabled if not set", func() {
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			instance, err := GetLogCollector(ctx, c)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(*instance.Spec.CollectProcessPath).To(Equal(operatorv1.CollectProcessPathEnable))
+		})
 		It("should use builtin images", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())

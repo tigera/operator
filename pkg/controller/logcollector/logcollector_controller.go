@@ -170,6 +170,40 @@ func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCol
 	return instance, nil
 }
 
+func fillDefaults(instance *operatorv1.LogCollector) []string {
+	// Keep track of whether we changed the LogCollector instance during reconcile, so that we know to save it.
+	// Keep track of which fields were modified (helpful for error messages)
+	modifiedFields := []string{}
+
+	if instance.Spec.CollectProcessPath == nil {
+		collectProcessPath := v1.CollectProcessPathEnable
+		instance.Spec.CollectProcessPath = &collectProcessPath
+		modifiedFields = append(modifiedFields, "CollectProcessPath")
+	}
+	if instance.Spec.AdditionalStores != nil {
+		if instance.Spec.AdditionalStores.Syslog != nil {
+			syslog := instance.Spec.AdditionalStores.Syslog
+			// Special case: For users that have a Syslog config and are upgrading from an older release
+			//  where logTypes field did not exist, we will auto-populate default values for
+			// them. This should only happen on upgrade, since logTypes is a required field.
+			if syslog.LogTypes == nil || len(syslog.LogTypes) == 0 {
+				// Set default log types to everything except for v1.SyslogLogIDSEvents (since this
+				// option was not available prior to the logTypes field being introduced). This ensures
+				// existing users continue to get the same expected behavior for Syslog forwarding.
+				instance.Spec.AdditionalStores.Syslog.LogTypes = []v1.SyslogLogType{
+					v1.SyslogLogAudit,
+					v1.SyslogLogDNS,
+					v1.SyslogLogFlows,
+				}
+
+				// Include the field that was modified (in case we need to display error messages)
+				modifiedFields = append(modifiedFields, "AdditionalStores.Syslog.LogTypes")
+			}
+		}
+	}
+	return modifiedFields
+}
+
 // Reconcile reads that state of the cluster for a LogCollector object and makes changes based on the state read
 // and what is in the LogCollector.Spec
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
@@ -177,11 +211,6 @@ func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCol
 func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling LogCollector")
-	// Keep track of whether we changed the LogCollector instance during reconcile, so that we know to save it.
-	isModified := false
-	// Keep track of which fields were modified (helpful for error messages)
-	modifiedFields := []string{}
-
 	// Fetch the LogCollector instance
 	instance, err := GetLogCollector(ctx, r.client)
 	if err != nil {
@@ -217,6 +246,18 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 		r.status.SetDegraded("Error querying license", err.Error())
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+	modifiedFields := fillDefaults(instance)
+	// Update the LogCollector instance with any changes that have occurred.
+	if err = r.client.Patch(ctx, instance, preDefaultPatchFrom); err != nil {
+		r.status.SetDegraded(
+			fmt.Sprintf(
+				"Failed to set defaults for LogCollector fields: [%s]",
+				strings.Join(modifiedFields, ", "),
+			),
+			err.Error(),
+		)
+		return reconcile.Result{}, err
 	}
 
 	// Fetch the Installation instance. We need this for a few reasons.
@@ -339,25 +380,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 					}
 				}
 			}
-
-			// Special case: For users that have a Syslog config and are upgrading from an older release
-			//  where logTypes field did not exist, we will auto-populate default values for
-			// them. This should only happen on upgrade, since logTypes is a required field.
-			if syslog.LogTypes == nil || len(syslog.LogTypes) == 0 {
-				// Set default log types to everything except for v1.SyslogLogIDSEvents (since this
-				// option was not available prior to the logTypes field being introduced). This ensures
-				// existing users continue to get the same expected behavior for Syslog forwarding.
-				instance.Spec.AdditionalStores.Syslog.LogTypes = []v1.SyslogLogType{
-					v1.SyslogLogAudit,
-					v1.SyslogLogDNS,
-					v1.SyslogLogFlows,
-				}
-
-				// Mark LogCollector as changed so we know to save it
-				isModified = true
-				// Include the field that was modified (in case we need to display error messages)
-				modifiedFields = append(modifiedFields, "AdditionalStores.Syslog.LogTypes")
-			}
 		}
 	}
 
@@ -384,20 +406,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 					return reconcile.Result{}, err
 				}
 			}
-		}
-	}
-
-	// Update the LogCollector instance with any changes that have occurred.
-	if isModified {
-		if err = r.client.Patch(ctx, instance, preDefaultPatchFrom); err != nil {
-			r.status.SetDegraded(
-				fmt.Sprintf(
-					"Failed to set defaults for LogCollector fields: [%s]",
-					strings.Join(modifiedFields, ", "),
-				),
-				err.Error(),
-			)
-			return reconcile.Result{}, err
 		}
 	}
 

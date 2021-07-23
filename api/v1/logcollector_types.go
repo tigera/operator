@@ -31,6 +31,7 @@ type LogCollectorSpec struct {
 	AdditionalSources *AdditionalLogSourceSpec `json:"additionalSources,omitempty"`
 
 	// Configuration for enabling/disabling process path collection in flowlogs.
+	// If Enabled, this feature sets hostPID to true in order to read process cmdline.
 	// Default: Enabled
 	// +optional
 	// +kubebuilder:validation:Enum=Enabled;Disabled

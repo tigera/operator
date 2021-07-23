@@ -142,7 +142,8 @@ spec:
                 type: object
               collectProcessPath:
                 description: 'Configuration for enabling/disabling process path collection
-                  in flowlogs. Default: Enabled'
+                  in flowlogs. If Enabled, this feature sets hostPID to true in order
+                  to read process cmdline. Default: Enabled'
                 enum:
                 - Enabled
                 - Disabled

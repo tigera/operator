@@ -170,6 +170,79 @@ func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCol
 	return instance, nil
 }
 
+func (r *ReconcileLogCollector) fillDefaults(ctx context.Context, instance *operatorv1.LogCollector) (bool, []string, error) {
+	// Keep track of whether we changed the LogCollector instance during reconcile, so that we know to save it.
+	isModified := false
+	// Keep track of which fields were modified (helpful for error messages)
+	modifiedFields := []string{}
+
+	if instance.Spec.CollectProcessPath == nil {
+		collectProcessPath := v1.CollectProcessPathEnable
+		instance.Spec.CollectProcessPath = &collectProcessPath
+		isModified = true
+		modifiedFields = append(modifiedFields, "CollectProcessPath")
+	}
+	if instance.Spec.AdditionalStores != nil {
+		if instance.Spec.AdditionalStores.Syslog != nil {
+			syslog := instance.Spec.AdditionalStores.Syslog
+
+			// Try to grab the ManagementClusterConnection CR because we need it for some
+			// validation with respect to Syslog.logTypes.
+			managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
+			if err != nil {
+				// Not finding a ManagementClusterConnection CR is not an error, as only a managed cluster will
+				// have this CR available, but we should communicate any other kind of error that we encounter.
+				if !errors.IsNotFound(err) {
+					r.status.SetDegraded(
+						"An error occurred while looking for a ManagementClusterConnection",
+						err.Error(),
+					)
+					return false, nil, err
+				}
+			}
+
+			// If the user set Syslog.logTypes, we need to ensure that they did not include
+			// the v1.SyslogLogIDSEvents option if this is a managed cluster (i.e.
+			// ManagementClusterConnection CR is present). This is because IDS events
+			// are only forwarded within a non-managed cluster (where LogStorage is present).
+			if syslog.LogTypes != nil {
+				if err == nil && managementClusterConnection != nil {
+					for _, l := range syslog.LogTypes {
+						// Set status to degraded to warn user and let them fix the issue themselves.
+						if l == v1.SyslogLogIDSEvents {
+							r.status.SetDegraded(
+								"IDSEvents option is not supported for Syslog config in a managed cluster",
+								"",
+							)
+							return false, nil, err
+						}
+					}
+				}
+			}
+
+			// Special case: For users that have a Syslog config and are upgrading from an older release
+			//  where logTypes field did not exist, we will auto-populate default values for
+			// them. This should only happen on upgrade, since logTypes is a required field.
+			if syslog.LogTypes == nil || len(syslog.LogTypes) == 0 {
+				// Set default log types to everything except for v1.SyslogLogIDSEvents (since this
+				// option was not available prior to the logTypes field being introduced). This ensures
+				// existing users continue to get the same expected behavior for Syslog forwarding.
+				instance.Spec.AdditionalStores.Syslog.LogTypes = []v1.SyslogLogType{
+					v1.SyslogLogAudit,
+					v1.SyslogLogDNS,
+					v1.SyslogLogFlows,
+				}
+
+				// Mark LogCollector as changed so we know to save it
+				isModified = true
+				// Include the field that was modified (in case we need to display error messages)
+				modifiedFields = append(modifiedFields, "AdditionalStores.Syslog.LogTypes")
+			}
+		}
+	}
+	return isModified, modifiedFields, nil
+}
+
 // Reconcile reads that state of the cluster for a LogCollector object and makes changes based on the state read
 // and what is in the LogCollector.Spec
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
@@ -177,11 +250,6 @@ func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCol
 func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling LogCollector")
-	// Keep track of whether we changed the LogCollector instance during reconcile, so that we know to save it.
-	isModified := false
-	// Keep track of which fields were modified (helpful for error messages)
-	modifiedFields := []string{}
-
 	// Fetch the LogCollector instance
 	instance, err := GetLogCollector(ctx, r.client)
 	if err != nil {
@@ -218,7 +286,10 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		r.status.SetDegraded("Error querying license", err.Error())
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
-
+	isModified, modifiedFields, err := r.fillDefaults(ctx, instance)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
 	// Fetch the Installation instance. We need this for a few reasons.
 	// - We need to make sure it has successfully completed installation.
 	// - We need to get the registry information from its spec.
@@ -298,65 +369,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 				log.Info("Splunk credential secret does not exist")
 				r.status.SetDegraded("Splunk credential secret does not exist", "")
 				return reconcile.Result{}, nil
-			}
-		}
-	}
-
-	if instance.Spec.AdditionalStores != nil {
-		if instance.Spec.AdditionalStores.Syslog != nil {
-			syslog := instance.Spec.AdditionalStores.Syslog
-
-			// Try to grab the ManagementClusterConnection CR because we need it for some
-			// validation with respect to Syslog.logTypes.
-			managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
-			if err != nil {
-				// Not finding a ManagementClusterConnection CR is not an error, as only a managed cluster will
-				// have this CR available, but we should communicate any other kind of error that we encounter.
-				if !errors.IsNotFound(err) {
-					r.status.SetDegraded(
-						"An error occurred while looking for a ManagementClusterConnection",
-						err.Error(),
-					)
-					return reconcile.Result{}, err
-				}
-			}
-
-			// If the user set Syslog.logTypes, we need to ensure that they did not include
-			// the v1.SyslogLogIDSEvents option if this is a managed cluster (i.e.
-			// ManagementClusterConnection CR is present). This is because IDS events
-			// are only forwarded within a non-managed cluster (where LogStorage is present).
-			if syslog.LogTypes != nil {
-				if err == nil && managementClusterConnection != nil {
-					for _, l := range syslog.LogTypes {
-						// Set status to degraded to warn user and let them fix the issue themselves.
-						if l == v1.SyslogLogIDSEvents {
-							r.status.SetDegraded(
-								"IDSEvents option is not supported for Syslog config in a managed cluster",
-								"",
-							)
-							return reconcile.Result{}, err
-						}
-					}
-				}
-			}
-
-			// Special case: For users that have a Syslog config and are upgrading from an older release
-			//  where logTypes field did not exist, we will auto-populate default values for
-			// them. This should only happen on upgrade, since logTypes is a required field.
-			if syslog.LogTypes == nil || len(syslog.LogTypes) == 0 {
-				// Set default log types to everything except for v1.SyslogLogIDSEvents (since this
-				// option was not available prior to the logTypes field being introduced). This ensures
-				// existing users continue to get the same expected behavior for Syslog forwarding.
-				instance.Spec.AdditionalStores.Syslog.LogTypes = []v1.SyslogLogType{
-					v1.SyslogLogAudit,
-					v1.SyslogLogDNS,
-					v1.SyslogLogFlows,
-				}
-
-				// Mark LogCollector as changed so we know to save it
-				isModified = true
-				// Include the field that was modified (in case we need to display error messages)
-				modifiedFields = append(modifiedFields, "AdditionalStores.Syslog.LogTypes")
 			}
 		}
 	}

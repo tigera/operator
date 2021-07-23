@@ -139,8 +139,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		Expect(podExecRoleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      render.ManagerServiceAccount,
-				Namespace: render.ManagerNamespace,
+				Name:      render.PacketCaptureServiceAccountName,
+				Namespace: render.PacketCaptureNamespace,
 			},
 		}))
 	})

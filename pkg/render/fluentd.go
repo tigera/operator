@@ -395,8 +395,8 @@ func (c *fluentdComponent) packetCaptureApiRoleBinding() *rbacv1.RoleBinding {
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      ManagerServiceAccount,
-				Namespace: ManagerNamespace,
+				Name:      PacketCaptureServiceAccountName,
+				Namespace: PacketCaptureNamespace,
 			},
 		},
 	}

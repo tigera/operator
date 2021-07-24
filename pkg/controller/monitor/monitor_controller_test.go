@@ -23,7 +23,6 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -39,7 +38,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
 var _ = Describe("Monitor controller tests", func() {
@@ -112,7 +110,6 @@ var _ = Describe("Monitor controller tests", func() {
 			pm = &monitoringv1.PodMonitor{}
 			pr = &monitoringv1.PrometheusRule{}
 			sm = &monitoringv1.ServiceMonitor{}
-			cm = &corev1.ConfigMap{}
 		)
 
 		BeforeEach(func() {
@@ -123,7 +120,6 @@ var _ = Describe("Monitor controller tests", func() {
 			Expect(cli.Get(ctx, client.ObjectKey{Name: render.TigeraPrometheusDPRate, Namespace: common.TigeraPrometheusNamespace}, pr)).To(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: render.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: render.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
-			Expect(cli.Get(ctx, client.ObjectKey{Name: MonitorConfigMapName, Namespace: rmeta.OperatorNamespace()}, cm)).To(HaveOccurred())
 		})
 
 		It("should create Prometheus related resources", func() {
@@ -137,7 +133,6 @@ var _ = Describe("Monitor controller tests", func() {
 			Expect(cli.Get(ctx, client.ObjectKey{Name: render.TigeraPrometheusDPRate, Namespace: common.TigeraPrometheusNamespace}, pr)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: render.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: render.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
-			Expect(cli.Get(ctx, client.ObjectKey{Name: MonitorConfigMapName, Namespace: rmeta.OperatorNamespace()}, cm)).NotTo(HaveOccurred())
 		})
 	})
 })

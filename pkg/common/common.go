@@ -20,9 +20,7 @@ const (
 	NodeDaemonSetName   = "calico-node"
 
 	// Monitor + Prometheus related const
-	TigeraPrometheusNamespace                           = "tigera-prometheus"
-	PrometheusDefaultPort                               = 9090
-	MonitorConfigTigeraPrometheusAPIListenPortFieldName = "tigeraPrometheusAPIListenPort"
+	TigeraPrometheusNamespace = "tigera-prometheus"
 
 	// ComplianceFeature name
 	ComplianceFeature = "compliance-reports"

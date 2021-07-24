@@ -15,6 +15,8 @@
 package render
 
 import (
+	"context"
+	"fmt"
 	"net/url"
 	"strconv"
 
@@ -27,7 +29,9 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -43,35 +47,29 @@ const (
 	prometheusServiceListenAddrEnvVarName = "LISTEN_ADDR"
 
 	tigeraPrometheusServiceHealthEndpoint = "/health"
-)
 
-func TigeraPrometheusAPI(cr *operator.InstallationSpec, pullSecrets []*corev1.Secret, configMap *corev1.ConfigMap) (Component, error) {
-
-	tigeraPrometheusAPIListenPort := common.PrometheusDefaultPort
-
-	// defaults to
-	if configMap != nil {
-		tigeraPrometheusAPIListenPort, _ = strconv.Atoi(configMap.Data[common.MonitorConfigTigeraPrometheusAPIListenPortFieldName])
-
-	}
-
-	return &tigeraPrometheusAPIComponent{
-		installation:                cr,
-		pullSecrets:                 pullSecrets,
-		prometheusServiceListenPort: tigeraPrometheusAPIListenPort,
-	}, nil
-}
-
-type tigeraPrometheusAPIComponent struct {
-	installation *operator.InstallationSpec
-	pullSecrets  []*corev1.Secret
-	// prometheusServiceListenPort defines the port that tigera-prometheus-service
+	// tigeraPrometheusAPIListenPort defines the port that tigera-prometheus-service
 	// pod listens to and the TargetPort of calico-node-prometheus service.
 	// If not set it defaults to port 9090. In the scenario that the cluster
 	// is hosted on EKS and using Calico as it's CNI, tigera-prometheus-service
 	// will be HostNetwoked. This is configurable in the configMap passed to TigeraPrometheusAPI
-	prometheusServiceListenPort int
-	prometheusServiceImage      string
+	tigeraPrometheusAPIListenPortFieldName = "tigeraPrometheusAPIListenPort"
+)
+
+func TigeraPrometheusAPI(client client.Client, cr *operator.InstallationSpec, pullSecrets []*corev1.Secret) (Component, error) {
+
+	return &tigeraPrometheusAPIComponent{
+		client:       client,
+		installation: cr,
+		pullSecrets:  pullSecrets,
+	}, nil
+}
+
+type tigeraPrometheusAPIComponent struct {
+	client                 client.Client
+	installation           *operator.InstallationSpec
+	pullSecrets            []*corev1.Secret
+	prometheusServiceImage string
 }
 
 func (p *tigeraPrometheusAPIComponent) ResolveImages(is *operator.ImageSet) error {
@@ -99,11 +97,25 @@ func (p *tigeraPrometheusAPIComponent) Objects() (objsToCreate, objsToDelete []c
 	secrets := secret.CopyToNamespace(common.TigeraPrometheusNamespace, p.pullSecrets...)
 	namespacedObjects = append(namespacedObjects, secret.ToRuntimeObjects(secrets...)...)
 
+	tigeraPrometheusApiConfigMap, err := p.getConfigMap()
+
+	if err != nil && errors.IsNotFound(err) {
+		tigeraPrometheusApiConfigMap = p.getDefaultConfigMap()
+		namespacedObjects = append(namespacedObjects, tigeraPrometheusApiConfigMap)
+	}
+
+	configuredTigeraPrometheusApiPort, err := strconv.Atoi(tigeraPrometheusApiConfigMap.Data[tigeraPrometheusAPIListenPortFieldName])
+
+	if err != nil {
+		log.Error(err, fmt.Sprintf("incorrect listen port value for %s, defaulting to port: %d", tigeraPrometheusAPIName, PrometheusDefaultPort))
+		configuredTigeraPrometheusApiPort = PrometheusDefaultPort
+	}
+
 	namespacedObjects = append(
 		namespacedObjects,
 		p.tigeraPrometheusApiPodSecurityPolicy(),
-		p.tigeraPrometheusServiceDeployment(),
-		p.calicoNodePrometheusService(),
+		p.tigeraPrometheusAPIDeployment(configuredTigeraPrometheusApiPort),
+		p.calicoNodePrometheusService(configuredTigeraPrometheusApiPort),
 	)
 
 	objsToCreate = []client.Object{}
@@ -123,8 +135,18 @@ func (p *tigeraPrometheusAPIComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
 
+// tigeraPrometheusApiPodSecurityPolicy PSP for tigera-prometheus-api
+func (p *tigeraPrometheusAPIComponent) tigeraPrometheusApiPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	psp := podsecuritypolicy.NewBasePolicy()
+	psp.GetObjectMeta().SetName(tigeraPrometheusAPIName)
+	return psp
+}
+
 // calicoNodePrometheusService sets up a service for the Prometheus Service/Proxy deployment
-func (p *tigeraPrometheusAPIComponent) calicoNodePrometheusService() *corev1.Service {
+func (p *tigeraPrometheusAPIComponent) calicoNodePrometheusService(prometheusServiceListenPort int) *corev1.Service {
+	// Note: name (calico-node-prometheus) used in this service is matching the name that was previously being created
+	// for the prometheus instance now that we're replacing to inject a proxy in the chain and we're keeping the name
+	// the same as before for version skew compatibility
 
 	s := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
@@ -143,9 +165,9 @@ func (p *tigeraPrometheusAPIComponent) calicoNodePrometheusService() *corev1.Ser
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "web",
-					Port:       common.PrometheusDefaultPort,
+					Port:       PrometheusDefaultPort,
 					Protocol:   corev1.ProtocolTCP,
-					TargetPort: intstr.FromInt(p.prometheusServiceListenPort),
+					TargetPort: intstr.FromInt(prometheusServiceListenPort),
 				},
 			},
 		},
@@ -154,8 +176,8 @@ func (p *tigeraPrometheusAPIComponent) calicoNodePrometheusService() *corev1.Ser
 	return s
 }
 
-// tigeraPrometheusServiceDeployment deployment for the Prometheus Service/Proxy pod and image
-func (p *tigeraPrometheusAPIComponent) tigeraPrometheusServiceDeployment() *appsv1.Deployment {
+// tigeraPrometheusAPIDeployment deployment for the Prometheus Service/Proxy pod and image
+func (p *tigeraPrometheusAPIComponent) tigeraPrometheusAPIDeployment(prometheusServiceListenPort int) *appsv1.Deployment {
 	var replicas int32 = 1
 	podDnsPolicy := corev1.DNSClusterFirst
 	podHostNetworked := false
@@ -204,7 +226,7 @@ func (p *tigeraPrometheusAPIComponent) tigeraPrometheusServiceDeployment() *apps
 					NodeSelector:     p.installation.ControlPlaneNodeSelector,
 					Tolerations:      []corev1.Toleration{rmeta.TolerateMaster},
 					Containers: []corev1.Container{
-						p.prometheusServiceContainers(),
+						p.tigeraPrometheusAPIContainers(prometheusServiceListenPort),
 					},
 				},
 			},
@@ -214,19 +236,14 @@ func (p *tigeraPrometheusAPIComponent) tigeraPrometheusServiceDeployment() *apps
 	return d
 }
 
-func (p *tigeraPrometheusAPIComponent) tigeraPrometheusApiPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(tigeraPrometheusAPIName)
-	return psp
-}
-
-func (p *tigeraPrometheusAPIComponent) prometheusServiceContainers() corev1.Container {
+//
+func (p *tigeraPrometheusAPIComponent) tigeraPrometheusAPIContainers(prometheusServiceListenPort int) corev1.Container {
 	prometheusOperatedHttpUrl := url.URL{
 		Scheme: prometheusOperatedHttpServiceScheme,
-		Host:   prometheusOperatedHttpServiceHost + ":" + strconv.Itoa(common.PrometheusDefaultPort),
+		Host:   prometheusOperatedHttpServiceHost + ":" + strconv.Itoa(PrometheusDefaultPort),
 	}
 
-	prometheusServiceListenAddrValue := ":" + strconv.Itoa(p.prometheusServiceListenPort)
+	prometheusServiceListenAddrValue := ":" + strconv.Itoa(prometheusServiceListenPort)
 
 	c := corev1.Container{
 		Name:            tigeraPrometheusAPIName,
@@ -234,7 +251,7 @@ func (p *tigeraPrometheusAPIComponent) prometheusServiceContainers() corev1.Cont
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Ports: []corev1.ContainerPort{
 			{
-				ContainerPort: int32(p.prometheusServiceListenPort),
+				ContainerPort: int32(prometheusServiceListenPort),
 			},
 		},
 		Env: []corev1.EnvVar{
@@ -251,7 +268,7 @@ func (p *tigeraPrometheusAPIComponent) prometheusServiceContainers() corev1.Cont
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path: tigeraPrometheusServiceHealthEndpoint,
-					Port: intstr.FromInt(p.prometheusServiceListenPort),
+					Port: intstr.FromInt(prometheusServiceListenPort),
 				},
 			},
 		},
@@ -259,11 +276,46 @@ func (p *tigeraPrometheusAPIComponent) prometheusServiceContainers() corev1.Cont
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path: tigeraPrometheusServiceHealthEndpoint,
-					Port: intstr.FromInt(p.prometheusServiceListenPort),
+					Port: intstr.FromInt(prometheusServiceListenPort),
 				},
 			},
 		},
 	}
 
 	return c
+}
+
+// getConfigMap attemps to retrieve an existing ConfigMap for tigera-prometheus-api
+// error if not found
+func (p *tigeraPrometheusAPIComponent) getConfigMap() (*corev1.ConfigMap, error) {
+	cm := &corev1.ConfigMap{}
+	cmNamespacedName := types.NamespacedName{
+		Name:      tigeraPrometheusAPIName,
+		Namespace: rmeta.OperatorNamespace(),
+	}
+
+	if err := p.client.Get(context.Background(), cmNamespacedName, cm); err != nil {
+		return nil, err
+	}
+	return cm, nil
+}
+
+// getDefaultConfigMap returns a ConfigMap object containing default values for
+// instantiating tigera-prometheus-api component
+func (p *tigeraPrometheusAPIComponent) getDefaultConfigMap() *corev1.ConfigMap {
+	cm := &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ConfigMap",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      tigeraPrometheusAPIName,
+			Namespace: rmeta.OperatorNamespace(),
+		},
+		Data: map[string]string{
+			tigeraPrometheusAPIListenPortFieldName: strconv.Itoa(PrometheusDefaultPort),
+		},
+	}
+
+	return cm
 }

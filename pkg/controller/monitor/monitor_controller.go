@@ -32,6 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/go-logr/logr"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -64,6 +65,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		log.Error(err, "Failed to establish a connection to k8s")
 		return err
 	}
+
 	go waitToAddWatch(controller, k8sClient, log, prometheusReady)
 
 	return add(mgr, controller)
@@ -177,13 +179,25 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	// render prometheus components
 	component := render.Monitor(install, pullSecrets)
 
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+	// renders
+	tigeraPrometheusApi, err := render.TigeraPrometheusAPI(r.client, install, pullSecrets)
+
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, component, tigeraPrometheusApi); err != nil {
 		r.setDegraded(reqLogger, err, "Error with images from ImageSet")
 		return reconcile.Result{}, err
 	}
 
 	if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 		r.setDegraded(reqLogger, err, "Error creating / updating resource")
+		return reconcile.Result{}, err
+	}
+
+	if err := hdler.CreateOrUpdateOrDelete(ctx, tigeraPrometheusApi, r.status); err != nil {
+		r.setDegraded(reqLogger, err, "Error creating / updating tigera-prometheus-api")
 		return reconcile.Result{}, err
 	}
 

@@ -51,23 +51,26 @@ func Guardian(
 	openshift bool,
 	installation *operatorv1.InstallationSpec,
 	tunnelSecret *corev1.Secret,
+	packetCaptureSecret *corev1.Secret,
 ) Component {
 	return &GuardianComponent{
-		url:          url,
-		pullSecrets:  pullSecrets,
-		openshift:    openshift,
-		installation: installation,
-		tunnelSecret: tunnelSecret,
+		url:                 url,
+		pullSecrets:         pullSecrets,
+		openshift:           openshift,
+		installation:        installation,
+		tunnelSecret:        tunnelSecret,
+		packetCaptureSecret: packetCaptureSecret,
 	}
 }
 
 type GuardianComponent struct {
-	url          string
-	pullSecrets  []*v1.Secret
-	openshift    bool
-	installation *operatorv1.InstallationSpec
-	tunnelSecret *corev1.Secret
-	image        string
+	url                 string
+	pullSecrets         []*v1.Secret
+	openshift           bool
+	installation        *operatorv1.InstallationSpec
+	tunnelSecret        *corev1.Secret
+	packetCaptureSecret *corev1.Secret
+	image               string
 }
 
 func (c *GuardianComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -95,6 +98,7 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		c.deployment(),
 		c.service(),
 		secret.CopyToNamespace(GuardianNamespace, c.tunnelSecret)[0],
+		secret.CopyToNamespace(GuardianNamespace, c.packetCaptureSecret)[0],
 		// Add tigera-manager service account for impersonation
 		createNamespace(ManagerNamespace, c.installation.KubernetesProvider),
 		managerServiceAccount(),
@@ -196,6 +200,7 @@ func (c *GuardianComponent) deployment() client.Object {
 			Labels: map[string]string{
 				"k8s-app": GuardianName,
 			},
+			Annotations: c.annotations(),
 		},
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
@@ -238,6 +243,18 @@ func (c *GuardianComponent) volumes() []v1.Volume {
 				},
 			},
 		},
+		{
+			Name: PacketCaptureCertSecret,
+			VolumeSource: v1.VolumeSource{
+				Secret: &v1.SecretVolumeSource{
+					Items: []v1.KeyToPath{{
+						Key:  "tls.crt",
+						Path: "tls.crt",
+					}},
+					SecretName: PacketCaptureCertSecret,
+				},
+			},
+		},
 	}
 }
 
@@ -251,11 +268,7 @@ func (c *GuardianComponent) container() []v1.Container {
 				{Name: "GUARDIAN_LOGLEVEL", Value: "INFO"},
 				{Name: "GUARDIAN_VOLTRON_URL", Value: c.url},
 			},
-			VolumeMounts: []corev1.VolumeMount{{
-				Name:      GuardianVolumeName,
-				MountPath: "/certs/",
-				ReadOnly:  true,
-			}},
+			VolumeMounts: c.volumeMounts(),
 			LivenessProbe: &corev1.Probe{
 				Handler: corev1.Handler{
 					HTTPGet: &corev1.HTTPGetAction{
@@ -279,4 +292,27 @@ func (c *GuardianComponent) container() []v1.Container {
 			SecurityContext: podsecuritycontext.NewBaseContext(),
 		},
 	}
+}
+
+func (c *GuardianComponent) volumeMounts() []v1.VolumeMount {
+	return []corev1.VolumeMount{
+		{
+			Name:      GuardianVolumeName,
+			MountPath: "/certs/",
+			ReadOnly:  true,
+		},
+		{
+			Name:      PacketCaptureCertSecret,
+			MountPath: "/certs/packetcapture",
+			ReadOnly:  true,
+		},
+	}
+}
+
+func (c *GuardianComponent) annotations() map[string]string {
+	var annotations = make(map[string]string)
+
+	annotations[PacketCaptureTLSHashAnnotation] = rmeta.AnnotationHash(c.packetCaptureSecret.Data)
+
+	return annotations
 }

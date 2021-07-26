@@ -29,7 +29,21 @@ type LogCollectorSpec struct {
 	// Configuration for importing audit logs from managed kubernetes cluster log sources.
 	// +optional
 	AdditionalSources *AdditionalLogSourceSpec `json:"additionalSources,omitempty"`
+
+	// Configuration for enabling/disabling process path collection in flowlogs.
+	// If Enabled, this feature sets hostPID to true in order to read process cmdline.
+	// Default: Enabled
+	// +optional
+	// +kubebuilder:validation:Enum=Enabled;Disabled
+	CollectProcessPath *CollectProcessPathOption `json:"collectProcessPath,omitempty"`
 }
+
+type CollectProcessPathOption string
+
+const (
+	CollectProcessPathEnable  CollectProcessPathOption = "Enabled"
+	CollectProcessPathDisable CollectProcessPathOption = "Disabled"
+)
 
 type AdditionalLogStoreSpec struct {
 	// If specified, enables exporting of flow, audit, and DNS logs to Amazon S3 storage.

@@ -259,6 +259,12 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		if err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch FelixConfiguration resource: %w", err)
 		}
+
+		//watch for change to primary resource LogCollector
+		err = c.Watch(&source.Kind{Type: &operator.LogCollector{}}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
+		}
 	}
 
 	return nil
@@ -810,12 +816,22 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	var esLicenseType render.ElasticsearchLicenseType
 	var elasticsearchSecret *corev1.Secret
 	var kibanaSecret *corev1.Secret
+	var logCollector *operator.LogCollector
 	if r.enterpriseCRDsExist {
 		logStorageExists, err = utils.LogStorageExists(ctx, r.client)
 		if err != nil {
 			log.Error(err, "Error checking if LogStorage exists")
 			r.SetDegraded("Error checking if LogStorage exists", err, reqLogger)
 			return reconcile.Result{}, err
+		}
+
+		logCollector, err = utils.GetLogCollector(ctx, r.client)
+		if logCollector != nil {
+			if err != nil {
+				log.Error(err, "Error reading LogCollector")
+				r.status.SetDegraded("Error reading LogCollector", err.Error())
+				return reconcile.Result{}, err
+			}
 		}
 
 		managementCluster, err = utils.GetManagementCluster(ctx, r.client)
@@ -1060,6 +1076,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		kubeControllersMetricsPort,
 		nodeReporterMetricsPort,
 		bgpLayout,
+		logCollector,
 	)
 	if err != nil {
 		log.Error(err, "Error with rendering Calico")

@@ -18,12 +18,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/render/common/authentication"
-	"github.com/tigera/operator/pkg/render/common/configmap"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -31,6 +27,10 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/ptr"
+	"github.com/tigera/operator/pkg/render/common/authentication"
+	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -52,7 +52,7 @@ const (
 )
 
 type packetCaptureApiComponent struct {
-	pullSecrets        []*v1.Secret
+	pullSecrets        []*corev1.Secret
 	openshift          bool
 	installation       *operatorv1.InstallationSpec
 	image              string
@@ -62,7 +62,7 @@ type packetCaptureApiComponent struct {
 	clusterDomain      string
 }
 
-func PacketCaptureAPI(pullSecrets []*v1.Secret, openshift bool,
+func PacketCaptureAPI(pullSecrets []*corev1.Secret, openshift bool,
 	installation *operatorv1.InstallationSpec,
 	keyValidatorConfig authentication.KeyValidatorConfig,
 	serverCertSecret *corev1.Secret,
@@ -163,7 +163,7 @@ func (pc *packetCaptureApiComponent) service() *corev1.Service {
 }
 
 func (pc *packetCaptureApiComponent) serviceAccount() client.Object {
-	return &v1.ServiceAccount{
+	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: PacketCaptureServiceAccountName, Namespace: PacketCaptureNamespace},
 	}
@@ -235,7 +235,7 @@ func (pc *packetCaptureApiComponent) deployment() client.Object {
 					"k8s-app": PacketCaptureName,
 				},
 			},
-			Replicas: &replicas,
+			Replicas: ptr.Int32ToPtr(1),
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
@@ -262,7 +262,7 @@ func (pc *packetCaptureApiComponent) deployment() client.Object {
 	}
 }
 
-func (pc *packetCaptureApiComponent) initContainers() []v1.Container {
+func (pc *packetCaptureApiComponent) initContainers() []corev1.Container {
 	var initContainers []corev1.Container
 	if pc.installation.CertificateManagement != nil {
 		initContainers = append(initContainers, CreateCSRInitContainer(
@@ -284,7 +284,7 @@ func (pc *packetCaptureApiComponent) container() corev1.Container {
 		MountPath: "/certs/https",
 		ReadOnly:  true,
 	}}
-	env := []v1.EnvVar{
+	env := []corev1.EnvVar{
 		{Name: "PACKETCAPTURE_API_LOG_LEVEL", Value: "Info"},
 	}
 
@@ -304,7 +304,7 @@ func (pc *packetCaptureApiComponent) container() corev1.Container {
 	}
 }
 
-func (pc *packetCaptureApiComponent) healthProbe() *v1.Probe {
+func (pc *packetCaptureApiComponent) healthProbe() *corev1.Probe {
 	return &corev1.Probe{
 		Handler: corev1.Handler{
 			HTTPGet: &corev1.HTTPGetAction{

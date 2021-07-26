@@ -90,7 +90,7 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 	})
 
 	It("should render with default specs", func() {
-		prometheusService, err := render.TigeraPrometheusAPI(cli, installationSpec, pullSecrets)
+		prometheusService, err := render.TigeraPrometheusAPI(cli, installationSpec, pullSecrets, nil)
 
 		Expect(err).ToNot(HaveOccurred())
 		Expect(prometheusService.ResolveImages(nil)).NotTo(HaveOccurred())
@@ -167,7 +167,7 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 		monitorConfigMap.Data[tigeraPrometheusAPIListenPortFieldName] = strconv.Itoa(prometheusServicePort)
 
 		cli.Create(context.Background(), monitorConfigMap)
-		prometheusService, err := render.TigeraPrometheusAPI(cli, installationSpec, pullSecrets)
+		prometheusService, err := render.TigeraPrometheusAPI(cli, installationSpec, pullSecrets, monitorConfigMap)
 		Expect(err).ToNot(HaveOccurred())
 
 		Expect(prometheusService.ResolveImages(nil)).NotTo(HaveOccurred())
@@ -228,7 +228,7 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 	})
 
 	It("should render pods as hostnetworked and hostNet dnsPolicy", func() {
-		prometheusService, err := render.TigeraPrometheusAPI(cli, installationSpec, pullSecrets)
+		prometheusService, err := render.TigeraPrometheusAPI(cli, installationSpec, pullSecrets, nil)
 
 		Expect(err).ToNot(HaveOccurred())
 		Expect(prometheusService.ResolveImages(nil)).NotTo(HaveOccurred())
@@ -274,9 +274,4 @@ func createMonitorDefaultConfigMap() *corev1.ConfigMap {
 	}
 
 	return cm
-}
-
-func remove(s []int, i int) []int {
-	s[i] = s[len(s)-1]
-	return s[:len(s)-1]
 }

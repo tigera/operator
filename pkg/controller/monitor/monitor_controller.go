@@ -19,10 +19,12 @@ import (
 	"fmt"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -40,6 +42,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
 var log = logf.Log.WithName("controller_monitor")
@@ -173,14 +176,26 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	// checks for an existing configmap
+	tigeraPrometheusAPIConfigMap, err := r.getTigeraPrometheusAPIConfigMap()
+
+	if err != nil {
+		if errors.IsNotFound(err) {
+			log.Info("No ConfigMap found, a default one will be created.")
+		} else {
+			r.setDegraded(reqLogger, err, "Internal error attempting to retrieve ConfigMap")
+			return reconcile.Result{}, err
+		}
+	}
+
 	// Create a component handler to manage the rendered component.
 	hdler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	// render prometheus components
 	component := render.Monitor(install, pullSecrets)
 
-	// renders
-	tigeraPrometheusApi, err := render.TigeraPrometheusAPI(r.client, install, pullSecrets)
+	// renders tigera prometheus api
+	tigeraPrometheusApi, err := render.TigeraPrometheusAPI(r.client, install, pullSecrets, tigeraPrometheusAPIConfigMap)
 
 	if err != nil {
 		return reconcile.Result{}, err
@@ -218,4 +233,18 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	return reconcile.Result{}, nil
+}
+
+// getTigeraPrometheusAPIConfigMap attemps to retrieve an existing ConfigMap for tigera-prometheus-api
+func (r *ReconcileMonitor) getTigeraPrometheusAPIConfigMap() (*corev1.ConfigMap, error) {
+	cm := &corev1.ConfigMap{}
+	cmNamespacedName := types.NamespacedName{
+		Name:      render.TigeraPrometheusAPIName,
+		Namespace: rmeta.OperatorNamespace(),
+	}
+
+	if err := r.client.Get(context.Background(), cmNamespacedName, cm); err != nil {
+		return nil, err
+	}
+	return cm, nil
 }

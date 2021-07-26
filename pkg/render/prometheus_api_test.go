@@ -15,13 +15,10 @@
 package render_test
 
 import (
-	"context"
 	"strconv"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -31,7 +28,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 )
 
 const (
@@ -49,8 +45,6 @@ const (
 
 var _ = Describe("Prometheus Service rendering tests", func() {
 
-	var cli client.Client
-	var scheme *runtime.Scheme
 	var installationSpec *operatorv1.InstallationSpec
 	var pullSecrets []*corev1.Secret
 
@@ -65,7 +59,6 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 
 	BeforeEach(func() {
 		installationSpec = &operatorv1.InstallationSpec{}
-		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
 
 		pullSecrets = []*corev1.Secret{
 			{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
@@ -90,7 +83,7 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 	})
 
 	It("should render with default specs", func() {
-		prometheusService, err := render.TigeraPrometheusAPI(cli, installationSpec, pullSecrets, nil)
+		prometheusService, err := render.TigeraPrometheusAPI(installationSpec, pullSecrets, nil)
 
 		Expect(err).ToNot(HaveOccurred())
 		Expect(prometheusService.ResolveImages(nil)).NotTo(HaveOccurred())
@@ -166,8 +159,7 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 		prometheusServicePort := 8090
 		monitorConfigMap.Data[tigeraPrometheusAPIListenPortFieldName] = strconv.Itoa(prometheusServicePort)
 
-		cli.Create(context.Background(), monitorConfigMap)
-		prometheusService, err := render.TigeraPrometheusAPI(cli, installationSpec, pullSecrets, monitorConfigMap)
+		prometheusService, err := render.TigeraPrometheusAPI(installationSpec, pullSecrets, monitorConfigMap)
 		Expect(err).ToNot(HaveOccurred())
 
 		Expect(prometheusService.ResolveImages(nil)).NotTo(HaveOccurred())
@@ -228,7 +220,7 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 	})
 
 	It("should render pods as hostnetworked and hostNet dnsPolicy", func() {
-		prometheusService, err := render.TigeraPrometheusAPI(cli, installationSpec, pullSecrets, nil)
+		prometheusService, err := render.TigeraPrometheusAPI(installationSpec, pullSecrets, nil)
 
 		Expect(err).ToNot(HaveOccurred())
 		Expect(prometheusService.ResolveImages(nil)).NotTo(HaveOccurred())

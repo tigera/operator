@@ -53,11 +53,10 @@ const (
 	tigeraPrometheusAPIListenPortFieldName = "tigeraPrometheusAPIListenPort"
 )
 
-func TigeraPrometheusAPI(client client.Client, cr *operator.InstallationSpec, pullSecrets []*corev1.Secret, configMap *corev1.ConfigMap) (Component, error) {
+func TigeraPrometheusAPI(cr *operator.InstallationSpec, pullSecrets []*corev1.Secret, configMap *corev1.ConfigMap) (Component, error) {
 
 	return &tigeraPrometheusAPIComponent{
 		configMap:    configMap,
-		client:       client,
 		installation: cr,
 		pullSecrets:  pullSecrets,
 	}, nil
@@ -65,7 +64,6 @@ func TigeraPrometheusAPI(client client.Client, cr *operator.InstallationSpec, pu
 
 type tigeraPrometheusAPIComponent struct {
 	configMap              *corev1.ConfigMap
-	client                 client.Client
 	installation           *operator.InstallationSpec
 	pullSecrets            []*corev1.Secret
 	prometheusServiceImage string

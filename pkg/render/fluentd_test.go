@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -139,8 +139,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		Expect(podExecRoleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      render.ManagerServiceAccount,
-				Namespace: render.ManagerNamespace,
+				Name:      render.PacketCaptureServiceAccountName,
+				Namespace: render.PacketCaptureNamespace,
 			},
 		}))
 	})

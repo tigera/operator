@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -91,6 +91,11 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, render.GuardianSecretName, err)
 	}
 
+	// Watch for changes to the secrets associated with the PacketCapture APIs.
+	if err = utils.AddSecretsWatch(c, render.PacketCaptureCertSecret, rmeta.OperatorNamespace()); err != nil {
+		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, render.PacketCaptureCertSecret, err)
+	}
+
 	if err = utils.AddNetworkWatch(c); err != nil {
 		return fmt.Errorf("%s failed to watch Network resource: %w", controllerName, err)
 	}
@@ -165,11 +170,28 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	tunnelSecret := &corev1.Secret{}
 	err = r.Client.Get(ctx, types.NamespacedName{Name: render.GuardianSecretName, Namespace: rmeta.OperatorNamespace()}, tunnelSecret)
 	if err != nil {
-		r.status.SetDegraded("Error copying secrets to the guardian namespace", err.Error())
+		r.status.SetDegraded("Error retrieving secrets to the guardian namespace", err.Error())
 		if !k8serrors.IsNotFound(err) {
 			return result, nil
 		}
 		return result, err
+	}
+
+	var packetCaptureServerCertSecret *corev1.Secret
+	packetCaptureServerCertSecret, err = utils.ValidateCertPair(r.Client,
+		rmeta.OperatorNamespace(),
+		render.PacketCaptureCertSecret,
+		"", // We don't need the key.
+		corev1.TLSCertKey,
+	)
+	if err != nil {
+		reqLogger.Error(err, fmt.Sprintf("failed to retrieve %s", render.PacketCaptureCertSecret))
+		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s", render.PacketCaptureCertSecret), err.Error())
+		return reconcile.Result{}, err
+	} else if packetCaptureServerCertSecret == nil {
+		reqLogger.Info(fmt.Sprintf("Waiting for secret '%s' to become available", render.PacketCaptureCertSecret))
+		r.status.SetDegraded(fmt.Sprintf("Waiting for secret '%s' to become available", render.PacketCaptureCertSecret), "")
+		return reconcile.Result{}, nil
 	}
 
 	ch := utils.NewComponentHandler(log, r.Client, r.Scheme, managementClusterConnection)
@@ -179,6 +201,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		r.Provider == operatorv1.ProviderOpenShift,
 		instl,
 		tunnelSecret,
+		packetCaptureServerCertSecret,
 	)
 
 	if err = imageset.ApplyImageSet(ctx, r.Client, variant, component); err != nil {

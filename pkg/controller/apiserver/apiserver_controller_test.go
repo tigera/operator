@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -132,6 +132,28 @@ var _ = Describe("apiserver controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentCSRInitContainer.Image,
 					components.ComponentCSRInitContainer.Version)))
+
+			pcDeployment := appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.PacketCaptureName,
+					Namespace: render.PacketCaptureNamespace,
+				},
+			}
+			Expect(test.GetResource(cli, &pcDeployment)).To(BeNil())
+			Expect(pcDeployment.Spec.Template.Spec.Containers).To(HaveLen(1))
+			pcContainer := test.GetContainer(pcDeployment.Spec.Template.Spec.Containers, render.PacketCaptureContainerName)
+			Expect(pcContainer).ToNot(BeNil())
+			Expect(pcContainer.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentPacketCapture.Image,
+					components.ComponentPacketCapture.Version)))
+			csrinitContainer := test.GetContainer(pcDeployment.Spec.Template.Spec.InitContainers, render.CSRInitContainerName)
+			Expect(csrinitContainer).ToNot(BeNil())
+			Expect(csrinitContainer.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentCSRInitContainer.Image,
+					components.ComponentCSRInitContainer.Version)))
 		})
 		It("should use images from imageset", func() {
 			Expect(cli.Create(ctx, &operatorv1.ImageSet{
@@ -141,6 +163,7 @@ var _ = Describe("apiserver controller tests", func() {
 						{Image: "tigera/cnx-apiserver", Digest: "sha256:apiserverhash"},
 						{Image: "tigera/cnx-queryserver", Digest: "sha256:queryserverhash"},
 						{Image: "tigera/key-cert-provisioner", Digest: "sha256:calicocsrinithash"},
+						{Image: "tigera/packetcapture-api", Digest: "sha256:packetcapturehash"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -178,6 +201,28 @@ var _ = Describe("apiserver controller tests", func() {
 			csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, render.CSRInitContainerName)
 			Expect(csrinit).ToNot(BeNil())
 			Expect(csrinit.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentCSRInitContainer.Image,
+					"sha256:calicocsrinithash")))
+
+			pcDeployment := appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.PacketCaptureName,
+					Namespace: render.PacketCaptureNamespace,
+				},
+			}
+			Expect(test.GetResource(cli, &pcDeployment)).To(BeNil())
+			Expect(pcDeployment.Spec.Template.Spec.Containers).To(HaveLen(1))
+			pcContainer := test.GetContainer(pcDeployment.Spec.Template.Spec.Containers, render.PacketCaptureContainerName)
+			Expect(pcContainer).ToNot(BeNil())
+			Expect(pcContainer.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentPacketCapture.Image,
+					"sha256:packetcapturehash")))
+			csrinitContainer := test.GetContainer(pcDeployment.Spec.Template.Spec.InitContainers, render.CSRInitContainerName)
+			Expect(csrinitContainer).ToNot(BeNil())
+			Expect(csrinitContainer.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentCSRInitContainer.Image,
 					"sha256:calicocsrinithash")))

@@ -218,8 +218,8 @@ func addResources(install *operatorv1.Installation, compName operatorv1.Componen
 // since Operator does not support setting custom annotations on components, these annotations
 // would otherwise be dropped.
 func handleAnnotations(c *components, _ *operatorv1.Installation) error {
-	kubectlGenerated := []string{"^kubectl\\.kubernetes\\.io"}
-	if a := removeExpectedAnnotations(c.node.Annotations, map[string]string{}, kubectlGenerated); len(a) != 0 {
+	ignoredAnnotationKeyRegExps := []string{"^kubectl\\.kubernetes\\.io"}
+	if a := removeExpectedAnnotations(c.node.Annotations, map[string]string{}, ignoredAnnotationKeyRegExps); len(a) != 0 {
 		return ErrIncompatibleAnnotation(a, ComponentCalicoNode)
 	}
 
@@ -229,26 +229,26 @@ func handleAnnotations(c *components, _ *operatorv1.Installation) error {
 	// we ignore it.
 	if a := removeExpectedAnnotations(c.node.Spec.Template.Annotations, map[string]string{
 		"cluster-autoscaler.kubernetes.io/daemonset-pod": "true",
-	}, kubectlGenerated); len(a) != 0 {
+	}, ignoredAnnotationKeyRegExps); len(a) != 0 {
 		return ErrIncompatibleAnnotation(a, ComponentCalicoNode+" podTemplateSpec")
 	}
 
 	if c.kubeControllers != nil {
-		if a := removeExpectedAnnotations(c.kubeControllers.Annotations, map[string]string{}, kubectlGenerated); len(a) != 0 {
+		if a := removeExpectedAnnotations(c.kubeControllers.Annotations, map[string]string{}, ignoredAnnotationKeyRegExps); len(a) != 0 {
 			return ErrIncompatibleAnnotation(a, ComponentKubeControllers)
 		}
-		if a := removeExpectedAnnotations(c.kubeControllers.Spec.Template.Annotations, map[string]string{}, kubectlGenerated); len(a) != 0 {
+		if a := removeExpectedAnnotations(c.kubeControllers.Spec.Template.Annotations, map[string]string{}, ignoredAnnotationKeyRegExps); len(a) != 0 {
 			return ErrIncompatibleAnnotation(a, ComponentKubeControllers+" podTemplateSpec")
 		}
 	}
 
 	if c.typha != nil {
-		if a := removeExpectedAnnotations(c.typha.Annotations, map[string]string{}, kubectlGenerated); len(a) != 0 {
+		if a := removeExpectedAnnotations(c.typha.Annotations, map[string]string{}, ignoredAnnotationKeyRegExps); len(a) != 0 {
 			return ErrIncompatibleAnnotation(a, ComponentTypha)
 		}
 		if a := removeExpectedAnnotations(c.typha.Spec.Template.Annotations, map[string]string{
 			"cluster-autoscaler.kubernetes.io/safe-to-evict": "true",
-		}, kubectlGenerated); len(a) != 0 {
+		}, ignoredAnnotationKeyRegExps); len(a) != 0 {
 			return ErrIncompatibleAnnotation(a, ComponentTypha+" podTemplateSpec")
 		}
 	}
@@ -279,6 +279,7 @@ func removeExpectedAnnotations(existing, ignoreWithValue map[string]string, igno
 
 		if v, ok := ignoreWithValue[key]; ok && v == val {
 			delete(a, key)
+			continue
 		}
 
 		for _, annotationKeyRegexp := range annotationKeyRegexps {

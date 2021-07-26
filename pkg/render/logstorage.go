@@ -495,10 +495,31 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		if es.kbService != nil && es.kbService.Spec.Type == corev1.ServiceTypeExternalName {
 			toDelete = append(toDelete, es.kbService)
 		}
+
+		if es.kubeControllersGatewaySecret != nil && es.elasticsearchPublicCertSecret != nil {
+			toCreate = append(toCreate,
+				es.kubeControllersServiceAccount(),
+				es.kubeControllersRole(),
+				es.kubeControllersRoleBinding(),
+				es.kubeControllersDeployment(),
+			)
+
+			if es.managerInternalSecret != nil {
+				toCreate = append(toCreate, secret.ToRuntimeObjects(
+					secret.CopyToNamespace(ElasticsearchNamespace, es.managerInternalSecret)...)...)
+			}
+
+			if es.installation.KubernetesProvider != operatorv1.ProviderOpenShift {
+				toCreate = append(toCreate, es.kubeControllersPodSecurityPolicy())
+			}
+		}
 	} else {
 		toCreate = append(toCreate,
 			CreateNamespace(ElasticsearchNamespace, es.installation.KubernetesProvider),
 			es.elasticsearchExternalService(),
+			es.kubeControllersServiceAccount(),
+			es.kubeControllersRole(),
+			es.kubeControllersRoleBinding(),
 		)
 	}
 
@@ -509,24 +530,6 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 	if es.installation.CertificateManagement != nil {
 		toCreate = append(toCreate, CSRClusterRoleBinding("tigera-elasticsearch", ElasticsearchNamespace))
 		toCreate = append(toCreate, CSRClusterRoleBinding("tigera-kibana", KibanaNamespace))
-	}
-
-	if es.logStorage != nil && es.kubeControllersGatewaySecret != nil && es.elasticsearchPublicCertSecret != nil {
-		toCreate = append(toCreate,
-			es.kubeControllersServiceAccount(),
-			es.kubeControllersRole(),
-			es.kubeControllersRoleBinding(),
-			es.kubeControllersDeployment(),
-		)
-
-		if es.managerInternalSecret != nil {
-			toCreate = append(toCreate, secret.ToRuntimeObjects(
-				secret.CopyToNamespace(ElasticsearchNamespace, es.managerInternalSecret)...)...)
-		}
-
-		if es.installation.KubernetesProvider != operatorv1.ProviderOpenShift {
-			toCreate = append(toCreate, es.kubeControllersPodSecurityPolicy())
-		}
 	}
 
 	return toCreate, toDelete
@@ -1774,7 +1777,28 @@ func (es elasticsearchComponent) kubeControllersRole() *rbacv1.ClusterRole {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: EsKubeControllerRole,
 		},
-		Rules: []rbacv1.PolicyRule{
+	}
+
+	if es.managementClusterConnection != nil {
+		role.Rules = []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"licensekeys"},
+				Verbs:     []string{"get", "create", "update", "list", "watch"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"get", "create", "update", "list", "watch"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"get", "create", "update", "list", "watch"},
+			},
+		}
+	} else {
+		role.Rules = []rbacv1.PolicyRule{
 			{
 				// Nodes are watched to monitor for deletions.
 				APIGroups: []string{""},
@@ -1860,26 +1884,18 @@ func (es elasticsearchComponent) kubeControllersRole() *rbacv1.ClusterRole {
 				Resources: []string{"managedclusters"},
 				Verbs:     []string{"watch", "list", "get"},
 			},
-		},
-	}
+		}
 
-	if es.managementCluster != nil {
-		// For cross-cluster requests an authentication review will be done for authenticating the kube-controllers.
-		// Requests on behalf of the kube-controllers will be sent to Voltron, where an authentication review will
-		// take place with its bearer token.
-		role.Rules = append(role.Rules, rbacv1.PolicyRule{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"authenticationreviews"},
-			Verbs:     []string{"create"},
-		})
-	}
-
-	if es.managementClusterConnection != nil {
-		role.Rules = append(role.Rules, rbacv1.PolicyRule{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"licensekeys"},
-			Verbs:     []string{"create", "update"},
-		})
+		if es.managementCluster != nil {
+			// For cross-cluster requests an authentication review will be done for authenticating the kube-controllers.
+			// Requests on behalf of the kube-controllers will be sent to Voltron, where an authentication review will
+			// take place with its bearer token.
+			role.Rules = append(role.Rules, rbacv1.PolicyRule{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"authenticationreviews"},
+				Verbs:     []string{"create"},
+			})
+		}
 	}
 
 	if es.installation.KubernetesProvider != operatorv1.ProviderOpenShift {

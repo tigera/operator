@@ -19,10 +19,12 @@ import (
 	"fmt"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -32,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/go-logr/logr"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -39,6 +42,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
 var log = logf.Log.WithName("controller_monitor")
@@ -64,6 +68,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		log.Error(err, "Failed to establish a connection to k8s")
 		return err
 	}
+
 	go waitToAddWatch(controller, k8sClient, log, prometheusReady)
 
 	return add(mgr, controller)
@@ -171,19 +176,43 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	// checks for an existing configmap
+	tigeraPrometheusAPIConfigMap, err := r.getTigeraPrometheusAPIConfigMap()
+
+	if err != nil {
+		if errors.IsNotFound(err) {
+			log.Info("No ConfigMap found, a default one will be created.")
+		} else {
+			r.setDegraded(reqLogger, err, "Internal error attempting to retrieve ConfigMap")
+			return reconcile.Result{}, err
+		}
+	}
+
 	// Create a component handler to manage the rendered component.
 	hdler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	// render prometheus components
 	component := render.Monitor(install, pullSecrets)
 
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+	// renders tigera prometheus api
+	tigeraPrometheusApi, err := render.TigeraPrometheusAPI(r.client, install, pullSecrets, tigeraPrometheusAPIConfigMap)
+
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, component, tigeraPrometheusApi); err != nil {
 		r.setDegraded(reqLogger, err, "Error with images from ImageSet")
 		return reconcile.Result{}, err
 	}
 
 	if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 		r.setDegraded(reqLogger, err, "Error creating / updating resource")
+		return reconcile.Result{}, err
+	}
+
+	if err := hdler.CreateOrUpdateOrDelete(ctx, tigeraPrometheusApi, r.status); err != nil {
+		r.setDegraded(reqLogger, err, "Error creating / updating tigera-prometheus-api")
 		return reconcile.Result{}, err
 	}
 
@@ -204,4 +233,18 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	return reconcile.Result{}, nil
+}
+
+// getTigeraPrometheusAPIConfigMap attemps to retrieve an existing ConfigMap for tigera-prometheus-api
+func (r *ReconcileMonitor) getTigeraPrometheusAPIConfigMap() (*corev1.ConfigMap, error) {
+	cm := &corev1.ConfigMap{}
+	cmNamespacedName := types.NamespacedName{
+		Name:      render.TigeraPrometheusAPIName,
+		Namespace: rmeta.OperatorNamespace(),
+	}
+
+	if err := r.client.Get(context.Background(), cmNamespacedName, cm); err != nil {
+		return nil, err
+	}
+	return cm, nil
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -46,6 +46,17 @@ var _ = Describe("Rendering tests", func() {
 				"key":  []byte("bar"),
 			},
 		}
+		packetCaptureSecret := &corev1.Secret{
+			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      render.PacketCaptureCertSecret,
+				Namespace: rmeta.OperatorNamespace(),
+			},
+			Data: map[string][]byte{
+				"tls.crt": []byte("foo"),
+				"tls.key": []byte("bar"),
+			},
+		}
 		g = render.Guardian(
 			addr,
 			[]*corev1.Secret{{
@@ -58,6 +69,7 @@ var _ = Describe("Rendering tests", func() {
 			false,
 			&i,
 			secret,
+			packetCaptureSecret,
 		)
 		Expect(g.ResolveImages(nil)).To(BeNil())
 		resources, _ = g.Objects()
@@ -84,6 +96,7 @@ var _ = Describe("Rendering tests", func() {
 			{name: render.GuardianDeploymentName, ns: render.GuardianNamespace, group: "apps", version: "v1", kind: "Deployment"},
 			{name: render.GuardianServiceName, ns: render.GuardianNamespace, group: "", version: "", kind: ""},
 			{name: render.GuardianSecretName, ns: render.GuardianNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: render.PacketCaptureCertSecret, ns: render.GuardianNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: render.ManagerNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: render.ManagerServiceAccount, ns: render.ManagerNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: render.ManagerClusterRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},

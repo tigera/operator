@@ -130,7 +130,6 @@ func (r *ReconcileMonitor) getMonitor(ctx context.Context) (*operatorv1.Monitor,
 func (r *ReconcileMonitor) setDegraded(reqLogger logr.Logger, err error, msg string) {
 	reqLogger.Error(err, msg)
 	r.status.SetDegraded(msg, err.Error())
-
 }
 
 func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -167,7 +166,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 
 	if !r.prometheusReady.IsReady() {
 		err = fmt.Errorf("waiting for Prometheus resources")
-		r.setDegraded(reqLogger, err, "Waiting for Prometheus resources to be ready")
+		r.setDegraded(reqLogger, err, "waiting for Prometheus resources to be ready")
 		return reconcile.Result{}, err
 	}
 

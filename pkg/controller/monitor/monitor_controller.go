@@ -195,7 +195,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	component := render.Monitor(install, pullSecrets)
 
 	// renders tigera prometheus api
-	tigeraPrometheusApi, err := render.TigeraPrometheusAPI(r.client, install, pullSecrets, tigeraPrometheusAPIConfigMap)
+	tigeraPrometheusApi, err := render.TigeraPrometheusAPI(install, pullSecrets, tigeraPrometheusAPIConfigMap)
 
 	if err != nil {
 		return reconcile.Result{}, err

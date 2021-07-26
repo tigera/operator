@@ -19,6 +19,7 @@ const (
 	TyphaDeploymentName = "calico-typha"
 	NodeDaemonSetName   = "calico-node"
 
+	// Monitor + Prometheus related const
 	TigeraPrometheusNamespace = "tigera-prometheus"
 
 	// ComplianceFeature name

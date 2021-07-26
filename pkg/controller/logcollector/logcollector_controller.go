@@ -170,6 +170,8 @@ func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCol
 	return instance, nil
 }
 
+// fillDefaults sets the default value of CollectProcessPath, syslog LogTypes, if not set.
+// This function returns the fields which were set to a default value in the logcollector instance.
 func fillDefaults(instance *operatorv1.LogCollector) []string {
 	// Keep track of whether we changed the LogCollector instance during reconcile, so that we know to save it.
 	// Keep track of which fields were modified (helpful for error messages)

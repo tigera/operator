@@ -170,7 +170,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	tunnelSecret := &corev1.Secret{}
 	err = r.Client.Get(ctx, types.NamespacedName{Name: render.GuardianSecretName, Namespace: rmeta.OperatorNamespace()}, tunnelSecret)
 	if err != nil {
-		r.status.SetDegraded("Error retrieving secrets to the guardian namespace", err.Error())
+		r.status.SetDegraded("Error retrieving secrets from guardian namespace", err.Error())
 		if !k8serrors.IsNotFound(err) {
 			return result, nil
 		}

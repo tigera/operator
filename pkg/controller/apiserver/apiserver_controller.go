@@ -302,9 +302,9 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 	if variant == operatorv1.TigeraSecureEnterprise {
 
-		var serverCertSecret *v1.Secret
+		var packetCaptureCertSecret *v1.Secret
 		if network.CertificateManagement == nil {
-			serverCertSecret, err = utils.ValidateCertPair(r.client,
+			packetCaptureCertSecret, err = utils.ValidateCertPair(r.client,
 				rmeta.OperatorNamespace(),
 				render.PacketCaptureCertSecret,
 				v1.TLSPrivateKeyKey,
@@ -312,7 +312,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			)
 			if err != nil {
 				log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", render.PacketCaptureCertSecret))
-				r.status.SetDegraded(fmt.Sprintf("failed to retrieve / validate  %s", render.PacketCaptureCertSecret), err.Error())
+				r.status.SetDegraded(fmt.Sprintf("Failed to retrieve / validate  %s", render.PacketCaptureCertSecret), err.Error())
 				return reconcile.Result{}, err
 			}
 
@@ -321,15 +321,15 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			// operator, the cert is recreated and returned. If the invalid cert is supplied by
 			// the user, set the component degraded.
 
-			serverCertSecret, err = utils.EnsureCertificateSecret(
-				render.PacketCaptureCertSecret, serverCertSecret, v1.TLSPrivateKeyKey, v1.TLSCertKey, rmeta.DefaultCertificateDuration, dns.GetServiceDNSNames(render.PacketCaptureServiceName, render.PacketCaptureNamespace, r.clusterDomain)...,
+			packetCaptureCertSecret, err = utils.EnsureCertificateSecret(
+				render.PacketCaptureCertSecret, packetCaptureCertSecret, v1.TLSPrivateKeyKey, v1.TLSCertKey, rmeta.DefaultCertificateDuration, dns.GetServiceDNSNames(render.PacketCaptureServiceName, render.PacketCaptureNamespace, r.clusterDomain)...,
 			)
 			if err != nil {
 				r.status.SetDegraded(fmt.Sprintf("Error ensuring packetcapture-api TLS certificate %q exists and has valid DNS names", render.PacketCaptureCertSecret), err.Error())
 				return reconcile.Result{}, err
 			}
 		} else {
-			serverCertSecret = render.CreateCertificateSecret(network.CertificateManagement.CACert, render.PacketCaptureCertSecret, rmeta.OperatorNamespace())
+			packetCaptureCertSecret = render.CreateCertificateSecret(network.CertificateManagement.CACert, render.PacketCaptureCertSecret, rmeta.OperatorNamespace())
 		}
 
 		// Fetch the Authentication spec. If present, we use to configure user authentication.
@@ -346,7 +346,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			return reconcile.Result{}, err
 		}
 
-		var pc = render.PacketCaptureAPI(pullSecrets, r.provider == operatorv1.ProviderOpenShift, network, keyValidatorConfig, serverCertSecret, r.clusterDomain)
+		var pc = render.PacketCaptureAPI(pullSecrets, r.provider == operatorv1.ProviderOpenShift, network, keyValidatorConfig, packetCaptureCertSecret, r.clusterDomain)
 		components = append(components, pc)
 	}
 

@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -37,12 +38,14 @@ import (
 const (
 	MonitoringAPIVersion = "monitoring.coreos.com/v1"
 
-	CalicoNodeAlertmanager = "calico-node-alertmanager"
-	CalicoNodeMonitor      = "calico-node-monitor"
-	CalicoNodePrometheus   = "calico-node-prometheus"
-	ElasticsearchMetrics   = "elasticearch-metrics"
-	FluentdMetrics         = "fluentd-metrics"
-	TigeraPrometheusDPRate = "tigera-prometheus-dp-rate"
+	CalicoNodeAlertmanager      = "calico-node-alertmanager"
+	CalicoNodeMonitor           = "calico-node-monitor"
+	CalicoNodePrometheus        = "calico-node-prometheus"
+	ElasticsearchMetrics        = "elasticearch-metrics"
+	FluentdMetrics              = "fluentd-metrics"
+	TigeraPrometheusDPRate      = "tigera-prometheus-dp-rate"
+	TigeraPrometheusRole        = "tigera-prometheus-role"
+	TigeraPrometheusRoleBinding = "tigera-prometheus-role-binding"
 )
 
 func Monitor(
@@ -97,6 +100,8 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.pullSecrets...)...)...)
 
 	objs = append(objs,
+		mc.role(),
+		mc.roleBinding(),
 		mc.alertmanager(),
 		mc.prometheus(),
 		mc.prometheusRule(),
@@ -264,6 +269,61 @@ func (mc *monitorComponent) serviceMonitorElasicsearch() *monitoringv1.ServiceMo
 					Port:          "metrics-port",
 					ScrapeTimeout: "5s",
 				},
+			},
+		},
+	}
+}
+
+func (mc *monitorComponent) role() *rbacv1.Role {
+	// list and watch have to be cluster scopes for watches to work.
+	// In controller-runtime, watches are by default non-namespaced.
+	return &rbacv1.Role{
+		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      TigeraPrometheusRole,
+			Namespace: common.TigeraPrometheusNamespace,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"monitoring.coreos.com"},
+				Resources: []string{
+					"alertmanagers",
+					"podmonitors",
+					"prometheuses",
+					"prometheusrules",
+					"servicemonitors",
+					"thanosrulers",
+				},
+				Verbs: []string{
+					"create",
+					"delete",
+					"get",
+					"list",
+					"update",
+					"watch",
+				},
+			},
+		},
+	}
+}
+
+func (mc *monitorComponent) roleBinding() *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      TigeraPrometheusRoleBinding,
+			Namespace: common.TigeraPrometheusNamespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     TigeraPrometheusRole,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "tigera-operator",
+				Namespace: rmeta.OperatorNamespace(),
 			},
 		},
 	}

@@ -89,6 +89,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		var resources = []expectedResource{
 			{name: render.PacketCaptureNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: "pull-secret", ns: render.PacketCaptureNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: render.PacketCaptureCertSecret, ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: render.PacketCaptureCertSecret, ns: render.PacketCaptureNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: render.PacketCaptureServiceAccountName, ns: render.PacketCaptureNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: render.PacketCaptureClusterRoleName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package installation
+package utils
 
 import (
 	"reflect"
@@ -31,7 +31,7 @@ const (
 	Different
 )
 
-func overrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operatorv1.InstallationSpec {
+func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operatorv1.InstallationSpec {
 	inst := *cfg.DeepCopy()
 
 	switch compareFields(inst.Variant, override.Variant) {
@@ -47,6 +47,11 @@ func overrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 	switch compareFields(inst.ImagePath, override.ImagePath) {
 	case BOnlySet, Different:
 		inst.ImagePath = override.ImagePath
+	}
+
+	switch compareFields(inst.ImagePrefix, override.ImagePrefix) {
+	case BOnlySet, Different:
+		inst.ImagePrefix = override.ImagePrefix
 	}
 
 	switch compareFields(inst.ImagePullSecrets, override.ImagePullSecrets) {

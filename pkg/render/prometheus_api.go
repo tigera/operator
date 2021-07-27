@@ -108,6 +108,7 @@ func (p *tigeraPrometheusAPIComponent) Objects() (objsToCreate, objsToDelete []c
 		configuredTigeraPrometheusApiPort = PrometheusDefaultPort
 	}
 
+	// openshift will use the default restricted SCCs if one is not provided
 	if p.installation.KubernetesProvider != operator.ProviderOpenShift {
 		namespacedObjects = append(namespacedObjects, p.podSecurityPolicy())
 	}

@@ -112,8 +112,6 @@ type DexRelyingPartyConfig interface {
 	RequestedScopes() []string
 	// UsernameClaim returns the part of the JWT that represents a unique username.
 	UsernameClaim() string
-	// GroupsClaim returns the part of the JWT that represents the list of user groups.
-	GroupsClaim() string
 	DexKeyValidatorConfig
 }
 
@@ -214,14 +212,6 @@ func (d *dexBaseCfg) UsernameClaim() string {
 	return claim
 }
 
-func (d *dexBaseCfg) GroupsClaim() string {
-	claim := defaultGroupsClaim
-	if d.connectorType == connectorTypeOIDC && d.authentication.Spec.OIDC.GroupsClaim != "" {
-		claim = d.authentication.Spec.OIDC.GroupsClaim
-	}
-	return claim
-}
-
 func (d *dexBaseCfg) ClientSecret() []byte {
 	return d.dexSecret.Data[ClientSecretSecretField]
 }
@@ -264,7 +254,7 @@ func (d *dexConfig) RequiredAnnotations() map[string]string {
 // RequiredAnnotations returns the annotations that are relevant for a relying party config.
 func (d *dexRelyingPartyConfig) RequiredAnnotations() map[string]string {
 	var annotations = map[string]string{
-		authenticationAnnotation: rmeta.AnnotationHash([]interface{}{d.GroupsClaim(), d.UsernameClaim(), d.ManagerURI(), d.RequestedScopes()}),
+		authenticationAnnotation: rmeta.AnnotationHash([]interface{}{d.UsernameClaim(), d.ManagerURI(), d.RequestedScopes()}),
 		dexTLSSecretAnnotation:   rmeta.AnnotationHash(d.tlsSecret.Data),
 	}
 	if d.dexSecret != nil {
@@ -276,7 +266,7 @@ func (d *dexRelyingPartyConfig) RequiredAnnotations() map[string]string {
 // RequiredAnnotations returns the annotations that are relevant for a validator config.
 func (d *dexKeyValidatorConfig) RequiredAnnotations() map[string]string {
 	var annotations = map[string]string{
-		authenticationAnnotation: rmeta.AnnotationHash([]interface{}{d.GroupsClaim(), d.UsernameClaim(), d.ManagerURI()}),
+		authenticationAnnotation: rmeta.AnnotationHash([]interface{}{d.UsernameClaim(), d.ManagerURI()}),
 		dexTLSSecretAnnotation:   rmeta.AnnotationHash(d.tlsSecret.Data),
 	}
 	return annotations

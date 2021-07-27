@@ -1392,6 +1392,10 @@ func (c *nodeComponent) nodePodSecurityPolicy() *policyv1beta1.PodSecurityPolicy
 	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(true)
 	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
 	psp.Spec.HostNetwork = true
+	// CollectProcessPath feature in logCollectorSpec requires access to hostPID
+	// Hence setting hostPID to true in the calico-node PSP, for this feature
+	// to work with PSP turned on
+	psp.Spec.HostPID = true
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
 	return psp
 }

@@ -188,7 +188,7 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 
 	if c.cr.CertificateManagement != nil {
 		objsToCreate = append(objsToCreate, csrClusterRole())
-		objsToCreate = append(objsToCreate, csrClusterRoleBinding("calico-node", common.CalicoNamespace))
+		objsToCreate = append(objsToCreate, CsrClusterRoleBinding("calico-node", common.CalicoNamespace))
 	}
 
 	return objsToCreate, objsToDelete
@@ -246,6 +246,12 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 		},
 
 		Rules: []rbacv1.PolicyRule{
+			{
+				// Calico uses endpoint slices for service-based network policy rules.
+				APIGroups: []string{"discovery.k8s.io"},
+				Resources: []string{"endpointslices"},
+				Verbs:     []string{"list", "watch"},
+			},
 			{
 				// The CNI plugin needs to get pods, nodes, namespaces.
 				APIGroups: []string{""},
@@ -1239,6 +1245,13 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		if c.cr.Variant == operator.TigeraSecureEnterprise {
 			// We also need to configure a non-default trusted DNS server, since there's no kube-dns.
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"})
+		}
+	// For AKS and EKS/CalicoCNI, we must explicitly ask felix to add host IP's to wireguard ifaces
+	case operator.ProviderAKS:
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDHOSTENCRYPTIONENABLED", Value: "true"})
+	case operator.ProviderEKS:
+		if c.cr.CNI.Type == operator.PluginCalico {
+			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDHOSTENCRYPTIONENABLED", Value: "true"})
 		}
 	}
 

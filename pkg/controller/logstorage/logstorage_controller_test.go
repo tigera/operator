@@ -237,7 +237,7 @@ var _ = Describe("LogStorage controller", func() {
 						Expect(err).ShouldNot(HaveOccurred())
 						svc := &corev1.Service{}
 						Expect(
-							cli.Get(ctx, client.ObjectKey{Name: render.ElasticsearchServiceName, Namespace: render.ElasticsearchNamespace}, svc),
+							cli.Get(ctx, client.ObjectKey{Name: esgateway.ServiceName, Namespace: render.ElasticsearchNamespace}, svc),
 						).ShouldNot(HaveOccurred())
 
 						Expect(svc.Spec.ExternalName).Should(Equal(expectedSvcName))

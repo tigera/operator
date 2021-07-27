@@ -128,7 +128,7 @@ func requiresPrometheusResources(client kubernetes.Interface) error {
 
 	for k, v := range expectedResources {
 		if !v {
-			return fmt.Errorf("expected Prometheus related resource %s not found", k)
+			return fmt.Errorf("failed to find Prometheus resource: %s", k)
 		}
 	}
 
@@ -150,11 +150,11 @@ func waitToAddWatch(c controller.Controller, client kubernetes.Interface, log lo
 
 	for {
 		if err := requiresPrometheusResources(client); err != nil {
-			log.Info("failed to find Prometheus resources. Will retry.")
+			log.Info("%v. monitor-controller will retry.", err)
 		} else {
 			// watch for prometheus resource changes
 			if err := addWatch(c); err != nil {
-				log.Info("failed to watch Prometheus resouces. Will retry.")
+				log.Info("%v. monitor-controller will retry.", err)
 			} else {
 				readyFlag.MarkAsReady()
 				return nil

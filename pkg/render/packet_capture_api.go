@@ -58,7 +58,7 @@ type packetCaptureApiComponent struct {
 	image              string
 	csrInitImage       string
 	keyValidatorConfig authentication.KeyValidatorConfig
-	serverCertSecrets  []*corev1.Secret
+	serverCertSecret   *corev1.Secret
 	clusterDomain      string
 }
 
@@ -68,16 +68,12 @@ func PacketCaptureAPI(pullSecrets []*corev1.Secret, openshift bool,
 	serverCertSecret *corev1.Secret,
 	clusterDomain string) Component {
 
-	var serverCertSecrets []*corev1.Secret
-	serverCertSecrets = append(serverCertSecrets, serverCertSecret)
-	serverCertSecrets = append(serverCertSecrets, secret.CopyToNamespace(PacketCaptureNamespace, serverCertSecret)...)
-
 	return &packetCaptureApiComponent{
 		pullSecrets:        pullSecrets,
 		openshift:          openshift,
 		installation:       installation,
 		keyValidatorConfig: keyValidatorConfig,
-		serverCertSecrets:  serverCertSecrets,
+		serverCertSecret:   serverCertSecret,
 		clusterDomain:      clusterDomain,
 	}
 }
@@ -117,7 +113,7 @@ func (pc *packetCaptureApiComponent) Objects() ([]client.Object, []client.Object
 		createNamespace(PacketCaptureNamespace, pc.installation.KubernetesProvider),
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PacketCaptureNamespace, pc.pullSecrets...)...)...)
-	objs = append(objs, secret.ToRuntimeObjects(pc.serverCertSecrets...)...)
+	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PacketCaptureNamespace, pc.serverCertSecret)...)...)
 
 	objs = append(objs,
 		pc.serviceAccount(),
@@ -337,7 +333,7 @@ func (pc *packetCaptureApiComponent) volumes() []corev1.Volume {
 
 func (pc *packetCaptureApiComponent) annotations() map[string]string {
 	var annotations = map[string]string{
-		PacketCaptureTLSHashAnnotation: rmeta.AnnotationHash(pc.serverCertSecrets[0].Data),
+		PacketCaptureTLSHashAnnotation: rmeta.AnnotationHash(pc.serverCertSecret.Data),
 	}
 
 	return annotations

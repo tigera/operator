@@ -108,9 +108,12 @@ func (p *tigeraPrometheusAPIComponent) Objects() (objsToCreate, objsToDelete []c
 		configuredTigeraPrometheusApiPort = PrometheusDefaultPort
 	}
 
+	if p.installation.KubernetesProvider != operator.ProviderOpenShift {
+		namespacedObjects = append(namespacedObjects, p.podSecurityPolicy())
+	}
+
 	namespacedObjects = append(
 		namespacedObjects,
-		p.podSecurityPolicy(),
 		p.deployment(configuredTigeraPrometheusApiPort),
 		p.calicoNodePrometheusService(configuredTigeraPrometheusApiPort),
 	)

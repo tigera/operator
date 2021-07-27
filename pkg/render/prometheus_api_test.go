@@ -155,6 +155,32 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 		}
 	})
 
+	It("should render without PSPs in Openshift", func() {
+		installationSpec.KubernetesProvider = operatorv1.ProviderOpenShift
+
+		prometheusService, err := render.TigeraPrometheusAPI(installationSpec, pullSecrets, nil)
+
+		Expect(err).ToNot(HaveOccurred())
+		Expect(prometheusService.ResolveImages(nil)).NotTo(HaveOccurred())
+
+		objectsToCreate, objectsToDelete := prometheusService.Objects()
+
+		Expect(len(objectsToDelete)).To(Equal(0))
+
+		By("veryfying the objects created at render")
+
+		// remove PSPs from expected resource
+		expectedResources = append(expectedResources[:2], expectedResources[2+1:]...)
+
+		Expect(len(objectsToCreate)).To(Equal(len(expectedResources)))
+
+		for i, expectedRes := range expectedResources {
+			obj := objectsToCreate[i]
+			rtest.ExpectResource(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+		}
+
+	})
+
 	It("should render with specs accordingly when tigeraPrometheusAPIListenPort is specified ", func() {
 		prometheusServicePort := 8090
 		monitorConfigMap.Data[tigeraPrometheusAPIListenPortFieldName] = strconv.Itoa(prometheusServicePort)
@@ -266,4 +292,8 @@ func createMonitorDefaultConfigMap() *corev1.ConfigMap {
 	}
 
 	return cm
+}
+
+func remove(slice []int, s int) []int {
+	return append(slice[:s], slice[s+1:]...)
 }

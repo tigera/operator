@@ -1408,7 +1408,9 @@ func (c *nodeComponent) nodePodSecurityPolicy() *policyv1beta1.PodSecurityPolicy
 	// CollectProcessPath feature in logCollectorSpec requires access to hostPID
 	// Hence setting hostPID to true in the calico-node PSP, for this feature
 	// to work with PSP turned on
-	psp.Spec.HostPID = true
+	if c.collectProcessPathEnabled() {
+		psp.Spec.HostPID = true
+	}
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
 	return psp
 }

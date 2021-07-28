@@ -234,6 +234,18 @@ func LogStorageExists(ctx context.Context, cli client.Client) (bool, error) {
 	return true, nil
 }
 
+func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCollector, error) {
+	logCollector := &operatorv1.LogCollector{}
+	err := cli.Get(ctx, DefaultTSEEInstanceKey, logCollector)
+	if err != nil {
+		if kerrors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return logCollector, nil
+}
+
 // FetchLicenseKey returns the license if it has been installed. It's useful
 // to prevent rollout of TSEE components that might require it.
 // It will return an error if the license is not installed/cannot be read

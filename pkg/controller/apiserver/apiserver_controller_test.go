@@ -17,6 +17,7 @@ package apiserver
 import (
 	"context"
 	"fmt"
+	v1 "k8s.io/api/core/v1"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -154,6 +155,15 @@ var _ = Describe("apiserver controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentCSRInitContainer.Image,
 					components.ComponentCSRInitContainer.Version)))
+			pcSecret := v1.Secret{
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.PacketCaptureCertSecret,
+					Namespace: "tigera-operator",
+				},
+			}
+			Expect(test.GetResource(cli, &pcSecret)).To(BeNil())
+			Expect(pcSecret).NotTo(BeNil())
 		})
 		It("should use images from imageset", func() {
 			Expect(cli.Create(ctx, &operatorv1.ImageSet{
@@ -226,6 +236,15 @@ var _ = Describe("apiserver controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentCSRInitContainer.Image,
 					"sha256:calicocsrinithash")))
+			pcSecret := v1.Secret{
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.PacketCaptureCertSecret,
+					Namespace: "tigera-operator",
+				},
+			}
+			Expect(test.GetResource(cli, &pcSecret)).To(BeNil())
+			Expect(pcSecret).NotTo(BeNil())
 		})
 	})
 })

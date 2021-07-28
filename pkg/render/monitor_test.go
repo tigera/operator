@@ -36,6 +36,11 @@ import (
 )
 
 var _ = Describe("monitor rendering tests", func() {
+
+	const (
+		calicoNodePrometheusServiceName = "calico-node-prometheus"
+	)
+
 	It("Should render Prometheus resources", func() {
 		component := render.Monitor(
 			&operatorv1.InstallationSpec{},
@@ -67,6 +72,7 @@ var _ = Describe("monitor rendering tests", func() {
 			{render.CalicoNodeMonitor, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
 			{render.ElasticsearchMetrics, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
 			{render.FluentdMetrics, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PodMonitorsKind},
+			{render.PrometheusHTTPAPIServiceName, common.TigeraPrometheusNamespace, "", "v1", "Service"},
 		}
 
 		Expect(len(toCreate)).To(Equal(len(expectedResources)))

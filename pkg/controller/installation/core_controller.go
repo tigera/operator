@@ -299,31 +299,6 @@ type ReconcileInstallation struct {
 	clusterDomain        string
 }
 
-// GetInstallation returns the current installation, for use by other controllers. It accounts for overlays and
-// returns the variant according to status.Variant, which is leveraged by other controllers to know when it is safe to
-// launch enterprise-dependent components.
-func GetInstallation(ctx context.Context, client client.Client) (operator.ProductVariant, *operator.InstallationSpec, error) {
-	// Fetch the Installation instance. We only support a single instance named "default".
-	instance := &operator.Installation{}
-	if err := client.Get(ctx, utils.DefaultInstanceKey, instance); err != nil {
-		return instance.Status.Variant, nil, err
-	}
-
-	spec := instance.Spec
-
-	// update Installation with 'overlay'
-	overlay := operator.Installation{}
-	if err := client.Get(ctx, utils.OverlayInstanceKey, &overlay); err != nil {
-		if !apierrors.IsNotFound(err) {
-			return instance.Status.Variant, nil, err
-		}
-	} else {
-		spec = overrideInstallationSpec(spec, overlay.Spec)
-	}
-
-	return instance.Status.Variant, &spec, nil
-}
-
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
 func updateInstallationWithDefaults(ctx context.Context, client client.Client, instance *operator.Installation, provider operator.Provider) error {
 	// Determine the provider in use by combining any auto-detected value with any value
@@ -421,6 +396,37 @@ func fillDefaults(instance *operator.Installation) error {
 			instance.Spec.CNI.Type = operator.PluginGKE
 		default:
 			instance.Spec.CNI.Type = operator.PluginCalico
+		}
+	}
+
+	if instance.Spec.TyphaAffinity == nil {
+		switch instance.Spec.KubernetesProvider {
+		// in AKS, there is a feature called 'virtual-nodes' which represent azure's container service as a node in the kubernetes cluster.
+		// virtual-nodes have many limitations, namely it's unable to run hostNetworked pods. virtual-kubelets are tainted to prevent pods from running on them,
+		// but typha tolerates all taints and will run there.
+		// as such, we add a required anti-affinity for virtual-nodes if running on azure
+		case operator.ProviderAKS:
+			instance.Spec.TyphaAffinity = &operator.TyphaAffinity{
+				NodeAffinity: &operator.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+						NodeSelectorTerms: []v1.NodeSelectorTerm{{
+							MatchExpressions: []v1.NodeSelectorRequirement{
+								{
+									Key:      "type",
+									Operator: corev1.NodeSelectorOpNotIn,
+									Values:   []string{"virtual-node"},
+								},
+								{
+									Key:      "kubernetes.azure.com/cluster",
+									Operator: v1.NodeSelectorOpExists,
+								},
+							},
+						}},
+					},
+				},
+			}
+		default:
+			instance.Spec.TyphaAffinity = nil
 		}
 	}
 
@@ -684,7 +690,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 				r.SetDegraded("Error converting existing installation", err, reqLogger)
 				return reconcile.Result{}, err
 			}
-			instance.Spec = overrideInstallationSpec(install.Spec, instance.Spec)
+			instance.Spec = utils.OverrideInstallationSpec(install.Spec, instance.Spec)
 		}
 	}
 
@@ -720,7 +726,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 		reqLogger.V(5).Info("no 'overlay' installation found")
 	} else {
-		instance.Spec = overrideInstallationSpec(instance.Spec, overlay.Spec)
+		instance.Spec = utils.OverrideInstallationSpec(instance.Spec, overlay.Spec)
 		reqLogger.V(2).Info("loaded final computed config", "config", instance)
 
 		// Validate the configuration.
@@ -899,11 +905,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	// Kube controllers needs the admin secret copied to it's namespace as it has administrative tasks to run on
-	// Elasticsearch.
-	esAdminSecret, err := utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, rmeta.OperatorNamespace())
-	if err != nil {
-		return reconcile.Result{}, err
+	var esAdminSecret *v1.Secret
+	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
+		// Kube controllers needs the admin secret copied to it's namespace as it has administrative tasks to run on
+		// Elasticsearch.
+		esAdminSecret, err = utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, rmeta.OperatorNamespace())
+		if err != nil {
+			return reconcile.Result{}, err
+		}
 	}
 
 	var typhaNodeTLS *render.TyphaNodeTLS

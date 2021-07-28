@@ -18,10 +18,12 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
+	"github.com/stretchr/testify/mock"
+
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/render"
 
@@ -32,8 +34,11 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var _ = Describe("Utils elasticsearch license type tests", func() {
@@ -85,3 +90,57 @@ var _ = Describe("Utils elasticsearch license type tests", func() {
 	})
 
 })
+
+var _ = Describe("Tigera License polling test", func() {
+	var client fakeClient
+	var discovery *fakeDiscovery
+
+	BeforeEach(func() {
+		discovery = new(fakeDiscovery)
+		client = fakeClient{discovery: discovery}
+	})
+
+	It("should be able to verify that the LicenseKey is ready", func() {
+		discovery.On("ServerGroupsAndResources").Return(nil, []*metav1.APIResourceList{
+			{
+				GroupVersion: "projectcalico.org/v3",
+				APIResources: []metav1.APIResource{
+					{Kind: "LicenseKey"},
+				},
+			},
+		})
+		Expect(isLicenseKeyReady(client)).To(BeTrue())
+		discovery.AssertExpectations(GinkgoT())
+	})
+	It("should be able to verify that the LicenseKey is not ready", func() {
+		discovery.On("ServerGroupsAndResources").Return(nil, []*metav1.APIResourceList{
+			{
+				GroupVersion: "apps/v1",
+				APIResources: []metav1.APIResource{
+					{Kind: "Deployment"},
+				},
+			},
+		})
+		Expect(isLicenseKeyReady(client)).To(BeFalse())
+		discovery.AssertExpectations(GinkgoT())
+	})
+})
+
+type fakeClient struct {
+	discovery discovery.DiscoveryInterface
+	kubernetes.Interface
+}
+
+type fakeDiscovery struct {
+	discovery.DiscoveryInterface
+	mock.Mock
+}
+
+func (m fakeClient) Discovery() discovery.DiscoveryInterface {
+	return m.discovery
+}
+
+func (m *fakeDiscovery) ServerGroupsAndResources() ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
+	args := m.Called()
+	return nil, args.Get(1).([]*metav1.APIResourceList), nil
+}

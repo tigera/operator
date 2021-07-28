@@ -177,6 +177,7 @@ var _ = Describe("Node rendering tests", func() {
 		expectedNodeEnv := []v1.EnvVar{
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
+			{Name: "CALICO_MANAGE_CNI", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp"},
@@ -285,6 +286,7 @@ var _ = Describe("Node rendering tests", func() {
 		// Verify volume mounts.
 		expectedNodeVolumeMounts := []v1.VolumeMount{
 			{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
+			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 			{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
 			{MountPath: "/var/run/calico", Name: "var-run-calico"},
 			{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
@@ -304,7 +306,7 @@ var _ = Describe("Node rendering tests", func() {
 		// Verify tolerations.
 		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateAll))
 
-		verifyProbes(ds, false, false)
+		verifyProbesAndLifecycle(ds, false, false)
 	})
 
 	It("should render node correctly for BPF dataplane", func() {
@@ -417,6 +419,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
+			{Name: "CALICO_MANAGE_CNI", Value: "true"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp"},
 			{Name: "IP", Value: "autodetect"},
@@ -528,6 +531,7 @@ var _ = Describe("Node rendering tests", func() {
 		// Verify volume mounts.
 		expectedNodeVolumeMounts := []v1.VolumeMount{
 			{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
+			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 			{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
 			{MountPath: "/var/run/calico", Name: "var-run-calico"},
 			{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
@@ -548,7 +552,7 @@ var _ = Describe("Node rendering tests", func() {
 		// Verify tolerations.
 		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateAll))
 
-		verifyProbes(ds, false, false)
+		verifyProbesAndLifecycle(ds, false, false)
 	})
 
 	It("should properly render an explicitly configured MTU", func() {
@@ -653,6 +657,7 @@ var _ = Describe("Node rendering tests", func() {
 			// Default envvars.
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
+			{Name: "CALICO_MANAGE_CNI", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp"},
 			{Name: "IP", Value: "autodetect"},
@@ -715,7 +720,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
 
-		verifyProbes(ds, false, true)
+		verifyProbesAndLifecycle(ds, false, true)
 	})
 
 	It("should render all resources when using Calico CNI on EKS", func() {
@@ -815,6 +820,7 @@ var _ = Describe("Node rendering tests", func() {
 		expectedNodeEnv := []v1.EnvVar{
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
+			{Name: "CALICO_MANAGE_CNI", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "vxlan"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,ecs"},
@@ -923,6 +929,7 @@ var _ = Describe("Node rendering tests", func() {
 		// Verify volume mounts.
 		expectedNodeVolumeMounts := []v1.VolumeMount{
 			{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
+			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 			{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
 			{MountPath: "/var/run/calico", Name: "var-run-calico"},
 			{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
@@ -944,7 +951,7 @@ var _ = Describe("Node rendering tests", func() {
 
 		// Verify readiness and liveness probes.
 
-		verifyProbes(ds, false, false)
+		verifyProbesAndLifecycle(ds, false, false)
 	})
 
 	It("should properly render a configuration using the AmazonVPC CNI plugin", func() {
@@ -1093,7 +1100,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateAll))
 
 		// Verify readiness and liveness probes.
-		verifyProbes(ds, false, true)
+		verifyProbesAndLifecycle(ds, false, true)
 	})
 
 	DescribeTable("should properly render configuration using non-Calico CNI plugin",
@@ -1139,7 +1146,7 @@ var _ = Describe("Node rendering tests", func() {
 			}
 
 			// Verify readiness and liveness probes.
-			verifyProbes(ds, false, false)
+			verifyProbesAndLifecycle(ds, false, false)
 		},
 		Entry("GKE", operator.PluginGKE, operator.IPAMPluginHostLocal, []v1.EnvVar{
 			{Name: "FELIX_INTERFACEPREFIX", Value: "gke"},
@@ -1252,6 +1259,7 @@ var _ = Describe("Node rendering tests", func() {
 		expectedNodeEnv := []v1.EnvVar{
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
+			{Name: "CALICO_MANAGE_CNI", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "vxlan"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,ecs"},
@@ -1360,6 +1368,7 @@ var _ = Describe("Node rendering tests", func() {
 		// Verify volume mounts.
 		expectedNodeVolumeMounts := []v1.VolumeMount{
 			{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
+			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 			{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
 			{MountPath: "/var/run/calico", Name: "var-run-calico"},
 			{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
@@ -1380,7 +1389,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateAll))
 
 		// Verify readiness and liveness probes.
-		verifyProbes(ds, false, false)
+		verifyProbesAndLifecycle(ds, false, false)
 	})
 
 	It("should properly render a configuration using the AmazonVPC CNI plugin", func() {
@@ -1529,7 +1538,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateAll))
 
 		// Verify readiness and liveness probes.
-		verifyProbes(ds, false, false)
+		verifyProbesAndLifecycle(ds, false, false)
 	})
 
 	It("should render all resources when running on openshift", func() {
@@ -1608,6 +1617,7 @@ var _ = Describe("Node rendering tests", func() {
 			// Default envvars.
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
+			{Name: "CALICO_MANAGE_CNI", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,openshift,bgp"},
 			{Name: "IP", Value: "autodetect"},
@@ -1660,7 +1670,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
 
-		verifyProbes(ds, true, false)
+		verifyProbesAndLifecycle(ds, true, false)
 	})
 
 	It("should render all resources when variant is TigeraSecureEnterprise and running on openshift", func() {
@@ -1704,6 +1714,7 @@ var _ = Describe("Node rendering tests", func() {
 			// Default envvars.
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
+			{Name: "CALICO_MANAGE_CNI", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,openshift,bgp"},
 			{Name: "IP", Value: "autodetect"},
@@ -1770,7 +1781,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
 
-		verifyProbes(ds, true, true)
+		verifyProbesAndLifecycle(ds, true, true)
 	})
 
 	It("should render volumes and node volumemounts when bird templates are provided", func() {
@@ -2599,6 +2610,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 			{Name: "CALICO_NETWORKING_BACKEND", Value: "none"},
+			{Name: "CALICO_MANAGE_CNI", Value: "true"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator"},
 			{Name: "IP", Value: "autodetect"},
@@ -2666,7 +2678,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env).To(ConsistOf(expectedCNIEnv))
 
 		// Verify readiness and liveness probes.
-		verifyProbes(ds, false, false)
+		verifyProbesAndLifecycle(ds, false, false)
 	})
 
 	DescribeTable("test node probes",
@@ -2688,7 +2700,7 @@ var _ = Describe("Node rendering tests", func() {
 			Expect(dsResource).ToNot(BeNil())
 
 			ds := dsResource.(*apps.DaemonSet)
-			verifyProbes(ds, isOpenshift, isEnterprise)
+			verifyProbesAndLifecycle(ds, isOpenshift, isEnterprise)
 		},
 
 		Entry("k8s Calico OS no BGP", false, false, operator.BGPDisabled),
@@ -2814,10 +2826,14 @@ var _ = Describe("Node rendering tests", func() {
 	})
 })
 
-// verifyProbes asserts the expected node liveness and readiness probe.
-func verifyProbes(ds *apps.DaemonSet, isOpenshift, isEnterprise bool) {
+// verifyProbesAndLifecycle asserts the expected node liveness and readiness probe plus pod lifecycle settings.
+func verifyProbesAndLifecycle(ds *apps.DaemonSet, isOpenshift, isEnterprise bool) {
 	// Verify readiness and liveness probes.
-	expectedReadiness := &v1.Probe{Handler: v1.Handler{Exec: &v1.ExecAction{Command: []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}}}}
+	expectedReadiness := &v1.Probe{
+		Handler:        v1.Handler{Exec: &v1.ExecAction{Command: []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}}},
+		TimeoutSeconds: 5,
+		PeriodSeconds:  10,
+	}
 	expectedLiveness := &v1.Probe{Handler: v1.Handler{
 		HTTPGet: &v1.HTTPGetAction{
 			Host: "localhost",
@@ -2853,4 +2869,11 @@ func verifyProbes(ds *apps.DaemonSet, isOpenshift, isEnterprise bool) {
 
 	Expect(ds.Spec.Template.Spec.Containers[0].ReadinessProbe).To(Equal(expectedReadiness))
 	Expect(ds.Spec.Template.Spec.Containers[0].LivenessProbe).To(Equal(expectedLiveness))
+
+	expectedLifecycle := &v1.Lifecycle{
+		PreStop: &v1.Handler{Exec: &v1.ExecAction{Command: []string{"/bin/calico-node", "-shutdown"}}},
+	}
+	Expect(ds.Spec.Template.Spec.Containers[0].Lifecycle).To(Equal(expectedLifecycle))
+
+	Expect(int(*ds.Spec.Template.Spec.TerminationGracePeriodSeconds)).To(Equal(5))
 }

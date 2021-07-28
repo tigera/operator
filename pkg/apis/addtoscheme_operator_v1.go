@@ -19,8 +19,10 @@ import (
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	configv1 "github.com/openshift/api/config/v1"
 	ocsv1 "github.com/openshift/api/security/v1"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	tigera "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
+	projectcalicov3 "github.com/tigera/operator/pkg/apis/projectcalico.org/v3"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	aggregator "k8s.io/kube-aggregator/pkg/client/clientset_generated/clientset/scheme"
@@ -37,4 +39,6 @@ func init() {
 	AddToSchemes = append(AddToSchemes, esv1.SchemeBuilder.AddToScheme)
 	AddToSchemes = append(AddToSchemes, kbv1.SchemeBuilder.AddToScheme)
 	AddToSchemes = append(AddToSchemes, policyv1beta1.SchemeBuilder.AddToScheme)
+	AddToSchemes = append(AddToSchemes, projectcalicov3.SchemeBuilder.AddToScheme)
+	AddToSchemes = append(AddToSchemes, monitoringv1.SchemeBuilder.AddToScheme)
 }

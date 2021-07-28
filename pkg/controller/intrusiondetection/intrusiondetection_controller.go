@@ -25,7 +25,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/logcollector"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -189,7 +188,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
-			r.status.OnCRFound()
+			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
 		reqLogger.V(3).Info("failed to get IntrusionDetection CR", "err", err)
@@ -221,7 +220,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	// Query for the installation object.
-	variant, network, err := installation.GetInstallation(context.Background(), r.client)
+	variant, network, err := utils.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())

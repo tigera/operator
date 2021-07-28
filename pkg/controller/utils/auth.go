@@ -9,7 +9,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
 	rauth "github.com/tigera/operator/pkg/render/common/authentication"
-	"github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
+	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	corev1 "k8s.io/api/core/v1"

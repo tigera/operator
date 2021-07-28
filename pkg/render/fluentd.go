@@ -62,8 +62,14 @@ const (
 	SplunkFluentdDefaultCertDir              = "/etc/ssl/splunk/"
 	SplunkFluentdDefaultCertPath             = SplunkFluentdDefaultCertDir + SplunkFluentdSecretCertificateKey
 
-	ProbeTimeoutSeconds = 5
-	ProbePeriodSeconds  = 10
+	probeTimeoutSeconds        int32 = 5
+	probePeriodSeconds         int32 = 5
+	probeWindowsTimeoutSeconds int32 = 10
+	probeWindowsPeriodSeconds  int32 = 10
+
+	// Default failure threshold for probes is 3. For the startupProbe tolerate more failures.
+	probeFailureThreshold        int32 = 3
+	startupProbeFailureThreshold int32 = 10
 
 	fluentdName        = "tigera-fluentd"
 	fluentdWindowsName = "tigera-fluentd-windows"
@@ -71,8 +77,10 @@ const (
 	fluentdNodeName        = "fluentd-node"
 	fluentdNodeWindowsName = "fluentd-node-windows"
 
-	eksLogForwarderName        = "eks-log-forwarder"
-	eksLogForwarderWindowsName = "eks-log-forwarder-windows"
+	eksLogForwarderName = "eks-log-forwarder"
+
+	PacketCaptureAPIRole        = "packetcapture-api-role"
+	PacketCaptureAPIRoleBinding = "packetcapture-api-role-binding"
 )
 
 type FluentdFilters struct {
@@ -103,6 +111,13 @@ func Fluentd(
 	clusterDomain string,
 	osType rmeta.OSType,
 ) Component {
+	timeout := probeTimeoutSeconds
+	period := probePeriodSeconds
+	if osType == rmeta.OSTypeWindows {
+		timeout = probeWindowsTimeoutSeconds
+		period = probeWindowsPeriodSeconds
+	}
+
 	return &fluentdComponent{
 		lc:              lc,
 		esSecrets:       esSecrets,
@@ -115,6 +130,8 @@ func Fluentd(
 		installation:    installation,
 		clusterDomain:   clusterDomain,
 		osType:          osType,
+		probeTimeout:    timeout,
+		probePeriod:     period,
 	}
 }
 
@@ -140,20 +157,23 @@ type fluentdComponent struct {
 	clusterDomain   string
 	osType          rmeta.OSType
 	image           string
+	probeTimeout    int32
+	probePeriod     int32
 }
 
 func (c *fluentdComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.installation.Registry
 	path := c.installation.ImagePath
+	prefix := c.installation.ImagePrefix
 
 	if c.osType == rmeta.OSTypeWindows {
 		var err error
-		c.image, err = components.GetReference(components.ComponentFluentdWindows, reg, path, is)
+		c.image, err = components.GetReference(components.ComponentFluentdWindows, reg, path, prefix, is)
 		return err
 	}
 
 	var err error
-	c.image, err = components.GetReference(components.ComponentFluentd, reg, path, is)
+	c.image, err = components.GetReference(components.ComponentFluentd, reg, path, prefix, is)
 	return err
 }
 
@@ -173,13 +193,6 @@ func (c *fluentdComponent) fluentdNodeName() string {
 		return fluentdNodeWindowsName
 	}
 	return fluentdNodeName
-}
-
-func (c *fluentdComponent) eksLogForwarderName() string {
-	if c.osType == rmeta.OSTypeWindows {
-		return eksLogForwarderWindowsName
-	}
-	return eksLogForwarderName
 }
 
 func (c *fluentdComponent) readinessCmd() []string {
@@ -230,10 +243,8 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	if c.filters != nil {
 		objs = append(objs, c.filtersConfigMap())
 	}
-	if c.eksConfig != nil {
-		// Windows PSP does not support allowedHostPaths yet.
-		// See: https://github.com/kubernetes/kubernetes/issues/93165#issuecomment-693049808
-		if c.installation.KubernetesProvider != operatorv1.ProviderOpenShift && c.osType == rmeta.OSTypeLinux {
+	if c.eksConfig != nil && c.osType == rmeta.OSTypeLinux {
+		if c.installation.KubernetesProvider != operatorv1.ProviderOpenShift {
 			objs = append(objs,
 				c.eksLogForwarderClusterRole(),
 				c.eksLogForwarderClusterRoleBinding(),
@@ -255,6 +266,7 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.esSecrets...)...)...)
 	objs = append(objs, c.fluentdServiceAccount())
+	objs = append(objs, c.packetCaptureApiRole(), c.packetCaptureApiRoleBinding())
 	objs = append(objs, c.daemonset())
 
 	return objs, nil
@@ -337,6 +349,56 @@ func (c *fluentdComponent) fluentdServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: c.fluentdNodeName(), Namespace: LogCollectorNamespace},
+	}
+}
+
+// packetCaptureApiRole creates a role in the tigera-fluentd namespace to allow pod/exec
+// only from fluentd pods. This is being used by the PacketCapture API and created
+// by the operator after the namespace tigera-fluentd is created.
+func (c *fluentdComponent) packetCaptureApiRole() *rbacv1.Role {
+	return &rbacv1.Role{
+		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      PacketCaptureAPIRole,
+			Namespace: LogCollectorNamespace,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods/exec"},
+				Verbs:     []string{"create"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     []string{"list"},
+			},
+		},
+	}
+}
+
+// packetCaptureApiRoleBinding creates a role binding within the tigera-fluentd namespace between the pod/exec role
+// the service account tigera-manager. This is being used by the PacketCapture API and created
+// by the operator after the namespace tigera-fluentd is created
+func (c *fluentdComponent) packetCaptureApiRoleBinding() *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      PacketCaptureAPIRoleBinding,
+			Namespace: LogCollectorNamespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     PacketCaptureAPIRole,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      ManagerServiceAccount,
+				Namespace: ManagerNamespace,
+			},
+		},
 	}
 }
 
@@ -609,20 +671,17 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 }
 
 // The startup probe uses the same action as the liveness probe, but with
-// a higher failure threshold and a larger timeout to account for slow networks.
+// a higher failure threshold and double the timeout to account for slow
+// networks.
 func (c *fluentdComponent) startup() *corev1.Probe {
-	// Default failure threshold for probes is 3. For the startup we should
-	// tolerate more failures.
-	var startupProbeFailureThreshold int32 = 10
-
 	return &corev1.Probe{
 		Handler: corev1.Handler{
 			Exec: &corev1.ExecAction{
 				Command: c.livenessCmd(),
 			},
 		},
-		TimeoutSeconds:   ProbeTimeoutSeconds * 2,
-		PeriodSeconds:    ProbePeriodSeconds,
+		TimeoutSeconds:   c.probeTimeout * 2,
+		PeriodSeconds:    c.probePeriod * 2,
 		FailureThreshold: startupProbeFailureThreshold,
 	}
 }
@@ -646,8 +705,9 @@ func (c *fluentdComponent) liveness() *corev1.Probe {
 				Command: c.livenessCmd(),
 			},
 		},
-		TimeoutSeconds: ProbeTimeoutSeconds,
-		PeriodSeconds:  ProbePeriodSeconds,
+		TimeoutSeconds:   c.probeTimeout,
+		PeriodSeconds:    c.probePeriod,
+		FailureThreshold: probeFailureThreshold,
 	}
 }
 
@@ -658,7 +718,9 @@ func (c *fluentdComponent) readiness() *corev1.Probe {
 				Command: c.readinessCmd(),
 			},
 		},
-		TimeoutSeconds: ProbeTimeoutSeconds,
+		TimeoutSeconds:   c.probeTimeout,
+		PeriodSeconds:    c.probePeriod,
+		FailureThreshold: probeFailureThreshold,
 	}
 }
 
@@ -769,7 +831,7 @@ func (c *fluentdComponent) fluentdClusterRole() *rbacv1.ClusterRole {
 func (c *fluentdComponent) eksLogForwarderServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: c.eksLogForwarderName(), Namespace: LogCollectorNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: eksLogForwarderName, Namespace: LogCollectorNamespace},
 	}
 }
 
@@ -814,10 +876,10 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      c.eksLogForwarderName(),
+			Name:      eksLogForwarderName,
 			Namespace: LogCollectorNamespace,
 			Labels: map[string]string{
-				"k8s-app": c.eksLogForwarderName(),
+				"k8s-app": eksLogForwarderName,
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -827,31 +889,31 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 			},
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"k8s-app": c.eksLogForwarderName(),
+					"k8s-app": eksLogForwarderName,
 				},
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      c.eksLogForwarderName(),
+					Name:      eksLogForwarderName,
 					Namespace: LogCollectorNamespace,
 					Labels: map[string]string{
-						"k8s-app": c.eksLogForwarderName(),
+						"k8s-app": eksLogForwarderName,
 					},
 					Annotations: annots,
 				},
 				Spec: corev1.PodSpec{
 					Tolerations:        c.installation.ControlPlaneTolerations,
-					ServiceAccountName: c.eksLogForwarderName(),
+					ServiceAccountName: eksLogForwarderName,
 					ImagePullSecrets:   secret.GetReferenceList(c.pullSecrets),
 					InitContainers: []corev1.Container{relasticsearch.ContainerDecorateENVVars(corev1.Container{
-						Name:         c.eksLogForwarderName() + "-startup",
+						Name:         eksLogForwarderName + "-startup",
 						Image:        c.image,
 						Command:      []string{c.path("/bin/eks-log-forwarder-startup")},
 						Env:          envVars,
 						VolumeMounts: c.eksLogForwarderVolumeMounts(),
 					}, c.esClusterConfig.ClusterName(), ElasticsearchEksLogForwarderUserSecret, c.clusterDomain, c.osType)},
 					Containers: []corev1.Container{relasticsearch.ContainerDecorateENVVars(corev1.Container{
-						Name:         c.eksLogForwarderName(),
+						Name:         eksLogForwarderName,
 						Image:        c.image,
 						Env:          envVars,
 						VolumeMounts: c.eksLogForwarderVolumeMounts(),
@@ -891,7 +953,7 @@ func (c *fluentdComponent) eksLogForwarderVolumes() []corev1.Volume {
 
 func (c *fluentdComponent) eksLogForwarderPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(c.eksLogForwarderName())
+	psp.GetObjectMeta().SetName(eksLogForwarderName)
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
 	return psp
 }
@@ -900,17 +962,17 @@ func (c *fluentdComponent) eksLogForwarderClusterRoleBinding() *rbacv1.ClusterRo
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: c.eksLogForwarderName(),
+			Name: eksLogForwarderName,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     c.eksLogForwarderName(),
+			Name:     eksLogForwarderName,
 		},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      c.eksLogForwarderName(),
+				Name:      eksLogForwarderName,
 				Namespace: LogCollectorNamespace,
 			},
 		},
@@ -921,7 +983,7 @@ func (c *fluentdComponent) eksLogForwarderClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: c.eksLogForwarderName(),
+			Name: eksLogForwarderName,
 		},
 
 		Rules: []rbacv1.PolicyRule{
@@ -930,7 +992,7 @@ func (c *fluentdComponent) eksLogForwarderClusterRole() *rbacv1.ClusterRole {
 				APIGroups:     []string{"policy"},
 				Resources:     []string{"podsecuritypolicies"},
 				Verbs:         []string{"use"},
-				ResourceNames: []string{c.eksLogForwarderName()},
+				ResourceNames: []string{eksLogForwarderName},
 			},
 		},
 	}

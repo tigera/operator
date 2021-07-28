@@ -83,11 +83,12 @@ type typhaComponent struct {
 func (c *typhaComponent) ResolveImages(is *operator.ImageSet) error {
 	reg := c.installation.Registry
 	path := c.installation.ImagePath
+	prefix := c.installation.ImagePrefix
 	var err error
 	if c.installation.Variant == operator.TigeraSecureEnterprise {
-		c.typhaImage, err = components.GetReference(components.ComponentTigeraTypha, reg, path, is)
+		c.typhaImage, err = components.GetReference(components.ComponentTigeraTypha, reg, path, prefix, is)
 	} else {
-		c.typhaImage, err = components.GetReference(components.ComponentCalicoTypha, reg, path, is)
+		c.typhaImage, err = components.GetReference(components.ComponentCalicoTypha, reg, path, prefix, is)
 	}
 	errMsgs := []string{}
 	if err != nil {
@@ -620,43 +621,19 @@ func (c *typhaComponent) typhaPodSecurityPolicy() *policyv1beta1.PodSecurityPoli
 	return psp
 }
 
-// affinity sets the affinity on typha, accounting for the kubernetes-provider and user-specified values.
+// affinity sets the user-specified typha affinity if specified.
 func (c *typhaComponent) affinity() (aff *v1.Affinity) {
-	// in AKS, there is a feature called 'virtual-nodes' which represent azure's container service as a node in the kubernetes cluster.
-	// virtual-nodes have many limitations, namely it's unable to run hostNetworked pods. virtual-kubelets are tainted to prevent pods from running on them,
-	// but typha tolerates all taints and will run there.
-	// as such, we add a required anti-affinity for virtual-nodes if running on azure
-	if c.installation.KubernetesProvider == operator.ProviderAKS {
-		aff = &v1.Affinity{
-			NodeAffinity: &v1.NodeAffinity{
-				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-					NodeSelectorTerms: []v1.NodeSelectorTerm{{
-						MatchExpressions: []v1.NodeSelectorRequirement{
-							{
-								Key:      "type",
-								Operator: corev1.NodeSelectorOpNotIn,
-								Values:   []string{"virtual-node"},
-							},
-							{
-								Key:      "kubernetes.azure.com/cluster",
-								Operator: v1.NodeSelectorOpExists,
-							},
-						},
-					}},
-				},
-			},
-		}
-	}
-
-	// add the user-specified typha preferred affinity if specified.
 	if c.installation.TyphaAffinity != nil && c.installation.TyphaAffinity.NodeAffinity != nil {
-		// check if above code initialized affintiy or not.
-		// this ensures we still return nil if neither condition is hit.
-		if aff == nil {
-			aff = &v1.Affinity{NodeAffinity: &v1.NodeAffinity{}}
+		// this ensures we return nil if no affinity is specified.
+		if c.installation.TyphaAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil && len(c.installation.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution) == 0 {
+			return nil
 		}
-		aff.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution = c.installation.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution
-	}
+		aff = &v1.Affinity{NodeAffinity: &v1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution:  c.installation.TyphaAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution,
+			PreferredDuringSchedulingIgnoredDuringExecution: c.installation.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
+		},
+		}
 
+	}
 	return aff
 }

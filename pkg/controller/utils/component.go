@@ -36,6 +36,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -170,7 +172,7 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 		err := c.client.Delete(ctx, obj)
 		if err != nil && !errors.IsNotFound(err) {
 			logCtx := ContextLoggerForResource(c.log, obj)
-			logCtx.Error(err, "Error deleting object %v", obj)
+			logCtx.Error(err, fmt.Sprintf("Error deleting object %v", obj))
 			return err
 		}
 
@@ -328,6 +330,18 @@ func ensureOSSchedulingRestrictions(obj client.Object, osType rmeta.OSType) {
 		for i := range nodeSets {
 			podSpecs = append(podSpecs, &nodeSets[i].PodTemplate.Spec)
 		}
+	case *monitoringv1.Alertmanager:
+		// Prometheus operator types don't have a template spec which is of v1.PodSpec type.
+		// We can't add it to the podSpecs list and assign osType in the for loop below.
+		podSpec := &obj.(*monitoringv1.Alertmanager).Spec
+		podSpec.NodeSelector = map[string]string{"kubernetes.io/os": string(osType)}
+		return
+	case *monitoringv1.Prometheus:
+		// Prometheus operator types don't have a template spec which is of v1.PodSpec type.
+		// We can't add it to the podSpecs list and assign osType in the for loop below.
+		podSpec := &obj.(*monitoringv1.Prometheus).Spec
+		podSpec.NodeSelector = map[string]string{"kubernetes.io/os": string(osType)}
+		return
 	default:
 		return
 	}

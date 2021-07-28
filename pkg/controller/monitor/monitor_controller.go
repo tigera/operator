@@ -130,7 +130,6 @@ func (r *ReconcileMonitor) getMonitor(ctx context.Context) (*operatorv1.Monitor,
 func (r *ReconcileMonitor) setDegraded(reqLogger logr.Logger, err error, msg string) {
 	reqLogger.Error(err, msg)
 	r.status.SetDegraded(msg, err.Error())
-
 }
 
 func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {

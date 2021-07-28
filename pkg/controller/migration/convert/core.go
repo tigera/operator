@@ -12,6 +12,7 @@ import (
 )
 
 var toBeIgnoredAnnotationKeyRegExps []*regexp.Regexp
+
 func init() {
 	log.Info("Compiling regular expressions for annotation keys to be ignored...")
 	toBeIgnoredAnnotationKeyRegExps = make([]*regexp.Regexp, 0)

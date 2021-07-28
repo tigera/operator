@@ -108,7 +108,7 @@ var _ = Describe("apiserver controller tests", func() {
 				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "tigera-apiserver",
-					Namespace: render.APIServerNamespace,
+					Namespace: "tigera-system",
 				},
 			}
 			Expect(test.GetResource(cli, &d)).To(BeNil())
@@ -158,7 +158,7 @@ var _ = Describe("apiserver controller tests", func() {
 				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "tigera-apiserver",
-					Namespace: render.APIServerNamespace,
+					Namespace: "tigera-system",
 				},
 			}
 			Expect(test.GetResource(cli, &d)).To(BeNil())

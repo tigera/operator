@@ -73,8 +73,9 @@ type GuardianComponent struct {
 func (c *GuardianComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.installation.Registry
 	path := c.installation.ImagePath
+	prefix := c.installation.ImagePrefix
 	var err error
-	c.image, err = components.GetReference(components.ComponentGuardian, reg, path, is)
+	c.image, err = components.GetReference(components.ComponentGuardian, reg, path, prefix, is)
 	return err
 }
 

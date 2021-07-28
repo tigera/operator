@@ -44,7 +44,22 @@ func RequiresTigeraSecure(cfg *rest.Config) (bool, error) {
 		return false, err
 	}
 	for _, r := range resources.APIResources {
-		if r.Kind == "APIServer" {
+		switch r.Kind {
+		case "LogCollector":
+			fallthrough
+		case "LogStorage":
+			fallthrough
+		case "AmazonCloudIntegration":
+			fallthrough
+		case "Compliance":
+			fallthrough
+		case "IntrusionDetection":
+			fallthrough
+		case "Monitor":
+			fallthrough
+		case "ManagementCluster":
+			fallthrough
+		case "ManagementClusterConnection":
 			return true, nil
 		}
 	}

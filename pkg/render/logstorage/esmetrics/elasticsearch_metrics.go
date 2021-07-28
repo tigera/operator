@@ -67,8 +67,9 @@ func (e *elasticsearchMetrics) ResolveImages(is *operatorv1.ImageSet) error {
 
 	reg := e.installation.Registry
 	path := e.installation.ImagePath
+	prefix := e.installation.ImagePrefix
 
-	e.esMetricsImage, err = components.GetReference(components.ComponentElasticsearchMetrics, reg, path, is)
+	e.esMetricsImage, err = components.GetReference(components.ComponentElasticsearchMetrics, reg, path, prefix, is)
 
 	return err
 }

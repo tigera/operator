@@ -37,6 +37,7 @@ var defaultImages = map[string]string{
 	"guardian":                "tigera/guardian",
 	"tigera-cni":              "tigera/cni",
 	"key-cert-provisioner":    "tigera/key-cert-provisioner",
+	"calico/apiserver":        "calico/apiserver",
 }
 
 type Release struct {

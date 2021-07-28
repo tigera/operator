@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package installation
+package utils
 
 import (
 	"fmt"
@@ -44,7 +44,7 @@ var _ = Describe("Installation merge tests", func() {
 		if second != nil {
 			s.Variant = *second
 		}
-		inst := overrideInstallationSpec(m, s)
+		inst := OverrideInstallationSpec(m, s)
 		if expectVariant == nil {
 			var x opv1.ProductVariant
 			Expect(inst.Variant).To(Equal(x))
@@ -68,7 +68,7 @@ var _ = Describe("Installation merge tests", func() {
 		if second != "" {
 			s.Registry = second
 		}
-		inst := overrideInstallationSpec(m, s)
+		inst := OverrideInstallationSpec(m, s)
 		Expect(inst.Registry).To(Equal(expect))
 	},
 		Entry("Both unset", nil, nil, nil),
@@ -87,7 +87,7 @@ var _ = Describe("Installation merge tests", func() {
 		if second != "" {
 			s.ImagePath = second
 		}
-		inst := overrideInstallationSpec(m, s)
+		inst := OverrideInstallationSpec(m, s)
 		Expect(inst.ImagePath).To(Equal(expect))
 	},
 		Entry("Both unset", nil, nil, nil),
@@ -106,7 +106,7 @@ var _ = Describe("Installation merge tests", func() {
 		if second != nil {
 			s.ImagePullSecrets = second
 		}
-		inst := overrideInstallationSpec(m, s)
+		inst := OverrideInstallationSpec(m, s)
 		Expect(inst.ImagePullSecrets).To(ConsistOf(expect))
 	},
 		Entry("Both unset", nil, nil, nil),
@@ -125,7 +125,7 @@ var _ = Describe("Installation merge tests", func() {
 		if second != nil {
 			s.KubernetesProvider = *second
 		}
-		inst := overrideInstallationSpec(m, s)
+		inst := OverrideInstallationSpec(m, s)
 		if expect == nil {
 			var x opv1.Provider
 			Expect(inst.KubernetesProvider).To(Equal(x))
@@ -149,7 +149,7 @@ var _ = Describe("Installation merge tests", func() {
 		if second != nil {
 			s.CNI = second
 		}
-		inst := overrideInstallationSpec(m, s)
+		inst := OverrideInstallationSpec(m, s)
 		if expect == nil {
 			Expect(inst.CNI).To(BeNil())
 		} else {
@@ -185,7 +185,7 @@ var _ = Describe("Installation merge tests", func() {
 			if second != nil {
 				s.CalicoNetwork = &opv1.CalicoNetworkSpec{BGP: second}
 			}
-			inst := overrideInstallationSpec(m, s)
+			inst := OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNetwork).To(BeNil())
 			} else {
@@ -208,7 +208,7 @@ var _ = Describe("Installation merge tests", func() {
 			if second != nil {
 				s.CalicoNetwork = &opv1.CalicoNetworkSpec{IPPools: second}
 			}
-			inst := overrideInstallationSpec(m, s)
+			inst := OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNetwork).To(BeNil())
 			} else {
@@ -231,7 +231,7 @@ var _ = Describe("Installation merge tests", func() {
 			if second != nil {
 				s.CalicoNetwork = second
 			}
-			inst := overrideInstallationSpec(m, s)
+			inst := OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNetwork).To(BeNil())
 			} else {
@@ -275,7 +275,7 @@ var _ = Describe("Installation merge tests", func() {
 			if second != nil {
 				s.CalicoNetwork = &opv1.CalicoNetworkSpec{NodeAddressAutodetectionV4: second}
 			}
-			inst := overrideInstallationSpec(m, s)
+			inst := OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNetwork).To(BeNil())
 			} else {
@@ -308,7 +308,7 @@ var _ = Describe("Installation merge tests", func() {
 			if second != nil {
 				s.CalicoNetwork = &opv1.CalicoNetworkSpec{NodeAddressAutodetectionV6: second}
 			}
-			inst := overrideInstallationSpec(m, s)
+			inst := OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNetwork).To(BeNil())
 			} else {
@@ -343,7 +343,7 @@ var _ = Describe("Installation merge tests", func() {
 			if second != nil {
 				s.CalicoNetwork = &opv1.CalicoNetworkSpec{HostPorts: second}
 			}
-			inst := overrideInstallationSpec(m, s)
+			inst := OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNetwork).To(BeNil())
 			} else {
@@ -368,7 +368,7 @@ var _ = Describe("Installation merge tests", func() {
 			if second != nil {
 				s.CalicoNetwork = &opv1.CalicoNetworkSpec{MultiInterfaceMode: second}
 			}
-			inst := overrideInstallationSpec(m, s)
+			inst := OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNetwork).To(BeNil())
 			} else {
@@ -393,7 +393,7 @@ var _ = Describe("Installation merge tests", func() {
 			if second != nil {
 				s.CalicoNetwork = &opv1.CalicoNetworkSpec{ContainerIPForwarding: second}
 			}
-			inst := overrideInstallationSpec(m, s)
+			inst := OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNetwork).To(BeNil())
 			} else {
@@ -416,7 +416,7 @@ var _ = Describe("Installation merge tests", func() {
 			if second != nil {
 				s.ControlPlaneNodeSelector = second
 			}
-			inst := overrideInstallationSpec(m, s)
+			inst := OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.ControlPlaneNodeSelector).To(BeNil())
 			} else {
@@ -440,7 +440,7 @@ var _ = Describe("Installation merge tests", func() {
 			if second != nil {
 				s.CalicoNetwork = second
 			}
-			inst := overrideInstallationSpec(m, s)
+			inst := OverrideInstallationSpec(m, s)
 			if expect == nil {
 				Expect(inst.CalicoNetwork).To(BeNil())
 			} else {
@@ -489,7 +489,7 @@ var _ = Describe("Installation merge tests", func() {
 		if second != nil {
 			s.NodeMetricsPort = second
 		}
-		inst := overrideInstallationSpec(m, s)
+		inst := OverrideInstallationSpec(m, s)
 		if expect == nil {
 			Expect(inst.NodeMetricsPort).To(BeNil())
 		} else {
@@ -512,7 +512,7 @@ var _ = Describe("Installation merge tests", func() {
 		if second != "" {
 			s.FlexVolumePath = second
 		}
-		inst := overrideInstallationSpec(m, s)
+		inst := OverrideInstallationSpec(m, s)
 		Expect(inst.FlexVolumePath).To(Equal(expect))
 	},
 		Entry("Both unset", nil, nil, nil),
@@ -541,7 +541,7 @@ var _ = Describe("Installation merge tests", func() {
 		if second != nil {
 			s.NodeUpdateStrategy = *second
 		}
-		inst := overrideInstallationSpec(m, s)
+		inst := OverrideInstallationSpec(m, s)
 		if expect == nil {
 			var x appsv1.DaemonSetUpdateStrategy
 			Expect(inst.NodeUpdateStrategy).To(Equal(x))
@@ -577,7 +577,7 @@ var _ = Describe("Installation merge tests", func() {
 		if second != nil {
 			s.ComponentResources = second
 		}
-		inst := overrideInstallationSpec(m, s)
+		inst := OverrideInstallationSpec(m, s)
 		if expect == nil {
 			Expect(inst.ComponentResources).To(HaveLen(0))
 		} else {
@@ -611,7 +611,7 @@ var _ = Describe("Installation merge tests", func() {
 		})
 
 		It("when set in cfg", func() {
-			inst := overrideInstallationSpec(
+			inst := OverrideInstallationSpec(
 				defaulted,
 				opv1.InstallationSpec{},
 			)
@@ -624,7 +624,7 @@ var _ = Describe("Installation merge tests", func() {
 				fmt.Sprintf("Differences: %+v", changeLog))
 		})
 		It("when set in override", func() {
-			inst := overrideInstallationSpec(
+			inst := OverrideInstallationSpec(
 				opv1.InstallationSpec{CalicoNetwork: &opv1.CalicoNetworkSpec{}},
 				defaulted,
 			)
@@ -636,7 +636,7 @@ var _ = Describe("Installation merge tests", func() {
 				fmt.Sprintf("Differences: %+v", changeLog))
 		})
 		DescribeTable("merge defaulted", func(cfg, override, expect *opv1.InstallationSpec) {
-			inst := overrideInstallationSpec(*cfg, *override)
+			inst := OverrideInstallationSpec(*cfg, *override)
 
 			changeLog, err := diff.Diff(inst, *expect)
 			Expect(err).NotTo(HaveOccurred())

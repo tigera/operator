@@ -79,6 +79,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: rmeta.OperatorNamespace()}},
 					{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: rmeta.OperatorNamespace()}},
 				},
+				false,
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchKubeControllersUserSecret, Namespace: rmeta.OperatorNamespace()}},
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchKubeControllersVerificationUserSecret, Namespace: render.ElasticsearchNamespace}},
@@ -121,6 +122,49 @@ var _ = Describe("ES Gateway rendering tests", func() {
 					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: rmeta.OperatorNamespace()}},
 					{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: rmeta.OperatorNamespace()}},
 				},
+				false,
+				[]*corev1.Secret{
+					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchKubeControllersUserSecret, Namespace: rmeta.OperatorNamespace()}},
+					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchKubeControllersVerificationUserSecret, Namespace: render.ElasticsearchNamespace}},
+					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchKubeControllersSecureUserSecret, Namespace: render.ElasticsearchNamespace}},
+				},
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: rmeta.OperatorNamespace()}},
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.InternalCertSecret, Namespace: render.ElasticsearchNamespace}},
+				clusterDomain,
+			)
+
+			createResources, _ := component.Objects()
+			compareResources(createResources, expectedResources)
+		})
+
+		It("should render an ES Gateway deployment and all supporting resources without overwriting the cert secret when customerProvidedCert is true", func() {
+			installation.CertificateManagement = &operatorv1.CertificateManagement{}
+			expectedResources := []resourceTestObj{
+				{relasticsearch.PublicCertSecret, rmeta.OperatorNamespace(), &corev1.Secret{}, nil},
+				{render.TigeraElasticsearchCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+				{relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+				{render.KibanaInternalCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+				{render.ElasticsearchKubeControllersUserSecret, rmeta.OperatorNamespace(), &corev1.Secret{}, nil},
+				{render.ElasticsearchKubeControllersVerificationUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+				{render.ElasticsearchKubeControllersSecureUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+				{ServiceName, render.ElasticsearchNamespace, &corev1.Service{}, nil},
+				{RoleName, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
+				{RoleName, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
+				{ServiceAccountName, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
+				{DeploymentName, render.ElasticsearchNamespace, &appsv1.Deployment{}, nil},
+				{RoleName + ":csr-creator", "", &rbacv1.ClusterRoleBinding{}, nil},
+			}
+
+			component := EsGateway(
+				installation,
+				[]*corev1.Secret{
+					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+				},
+				[]*corev1.Secret{
+					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: rmeta.OperatorNamespace()}},
+					{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: rmeta.OperatorNamespace()}},
+				},
+				true,
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchKubeControllersUserSecret, Namespace: rmeta.OperatorNamespace()}},
 					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchKubeControllersVerificationUserSecret, Namespace: render.ElasticsearchNamespace}},

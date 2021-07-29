@@ -54,13 +54,22 @@ func EsGateway(
 	installation *operatorv1.InstallationSpec,
 	pullSecrets []*corev1.Secret,
 	certSecrets []*corev1.Secret,
+	customerProvidedCert bool,
 	kubeControllersUserSecrets []*corev1.Secret,
 	kibanaInternalCertSecret *corev1.Secret,
 	esInternalCertSecret *corev1.Secret,
 	clusterDomain string,
 ) render.Component {
 	var certSecretsESCopy []*corev1.Secret
-	secrets := certSecrets
+	var secrets []*corev1.Secret
+
+	// If the cert secret for ES Gateway is provided by the customer, we need to avoid re-rendering the secret
+	// in the Operator namespace to avoid changing the OwnerReference.
+	if customerProvidedCert {
+		secrets = append(secrets, certSecrets[1])
+	} else {
+		secrets = certSecrets
+	}
 
 	// Copy the Operator namespaced cert secrets to the Elasticsearch namespace.
 	certSecretsESCopy = append(certSecretsESCopy, secret.CopyToNamespace(render.ElasticsearchNamespace, certSecrets...)...)

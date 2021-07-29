@@ -22,7 +22,7 @@ make release VERSION=${tag}
 echo "Publish release ${tag}"
 make release-publish-images VERSION=${tag}
 
-if [[ ! "$(git rev-parse --abbrev-ref HEAD)" =~ (cloud-dev) ]]; then
+if [[ "$(git rev-parse --abbrev-ref HEAD)" =~ (cloud-dev) ]]; then
 	echo "on 'cloud-dev' branch, do not push to RedHat for certification"
 	exit 0
 fi

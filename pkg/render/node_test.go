@@ -2841,7 +2841,9 @@ func verifyProbesAndLifecycle(ds *apps.DaemonSet, isOpenshift, isEnterprise bool
 			Host: "localhost",
 			Path: "/liveness",
 			Port: intstr.FromInt(9099),
-		}}}
+		}},
+		TimeoutSeconds: 10,
+	}
 
 	if isOpenshift {
 		expectedLiveness.HTTPGet.Port = intstr.FromInt(9199)

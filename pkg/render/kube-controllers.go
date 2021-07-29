@@ -393,6 +393,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 					},
 				},
 			},
+			TimeoutSeconds: 10,
 		},
 		LivenessProbe: &v1.Probe{
 			PeriodSeconds:       int32(10),
@@ -406,6 +407,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 					},
 				},
 			},
+			TimeoutSeconds: 10,
 		},
 		VolumeMounts: kubeControllersVolumeMounts(c.managerInternalSecret),
 	}

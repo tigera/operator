@@ -1354,6 +1354,7 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 				Port: livenessPort,
 			},
 		},
+		TimeoutSeconds: 10,
 	}
 	rp := &v1.Probe{
 		Handler: v1.Handler{Exec: &v1.ExecAction{Command: readinessCmd}},

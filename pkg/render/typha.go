@@ -582,6 +582,7 @@ func (c *typhaComponent) livenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 				Port: port,
 			},
 		},
+		TimeoutSeconds: 10,
 	}
 	rp := &v1.Probe{
 		Handler: v1.Handler{
@@ -591,6 +592,7 @@ func (c *typhaComponent) livenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 				Port: port,
 			},
 		},
+		TimeoutSeconds: 10,
 	}
 	return lp, rp
 }

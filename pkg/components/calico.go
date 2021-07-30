@@ -48,6 +48,16 @@ var (
 		Version: "master",
 		Image:   "calico/apiserver",
 	}
+
+	ComponentCalicoVpp = component{
+		Version: "latest",
+		Image:   "calicovpp/vpp",
+	}
+
+	ComponentCalicoVppAgent = component{
+		Version: "latest",
+		Image:   "calicovpp/agent",
+	}
 	ComponentOperatorInit = component{
 		Version: version.VERSION,
 		Image:   "tigera/operator",

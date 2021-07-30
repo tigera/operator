@@ -54,6 +54,9 @@ func (c *namespaceComponent) Objects() ([]client.Object, []client.Object) {
 		// We need to always have ns tigera-dex even when the Authentication CR is not present, so policies can be added to this namespace.
 		ns = append(ns, createNamespace(DexObjectName, c.installation.KubernetesProvider))
 	}
+	if vppDataplaneEnabled(c.installation) {
+		ns = append(ns, createNamespace(common.VppNamespace, c.installation.KubernetesProvider))
+	}
 	if len(c.pullSecrets) > 0 {
 		ns = append(ns, secret.ToRuntimeObjects(secret.CopyToNamespace(common.CalicoNamespace, c.pullSecrets...)...)...)
 	}

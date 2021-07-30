@@ -41,7 +41,7 @@ const (
 	CalicoNodeAlertmanager      = "calico-node-alertmanager"
 	CalicoNodeMonitor           = "calico-node-monitor"
 	CalicoNodePrometheus        = "calico-node-prometheus"
-	ElasticsearchMetrics        = "elasticearch-metrics"
+	ElasticsearchMetrics        = "elasticsearch-metrics"
 	FluentdMetrics              = "fluentd-metrics"
 	TigeraPrometheusDPRate      = "tigera-prometheus-dp-rate"
 	TigeraPrometheusRole        = "tigera-prometheus-role"
@@ -173,7 +173,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 
 // prometheusHTTPAPIService sets up a service to open http connection for the prometheus instance
 func (mc *monitorComponent) prometheusHTTPAPIService() *corev1.Service {
-	s := &corev1.Service{
+	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Service",
 			APIVersion: "v1",
@@ -197,8 +197,6 @@ func (mc *monitorComponent) prometheusHTTPAPIService() *corev1.Service {
 			},
 		},
 	}
-
-	return s
 }
 
 func (mc *monitorComponent) podMonitor() *monitoringv1.PodMonitor {

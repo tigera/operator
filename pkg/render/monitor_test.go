@@ -36,11 +36,6 @@ import (
 )
 
 var _ = Describe("monitor rendering tests", func() {
-
-	const (
-		calicoNodePrometheusServiceName = "calico-node-prometheus"
-	)
-
 	It("Should render Prometheus resources", func() {
 		component := render.Monitor(
 			&operatorv1.InstallationSpec{},
@@ -62,17 +57,17 @@ var _ = Describe("monitor rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{common.TigeraPrometheusNamespace, "", "", "v1", "Namespace"},
+			{"tigera-prometheus", "", "", "v1", "Namespace"},
 			{"tigera-pull-secret", common.TigeraPrometheusNamespace, "", "", ""},
-			{render.TigeraPrometheusRole, common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "Role"},
-			{render.TigeraPrometheusRoleBinding, common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding"},
-			{render.CalicoNodeAlertmanager, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.AlertmanagersKind},
-			{render.CalicoNodePrometheus, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind},
-			{render.TigeraPrometheusDPRate, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusRuleKind},
-			{render.CalicoNodeMonitor, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
-			{render.ElasticsearchMetrics, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
-			{render.FluentdMetrics, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PodMonitorsKind},
-			{render.PrometheusHTTPAPIServiceName, common.TigeraPrometheusNamespace, "", "v1", "Service"},
+			{"tigera-prometheus-role", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "Role"},
+			{"tigera-prometheus-role-binding", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding"},
+			{"calico-node-alertmanager", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.AlertmanagersKind},
+			{"calico-node-prometheus", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind},
+			{"tigera-prometheus-dp-rate", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusRuleKind},
+			{"calico-node-monitor", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
+			{"elasticsearch-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
+			{"fluentd-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PodMonitorsKind},
+			{"prometheus-http-api", common.TigeraPrometheusNamespace, "", "v1", "Service"},
 		}
 
 		Expect(len(toCreate)).To(Equal(len(expectedResources)))
@@ -80,25 +75,6 @@ var _ = Describe("monitor rendering tests", func() {
 		for i, expectedRes := range expectedResources {
 			obj := toCreate[i]
 			rtest.ExpectResource(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-
-			if alertmanagerObj, ok := obj.(*monitoringv1.Alertmanager); ok {
-				com := components.ComponentPrometheusAlertmanager
-				expectedImage := fmt.Sprintf("%s%s:%s", components.PrometheusRegistry, com.Image, com.Version)
-				Expect(*alertmanagerObj.Spec.Image).To(Equal(expectedImage))
-			} else if prometheusObj, ok := obj.(*monitoringv1.Prometheus); ok {
-				com := components.ComponentPrometheus
-				expectedImage := fmt.Sprintf("%s%s:%s", components.PrometheusRegistry, com.Image, com.Version)
-				Expect(*prometheusObj.Spec.Image).To(Equal(expectedImage))
-			} else if obj.GetName() == "prometheus-operated-http" {
-				prometheusOperatedHttpServiceManifest := obj.(*corev1.Service)
-				Expect(prometheusOperatedHttpServiceManifest.Spec.Selector["prometheus"]).To(Equal(calicoNodePrometheusServiceName))
-
-				Expect(prometheusOperatedHttpServiceManifest.Spec.Type).To(Equal(corev1.ServiceTypeClusterIP))
-				Expect(len(prometheusOperatedHttpServiceManifest.Spec.Ports)).To(Equal(1))
-				Expect(prometheusOperatedHttpServiceManifest.Spec.Ports[0].Port).To(Equal(int32(render.PrometheusDefaultPort)))
-				Expect(prometheusOperatedHttpServiceManifest.Spec.Ports[0].TargetPort.IntVal).To(Equal(int32(render.PrometheusDefaultPort)))
-
-			}
 		}
 	})
 
@@ -139,6 +115,15 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(prometheusObj.Spec.Alerting.Alertmanagers[0].Namespace).To(Equal("tigera-prometheus"))
 		Expect(prometheusObj.Spec.Alerting.Alertmanagers[0].Port).To(Equal(intstr.FromString("web")))
 		Expect(prometheusObj.Spec.Alerting.Alertmanagers[0].Scheme).To(Equal("HTTP"))
+
+		// Prometheus HTTP API service
+		prometheusServiceObj, ok := rtest.GetResource(toCreate, render.PrometheusHTTPAPIServiceName, common.TigeraPrometheusNamespace, "", "v1", "Service").(*corev1.Service)
+		Expect(ok).To(BeTrue())
+		Expect(prometheusServiceObj.Spec.Selector["prometheus"]).To(Equal("calico-node-prometheus"))
+		Expect(prometheusServiceObj.Spec.Type).To(Equal(corev1.ServiceTypeClusterIP))
+		Expect(prometheusServiceObj.Spec.Ports).To(HaveLen(1))
+		Expect(prometheusServiceObj.Spec.Ports[0].Port).To(Equal(int32(9090)))
+		Expect(prometheusServiceObj.Spec.Ports[0].TargetPort).To(Equal(intstr.FromInt(9090)))
 
 		// PodMonitor
 		podmonitorObj, ok := rtest.GetResource(toCreate, render.FluentdMetrics, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PodMonitorsKind).(*monitoringv1.PodMonitor)

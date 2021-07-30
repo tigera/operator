@@ -41,7 +41,7 @@ const (
 	CalicoNodeAlertmanager      = "calico-node-alertmanager"
 	CalicoNodeMonitor           = "calico-node-monitor"
 	CalicoNodePrometheus        = "calico-node-prometheus"
-	ElasticsearchMetrics        = "elasticearch-metrics"
+	ElasticsearchMetrics        = "elasticsearch-metrics"
 	FluentdMetrics              = "fluentd-metrics"
 	TigeraPrometheusDPRate      = "tigera-prometheus-dp-rate"
 	TigeraPrometheusRole        = "tigera-prometheus-role"
@@ -97,12 +97,11 @@ func (mc *monitorComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
-	objs := []client.Object{
+	toCreate := []client.Object{
 		createNamespace(common.TigeraPrometheusNamespace, mc.installation.KubernetesProvider),
 	}
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.pullSecrets...)...)...)
-
-	objs = append(objs,
+	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.pullSecrets...)...)...)
+	toCreate = append(toCreate,
 		mc.role(),
 		mc.roleBinding(),
 		mc.alertmanager(),
@@ -114,7 +113,13 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		mc.prometheusHTTPAPIService(),
 	)
 
-	return objs, nil
+	// We had a typo in Elasticsearch ServiceMonitor name in v3.8 so delete it from the cluster.
+	// TODO Remove the toDelete object after we drop support for v3.8.
+	toDelete := []client.Object{
+		mc.serviceMonitorElasicsearchToDelete(),
+	}
+
+	return toCreate, toDelete
 }
 
 func (mc *monitorComponent) Ready() bool {
@@ -173,7 +178,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 
 // prometheusHTTPAPIService sets up a service to open http connection for the prometheus instance
 func (mc *monitorComponent) prometheusHTTPAPIService() *corev1.Service {
-	s := &corev1.Service{
+	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Service",
 			APIVersion: "v1",
@@ -197,8 +202,6 @@ func (mc *monitorComponent) prometheusHTTPAPIService() *corev1.Service {
 			},
 		},
 	}
-
-	return s
 }
 
 func (mc *monitorComponent) podMonitor() *monitoringv1.PodMonitor {
@@ -308,6 +311,29 @@ func (mc *monitorComponent) serviceMonitorElasicsearch() *monitoringv1.ServiceMo
 	}
 }
 
+// TODO Remove this object after we drop support for v3.8.
+func (mc *monitorComponent) serviceMonitorElasicsearchToDelete() *monitoringv1.ServiceMonitor {
+	return &monitoringv1.ServiceMonitor{
+		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: MonitoringAPIVersion},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "elasticearch-metrics",
+			Namespace: common.TigeraPrometheusNamespace,
+			Labels:    map[string]string{"team": "network-operators"},
+		},
+		Spec: monitoringv1.ServiceMonitorSpec{
+			Selector:          metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "tigera-elasticsearch-metrics"}},
+			NamespaceSelector: monitoringv1.NamespaceSelector{MatchNames: []string{"tigera-elasticsearch"}},
+			Endpoints: []monitoringv1.Endpoint{
+				{
+					HonorLabels:   true,
+					Interval:      "5s",
+					Port:          "metrics-port",
+					ScrapeTimeout: "5s",
+				},
+			},
+		},
+	}
+}
 func (mc *monitorComponent) role() *rbacv1.Role {
 	// list and watch have to be cluster scopes for watches to work.
 	// In controller-runtime, watches are by default non-namespaced.

@@ -40,7 +40,7 @@ const (
 	CalicoNodeAlertmanager = "calico-node-alertmanager"
 	CalicoNodeMonitor      = "calico-node-monitor"
 	CalicoNodePrometheus   = "calico-node-prometheus"
-	ElasticsearchMetrics   = "elasticearch-metrics"
+	ElasticsearchMetrics   = "elasticsearch-metrics"
 	FluentdMetrics         = "fluentd-metrics"
 	TigeraPrometheusDPRate = "tigera-prometheus-dp-rate"
 )

@@ -431,6 +431,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	var kibanaSecrets, curatorSecrets []*corev1.Secret
 	var clusterConfig *relasticsearch.ClusterConfig
 	var esLicenseType render.ElasticsearchLicenseType
+	customerProvidedCert := false
 
 	if managementClusterConnection == nil {
 		var flowShards = calculateFlowShards(ls.Spec.Nodes, defaultElasticsearchShards)
@@ -450,7 +451,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, nil
 		}
 
-		if gatewayCertSecret, publicCertSecret, err = r.getESGatewayCertificateSecrets(ctx, install); err != nil {
+		if gatewayCertSecret, publicCertSecret, customerProvidedCert, err = r.getESGatewayCertificateSecrets(ctx, install); err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Failed to create Elasticsearch Gateway secrets", err.Error())
 			return reconcile.Result{}, err
@@ -620,6 +621,14 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, err
 		}
 
+		if !customerProvidedCert {
+			if err := hdler.CreateOrUpdateOrDelete(ctx, render.Secrets([]*corev1.Secret{gatewayCertSecret}), r.status); err != nil {
+				reqLogger.Error(err, err.Error())
+				r.status.SetDegraded("Error creating / updating resource", err.Error())
+				return reconcile.Result{}, err
+			}
+		}
+
 		if err := hdler.CreateOrUpdateOrDelete(ctx, esGatewayComponent, r.status); err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Error creating / updating resource", err.Error())
@@ -784,7 +793,9 @@ func (r *ReconcileLogStorage) createKubeControllersSecrets(ctx context.Context, 
 // 1) The certificate/key secret to be mounted by ES Gateway and used to authenticate requests before
 // proxying to Elasticsearch/Kibana (in the operator namespace). If the user didn't create this secret, it is created.
 // 2) The certificate mounted by other clients that connect to Elasticsearch/Kibana through ES Gateway (in the operator namespace).
-func (r *ReconcileLogStorage) getESGatewayCertificateSecrets(ctx context.Context, instl *operatorv1.InstallationSpec) (*corev1.Secret, *corev1.Secret, error) {
+// The final return value is used to indicate that the certificate secret was provided by the customer. This
+// ensures that we do not re-render the secret in the Operator Namespace and overwrite the OwnerReference.
+func (r *ReconcileLogStorage) getESGatewayCertificateSecrets(ctx context.Context, instl *operatorv1.InstallationSpec) (*corev1.Secret, *corev1.Secret, bool, error) {
 	var publicCertSecret *corev1.Secret
 
 	svcDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
@@ -793,13 +804,13 @@ func (r *ReconcileLogStorage) getESGatewayCertificateSecrets(ctx context.Context
 	// Get the secret - might be nil
 	oprKeyCert, err := utils.GetSecret(ctx, r.client, render.TigeraElasticsearchCertSecret, rmeta.OperatorNamespace())
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 
 	// Ensure that cert is valid.
 	oprKeyCert, err = utils.EnsureCertificateSecret(render.TigeraElasticsearchCertSecret, oprKeyCert, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, svcDNSNames...)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 
 	// Three different certificate issuers are possible:
@@ -808,7 +819,7 @@ func (r *ReconcileLogStorage) getESGatewayCertificateSecrets(ctx context.Context
 	// - The issuer that is provided through the certificate management feature.
 	keyCertIssuer, err := utils.GetCertificateIssuer(oprKeyCert.Data[corev1.TLSCertKey])
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 	customerProvidedCert := !utils.IsOperatorIssued(keyCertIssuer)
 
@@ -817,14 +828,14 @@ func (r *ReconcileLogStorage) getESGatewayCertificateSecrets(ctx context.Context
 		cmCa := instl.CertificateManagement.CACert
 		cmIssuer, err := utils.GetCertificateIssuer(cmCa)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, false, err
 		}
 
 		// If the issuer of the current secret is not the same as the certificate management issuer and also is not
 		// issued by the tigera-operator, it means that it is added to this cluster by the customer. This is not supported
 		// in combination with certificate management.
 		if customerProvidedCert && cmIssuer != keyCertIssuer {
-			return nil, nil, fmt.Errorf("certificate management does not support custom Elasticsearch secrets, please delete secret %s/%s or disable certificate management", oprKeyCert.Namespace, oprKeyCert.Name)
+			return nil, nil, false, fmt.Errorf("certificate management does not support custom Elasticsearch secrets, please delete secret %s/%s or disable certificate management", oprKeyCert.Namespace, oprKeyCert.Name)
 		}
 
 		oprKeyCert.Data[corev1.TLSCertKey] = instl.CertificateManagement.CACert
@@ -833,7 +844,7 @@ func (r *ReconcileLogStorage) getESGatewayCertificateSecrets(ctx context.Context
 		// Get the es gateway pub secret - might be nil
 		publicCertSecret, err = utils.GetSecret(ctx, r.client, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, false, err
 		}
 
 		if publicCertSecret != nil {
@@ -843,7 +854,7 @@ func (r *ReconcileLogStorage) getESGatewayCertificateSecrets(ctx context.Context
 				err = utils.SecretHasExpectedDNSNames(publicCertSecret, corev1.TLSCertKey, svcDNSNames)
 				if err == utils.ErrInvalidCertDNSNames {
 					if err := r.deleteInvalidECKManagedPublicCertSecret(ctx, publicCertSecret); err != nil {
-						return nil, nil, err
+						return nil, nil, false, err
 					}
 					publicCertSecret = render.CreateCertificateSecret(oprKeyCert.Data[corev1.TLSCertKey], relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
 				}
@@ -853,7 +864,7 @@ func (r *ReconcileLogStorage) getESGatewayCertificateSecrets(ctx context.Context
 		}
 	}
 
-	return oprKeyCert, publicCertSecret, nil
+	return oprKeyCert, publicCertSecret, customerProvidedCert, nil
 }
 
 // getElasticsearchCertificateSecrets retrieves Elasticsearch certificate secrets needed for Elasticsearch to run or for

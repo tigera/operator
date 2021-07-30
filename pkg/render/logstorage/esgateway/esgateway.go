@@ -60,7 +60,8 @@ func EsGateway(
 	clusterDomain string,
 ) render.Component {
 	var certSecretsESCopy []*corev1.Secret
-	secrets := certSecrets
+	// Only render the public cert secret in the Operator namespace.
+	secrets := []*corev1.Secret{certSecrets[1]}
 
 	// Copy the Operator namespaced cert secrets to the Elasticsearch namespace.
 	certSecretsESCopy = append(certSecretsESCopy, secret.CopyToNamespace(render.ElasticsearchNamespace, certSecrets...)...)

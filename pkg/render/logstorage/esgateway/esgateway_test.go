@@ -55,7 +55,6 @@ var _ = Describe("ES Gateway rendering tests", func() {
 
 		It("should render an ES Gateway deployment and all supporting resources", func() {
 			expectedResources := []resourceTestObj{
-				{render.TigeraElasticsearchCertSecret, rmeta.OperatorNamespace(), &corev1.Secret{}, nil},
 				{relasticsearch.PublicCertSecret, rmeta.OperatorNamespace(), &corev1.Secret{}, nil},
 				{render.TigeraElasticsearchCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 				{relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
@@ -96,7 +95,6 @@ var _ = Describe("ES Gateway rendering tests", func() {
 		It("should render an ES Gateway deployment and all supporting resources when CertificateManagement is enabled", func() {
 			installation.CertificateManagement = &operatorv1.CertificateManagement{}
 			expectedResources := []resourceTestObj{
-				{render.TigeraElasticsearchCertSecret, rmeta.OperatorNamespace(), &corev1.Secret{}, nil},
 				{relasticsearch.PublicCertSecret, rmeta.OperatorNamespace(), &corev1.Secret{}, nil},
 				{render.TigeraElasticsearchCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 				{relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},

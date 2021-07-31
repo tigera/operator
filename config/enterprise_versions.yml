@@ -29,7 +29,7 @@ components:
     version: v3.8.1
   es-proxy:
     image: tigera/es-proxy
-    version: v3.8.1
+    version: v3.8.2-1
   eck-kibana:
     version: 7.10.1
   dex:

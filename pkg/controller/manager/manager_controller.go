@@ -489,6 +489,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	} else {
 		render.CloudPortalAPIURL = mgrCfg.Data["portalAPIURL"]
+		render.CloudAuth0OrgID = mgrCfg.Data["auth0OrgID"]
 	}
 
 	// Create a component handler to manage the rendered component.

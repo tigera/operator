@@ -1267,9 +1267,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	case operator.ProviderAKS:
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDHOSTENCRYPTIONENABLED", Value: "true"})
 	case operator.ProviderEKS:
-		if c.cr.CNI.Type == operator.PluginCalico {
-			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDHOSTENCRYPTIONENABLED", Value: "true"})
-		}
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDHOSTENCRYPTIONENABLED", Value: "true"})
 	}
 
 	switch c.cr.CNI.Type {

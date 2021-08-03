@@ -11,7 +11,7 @@ if [[ ! "${tag}" =~ ^cloud-v[0-9]+\.[0-9]+\.[0-9]+-[0-9]+$ ]]; then
 	exit 1
 fi
 
-if [[ ! "$(git rev-parse --abbrev-ref HEAD)" =~ (release-v*.*|master|cloud-dev) ]]; then
+if [[ ! "$(git rev-parse --abbrev-ref HEAD)" =~ (release-v*.*|master|cloud-*) ]]; then
 	echo "not on 'master', 'cloud-dev', or 'release-vX.Y'"
 	exit 0
 fi
@@ -22,8 +22,8 @@ make release VERSION=${tag}
 echo "Publish release ${tag}"
 make release-publish-images VERSION=${tag}
 
-if [[ ! "$(git rev-parse --abbrev-ref HEAD)" =~ (cloud-dev) ]]; then
-	echo "on 'cloud-dev' branch, do not push to RedHat for certification"
+if [[ ! "$(git rev-parse --abbrev-ref HEAD)" =~ (cloud-*) ]]; then
+	echo "on 'cloud-*' branch, do not push to RedHat for certification"
 	exit 0
 fi
 

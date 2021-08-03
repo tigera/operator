@@ -18,9 +18,11 @@ fi
 
 echo "On a git tag - building release: ${tag}"
 make release VERSION=${tag}
+make release VERSION=${tag} BUILD_IMAGE=tigera-tesla/operator-cloud
 
 echo "Publish release ${tag}"
 make release-publish-images VERSION=${tag}
+make release-publish-images VERSION=${tag} BUILD_IMAGE=tigera-tesla/operator-cloud
 
 if [[ ! "$(git rev-parse --abbrev-ref HEAD)" =~ (cloud-dev) ]]; then
 	echo "on 'cloud-dev' branch, do not push to RedHat for certification"

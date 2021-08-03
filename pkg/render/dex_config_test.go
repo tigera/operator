@@ -15,6 +15,8 @@
 package render_test
 
 import (
+	"encoding/json"
+	"fmt"
 	"reflect"
 
 	. "github.com/onsi/ginkgo"
@@ -49,9 +51,9 @@ var _ = Describe("dex config tests", func() {
 	}
 	authenticationDiff := &operatorv1.Authentication{
 		Spec: operatorv1.AuthenticationSpec{
-			ManagerDomain: "https://example.com",
+			ManagerDomain: "https://example.org",
 			OIDC: &operatorv1.AuthenticationOIDC{
-				IssuerURL:     "https://example.com",
+				IssuerURL:     "https://example.org",
 				UsernameClaim: "email",
 			},
 		},
@@ -123,7 +125,7 @@ var _ = Describe("dex config tests", func() {
 		validDN     = "dc=example,dc=com"
 		validFilter = "(objectClass=posixGroup)"
 		attribute   = "uid"
-		oidc        = &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{ManagerDomain: domain, OIDC: &operatorv1.AuthenticationOIDC{IssuerURL: iss, UsernameClaim: "email"}}}
+		oidc        = &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{ManagerDomain: domain, OIDC: &operatorv1.AuthenticationOIDC{IssuerURL: iss, UsernameClaim: "email", GroupsClaim: "group"}}}
 		google      = &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{ManagerDomain: domain, OIDC: &operatorv1.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"}}}
 		ocp         = &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{ManagerDomain: domain, Openshift: &operatorv1.AuthenticationOpenshift{IssuerURL: iss}}}
 		ldap        = &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{ManagerDomain: domain, LDAP: &operatorv1.AuthenticationLDAP{Host: iss, UserSearch: &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute}, GroupSearch: &operatorv1.GroupSearch{NameAttribute: attribute, Filter: validFilter, BaseDN: validDN, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}}}}}
@@ -135,6 +137,13 @@ var _ = Describe("dex config tests", func() {
 
 	DescribeTable("Test DexConfig methods for various connectors ", func(auth *operatorv1.Authentication, expectedConnector map[string]interface{}, expectedVolumes []corev1.Volume, expectedEnv []corev1.EnvVar, secret *corev1.Secret) {
 		dexConfig := render.NewDexConfig(auth, tlsSecret, dexSecret, secret, dns.DefaultClusterDomain)
+
+		eb, _ := json.Marshal(expectedConnector)
+		ab, _ := json.Marshal(dexConfig.Connector())
+
+		if !reflect.DeepEqual(dexConfig.Connector(), expectedConnector) {
+			Fail(fmt.Sprintf("Expected:\n%v\n but got:\n%v\n", string(eb), string(ab)))
+		}
 		Expect(reflect.DeepEqual(dexConfig.Connector(), expectedConnector)).To(BeTrue())
 		annotations := dexConfig.RequiredAnnotations()
 		Expect(annotations["hash.operator.tigera.io/tigera-dex-config"]).NotTo(BeEmpty())
@@ -161,7 +170,9 @@ var _ = Describe("dex config tests", func() {
 					"scopes":                    []string{"openid", "email", "profile"},
 					"userNameKey":               "email",
 					"userIDKey":                 "email",
+					"claimMapping":              map[string]string{"groups": "group"},
 					"insecureSkipEmailVerified": false,
+					"insecureEnableGroups":      true,
 				},
 			}, []corev1.Volume{
 				{
@@ -278,7 +289,6 @@ var _ = Describe("dex config tests", func() {
 		Expect(dexConfig.JWKSURI()).To(Equal("https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/keys"))
 		Expect(dexConfig.ClientSecret()).To(Equal(dexSecret.Data["clientSecret"]))
 		Expect(dexConfig.UsernameClaim()).To(Equal("email"))
-		Expect(dexConfig.GroupsClaim()).To(Equal("groups"))
 
 		annotations := dexConfig.RequiredAnnotations()
 		Expect(annotations["hash.operator.tigera.io/tigera-dex-secret"]).NotTo(BeEmpty())

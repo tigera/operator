@@ -48,12 +48,12 @@ var (
 	}
 
 	ComponentEckElasticsearch = component{
-		Version: "7.11.2",
+		Version: "7.10.1",
 		Image:   "tigera/elasticsearch",
 	}
 
 	ComponentEckKibana = component{
-		Version: "7.11.2",
+		Version: "7.10.1",
 		Image:   "tigera/kibana",
 	}
 

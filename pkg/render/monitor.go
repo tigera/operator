@@ -92,7 +92,7 @@ func (mc *monitorComponent) SupportedOSType() rmeta.OSType {
 
 func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
-		createNamespace(common.TigeraPrometheusNamespace, mc.installation.KubernetesProvider),
+		CreateNamespace(common.TigeraPrometheusNamespace, mc.installation.KubernetesProvider),
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.pullSecrets...)...)...)
 

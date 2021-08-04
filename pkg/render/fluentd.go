@@ -230,7 +230,7 @@ func (c *fluentdComponent) path(path string) string {
 func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	var objs []client.Object
 	objs = append(objs,
-		createNamespace(
+		CreateNamespace(
 			LogCollectorNamespace,
 			c.installation.KubernetesProvider))
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.pullSecrets...)...)...)

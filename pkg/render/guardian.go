@@ -88,7 +88,7 @@ func (c *GuardianComponent) SupportedOSType() rmeta.OSType {
 
 func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
-		createNamespace(GuardianNamespace, c.installation.KubernetesProvider),
+		CreateNamespace(GuardianNamespace, c.installation.KubernetesProvider),
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(GuardianNamespace, c.pullSecrets...)...)...)
 	objs = append(objs,
@@ -100,7 +100,7 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		secret.CopyToNamespace(GuardianNamespace, c.tunnelSecret)[0],
 		secret.CopyToNamespace(GuardianNamespace, c.packetCaptureSecret)[0],
 		// Add tigera-manager service account for impersonation
-		createNamespace(ManagerNamespace, c.installation.KubernetesProvider),
+		CreateNamespace(ManagerNamespace, c.installation.KubernetesProvider),
 		managerServiceAccount(),
 		managerClusterRole(false, true, c.openshift),
 		managerClusterRoleBinding(),

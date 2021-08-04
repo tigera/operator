@@ -100,8 +100,6 @@ type DexRelyingPartyConfig interface {
 	RequestedScopes() []string
 	// UsernameClaim returns the part of the JWT that represents a unique username.
 	UsernameClaim() string
-	// GroupsClaim returns the part of the JWT that represents the list of user groups.
-	GroupsClaim() string
 	DexKeyValidatorConfig
 }
 
@@ -205,14 +203,6 @@ func (d *dexBaseCfg) UsernameClaim() string {
 	return claim
 }
 
-func (d *dexBaseCfg) GroupsClaim() string {
-	claim := defaultGroupsClaim
-	if d.connectorType == connectorTypeOIDC && d.authentication.Spec.OIDC.GroupsClaim != "" {
-		claim = d.authentication.Spec.OIDC.GroupsClaim
-	}
-	return claim
-}
-
 func (d *dexBaseCfg) ClientSecret() []byte {
 	return d.dexSecret.Data[ClientSecretSecretField]
 }
@@ -255,7 +245,7 @@ func (d *dexConfig) RequiredAnnotations() map[string]string {
 // RequiredAnnotations returns the annotations that are relevant for a relying party config.
 func (d *dexRelyingPartyConfig) RequiredAnnotations() map[string]string {
 	var annotations = map[string]string{
-		authenticationAnnotation: AnnotationHash([]interface{}{d.GroupsClaim(), d.UsernameClaim(), d.ManagerURI(), d.RequestedScopes()}),
+		authenticationAnnotation: AnnotationHash([]interface{}{d.UsernameClaim(), d.ManagerURI(), d.RequestedScopes()}),
 		dexTLSSecretAnnotation:   AnnotationHash(d.tlsSecret.Data),
 	}
 	if d.dexSecret != nil {
@@ -267,7 +257,7 @@ func (d *dexRelyingPartyConfig) RequiredAnnotations() map[string]string {
 // RequiredAnnotations returns the annotations that are relevant for a validator config.
 func (d *dexKeyValidatorConfig) RequiredAnnotations() map[string]string {
 	var annotations = map[string]string{
-		authenticationAnnotation: AnnotationHash([]interface{}{d.GroupsClaim(), d.UsernameClaim(), d.ManagerURI()}),
+		authenticationAnnotation: AnnotationHash([]interface{}{d.UsernameClaim(), d.ManagerURI()}),
 		dexTLSSecretAnnotation:   AnnotationHash(d.tlsSecret.Data),
 	}
 	return annotations
@@ -282,7 +272,7 @@ func (d *dexKeyValidatorConfig) RequiredEnv(prefix string) []corev1.EnvVar {
 		{Name: fmt.Sprintf("%sDEX_JWKS_URL", prefix), Value: fmt.Sprintf(jwksURI, d.clusterDomain)},
 		{Name: fmt.Sprintf("%sDEX_CLIENT_ID", prefix), Value: DexClientId},
 		{Name: fmt.Sprintf("%sDEX_USERNAME_CLAIM", prefix), Value: d.UsernameClaim()},
-		{Name: fmt.Sprintf("%sDEX_GROUPS_CLAIM", prefix), Value: d.GroupsClaim()},
+		{Name: fmt.Sprintf("%sDEX_GROUPS_CLAIM", prefix), Value: defaultGroupsClaim},
 		{Name: fmt.Sprintf("%sDEX_USERNAME_PREFIX", prefix), Value: d.authentication.Spec.UsernamePrefix},
 		{Name: fmt.Sprintf("%sDEX_GROUPS_PREFIX", prefix), Value: d.authentication.Spec.GroupsPrefix},
 	}
@@ -468,6 +458,16 @@ func (d *dexConfig) Connector() map[string]interface{} {
 		d.authentication.Spec.OIDC.EmailVerification != nil &&
 		*d.authentication.Spec.OIDC.EmailVerification == oprv1.EmailVerificationTypeSkip {
 		config["insecureSkipEmailVerified"] = true
+	}
+	if connectorType == connectorTypeOIDC {
+		config["insecureEnableGroups"] = true
+		groupsClaim := d.authentication.Spec.OIDC.GroupsClaim
+		if groupsClaim != "" && groupsClaim != defaultGroupsClaim {
+
+			config["claimMapping"] = map[string]string{
+				"groups": groupsClaim,
+			}
+		}
 	}
 
 	c := map[string]interface{}{

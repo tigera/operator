@@ -112,8 +112,6 @@ type DexRelyingPartyConfig interface {
 	RequestedScopes() []string
 	// UsernameClaim returns the part of the JWT that represents a unique username.
 	UsernameClaim() string
-	// GroupsClaim returns the part of the JWT that represents the list of user groups.
-	GroupsClaim() string
 	DexKeyValidatorConfig
 }
 
@@ -214,14 +212,6 @@ func (d *dexBaseCfg) UsernameClaim() string {
 	return claim
 }
 
-func (d *dexBaseCfg) GroupsClaim() string {
-	claim := defaultGroupsClaim
-	if d.connectorType == connectorTypeOIDC && d.authentication.Spec.OIDC.GroupsClaim != "" {
-		claim = d.authentication.Spec.OIDC.GroupsClaim
-	}
-	return claim
-}
-
 func (d *dexBaseCfg) ClientSecret() []byte {
 	return d.dexSecret.Data[ClientSecretSecretField]
 }
@@ -264,7 +254,7 @@ func (d *dexConfig) RequiredAnnotations() map[string]string {
 // RequiredAnnotations returns the annotations that are relevant for a relying party config.
 func (d *dexRelyingPartyConfig) RequiredAnnotations() map[string]string {
 	var annotations = map[string]string{
-		authenticationAnnotation: rmeta.AnnotationHash([]interface{}{d.GroupsClaim(), d.UsernameClaim(), d.ManagerURI(), d.RequestedScopes()}),
+		authenticationAnnotation: rmeta.AnnotationHash([]interface{}{d.UsernameClaim(), d.ManagerURI(), d.RequestedScopes()}),
 		dexTLSSecretAnnotation:   rmeta.AnnotationHash(d.tlsSecret.Data),
 	}
 	if d.dexSecret != nil {
@@ -276,7 +266,7 @@ func (d *dexRelyingPartyConfig) RequiredAnnotations() map[string]string {
 // RequiredAnnotations returns the annotations that are relevant for a validator config.
 func (d *dexKeyValidatorConfig) RequiredAnnotations() map[string]string {
 	var annotations = map[string]string{
-		authenticationAnnotation: rmeta.AnnotationHash([]interface{}{d.GroupsClaim(), d.UsernameClaim(), d.ManagerURI()}),
+		authenticationAnnotation: rmeta.AnnotationHash([]interface{}{d.UsernameClaim(), d.ManagerURI()}),
 		dexTLSSecretAnnotation:   rmeta.AnnotationHash(d.tlsSecret.Data),
 	}
 	return annotations
@@ -291,7 +281,7 @@ func (d *dexKeyValidatorConfig) RequiredEnv(prefix string) []corev1.EnvVar {
 		{Name: fmt.Sprintf("%sDEX_JWKS_URL", prefix), Value: fmt.Sprintf(jwksURI, d.clusterDomain)},
 		{Name: fmt.Sprintf("%sDEX_CLIENT_ID", prefix), Value: DexClientId},
 		{Name: fmt.Sprintf("%sDEX_USERNAME_CLAIM", prefix), Value: d.UsernameClaim()},
-		{Name: fmt.Sprintf("%sDEX_GROUPS_CLAIM", prefix), Value: d.GroupsClaim()},
+		{Name: fmt.Sprintf("%sDEX_GROUPS_CLAIM", prefix), Value: defaultGroupsClaim},
 		{Name: fmt.Sprintf("%sDEX_USERNAME_PREFIX", prefix), Value: d.authentication.Spec.UsernamePrefix},
 		{Name: fmt.Sprintf("%sDEX_GROUPS_PREFIX", prefix), Value: d.authentication.Spec.GroupsPrefix},
 	}
@@ -478,6 +468,10 @@ func (d *dexConfig) Connector() map[string]interface{} {
 			"userIDKey":    d.UsernameClaim(),
 			"insecureSkipEmailVerified": d.authentication.Spec.OIDC.EmailVerification != nil &&
 				*d.authentication.Spec.OIDC.EmailVerification == oprv1.EmailVerificationTypeSkip,
+			// Although the field is called insecure, it no longer is. It was first introduced without proper refreshing
+			// of the groups claim, leading to stale groups. This has been addressed in Dex v2.25, yet the field retains
+			// this name.
+			"insecureEnableGroups": true,
 		}
 		promptTypes := d.authentication.Spec.OIDC.PromptTypes
 		if promptTypes != nil {
@@ -497,6 +491,12 @@ func (d *dexConfig) Connector() map[string]interface{} {
 			}
 			// RFC specifies space delimited case sensitive list: https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest
 			config["promptType"] = strings.Join(prompts, " ")
+		}
+		groupsClaim := d.authentication.Spec.OIDC.GroupsClaim
+		if groupsClaim != "" && groupsClaim != defaultGroupsClaim {
+			config["claimMapping"] = map[string]string{
+				"groups": groupsClaim,
+			}
 		}
 
 	case connectorTypeGoogle:

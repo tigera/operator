@@ -205,7 +205,7 @@ func (c *managerComponent) SupportedOSType() rmeta.OSType {
 
 func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
-		createNamespace(ManagerNamespace, c.installation.KubernetesProvider),
+		CreateNamespace(ManagerNamespace, c.installation.KubernetesProvider),
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.pullSecrets...)...)...)
 

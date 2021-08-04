@@ -48,11 +48,11 @@ func (c *namespaceComponent) SupportedOSType() rmeta.OSType {
 
 func (c *namespaceComponent) Objects() ([]client.Object, []client.Object) {
 	ns := []client.Object{
-		createNamespace(common.CalicoNamespace, c.installation.KubernetesProvider),
+		CreateNamespace(common.CalicoNamespace, c.installation.KubernetesProvider),
 	}
 	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {
 		// We need to always have ns tigera-dex even when the Authentication CR is not present, so policies can be added to this namespace.
-		ns = append(ns, createNamespace(DexObjectName, c.installation.KubernetesProvider))
+		ns = append(ns, CreateNamespace(DexObjectName, c.installation.KubernetesProvider))
 	}
 	if len(c.pullSecrets) > 0 {
 		ns = append(ns, secret.ToRuntimeObjects(secret.CopyToNamespace(common.CalicoNamespace, c.pullSecrets...)...)...)
@@ -65,7 +65,7 @@ func (c *namespaceComponent) Ready() bool {
 	return true
 }
 
-func createNamespace(name string, provider operatorv1.Provider) *corev1.Namespace {
+func CreateNamespace(name string, provider operatorv1.Provider) *corev1.Namespace {
 	ns := &corev1.Namespace{
 		TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{

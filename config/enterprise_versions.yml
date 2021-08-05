@@ -34,7 +34,7 @@ components:
     image: tigera/es-gateway
     version: master
   eck-kibana:
-    version: 7.10.1
+    version: 7.11.2
   dex:
     image: tigera/dex
     version: master
@@ -42,7 +42,7 @@ components:
     image: tigera/kibana
     version: master
   eck-elasticsearch:
-    version: 7.10.1
+    version: 7.11.2
   elasticsearch:
     image: tigera/elasticsearch
     version: master

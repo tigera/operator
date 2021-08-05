@@ -15,35 +15,35 @@
 package components
 
 var (
-	EnterpriseRelease string = "master"
+	EnterpriseRelease string = "release-calient-v3.9"
 
 	ComponentAPIServer = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/cnx-apiserver",
 	}
 
 	ComponentComplianceBenchmarker = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/compliance-benchmarker",
 	}
 
 	ComponentComplianceController = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/compliance-controller",
 	}
 
 	ComponentComplianceReporter = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/compliance-reporter",
 	}
 
 	ComponentComplianceServer = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/compliance-server",
 	}
 
 	ComponentComplianceSnapshotter = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/compliance-snapshotter",
 	}
 
@@ -58,12 +58,12 @@ var (
 	}
 
 	ComponentElasticTseeInstaller = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/intrusion-detection-job-installer",
 	}
 
 	ComponentElasticsearch = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/elasticsearch",
 	}
 
@@ -73,62 +73,62 @@ var (
 	}
 
 	ComponentEsCurator = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/es-curator",
 	}
 
 	ComponentEsProxy = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/es-proxy",
 	}
 
 	ComponentESGateway = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/es-gateway",
 	}
 
 	ComponentFluentd = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/fluentd",
 	}
 
 	ComponentFluentdWindows = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/fluentd-windows",
 	}
 
 	ComponentGuardian = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/guardian",
 	}
 
 	ComponentIntrusionDetectionController = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/intrusion-detection-controller",
 	}
 
 	ComponentKibana = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/kibana",
 	}
 
 	ComponentManager = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/cnx-manager",
 	}
 
 	ComponentDex = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/dex",
 	}
 
 	ComponentManagerProxy = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/voltron",
 	}
 
 	ComponentPacketCapture = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/packetcapture-api",
 	}
 
@@ -138,7 +138,7 @@ var (
 	}
 
 	ComponentTigeraPrometheusService = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/prometheus-service",
 	}
 
@@ -148,37 +148,37 @@ var (
 	}
 
 	ComponentQueryServer = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/cnx-queryserver",
 	}
 
 	ComponentTigeraKubeControllers = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/kube-controllers",
 	}
 
 	ComponentTigeraNode = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/cnx-node",
 	}
 
 	ComponentTigeraTypha = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/typha",
 	}
 
 	ComponentTigeraCNI = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/cni",
 	}
 
 	ComponentCloudControllers = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/cloud-controllers",
 	}
 
 	ComponentElasticsearchMetrics = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/elasticsearch-metrics",
 	}
 

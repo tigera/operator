@@ -55,7 +55,7 @@ func awsCNIPolicyOnlyConfig() []runtime.Object {
 								{Name: "FELIX_LOGSEVERITYSCREEN", Value: "info"},
 								{Name: "CALICO_NETWORKING_BACKEND", Value: "none"},
 								{Name: "CLUSTER_TYPE", Value: "k8s,ecs"},
-								{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
+								{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
 								{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 								{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 								{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"},

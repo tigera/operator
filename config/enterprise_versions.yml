@@ -40,12 +40,12 @@ components:
     version: master
   kibana:
     image: tigera/kibana
-    version: master
+    version: release-calient-v3.9
   eck-elasticsearch:
     version: 7.10.1
   elasticsearch:
     image: tigera/elasticsearch
-    version: master
+    version: release-calient-v3.9
   elastic-tsee-installer:
     image: tigera/intrusion-detection-job-installer
     version: master

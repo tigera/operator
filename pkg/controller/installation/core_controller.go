@@ -15,6 +15,7 @@
 package installation
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -45,8 +46,11 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/tls"
 
 	configv1 "github.com/openshift/api/config/v1"
+	"github.com/openshift/library-go/pkg/crypto"
 
 	"github.com/go-logr/logr"
 	apps "k8s.io/api/apps/v1"
@@ -661,8 +665,15 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Get the installation object if it exists so that we can save the original
 	// status before we merge/fill that object with other values.
+	//
+	// We support two different Installation objects - the default one, and the enterprise one. Look at the incoming
+	// request to determine which it is. If it's the enterprise one, it requires that an OSS one be created as well. This is
+	// because the enterprise Installation is used to support mixed-mode operation, with some nodes functioning as Enterprise
+	// nodes and others as OSS nodes.
 	instance := &operator.Installation{}
-	if err := r.client.Get(ctx, utils.DefaultInstanceKey, instance); err != nil {
+	ossInstance := &operator.Installation{}
+	enterpriseInstance := &operator.Installation{}
+	if err := r.client.Get(ctx, utils.DefaultInstanceKey, ossInstance); err != nil {
 		if apierrors.IsNotFound(err) {
 			reqLogger.Info("Installation config not found")
 			r.status.OnCRNotFound()
@@ -671,8 +682,30 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		reqLogger.Error(err, "An error occurred when querying the Installation resource")
 		return reconcile.Result{}, err
 	}
+	if err := r.client.Get(ctx, utils.CalicoEnterpriseInstsanceKey, enterpriseInstance); err != nil {
+		// TODO: Figure out the proper error handling for this situation.
+		if apierrors.IsNotFound(err) {
+			reqLogger.Info("Installation config not found")
+			return reconcile.Result{}, nil
+		}
+		reqLogger.Error(err, "An error occurred when querying the Installation resource")
+		return reconcile.Result{}, err
+	}
+
+	// If both are specified, this is a mixed-mode cluster.
+	mixedMode := !reflect.DeepEqual(ossInstance, operator.Installation{}) && !reflect.DeepEqual(enterpriseInstance, operator.Installation{})
+
+	// Determine which instance to act on.
+	if request.Name == "calico-enterprise" && request.Namespace == "" {
+		instance = enterpriseInstance
+	} else {
+		// OSS - use the oss instance.
+		instance = ossInstance
+	}
 	status := instance.Status
 	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
+
+	reqLogger.Info(fmt.Sprintf("Mixed mode? %t", mixedMode))
 
 	// Mark CR found so we can report converter problems via tigerastatus
 	r.status.OnCRFound()
@@ -931,11 +964,36 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	var typhaNodeTLS *render.TyphaNodeTLS
 	if instance.Spec.CertificateManagement == nil {
+		// First, attempt to load TLS secrets from the cluster, if any exist.
 		typhaNodeTLS, err = r.GetTyphaFelixTLSConfig()
 		if err != nil {
 			log.Error(err, "Error with Typha/Felix secrets")
 			r.SetDegraded("Error with Typha/Felix secrets", err, reqLogger)
 			return reconcile.Result{}, err
+		}
+
+		if typhaNodeTLS.CAConfigMap == nil {
+			// No TLS information on the cluster. Generate it ourselves.
+			typhaNodeTLS, err = CreateNewTyphaNodeTLS()
+			if err != nil {
+				log.Error(err, "Error generating Typha/Felix secrets")
+				r.SetDegraded("Error generating Typha/Felix secrets", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+		}
+	} else {
+		// Use CSR-based certificate signing.
+		typhaNodeTLS = &render.TyphaNodeTLS{
+			CAConfigMap: &corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.TyphaCAConfigMapName,
+					Namespace: rmeta.OperatorNamespace(),
+				},
+				Data: map[string]string{
+					render.TyphaCABundleName: string(instance.Spec.CertificateManagement.CACert),
+				},
+			},
 		}
 	}
 
@@ -1061,7 +1119,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		managementClusterConnection,
 		authentication,
 		pullSecrets,
-		typhaNodeTLS,
 		managerInternalTLSSecret,
 		elasticsearchSecret,
 		kibanaSecret,
@@ -1069,14 +1126,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		instance.Spec.KubernetesProvider,
 		aci,
 		needNsMigration,
-		nodeAppArmorProfile,
 		r.clusterDomain,
 		enableESOIDCWorkaround,
 		kubeControllersGatewaySecret,
 		kubeControllersMetricsPort,
-		nodeReporterMetricsPort,
-		bgpLayout,
-		logCollector,
 	)
 	if err != nil {
 		log.Error(err, "Error with rendering Calico")
@@ -1085,6 +1138,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	components := []render.Component{}
+
 	// If we're on OpenShift on AWS render a Job (and needed resources) to
 	// setup the security groups we need for IPIP, BGP, and Typha communication.
 	if openShiftOnAws {
@@ -1098,6 +1152,22 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 	components = append(components, calico.Render()...)
+
+	// Build a configuration for rendering calico/node.
+	nodeCfg := render.NodeConfiguration{
+		K8sServiceEp:            k8sapi.Endpoint,
+		Installation:            &instance.Spec,
+		AmazonCloudIntegration:  aci,
+		LogCollector:            logCollector,
+		BirdTemplates:           birdTemplates,
+		TLS:                     typhaNodeTLS,
+		ClusterDomain:           r.clusterDomain,
+		NodeReporterMetricsPort: nodeReporterMetricsPort,
+		BGPLayouts:              bgpLayout,
+		NodeAppArmorProfile:     nodeAppArmorProfile,
+		MigrateNamespaces:       needNsMigration,
+	}
+	components = append(components, render.Node(&nodeCfg))
 
 	imageSet, err := imageset.GetImageSet(ctx, r.client, instance.Spec.Variant)
 	if err != nil {
@@ -1352,6 +1422,67 @@ func (r *ReconcileInstallation) validateTyphaCAConfigMap() (*corev1.ConfigMap, e
 	}
 
 	return cm, nil
+}
+
+func CreateNewTyphaNodeTLS() (*render.TyphaNodeTLS, error) {
+	// Make CA
+	ca, err := tls.MakeCA(fmt.Sprintf("%s@%d", rmeta.TigeraOperatorCAIssuerPrefix, time.Now().Unix()))
+	if err != nil {
+		return nil, err
+	}
+	crtContent := &bytes.Buffer{}
+	keyContent := &bytes.Buffer{}
+	if err := ca.Config.WriteCertConfig(crtContent, keyContent); err != nil {
+		return nil, err
+	}
+
+	tntls := render.TyphaNodeTLS{}
+
+	// Take CA cert and create ConfigMap
+	data := make(map[string]string)
+	data[render.TyphaCABundleName] = crtContent.String()
+	tntls.CAConfigMap = &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      render.TyphaCAConfigMapName,
+			Namespace: rmeta.OperatorNamespace(),
+		},
+		Data: data,
+	}
+
+	// Create TLS Secret for Felix using ca from above
+	tntls.NodeSecret, err = secret.CreateTLSSecret(ca,
+		render.NodeTLSSecretName,
+		rmeta.OperatorNamespace(),
+		render.TLSSecretKeyName,
+		render.TLSSecretCertName,
+		rmeta.DefaultCertificateDuration,
+		[]crypto.CertificateExtensionFunc{tls.SetClientAuth},
+		render.FelixCommonName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set the CommonName used to create cert
+	tntls.NodeSecret.Data[render.CommonName] = []byte(render.FelixCommonName)
+
+	// Create TLS Secret for Felix using ca from above
+	tntls.TyphaSecret, err = secret.CreateTLSSecret(ca,
+		render.TyphaTLSSecretName,
+		rmeta.OperatorNamespace(),
+		render.TLSSecretKeyName,
+		render.TLSSecretCertName,
+		rmeta.DefaultCertificateDuration,
+		[]crypto.CertificateExtensionFunc{tls.SetServerAuth},
+		render.TyphaCommonName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set the CommonName used to create cert
+	tntls.TyphaSecret.Data[render.CommonName] = []byte(render.TyphaCommonName)
+
+	return &tntls, nil
 }
 
 func getConfigMap(client client.Client, cmName string) (*corev1.ConfigMap, error) {

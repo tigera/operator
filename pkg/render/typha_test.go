@@ -74,7 +74,7 @@ var _ = Describe("Typha rendering tests", func() {
 			{name: "calico-typha", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
-		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, false, defaultClusterDomain)
+		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, false, defaultClusterDomain, false)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -113,7 +113,7 @@ var _ = Describe("Typha rendering tests", func() {
 			{name: "calico-typha", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
-		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, true, defaultClusterDomain)
+		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, true, defaultClusterDomain, false)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -155,7 +155,7 @@ var _ = Describe("Typha rendering tests", func() {
 				PodSecurityGroupID:   "sg-podsgid",
 			},
 		}
-		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, aci, true, defaultClusterDomain)
+		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, aci, true, defaultClusterDomain, false)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -194,7 +194,7 @@ var _ = Describe("Typha rendering tests", func() {
 			},
 		}
 
-		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, false, defaultClusterDomain)
+		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, false, defaultClusterDomain, false)
 		resources, _ := component.Objects()
 
 		depResource := rtest.GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
@@ -227,7 +227,7 @@ var _ = Describe("Typha rendering tests", func() {
 				PreferredDuringSchedulingIgnoredDuringExecution: pfts,
 			},
 		}
-		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, true, defaultClusterDomain)
+		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, true, defaultClusterDomain, false)
 		resources, _ := component.Objects()
 		dResource := rtest.GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
 		Expect(dResource).ToNot(BeNil())
@@ -251,7 +251,7 @@ var _ = Describe("Typha rendering tests", func() {
 				RequiredDuringSchedulingIgnoredDuringExecution: rst,
 			},
 		}
-		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, true, defaultClusterDomain)
+		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, true, defaultClusterDomain, false)
 		resources, _ := component.Objects()
 		dResource := rtest.GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
 		Expect(dResource).ToNot(BeNil())
@@ -280,7 +280,7 @@ var _ = Describe("Typha rendering tests", func() {
 			{name: "calico-typha:csr-creator", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
-		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, false, defaultClusterDomain)
+		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, false, defaultClusterDomain, false)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -302,7 +302,7 @@ var _ = Describe("Typha rendering tests", func() {
 	It("should not enable prometheus metrics if TyphaMetricsPort is nil", func() {
 		installation.Variant = operator.TigeraSecureEnterprise
 		installation.TyphaMetricsPort = nil
-		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, false, defaultClusterDomain)
+		component := render.Typha(k8sServiceEp, installation, typhaNodeTLS, nil, false, defaultClusterDomain, false)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 

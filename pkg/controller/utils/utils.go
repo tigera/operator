@@ -51,6 +51,7 @@ const (
 )
 
 var DefaultInstanceKey = client.ObjectKey{Name: "default"}
+var CalicoEnterpriseInstsanceKey = client.ObjectKey{Name: "calico-enterprise"}
 var DefaultTSEEInstanceKey = client.ObjectKey{Name: "tigera-secure"}
 var OverlayInstanceKey = client.ObjectKey{Name: "overlay"}
 

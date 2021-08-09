@@ -134,7 +134,7 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(DexNamespace, c.pullSecrets...)...)...)
 
 	if c.installation.CertificateManagement != nil {
-		objs = append(objs, CsrClusterRoleBinding(DexObjectName, DexNamespace))
+		objs = append(objs, CSRClusterRoleBinding(DexObjectName, DexNamespace))
 	}
 
 	if c.deleteDex {

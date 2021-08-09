@@ -85,8 +85,11 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 	osType := component.SupportedOSType()
 
 	for _, obj := range objsToCreate {
-		// Set CR instance as the owner and controller.
-		if err := controllerutil.SetControllerReference(c.cr, obj.(metav1.ObjectMetaAccessor).GetObjectMeta(), c.scheme); err != nil {
+		om, ok := obj.(metav1.ObjectMetaAccessor)
+		if !ok {
+			return fmt.Errorf("Object is not ObjectMetaAccessor")
+		}
+		if err := controllerutil.SetControllerReference(c.cr, om.GetObjectMeta(), c.scheme); err != nil {
 			return err
 		}
 

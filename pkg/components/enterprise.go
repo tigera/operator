@@ -48,12 +48,12 @@ var (
 	}
 
 	ComponentEckElasticsearch = component{
-		Version: "7.10.1",
+		Version: "7.11.2",
 		Image:   "tigera/elasticsearch",
 	}
 
 	ComponentEckKibana = component{
-		Version: "7.10.1",
+		Version: "7.11.2",
 		Image:   "tigera/kibana",
 	}
 
@@ -63,12 +63,12 @@ var (
 	}
 
 	ComponentElasticsearch = component{
-		Version: "release-calient-v3.9",
+		Version: "master",
 		Image:   "tigera/elasticsearch",
 	}
 
 	ComponentElasticsearchOperator = component{
-		Version: "1.2.1",
+		Version: "1.3.2",
 		Image:   "tigera/eck-operator",
 	}
 
@@ -108,7 +108,7 @@ var (
 	}
 
 	ComponentKibana = component{
-		Version: "release-calient-v3.9",
+		Version: "master",
 		Image:   "tigera/kibana",
 	}
 

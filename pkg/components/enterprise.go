@@ -63,7 +63,7 @@ var (
 	}
 
 	ComponentElasticsearch = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/elasticsearch",
 	}
 
@@ -108,7 +108,7 @@ var (
 	}
 
 	ComponentKibana = component{
-		Version: "master",
+		Version: "release-calient-v3.9",
 		Image:   "tigera/kibana",
 	}
 

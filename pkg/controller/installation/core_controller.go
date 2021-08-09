@@ -15,6 +15,7 @@
 package installation
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -45,8 +46,11 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/tls"
 
 	configv1 "github.com/openshift/api/config/v1"
+	"github.com/openshift/library-go/pkg/crypto"
 
 	"github.com/go-logr/logr"
 	apps "k8s.io/api/apps/v1"
@@ -931,11 +935,36 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	var typhaNodeTLS *render.TyphaNodeTLS
 	if instance.Spec.CertificateManagement == nil {
+		// First, attempt to load TLS secrets from the cluster, if any exist.
 		typhaNodeTLS, err = r.GetTyphaFelixTLSConfig()
 		if err != nil {
 			log.Error(err, "Error with Typha/Felix secrets")
 			r.SetDegraded("Error with Typha/Felix secrets", err, reqLogger)
 			return reconcile.Result{}, err
+		}
+
+		if typhaNodeTLS.CAConfigMap == nil {
+			// No TLS information on the cluster. Generate it ourselves.
+			typhaNodeTLS, err = CreateNewTyphaNodeTLS()
+			if err != nil {
+				log.Error(err, "Error generating Typha/Felix secrets")
+				r.SetDegraded("Error generating Typha/Felix secrets", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+		}
+	} else {
+		// Use CSR-based certificate signing.
+		typhaNodeTLS = &render.TyphaNodeTLS{
+			CAConfigMap: &corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.TyphaCAConfigMapName,
+					Namespace: rmeta.OperatorNamespace(),
+				},
+				Data: map[string]string{
+					render.TyphaCABundleName: string(instance.Spec.CertificateManagement.CACert),
+				},
+			},
 		}
 	}
 
@@ -1048,43 +1077,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		nodeAppArmorProfile = val
 	}
 
-	// Create a component handler to manage the rendered components.
-	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
-
-	// Render the desired Calico components based on our configuration and then
-	// create or update them.
-	calico, err := render.Calico(
-		k8sapi.Endpoint,
-		&instance.Spec,
-		logStorageExists,
-		managementCluster,
-		managementClusterConnection,
-		authentication,
-		pullSecrets,
-		typhaNodeTLS,
-		managerInternalTLSSecret,
-		elasticsearchSecret,
-		kibanaSecret,
-		birdTemplates,
-		instance.Spec.KubernetesProvider,
-		aci,
-		needNsMigration,
-		nodeAppArmorProfile,
-		r.clusterDomain,
-		enableESOIDCWorkaround,
-		kubeControllersGatewaySecret,
-		kubeControllersMetricsPort,
-		nodeReporterMetricsPort,
-		bgpLayout,
-		logCollector,
-	)
-	if err != nil {
-		log.Error(err, "Error with rendering Calico")
-		r.SetDegraded("Error with rendering Calico resources", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
+	// Render namespaces for Calico.
 	components := []render.Component{}
+	components = append(components, render.Namespaces(&instance.Spec, pullSecrets))
+
 	// If we're on OpenShift on AWS render a Job (and needed resources) to
 	// setup the security groups we need for IPIP, BGP, and Typha communication.
 	if openShiftOnAws {
@@ -1097,7 +1093,51 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			components = append(components, awsSetup)
 		}
 	}
-	components = append(components, calico.Render()...)
+
+	// Build a configuration for rendering calico/node.
+	nodeCfg := render.NodeConfiguration{
+		K8sServiceEp:            k8sapi.Endpoint,
+		Installation:            &instance.Spec,
+		AmazonCloudIntegration:  aci,
+		LogCollector:            logCollector,
+		BirdTemplates:           birdTemplates,
+		TLS:                     typhaNodeTLS,
+		ClusterDomain:           r.clusterDomain,
+		NodeReporterMetricsPort: nodeReporterMetricsPort,
+		BGPLayouts:              bgpLayout,
+		NodeAppArmorProfile:     nodeAppArmorProfile,
+		MigrateNamespaces:       needNsMigration,
+	}
+	components = append(components, render.Node(&nodeCfg))
+
+	// Build a configuration for rendering calico/typha.
+	typhaCfg := render.TyphaConfiguration{
+		K8sServiceEp:           k8sapi.Endpoint,
+		Installation:           &instance.Spec,
+		TLS:                    typhaNodeTLS,
+		AmazonCloudIntegration: aci,
+		MigrateNamespaces:      needNsMigration,
+		ClusterDomain:          r.clusterDomain,
+	}
+	components = append(components, render.Typha(&typhaCfg))
+
+	// Build a configuration for rendering calico/kube-controllers.
+	kubeControllersCfg := render.KubeControllersConfiguration{
+		K8sServiceEp:                 k8sapi.Endpoint,
+		Installation:                 &instance.Spec,
+		ManagementCluster:            managementCluster,
+		ManagementClusterConnection:  managementClusterConnection,
+		Authentication:               authentication,
+		LogStorageExists:             logStorageExists,
+		EnabledESOIDCWorkaround:      enableESOIDCWorkaround,
+		ClusterDomain:                r.clusterDomain,
+		MetricsPort:                  kubeControllersMetricsPort,
+		ManagerInternalSecret:        managerInternalTLSSecret,
+		ElasticsearchSecret:          elasticsearchSecret,
+		KubeControllersGatewaySecret: kubeControllersGatewaySecret,
+		KibanaSecret:                 kibanaSecret,
+	}
+	components = append(components, render.KubeControllers(&kubeControllersCfg))
 
 	imageSet, err := imageset.GetImageSet(ctx, r.client, instance.Spec.Variant)
 	if err != nil {
@@ -1115,6 +1155,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	// Create a component handler to create or update the rendered components.
+	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 	for _, component := range components {
 		if err := handler.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
 			r.SetDegraded("Error creating / updating resource", err, reqLogger)
@@ -1352,6 +1394,67 @@ func (r *ReconcileInstallation) validateTyphaCAConfigMap() (*corev1.ConfigMap, e
 	}
 
 	return cm, nil
+}
+
+func CreateNewTyphaNodeTLS() (*render.TyphaNodeTLS, error) {
+	// Make CA
+	ca, err := tls.MakeCA(fmt.Sprintf("%s@%d", rmeta.TigeraOperatorCAIssuerPrefix, time.Now().Unix()))
+	if err != nil {
+		return nil, err
+	}
+	crtContent := &bytes.Buffer{}
+	keyContent := &bytes.Buffer{}
+	if err := ca.Config.WriteCertConfig(crtContent, keyContent); err != nil {
+		return nil, err
+	}
+
+	tntls := render.TyphaNodeTLS{}
+
+	// Take CA cert and create ConfigMap
+	data := make(map[string]string)
+	data[render.TyphaCABundleName] = crtContent.String()
+	tntls.CAConfigMap = &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      render.TyphaCAConfigMapName,
+			Namespace: rmeta.OperatorNamespace(),
+		},
+		Data: data,
+	}
+
+	// Create TLS Secret for Felix using ca from above
+	tntls.NodeSecret, err = secret.CreateTLSSecret(ca,
+		render.NodeTLSSecretName,
+		rmeta.OperatorNamespace(),
+		render.TLSSecretKeyName,
+		render.TLSSecretCertName,
+		rmeta.DefaultCertificateDuration,
+		[]crypto.CertificateExtensionFunc{tls.SetClientAuth},
+		render.FelixCommonName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set the CommonName used to create cert
+	tntls.NodeSecret.Data[render.CommonName] = []byte(render.FelixCommonName)
+
+	// Create TLS Secret for Felix using ca from above
+	tntls.TyphaSecret, err = secret.CreateTLSSecret(ca,
+		render.TyphaTLSSecretName,
+		rmeta.OperatorNamespace(),
+		render.TLSSecretKeyName,
+		render.TLSSecretCertName,
+		rmeta.DefaultCertificateDuration,
+		[]crypto.CertificateExtensionFunc{tls.SetServerAuth},
+		render.TyphaCommonName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set the CommonName used to create cert
+	tntls.TyphaSecret.Data[render.CommonName] = []byte(render.TyphaCommonName)
+
+	return &tntls, nil
 }
 
 func getConfigMap(client client.Client, cmName string) (*corev1.ConfigMap, error) {

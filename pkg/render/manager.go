@@ -241,7 +241,7 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 
 	var toDelete []client.Object
 	if c.installation.CertificateManagement != nil {
-		objs = append(objs, CsrClusterRoleBinding(ManagerServiceName, ManagerNamespace))
+		objs = append(objs, CSRClusterRoleBinding(ManagerServiceName, ManagerNamespace))
 		// If we want to use certificate management, we should clean up any existing secrets that have been created by the operator.
 		secretToDelete := &corev1.Secret{
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},

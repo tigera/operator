@@ -2,7 +2,7 @@ title: v3.7.0
 components:
   cnx-manager:
     image: tigera/cnx-manager
-    version: v3.7.1-3
+    version: v3.7.1-4
   voltron:
     image: tigera/voltron
     version: v3.7.0

@@ -37,6 +37,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
+	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
 const (
@@ -48,6 +49,12 @@ const (
 	TyphaPort               int32 = 5473
 	typhaCAHashAnnotation         = "hash.operator.tigera.io/typha-ca"
 	typhaCertHashAnnotation       = "hash.operator.tigera.io/typha-cert"
+)
+
+var (
+	TyphaTLSSecretName   = "typha-certs"
+	TyphaCAConfigMapName = "typha-ca"
+	TyphaCABundleName    = "caBundle"
 )
 
 // TyphaConfiguration is the public API used to provide information to the render code to
@@ -112,9 +119,12 @@ func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
 		c.typhaServiceAccount(),
 		c.typhaRole(),
 		c.typhaRoleBinding(),
-		c.typhaDeployment(),
 		c.typhaService(),
 		c.typhaPodDisruptionBudget(),
+	}
+
+	if c.cfg.TLS.TyphaSecret != nil {
+		objs = append(objs, secret.CopyToNamespace(common.CalicoNamespace, c.cfg.TLS.TyphaSecret)[1])
 	}
 
 	if c.cfg.Installation.KubernetesProvider != operator.ProviderOpenShift {
@@ -124,6 +134,9 @@ func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
 	if c.cfg.Installation.CertificateManagement != nil {
 		objs = append(objs, CsrClusterRoleBinding("calico-typha", common.CalicoNamespace))
 	}
+
+	// Add deployment last, as it may depend on the creation of previous objects in the list.
+	objs = append(objs, c.typhaDeployment())
 
 	return objs, nil
 }

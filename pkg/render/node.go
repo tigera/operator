@@ -28,6 +28,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	schedv1 "k8s.io/api/scheduling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -64,6 +65,10 @@ var (
 	// The port used by calico/node to report Calico Enterprise BGP metrics.
 	// This is currently not intended to be user configurable.
 	nodeBGPReporterPort int32 = 9900
+
+	NodeTLSSecretName = "node-certs"
+	TLSSecretCertName = "cert.crt"
+	TLSSecretKeyName  = "key.key"
 )
 
 // TyphaNodeTLS holds configuration for Node and Typha to establish TLS.
@@ -160,6 +165,7 @@ func (c *nodeComponent) SupportedOSType() rmeta.OSType {
 
 func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 	objsToCreate := []client.Object{
+		c.calicoPriorityClass(),
 		c.nodeServiceAccount(),
 		c.nodeRole(),
 		c.nodeRoleBinding(),
@@ -171,10 +177,12 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 
 	// Include secrets and config necessary for node and Typha to communicate. These are passed in to us as configuration,
 	// but need to be rendered into the correct namespace.
-	objsToCreate = append(objsToCreate, configmap.CopyToNamespace(common.CalicoNamespace, c.cfg.TLS.CAConfigMap)[1])
-	objsToCreate = append(objsToCreate, secret.CopyToNamespace(common.CalicoNamespace, c.cfg.TLS.NodeSecret)[1])
-	objsToCreate = append(objsToCreate, secret.CopyToNamespace(common.CalicoNamespace, c.cfg.TLS.TyphaSecret)[1])
-
+	if c.cfg.TLS.CAConfigMap != nil {
+		objsToCreate = append(objsToCreate, configmap.CopyToNamespace(common.CalicoNamespace, c.cfg.TLS.CAConfigMap)[1])
+	}
+	if c.cfg.TLS.NodeSecret != nil {
+		objsToCreate = append(objsToCreate, secret.CopyToNamespace(common.CalicoNamespace, c.cfg.TLS.NodeSecret)[1])
+	}
 	var objsToDelete []client.Object
 
 	if c.cfg.Installation.Variant == operator.TigeraSecureEnterprise {
@@ -211,6 +219,21 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 
 func (c *nodeComponent) Ready() bool {
 	return true
+}
+
+func (c *nodeComponent) calicoPriorityClass() *schedv1.PriorityClass {
+	return &schedv1.PriorityClass{
+		TypeMeta: metav1.TypeMeta{Kind: "PriorityClass", APIVersion: "scheduling.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: PriorityClassName,
+		},
+		// We would prefer to use the same value as system-node-critical (2000001000)
+		// but the highest value setable by a user is 1000000000
+		// and system-node-critical can only be used in the kube-system namespace
+		Value:         1000000000,
+		GlobalDefault: false,
+		Description:   "Priority class for Calico resources that should have a high priority",
+	}
 }
 
 // nodeServiceAccount creates the node's service account.

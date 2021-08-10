@@ -1106,38 +1106,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		nodeAppArmorProfile = val
 	}
 
-	// Create a component handler to manage the rendered components.
-	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
-
-	// Render the desired Calico components based on our configuration and then
-	// create or update them.
-	calico, err := render.Calico(
-		k8sapi.Endpoint,
-		&instance.Spec,
-		logStorageExists,
-		managementCluster,
-		managementClusterConnection,
-		authentication,
-		pullSecrets,
-		managerInternalTLSSecret,
-		elasticsearchSecret,
-		kibanaSecret,
-		birdTemplates,
-		instance.Spec.KubernetesProvider,
-		aci,
-		needNsMigration,
-		r.clusterDomain,
-		enableESOIDCWorkaround,
-		kubeControllersGatewaySecret,
-		kubeControllersMetricsPort,
-	)
-	if err != nil {
-		log.Error(err, "Error with rendering Calico")
-		r.SetDegraded("Error with rendering Calico resources", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
+	// Render namespaces for Calico.
 	components := []render.Component{}
+	components = append(components, render.Namespaces(&instance.Spec, pullSecrets))
 
 	// If we're on OpenShift on AWS render a Job (and needed resources) to
 	// setup the security groups we need for IPIP, BGP, and Typha communication.
@@ -1151,7 +1122,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			components = append(components, awsSetup)
 		}
 	}
-	components = append(components, calico.Render()...)
 
 	// Build a configuration for rendering calico/node.
 	nodeCfg := render.NodeConfiguration{
@@ -1169,6 +1139,35 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	components = append(components, render.Node(&nodeCfg))
 
+	// Build a configuration for rendering calico/typha.
+	typhaCfg := render.TyphaConfiguration{
+		K8sServiceEp:           k8sapi.Endpoint,
+		Installation:           &instance.Spec,
+		TLS:                    typhaNodeTLS,
+		AmazonCloudIntegration: aci,
+		MigrateNamespaces:      needNsMigration,
+		ClusterDomain:          r.clusterDomain,
+	}
+	components = append(components, render.Typha(&typhaCfg))
+
+	// Build a configuration for rendering calico/kube-controllers.
+	kubeControllersCfg := render.KubeControllersConfiguration{
+		K8sServiceEp:                 k8sapi.Endpoint,
+		Installation:                 &instance.Spec,
+		ManagementCluster:            managementCluster,
+		ManagementClusterConnection:  managementClusterConnection,
+		Authentication:               authentication,
+		LogStorageExists:             logStorageExists,
+		EnabledESOIDCWorkaround:      enableESOIDCWorkaround,
+		ClusterDomain:                r.clusterDomain,
+		MetricsPort:                  kubeControllersMetricsPort,
+		ManagerInternalSecret:        managerInternalTLSSecret,
+		ElasticsearchSecret:          elasticsearchSecret,
+		KubeControllersGatewaySecret: kubeControllersGatewaySecret,
+		KibanaSecret:                 kibanaSecret,
+	}
+	components = append(components, render.KubeControllers(&kubeControllersCfg))
+
 	imageSet, err := imageset.GetImageSet(ctx, r.client, instance.Spec.Variant)
 	if err != nil {
 		r.SetDegraded("Error getting ImageSet", err, reqLogger)
@@ -1185,6 +1184,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	// Create a component handler to create or update the rendered components.
+	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 	for _, component := range components {
 		if err := handler.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
 			r.SetDegraded("Error creating / updating resource", err, reqLogger)

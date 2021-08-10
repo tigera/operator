@@ -684,12 +684,11 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	if err := r.client.Get(ctx, utils.CalicoEnterpriseInstsanceKey, enterpriseInstance); err != nil {
 		// TODO: Figure out the proper error handling for this situation.
-		if apierrors.IsNotFound(err) {
-			reqLogger.Info("Installation config not found")
-			return reconcile.Result{}, nil
+		if !apierrors.IsNotFound(err) {
+			reqLogger.Error(err, "An error occurred when querying the Installation resource")
+			return reconcile.Result{}, err
 		}
-		reqLogger.Error(err, "An error occurred when querying the Installation resource")
-		return reconcile.Result{}, err
+		// Not found - this is OK.
 	}
 
 	// If both are specified, this is a mixed-mode cluster.

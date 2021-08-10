@@ -124,7 +124,7 @@ func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	if c.cfg.TLS.TyphaSecret != nil {
-		objs = append(objs, secret.CopyToNamespace(common.CalicoNamespace, c.cfg.TLS.TyphaSecret)[1])
+		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(common.CalicoNamespace, c.cfg.TLS.TyphaSecret)...)...)
 	}
 
 	if c.cfg.Installation.KubernetesProvider != operator.ProviderOpenShift {
@@ -132,7 +132,7 @@ func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	if c.cfg.Installation.CertificateManagement != nil {
-		objs = append(objs, CsrClusterRoleBinding("calico-typha", common.CalicoNamespace))
+		objs = append(objs, CSRClusterRoleBinding("calico-typha", common.CalicoNamespace))
 	}
 
 	// Add deployment last, as it may depend on the creation of previous objects in the list.

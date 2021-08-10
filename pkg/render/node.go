@@ -178,10 +178,10 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 	// Include secrets and config necessary for node and Typha to communicate. These are passed in to us as configuration,
 	// but need to be rendered into the correct namespace.
 	if c.cfg.TLS.CAConfigMap != nil {
-		objsToCreate = append(objsToCreate, configmap.CopyToNamespace(common.CalicoNamespace, c.cfg.TLS.CAConfigMap)[1])
+		objsToCreate = append(objsToCreate, configmap.ToRuntimeObjects(configmap.CopyToNamespace(common.CalicoNamespace, c.cfg.TLS.CAConfigMap)...)...)
 	}
 	if c.cfg.TLS.NodeSecret != nil {
-		objsToCreate = append(objsToCreate, secret.CopyToNamespace(common.CalicoNamespace, c.cfg.TLS.NodeSecret)[1])
+		objsToCreate = append(objsToCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.CalicoNamespace, c.cfg.TLS.NodeSecret)...)...)
 	}
 	var objsToDelete []client.Object
 
@@ -211,7 +211,7 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 
 	if c.cfg.Installation.CertificateManagement != nil {
 		objsToCreate = append(objsToCreate, csrClusterRole())
-		objsToCreate = append(objsToCreate, CsrClusterRoleBinding("calico-node", common.CalicoNamespace))
+		objsToCreate = append(objsToCreate, CSRClusterRoleBinding("calico-node", common.CalicoNamespace))
 	}
 
 	return objsToCreate, objsToDelete

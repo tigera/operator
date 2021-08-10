@@ -16,6 +16,7 @@ package render_test
 
 import (
 	"fmt"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -388,7 +389,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					}},
 					{render.ECKOperatorNamespace, "", &corev1.Namespace{}, nil},
 					{"tigera-pull-secret", render.ECKOperatorNamespace, &corev1.Secret{}, nil},
-					{render.ElasticsearchKubeControllersUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+					{render.ElasticsearchKubeControllersUserSecret, common.CalicoNamespace, &corev1.Secret{}, nil},
 					{"elastic-operator", "", &rbacv1.ClusterRole{}, nil},
 					{"elastic-operator", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"elastic-operator", render.ECKOperatorNamespace, &corev1.ServiceAccount{}, nil},
@@ -425,11 +426,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{render.EsCuratorName, render.ElasticsearchNamespace, &batchv1beta.CronJob{}, nil},
 					{render.EsManagerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
 					{render.EsManagerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
-					{render.EsKubeControllerServiceAccount, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
 					{render.EsKubeControllerRole, "", &rbacv1.ClusterRole{}, nil},
 					{render.EsKubeControllerRoleBinding, "", &rbacv1.ClusterRoleBinding{}, nil},
-					{render.EsKubeController, render.ElasticsearchNamespace, &appsv1.Deployment{}, nil},
-					{render.ManagerInternalTLSSecretName, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+					{render.EsKubeController, common.CalicoNamespace, &appsv1.Deployment{}, nil},
 					{render.EsKubeController, "", &policyv1beta1.PodSecurityPolicy{}, nil},
 				}
 				component := render.LogStorage(
@@ -506,7 +505,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{Name: "ES_CURATOR_BACKEND_CERT", Value: "/etc/ssl/elastic/ca.pem"},
 				}
 
-				kubeControllerDeployment := rtest.GetResource(createResources, render.EsKubeController, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+				kubeControllerDeployment := rtest.GetResource(createResources, render.EsKubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 				Expect(*kubeControllerDeployment.Spec.Replicas).To(Equal(int32(1)))
 				Expect(kubeControllerDeployment.Spec.Template.Spec.Containers[0].Env).To(ContainElements(
 					corev1.EnvVar{Name: "DATASTORE_TYPE", Value: "kubernetes"},
@@ -556,7 +555,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					nil, nil, dns.DefaultClusterDomain, nil, render.ElasticsearchLicenseTypeEnterpriseTrial,
 					nil, false, &internalManagerTLSSecret, k8sapi.Endpoint)
 				createResources, _ := component.Objects()
-				kubeControllerDeployment := rtest.GetResource(createResources, render.EsKubeController, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+				kubeControllerDeployment := rtest.GetResource(createResources, render.EsKubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 				Expect(kubeControllerDeployment.Spec.Template.Spec.Containers[0].Env).To(ContainElement(
 					corev1.EnvVar{Name: "ENABLED_CONTROLLERS", Value: "authorization,elasticsearchconfiguration,managedcluster"}))
 			})
@@ -839,7 +838,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 			createResources, _ := component.Objects()
 			kubeControllerDeployment := rtest.GetResource(createResources, render.EsKubeController,
-				render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+				common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(kubeControllerDeployment.Spec.Template.Spec.Containers[0].Env).To(
 				ContainElement(corev1.EnvVar{Name: "ENABLE_ELASTICSEARCH_OIDC_WORKAROUND", Value: "true"}))
 			Expect(kubeControllerDeployment.Spec.Template.Spec.Containers[0].Env).To(
@@ -928,7 +927,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeExternalName))
 						Expect(svc.Spec.ExternalName).Should(Equal(fmt.Sprintf("%s.%s.svc.%s", render.GuardianServiceName, render.GuardianNamespace, dns.DefaultClusterDomain)))
 					}},
-					{render.EsKubeControllerServiceAccount, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
 					{render.EsKubeControllerRole, "", &rbacv1.ClusterRole{}, nil},
 					{render.EsKubeControllerRoleBinding, "", &rbacv1.ClusterRoleBinding{}, nil},
 				}

@@ -129,7 +129,7 @@ func (pc *packetCaptureApiComponent) Objects() ([]client.Object, []client.Object
 	}
 
 	if pc.installation.CertificateManagement != nil {
-		objs = append(objs, CsrClusterRoleBinding(PacketCaptureServiceName, PacketCaptureNamespace))
+		objs = append(objs, CSRClusterRoleBinding(PacketCaptureServiceName, PacketCaptureNamespace))
 	}
 
 	return objs, nil

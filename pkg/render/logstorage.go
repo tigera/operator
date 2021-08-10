@@ -18,6 +18,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"hash/fnv"
 	"net/url"
@@ -123,7 +124,7 @@ const (
 	EsManagerRole                  = "es-manager"
 	EsManagerRoleBinding           = "es-manager"
 	EsKubeController               = "es-calico-kube-controllers"
-	EsKubeControllerServiceAccount = "es-calico-kube-controllers"
+	EsKubeControllerServiceAccount = "calico-kube-controllers"
 	EsKubeControllerRole           = "es-calico-kube-controllers"
 	EsKubeControllerRoleBinding    = "es-calico-kube-controllers"
 
@@ -211,7 +212,7 @@ func LogStorage(
 		}
 	}
 	if kubeControllersGatewaySecret != nil {
-		kubeControllersGatewaySecret = secret.CopyToNamespace(ElasticsearchNamespace, kubeControllersGatewaySecret)[0]
+		kubeControllersGatewaySecret = secret.CopyToNamespace(common.CalicoNamespace, kubeControllersGatewaySecret)[0]
 		elasticsearchSecrets[kubeControllersGatewaySecretIndex] = elasticsearchSecrets[len(elasticsearchSecrets)-1]
 		elasticsearchSecrets[len(elasticsearchSecrets)-1] = nil
 		elasticsearchSecrets = elasticsearchSecrets[:len(elasticsearchSecrets)-1]
@@ -498,16 +499,10 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 		if es.kubeControllersGatewaySecret != nil && es.elasticsearchPublicCertSecret != nil {
 			toCreate = append(toCreate,
-				es.kubeControllersServiceAccount(),
 				es.kubeControllersRole(),
 				es.kubeControllersRoleBinding(),
 				es.kubeControllersDeployment(),
 			)
-
-			if es.managerInternalSecret != nil {
-				toCreate = append(toCreate, secret.ToRuntimeObjects(
-					secret.CopyToNamespace(ElasticsearchNamespace, es.managerInternalSecret)...)...)
-			}
 
 			if es.installation.KubernetesProvider != operatorv1.ProviderOpenShift {
 				toCreate = append(toCreate, es.kubeControllersPodSecurityPolicy())
@@ -517,7 +512,6 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate,
 			createNamespace(ElasticsearchNamespace, es.installation.KubernetesProvider),
 			es.elasticsearchExternalService(),
-			es.kubeControllersServiceAccount(),
 			es.kubeControllersRole(),
 			es.kubeControllersRoleBinding(),
 		)
@@ -1760,17 +1754,6 @@ func (es elasticsearchComponent) kubeControllersPodSecurityPolicy() *policyv1bet
 	return psp
 }
 
-func (es elasticsearchComponent) kubeControllersServiceAccount() *corev1.ServiceAccount {
-	return &corev1.ServiceAccount{
-		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      EsKubeControllerServiceAccount,
-			Namespace: ElasticsearchNamespace,
-			Labels:    map[string]string{},
-		},
-	}
-}
-
 func (es elasticsearchComponent) kubeControllersRole() *rbacv1.ClusterRole {
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -1927,7 +1910,7 @@ func (es elasticsearchComponent) kubeControllersRoleBinding() *rbacv1.ClusterRol
 			{
 				Kind:      "ServiceAccount",
 				Name:      EsKubeControllerServiceAccount,
-				Namespace: ElasticsearchNamespace,
+				Namespace: common.CalicoNamespace,
 			},
 		},
 	}
@@ -2020,7 +2003,7 @@ func (es elasticsearchComponent) kubeControllersDeployment() *appsv1.Deployment 
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      EsKubeController,
-			Namespace: ElasticsearchNamespace,
+			Namespace: common.CalicoNamespace,
 			Labels: map[string]string{
 				"k8s-app": EsKubeController,
 			},
@@ -2038,7 +2021,7 @@ func (es elasticsearchComponent) kubeControllersDeployment() *appsv1.Deployment 
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      EsKubeController,
-					Namespace: ElasticsearchNamespace,
+					Namespace: common.CalicoNamespace,
 					Labels: map[string]string{
 						"k8s-app": EsKubeController,
 					},

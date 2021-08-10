@@ -665,15 +665,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Get the installation object if it exists so that we can save the original
 	// status before we merge/fill that object with other values.
-	//
-	// We support two different Installation objects - the default one, and the enterprise one. Look at the incoming
-	// request to determine which it is. If it's the enterprise one, it requires that an OSS one be created as well. This is
-	// because the enterprise Installation is used to support mixed-mode operation, with some nodes functioning as Enterprise
-	// nodes and others as OSS nodes.
 	instance := &operator.Installation{}
-	ossInstance := &operator.Installation{}
-	enterpriseInstance := &operator.Installation{}
-	if err := r.client.Get(ctx, utils.DefaultInstanceKey, ossInstance); err != nil {
+	if err := r.client.Get(ctx, utils.DefaultInstanceKey, instance); err != nil {
 		if apierrors.IsNotFound(err) {
 			reqLogger.Info("Installation config not found")
 			r.status.OnCRNotFound()
@@ -682,29 +675,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		reqLogger.Error(err, "An error occurred when querying the Installation resource")
 		return reconcile.Result{}, err
 	}
-	if err := r.client.Get(ctx, utils.CalicoEnterpriseInstsanceKey, enterpriseInstance); err != nil {
-		// TODO: Figure out the proper error handling for this situation.
-		if !apierrors.IsNotFound(err) {
-			reqLogger.Error(err, "An error occurred when querying the Installation resource")
-			return reconcile.Result{}, err
-		}
-		// Not found - this is OK.
-	}
-
-	// If both are specified, this is a mixed-mode cluster.
-	mixedMode := !reflect.DeepEqual(ossInstance, operator.Installation{}) && !reflect.DeepEqual(enterpriseInstance, operator.Installation{})
-
-	// Determine which instance to act on.
-	if request.Name == "calico-enterprise" && request.Namespace == "" {
-		instance = enterpriseInstance
-	} else {
-		// OSS - use the oss instance.
-		instance = ossInstance
-	}
 	status := instance.Status
 	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
-
-	reqLogger.Info(fmt.Sprintf("Mixed mode? %t", mixedMode))
 
 	// Mark CR found so we can report converter problems via tigerastatus
 	r.status.OnCRFound()

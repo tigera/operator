@@ -1153,7 +1153,6 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_INTERFACEPREFIX", Value: "gke"},
 			{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"},
 			{Name: "FELIX_IPTABLESFILTERALLOWACTION", Value: "Return"},
-			{Name: "FELIX_ROUTETABLERANGE", Value: "10-250"},
 		}),
 		Entry("AmazonVPC", operator.PluginAmazonVPC, operator.IPAMPluginAmazonVPC, []v1.EnvVar{
 			{Name: "FELIX_INTERFACEPREFIX", Value: "eni"},

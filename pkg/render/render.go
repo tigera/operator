@@ -16,13 +16,15 @@ package render
 
 import (
 	"github.com/go-logr/logr"
+	v1 "k8s.io/api/core/v1"
 )
 
 var (
-	CommonName      = "common-name"
-	URISAN          = "uri-san"
-	TyphaCommonName = "typha-server"
-	FelixCommonName = "typha-client"
+	CommonName        = "common-name"
+	URISAN            = "uri-san"
+	TyphaCommonName   = "typha-server"
+	FelixCommonName   = "typha-client"
+	PriorityClassName = "calico-priority"
 )
 
 // A Renderer is capable of generating components to be installed on the cluster.
@@ -39,4 +41,8 @@ func appendNotNil(components []Component, c Component) []Component {
 
 func SetTestLogger(l logr.Logger) {
 	log = l
+}
+
+func setCriticalPod(t *v1.PodTemplateSpec) {
+	t.Spec.PriorityClassName = PriorityClassName
 }

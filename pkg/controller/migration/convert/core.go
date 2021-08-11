@@ -3,12 +3,28 @@ package convert
 import (
 	"fmt"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 )
+
+var toBeIgnoredAnnotationKeyRegExps []*regexp.Regexp
+
+func init() {
+	log.Info("Compiling regular expressions for annotation keys to be ignored...")
+	toBeIgnoredAnnotationKeyRegExps = make([]*regexp.Regexp, 0)
+	for _, annotationKey := range []string{"^kubectl\\.kubernetes\\.io"} {
+		annotationKeyRegexp, err := regexp.Compile(annotationKey)
+		if err != nil {
+			log.Error(fmt.Errorf("%s is not a valid regular expression", annotationKey), "Error when removing expected annotations")
+			continue
+		}
+		toBeIgnoredAnnotationKeyRegExps = append(toBeIgnoredAnnotationKeyRegExps, annotationKeyRegexp)
+	}
+}
 
 func handleCore(c *components, install *operatorv1.Installation) error {
 	dsType, err := c.node.getEnv(ctx, c.client, "calico-node", "DATASTORE_TYPE")
@@ -217,7 +233,7 @@ func addResources(install *operatorv1.Installation, compName operatorv1.Componen
 // since Operator does not support setting custom annotations on components, these annotations
 // would otherwise be dropped.
 func handleAnnotations(c *components, _ *operatorv1.Installation) error {
-	if a := removeExpectedAnnotations(c.node.Annotations, map[string]string{}); len(a) != 0 {
+	if a := removeExpectedAnnotations(c.node.Annotations, map[string]string{}, toBeIgnoredAnnotationKeyRegExps); len(a) != 0 {
 		return ErrIncompatibleAnnotation(a, ComponentCalicoNode)
 	}
 
@@ -227,26 +243,26 @@ func handleAnnotations(c *components, _ *operatorv1.Installation) error {
 	// we ignore it.
 	if a := removeExpectedAnnotations(c.node.Spec.Template.Annotations, map[string]string{
 		"cluster-autoscaler.kubernetes.io/daemonset-pod": "true",
-	}); len(a) != 0 {
+	}, toBeIgnoredAnnotationKeyRegExps); len(a) != 0 {
 		return ErrIncompatibleAnnotation(a, ComponentCalicoNode+" podTemplateSpec")
 	}
 
 	if c.kubeControllers != nil {
-		if a := removeExpectedAnnotations(c.kubeControllers.Annotations, map[string]string{}); len(a) != 0 {
+		if a := removeExpectedAnnotations(c.kubeControllers.Annotations, map[string]string{}, toBeIgnoredAnnotationKeyRegExps); len(a) != 0 {
 			return ErrIncompatibleAnnotation(a, ComponentKubeControllers)
 		}
-		if a := removeExpectedAnnotations(c.kubeControllers.Spec.Template.Annotations, map[string]string{}); len(a) != 0 {
+		if a := removeExpectedAnnotations(c.kubeControllers.Spec.Template.Annotations, map[string]string{}, toBeIgnoredAnnotationKeyRegExps); len(a) != 0 {
 			return ErrIncompatibleAnnotation(a, ComponentKubeControllers+" podTemplateSpec")
 		}
 	}
 
 	if c.typha != nil {
-		if a := removeExpectedAnnotations(c.typha.Annotations, map[string]string{}); len(a) != 0 {
+		if a := removeExpectedAnnotations(c.typha.Annotations, map[string]string{}, toBeIgnoredAnnotationKeyRegExps); len(a) != 0 {
 			return ErrIncompatibleAnnotation(a, ComponentTypha)
 		}
 		if a := removeExpectedAnnotations(c.typha.Spec.Template.Annotations, map[string]string{
 			"cluster-autoscaler.kubernetes.io/safe-to-evict": "true",
-		}); len(a) != 0 {
+		}, toBeIgnoredAnnotationKeyRegExps); len(a) != 0 {
 			return ErrIncompatibleAnnotation(a, ComponentTypha+" podTemplateSpec")
 		}
 	}
@@ -255,19 +271,27 @@ func handleAnnotations(c *components, _ *operatorv1.Installation) error {
 
 // removeExpectedAnnotations returns the given annotations with common k8s-native annotations removed.
 // this function also accepts a second argument of additional annotations to remove.
-func removeExpectedAnnotations(existing, ignore map[string]string) map[string]string {
+func removeExpectedAnnotations(existing, ignoreWithValue map[string]string, toBeIgnoredAnnotationKeyRegExps []*regexp.Regexp) map[string]string {
 	a := existing
+
 	for key, val := range existing {
-		if key == "kubectl.kubernetes.io/last-applied-configuration" ||
-			key == "deprecated.daemonset.template.generation" ||
+		if key == "deprecated.daemonset.template.generation" ||
 			key == "deployment.kubernetes.io/revision" ||
 			key == "scheduler.alpha.kubernetes.io/critical-pod" {
 			delete(a, key)
 			continue
 		}
 
-		if v, ok := ignore[key]; ok && v == val {
+		if v, ok := ignoreWithValue[key]; ok && v == val {
 			delete(a, key)
+			continue
+		}
+
+		for _, annotationKeyRegexp := range toBeIgnoredAnnotationKeyRegExps {
+			if annotationKeyRegexp.MatchString(key) {
+				delete(a, key)
+				break
+			}
 		}
 	}
 

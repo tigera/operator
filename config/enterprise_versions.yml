@@ -34,7 +34,7 @@ components:
     image: tigera/es-gateway
     version: release-calient-v3.9
   eck-kibana:
-    version: 7.10.1
+    version: 7.11.2
   dex:
     image: tigera/dex
     version: release-calient-v3.9
@@ -42,7 +42,7 @@ components:
     image: tigera/kibana
     version: release-calient-v3.9
   eck-elasticsearch:
-    version: 7.10.1
+    version: 7.11.2
   elasticsearch:
     image: tigera/elasticsearch
     version: release-calient-v3.9
@@ -92,7 +92,7 @@ components:
   # quay.io/tigera so all enterprise images come from the same repository and org.
   elasticsearch-operator:
     image: tigera/eck-operator
-    version: 1.2.1
+    version: 1.3.2
   prometheus:
     image: tigera/prometheus
     version: v2.17.2

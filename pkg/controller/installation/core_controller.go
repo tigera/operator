@@ -1002,19 +1002,24 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	// Fetch any existing default FelixConfiguration object.
+	felixConfiguration := &crdv1.FelixConfiguration{}
+	fcErr := r.client.Get(ctx, types.NamespacedName{Name: "default"}, felixConfiguration)
+	if fcErr != nil && !apierrors.IsNotFound(fcErr) {
+		r.SetDegraded("Unable to read FelixConfiguration", fcErr, reqLogger)
+		return reconcile.Result{}, fcErr
+	}
+
+	if err = r.setDefaultsOnFelixConfiguration(ctx, instance, felixConfiguration, apierrors.IsNotFound(fcErr), reqLogger); err != nil {
+		return reconcile.Result{}, err
+	}
+
 	// nodeReporterMetricsPort is a port used in Enterprise to host internal metrics.
 	// Operator is responsible for creating a service which maps to that port.
 	// Here, we'll check the default felixconfiguration to see if the user is specifying
 	// a non-default port, and use that value if they are.
 	nodeReporterMetricsPort := defaultNodeReporterPort
 	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
-		// Query the FelixConfiguration object. We'll use this to help configure felix.
-		felixConfiguration := &crdv1.FelixConfiguration{}
-		err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, felixConfiguration)
-		if err != nil && !apierrors.IsNotFound(err) {
-			r.SetDegraded("Unable to read FelixConfiguration", err, reqLogger)
-			return reconcile.Result{}, err
-		}
 
 		// Determine the port to use for nodeReporter metrics.
 		if felixConfiguration.Spec.PrometheusReporterPort != nil {
@@ -1352,6 +1357,53 @@ func (r *ReconcileInstallation) validateTyphaCAConfigMap() (*corev1.ConfigMap, e
 	}
 
 	return cm, nil
+}
+
+// setDefaultOnFelixConfiguration will take the passed in fc and add any defaulting needed
+// based on the install config. If create is true then the FelixConfig default will be created,
+// otherwise a patch will be performed.
+func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, create bool, log logr.Logger) error {
+	patchFrom := client.MergeFrom(fc.DeepCopy())
+	fc.ObjectMeta.Name = "default"
+	updated := false
+
+	switch install.Spec.CNI.Type {
+	// If we're using the AWS CNI plugin we need to ensure the route tables that calico-node
+	// uses do not conflict with the ones the AWS CNI plugin uses so default them
+	// in the FelixConfiguration if they are not already set.
+	case operator.PluginAmazonVPC:
+		if fc.Spec.RouteTableRange == nil {
+			updated = true
+			fc.Spec.RouteTableRange = &crdv1.RouteTableRange{
+				Min: 65,
+				Max: 99,
+			}
+		}
+	case operator.PluginGKE:
+		if fc.Spec.RouteTableRange == nil {
+			updated = true
+			// Don't conflict with the GKE CNI plugin's routes.
+			fc.Spec.RouteTableRange = &crdv1.RouteTableRange{
+				Min: 10,
+				Max: 250,
+			}
+		}
+	}
+	if !updated {
+		return nil
+	}
+	if create {
+		if err := r.client.Create(ctx, fc); err != nil {
+			r.SetDegraded("Unable to Create default FelixConfiguration", err, log)
+			return err
+		}
+	} else {
+		if err := r.client.Patch(ctx, fc, patchFrom); err != nil {
+			r.SetDegraded("Unable to Patch default FelixConfiguration", err, log)
+			return err
+		}
+	}
+	return nil
 }
 
 func getConfigMap(client client.Client, cmName string) (*corev1.ConfigMap, error) {

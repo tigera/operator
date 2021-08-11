@@ -96,10 +96,11 @@ type esGateway struct {
 func (e *esGateway) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := e.installation.Registry
 	path := e.installation.ImagePath
+	prefix := e.installation.ImagePrefix
 	var err error
 	errMsgs := []string{}
 
-	e.esGatewayImage, err = components.GetReference(components.ComponentESGateway, reg, path, is)
+	e.esGatewayImage, err = components.GetReference(components.ComponentESGateway, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}

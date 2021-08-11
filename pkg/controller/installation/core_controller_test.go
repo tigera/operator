@@ -864,7 +864,21 @@ var _ = Describe("Testing core-controller installation", func() {
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(fc.Spec.RouteTableRange).NotTo(BeNil())
-			Expect(*fc.Spec.RouteTableRange).To(Equal(crdv1.RouteTableRange{Min: 31, Max: 250}))
+			Expect(*fc.Spec.RouteTableRange).To(Equal(crdv1.RouteTableRange{Min: 65, Max: 99}))
+		})
+
+		It("should Reconcile with GKE CNI config", func() {
+			cr.Spec.CNI = &operator.CNISpec{Type: operator.PluginGKE}
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Check that FelixConfiguration is created with RouteTableRange
+			fc := &crdv1.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(fc.Spec.RouteTableRange).NotTo(BeNil())
+			Expect(*fc.Spec.RouteTableRange).To(Equal(crdv1.RouteTableRange{Min: 10, Max: 250}))
 		})
 
 		It("should Reconcile with AWS CNI and not change existing FelixConfig", func() {
@@ -912,7 +926,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(fc.Spec.RouteTableRange).NotTo(BeNil())
-			Expect(*fc.Spec.RouteTableRange).To(Equal(crdv1.RouteTableRange{Min: 31, Max: 250}))
+			Expect(*fc.Spec.RouteTableRange).To(Equal(crdv1.RouteTableRange{Min: 65, Max: 99}))
 			Expect(fc.Spec.LogSeverityScreen).To(Equal("Error"))
 		})
 	})

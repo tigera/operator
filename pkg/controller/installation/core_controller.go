@@ -1363,28 +1363,44 @@ func (r *ReconcileInstallation) validateTyphaCAConfigMap() (*corev1.ConfigMap, e
 // based on the install config. If create is true then the FelixConfig default will be created,
 // otherwise a patch will be performed.
 func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, create bool, log logr.Logger) error {
+	patchFrom := client.MergeFrom(fc.DeepCopy())
+	fc.ObjectMeta.Name = "default"
+	updated := false
+
+	switch install.Spec.CNI.Type {
 	// If we're using the AWS CNI plugin we need to ensure the route tables that calico-node
 	// uses do not conflict with the ones the AWS CNI plugin uses so default them
 	// in the FelixConfiguration if they are not already set.
-	if install.Spec.CNI.Type == operator.PluginAmazonVPC {
+	case operator.PluginAmazonVPC:
 		if fc.Spec.RouteTableRange == nil {
-			patchFrom := client.MergeFrom(fc.DeepCopy())
+			updated = true
 			fc.Spec.RouteTableRange = &crdv1.RouteTableRange{
-				Min: 31,
+				Min: 65,
+				Max: 99,
+			}
+		}
+	case operator.PluginGKE:
+		if fc.Spec.RouteTableRange == nil {
+			updated = true
+			// Don't conflict with the GKE CNI plugin's routes.
+			fc.Spec.RouteTableRange = &crdv1.RouteTableRange{
+				Min: 10,
 				Max: 250,
 			}
-			if create {
-				fc.ObjectMeta.Name = "default"
-				if err := r.client.Create(ctx, fc); err != nil {
-					r.SetDegraded("Unable to Create default FelixConfiguration", err, log)
-					return err
-				}
-			} else {
-				if err := r.client.Patch(ctx, fc, patchFrom); err != nil {
-					r.SetDegraded("Unable to Patch default FelixConfiguration", err, log)
-					return err
-				}
-			}
+		}
+	}
+	if !updated {
+		return nil
+	}
+	if create {
+		if err := r.client.Create(ctx, fc); err != nil {
+			r.SetDegraded("Unable to Create default FelixConfiguration", err, log)
+			return err
+		}
+	} else {
+		if err := r.client.Patch(ctx, fc, patchFrom); err != nil {
+			r.SetDegraded("Unable to Patch default FelixConfiguration", err, log)
+			return err
 		}
 	}
 	return nil

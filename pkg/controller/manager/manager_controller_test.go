@@ -422,7 +422,7 @@ var _ = Describe("Manager controller tests", func() {
 				},
 			}
 			Expect(test.GetResource(c, &d)).To(BeNil())
-			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(3))
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(4))
 			mgr := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-manager")
 			Expect(mgr).ToNot(BeNil())
 			Expect(mgr.Image).To(Equal(
@@ -441,6 +441,12 @@ var _ = Describe("Manager controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentManagerProxy.Image,
 					components.ComponentManagerProxy.Version)))
+			packetCapture := test.GetContainer(d.Spec.Template.Spec.Containers, render.PacketCaptureServer)
+			Expect(packetCapture).ToNot(BeNil())
+			Expect(packetCapture.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentPacketCapture.Image,
+					components.ComponentPacketCapture.Version)))
 		})
 		It("should use images from imageset", func() {
 			Expect(c.Create(ctx, &operatorv1.ImageSet{
@@ -450,6 +456,7 @@ var _ = Describe("Manager controller tests", func() {
 						{Image: "tigera/cnx-manager", Digest: "sha256:cnxmanagerhash"},
 						{Image: "tigera/es-proxy", Digest: "sha256:esproxyhash"},
 						{Image: "tigera/voltron", Digest: "sha256:voltronhash"},
+						{Image: "tigera/packetcapture-api", Digest: "sha256:packetcapturehash"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -464,7 +471,7 @@ var _ = Describe("Manager controller tests", func() {
 				},
 			}
 			Expect(test.GetResource(c, &d)).To(BeNil())
-			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(3))
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(4))
 			mgr := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-manager")
 			Expect(mgr).ToNot(BeNil())
 			Expect(mgr.Image).To(Equal(
@@ -483,6 +490,12 @@ var _ = Describe("Manager controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentManagerProxy.Image,
 					"sha256:voltronhash")))
+			packetCapture := test.GetContainer(d.Spec.Template.Spec.Containers, render.PacketCaptureServer)
+			Expect(packetCapture).ToNot(BeNil())
+			Expect(packetCapture.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentPacketCapture.Image,
+					"sha256:packetcapturehash")))
 		})
 	})
 })

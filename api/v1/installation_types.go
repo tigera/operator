@@ -38,7 +38,7 @@ type InstallationSpec struct {
 	// the default registries will be used.
 	//
 	// Image format:
-	//    `<registry>/<imagePath>/<imageName>:<image-tag>`
+	//    `<registry>/<imagePath>/<imagePrefix><imageName>:<image-tag>`
 	//
 	// This option allows configuring the `<registry>` portion of the above format.
 	// +optional
@@ -51,11 +51,24 @@ type InstallationSpec struct {
 	// image path will be used for each image.
 	//
 	// Image format:
-	//    `<registry>/<imagePath>/<imageName>:<image-tag>`
+	//    `<registry>/<imagePath>/<imagePrefix><imageName>:<image-tag>`
 	//
 	// This option allows configuring the `<imagePath>` portion of the above format.
 	// +optional
 	ImagePath string `json:"imagePath,omitempty"`
+
+	// ImagePrefix allows for the prefix part of an image to be specified. If specified
+	// then the given value will be used as a prefix on each image. If not specified
+	// or empty, no prefix will be used.
+	// A special case value, UseDefault, is supported to explicitly specify the default
+	// image prefix will be used for each image.
+	//
+	// Image format:
+	//    `<registry>/<imagePath>/<imagePrefix><imageName>:<image-tag>`
+	//
+	// This option allows configuring the `<imagePrefix>` portion of the above format.
+	// +optional
+	ImagePrefix string `json:"imagePrefix,omitempty"`
 
 	// ImagePullSecrets is an array of references to container registry pull secrets to use. These are
 	// applied to all images to be pulled.
@@ -129,17 +142,31 @@ type InstallationSpec struct {
 type TyphaAffinity struct {
 	// NodeAffinity describes node affinity scheduling rules for typha.
 	// +optional
-	NodeAffinity *PreferredNodeAffinity `json:"nodeAffinity,omitempty"`
+	NodeAffinity *NodeAffinity `json:"nodeAffinity,omitempty"`
 }
 
-// PreferredNodeAffinity is similar to an affinity except it only exposes the Preferred scheduling option,
-// which ensures a pod will still be scheduled even when all the nodes it matches are unschedulable.
-type PreferredNodeAffinity struct {
+// NodeAffinity is similar to *v1.NodeAffinity, but allows us to limit available schedulers.
+type NodeAffinity struct {
 	// The scheduler will prefer to schedule pods to nodes that satisfy
 	// the affinity expressions specified by this field, but it may choose
 	// a node that violates one or more of the expressions.
 	// +optional
 	PreferredDuringSchedulingIgnoredDuringExecution []v1.PreferredSchedulingTerm `json:"preferredDuringSchedulingIgnoredDuringExecution,omitempty"`
+
+	// WARNING: Please note that if the affinity requirements specified by this field are not met at
+	// scheduling time, the pod will NOT be scheduled onto the node.
+	// There is no fallback to another affinity rules with this setting.
+	// This may cause networking disruption or even catastrophic failure!
+	// PreferredDuringSchedulingIgnoredDuringExecution should be used for affinity
+	// unless there is a specific well understood reason to use RequiredDuringSchedulingIgnoredDuringExecution and
+	// you can guarantee that the RequiredDuringSchedulingIgnoredDuringExecution will always have sufficient nodes to satisfy the requirement.
+	// NOTE: RequiredDuringSchedulingIgnoredDuringExecution is set by default for AKS nodes,
+	// to avoid scheduling Typhas on virtual-nodes.
+	// If the affinity requirements specified by this field cease to be met
+	// at some point during pod execution (e.g. due to an update), the system
+	// may or may not try to eventually evict the pod from its node.
+	// +optional
+	RequiredDuringSchedulingIgnoredDuringExecution *v1.NodeSelector `json:"requiredDuringSchedulingIgnoredDuringExecution,omitempty"`
 }
 
 // ComponentName represents a single component.

@@ -101,11 +101,12 @@ type kubeControllersComponent struct {
 func (c *kubeControllersComponent) ResolveImages(is *operator.ImageSet) error {
 	reg := c.cr.Registry
 	path := c.cr.ImagePath
+	prefix := c.cr.ImagePrefix
 	var err error
 	if c.cr.Variant == operator.TigeraSecureEnterprise {
-		c.image, err = components.GetReference(components.ComponentTigeraKubeControllers, reg, path, is)
+		c.image, err = components.GetReference(components.ComponentTigeraKubeControllers, reg, path, prefix, is)
 	} else {
-		c.image, err = components.GetReference(components.ComponentCalicoKubeControllers, reg, path, is)
+		c.image, err = components.GetReference(components.ComponentCalicoKubeControllers, reg, path, prefix, is)
 	}
 	return err
 }
@@ -226,9 +227,16 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 			},
 			{
 				APIGroups: []string{""},
-				Resources: []string{"configmaps", "secrets"},
+				Resources: []string{"configmaps"},
 				Verbs:     []string{"watch", "list", "get", "update", "create"},
 			},
+			// Used for the creation, synchronization and deletion of elasticsearch related secrets.
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"watch", "list", "get", "update", "create", "deletecollection"},
+			},
+
 			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},

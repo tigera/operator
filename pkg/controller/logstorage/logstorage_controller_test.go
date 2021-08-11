@@ -992,7 +992,7 @@ var _ = Describe("LogStorage controller", func() {
 								Images: []operatorv1.Image{
 									{Image: "tigera/elasticsearch", Digest: "sha256:elasticsearchhash"},
 									{Image: "tigera/kibana", Digest: "sha256:kibanahash"},
-									{Image: "eck/eck-operator", Digest: "sha256:eckoperatorhash"},
+									{Image: "tigera/eck-operator", Digest: "sha256:eckoperatorhash"},
 									{Image: "tigera/es-curator", Digest: "sha256:escuratorhash"},
 									{Image: "tigera/elasticsearch-metrics", Digest: "sha256:esmetricshash"},
 									{Image: "tigera/es-gateway", Digest: "sha256:esgatewayhash"},

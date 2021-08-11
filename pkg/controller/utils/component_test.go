@@ -34,6 +34,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -236,6 +238,10 @@ var _ = Describe("Component handler tests", func() {
 				Expect(ns.PodTemplate.Spec.NodeSelector).Should(Equal(expectedNodeSelectors))
 			}
 			return
+		case *monitoringv1.Alertmanager:
+			nodeSelectors = obj.(*monitoringv1.Alertmanager).Spec.NodeSelector
+		case *monitoringv1.Prometheus:
+			nodeSelectors = obj.(*monitoringv1.Prometheus).Spec.NodeSelector
 		default:
 			Expect(fmt.Errorf("unexpected type passed to test")).ToNot(HaveOccurred())
 		}
@@ -600,6 +606,40 @@ var _ = Describe("Component handler tests", func() {
 				map[string]string{
 					"kubernetes.io/foo": "bar",
 					"kubernetes.io/os":  "windows",
+				},
+			},
+		},
+		TableEntry{
+			Description: "linux - sets the required annotations for Prometheus Alertmanager nodes",
+			Parameters: []interface{}{
+				&fakeComponent{
+					supportedOSType: rmeta.OSTypeLinux,
+					objs: []client.Object{&monitoringv1.Alertmanager{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-alertmanager"},
+						Spec: monitoringv1.AlertmanagerSpec{
+							NodeSelector: map[string]string{},
+						},
+					}},
+				}, client.ObjectKey{Name: "test-alertmanager"}, &monitoringv1.Alertmanager{},
+				map[string]string{
+					"kubernetes.io/os": "linux",
+				},
+			},
+		},
+		TableEntry{
+			Description: "linux - sets the required annotations for Prometheus nodes",
+			Parameters: []interface{}{
+				&fakeComponent{
+					supportedOSType: rmeta.OSTypeLinux,
+					objs: []client.Object{&monitoringv1.Prometheus{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-prometheus"},
+						Spec: monitoringv1.PrometheusSpec{
+							NodeSelector: map[string]string{},
+						},
+					}},
+				}, client.ObjectKey{Name: "test-prometheus"}, &monitoringv1.Prometheus{},
+				map[string]string{
+					"kubernetes.io/os": "linux",
 				},
 			},
 		},

@@ -148,6 +148,24 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "packetcapture-api" }}
+	ComponentPacketCapture = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
+{{ with index .Components "prometheus" }}
+	ComponentPrometheus = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
+{{ with index .Components "alertmanager" }}
+	ComponentPrometheusAlertmanager = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "cnx-queryserver" }}
 	ComponentQueryServer = component{
 		Version: "{{ .Version }}",
@@ -213,6 +231,9 @@ var (
 		ComponentManager,
 		ComponentDex,
 		ComponentManagerProxy,
+		ComponentPacketCapture,
+		ComponentPrometheus,
+		ComponentPrometheusAlertmanager,
 		ComponentQueryServer,
 		ComponentTigeraKubeControllers,
 		ComponentTigeraNode,

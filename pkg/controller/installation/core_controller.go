@@ -1359,6 +1359,9 @@ func (r *ReconcileInstallation) validateTyphaCAConfigMap() (*corev1.ConfigMap, e
 	return cm, nil
 }
 
+// setDefaultOnFelixConfiguration will take the passed in fc and add any defaulting needed
+// based on the install config. If create is true then the FelixConfig default will be created,
+// otherwise a patch will be performed.
 func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, create bool, log logr.Logger) error {
 	// If we're using the AWS CNI plugin we need to ensure the route tables that calico-node
 	// uses do not conflict with the ones the AWS CNI plugin uses so default them

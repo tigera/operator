@@ -1280,8 +1280,6 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		// The GKE CNI plugin has its own iptables rules. Defer to them after ours.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESFILTERALLOWACTION", Value: "Return"})
-		// Don't conflict with the GKE CNI plugin's routes.
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_ROUTETABLERANGE", Value: "10-250"})
 	case operator.PluginAzureVNET:
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "azv"})
 	}

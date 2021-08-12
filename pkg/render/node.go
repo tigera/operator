@@ -929,18 +929,11 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		}
 	}
 
-	var disableFileLogging string
-	if c.cr.Variant == operator.TigeraSecureEnterprise {
-		disableFileLogging = "false"
-	} else {
-		disableFileLogging = "true"
-	}
-
 	nodeEnv := []v1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 		{Name: "CLUSTER_TYPE", Value: clusterType},
-		{Name: "CALICO_DISABLE_FILE_LOGGING", Value: disableFileLogging},
+		{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
 		{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 		{Name: "FELIX_HEALTHENABLED", Value: "true"},
 		{

@@ -313,7 +313,7 @@ func (pc *packetCaptureApiComponent) healthProbe() *corev1.Probe {
 				Scheme: corev1.URISchemeHTTPS,
 			},
 		},
-		InitialDelaySeconds: 90,
+		InitialDelaySeconds: 30,
 		PeriodSeconds:       10,
 	}
 }

@@ -25,6 +25,7 @@ import (
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -65,12 +66,63 @@ func allCalicoComponents(
 	bgpLayout *corev1.ConfigMap,
 	logCollector *operator.LogCollector,
 ) ([]render.Component, error) {
-	// TODO: Populate these structs.
-	nodeCfg := &render.NodeConfiguration{}
-	typhaCfg := &render.TyphaConfiguration{}
-	kcCfg := &render.KubeControllersConfiguration{}
 
-	return []render.Component{render.Node(nodeCfg), render.Typha(typhaCfg), render.KubeControllers(kcCfg)}, nil
+	namespaces := render.Namespaces(cr, pullSecrets)
+
+	secretsAndConfigMaps := render.NewPassthrough(filterNil(
+		typhaNodeTLS.CAConfigMap,
+		bgpLayout,
+		typhaNodeTLS.NodeSecret,
+		typhaNodeTLS.TyphaSecret,
+		managerInternalTLSSecret,
+	))
+
+	nodeCfg := &render.NodeConfiguration{
+		K8sServiceEp:            k8sServiceEp,
+		Installation:            cr,
+		TLS:                     typhaNodeTLS,
+		NodeAppArmorProfile:     nodeAppArmorProfile,
+		ClusterDomain:           clusterDomain,
+		AmazonCloudIntegration:  aci,
+		NodeReporterMetricsPort: nodeReporterMetricsPort,
+		BGPLayouts:              bgpLayout,
+		LogCollector:            logCollector,
+		BirdTemplates:           bt,
+		MigrateNamespaces:       up,
+	}
+	typhaCfg := &render.TyphaConfiguration{
+		K8sServiceEp:           k8sServiceEp,
+		Installation:           cr,
+		TLS:                    typhaNodeTLS,
+		ClusterDomain:          clusterDomain,
+		AmazonCloudIntegration: aci,
+		MigrateNamespaces:      up,
+	}
+	kcCfg := &render.KubeControllersConfiguration{
+		K8sServiceEp:                 k8sServiceEp,
+		Installation:                 cr,
+		LogStorageExists:             logStorageExists,
+		ManagementCluster:            managementCluster,
+		ManagementClusterConnection:  managementClusterConnection,
+		ManagerInternalSecret:        managerInternalTLSSecret,
+		ElasticsearchSecret:          elasticsearchSecret,
+		KibanaSecret:                 kibanaSecret,
+		Authentication:               authentication,
+		EnabledESOIDCWorkaround:      enableESOIDCWorkaround,
+		ClusterDomain:                clusterDomain,
+		KubeControllersGatewaySecret: kubeControllersGatewaySecret,
+		MetricsPort:                  kubeControllersMetricsPort,
+	}
+
+	return []render.Component{namespaces, secretsAndConfigMaps, render.Typha(typhaCfg), render.Node(nodeCfg), render.KubeControllers(kcCfg)}, nil
+}
+
+func filterNil(objs ...client.Object) []client.Object {
+	f := []client.Object{}
+	for _, o := range objs {
+		f = append(f, o)
+	}
+	return f
 }
 
 var _ = Describe("Rendering tests", func() {
@@ -104,10 +156,27 @@ var _ = Describe("Rendering tests", func() {
 			},
 		}
 
+		nodeSecret := v1.Secret{}
+		nodeSecret.Name = "node-certs"
+		nodeSecret.Namespace = "tigera-operator"
+		nodeSecret.Data = map[string][]byte{"k": []byte("v")}
+
+		typhaSecret := v1.Secret{}
+		typhaSecret.Name = "typha-certs"
+		typhaSecret.Namespace = "tigera-operator"
+		typhaSecret.Data = map[string][]byte{"k": []byte("v")}
+
 		logWriter = bufio.NewWriter(&logBuffer)
 		render.SetTestLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(logWriter)))
-		typhaNodeTLS = &render.TyphaNodeTLS{}
+		typhaNodeTLS = &render.TyphaNodeTLS{
+			CAConfigMap: &corev1.ConfigMap{Data: map[string]string{}},
+			TyphaSecret: &typhaSecret,
+			NodeSecret:  &nodeSecret,
+		}
+		typhaNodeTLS.CAConfigMap.Name = "typha-node-ca"
+		typhaNodeTLS.CAConfigMap.Namespace = "tigera-operator"
 	})
+
 	AfterEach(func() {
 		if CurrentGinkgoTestDescription().Failed {
 			logWriter.Flush()
@@ -167,7 +236,6 @@ var _ = Describe("Rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{render.PriorityClassName, "", "scheduling.k8s.io", "v1", "PriorityClass"},
 			{common.CalicoNamespace, "", "", "v1", "Namespace"},
 			{render.DexObjectName, "", "", "v1", "Namespace"},
 			{render.TyphaCAConfigMapName, rmeta.OperatorNamespace(), "", "v1", "ConfigMap"},
@@ -184,6 +252,7 @@ var _ = Describe("Rendering tests", func() {
 			{render.TyphaServiceName, common.CalicoNamespace, "", "v1", "Service"},
 			{common.TyphaDeploymentName, common.CalicoNamespace, "policy", "v1beta1", "PodDisruptionBudget"},
 			{common.TyphaDeploymentName, "", "policy", "v1beta1", "PodSecurityPolicy"},
+			{render.PriorityClassName, "", "scheduling.k8s.io", "v1", "PriorityClass"},
 			{"calico-node", common.CalicoNamespace, "", "v1", "ServiceAccount"},
 			{"calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
 			{"calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},

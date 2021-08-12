@@ -115,6 +115,12 @@ func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 				return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 			}
 		}
+
+		// Watch for changes to authentication
+		err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			return fmt.Errorf("apiserver-controller failed to watch resource: %w", err)
+		}
 	}
 
 	// Watch for certificate changes. We watch both secrets in case the user is switching between variants.

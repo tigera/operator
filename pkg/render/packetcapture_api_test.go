@@ -205,7 +205,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 							Scheme: corev1.URISchemeHTTPS,
 						},
 					},
-					InitialDelaySeconds: 90,
+					InitialDelaySeconds: 30,
 					PeriodSeconds:       10,
 				},
 				LivenessProbe: &corev1.Probe{
@@ -216,7 +216,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 							Scheme: corev1.URISchemeHTTPS,
 						},
 					},
-					InitialDelaySeconds: 90,
+					InitialDelaySeconds: 30,
 					PeriodSeconds:       10,
 				},
 				Env:          envVars,

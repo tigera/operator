@@ -167,6 +167,10 @@ func (c *GuardianComponent) clusterRole() client.Object {
 				Verbs:     []string{"impersonate"},
 			},
 			{
+				// Guardian forwards its token when sending the request to other services
+				// PacketCapture will authenticate the token from the request and check if impersonation is allowed
+				// AuthenticationReview API can authenticate a bearer token from the request if the token can create
+				// authenticationreviews
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"authenticationreviews"},
 				Verbs:     []string{"create"},

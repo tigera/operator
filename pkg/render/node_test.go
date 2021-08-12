@@ -89,6 +89,11 @@ var _ = Describe("Node rendering tests", func() {
 		typhaNodeTLS.NodeSecret.Kind = "Secret"
 		typhaNodeTLS.NodeSecret.APIVersion = "v1"
 
+		typhaNodeTLS.CAConfigMap.Name = "typha-node-ca"
+		typhaNodeTLS.CAConfigMap.Namespace = "tigera-operator"
+		typhaNodeTLS.CAConfigMap.Kind = "ConfigMap"
+		typhaNodeTLS.CAConfigMap.APIVersion = "v1"
+
 		// Dummy service endpoint for k8s API.
 		k8sServiceEp = k8sapi.ServiceEndpoint{}
 
@@ -113,10 +118,11 @@ var _ = Describe("Node rendering tests", func() {
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
-			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 		}
 
 		defaultInstance.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
@@ -340,6 +346,8 @@ var _ = Describe("Node rendering tests", func() {
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -650,12 +658,15 @@ var _ = Describe("Node rendering tests", func() {
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "calico-node-metrics", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 		defaultInstance.Variant = operator.TigeraSecureEnterprise
+		cfg.NodeReporterMetricsPort = 9081
 
 		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -757,6 +768,8 @@ var _ = Describe("Node rendering tests", func() {
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -990,13 +1003,16 @@ var _ = Describe("Node rendering tests", func() {
 		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(5))
+		Expect(len(resources)).To(Equal(8))
 
 		// Should render the correct resources.
 		Expect(rtest.GetResource(resources, "calico-node", "calico-system", "", "v1", "ServiceAccount")).ToNot(BeNil())
 		Expect(rtest.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")).ToNot(BeNil())
 		Expect(rtest.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")).ToNot(BeNil())
 		Expect(rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")).ToNot(BeNil())
+		Expect(rtest.GetResource(resources, "node-certs", "calico-system", "", "v1", "Secret")).ToNot(BeNil())
+		Expect(rtest.GetResource(resources, "typha-node-ca", "calico-system", "", "v1", "ConfigMap")).ToNot(BeNil())
+		Expect(rtest.GetResource(resources, "calico-priority", "", "scheduling.k8s.io", "v1", "PriorityClass")).ToNot(BeNil())
 		dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
 
@@ -1201,6 +1217,8 @@ var _ = Describe("Node rendering tests", func() {
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -1431,13 +1449,16 @@ var _ = Describe("Node rendering tests", func() {
 		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(5))
+		Expect(len(resources)).To(Equal(8))
 
 		// Should render the correct resources.
 		Expect(rtest.GetResource(resources, "calico-node", "calico-system", "", "v1", "ServiceAccount")).ToNot(BeNil())
 		Expect(rtest.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")).ToNot(BeNil())
 		Expect(rtest.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")).ToNot(BeNil())
 		Expect(rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")).ToNot(BeNil())
+		Expect(rtest.GetResource(resources, "node-certs", "calico-system", "", "v1", "Secret")).ToNot(BeNil())
+		Expect(rtest.GetResource(resources, "typha-node-ca", "calico-system", "", "v1", "ConfigMap")).ToNot(BeNil())
+		Expect(rtest.GetResource(resources, "calico-priority", "", "scheduling.k8s.io", "v1", "PriorityClass")).ToNot(BeNil())
 		dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
 
@@ -1583,6 +1604,8 @@ var _ = Describe("Node rendering tests", func() {
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
@@ -1716,6 +1739,8 @@ var _ = Describe("Node rendering tests", func() {
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "calico-node-metrics", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -1723,6 +1748,8 @@ var _ = Describe("Node rendering tests", func() {
 
 		defaultInstance.Variant = operator.TigeraSecureEnterprise
 		defaultInstance.KubernetesProvider = operator.ProviderOpenShift
+		cfg.NodeReporterMetricsPort = 9081
+
 		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -1828,6 +1855,8 @@ var _ = Describe("Node rendering tests", func() {
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: render.BirdTemplatesConfigMapName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -2150,6 +2179,8 @@ var _ = Describe("Node rendering tests", func() {
 	It("should not enable prometheus metrics if NodeMetricsPort is nil", func() {
 		defaultInstance.Variant = operator.TigeraSecureEnterprise
 		defaultInstance.NodeMetricsPort = nil
+		cfg.NodeReporterMetricsPort = 9081
+
 		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -2236,6 +2267,8 @@ var _ = Describe("Node rendering tests", func() {
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -2558,6 +2591,8 @@ var _ = Describe("Node rendering tests", func() {
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -2794,6 +2829,8 @@ var _ = Describe("Node rendering tests", func() {
 
 	It("should render extra resources when certificate management is enabled", func() {
 		defaultInstance.CertificateManagement = &operator.CertificateManagement{CACert: []byte("<ca>"), SignerName: "a.b/c"}
+		cfg.TLS.NodeSecret = nil
+		cfg.TLS.CAConfigMap = nil
 		expectedResources := []struct {
 			name    string
 			ns      string

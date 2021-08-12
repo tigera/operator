@@ -166,6 +166,11 @@ func (c *GuardianComponent) clusterRole() client.Object {
 				Resources: []string{"users", "groups", "serviceaccounts"},
 				Verbs:     []string{"impersonate"},
 			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"authenticationreviews"},
+				Verbs:     []string{"create"},
+			},
 		},
 	}
 }

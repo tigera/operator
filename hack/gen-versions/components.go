@@ -40,6 +40,15 @@ var defaultImages = map[string]string{
 	"calico/apiserver":        "calico/apiserver",
 }
 
+var ignoredImages = map[string]struct{}{
+	"calico":            {},
+	"networking-calico": {},
+	"calico-private":    {},
+	"cnx-manager-proxy": {},
+	"busybox":           {},
+	"calico/api":        {},
+}
+
 type Release struct {
 	// Title is the Release version and should match the major.minor.patch of the
 	// Calico or Enterprise version included in the operator.
@@ -69,7 +78,7 @@ func GetComponents(versionsPath string) (Release, error) {
 
 	// add known default images to any components that are missing them.
 	for key, component := range v.Components {
-		if key == "calico" || key == "networking-calico" || key == "calico-private" || key == "cnx-manager-proxy" || key == "busybox" {
+		if _, ignore := ignoredImages[key]; ignore {
 			continue
 		}
 

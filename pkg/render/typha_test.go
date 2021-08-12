@@ -79,6 +79,7 @@ var _ = Describe("Typha rendering tests", func() {
 			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "Deployment"},
 			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 			{name: "calico-typha", ns: "calico-system", group: "policy", version: "v1beta1", kind: "PodDisruptionBudget"},
+			{name: "typha-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "calico-typha", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
@@ -118,6 +119,7 @@ var _ = Describe("Typha rendering tests", func() {
 			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "Deployment"},
 			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 			{name: "calico-typha", ns: "calico-system", group: "policy", version: "v1beta1", kind: "PodDisruptionBudget"},
+			{name: "typha-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "calico-typha", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
@@ -155,6 +157,7 @@ var _ = Describe("Typha rendering tests", func() {
 			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "Deployment"},
 			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 			{name: "calico-typha", ns: "calico-system", group: "policy", version: "v1beta1", kind: "PodDisruptionBudget"},
+			{name: "typha-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "calico-typha", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 

@@ -172,7 +172,7 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	if c.cfg.BGPLayouts != nil {
-		objsToCreate = append(objsToCreate, configmap.CopyToNamespace(common.CalicoNamespace, c.cfg.BGPLayouts)[1])
+		objsToCreate = append(objsToCreate, configmap.ToRuntimeObjects(configmap.CopyToNamespace(common.CalicoNamespace, c.cfg.BGPLayouts)...)...)
 	}
 
 	// Include secrets and config necessary for node and Typha to communicate. These are passed in to us as configuration,

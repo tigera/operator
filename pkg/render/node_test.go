@@ -50,7 +50,7 @@ var _ = Describe("Node rendering tests", func() {
 	var typhaNodeTLS *render.TyphaNodeTLS
 	var k8sServiceEp k8sapi.ServiceEndpoint
 	one := intstr.FromInt(1)
-	defaultNumExpectedResources := 6
+	defaultNumExpectedResources := 9
 	const defaultClusterDomain = "svc.cluster.local"
 	var defaultMode int32 = 420
 	var cfg render.NodeConfiguration
@@ -77,11 +77,19 @@ var _ = Describe("Node rendering tests", func() {
 				},
 			},
 		}
+
+		// Create a dummy secret to pass as input.
 		typhaNodeTLS = &render.TyphaNodeTLS{
 			CAConfigMap: &v1.ConfigMap{},
 			TyphaSecret: &v1.Secret{},
 			NodeSecret:  &v1.Secret{},
 		}
+		typhaNodeTLS.NodeSecret.Name = "node-certs"
+		typhaNodeTLS.NodeSecret.Namespace = "tigera-operator"
+		typhaNodeTLS.NodeSecret.Kind = "Secret"
+		typhaNodeTLS.NodeSecret.APIVersion = "v1"
+
+		// Dummy service endpoint for k8s API.
 		k8sServiceEp = k8sapi.ServiceEndpoint{}
 
 		// Create a default configuration.
@@ -101,12 +109,14 @@ var _ = Describe("Node rendering tests", func() {
 			version string
 			kind    string
 		}{
+			{name: "calico-priority", ns: "", group: "scheduling.k8s.io", version: "v1", kind: "PriorityClass"},
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 		}
 
 		defaultInstance.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
@@ -326,6 +336,7 @@ var _ = Describe("Node rendering tests", func() {
 			version string
 			kind    string
 		}{
+			{name: "calico-priority", ns: "", group: "scheduling.k8s.io", version: "v1", kind: "PriorityClass"},
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -635,6 +646,7 @@ var _ = Describe("Node rendering tests", func() {
 			version string
 			kind    string
 		}{
+			{name: "calico-priority", ns: "", group: "scheduling.k8s.io", version: "v1", kind: "PriorityClass"},
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -741,6 +753,7 @@ var _ = Describe("Node rendering tests", func() {
 			version string
 			kind    string
 		}{
+			{name: "calico-priority", ns: "", group: "scheduling.k8s.io", version: "v1", kind: "PriorityClass"},
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -1184,6 +1197,7 @@ var _ = Describe("Node rendering tests", func() {
 			version string
 			kind    string
 		}{
+			{name: "calico-priority", ns: "", group: "scheduling.k8s.io", version: "v1", kind: "PriorityClass"},
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -1565,6 +1579,7 @@ var _ = Describe("Node rendering tests", func() {
 			version string
 			kind    string
 		}{
+			{name: "calico-priority", ns: "", group: "scheduling.k8s.io", version: "v1", kind: "PriorityClass"},
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -1697,6 +1712,7 @@ var _ = Describe("Node rendering tests", func() {
 			version string
 			kind    string
 		}{
+			{name: "calico-priority", ns: "", group: "scheduling.k8s.io", version: "v1", kind: "PriorityClass"},
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -1808,6 +1824,7 @@ var _ = Describe("Node rendering tests", func() {
 			version string
 			kind    string
 		}{
+			{name: "calico-priority", ns: "", group: "scheduling.k8s.io", version: "v1", kind: "PriorityClass"},
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -2215,6 +2232,7 @@ var _ = Describe("Node rendering tests", func() {
 			version string
 			kind    string
 		}{
+			{name: "calico-priority", ns: "", group: "scheduling.k8s.io", version: "v1", kind: "PriorityClass"},
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -2536,6 +2554,7 @@ var _ = Describe("Node rendering tests", func() {
 			version string
 			kind    string
 		}{
+			{name: "calico-priority", ns: "", group: "scheduling.k8s.io", version: "v1", kind: "PriorityClass"},
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -2782,6 +2801,7 @@ var _ = Describe("Node rendering tests", func() {
 			version string
 			kind    string
 		}{
+			{name: "calico-priority", ns: "", group: "scheduling.k8s.io", version: "v1", kind: "PriorityClass"},
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -2825,7 +2845,7 @@ var _ = Describe("Node rendering tests", func() {
 		deploy, ok := dep.(*appsv1.DaemonSet)
 		Expect(ok).To(BeTrue())
 		Expect(deploy.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/bgp-layout"))
-		Expect(deploy.Spec.Template.Annotations["hash.operator.tigera.io/bgp-layout"]).To(Equal("TODO"))
+		Expect(deploy.Spec.Template.Annotations["hash.operator.tigera.io/bgp-layout"]).To(Equal("46aec5c60cd6c6fc95979e247a8370bdb9f23b0f"))
 		Expect(deploy.Spec.Template.Spec.Volumes).To(ContainElement(v1.Volume{
 			Name: render.BGPLayoutVolumeName,
 			VolumeSource: v1.VolumeSource{

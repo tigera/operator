@@ -936,15 +936,15 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	var typhaNodeTLS *render.TyphaNodeTLS
 	if instance.Spec.CertificateManagement == nil {
 		// First, attempt to load TLS secrets from the cluster, if any exist.
-		typhaNodeTLS, err = r.GetTyphaFelixTLSConfig()
+		typhaNodeTLS, err = r.GetTyphaNodeTLSConfig()
 		if err != nil {
 			log.Error(err, "Error with Typha/Felix secrets")
 			r.SetDegraded("Error with Typha/Felix secrets", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
-		if typhaNodeTLS.CAConfigMap == nil {
-			// No TLS information on the cluster. Generate it ourselves.
+		if typhaNodeTLS.CAConfigMap == nil || typhaNodeTLS.TyphaSecret == nil || typhaNodeTLS.NodeSecret == nil {
+			// Unable to find at least one necessary bit of TLS config. Generate new ones ourselves.
 			typhaNodeTLS, err = CreateNewTyphaNodeTLS()
 			if err != nil {
 				log.Error(err, "Error generating Typha/Felix secrets")
@@ -1082,8 +1082,26 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		nodeAppArmorProfile = val
 	}
 
-	// Render namespaces for Calico.
 	components := []render.Component{}
+
+	// Create a passthrough component for the simple purpose of caching generated resources in the tigera-operator namespace.
+	// We store TLS secrets and config to be fetched on future reconcile iterations.
+	objs := []client.Object{
+		typhaNodeTLS.CAConfigMap,
+	}
+	if typhaNodeTLS.NodeSecret != nil {
+		objs = append(objs, typhaNodeTLS.NodeSecret)
+	}
+	if typhaNodeTLS.TyphaSecret != nil {
+		objs = append(objs, typhaNodeTLS.TyphaSecret)
+	}
+	if managerInternalTLSSecret != nil {
+		objs = append(objs, managerInternalTLSSecret)
+	}
+	operatorComponent := render.NewPassthrough(objs)
+	components = append(components, operatorComponent)
+
+	// Render namespaces for Calico.
 	components = append(components, render.Namespaces(&instance.Spec, pullSecrets))
 
 	// If we're on OpenShift on AWS render a Job (and needed resources) to
@@ -1303,10 +1321,10 @@ func (r *ReconcileInstallation) SetDegraded(reason string, err error, log logr.L
 	r.status.SetDegraded(reason, err.Error())
 }
 
-// GetTyphaFelixTLSConfig reads and validates the CA ConfigMap and Secrets for
+// GetTyphaNodeTLSConfig reads and validates the CA ConfigMap and Secrets for
 // Typha and Felix configuration. It returns the validated resources or error
 // if there was one.
-func (r *ReconcileInstallation) GetTyphaFelixTLSConfig() (*render.TyphaNodeTLS, error) {
+func (r *ReconcileInstallation) GetTyphaNodeTLSConfig() (*render.TyphaNodeTLS, error) {
 	// accumulate all the error messages so all problems with the certs
 	// and CA are reported.
 	errMsgs := []string{}

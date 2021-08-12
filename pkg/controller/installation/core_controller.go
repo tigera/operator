@@ -1004,13 +1004,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Fetch any existing default FelixConfiguration object.
 	felixConfiguration := &crdv1.FelixConfiguration{}
-	fcErr := r.client.Get(ctx, types.NamespacedName{Name: "default"}, felixConfiguration)
-	if fcErr != nil && !apierrors.IsNotFound(fcErr) {
-		r.SetDegraded("Unable to read FelixConfiguration", fcErr, reqLogger)
-		return reconcile.Result{}, fcErr
+	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, felixConfiguration)
+	if err != nil && !apierrors.IsNotFound(err) {
+		r.SetDegraded("Unable to read FelixConfiguration", err, reqLogger)
+		return reconcile.Result{}, err
 	}
 
-	if err = r.setDefaultsOnFelixConfiguration(ctx, instance, felixConfiguration, apierrors.IsNotFound(fcErr), reqLogger); err != nil {
+	if err = r.setDefaultsOnFelixConfiguration(ctx, instance, felixConfiguration, reqLogger); err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -1360,9 +1360,9 @@ func (r *ReconcileInstallation) validateTyphaCAConfigMap() (*corev1.ConfigMap, e
 }
 
 // setDefaultOnFelixConfiguration will take the passed in fc and add any defaulting needed
-// based on the install config. If create is true then the FelixConfig default will be created,
-// otherwise a patch will be performed.
-func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, create bool, log logr.Logger) error {
+// based on the install config. If the FelixConfig ResourceVersion is empty,
+// then the FelixConfig default will be created, otherwise a patch will be performed.
+func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, log logr.Logger) error {
 	patchFrom := client.MergeFrom(fc.DeepCopy())
 	fc.ObjectMeta.Name = "default"
 	updated := false
@@ -1398,7 +1398,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 	if !updated {
 		return nil
 	}
-	if create {
+	if fc.ResourceVersion == "" {
 		if err := r.client.Create(ctx, fc); err != nil {
 			r.SetDegraded("Unable to Create default FelixConfiguration", err, log)
 			return err

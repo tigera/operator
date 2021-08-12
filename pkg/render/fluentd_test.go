@@ -20,6 +20,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	rbacv1 "k8s.io/api/rbac/v1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/dns"
@@ -65,6 +66,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-fluentd", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
@@ -100,6 +103,46 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		for _, expected := range expectedEnvs {
 			Expect(envs).To(ContainElement(expected))
 		}
+
+		container := ds.Spec.Template.Spec.Containers[0]
+
+		Expect(container.ReadinessProbe.Exec.Command).To(ConsistOf([]string{"sh", "-c", "/bin/readiness.sh"}))
+		Expect(container.ReadinessProbe.TimeoutSeconds).To(BeEquivalentTo(5))
+		Expect(container.ReadinessProbe.PeriodSeconds).To(BeEquivalentTo(5))
+		Expect(container.ReadinessProbe.FailureThreshold).To(BeEquivalentTo(3))
+
+		Expect(container.LivenessProbe.Exec.Command).To(ConsistOf([]string{"sh", "-c", "/bin/liveness.sh"}))
+		Expect(container.LivenessProbe.TimeoutSeconds).To(BeEquivalentTo(5))
+		Expect(container.LivenessProbe.PeriodSeconds).To(BeEquivalentTo(5))
+		Expect(container.LivenessProbe.FailureThreshold).To(BeEquivalentTo(3))
+
+		Expect(container.StartupProbe.Exec.Command).To(ConsistOf([]string{"sh", "-c", "/bin/liveness.sh"}))
+		Expect(container.StartupProbe.TimeoutSeconds).To(BeEquivalentTo(10))
+		Expect(container.StartupProbe.PeriodSeconds).To(BeEquivalentTo(10))
+		Expect(container.StartupProbe.FailureThreshold).To(BeEquivalentTo(10))
+
+		podExecRole := rtest.GetResource(resources, render.PacketCaptureAPIRole, render.LogCollectorNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
+		Expect(podExecRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods/exec"},
+				Verbs:     []string{"create"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     []string{"list"},
+			},
+		}))
+		podExecRoleBinding := rtest.GetResource(resources, render.PacketCaptureAPIRoleBinding, render.LogCollectorNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
+		Expect(podExecRoleBinding.RoleRef.Name).To(Equal(render.PacketCaptureAPIRole))
+		Expect(podExecRoleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      render.ManagerServiceAccount,
+				Namespace: render.ManagerNamespace,
+			},
+		}))
 	})
 
 	It("should render for Windows nodes", func() {
@@ -112,6 +155,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: "fluentd-node-windows", ns: "tigera-fluentd", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "fluentd-node-windows", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
@@ -169,6 +214,23 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		for _, expected := range expectedEnvs {
 			Expect(envs).To(ContainElement(expected))
 		}
+
+		container := ds.Spec.Template.Spec.Containers[0]
+
+		Expect(container.ReadinessProbe.Exec.Command).To(ConsistOf([]string{`c:\ruby26\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/readiness.sh`}))
+		Expect(container.ReadinessProbe.TimeoutSeconds).To(BeEquivalentTo(10))
+		Expect(container.ReadinessProbe.PeriodSeconds).To(BeEquivalentTo(10))
+		Expect(container.ReadinessProbe.FailureThreshold).To(BeEquivalentTo(3))
+
+		Expect(container.LivenessProbe.Exec.Command).To(ConsistOf([]string{`c:\ruby26\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/liveness.sh`}))
+		Expect(container.LivenessProbe.TimeoutSeconds).To(BeEquivalentTo(10))
+		Expect(container.LivenessProbe.PeriodSeconds).To(BeEquivalentTo(10))
+		Expect(container.LivenessProbe.FailureThreshold).To(BeEquivalentTo(3))
+
+		Expect(container.StartupProbe.Exec.Command).To(ConsistOf([]string{`c:\ruby26\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/liveness.sh`}))
+		Expect(container.StartupProbe.TimeoutSeconds).To(BeEquivalentTo(20))
+		Expect(container.StartupProbe.PeriodSeconds).To(BeEquivalentTo(20))
+		Expect(container.StartupProbe.FailureThreshold).To(BeEquivalentTo(10))
 	})
 
 	It("should render with S3 configuration", func() {
@@ -197,6 +259,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-fluentd", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
@@ -259,6 +323,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-fluentd", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
@@ -353,6 +419,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-fluentd", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
@@ -434,6 +502,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-fluentd", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
@@ -503,6 +573,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-fluentd", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
@@ -544,6 +616,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-fluentd", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			// Daemonset
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
 		}

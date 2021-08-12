@@ -278,7 +278,8 @@ deploy-crds: kubectl
 		./kubectl apply -f deploy/crds/calico/ && \
 		./kubectl apply -f deploy/crds/enterprise/ && \
 		./kubectl apply -f deploy/crds/elastic/elasticsearch-crd.yaml && \
-		./kubectl apply -f deploy/crds/elastic/kibana-crd.yaml
+		./kubectl apply -f deploy/crds/elastic/kibana-crd.yaml && \
+		./kubectl apply -f deploy/crds/prometheus
 
 create-tigera-operator-namespace: kubectl
 	KUBECONFIG=$(KUBECONFIG) ./kubectl create ns tigera-operator
@@ -322,7 +323,7 @@ format-check:
 .PHONY: dirty-check
 dirty-check:
 	@if [ "$$(git diff --stat)" = "" ]; then exit 0; fi; \
-	echo "The following files are dirty"; git diff --stat
+	echo "The following files are dirty"; git diff --stat; exit 1
 
 foss-checks:
 	@echo Running $@...
@@ -338,10 +339,11 @@ foss-checks:
 ###############################################################################
 .PHONY: ci
 ## Run what CI runs
-ci: clean format-check images test $(BINDIR)/gen-versions validate-gen-versions dirty-check
+ci: clean format-check images test dirty-check validate-gen-versions
 
 validate-gen-versions:
-	./hack/gen-versions/validate.sh
+	make gen-versions
+	make dirty-check
 
 ## Deploys images to registry
 cd:
@@ -453,17 +455,6 @@ $(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
 	sh -c '$(GIT_CONFIG_SSH) \
 	go build -o $(BINDIR)/gen-versions ./hack/gen-versions'
 
-## Generate a ClusterServiceVersion package.
-# E.g. make gen-csv VERSION=1.6.2 PREV_VERSION=0.0.0
-#
-# VERSION: the operator version to generate a CSV for.
-# PREV_VERSION: the operator version that this CSV will replace. If there is
-#               no previous version, use 0.0.0
-.PHONY: gen-csv
-gen-csv: $(OPERATOR_SDK_BARE) get-digest
-	$(eval EXTRA_DOCKER_ARGS += -e OPERATOR_IMAGE_INSPECT="$(OPERATOR_IMAGE_INSPECT)" -e VERSION=$(VERSION) -e PREV_VERSION=$(PREV_VERSION))
-	$(CONTAINERIZED) hack/gen-csv/csv.sh
-
 .PHONY: prepull-image
 prepull-image:
 	@echo Pulling operator image...
@@ -515,19 +506,6 @@ help: # Some kind of magic from https://gist.github.com/rcmachado/af3db315e31383
 	$(MAKEFILE_LIST)
 #####################################
 #####################################
-# Current Operator version
-VERSION ?= 0.0.1
-# Default bundle image tag
-BUNDLE_IMG ?= controller-bundle:$(VERSION)
-# Options for 'bundle-build'
-ifneq ($(origin CHANNELS), undefined)
-BUNDLE_CHANNELS := --channels=$(CHANNELS)
-endif
-ifneq ($(origin DEFAULT_CHANNEL), undefined)
-BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
-endif
-BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
-
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
@@ -554,6 +532,7 @@ deploy: manifests kustomize
 # Can also generate RBAC and webhooks but that is not enabled currently
 manifests: controller-gen
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) paths="./api/..." output:crd:artifacts:config=config/crd/bases
+	for x in $$(find config/crd/bases/*); do sed -i -e '/creationTimestamp: null/d' $$x; done
 
 # Run go fmt against code
 fmt:
@@ -604,15 +583,71 @@ $(BINDIR)/kustomize:
 		go mod init tmp ;\
 		go get sigs.k8s.io/kustomize/kustomize/v3@v3.5.4 '
 
-## Generate bundle manifests and metadata, then validate generated files.
-#.PHONY: bundle
-#bundle: manifests
-#	operator-sdk generate kustomize manifests -q
-#	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
-#	$(KUSTOMIZE) build config/manifests | operator-sdk generate bundle -q --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS)
-#	operator-sdk bundle validate ./bundle
-#
-## Build the bundle image.
-#.PHONY: bundle-build
-#bundle-build:
-#	docker build -f bundle.Dockerfile -t $(BUNDLE_IMG) .
+
+# Options for 'bundle-build'
+ifneq ($(origin CHANNELS), undefined)
+BUNDLE_CHANNELS := --channels=$(CHANNELS)
+endif
+ifneq ($(origin DEFAULT_CHANNEL), undefined)
+BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
+endif
+BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
+
+BUNDLE_CRD_DIR ?= build/_output/bundle/$(VERSION)/crds
+BUNDLE_DEPLOY_DIR ?= build/_output/bundle/$(VERSION)/deploy
+
+## Create an operator bundle image.
+# E.g., make bundle VERSION=1.13.1 PREV_VERSION=1.13.0 CHANNELS=release-v1.13 DEFAULT_CHANNEL=release-v1.13
+.PHONY: bundle
+bundle: bundle-generate bundle-crd-clean update-bundle bundle-validate bundle-image
+
+# Set CRD_OPTIONS to generate v1beta1 crds. This is required for RH
+# certification. We need apiextensions.k8s.io/v1beta1 crds until we
+# stop supporting OCP 4.5 or RH Connect supports v1 crds.
+.PHONY: bundle-crd-options
+bundle-crd-options:
+	$(eval CRD_OPTIONS = crd:crdVersions=v1beta1,trivialVersions=true)
+
+.PHONY: bundle-crd-clean
+bundle-crd-clean:
+	git checkout -- config/crd/bases/
+
+.PHONY: bundle-validate
+bundle-validate:
+	$(OPERATOR_SDK_BARE) bundle validate bundle/$(VERSION)
+
+.PHONY: bundle-manifests
+bundle-manifests:
+ifndef VERSION
+	$(error VERSION is undefined - run using make $@ VERSION=X.Y.Z PREV_VERSION=D.E.F)
+endif
+ifndef PREV_VERSION
+	$(error PREV_VERSION is undefined - run using make $@ VERSION=X.Y.Z PREV_VERSION=D.E.F)
+endif
+	$(eval EXTRA_DOCKER_ARGS += -e BUNDLE_CRD_DIR=$(BUNDLE_CRD_DIR) -e BUNDLE_DEPLOY_DIR=$(BUNDLE_DEPLOY_DIR))
+	$(CONTAINERIZED) "hack/gen-bundle/get-manifests.sh"
+
+.PHONY: bundle-generate
+bundle-generate: bundle-crd-options manifests $(KUSTOMIZE) $(OPERATOR_SDK_BARE) bundle-manifests
+	$(KUSTOMIZE) build config/manifests \
+	| $(OPERATOR_SDK_BARE) generate bundle \
+		--crds-dir $(BUNDLE_CRD_DIR) \
+		--deploy-dir $(BUNDLE_DEPLOY_DIR) \
+		--version $(VERSION) \
+		--verbose \
+		--manifests \
+		--metadata $(BUNDLE_METADATA_OPTS)
+
+# Update a generated bundle so that it can be certified.
+.PHONY: update-bundle
+update-bundle: $(OPERATOR_SDK_BARE) get-digest
+	$(eval EXTRA_DOCKER_ARGS += -e OPERATOR_IMAGE_INSPECT="$(OPERATOR_IMAGE_INSPECT)" -e VERSION=$(VERSION) -e PREV_VERSION=$(PREV_VERSION))
+	$(CONTAINERIZED) hack/gen-bundle/update-bundle.sh
+
+# Build the bundle image.
+.PHONY: bundle-build
+bundle-image:
+ifndef VERSION
+	$(error VERSION is undefined - run using make $@ VERSION=X.Y.Z)
+endif
+	docker build -f bundle/bundle-v$(VERSION).Dockerfile -t tigera-operator-bundle:$(VERSION) bundle/

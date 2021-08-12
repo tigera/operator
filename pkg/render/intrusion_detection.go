@@ -99,16 +99,17 @@ type intrusionDetectionComponent struct {
 func (c *intrusionDetectionComponent) ResolveImages(is *operator.ImageSet) error {
 	reg := c.installation.Registry
 	path := c.installation.ImagePath
+	prefix := c.installation.ImagePrefix
 	errMsgs := []string{}
 	var err error
 	if !c.managedCluster {
-		c.jobInstallerImage, err = components.GetReference(components.ComponentElasticTseeInstaller, reg, path, is)
+		c.jobInstallerImage, err = components.GetReference(components.ComponentElasticTseeInstaller, reg, path, prefix, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
 	}
 
-	c.controllerImage, err = components.GetReference(components.ComponentIntrusionDetectionController, reg, path, is)
+	c.controllerImage, err = components.GetReference(components.ComponentIntrusionDetectionController, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -124,7 +125,7 @@ func (c *intrusionDetectionComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Object) {
-	objs := []client.Object{createNamespace(IntrusionDetectionNamespace, c.installation.KubernetesProvider)}
+	objs := []client.Object{CreateNamespace(IntrusionDetectionNamespace, c.installation.KubernetesProvider)}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(IntrusionDetectionNamespace, c.pullSecrets...)...)...)
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(IntrusionDetectionNamespace, c.esSecrets...)...)...)
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(IntrusionDetectionNamespace, c.kibanaCertSecret)...)...)

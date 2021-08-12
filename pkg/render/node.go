@@ -43,17 +43,18 @@ import (
 )
 
 const (
-	BirdTemplatesConfigMapName  = "bird-templates"
-	birdTemplateHashAnnotation  = "hash.operator.tigera.io/bird-templates"
-	nodeCertHashAnnotation      = "hash.operator.tigera.io/node-cert"
-	nodeCniConfigAnnotation     = "hash.operator.tigera.io/cni-config"
-	bgpLayoutHashAnnotation     = "hash.operator.tigera.io/bgp-layout"
-	CSRLabelCalicoSystem        = "calico-system"
-	BGPLayoutConfigMapName      = "bgp-layout"
-	BGPLayoutConfigMapKey       = "earlyNetworkConfiguration"
-	BGPLayoutVolumeName         = "bgp-layout"
-	BGPLayoutPath               = "/etc/calico/early-networking.yaml"
-	K8sSvcEndpointConfigMapName = "kubernetes-services-endpoint"
+	BirdTemplatesConfigMapName        = "bird-templates"
+	birdTemplateHashAnnotation        = "hash.operator.tigera.io/bird-templates"
+	nodeCertHashAnnotation            = "hash.operator.tigera.io/node-cert"
+	nodeCniConfigAnnotation           = "hash.operator.tigera.io/cni-config"
+	bgpLayoutHashAnnotation           = "hash.operator.tigera.io/bgp-layout"
+	CSRLabelCalicoSystem              = "calico-system"
+	BGPLayoutConfigMapName            = "bgp-layout"
+	BGPLayoutConfigMapKey             = "earlyNetworkConfiguration"
+	BGPLayoutVolumeName               = "bgp-layout"
+	BGPLayoutPath                     = "/etc/calico/early-networking.yaml"
+	K8sSvcEndpointConfigMapName       = "kubernetes-services-endpoint"
+	nodeTerminationGracePeriodSeconds = 5
 )
 
 var (
@@ -109,26 +110,27 @@ type nodeComponent struct {
 func (c *nodeComponent) ResolveImages(is *operator.ImageSet) error {
 	reg := c.cr.Registry
 	path := c.cr.ImagePath
+	prefix := c.cr.ImagePrefix
 	var err error
 	if c.cr.Variant == operator.TigeraSecureEnterprise {
-		c.cniImage, err = components.GetReference(components.ComponentTigeraCNI, reg, path, is)
+		c.cniImage, err = components.GetReference(components.ComponentTigeraCNI, reg, path, prefix, is)
 	} else {
-		c.cniImage, err = components.GetReference(components.ComponentCalicoCNI, reg, path, is)
+		c.cniImage, err = components.GetReference(components.ComponentCalicoCNI, reg, path, prefix, is)
 	}
 	errMsgs := []string{}
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.flexvolImage, err = components.GetReference(components.ComponentFlexVolume, reg, path, is)
+	c.flexvolImage, err = components.GetReference(components.ComponentFlexVolume, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
 	if c.cr.Variant == operator.TigeraSecureEnterprise {
-		c.nodeImage, err = components.GetReference(components.ComponentTigeraNode, reg, path, is)
+		c.nodeImage, err = components.GetReference(components.ComponentTigeraNode, reg, path, prefix, is)
 	} else {
-		c.nodeImage, err = components.GetReference(components.ComponentCalicoNode, reg, path, is)
+		c.nodeImage, err = components.GetReference(components.ComponentCalicoNode, reg, path, prefix, is)
 	}
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
@@ -186,7 +188,7 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 
 	if c.cr.CertificateManagement != nil {
 		objsToCreate = append(objsToCreate, csrClusterRole())
-		objsToCreate = append(objsToCreate, csrClusterRoleBinding("calico-node", common.CalicoNamespace))
+		objsToCreate = append(objsToCreate, CsrClusterRoleBinding("calico-node", common.CalicoNamespace))
 	}
 
 	return objsToCreate, objsToDelete
@@ -383,6 +385,14 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				},
 				Verbs: []string{"create"},
 			},
+			{
+				// Tigera Secure updates status for packet captures.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{
+					"packetcaptures",
+				},
+				Verbs: []string{"update"},
+			},
 		}
 		role.Rules = append(role.Rules, extraRules...)
 	}
@@ -556,7 +566,7 @@ func (c *nodeComponent) clusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBind
 
 // nodeDaemonset creates the node daemonset.
 func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
-	var terminationGracePeriod int64 = 0
+	var terminationGracePeriod int64 = nodeTerminationGracePeriodSeconds
 	var initContainers []v1.Container
 
 	annotations := make(map[string]string)
@@ -900,6 +910,7 @@ func (c *nodeComponent) nodeContainer() v1.Container {
 		VolumeMounts:    c.nodeVolumeMounts(),
 		LivenessProbe:   lp,
 		ReadinessProbe:  rp,
+		Lifecycle:       c.nodeLifecycle(),
 	}
 }
 
@@ -930,6 +941,10 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 	} else if c.cr.CNI.Type == operator.PluginCalico {
 		cniLogMount := v1.VolumeMount{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: true}
 		nodeVolumeMounts = append(nodeVolumeMounts, cniLogMount)
+	}
+
+	if c.cr.CNI.Type == operator.PluginCalico {
+		nodeVolumeMounts = append(nodeVolumeMounts, v1.VolumeMount{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"})
 	}
 
 	if c.birdTemplates != nil {
@@ -971,6 +986,8 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	// Set the clusterType.
 	clusterType := "k8s,operator"
 
+	// Note: Felix now activates certain special-case logic based on the provider in the cluster type; avoid changing
+	// these unless you also update Felix's parsing logic.
 	switch c.cr.KubernetesProvider {
 	case operator.ProviderOpenShift:
 		clusterType = clusterType + ",openshift"
@@ -1042,6 +1059,11 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 				Optional: ptr.BoolToPtr(true),
 			},
 		}},
+	}
+
+	if c.cr.CNI != nil && c.cr.CNI.Type == operator.PluginCalico {
+		// If using Calico CNI, we need to manage CNI credential rotation on the host.
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_MANAGE_CNI", Value: "true"})
 	}
 
 	if c.cr.CNI != nil && c.cr.CNI.Type == operator.PluginAmazonVPC {
@@ -1264,6 +1286,15 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	return nodeEnv
 }
 
+// nodeLifecycle creates the node's postStart and preStop hooks.
+func (c *nodeComponent) nodeLifecycle() *v1.Lifecycle {
+	preStopCmd := []string{"/bin/calico-node", "-shutdown"}
+	lc := &v1.Lifecycle{
+		PreStop: &v1.Handler{Exec: &v1.ExecAction{Command: preStopCmd}},
+	}
+	return lc
+}
+
 // nodeLivenessReadinessProbes creates the node's liveness and readiness probes.
 func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 	// Determine liveness and readiness configuration for node.
@@ -1296,6 +1327,10 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 	}
 	rp := &v1.Probe{
 		Handler: v1.Handler{Exec: &v1.ExecAction{Command: readinessCmd}},
+		// Set the TimeoutSeconds greater than the default of 1 to allow additional time on loaded nodes.
+		// This timeout should be less than the PeriodSeconds.
+		TimeoutSeconds: 5,
+		PeriodSeconds:  10,
 	}
 	return lp, rp
 }

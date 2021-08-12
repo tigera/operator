@@ -94,6 +94,7 @@ func ResolveCSRInitImage(inst *operator.InstallationSpec, is *operator.ImageSet)
 		components.ComponentCSRInitContainer,
 		inst.Registry,
 		inst.ImagePath,
+		inst.ImagePrefix,
 		is,
 	)
 }
@@ -117,8 +118,8 @@ func csrClusterRole() client.Object {
 	}
 }
 
-// csrClusterRoleBinding returns a role binding with the necessary permissions to create certificate signing requests.
-func csrClusterRoleBinding(name, namespace string) *rbacv1.ClusterRoleBinding {
+// CsrClusterRoleBinding returns a role binding with the necessary permissions to create certificate signing requests.
+func CsrClusterRoleBinding(name, namespace string) *rbacv1.ClusterRoleBinding {
 	crb := &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{

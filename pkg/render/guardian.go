@@ -73,8 +73,9 @@ type GuardianComponent struct {
 func (c *GuardianComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.installation.Registry
 	path := c.installation.ImagePath
+	prefix := c.installation.ImagePrefix
 	var err error
-	c.image, err = components.GetReference(components.ComponentGuardian, reg, path, is)
+	c.image, err = components.GetReference(components.ComponentGuardian, reg, path, prefix, is)
 	return err
 }
 
@@ -84,7 +85,7 @@ func (c *GuardianComponent) SupportedOSType() rmeta.OSType {
 
 func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
-		createNamespace(GuardianNamespace, c.installation.KubernetesProvider),
+		CreateNamespace(GuardianNamespace, c.installation.KubernetesProvider),
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(GuardianNamespace, c.pullSecrets...)...)...)
 	objs = append(objs,
@@ -95,7 +96,7 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		c.service(),
 		secret.CopyToNamespace(GuardianNamespace, c.tunnelSecret)[0],
 		// Add tigera-manager service account for impersonation
-		createNamespace(ManagerNamespace, c.installation.KubernetesProvider),
+		CreateNamespace(ManagerNamespace, c.installation.KubernetesProvider),
 		managerServiceAccount(),
 		managerClusterRole(false, true, c.openshift),
 		managerClusterRoleBinding(),

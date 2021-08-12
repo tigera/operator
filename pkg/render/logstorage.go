@@ -64,6 +64,7 @@ const (
 
 	ElasticsearchName                     = "tigera-secure"
 	ElasticsearchServiceName              = "tigera-secure-es-http"
+	ESGatewayServiceName                  = "tigera-secure-es-gateway-http"
 	ElasticsearchSecureSettingsSecretName = "tigera-elasticsearch-secure-settings"
 	ElasticsearchOperatorUserSecret       = "tigera-ee-operator-elasticsearch-access"
 	ElasticsearchAdminUserSecret          = "tigera-secure-es-elastic-user"
@@ -236,24 +237,25 @@ type elasticsearchComponent struct {
 func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := es.installation.Registry
 	path := es.installation.ImagePath
+	prefix := es.installation.ImagePrefix
 	var err error
-	es.esImage, err = components.GetReference(components.ComponentElasticsearch, reg, path, is)
+	es.esImage, err = components.GetReference(components.ComponentElasticsearch, reg, path, prefix, is)
 	errMsgs := []string{}
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	es.esOperatorImage, err = components.GetReference(components.ComponentElasticsearchOperator, reg, path, is)
+	es.esOperatorImage, err = components.GetReference(components.ComponentElasticsearchOperator, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	es.kibanaImage, err = components.GetReference(components.ComponentKibana, reg, path, is)
+	es.kibanaImage, err = components.GetReference(components.ComponentKibana, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	es.curatorImage, err = components.GetReference(components.ComponentEsCurator, reg, path, is)
+	es.curatorImage, err = components.GetReference(components.ComponentEsCurator, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -316,7 +318,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 		// ECK CRs
 		toCreate = append(toCreate,
-			createNamespace(ECKOperatorNamespace, es.installation.KubernetesProvider),
+			CreateNamespace(ECKOperatorNamespace, es.installation.KubernetesProvider),
 		)
 
 		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ECKOperatorNamespace, es.pullSecrets...)...)...)
@@ -347,7 +349,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate, es.eckOperatorStatefulSet())
 
 		// Elasticsearch CRs
-		toCreate = append(toCreate, createNamespace(ElasticsearchNamespace, es.installation.KubernetesProvider))
+		toCreate = append(toCreate, CreateNamespace(ElasticsearchNamespace, es.installation.KubernetesProvider))
 
 		if len(es.pullSecrets) > 0 {
 			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.pullSecrets...)...)...)
@@ -368,7 +370,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate, es.elasticsearchCluster(len(secureSettings.Data) > 0))
 
 		// Kibana CRs
-		toCreate = append(toCreate, createNamespace(KibanaNamespace, es.installation.KubernetesProvider))
+		toCreate = append(toCreate, CreateNamespace(KibanaNamespace, es.installation.KubernetesProvider))
 		toCreate = append(toCreate, es.kibanaServiceAccount())
 
 		if len(es.pullSecrets) > 0 {
@@ -412,7 +414,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		}
 	} else {
 		toCreate = append(toCreate,
-			createNamespace(ElasticsearchNamespace, es.installation.KubernetesProvider),
+			CreateNamespace(ElasticsearchNamespace, es.installation.KubernetesProvider),
 			es.elasticsearchExternalService(),
 		)
 	}
@@ -422,8 +424,8 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	if es.installation.CertificateManagement != nil {
-		toCreate = append(toCreate, csrClusterRoleBinding("tigera-elasticsearch", ElasticsearchNamespace))
-		toCreate = append(toCreate, csrClusterRoleBinding("tigera-kibana", KibanaNamespace))
+		toCreate = append(toCreate, CsrClusterRoleBinding("tigera-elasticsearch", ElasticsearchNamespace))
+		toCreate = append(toCreate, CsrClusterRoleBinding("tigera-kibana", KibanaNamespace))
 	}
 
 	return toCreate, toDelete
@@ -437,22 +439,8 @@ func (es elasticsearchComponent) elasticsearchExternalService() *corev1.Service 
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ElasticsearchServiceName,
+			Name:      ESGatewayServiceName,
 			Namespace: ElasticsearchNamespace,
-		},
-		Spec: corev1.ServiceSpec{
-			Type:         corev1.ServiceTypeExternalName,
-			ExternalName: fmt.Sprintf("%s.%s.svc.%s", GuardianServiceName, GuardianNamespace, es.clusterDomain),
-		},
-	}
-}
-
-func (es elasticsearchComponent) kibanaExternalService() *corev1.Service {
-	return &corev1.Service{
-		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      KibanaServiceName,
-			Namespace: KibanaNamespace,
 		},
 		Spec: corev1.ServiceSpec{
 			Type:         corev1.ServiceTypeExternalName,

@@ -86,8 +86,9 @@ type dexComponent struct {
 func (c *dexComponent) ResolveImages(is *oprv1.ImageSet) error {
 	reg := c.installation.Registry
 	path := c.installation.ImagePath
+	prefix := c.installation.ImagePrefix
 	var err error
-	c.image, err = components.GetReference(components.ComponentDex, reg, path, is)
+	c.image, err = components.GetReference(components.ComponentDex, reg, path, prefix, is)
 
 	var errMsgs []string
 	if err != nil {
@@ -133,7 +134,7 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(DexNamespace, c.pullSecrets...)...)...)
 
 	if c.installation.CertificateManagement != nil {
-		objs = append(objs, csrClusterRoleBinding(DexObjectName, DexNamespace))
+		objs = append(objs, CsrClusterRoleBinding(DexObjectName, DexNamespace))
 	}
 
 	if c.deleteDex {

@@ -63,8 +63,9 @@ type amazonCloudIntegrationComponent struct {
 func (c *amazonCloudIntegrationComponent) ResolveImages(is *operator.ImageSet) error {
 	reg := c.installation.Registry
 	path := c.installation.ImagePath
+	prefix := c.installation.ImagePrefix
 	var err error
-	c.image, err = components.GetReference(components.ComponentCloudControllers, reg, path, is)
+	c.image, err = components.GetReference(components.ComponentCloudControllers, reg, path, prefix, is)
 	return err
 }
 
@@ -105,7 +106,7 @@ func ConvertSecretToCredential(s *corev1.Secret) (*AmazonCredential, error) {
 
 func (c *amazonCloudIntegrationComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
-		createNamespace(AmazonCloudIntegrationNamespace, c.installation.KubernetesProvider),
+		CreateNamespace(AmazonCloudIntegrationNamespace, c.installation.KubernetesProvider),
 	}
 	secrets := secret.CopyToNamespace(AmazonCloudIntegrationNamespace, c.pullSecrets...)
 	objs = append(objs, secret.ToRuntimeObjects(secrets...)...)

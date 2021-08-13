@@ -195,6 +195,13 @@ func mergeCalicoNetwork(cfg, override *operatorv1.CalicoNetworkSpec) *operatorv1
 		out.LinuxDataplane = override.LinuxDataplane
 	}
 
+	switch compareFields(out.VPP, override.VPP) {
+	case BOnlySet:
+		out.VPP = override.VPP.DeepCopy()
+	case Different:
+		out.VPP = mergeVPP(out.VPP, override.VPP)
+	}
+
 	switch compareFields(out.NodeAddressAutodetectionV4, override.NodeAddressAutodetectionV4) {
 	case BOnlySet, Different:
 		out.NodeAddressAutodetectionV4 = override.NodeAddressAutodetectionV4
@@ -218,6 +225,81 @@ func mergeCalicoNetwork(cfg, override *operatorv1.CalicoNetworkSpec) *operatorv1
 	switch compareFields(out.ContainerIPForwarding, override.ContainerIPForwarding) {
 	case BOnlySet, Different:
 		out.ContainerIPForwarding = override.ContainerIPForwarding
+	}
+	return out
+}
+
+func mergeVPP(cfg, override *operatorv1.VPPConfiguration) *operatorv1.VPPConfiguration {
+	out := cfg.DeepCopy()
+
+	switch compareFields(out.UplinkInterface, override.UplinkInterface) {
+	case BOnlySet, Different:
+		out.UplinkInterface = override.UplinkInterface
+	}
+
+	switch compareFields(out.ServicePrefix, override.ServicePrefix) {
+	case BOnlySet, Different:
+		out.ServicePrefix = override.ServicePrefix
+	}
+
+	switch compareFields(out.UplinkDriver, override.UplinkDriver) {
+	case BOnlySet, Different:
+		out.UplinkDriver = override.UplinkDriver
+	}
+
+	switch compareFields(out.Hugepages, override.Hugepages) {
+	case BOnlySet, Different:
+		out.Hugepages = override.Hugepages
+	}
+
+	switch compareFields(out.DefaultGateway, override.DefaultGateway) {
+	case BOnlySet, Different:
+		out.DefaultGateway = override.DefaultGateway
+	}
+
+	switch compareFields(out.RxMode, override.RxMode) {
+	case BOnlySet, Different:
+		out.RxMode = override.RxMode
+	}
+
+	switch compareFields(out.UplinkRxQueues, override.UplinkRxQueues) {
+	case BOnlySet, Different:
+		out.UplinkRxQueues = override.UplinkRxQueues
+	}
+
+	switch compareFields(out.UplinkQueueSize, override.UplinkQueueSize) {
+	case BOnlySet, Different:
+		out.UplinkQueueSize = override.UplinkQueueSize
+	}
+
+	switch compareFields(out.TunRxQueues, override.TunRxQueues) {
+	case BOnlySet, Different:
+		out.TunRxQueues = override.TunRxQueues
+	}
+
+	switch compareFields(out.TunTxQueues, override.TunTxQueues) {
+	case BOnlySet, Different:
+		out.TunTxQueues = override.TunTxQueues
+	}
+
+	switch compareFields(out.TunQueueSize, override.TunQueueSize) {
+	case BOnlySet, Different:
+		out.TunQueueSize = override.TunQueueSize
+	}
+
+	switch compareFields(out.IPsec, override.IPsec) {
+	case BOnlySet, Different:
+		out.IPsec = override.IPsec
+	}
+
+	switch compareFields(out.Workers, override.Workers) {
+	case BOnlySet, Different:
+		out.Workers = override.Workers
+	}
+
+	switch compareFields(out.HookType, override.HookType) {
+	case BOnlySet, Different:
+		out.HookType = override.HookType
 	}
 	return out
 }

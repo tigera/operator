@@ -393,15 +393,20 @@ func fillDefaults(instance *operator.Installation) error {
 		instance.Spec.CNI = &operator.CNISpec{}
 	}
 	if instance.Spec.CNI.Type == "" {
-		switch instance.Spec.KubernetesProvider {
-		case operator.ProviderAKS:
-			instance.Spec.CNI.Type = operator.PluginAzureVNET
-		case operator.ProviderEKS:
-			instance.Spec.CNI.Type = operator.PluginAmazonVPC
-		case operator.ProviderGKE:
-			instance.Spec.CNI.Type = operator.PluginGKE
-		default:
+		if instance.Spec.CalicoNetwork != nil && instance.Spec.CalicoNetwork.VPP != nil {
+			// Default CNI type is always Calico when VPP is enabled as vpp only supports calico
 			instance.Spec.CNI.Type = operator.PluginCalico
+		} else {
+			switch instance.Spec.KubernetesProvider {
+			case operator.ProviderAKS:
+				instance.Spec.CNI.Type = operator.PluginAzureVNET
+			case operator.ProviderEKS:
+				instance.Spec.CNI.Type = operator.PluginAmazonVPC
+			case operator.ProviderGKE:
+				instance.Spec.CNI.Type = operator.PluginGKE
+			default:
+				instance.Spec.CNI.Type = operator.PluginCalico
+			}
 		}
 	}
 

@@ -1117,6 +1117,17 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	// Build a configuration for rendering calico/typha.
+	typhaCfg := render.TyphaConfiguration{
+		K8sServiceEp:           k8sapi.Endpoint,
+		Installation:           &instance.Spec,
+		TLS:                    typhaNodeTLS,
+		AmazonCloudIntegration: aci,
+		MigrateNamespaces:      needNsMigration,
+		ClusterDomain:          r.clusterDomain,
+	}
+	components = append(components, render.Typha(&typhaCfg))
+
 	// Build a configuration for rendering calico/node.
 	nodeCfg := render.NodeConfiguration{
 		K8sServiceEp:            k8sapi.Endpoint,
@@ -1132,17 +1143,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		MigrateNamespaces:       needNsMigration,
 	}
 	components = append(components, render.Node(&nodeCfg))
-
-	// Build a configuration for rendering calico/typha.
-	typhaCfg := render.TyphaConfiguration{
-		K8sServiceEp:           k8sapi.Endpoint,
-		Installation:           &instance.Spec,
-		TLS:                    typhaNodeTLS,
-		AmazonCloudIntegration: aci,
-		MigrateNamespaces:      needNsMigration,
-		ClusterDomain:          r.clusterDomain,
-	}
-	components = append(components, render.Typha(&typhaCfg))
 
 	// Build a configuration for rendering calico/kube-controllers.
 	kubeControllersCfg := render.KubeControllersConfiguration{

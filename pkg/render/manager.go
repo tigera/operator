@@ -87,6 +87,7 @@ const (
 var (
 	CloudManagerConfigOverrideName = "cloud-manager-config"
 	CloudPortalAPIURL              = ""
+	CloudAuth0OrgID                = ""
 )
 
 func Manager(
@@ -532,6 +533,7 @@ func setManagerCloudEnvs(envs []corev1.EnvVar) []corev1.EnvVar {
 		envs = append(envs,
 			v1.EnvVar{Name: "CNX_PORTAL_URL", Value: CloudPortalAPIURL},
 			v1.EnvVar{Name: "ENABLE_PORTAL_SUPPORT", Value: "true"},
+			v1.EnvVar{Name: "CNX_AUTH0_ORG_ID", Value: CloudAuth0OrgID},
 		)
 	}
 	return envs

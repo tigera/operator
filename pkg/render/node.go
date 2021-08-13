@@ -617,6 +617,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 	if len(c.cfg.BirdTemplates) != 0 {
 		annotations[birdTemplateHashAnnotation] = rmeta.AnnotationHash(c.cfg.BirdTemplates)
 	}
+
 	annotations[typhaCAHashAnnotation] = rmeta.AnnotationHash(c.cfg.TLS.CAConfigMap.Data)
 	if c.cfg.Installation.CertificateManagement == nil {
 		annotations[nodeCertHashAnnotation] = rmeta.AnnotationHash(c.cfg.TLS.NodeSecret.Data)

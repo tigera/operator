@@ -2830,7 +2830,7 @@ var _ = Describe("Node rendering tests", func() {
 	It("should render extra resources when certificate management is enabled", func() {
 		defaultInstance.CertificateManagement = &operator.CertificateManagement{CACert: []byte("<ca>"), SignerName: "a.b/c"}
 		cfg.TLS.NodeSecret = nil
-		cfg.TLS.CAConfigMap = nil
+		cfg.TLS.TyphaSecret = nil
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -2842,6 +2842,7 @@ var _ = Describe("Node rendering tests", func() {
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},

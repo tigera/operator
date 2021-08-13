@@ -18,6 +18,8 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	glog "log"
+	"reflect"
 
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 
@@ -69,13 +71,23 @@ func allCalicoComponents(
 
 	namespaces := render.Namespaces(cr, pullSecrets)
 
-	secretsAndConfigMaps := render.NewPassthrough(filterNil(
-		typhaNodeTLS.CAConfigMap,
-		bgpLayout,
-		typhaNodeTLS.NodeSecret,
-		typhaNodeTLS.TyphaSecret,
-		managerInternalTLSSecret,
-	))
+	objs := []client.Object{}
+	if typhaNodeTLS.CAConfigMap != nil {
+		objs = append(objs, typhaNodeTLS.CAConfigMap)
+	}
+	if bgpLayout != nil {
+		objs = append(objs, bgpLayout)
+	}
+	if typhaNodeTLS.NodeSecret != nil {
+		objs = append(objs, typhaNodeTLS.NodeSecret)
+	}
+	if typhaNodeTLS.TyphaSecret != nil {
+		objs = append(objs, typhaNodeTLS.TyphaSecret)
+	}
+	if managerInternalTLSSecret != nil {
+		objs = append(objs, managerInternalTLSSecret)
+	}
+	secretsAndConfigMaps := render.NewPassthrough(objs)
 
 	nodeCfg := &render.NodeConfiguration{
 		K8sServiceEp:            k8sServiceEp,
@@ -120,7 +132,9 @@ func allCalicoComponents(
 func filterNil(objs ...client.Object) []client.Object {
 	f := []client.Object{}
 	for _, o := range objs {
-		f = append(f, o)
+		if o != nil {
+			f = append(f, o)
+		}
 	}
 	return f
 }
@@ -157,14 +171,18 @@ var _ = Describe("Rendering tests", func() {
 		}
 
 		nodeSecret := v1.Secret{}
-		nodeSecret.Name = "node-certs"
-		nodeSecret.Namespace = "tigera-operator"
+		nodeSecret.Name = render.NodeTLSSecretName
+		nodeSecret.Namespace = rmeta.OperatorNamespace()
 		nodeSecret.Data = map[string][]byte{"k": []byte("v")}
+		nodeSecret.Kind = "Secret"
+		nodeSecret.APIVersion = "v1"
 
 		typhaSecret := v1.Secret{}
-		typhaSecret.Name = "typha-certs"
-		typhaSecret.Namespace = "tigera-operator"
+		typhaSecret.Name = render.TyphaTLSSecretName
+		typhaSecret.Namespace = rmeta.OperatorNamespace()
 		typhaSecret.Data = map[string][]byte{"k": []byte("v")}
+		typhaSecret.Kind = "Secret"
+		typhaSecret.APIVersion = "v1"
 
 		logWriter = bufio.NewWriter(&logBuffer)
 		render.SetTestLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(logWriter)))
@@ -173,8 +191,10 @@ var _ = Describe("Rendering tests", func() {
 			TyphaSecret: &typhaSecret,
 			NodeSecret:  &nodeSecret,
 		}
-		typhaNodeTLS.CAConfigMap.Name = "typha-node-ca"
-		typhaNodeTLS.CAConfigMap.Namespace = "tigera-operator"
+		typhaNodeTLS.CAConfigMap.Name = render.TyphaCAConfigMapName
+		typhaNodeTLS.CAConfigMap.Namespace = rmeta.OperatorNamespace()
+		typhaNodeTLS.CAConfigMap.Kind = "ConfigMap"
+		typhaNodeTLS.CAConfigMap.APIVersion = "v1"
 	})
 
 	AfterEach(func() {
@@ -187,16 +207,15 @@ var _ = Describe("Rendering tests", func() {
 	It("should render all resources for a default configuration", func() {
 		// For this scenario, we expect the basic resources
 		// created by the controller without any optional ones. These include:
-		// - 6 node resources (ServiceAccount, ClusterRole, Binding, ConfigMap, DaemonSet, PodSecurityPolicy)
+		// - 7 node resources (PriorityClass, ServiceAccount, ClusterRole, Binding, ConfigMap, DaemonSet, PodSecurityPolicy)
 		// - 4 secrets for Typha comms (2 in operator namespace and 2 in calico namespace)
 		// - 2 ConfigMap for Typha comms (1 in operator namespace and 1 in calico namespace)
 		// - 7 typha resources (Service, SA, Role, Binding, Deployment, PodDisruptionBudget, PodSecurityPolicy)
 		// - 6 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment, PodSecurityPolicy, Service, Secret)
 		// - 1 namespace
-		// - 1 PriorityClass
 		c, err := allCalicoComponents(k8sServiceEp, instance, false, nil, nil, nil, nil, typhaNodeTLS, nil, nil, nil, nil, operator.ProviderNone, nil, false, "", dns.DefaultClusterDomain, false, nil, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c)).To(Equal(6 + 4 + 2 + 7 + 6 + 1 + 1))
+		Expect(componentCount(c)).To(Equal(7 + 4 + 2 + 7 + 6 + 1))
 	})
 
 	It("should render all resources when variant is Tigera Secure", func() {
@@ -236,30 +255,39 @@ var _ = Describe("Rendering tests", func() {
 			version string
 			kind    string
 		}{
+			// Namespaces first.
 			{common.CalicoNamespace, "", "", "v1", "Namespace"},
 			{render.DexObjectName, "", "", "v1", "Namespace"},
+
+			// Secrets and configmaps from tigera-operator namespace.
 			{render.TyphaCAConfigMapName, rmeta.OperatorNamespace(), "", "v1", "ConfigMap"},
-			{render.TyphaCAConfigMapName, common.CalicoNamespace, "", "v1", "ConfigMap"},
-			{render.TyphaTLSSecretName, rmeta.OperatorNamespace(), "", "v1", "Secret"},
 			{render.NodeTLSSecretName, rmeta.OperatorNamespace(), "", "v1", "Secret"},
-			{render.TyphaTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
-			{render.NodeTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
+			{render.TyphaTLSSecretName, rmeta.OperatorNamespace(), "", "v1", "Secret"},
 			{render.ManagerInternalTLSSecretName, rmeta.OperatorNamespace(), "", "v1", "Secret"},
+
+			// Typha objects.
 			{render.TyphaServiceAccountName, common.CalicoNamespace, "", "v1", "ServiceAccount"},
 			{"calico-typha", "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
 			{"calico-typha", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
-			{common.TyphaDeploymentName, common.CalicoNamespace, "", "v1", "Deployment"},
 			{render.TyphaServiceName, common.CalicoNamespace, "", "v1", "Service"},
 			{common.TyphaDeploymentName, common.CalicoNamespace, "policy", "v1beta1", "PodDisruptionBudget"},
+			{render.TyphaTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
 			{common.TyphaDeploymentName, "", "policy", "v1beta1", "PodSecurityPolicy"},
+			{common.TyphaDeploymentName, common.CalicoNamespace, "", "v1", "Deployment"},
+
+			// Node objects.
 			{render.PriorityClassName, "", "scheduling.k8s.io", "v1", "PriorityClass"},
 			{"calico-node", common.CalicoNamespace, "", "v1", "ServiceAccount"},
 			{"calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
 			{"calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
+			{render.TyphaCAConfigMapName, common.CalicoNamespace, "", "v1", "ConfigMap"},
+			{render.NodeTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
 			{"calico-node-metrics", common.CalicoNamespace, "", "v1", "Service"},
 			{"cni-config", common.CalicoNamespace, "", "v1", "ConfigMap"},
 			{common.NodeDaemonSetName, "", "policy", "v1beta1", "PodSecurityPolicy"},
 			{common.NodeDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet"},
+
+			// Kube-controllers objects.
 			{"calico-kube-controllers", common.CalicoNamespace, "", "v1", "ServiceAccount"},
 			{"calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
 			{"calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
@@ -306,7 +334,7 @@ var _ = Describe("Rendering tests", func() {
 			},
 		}
 		bgpLayout.Name = "bgp-layout"
-		bgpLayout.Namespace = "tigera-operator"
+		bgpLayout.Namespace = rmeta.OperatorNamespace()
 		comps, err := allCalicoComponents(k8sServiceEp, instance, true, nil, nil, nil, nil, typhaNodeTLS, nil, nil, nil, nil, operator.ProviderNone, nil, false, "", dns.DefaultClusterDomain, false, nil, 0, 0, bgpLayout, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		var cm *corev1.ConfigMap
@@ -368,6 +396,10 @@ func componentCount(components []render.Component) int {
 	for _, c := range components {
 		objsToCreate, _ := c.Objects()
 		count += len(objsToCreate)
+		glog.Printf("Component: %s\n", reflect.TypeOf(c))
+		for i, o := range objsToCreate {
+			glog.Printf(" - %d/%d: %s/%s\n", i, len(objsToCreate), o.GetNamespace(), o.GetName())
+		}
 	}
 	return count
 }

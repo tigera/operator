@@ -19,6 +19,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/ptr"
+	"github.com/tigera/operator/pkg/render/common/configmap"
+	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/util/intstr"
+
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -46,9 +52,17 @@ const (
 	ElasticsearchADJobUserSecret                 = "tigera-ee-ad-job-elasticsearch-access"
 
 	IntrusionDetectionInstallerJobName = "intrusion-detection-es-job-installer"
+
+	DeepPacketInspectionNamespace = "tigera-dpi"
+	DeepPacketInspectionName      = "tigera-dpi"
+	DefaultMemoryLimitDPI         = "1Gi"
+	DefaultMemoryRequestDPI       = "100Mi"
+	DefaultCPULimitDPI            = "1"
+	DefaultCPURequestDPI          = "100m"
 )
 
 func IntrusionDetection(
+	ids *operatorv1.IntrusionDetection,
 	lc *operatorv1.LogCollector,
 	esSecrets []*corev1.Secret,
 	kibanaCertSecret *corev1.Secret,
@@ -61,8 +75,13 @@ func IntrusionDetection(
 	managedCluster bool,
 	hasNoLicense bool,
 	managerInternalTLSSecret *corev1.Secret,
+	addDPIDaemonSet bool,
+	nodeTLSSecret *corev1.Secret,
+	typhaTLSSecret *corev1.Secret,
+	typhaCAConfigMap *corev1.ConfigMap,
 ) Component {
 	return &intrusionDetectionComponent{
+		ids:                      ids,
 		lc:                       lc,
 		esSecrets:                esSecrets,
 		kibanaCertSecret:         kibanaCertSecret,
@@ -75,10 +94,15 @@ func IntrusionDetection(
 		managedCluster:           managedCluster,
 		hasNoLicense:             hasNoLicense,
 		managerInternalTLSSecret: managerInternalTLSSecret,
+		dpiDaemonSet:             addDPIDaemonSet,
+		nodeTLSSecret:            nodeTLSSecret,
+		typhaTLSSecret:           typhaTLSSecret,
+		typhaCAConfigMap:         typhaCAConfigMap,
 	}
 }
 
 type intrusionDetectionComponent struct {
+	ids                      *operatorv1.IntrusionDetection
 	lc                       *operatorv1.LogCollector
 	esSecrets                []*corev1.Secret
 	kibanaCertSecret         *corev1.Secret
@@ -93,6 +117,11 @@ type intrusionDetectionComponent struct {
 	managedCluster           bool
 	hasNoLicense             bool
 	managerInternalTLSSecret *corev1.Secret
+	dpiDaemonSet             bool
+	nodeTLSSecret            *corev1.Secret
+	typhaTLSSecret           *corev1.Secret
+	typhaCAConfigMap         *corev1.ConfigMap
+	dpiImage                 string
 }
 
 func (c *intrusionDetectionComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -113,6 +142,11 @@ func (c *intrusionDetectionComponent) ResolveImages(is *operatorv1.ImageSet) err
 		errMsgs = append(errMsgs, err.Error())
 	}
 
+	c.dpiImage, err = components.GetReference(components.ComponentDeepPacketInspection, reg, path, prefix, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
 	if len(errMsgs) != 0 {
 		return fmt.Errorf(strings.Join(errMsgs, ","))
 	}
@@ -124,6 +158,7 @@ func (c *intrusionDetectionComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Object) {
+	var toDelete []client.Object
 	objs := []client.Object{CreateNamespace(IntrusionDetectionNamespace, c.installation.KubernetesProvider)}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(IntrusionDetectionNamespace, c.pullSecrets...)...)...)
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(IntrusionDetectionNamespace, c.esSecrets...)...)...)
@@ -154,11 +189,33 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 			c.intrusionDetectionPSPClusterRoleBinding())
 	}
 
+	if c.dpiDaemonSet {
+		c.intrusionDetectionComponentResources()
+		objs = append(objs, CreateNamespace(DeepPacketInspectionNamespace, c.installation.KubernetesProvider))
+		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, c.nodeTLSSecret)...)...)
+		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, c.typhaTLSSecret)...)...)
+		objs = append(objs, configmap.ToRuntimeObjects(configmap.CopyToNamespace(DeepPacketInspectionNamespace, c.typhaCAConfigMap)...)...)
+		objs = append(objs,
+			c.dpiServiceAccount(),
+			c.dpiRole(),
+			c.dpiRoleBinding(),
+			c.dpiDaemonset(),
+		)
+	} else {
+		toDelete = append(toDelete, c.dpiNamespace())
+	}
+
 	if c.hasNoLicense {
 		return nil, objs
 	}
 
-	return objs, nil
+	// If IDS resource needs to be updated with default resourceRequirements,
+	// append it after license check is done to avoid deleting IDS CR.
+	if c.dpiDaemonSet {
+		objs = append(objs, c.ids)
+	}
+
+	return objs, toDelete
 }
 
 func (c *intrusionDetectionComponent) Ready() bool {
@@ -377,6 +434,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionRole() *rbacv1.Role {
 		},
 	}
 }
+
 func (c *intrusionDetectionComponent) intrusionDetectionRoleBinding() *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -890,4 +948,243 @@ func (c *intrusionDetectionComponent) intrusionDetectionAnnotations() map[string
 		}
 	}
 	return nil
+}
+
+// intrusionDetectionComponentResources sets the default requirements value for DPI in IDS resource if it is not set.
+func (c *intrusionDetectionComponent) intrusionDetectionComponentResources() {
+	if c.ids.Spec.ComponentResources == nil {
+		c.ids.Spec.ComponentResources = []operatorv1.IntrusionDetectionComponentResource{
+			{
+				ComponentName: operatorv1.ComponentNameDeepPacketInspection,
+				ResourceRequirements: &corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{
+						corev1.ResourceMemory: resource.MustParse(DefaultMemoryLimitDPI),
+						corev1.ResourceCPU:    resource.MustParse(DefaultCPULimitDPI),
+					},
+					Requests: corev1.ResourceList{
+						corev1.ResourceMemory: resource.MustParse(DefaultMemoryRequestDPI),
+						corev1.ResourceCPU:    resource.MustParse(DefaultCPURequestDPI),
+					},
+				},
+			},
+		}
+	}
+}
+
+func (c *intrusionDetectionComponent) dpiDaemonset() *appsv1.DaemonSet {
+	var terminationGracePeriod int64 = 0
+
+	return &appsv1.DaemonSet{
+		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      DeepPacketInspectionName,
+			Namespace: DeepPacketInspectionNamespace,
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": DeepPacketInspectionName}},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"k8s-app": DeepPacketInspectionName,
+					},
+				},
+				Spec: corev1.PodSpec{
+					Tolerations:                   rmeta.TolerateAll,
+					ImagePullSecrets:              secret.GetReferenceList(c.pullSecrets),
+					ServiceAccountName:            DeepPacketInspectionName,
+					TerminationGracePeriodSeconds: &terminationGracePeriod,
+					HostNetwork:                   true,
+					Containers:                    []corev1.Container{c.dpiContainer()},
+					Volumes:                       c.dpiVolumes(),
+				},
+			},
+		},
+	}
+}
+
+func (c *intrusionDetectionComponent) dpiContainer() corev1.Container {
+	privileged := false
+	// On OpenShift Snort needs privileged access to access host network
+	if c.openshift {
+		privileged = true
+	}
+
+	return corev1.Container{
+		Name:         DeepPacketInspectionName,
+		Image:        c.dpiImage,
+		Resources:    *c.ids.Spec.ComponentResources[0].ResourceRequirements,
+		Env:          c.dpiEnvVars(),
+		VolumeMounts: c.dpiVolumeMounts(),
+		SecurityContext: &corev1.SecurityContext{
+			Privileged: &privileged,
+		},
+		LivenessProbe: c.dpiReadinessProbes(),
+	}
+}
+
+func (c *intrusionDetectionComponent) dpiVolumes() []corev1.Volume {
+	return []corev1.Volume{
+		{
+			Name: "typha-ca",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: TyphaCAConfigMapName,
+					},
+				},
+			},
+		},
+		{
+			Name:         "node-certs",
+			VolumeSource: certificateVolumeSource(c.installation.CertificateManagement, NodeTLSSecretName),
+		},
+	}
+}
+
+func (c *intrusionDetectionComponent) dpiEnvVars() []corev1.EnvVar {
+	var cnEnv corev1.EnvVar
+	if c.installation.CertificateManagement != nil {
+		cnEnv = corev1.EnvVar{
+			Name: "DPI_TYPHACN", Value: TyphaCommonName,
+		}
+	} else {
+		cnEnv = corev1.EnvVar{
+			Name: "DPI_TYPHACN", ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: TyphaTLSSecretName,
+					},
+					Key:      CommonName,
+					Optional: ptr.BoolToPtr(true),
+				},
+			},
+		}
+	}
+	return []corev1.EnvVar{
+		{
+			Name: "NODENAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
+			},
+		},
+		{Name: "DPI_TYPHAK8SNAMESPACE", Value: common.CalicoNamespace},
+		{Name: "DPI_TYPHAK8SSERVICENAME", Value: TyphaServiceName},
+		{Name: "DPI_TYPHACAFILE", Value: "/typha-ca/caBundle"},
+		{Name: "DPI_TYPHACERTFILE", Value: fmt.Sprintf("/node-certs/%s", TLSSecretCertName)},
+		{Name: "DPI_TYPHAKEYFILE", Value: fmt.Sprintf("/node-certs/%s", TLSSecretKeyName)},
+		cnEnv,
+		{Name: "DPI_TYPHAURISAN", ValueFrom: &corev1.EnvVarSource{
+			SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: TyphaTLSSecretName,
+				},
+				Key:      URISAN,
+				Optional: ptr.BoolToPtr(true),
+			},
+		}},
+	}
+}
+
+func (c *intrusionDetectionComponent) dpiVolumeMounts() []corev1.VolumeMount {
+	return []corev1.VolumeMount{
+		{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
+		{MountPath: "/node-certs", Name: "node-certs", ReadOnly: true},
+	}
+}
+
+func (c *intrusionDetectionComponent) dpiReadinessProbes() *corev1.Probe {
+	return &corev1.Probe{
+		Handler: corev1.Handler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Host: "localhost",
+				Path: "/liveness",
+				Port: intstr.FromInt(9097),
+			},
+		},
+		TimeoutSeconds: 10,
+	}
+}
+
+func (c *intrusionDetectionComponent) dpiServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      DeepPacketInspectionName,
+			Namespace: DeepPacketInspectionNamespace,
+		},
+	}
+}
+
+func (c *intrusionDetectionComponent) dpiRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   DeepPacketInspectionName,
+			Labels: map[string]string{},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     DeepPacketInspectionName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      DeepPacketInspectionName,
+				Namespace: DeepPacketInspectionNamespace,
+			},
+		},
+	}
+}
+
+func (c *intrusionDetectionComponent) dpiRole() *rbacv1.ClusterRole {
+	role := &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: DeepPacketInspectionName,
+		},
+
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{
+					"deeppacketinspections",
+				},
+				Verbs: []string{"get", "list", "watch"},
+			},
+			{
+				// Used to update the DPI resource status
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{
+					"deeppacketinspections/status",
+				},
+				Verbs: []string{"update"},
+			},
+			{
+				// Used to discover Typha endpoints and service IPs for advertisement.
+				APIGroups: []string{""},
+				Resources: []string{"endpoints", "services"},
+				Verbs:     []string{"watch", "list", "get"},
+			},
+		},
+	}
+	if c.installation.KubernetesProvider != operatorv1.ProviderOpenShift {
+		// Allow access to the pod security policy in case this is enforced on the cluster
+		role.Rules = append(role.Rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{DeepPacketInspectionName},
+		})
+	}
+	return role
+}
+
+func (c *intrusionDetectionComponent) dpiNamespace() *corev1.Namespace {
+	return &corev1.Namespace{
+		TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: DeepPacketInspectionNamespace,
+		},
+	}
 }

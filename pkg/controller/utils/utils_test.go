@@ -17,6 +17,8 @@ package utils
 import (
 	"context"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	"github.com/go-logr/logr"
 
 	. "github.com/onsi/ginkgo"
@@ -109,7 +111,7 @@ var _ = Describe("Tigera License polling test", func() {
 				},
 			},
 		})
-		Expect(isLicenseKeyReady(client)).To(BeTrue())
+		Expect(isResourceReady(client, v3.KindLicenseKey)).To(BeTrue())
 		discovery.AssertExpectations(GinkgoT())
 	})
 	It("should be able to verify that the LicenseKey is not ready", func() {
@@ -121,7 +123,7 @@ var _ = Describe("Tigera License polling test", func() {
 				},
 			},
 		})
-		Expect(isLicenseKeyReady(client)).To(BeFalse())
+		Expect(isResourceReady(client, v3.KindLicenseKey)).To(BeFalse())
 		discovery.AssertExpectations(GinkgoT())
 	})
 })

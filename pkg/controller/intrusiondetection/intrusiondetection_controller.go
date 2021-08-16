@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 
@@ -58,9 +60,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	var licenseAPIReady = &utils.ReadyFlag{}
+	var dpiAPIReady = &utils.ReadyFlag{}
 
 	// create the reconciler
-	reconciler := newReconciler(mgr, opts, licenseAPIReady)
+	reconciler := newReconciler(mgr, opts, licenseAPIReady, dpiAPIReady)
 
 	// Create a new controller
 	controller, err := controller.New("intrusiondetection-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
@@ -76,11 +79,13 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
 
+	go waitToAddDPIWatch(controller, k8sClient, dpiAPIReady)
+
 	return add(mgr, controller)
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag, dpiAPIReady *utils.ReadyFlag) reconcile.Reconciler {
 	r := &ReconcileIntrusionDetection{
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
@@ -88,6 +93,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		status:          status.New(mgr.GetClient(), "intrusion-detection", opts.KubernetesVersion),
 		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
+		dpiAPIReady:     dpiAPIReady,
 	}
 	r.status.Run()
 	return r
@@ -134,6 +140,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		relasticsearch.PublicCertSecret, render.ElasticsearchIntrusionDetectionUserSecret,
 		render.ElasticsearchIntrusionDetectionJobUserSecret, render.ElasticsearchADJobUserSecret,
 		render.ManagerInternalTLSSecretName,
+		render.NodeTLSSecretName, render.TyphaTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, rmeta.OperatorNamespace()); err != nil {
 			return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
@@ -157,6 +164,10 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
 	}
 
+	if err = utils.AddConfigMapWatch(c, render.TyphaCAConfigMapName, rmeta.OperatorNamespace()); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
+	}
+
 	return nil
 }
 
@@ -173,6 +184,7 @@ type ReconcileIntrusionDetection struct {
 	status          status.StatusManager
 	clusterDomain   string
 	licenseAPIReady *utils.ReadyFlag
+	dpiAPIReady     *utils.ReadyFlag
 }
 
 // Reconcile reads that state of the cluster for a IntrusionDetection object and makes changes based on the state read
@@ -303,6 +315,38 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
+	if !r.dpiAPIReady.IsReady() {
+		r.status.SetDegraded("Waiting for DeepPacketInspection API to be ready", "")
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	var typhaTLSSecret, nodeTLSSecret *corev1.Secret
+	typhaCAConfigMap := &corev1.ConfigMap{}
+	dpi := &v3.DeepPacketInspectionList{}
+	if err := r.client.List(ctx, dpi); err != nil {
+		r.status.SetDegraded("Failed to retrieve DeepPacketInspection resource", err.Error())
+		return reconcile.Result{}, err
+	}
+	if len(dpi.Items) > 0 {
+		nodeTLSSecret, err = utils.GetSecret(ctx, r.client, render.NodeTLSSecretName, rmeta.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded("Failed to retrieve node cert secret", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		typhaTLSSecret, err = utils.GetSecret(ctx, r.client, render.TyphaTLSSecretName, rmeta.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded("Failed to retrieve typha cert secret", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		err = r.client.Get(ctx, types.NamespacedName{Name: render.TyphaCAConfigMapName, Namespace: rmeta.OperatorNamespace()}, typhaCAConfigMap)
+		if err != nil {
+			r.status.SetDegraded("Failed to retrieve typha ca configmap", err.Error())
+			return reconcile.Result{}, err
+		}
+	}
+
 	var esLicenseType render.ElasticsearchLicenseType
 	var managerInternalTLSSecret *corev1.Secret
 	if managementClusterConnection == nil {
@@ -331,6 +375,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	// Render the desired objects from the CRD and create or update them.
 	var hasNoLicense = !utils.IsFeatureActive(license, common.ThreatDefenseFeature)
 	component := render.IntrusionDetection(
+		instance,
 		lc,
 		esSecrets,
 		kibanaPublicCertSecret,
@@ -343,6 +388,9 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		managementClusterConnection != nil,
 		hasNoLicense,
 		managerInternalTLSSecret,
+		nodeTLSSecret,
+		typhaTLSSecret,
+		typhaCAConfigMap,
 	)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
@@ -377,4 +425,56 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
+}
+
+// waitToAddDPIWatch will check if projectcalico.org APIs are available and if so, it will add a watch for DeepPacketInspection
+// The completion of this operation will be signaled on a ready channel
+func waitToAddDPIWatch(controller controller.Controller, client kubernetes.Interface, flag *utils.ReadyFlag) {
+	maxDuration := 30 * time.Second
+	duration := 1 * time.Second
+	ticker := time.NewTicker(duration)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			duration = duration * 2
+			if duration >= maxDuration {
+				duration = maxDuration
+			}
+			ticker.Reset(duration)
+			if isDPIReady(client) {
+				err := addDPIWatch(controller)
+				if err != nil {
+					log.V(4).Info("failed to watch DeepPacketInspection resource: %v. Will retry to add watch", err)
+				} else {
+					flag.MarkAsReady()
+					return
+				}
+			}
+		}
+	}
+}
+
+func isDPIReady(client kubernetes.Interface) bool {
+	_, res, err := client.Discovery().ServerGroupsAndResources()
+	if err != nil {
+		return false
+	}
+	for _, group := range res {
+		if group.GroupVersion == v3.GroupVersionCurrent {
+			for _, r := range group.APIResources {
+				if r.Kind == v3.KindDeepPacketInspection {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func addDPIWatch(c controller.Controller) error {
+	dpi := &v3.DeepPacketInspection{
+		TypeMeta: metav1.TypeMeta{Kind: v3.KindDeepPacketInspection},
+	}
+	return c.Watch(&source.Kind{Type: dpi}, &handler.EnqueueRequestForObject{})
 }

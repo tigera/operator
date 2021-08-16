@@ -119,16 +119,24 @@ func AddServiceWatch(c controller.Controller, name, namespace string) error {
 	})
 }
 
-func addLicenseWatch(c controller.Controller) error {
-	lic := &v3.LicenseKey{
-		TypeMeta: metav1.TypeMeta{Kind: "LicenseKey"},
+func addResourceWatch(c controller.Controller, resourceKind string) error {
+	var obj client.Object
+	switch resourceKind {
+	case v3.KindLicenseKey:
+		obj = &v3.LicenseKey{
+			TypeMeta: metav1.TypeMeta{Kind: v3.KindLicenseKey},
+		}
+	case v3.KindDeepPacketInspection:
+		obj = &v3.DeepPacketInspection{
+			TypeMeta: metav1.TypeMeta{Kind: v3.KindDeepPacketInspection},
+		}
 	}
-	return c.Watch(&source.Kind{Type: lic}, &handler.EnqueueRequestForObject{})
+	return c.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{})
 }
 
-// WaitToAddLicenseKeyWatch will check if projectcalico.org APIs are available and if so, it will add a watch for LicenseKey
+// WaitToAddResourceWatch will check if projectcalico.org APIs are available and if so, it will add a watch for the resource.
 // The completion of this operation will be signaled on a ready channel
-func WaitToAddLicenseKeyWatch(controller controller.Controller, client kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
+func WaitToAddResourceWatch(controller controller.Controller, client kubernetes.Interface, log logr.Logger, flag *ReadyFlag, resourceKind string) {
 	maxDuration := 30 * time.Second
 	duration := 1 * time.Second
 	ticker := time.NewTicker(duration)
@@ -141,10 +149,10 @@ func WaitToAddLicenseKeyWatch(controller controller.Controller, client kubernete
 				duration = maxDuration
 			}
 			ticker.Reset(duration)
-			if isLicenseKeyReady(client) {
-				err := addLicenseWatch(controller)
+			if isResourceReady(client, resourceKind) {
+				err := addResourceWatch(controller, resourceKind)
 				if err != nil {
-					log.Info("failed to watch LicenseKey resource: %v. Will retry to add watch", err)
+					log.Info("failed to watch %s resource: %v. Will retry to add watch", resourceKind, err)
 				} else {
 					flag.MarkAsReady()
 					return
@@ -152,6 +160,10 @@ func WaitToAddLicenseKeyWatch(controller controller.Controller, client kubernete
 			}
 		}
 	}
+}
+
+func WaitToAddLicenseKeyWatch(controller controller.Controller, client kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
+	WaitToAddResourceWatch(controller, client, log, flag, v3.KindLicenseKey)
 }
 
 // AddNamespacedWatch creates a watch on the given object. If a name and namespace are provided, then it will
@@ -204,15 +216,15 @@ func IsAPIServerReady(client client.Client, l logr.Logger) bool {
 	return true
 }
 
-func isLicenseKeyReady(client kubernetes.Interface) bool {
+func isResourceReady(client kubernetes.Interface, resourceKind string) bool {
 	_, res, err := client.Discovery().ServerGroupsAndResources()
 	if err != nil {
 		return false
 	}
 	for _, group := range res {
-		if group.GroupVersion == "projectcalico.org/v3" {
+		if group.GroupVersion == v3.GroupVersionCurrent {
 			for _, r := range group.APIResources {
-				if r.Kind == "LicenseKey" {
+				if r.Kind == resourceKind {
 					return true
 				}
 			}

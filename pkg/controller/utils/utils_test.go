@@ -109,7 +109,7 @@ var _ = Describe("Tigera License polling test", func() {
 				},
 			},
 		})
-		Expect(isLicenseKeyReady(client)).To(BeTrue())
+		Expect(isResourceReady(client, "LicenseKey")).To(BeTrue())
 		discovery.AssertExpectations(GinkgoT())
 	})
 	It("should be able to verify that the LicenseKey is not ready", func() {
@@ -121,7 +121,7 @@ var _ = Describe("Tigera License polling test", func() {
 				},
 			},
 		})
-		Expect(isLicenseKeyReady(client)).To(BeFalse())
+		Expect(isResourceReady(client, "LicenseKey")).To(BeFalse())
 		discovery.AssertExpectations(GinkgoT())
 	})
 })

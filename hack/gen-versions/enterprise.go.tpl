@@ -52,6 +52,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "deep-packet-inspection" }}
+	ComponentDeepPacketInspection = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "eck-elasticsearch" }}
 	ComponentEckElasticsearch = component{
 		Version: "{{ .Version }}",
@@ -222,6 +228,7 @@ var (
 		ComponentComplianceReporter,
 		ComponentComplianceServer,
 		ComponentComplianceSnapshotter,
+		ComponentDeepPacketInspection,
 		ComponentEckElasticsearch,
 		ComponentEckKibana,
 		ComponentElasticTseeInstaller,

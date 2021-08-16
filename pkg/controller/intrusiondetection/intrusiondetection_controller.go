@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 
@@ -134,6 +136,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		relasticsearch.PublicCertSecret, render.ElasticsearchIntrusionDetectionUserSecret,
 		render.ElasticsearchIntrusionDetectionJobUserSecret, render.ElasticsearchADJobUserSecret,
 		render.ManagerInternalTLSSecretName,
+		render.NodeTLSSecretName, render.TyphaTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, rmeta.OperatorNamespace()); err != nil {
 			return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
@@ -154,6 +157,17 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
+	}
+
+	// Watch for intrusiondetection resource and also secretes that needs to be mounted for dpi daemonset
+	if err = c.Watch(&source.Kind{Type: &v3.DeepPacketInspection{
+		TypeMeta: metav1.TypeMeta{Kind: v3.KindDeepPacketInspection},
+	}}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch DeepPacketInspection resource: %v", err)
+	}
+
+	if err = utils.AddConfigMapWatch(c, render.TyphaCAConfigMapName, rmeta.OperatorNamespace()); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
 	}
 
@@ -303,6 +317,33 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
+	var typhaTLSSecret, nodeTLSSecret *corev1.Secret
+	typhaCAConfigMap := &corev1.ConfigMap{}
+	dpi := &v3.DeepPacketInspectionList{}
+	if err := r.client.List(ctx, dpi); err != nil {
+		r.status.SetDegraded("Failed to retrieve DeepPacketInspection resource", err.Error())
+		return reconcile.Result{}, err
+	}
+	if len(dpi.Items) > 0 {
+		nodeTLSSecret, err = utils.GetSecret(ctx, r.client, render.NodeTLSSecretName, rmeta.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded("Failed to retrieve node cert secret", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		typhaTLSSecret, err = utils.GetSecret(ctx, r.client, render.TyphaTLSSecretName, rmeta.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded("Failed to retrieve typha cert secret", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		err = r.client.Get(ctx, types.NamespacedName{Name: render.TyphaCAConfigMapName, Namespace: rmeta.OperatorNamespace()}, typhaCAConfigMap)
+		if err != nil {
+			r.status.SetDegraded("Failed to retrieve typha ca configmap", err.Error())
+			return reconcile.Result{}, err
+		}
+	}
+
 	var esLicenseType render.ElasticsearchLicenseType
 	var managerInternalTLSSecret *corev1.Secret
 	if managementClusterConnection == nil {
@@ -331,6 +372,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	// Render the desired objects from the CRD and create or update them.
 	var hasNoLicense = !utils.IsFeatureActive(license, common.ThreatDefenseFeature)
 	component := render.IntrusionDetection(
+		instance,
 		lc,
 		esSecrets,
 		kibanaPublicCertSecret,
@@ -343,6 +385,9 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		managementClusterConnection != nil,
 		hasNoLicense,
 		managerInternalTLSSecret,
+		nodeTLSSecret,
+		typhaTLSSecret,
+		typhaCAConfigMap,
 	)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {

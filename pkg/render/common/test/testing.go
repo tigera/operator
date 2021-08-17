@@ -46,6 +46,21 @@ func ExpectK8sServiceEpEnvVars(podSpec corev1.PodSpec, host, port string) {
 	}
 }
 
+func ExpectNoK8sServiceEpEnvVars(podSpec corev1.PodSpec) {
+	for _, c := range podSpec.Containers {
+		for _, ev := range c.Env {
+			ExpectWithOffset(1, ev.Name).NotTo(Equal("KUBERNETES_SERVICE_HOST"))
+			ExpectWithOffset(1, ev.Name).NotTo(Equal("KUBERNETES_SERVICE_PORT"))
+		}
+	}
+	for _, c := range podSpec.InitContainers {
+		for _, ev := range c.Env {
+			ExpectWithOffset(1, ev.Name).NotTo(Equal("KUBERNETES_SERVICE_HOST"))
+			ExpectWithOffset(1, ev.Name).NotTo(Equal("KUBERNETES_SERVICE_PORT"))
+		}
+	}
+}
+
 func ExpectResourceInList(objs []client.Object, name, ns, group, version, kind string) {
 	type expectedResource struct {
 		Name      string

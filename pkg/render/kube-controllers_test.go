@@ -421,7 +421,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		})
 	})
 
-	It("should add the KUBERNETES_SERVICE_... variables", func() {
+	It("should not add the KUBERNETES_SERVICE_... variables", func() {
 		k8sServiceEp.Host = "k8shost"
 		k8sServiceEp.Port = "1234"
 
@@ -432,6 +432,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		depResource := rtest.GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")
 		Expect(depResource).ToNot(BeNil())
 		deployment := depResource.(*apps.Deployment)
-		rtest.ExpectK8sServiceEpEnvVars(deployment.Spec.Template.Spec, "k8shost", "1234")
+		rtest.ExpectNoK8sServiceEpEnvVars(deployment.Spec.Template.Spec)
 	})
 })

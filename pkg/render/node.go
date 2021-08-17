@@ -1121,6 +1121,8 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	if c.cfg.Installation.CNI != nil && c.cfg.Installation.CNI.Type == operator.PluginCalico {
 		// If using Calico CNI, we need to manage CNI credential rotation on the host.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_MANAGE_CNI", Value: "true"})
+	} else {
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_MANAGE_CNI", Value: "false"})
 	}
 
 	if c.cfg.Installation.CNI != nil && c.cfg.Installation.CNI.Type == operator.PluginAmazonVPC {

@@ -41,6 +41,7 @@ import (
 var _ = Describe("kube-controllers rendering tests", func() {
 	var instance *operator.InstallationSpec
 	var k8sServiceEp k8sapi.ServiceEndpoint
+	var cfg render.KubeControllersConfiguration
 	var esEnvs = []v1.EnvVar{
 		{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
 		{Name: "ELASTIC_SCHEME", Value: "https"},
@@ -96,6 +97,16 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Registry: "test-reg/",
 		}
 		k8sServiceEp = k8sapi.ServiceEndpoint{}
+
+		// Set up a default config to pass to render.
+		cfg = render.KubeControllersConfiguration{
+			K8sServiceEp:     k8sServiceEp,
+			Installation:     instance,
+			ClusterDomain:    dns.DefaultClusterDomain,
+			MetricsPort:      9094,
+			LogStorageExists: true,
+		}
+
 	})
 
 	It("should render all resources for a custom configuration", func() {
@@ -114,8 +125,13 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: "calico-kube-controllers", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
-		component := render.KubeControllers(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, nil,
-			false, dns.DefaultClusterDomain, &kubeControllersUserSecret, 0)
+		cfg = render.KubeControllersConfiguration{
+			K8sServiceEp:                 k8sServiceEp,
+			Installation:                 instance,
+			ClusterDomain:                dns.DefaultClusterDomain,
+			KubeControllersGatewaySecret: &kubeControllersUserSecret,
+		}
+		component := render.KubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -167,9 +183,14 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}
 
 		instance.Variant = operator.TigeraSecureEnterprise
+		cfg.LogStorageExists = true
+		cfg.KubeControllersGatewaySecret = &kubeControllersUserSecret
+		cfg.ElasticsearchSecret = &elasticsearchSecret
+		cfg.ManagerInternalSecret = &internalManagerTLSSecret
+		cfg.MetricsPort = 9094
+		cfg.EnabledESOIDCWorkaround = true
 
-		component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, &internalManagerTLSSecret, &elasticsearchSecret, &kibanaSecret, nil,
-			true, dns.DefaultClusterDomain, &kubeControllersUserSecret, 9094)
+		component := render.KubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -226,11 +247,17 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: "calico-kube-controllers-metrics", ns: common.CalicoNamespace, group: "", version: "v1", kind: "Service"},
 		}
 
+		// Override configuration to match expected Enterprise config.
 		instance.Variant = operator.TigeraSecureEnterprise
+		cfg.LogStorageExists = true
+		cfg.ManagementCluster = &operator.ManagementCluster{}
+		cfg.KubeControllersGatewaySecret = &kubeControllersUserSecret
+		cfg.ElasticsearchSecret = &elasticsearchSecret
+		cfg.ManagerInternalSecret = &internalManagerTLSSecret
+		cfg.MetricsPort = 9094
+		cfg.EnabledESOIDCWorkaround = true
 
-		component := render.KubeControllers(k8sServiceEp, instance, true, &operator.ManagementCluster{}, nil,
-			&internalManagerTLSSecret, &elasticsearchSecret, &kibanaSecret, nil, true,
-			dns.DefaultClusterDomain, &kubeControllersUserSecret, 9094)
+		component := render.KubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -292,9 +319,16 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: "calico-kube-controllers", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
+		// Set node selector.
 		instance.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
+
+		// Simulate enterprise config.
 		instance.Variant = operator.TigeraSecureEnterprise
-		component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, nil, nil, nil, nil, true, dns.DefaultClusterDomain, nil, 0)
+		cfg.LogStorageExists = true
+		cfg.EnabledESOIDCWorkaround = true
+		cfg.MetricsPort = 0
+
+		component := render.KubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -317,7 +351,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Value:    "bar",
 		}
 		instance.ControlPlaneTolerations = []v1.Toleration{t}
-		component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, nil, nil, nil, nil, false, dns.DefaultClusterDomain, nil, 0)
+		component := render.KubeControllers(&cfg)
 		resources, _ := component.Objects()
 		d := rtest.GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment").(*apps.Deployment)
 		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(t, rmeta.TolerateMaster))
@@ -342,7 +376,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			},
 		}
 
-		component := render.KubeControllers(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, nil, false, dns.DefaultClusterDomain, nil, 0)
+		component := render.KubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
@@ -362,15 +396,20 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 	It("should add the OIDC prefix env variables", func() {
 		instance.Variant = operator.TigeraSecureEnterprise
-
-		authentication := &operator.Authentication{Spec: operator.AuthenticationSpec{
+		cfg.LogStorageExists = true
+		cfg.ManagementCluster = &operator.ManagementCluster{}
+		cfg.KubeControllersGatewaySecret = &kubeControllersUserSecret
+		cfg.ElasticsearchSecret = &elasticsearchSecret
+		cfg.ManagerInternalSecret = &internalManagerTLSSecret
+		cfg.MetricsPort = 9094
+		cfg.EnabledESOIDCWorkaround = true
+		cfg.Authentication = &operator.Authentication{Spec: operator.AuthenticationSpec{
 			UsernamePrefix: "uOIDC:",
 			GroupsPrefix:   "gOIDC:",
 			Openshift:      &operator.AuthenticationOpenshift{IssuerURL: "https://api.example.com"},
 		}}
 
-		component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, nil, &elasticsearchSecret, nil, authentication,
-			false, dns.DefaultClusterDomain, &kubeControllersUserSecret, 0)
+		component := render.KubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
@@ -398,8 +437,14 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	When("enableESOIDCWorkaround is true", func() {
 		It("should set the ENABLE_ELASTICSEARCH_OIDC_WORKAROUND env variable to true", func() {
 			instance.Variant = operator.TigeraSecureEnterprise
-			component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, nil, &elasticsearchSecret, nil,
-				nil, true, dns.DefaultClusterDomain, &kubeControllersUserSecret, 0)
+			cfg.LogStorageExists = true
+			cfg.ManagementCluster = &operator.ManagementCluster{}
+			cfg.KubeControllersGatewaySecret = &kubeControllersUserSecret
+			cfg.ElasticsearchSecret = &elasticsearchSecret
+			cfg.ManagerInternalSecret = &internalManagerTLSSecret
+			cfg.MetricsPort = 9094
+			cfg.EnabledESOIDCWorkaround = true
+			component := render.KubeControllers(&cfg)
 			resources, _ := component.Objects()
 
 			depResource := rtest.GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")
@@ -424,8 +469,9 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	It("should add the KUBERNETES_SERVICE_... variables", func() {
 		k8sServiceEp.Host = "k8shost"
 		k8sServiceEp.Port = "1234"
+		cfg.K8sServiceEp = k8sServiceEp
 
-		component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, nil, nil, nil, nil, false, dns.DefaultClusterDomain, nil, 0)
+		component := render.KubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 

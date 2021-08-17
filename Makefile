@@ -47,6 +47,13 @@ ifeq ($(ARCH),x86_64)
     override ARCH=amd64
 endif
 
+# Required to prevent `FROM SCRATCH` from pulling an amd64 image in the build phase.
+ifeq ($(ARCH),arm64)
+	TARGET_PLATFORM=arm64/v8
+else
+	TARGET_PLATFORM=amd64
+endif
+
 # we want to be able to run the same recipe on multiple targets keyed on the image name
 # to do that, we would use the entire image name, e.g. calico/node:abcdefg, as the stem, or '%', in the target
 # however, make does **not** allow the usage of invalid filename characters - like / and : - in a stem, and thus errors out
@@ -81,7 +88,7 @@ VALIDARCHES = $(filter-out $(EXCLUDEARCH),$(ARCHES))
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
 GO_BUILD_VER?=v0.50
-CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)
+CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(ARCH)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./api -name '*.go')
 SRC_FILES+=$(shell find ./controllers -name '*.go')
@@ -214,8 +221,8 @@ sub-image-%:
 	$(MAKE) image ARCH=$*
 
 $(BUILD_IMAGE): $(BUILD_IMAGE)-$(ARCH)
-$(BUILD_IMAGE)-$(ARCH): $(BINDIR)/operator-$(ARCH)
-	docker build --pull -t $(BUILD_IMAGE):latest-$(ARCH) --build-arg GIT_VERSION=$(GIT_VERSION) -f ./build/Dockerfile.$(ARCH) .
+$(BUILD_IMAGE)-$(ARCH): register $(BINDIR)/operator-$(ARCH)
+	docker build --pull -t $(BUILD_IMAGE):latest-$(ARCH) --platform=linux/$(TARGET_PLATFORM) --build-arg GIT_VERSION=$(GIT_VERSION) -f ./build/Dockerfile.$(ARCH) .
 ifeq ($(ARCH),amd64)
 	docker tag $(BUILD_IMAGE):latest-$(ARCH) $(BUILD_IMAGE):latest
 endif

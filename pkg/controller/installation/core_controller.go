@@ -1010,31 +1010,31 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// We store TLS secrets and config to be fetched on future reconcile iterations.
 	objs := []client.Object{
 		typhaNodeTLS.CAConfigMap,
-	// Render the desired Calico components based on our configuration and then
-	// create or update them.
-	//calico, err := render.Calico(
-	//	k8sapi.Endpoint,
-	//	&instance.Spec,
-	//	managementCluster,
-	//	managementClusterConnection,
-	//	pullSecrets,
-	//	typhaNodeTLS,
-	//	managerInternalTLSSecret,
-	//	birdTemplates,
-	//	instance.Spec.KubernetesProvider,
-	//	aci,
-	//	needNsMigration,
-	//	nodeAppArmorProfile,
-	//	r.clusterDomain,
-	//	kubeControllersMetricsPort,
-	//	nodeReporterMetricsPort,
-	//	bgpLayout,
-	//	logCollector,
-	//)
-	//if err != nil {
-	//	log.Error(err, "Error with rendering Calico")
-	//	r.SetDegraded("Error with rendering Calico resources", err, reqLogger)
-	//	return reconcile.Result{}, err
+		// Render the desired Calico components based on our configuration and then
+		// create or update them.
+		//calico, err := render.Calico(
+		//	k8sapi.Endpoint,
+		//	&instance.Spec,
+		//	managementCluster,
+		//	managementClusterConnection,
+		//	pullSecrets,
+		//	typhaNodeTLS,
+		//	managerInternalTLSSecret,
+		//	birdTemplates,
+		//	instance.Spec.KubernetesProvider,
+		//	aci,
+		//	needNsMigration,
+		//	nodeAppArmorProfile,
+		//	r.clusterDomain,
+		//	kubeControllersMetricsPort,
+		//	nodeReporterMetricsPort,
+		//	bgpLayout,
+		//	logCollector,
+		//)
+		//if err != nil {
+		//	log.Error(err, "Error with rendering Calico")
+		//	r.SetDegraded("Error with rendering Calico resources", err, reqLogger)
+		//	return reconcile.Result{}, err
 	}
 	if typhaNodeTLS.NodeSecret != nil {
 		objs = append(objs, typhaNodeTLS.NodeSecret)
@@ -1093,13 +1093,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Build a configuration for rendering calico/kube-controllers.
 	kubeControllersCfg := render.KubeControllersConfiguration{
-		K8sServiceEp:                 k8sapi.Endpoint,
-		Installation:                 &instance.Spec,
-		ManagementCluster:            managementCluster,
-		ManagementClusterConnection:  managementClusterConnection,
-		ClusterDomain:                r.clusterDomain,
-		MetricsPort:                  kubeControllersMetricsPort,
-		ManagerInternalSecret:        managerInternalTLSSecret,
+		K8sServiceEp:                k8sapi.Endpoint,
+		Installation:                &instance.Spec,
+		ManagementCluster:           managementCluster,
+		ManagementClusterConnection: managementClusterConnection,
+		ClusterDomain:               r.clusterDomain,
+		MetricsPort:                 kubeControllersMetricsPort,
+		ManagerInternalSecret:       managerInternalTLSSecret,
 	}
 	components = append(components, render.KubeControllers(&kubeControllersCfg))
 

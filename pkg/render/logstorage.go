@@ -18,6 +18,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"hash/fnv"
 	"net/url"
 	"strings"
@@ -41,7 +43,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/ptr"
@@ -69,6 +70,11 @@ const (
 	ElasticsearchSecureSettingsSecretName = "tigera-elasticsearch-secure-settings"
 	ElasticsearchOperatorUserSecret       = "tigera-ee-operator-elasticsearch-access"
 	ElasticsearchAdminUserSecret          = "tigera-secure-es-elastic-user"
+
+	ElasticsearchKubeControllersUserSecret             = "tigera-ee-kube-controllers-elasticsearch-access"
+	ElasticsearchKubeControllersUserName               = "tigera-ee-kube-controllers"
+	ElasticsearchKubeControllersSecureUserSecret       = "tigera-ee-kube-controllers-elasticsearch-access-gateway"
+	ElasticsearchKubeControllersVerificationUserSecret = "tigera-ee-kube-controllers-gateway-verification-credentials"
 
 	KibanaName               = "tigera-secure"
 	KibanaNamespace          = "tigera-kibana"
@@ -115,10 +121,12 @@ const (
 	ElasticsearchLicenseTypeEnterpriseTrial ElasticsearchLicenseType = "enterprise_trial"
 	ElasticsearchLicenseTypeUnknown         ElasticsearchLicenseType = ""
 
-	EsManagerRole               = "es-manager"
-	EsManagerRoleBinding        = "es-manager"
-	EsKubeControllerRole        = "es-calico-kube-controllers"
-	EsKubeControllerRoleBinding = "es-calico-kube-controllers"
+	EsManagerRole                  = "es-manager"
+	EsManagerRoleBinding           = "es-manager"
+	EsKubeController               = "es-calico-kube-controllers"
+	EsKubeControllerServiceAccount = "calico-kube-controllers"
+	EsKubeControllerRole           = "es-calico-kube-controllers"
+	EsKubeControllerRoleBinding    = "es-calico-kube-controllers"
 
 	KibanaTLSAnnotationHash        = "hash.operator.tigera.io/kb-secrets"
 	ElasticsearchTLSHashAnnotation = "hash.operator.tigera.io/es-secrets"
@@ -189,51 +197,116 @@ func LogStorage(
 	clusterDomain string,
 	dexCfg DexRelyingPartyConfig,
 	elasticLicenseType ElasticsearchLicenseType,
+	authentication *operatorv1.Authentication,
+	enableESOIDCWorkaround bool,
+	managerInternalTLSSecret *corev1.Secret,
+	k8sServiceEp k8sapi.ServiceEndpoint,
 ) Component {
+	var kubeControllersGatewaySecret *corev1.Secret
+	kubeControllersGatewaySecretIndex := -1
+	for i, elasticsearchSecret := range elasticsearchSecrets {
+		if elasticsearchSecret != nil && elasticsearchSecret.Name == ElasticsearchKubeControllersUserSecret {
+			kubeControllersGatewaySecret = elasticsearchSecret
+			kubeControllersGatewaySecretIndex = i
+			break
+		}
+	}
+	if kubeControllersGatewaySecret != nil {
+		kubeControllersGatewaySecret = secret.CopyToNamespace(common.CalicoNamespace, kubeControllersGatewaySecret)[0]
+		elasticsearchSecrets[kubeControllersGatewaySecretIndex] = elasticsearchSecrets[len(elasticsearchSecrets)-1]
+		elasticsearchSecrets[len(elasticsearchSecrets)-1] = nil
+		elasticsearchSecrets = elasticsearchSecrets[:len(elasticsearchSecrets)-1]
+	}
+
+	var kubeControllerEsPublicCertSecret *corev1.Secret
+	kubeControllerEsPublicCertSecretIndex := -1
+	for i, elasticsearchSecret := range elasticsearchSecrets {
+		if elasticsearchSecret != nil && elasticsearchSecret.Name == relasticsearch.PublicCertSecret {
+			kubeControllerEsPublicCertSecret = elasticsearchSecret
+			kubeControllerEsPublicCertSecretIndex = i
+			break
+		}
+	}
+	if kubeControllerEsPublicCertSecret != nil {
+		elasticsearchSecrets[kubeControllerEsPublicCertSecretIndex] = elasticsearchSecrets[len(elasticsearchSecrets)-1]
+		elasticsearchSecrets[len(elasticsearchSecrets)-1] = nil
+		elasticsearchSecrets = elasticsearchSecrets[:len(elasticsearchSecrets)-1]
+	}
+
+	var kubeControllerKibanaPublicCertSecret *corev1.Secret
+	kubeControllerKibanaPublicCertSecretIndex := -1
+	for i, kibanaSecret := range kibanaSecrets {
+		if kibanaSecret != nil && kibanaSecret.Name == KibanaPublicCertSecret {
+			kubeControllerKibanaPublicCertSecret = kibanaSecret
+			kubeControllerKibanaPublicCertSecretIndex = i
+			break
+		}
+	}
+	if kubeControllerKibanaPublicCertSecret != nil {
+		kibanaSecrets[kubeControllerKibanaPublicCertSecretIndex] = kibanaSecrets[len(kibanaSecrets)-1]
+		kibanaSecrets[len(kibanaSecrets)-1] = nil
+		kibanaSecrets = kibanaSecrets[:len(kibanaSecrets)-1]
+	}
+
 	return &elasticsearchComponent{
-		logStorage:                  logStorage,
-		installation:                installation,
-		managementCluster:           managementCluster,
-		managementClusterConnection: managementClusterConnection,
-		elasticsearch:               elasticsearch,
-		kibana:                      kibana,
-		clusterConfig:               clusterConfig,
-		elasticsearchSecrets:        elasticsearchSecrets,
-		kibanaSecrets:               kibanaSecrets,
-		curatorSecrets:              curatorSecrets,
-		pullSecrets:                 pullSecrets,
-		provider:                    provider,
-		esService:                   esService,
-		kbService:                   kbService,
-		clusterDomain:               clusterDomain,
-		dexCfg:                      dexCfg,
-		elasticLicenseType:          elasticLicenseType,
+		logStorage:                    logStorage,
+		installation:                  installation,
+		managementCluster:             managementCluster,
+		managementClusterConnection:   managementClusterConnection,
+		elasticsearch:                 elasticsearch,
+		kibana:                        kibana,
+		clusterConfig:                 clusterConfig,
+		elasticsearchSecrets:          elasticsearchSecrets,
+		kibanaSecrets:                 kibanaSecrets,
+		curatorSecrets:                curatorSecrets,
+		pullSecrets:                   pullSecrets,
+		provider:                      provider,
+		esService:                     esService,
+		kbService:                     kbService,
+		clusterDomain:                 clusterDomain,
+		dexCfg:                        dexCfg,
+		elasticLicenseType:            elasticLicenseType,
+		authentication:                authentication,
+		enableESOIDCWorkaround:        enableESOIDCWorkaround,
+		managerInternalSecret:         managerInternalTLSSecret,
+		kubeControllersGatewaySecret:  kubeControllersGatewaySecret,
+		elasticsearchPublicCertSecret: kubeControllerEsPublicCertSecret,
+		kibanaPublicCertSecret:        kubeControllerKibanaPublicCertSecret,
+		k8sServiceEp:                  k8sServiceEp,
 	}
 }
 
 type elasticsearchComponent struct {
-	logStorage                  *operatorv1.LogStorage
-	installation                *operatorv1.InstallationSpec
-	managementCluster           *operatorv1.ManagementCluster
-	managementClusterConnection *operatorv1.ManagementClusterConnection
-	elasticsearch               *esv1.Elasticsearch
-	kibana                      *kbv1.Kibana
-	clusterConfig               *relasticsearch.ClusterConfig
-	elasticsearchSecrets        []*corev1.Secret
-	kibanaSecrets               []*corev1.Secret
-	curatorSecrets              []*corev1.Secret
-	pullSecrets                 []*corev1.Secret
-	provider                    operatorv1.Provider
-	esService                   *corev1.Service
-	kbService                   *corev1.Service
-	clusterDomain               string
-	dexCfg                      DexRelyingPartyConfig
-	elasticLicenseType          ElasticsearchLicenseType
-	esImage                     string
-	esOperatorImage             string
-	kibanaImage                 string
-	curatorImage                string
-	csrImage                    string
+	logStorage                    *operatorv1.LogStorage
+	installation                  *operatorv1.InstallationSpec
+	managementCluster             *operatorv1.ManagementCluster
+	managementClusterConnection   *operatorv1.ManagementClusterConnection
+	elasticsearch                 *esv1.Elasticsearch
+	kibana                        *kbv1.Kibana
+	clusterConfig                 *relasticsearch.ClusterConfig
+	elasticsearchSecrets          []*corev1.Secret
+	kibanaSecrets                 []*corev1.Secret
+	curatorSecrets                []*corev1.Secret
+	pullSecrets                   []*corev1.Secret
+	provider                      operatorv1.Provider
+	esService                     *corev1.Service
+	kbService                     *corev1.Service
+	clusterDomain                 string
+	dexCfg                        DexRelyingPartyConfig
+	elasticLicenseType            ElasticsearchLicenseType
+	esImage                       string
+	esOperatorImage               string
+	kibanaImage                   string
+	curatorImage                  string
+	csrImage                      string
+	kubeControllerImage           string
+	authentication                *operatorv1.Authentication
+	enableESOIDCWorkaround        bool
+	managerInternalSecret         *corev1.Secret
+	kubeControllersGatewaySecret  *corev1.Secret
+	elasticsearchPublicCertSecret *corev1.Secret
+	kibanaPublicCertSecret        *corev1.Secret
+	k8sServiceEp                  k8sapi.ServiceEndpoint
 }
 
 func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -242,7 +315,7 @@ func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := es.installation.ImagePrefix
 	var err error
 	es.esImage, err = components.GetReference(components.ComponentElasticsearch, reg, path, prefix, is)
-	errMsgs := []string{}
+	errMsgs := make([]string, 0)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -258,6 +331,11 @@ func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	es.curatorImage, err = components.GetReference(components.ComponentEsCurator, reg, path, prefix, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	es.kubeControllerImage, err = components.GetReference(components.ComponentTigeraKubeControllers, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -324,6 +402,10 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		)
 
 		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ECKOperatorNamespace, es.pullSecrets...)...)...)
+
+		if es.kubeControllersGatewaySecret != nil {
+			toCreate = append(toCreate, secret.ToRuntimeObjects(es.kubeControllersGatewaySecret)...)
+		}
 
 		toCreate = append(toCreate,
 			es.eckOperatorClusterRole(),
@@ -402,8 +484,8 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 			toCreate = append(toCreate, es.curatorCronJob())
 		}
 
-		toCreate = append(toCreate, es.oidcUserRole()...)
-		toCreate = append(toCreate, es.oidcUserRoleBinding()...)
+		toCreate = append(toCreate, es.oidcUserRole())
+		toCreate = append(toCreate, es.oidcUserRoleBinding())
 
 		// If we converted from a ManagedCluster to a Standalone or Management then we need to delete the elasticsearch
 		// service as it differs between these cluster types
@@ -414,10 +496,24 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		if es.kbService != nil && es.kbService.Spec.Type == corev1.ServiceTypeExternalName {
 			toDelete = append(toDelete, es.kbService)
 		}
+
+		if es.kubeControllersGatewaySecret != nil && es.elasticsearchPublicCertSecret != nil {
+			toCreate = append(toCreate,
+				es.kubeControllersRole(),
+				es.kubeControllersRoleBinding(),
+				es.kubeControllersDeployment(),
+			)
+
+			if es.installation.KubernetesProvider != operatorv1.ProviderOpenShift {
+				toCreate = append(toCreate, es.kubeControllersPodSecurityPolicy())
+			}
+		}
 	} else {
 		toCreate = append(toCreate,
 			CreateNamespace(ElasticsearchNamespace, es.installation.KubernetesProvider),
 			es.elasticsearchExternalService(),
+			es.kubeControllersRole(),
+			es.kubeControllersRoleBinding(),
 		)
 	}
 
@@ -1606,94 +1702,360 @@ func (es *elasticsearchComponent) supportsOIDC() bool {
 		es.dexCfg != nil
 }
 
-func (es elasticsearchComponent) oidcUserRole() []client.Object {
-	return []client.Object{
-		&rbacv1.Role{
-			TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      EsManagerRole,
-				Namespace: ElasticsearchNamespace,
-			},
-			Rules: []rbacv1.PolicyRule{
-				{
-					APIGroups:     []string{""},
-					Resources:     []string{"configmaps"},
-					ResourceNames: []string{OIDCUsersConfigMapName},
-					Verbs:         []string{"update", "patch"},
-				},
-				{
-					APIGroups:     []string{""},
-					Resources:     []string{"secrets"},
-					ResourceNames: []string{OIDCUsersEsSecreteName},
-					Verbs:         []string{"get", "list"},
-				},
-			},
+func (es elasticsearchComponent) oidcUserRole() client.Object {
+	return &rbacv1.Role{
+		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      EsManagerRole,
+			Namespace: ElasticsearchNamespace,
 		},
-		&rbacv1.Role{
-			TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      EsKubeControllerRole,
-				Namespace: ElasticsearchNamespace,
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"configmaps"},
+				ResourceNames: []string{OIDCUsersConfigMapName},
+				Verbs:         []string{"update", "patch"},
 			},
-			Rules: []rbacv1.PolicyRule{
-				{
-					APIGroups:     []string{""},
-					Resources:     []string{"configmaps"},
-					ResourceNames: []string{OIDCUsersConfigMapName},
-					Verbs:         []string{"get", "list", "watch", "create", "delete"},
-				},
-				{
-					APIGroups:     []string{""},
-					Resources:     []string{"secrets"},
-					ResourceNames: []string{OIDCUsersEsSecreteName},
-					Verbs:         []string{"get", "list", "watch", "create", "update", "delete"},
-				},
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"secrets"},
+				ResourceNames: []string{OIDCUsersEsSecreteName},
+				Verbs:         []string{"get", "list"},
 			},
 		},
 	}
 }
 
-func (es elasticsearchComponent) oidcUserRoleBinding() []client.Object {
-	return []client.Object{
-		&rbacv1.RoleBinding{
-			TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      EsManagerRoleBinding,
-				Namespace: ElasticsearchNamespace,
-			},
-			RoleRef: rbacv1.RoleRef{
-				Kind:     "Role",
-				Name:     EsManagerRole,
-				APIGroup: "rbac.authorization.k8s.io",
-			},
-			Subjects: []rbacv1.Subject{
-				{
-					Kind:      "ServiceAccount",
-					Name:      ManagerServiceAccount,
-					Namespace: ManagerNamespace,
-				},
-			},
+func (es elasticsearchComponent) oidcUserRoleBinding() client.Object {
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      EsManagerRoleBinding,
+			Namespace: ElasticsearchNamespace,
 		},
-		&rbacv1.RoleBinding{
-			TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      EsKubeControllerRoleBinding,
-				Namespace: ElasticsearchNamespace,
-			},
-			RoleRef: rbacv1.RoleRef{
-				APIGroup: "rbac.authorization.k8s.io",
-				Kind:     "Role",
-				Name:     EsKubeControllerRole,
-			},
-			Subjects: []rbacv1.Subject{
-				{
-					Kind:      "ServiceAccount",
-					Name:      "calico-kube-controllers",
-					Namespace: common.CalicoNamespace,
-				},
+		RoleRef: rbacv1.RoleRef{
+			Kind:     "Role",
+			Name:     EsManagerRole,
+			APIGroup: "rbac.authorization.k8s.io",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      ManagerServiceAccount,
+				Namespace: ManagerNamespace,
 			},
 		},
 	}
+}
+
+func (es elasticsearchComponent) kubeControllersPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	psp := podsecuritypolicy.NewBasePolicy()
+	psp.GetObjectMeta().SetName(EsKubeController)
+	return psp
+}
+
+func (es elasticsearchComponent) kubeControllersRole() *rbacv1.ClusterRole {
+	role := &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: EsKubeControllerRole,
+		},
+	}
+
+	if es.managementClusterConnection != nil {
+		role.Rules = []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"licensekeys"},
+				Verbs:     []string{"get", "create", "update", "list", "watch"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"get", "create", "update", "list", "watch"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"get", "create", "update", "list", "watch"},
+			},
+		}
+	} else {
+		role.Rules = []rbacv1.PolicyRule{
+			{
+				// Nodes are watched to monitor for deletions.
+				APIGroups: []string{""},
+				Resources: []string{"nodes", "endpoints", "services"},
+				Verbs:     []string{"watch", "list", "get"},
+			},
+			{
+				// Pods are queried to check for existence.
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     []string{"get"},
+			},
+			{
+				// IPAM resources are manipulated when nodes are deleted.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"ippools"},
+				Verbs:     []string{"list"},
+			},
+			{
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"blockaffinities", "ipamblocks", "ipamhandles", "networksets"},
+				Verbs:     []string{"get", "list", "create", "update", "delete", "watch"},
+			},
+			{
+				// Needs access to update clusterinformations.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"clusterinformations"},
+				Verbs:     []string{"get", "create", "update"},
+			},
+			{
+				// Needs to manage hostendpoints.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"hostendpoints"},
+				Verbs:     []string{"get", "list", "create", "update", "delete"},
+			},
+			{
+				// calico-kube-controllers requires tiers create
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"tiers"},
+				Verbs:     []string{"create"},
+			},
+			{
+				// Needed to validate the license
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"licensekeys"},
+				Verbs:     []string{"get"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"licensekeys"},
+				Verbs:     []string{"get", "watch", "list"},
+			},
+			{
+				APIGroups: []string{"elasticsearch.k8s.elastic.co"},
+				Resources: []string{"elasticsearches"},
+				Verbs:     []string{"watch", "get", "list"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"watch", "list", "get", "update", "create"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"watch", "list", "get", "update", "create"},
+			},
+			{
+				APIGroups: []string{"rbac.authorization.k8s.io"},
+				Resources: []string{"clusterroles", "clusterrolebindings"},
+				Verbs:     []string{"watch", "list", "get"},
+			},
+			{
+				// Needs to manipulate kubecontrollersconfiguration, which contains
+				// its config.  It creates a default if none exists, and updates status
+				// as well.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"kubecontrollersconfigurations"},
+				Verbs:     []string{"get", "create", "update", "watch"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs:     []string{"watch", "list", "get"},
+			},
+		}
+
+		if es.managementCluster != nil {
+			// For cross-cluster requests an authentication review will be done for authenticating the kube-controllers.
+			// Requests on behalf of the kube-controllers will be sent to Voltron, where an authentication review will
+			// take place with its bearer token.
+			role.Rules = append(role.Rules, rbacv1.PolicyRule{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"authenticationreviews"},
+				Verbs:     []string{"create"},
+			})
+		}
+	}
+
+	if es.installation.KubernetesProvider != operatorv1.ProviderOpenShift {
+		// Allow access to the pod security policy in case this is enforced on the cluster
+		role.Rules = append(role.Rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{EsKubeController},
+		})
+	}
+
+	return role
+}
+
+func (es elasticsearchComponent) kubeControllersRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   EsKubeControllerRoleBinding,
+			Labels: map[string]string{},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     EsKubeControllerRole,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      EsKubeControllerServiceAccount,
+				Namespace: common.CalicoNamespace,
+			},
+		},
+	}
+}
+
+func (es elasticsearchComponent) kubeControllersDeployment() *appsv1.Deployment {
+	env := []corev1.EnvVar{
+		{Name: "KUBE_CONTROLLERS_CONFIG_NAME", Value: "elasticsearch"},
+		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+	}
+
+	env = append(env, es.k8sServiceEp.EnvVars()...)
+
+	enabledControllers := make([]string, 0)
+	// These controllers require that Elasticsearch exists within the cluster Kube Controllers is running in, i.e.
+	// Full Standalone and Management clusters, not Minimal Standalone and Managed clusters.
+	enabledControllers = append(enabledControllers, "authorization", "elasticsearchconfiguration")
+
+	if es.enableESOIDCWorkaround {
+		env = append(env, corev1.EnvVar{Name: "ENABLE_ELASTICSEARCH_OIDC_WORKAROUND", Value: "true"})
+	}
+
+	if es.managementCluster != nil {
+		enabledControllers = append(enabledControllers, "managedcluster")
+	}
+
+	if es.installation.CalicoNetwork != nil && es.installation.CalicoNetwork.MultiInterfaceMode != nil {
+		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: es.installation.CalicoNetwork.MultiInterfaceMode.Value()})
+	}
+
+	// These environment variables are for the "authorization" controller, so if it's not enabled don't provide them.
+	if es.authentication != nil {
+		env = append(env,
+			corev1.EnvVar{Name: "OIDC_AUTH_USERNAME_PREFIX", Value: es.authentication.Spec.UsernamePrefix},
+			corev1.EnvVar{Name: "OIDC_AUTH_GROUP_PREFIX", Value: es.authentication.Spec.GroupsPrefix},
+		)
+	}
+
+	env = append(env, corev1.EnvVar{Name: "ENABLED_CONTROLLERS", Value: strings.Join(enabledControllers, ",")})
+
+	defaultMode := int32(420)
+
+	container := corev1.Container{
+		Name:      EsKubeController,
+		Image:     es.kubeControllerImage,
+		Env:       env,
+		Resources: es.kubeControllersResources(),
+		ReadinessProbe: &corev1.Probe{
+			PeriodSeconds: int32(10),
+			Handler: corev1.Handler{
+				Exec: &corev1.ExecAction{
+					Command: []string{
+						"/usr/bin/check-status",
+						"-r",
+					},
+				},
+			},
+		},
+		LivenessProbe: &corev1.Probe{
+			PeriodSeconds:       int32(10),
+			InitialDelaySeconds: int32(10),
+			FailureThreshold:    int32(6),
+			Handler: corev1.Handler{
+				Exec: &corev1.ExecAction{
+					Command: []string{
+						"/usr/bin/check-status",
+						"-l",
+					},
+				},
+			},
+		},
+		VolumeMounts: kubeControllersVolumeMounts(es.managerInternalSecret),
+	}
+
+	container = relasticsearch.ContainerDecorate(container, DefaultElasticsearchClusterName,
+		ElasticsearchKubeControllersUserSecret, es.clusterDomain, rmeta.OSTypeLinux)
+
+	podSpec := corev1.PodSpec{
+		NodeSelector:       es.installation.ControlPlaneNodeSelector,
+		Tolerations:        append(es.installation.ControlPlaneTolerations, rmeta.TolerateMaster, rmeta.TolerateCriticalAddonsOnly),
+		ImagePullSecrets:   es.installation.ImagePullSecrets,
+		ServiceAccountName: EsKubeControllerServiceAccount,
+		Containers:         []corev1.Container{container},
+		Volumes:            kubeControllersVolumes(defaultMode, es.managerInternalSecret),
+	}
+
+	podSpec = relasticsearch.PodSpecDecorate(podSpec)
+
+	d := appsv1.Deployment{
+		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      EsKubeController,
+			Namespace: common.CalicoNamespace,
+			Labels: map[string]string{
+				"k8s-app": EsKubeController,
+			},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+			Strategy: appsv1.DeploymentStrategy{
+				Type: appsv1.RecreateDeploymentStrategyType,
+			},
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"k8s-app": EsKubeController,
+				},
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      EsKubeController,
+					Namespace: common.CalicoNamespace,
+					Labels: map[string]string{
+						"k8s-app": EsKubeController,
+					},
+					Annotations: es.annotations(),
+				},
+				Spec: podSpec,
+			},
+		},
+	}
+	setCriticalPod(&(d.Spec.Template))
+
+	return &d
+}
+
+func (es elasticsearchComponent) annotations() map[string]string {
+	am := map[string]string{}
+	if es.managerInternalSecret != nil {
+		am[ManagerInternalTLSHashAnnotation] = rmeta.AnnotationHash(es.managerInternalSecret.Data)
+	}
+	if es.elasticsearchPublicCertSecret != nil {
+		am[tlsSecretHashAnnotation] = rmeta.AnnotationHash(es.elasticsearchPublicCertSecret.Data)
+	}
+	if es.kubeControllersGatewaySecret != nil {
+		am[ElasticsearchUserHashAnnotation] = rmeta.AnnotationHash(es.kubeControllersGatewaySecret.Data)
+	}
+	if es.kibanaPublicCertSecret != nil {
+		am[KibanaTLSHashAnnotation] = rmeta.AnnotationHash(es.kibanaPublicCertSecret.Data)
+	}
+	return am
+}
+
+// kubeControllerResources creates the kube-controller's resource requirements.
+func (es elasticsearchComponent) kubeControllersResources() corev1.ResourceRequirements {
+	return rmeta.GetResourceRequirements(es.installation, operatorv1.ComponentNameKubeControllers)
 }
 
 // overrideResourceRequirements replaces individual ResourceRequirements field's default value with user's value.

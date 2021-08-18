@@ -340,6 +340,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	if err != nil {
 		// Not finding the LogStorage CR is not an error, as a Managed cluster will not have this CR available but
 		// there are still "LogStorage" related items that need to be set up
+		// Merge conflict test.
 		if !errors.IsNotFound(err) {
 			r.status.SetDegraded("An error occurred while querying LogStorage", err.Error())
 			return reconcile.Result{}, err

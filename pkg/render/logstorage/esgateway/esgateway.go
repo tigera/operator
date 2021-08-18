@@ -50,36 +50,28 @@ const (
 	KibanaPort                 = 5601
 )
 
-func EsGateway(
-	installation *operatorv1.InstallationSpec,
-	pullSecrets []*corev1.Secret,
-	certSecrets []*corev1.Secret,
-	kubeControllersUserSecrets []*corev1.Secret,
-	kibanaInternalCertSecret *corev1.Secret,
-	esInternalCertSecret *corev1.Secret,
-	clusterDomain string,
-) render.Component {
+func EsGateway(c *Config) render.Component {
 	var certSecretsESCopy []*corev1.Secret
 	// Only render the public cert secret in the Operator namespace.
-	secrets := []*corev1.Secret{certSecrets[1]}
+	secrets := []*corev1.Secret{c.CertSecrets[1]}
 
 	// Copy the Operator namespaced cert secrets to the Elasticsearch namespace.
-	certSecretsESCopy = append(certSecretsESCopy, secret.CopyToNamespace(render.ElasticsearchNamespace, certSecrets...)...)
-	tlsAnnotations := map[string]string{render.ElasticsearchTLSHashAnnotation: rmeta.SecretsAnnotationHash(append(certSecretsESCopy, esInternalCertSecret)...)}
+	certSecretsESCopy = append(certSecretsESCopy, secret.CopyToNamespace(render.ElasticsearchNamespace, c.CertSecrets...)...)
+	tlsAnnotations := map[string]string{render.ElasticsearchTLSHashAnnotation: rmeta.SecretsAnnotationHash(append(certSecretsESCopy, c.EsInternalCertSecret)...)}
 
 	secrets = append(secrets, certSecretsESCopy...)
 
 	// tigera-secure-kb-http-certs-public, mounted by ES Gateway.
-	secrets = append(secrets, secret.CopyToNamespace(render.ElasticsearchNamespace, kibanaInternalCertSecret)...)
-	tlsAnnotations[render.KibanaTLSAnnotationHash] = rmeta.SecretsAnnotationHash(kibanaInternalCertSecret)
+	secrets = append(secrets, secret.CopyToNamespace(render.ElasticsearchNamespace, c.KibanaInternalCertSecret)...)
+	tlsAnnotations[render.KibanaTLSAnnotationHash] = rmeta.SecretsAnnotationHash(c.KibanaInternalCertSecret)
 
-	secrets = append(secrets, kubeControllersUserSecrets...)
+	secrets = append(secrets, c.KubeControllersUserSecrets...)
 	return &esGateway{
-		installation:   installation,
-		pullSecrets:    pullSecrets,
+		installation:   c.Installation,
+		pullSecrets:    c.PullSecrets,
 		secrets:        secrets,
 		tlsAnnotations: tlsAnnotations,
-		clusterDomain:  clusterDomain,
+		clusterDomain:  c.ClusterDomain,
 	}
 }
 
@@ -91,6 +83,16 @@ type esGateway struct {
 	clusterDomain  string
 	csrImage       string
 	esGatewayImage string
+}
+
+type Config struct {
+	Installation               *operatorv1.InstallationSpec
+	PullSecrets                []*corev1.Secret
+	CertSecrets                []*corev1.Secret
+	KubeControllersUserSecrets []*corev1.Secret
+	KibanaInternalCertSecret   *corev1.Secret
+	EsInternalCertSecret       *corev1.Secret
+	ClusterDomain              string
 }
 
 func (e *esGateway) ResolveImages(is *operatorv1.ImageSet) error {

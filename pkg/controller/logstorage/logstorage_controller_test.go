@@ -378,7 +378,6 @@ var _ = Describe("LogStorage controller", func() {
 
 					mockStatus.On("SetDegraded", "Waiting for Elasticsearch cluster to be operational", "").Return()
 					result, err := r.Reconcile(ctx, reconcile.Request{})
-					Expect(err).ShouldNot(HaveOccurred())
 					// Expect to be waiting for Elasticsearch and Kibana to be functional
 					Expect(result).Should(Equal(reconcile.Result{}))
 
@@ -447,14 +446,12 @@ var _ = Describe("LogStorage controller", func() {
 
 					mockStatus.On("SetDegraded", "Waiting for curator secrets to become available", "").Return()
 					result, err = r.Reconcile(ctx, reconcile.Request{})
-					Expect(err).ShouldNot(HaveOccurred())
 					// Expect to be waiting for curator secret
 					Expect(result).Should(Equal(reconcile.Result{}))
 					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: curatorUsrSecretObjMeta})).ShouldNot(HaveOccurred())
 
 					mockStatus.On("SetDegraded", "Waiting for elasticsearch metrics secrets to become available", "").Return()
 					result, err = r.Reconcile(ctx, reconcile.Request{})
-					Expect(err).ShouldNot(HaveOccurred())
 
 					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: esMetricsUsrSecretObjMeta})).ShouldNot(HaveOccurred())
 
@@ -523,7 +520,6 @@ var _ = Describe("LogStorage controller", func() {
 
 					mockStatus.On("SetDegraded", "Waiting for Elasticsearch cluster to be operational", "").Return()
 					result, err := r.Reconcile(ctx, reconcile.Request{})
-					Expect(err).ShouldNot(HaveOccurred())
 					// Expect to be waiting for Elasticsearch and Kibana to be functional
 					Expect(result).Should(Equal(reconcile.Result{}))
 
@@ -583,7 +579,6 @@ var _ = Describe("LogStorage controller", func() {
 
 					mockStatus.On("SetDegraded", "Waiting for curator secrets to become available", "").Return()
 					result, err = r.Reconcile(ctx, reconcile.Request{})
-					Expect(err).ShouldNot(HaveOccurred())
 					// Expect to be waiting for curator secret
 					Expect(result).Should(Equal(reconcile.Result{}))
 					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: curatorUsrSecretObjMeta})).ShouldNot(HaveOccurred())
@@ -669,7 +664,6 @@ var _ = Describe("LogStorage controller", func() {
 					// Elasticsearch and kibana secrets are good.
 					mockStatus.On("SetDegraded", "Waiting for Elasticsearch cluster to be operational", "").Return()
 					_, err = r.Reconcile(ctx, reconcile.Request{})
-					Expect(err).ShouldNot(HaveOccurred())
 
 					Expect(cli.Get(ctx, esCertSecretOperKey, esSecret)).ShouldNot(HaveOccurred())
 					test.VerifyCert(esSecret, "tls.key", "tls.crt", esDNSNames...)
@@ -707,7 +701,6 @@ var _ = Describe("LogStorage controller", func() {
 
 					mockStatus.On("SetDegraded", "Waiting for Elasticsearch cluster to be operational", "").Return()
 					result, err := r.Reconcile(ctx, reconcile.Request{})
-					Expect(err).ShouldNot(HaveOccurred())
 					// Expect to be waiting for Elasticsearch and Kibana to be functional
 					Expect(result).Should(Equal(reconcile.Result{}))
 
@@ -781,7 +774,6 @@ var _ = Describe("LogStorage controller", func() {
 
 					mockStatus.On("SetDegraded", "Waiting for curator secrets to become available", "").Return()
 					result, err = r.Reconcile(ctx, reconcile.Request{})
-					Expect(err).ShouldNot(HaveOccurred())
 
 					By("confirming elasticsearch certs were updated and have the expected DNS names")
 					combinedDNSNames := append(esGatewayDNSNmes, esDNSNames...)
@@ -1232,7 +1224,6 @@ var _ = Describe("LogStorage controller", func() {
 
 					mockStatus.On("SetDegraded", "Waiting for Elasticsearch cluster to be operational", "")
 					result, err = r.Reconcile(ctx, reconcile.Request{})
-					Expect(err).ShouldNot(HaveOccurred())
 					Expect(result).Should(Equal(reconcile.Result{}))
 
 					By("expecting not to find the eck-cleanup finalizer in the LogStorage CR anymore")

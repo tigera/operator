@@ -16,7 +16,6 @@ package logstorage
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
@@ -63,23 +62,24 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 
-	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage", opts.KubernetesVersion), opts.DetectedProvider, utils.NewElasticClient, opts.ClusterDomain)
+	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage", opts.KubernetesVersion), opts.DetectedProvider, utils.NewElasticClient, opts.ClusterDomain, opts.ElasticExternal)
 	if err != nil {
 		return err
 	}
 
-	return add(mgr, r)
+	return add(mgr, r, opts.ElasticExternal)
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, provider operatorv1.Provider, esCliCreator utils.ElasticsearchClientCreator, clusterDomain string) (*ReconcileLogStorage, error) {
+func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, provider operatorv1.Provider, esCliCreator utils.ElasticsearchClientCreator, clusterDomain string, elasticExternal bool) (*ReconcileLogStorage, error) {
 	c := &ReconcileLogStorage{
-		client:        cli,
-		scheme:        schema,
-		status:        statusMgr,
-		provider:      provider,
-		esCliCreator:  esCliCreator,
-		clusterDomain: clusterDomain,
+		client:          cli,
+		scheme:          schema,
+		status:          statusMgr,
+		provider:        provider,
+		esCliCreator:    esCliCreator,
+		clusterDomain:   clusterDomain,
+		elasticExternal: elasticExternal,
 	}
 
 	c.status.Run()
@@ -87,7 +87,7 @@ func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.S
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
+func add(mgr manager.Manager, r reconcile.Reconciler, elasticExternal bool) error {
 	c, err := controller.New("log-storage-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
@@ -107,8 +107,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("log-storage-controller failed to watch ImageSet: %w", err)
 	}
 
-	if err := addLogStorageWatches(c); err != nil {
-		return err
+	if !elasticExternal {
+		if err := addLogStorageWatches(c); err != nil {
+			return err
+		}
 	}
 
 	// Watch all the elasticsearch user secrets in the operator namespace. In the future, we may want put this logic in
@@ -194,6 +196,7 @@ type ReconcileLogStorage struct {
 	provider      operatorv1.Provider
 	esCliCreator  utils.ElasticsearchClientCreator
 	clusterDomain string
+	elasticExternal   bool
 }
 
 func GetLogStorage(ctx context.Context, cli client.Client) (*operatorv1.LogStorage, error) {
@@ -420,44 +423,31 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, managementClusterConnection)
 	}
 
-	// Cloud modifications
-	kbCm := &corev1.ConfigMap{}
-	key := types.NamespacedName{Name: "cloud-kibana-config", Namespace: rmeta.OperatorNamespace()}
-	if err = r.client.Get(ctx, key, kbCm); err != nil {
-		if !errors.IsNotFound(err) {
-			return reconcile.Result{}, fmt.Errorf("Failed to read cloud-kibana-config ConfigMap: %s", err.Error())
+	if !r.elasticExternal {
+		result, proceed, err := r.createLogStorage(
+			ls,
+			install,
+			variant,
+			clusterConfig,
+			managementCluster,
+			managementClusterConnection,
+			esAdminUserSecret,
+			curatorSecrets,
+			esLicenseType,
+			esService,
+			kbService,
+			pullSecrets,
+			hdler,
+			reqLogger,
+			ctx,
+		)
+		if err != nil || !proceed {
+			return result, err
 		}
-	} else {
-		render.CloudKibanaConfigOverrides = map[string]interface{}{}
-		if err = json.Unmarshal([]byte(kbCm.Data["config"]), &render.CloudKibanaConfigOverrides); err != nil {
-			r.status.SetDegraded("Failed to unmarshall config in cloud-kibana-config ConfigMap", err.Error())
-			return reconcile.Result{}, err
-		}
-	}
-
-	result, proceed, err := r.createLogStorage(
-		ls,
-		install,
-		variant,
-		clusterConfig,
-		managementCluster,
-		managementClusterConnection,
-		esAdminUserSecret,
-		curatorSecrets,
-		esLicenseType,
-		esService,
-		kbService,
-		pullSecrets,
-		hdler,
-		reqLogger,
-		ctx,
-	)
-	if err != nil || !proceed {
-		return result, err
 	}
 
 	if managementClusterConnection == nil {
-		result, proceed, err = r.createEsGateway(
+		result, proceed, err := r.createEsGateway(
 			install,
 			variant,
 			pullSecrets,
@@ -470,14 +460,16 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			return result, err
 		}
 
-		result, proceed, err = r.applyILMPolicies(ls, reqLogger, ctx)
-		if err != nil || !proceed {
-			return result, err
-		}
+		if !r.elasticExternal {
+			result, proceed, err = r.applyILMPolicies(ls, reqLogger, ctx)
+			if err != nil || !proceed {
+				return result, err
+			}
 
-		result, proceed, err = r.validateLogStorage(curatorSecrets, esLicenseType, reqLogger, ctx)
-		if err != nil || !proceed {
-			return result, err
+			result, proceed, err = r.validateLogStorage(curatorSecrets, esLicenseType, reqLogger, ctx)
+			if err != nil || !proceed {
+				return result, err
+			}
 		}
 
 		result, proceed, err = r.createEsMetrics(

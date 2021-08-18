@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"os"
 	goruntime "runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -224,12 +225,25 @@ func main() {
 		kubernetesVersion = &common.VersionInfo{Major: 1, Minor: 18}
 	}
 
+	elasticExternalEnv := os.Getenv("ELASTIC_EXTERNAL")
+	if elasticExternalEnv == "" {
+		log.Error(err, fmt.Sprintf("Unable to resolve ELASTIC_EXTERNAL, defaulting to false"))
+		elasticExternalEnv = "false"
+	}
+
+	elasticExternal, err := strconv.ParseBool(elasticExternalEnv)
+	if err != nil {
+		log.Error(err, fmt.Sprintf("Unable to resolve ELASTIC_EXTERNAL, defaulting to false"))
+		elasticExternal = false
+	}
+
 	options := options.AddOptions{
 		DetectedProvider:    provider,
 		EnterpriseCRDExists: enterpriseCRDExists,
 		AmazonCRDExists:     amazonCRDExists,
 		ClusterDomain:       clusterDomain,
 		KubernetesVersion:   kubernetesVersion,
+		ElasticExternal:     elasticExternal,
 	}
 
 	err = controllers.AddToManager(mgr, options)

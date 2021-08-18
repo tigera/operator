@@ -2,6 +2,7 @@ package logstorage
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
@@ -20,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -118,6 +120,21 @@ func (r *ReconcileLogStorage) createLogStorage(
 			return reconcile.Result{}, false, err
 		}
 		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexCertSecret, dexSecret, r.clusterDomain)
+	}
+
+	// Cloud modifications
+	kbCm := &corev1.ConfigMap{}
+	key := types.NamespacedName{Name: "cloud-kibana-config", Namespace: rmeta.OperatorNamespace()}
+	if err = r.client.Get(ctx, key, kbCm); err != nil {
+		if !errors.IsNotFound(err) {
+			return reconcile.Result{}, fmt.Errorf("Failed to read cloud-kibana-config ConfigMap: %s", err.Error())
+		}
+	} else {
+		render.CloudKibanaConfigOverrides = map[string]interface{}{}
+		if err = json.Unmarshal([]byte(kbCm.Data["config"]), &render.CloudKibanaConfigOverrides); err != nil {
+			r.status.SetDegraded("Failed to unmarshall config in cloud-kibana-config ConfigMap", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	component := render.LogStorage(

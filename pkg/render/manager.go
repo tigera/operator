@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,9 +21,8 @@ import (
 
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
 
-	"github.com/tigera/operator/pkg/render/common/authentication"
-
 	ocsv1 "github.com/openshift/api/security/v1"
+	"github.com/tigera/operator/pkg/render/common/authentication"
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -69,8 +68,6 @@ const (
 
 	KibanaTLSHashAnnotation         = "hash.operator.tigera.io/kibana-secrets"
 	ElasticsearchUserHashAnnotation = "hash.operator.tigera.io/elasticsearch-user"
-
-	PacketCaptureServer = "tigera-packetcapture-server"
 )
 
 // ManagementClusterConnection configuration constants
@@ -95,6 +92,7 @@ func Manager(
 	esSecrets []*corev1.Secret,
 	kibanaSecrets []*corev1.Secret,
 	complianceServerCertSecret *corev1.Secret,
+	packetCaptureServerCertSecret *corev1.Secret,
 	esClusterConfig *relasticsearch.ClusterConfig,
 	tlsKeyPair *corev1.Secret,
 	pullSecrets []*corev1.Secret,
@@ -135,41 +133,42 @@ func Manager(
 		tlsAnnotations[ManagerInternalTLSHashAnnotation] = rmeta.AnnotationHash(internalTrafficSecret.Data)
 	}
 	return &managerComponent{
-		keyValidatorConfig:         keyValidatorConfig,
-		esSecrets:                  esSecrets,
-		kibanaSecrets:              kibanaSecrets,
-		complianceServerCertSecret: complianceServerCertSecret,
-		esClusterConfig:            esClusterConfig,
-		tlsSecrets:                 tlsSecrets,
-		tlsAnnotations:             tlsAnnotations,
-		pullSecrets:                pullSecrets,
-		openshift:                  openshift,
-		clusterDomain:              clusterDomain,
-		installation:               installation,
-		managementCluster:          managementCluster,
-		esLicenseType:              esLicenseType,
+		keyValidatorConfig:            keyValidatorConfig,
+		esSecrets:                     esSecrets,
+		kibanaSecrets:                 kibanaSecrets,
+		complianceServerCertSecret:    complianceServerCertSecret,
+		packetCaptureServerCertSecret: packetCaptureServerCertSecret,
+		esClusterConfig:               esClusterConfig,
+		tlsSecrets:                    tlsSecrets,
+		tlsAnnotations:                tlsAnnotations,
+		pullSecrets:                   pullSecrets,
+		openshift:                     openshift,
+		clusterDomain:                 clusterDomain,
+		installation:                  installation,
+		managementCluster:             managementCluster,
+		esLicenseType:                 esLicenseType,
 	}, nil
 }
 
 type managerComponent struct {
-	keyValidatorConfig         authentication.KeyValidatorConfig
-	esSecrets                  []*corev1.Secret
-	kibanaSecrets              []*corev1.Secret
-	complianceServerCertSecret *corev1.Secret
-	esClusterConfig            *relasticsearch.ClusterConfig
-	tlsSecrets                 []*corev1.Secret
-	tlsAnnotations             map[string]string
-	pullSecrets                []*corev1.Secret
-	openshift                  bool
-	clusterDomain              string
-	installation               *operator.InstallationSpec
-	managementCluster          *operator.ManagementCluster
-	esLicenseType              ElasticsearchLicenseType
-	managerImage               string
-	proxyImage                 string
-	esProxyImage               string
-	packetCaptureImage         string
-	csrInitImage               string
+	keyValidatorConfig            authentication.KeyValidatorConfig
+	esSecrets                     []*corev1.Secret
+	kibanaSecrets                 []*corev1.Secret
+	complianceServerCertSecret    *corev1.Secret
+	packetCaptureServerCertSecret *corev1.Secret
+	esClusterConfig               *relasticsearch.ClusterConfig
+	tlsSecrets                    []*corev1.Secret
+	tlsAnnotations                map[string]string
+	pullSecrets                   []*corev1.Secret
+	openshift                     bool
+	clusterDomain                 string
+	installation                  *operator.InstallationSpec
+	managementCluster             *operator.ManagementCluster
+	esLicenseType                 ElasticsearchLicenseType
+	managerImage                  string
+	proxyImage                    string
+	esProxyImage                  string
+	csrInitImage                  string
 }
 
 func (c *managerComponent) ResolveImages(is *operator.ImageSet) error {
@@ -189,11 +188,6 @@ func (c *managerComponent) ResolveImages(is *operator.ImageSet) error {
 	}
 
 	c.esProxyImage, err = components.GetReference(components.ComponentEsProxy, reg, path, prefix, is)
-	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
-	}
-
-	c.packetCaptureImage, err = components.GetReference(components.ComponentPacketCapture, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -243,6 +237,9 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	if c.complianceServerCertSecret != nil {
 		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.complianceServerCertSecret)...)...)
 	}
+	if c.packetCaptureServerCertSecret != nil {
+		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.packetCaptureServerCertSecret)...)...)
+	}
 	objs = append(objs, c.managerDeployment())
 	if c.keyValidatorConfig != nil {
 		objs = append(objs, configmap.ToRuntimeObjects(c.keyValidatorConfig.RequiredConfigMaps(ManagerNamespace)...)...)
@@ -250,7 +247,7 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 
 	var toDelete []client.Object
 	if c.installation.CertificateManagement != nil {
-		objs = append(objs, csrClusterRoleBinding(ManagerServiceName, ManagerNamespace))
+		objs = append(objs, CsrClusterRoleBinding(ManagerServiceName, ManagerNamespace))
 		// If we want to use certificate management, we should clean up any existing secrets that have been created by the operator.
 		secretToDelete := &corev1.Secret{
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
@@ -277,6 +274,10 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 
 	if c.complianceServerCertSecret != nil {
 		annotations[complianceServerTLSHashAnnotation] = rmeta.AnnotationHash(c.complianceServerCertSecret.Data)
+	}
+
+	if c.packetCaptureServerCertSecret != nil {
+		annotations[PacketCaptureTLSHashAnnotation] = rmeta.AnnotationHash(c.packetCaptureServerCertSecret.Data)
 	}
 
 	// Add a hash of the Secret to ensure if it changes the manager will be
@@ -320,7 +321,6 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 				relasticsearch.ContainerDecorate(c.managerContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.clusterDomain, c.SupportedOSType()),
 				relasticsearch.ContainerDecorate(c.managerEsProxyContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.clusterDomain, c.SupportedOSType()),
 				c.managerProxyContainer(),
-				c.managerPacketCaptureContainer(),
 			},
 			Volumes: c.managerVolumes(),
 		}),
@@ -391,6 +391,21 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 						Path: "tls.crt",
 					}},
 					SecretName: ComplianceServerCertSecret,
+				},
+			},
+		})
+	}
+
+	if c.packetCaptureServerCertSecret != nil {
+		v = append(v, v1.Volume{
+			Name: PacketCaptureCertSecret,
+			VolumeSource: v1.VolumeSource{
+				Secret: &v1.SecretVolumeSource{
+					Items: []v1.KeyToPath{{
+						Key:  "tls.crt",
+						Path: "tls.crt",
+					}},
+					SecretName: PacketCaptureCertSecret,
 				},
 			},
 		})
@@ -476,21 +491,6 @@ func (c *managerComponent) managerProxyProbe() *v1.Probe {
 		Handler: corev1.Handler{
 			HTTPGet: &corev1.HTTPGetAction{
 				Path:   "/voltron/api/health",
-				Port:   intstr.FromInt(managerPort),
-				Scheme: corev1.URISchemeHTTPS,
-			},
-		},
-		InitialDelaySeconds: 90,
-		PeriodSeconds:       10,
-	}
-}
-
-// managerPacketCaptureLivenessProbe returns the probe for the PacketCapture API container.
-func (c *managerComponent) managerPacketCaptureLivenessProbe() *v1.Probe {
-	return &corev1.Probe{
-		Handler: corev1.Handler{
-			HTTPGet: &corev1.HTTPGetAction{
-				Path:   "/packetcapture/health",
 				Port:   intstr.FromInt(managerPort),
 				Scheme: corev1.URISchemeHTTPS,
 			},
@@ -586,12 +586,13 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 	env := []corev1.EnvVar{
 		{Name: "VOLTRON_PORT", Value: defaultVoltronPort},
 		{Name: "VOLTRON_COMPLIANCE_ENDPOINT", Value: fmt.Sprintf("https://compliance.%s.svc.%s", ComplianceNamespace, c.clusterDomain)},
-		{Name: "VOLTRON_LOGLEVEL", Value: "info"},
+		{Name: "VOLTRON_LOGLEVEL", Value: "Info"},
 		{Name: "VOLTRON_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.clusterDomain)},
 		{Name: "VOLTRON_KIBANA_BASE_PATH", Value: fmt.Sprintf("/%s/", KibanaBasePath)},
 		{Name: "VOLTRON_KIBANA_CA_BUNDLE_PATH", Value: "/certs/kibana/tls.crt"},
 		{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.managementCluster != nil)},
 		{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
+		{Name: "VOLTRON_DEFAULT_FORWARD_SERVER", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc:9200"},
 	}
 
 	if c.keyValidatorConfig != nil {
@@ -612,32 +613,6 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 	}
 }
 
-// managerPacketCaptureContainer returns the manager container.
-func (c *managerComponent) managerPacketCaptureContainer() corev1.Container {
-	var volumeMounts []corev1.VolumeMount
-	if c.managementCluster != nil {
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{Name: ManagerInternalTLSSecretCertName, MountPath: "/manager-tls", ReadOnly: true})
-	}
-
-	env := []v1.EnvVar{
-		{Name: "PACKETCAPTURE_API_LOG_LEVEL", Value: "Info"},
-	}
-
-	if c.keyValidatorConfig != nil {
-		env = append(env, c.keyValidatorConfig.RequiredEnv("PACKETCAPTURE_API")...)
-		volumeMounts = append(volumeMounts, c.keyValidatorConfig.RequiredVolumeMounts()...)
-	}
-
-	return corev1.Container{
-		Name:            PacketCaptureServer,
-		Image:           c.packetCaptureImage,
-		LivenessProbe:   c.managerPacketCaptureLivenessProbe(),
-		SecurityContext: podsecuritycontext.NewBaseContext(),
-		Env:             env,
-		VolumeMounts:    volumeMounts,
-	}
-}
-
 func (c *managerComponent) volumeMountsForProxyManager() []v1.VolumeMount {
 	var mounts = []corev1.VolumeMount{
 		{Name: ManagerTLSSecretName, MountPath: "/certs/https", ReadOnly: true},
@@ -646,6 +621,10 @@ func (c *managerComponent) volumeMountsForProxyManager() []v1.VolumeMount {
 
 	if c.complianceServerCertSecret != nil {
 		mounts = append(mounts, corev1.VolumeMount{Name: ComplianceServerCertSecret, MountPath: "/certs/compliance", ReadOnly: true})
+	}
+
+	if c.packetCaptureServerCertSecret != nil {
+		mounts = append(mounts, corev1.VolumeMount{Name: PacketCaptureCertSecret, MountPath: "/certs/packetcapture", ReadOnly: true})
 	}
 
 	if c.managementCluster != nil {
@@ -764,13 +743,6 @@ func managerClusterRole(managementCluster, managedCluster, openshift bool) *rbac
 			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{
-					"packetcaptures",
-				},
-				Verbs: []string{"get"},
-			},
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{
 					"hostendpoints",
 				},
 				Verbs: []string{"list"},
@@ -816,12 +788,10 @@ func managerClusterRole(managementCluster, managedCluster, openshift bool) *rbac
 		)
 	}
 
-	if !managedCluster {
+	if managementCluster {
 		// For cross-cluster requests an authentication review will be done for authenticating the tigera-manager.
 		// Requests on behalf of the tigera-manager will be sent to Voltron, where an authentication review will
 		// take place with its bearer token.
-		// In addition, PacketCapture API uses authentication reviews to authenticate the users and then perform
-		// SubjectAccessReviews in order to enforce RBAC on this API
 		cr.Rules = append(cr.Rules, rbacv1.PolicyRule{
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"authenticationreviews"},

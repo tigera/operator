@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/tigera/operator/pkg/dns"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -113,6 +115,12 @@ func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 				return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 			}
 		}
+
+		// Watch for changes to authentication
+		err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			return fmt.Errorf("apiserver-controller failed to watch resource: %w", err)
+		}
 	}
 
 	// Watch for certificate changes. We watch both secrets in case the user is switching between variants.
@@ -120,6 +128,10 @@ func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 		return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 	}
 	if err = utils.AddSecretsWatch(c, "tigera-apiserver-certs", rmeta.OperatorNamespace()); err != nil {
+		return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
+	}
+
+	if err = utils.AddSecretsWatch(c, render.PacketCaptureCertSecret, rmeta.OperatorNamespace()); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 	}
 
@@ -284,6 +296,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
+	var components []render.Component
 	component, err := render.APIServer(k8sapi.Endpoint, network, false, managementCluster, managementClusterConnection, amazon, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift,
 		tunnelCASecret, r.clusterDomain)
 	if err != nil {
@@ -291,18 +304,79 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		r.status.SetDegraded("Error rendering APIServer", err.Error())
 		return reconcile.Result{}, err
 	}
+	components = append(components, component)
 
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+	if variant == operatorv1.TigeraSecureEnterprise {
+
+		var packetCaptureCertSecret *v1.Secret
+		var renderSecret bool
+		if network.CertificateManagement == nil {
+			packetCaptureCertSecret, err = utils.ValidateCertPair(r.client,
+				rmeta.OperatorNamespace(),
+				render.PacketCaptureCertSecret,
+				v1.TLSPrivateKeyKey,
+				v1.TLSCertKey,
+			)
+			if err != nil {
+				log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", render.PacketCaptureCertSecret))
+				r.status.SetDegraded(fmt.Sprintf("Failed to retrieve / validate  %s", render.PacketCaptureCertSecret), err.Error())
+				return reconcile.Result{}, err
+			}
+
+			// Create the cert if doesn't exist. If the cert exists, check that the cert
+			// has the expected DNS names. If the cert doesn't and the cert is managed by the
+			// operator, the cert is recreated and returned. If the invalid cert is supplied by
+			// the user, set the component degraded.
+
+			if packetCaptureCertSecret == nil {
+				renderSecret = true
+			}
+			packetCaptureCertSecret, err = utils.EnsureCertificateSecret(
+				render.PacketCaptureCertSecret, packetCaptureCertSecret, v1.TLSPrivateKeyKey, v1.TLSCertKey, rmeta.DefaultCertificateDuration, dns.GetServiceDNSNames(render.PacketCaptureServiceName, render.PacketCaptureNamespace, r.clusterDomain)...,
+			)
+			if err != nil {
+				r.status.SetDegraded(fmt.Sprintf("Error ensuring packetcapture-api TLS certificate %q exists and has valid DNS names", render.PacketCaptureCertSecret), err.Error())
+				return reconcile.Result{}, err
+			}
+		} else {
+			packetCaptureCertSecret = render.CreateCertificateSecret(network.CertificateManagement.CACert, render.PacketCaptureCertSecret, rmeta.OperatorNamespace())
+			renderSecret = true
+		}
+
+		if renderSecret {
+			components = append(components, render.Secrets([]*v1.Secret{packetCaptureCertSecret}))
+		}
+
+		// Fetch the Authentication spec. If present, we use to configure user authentication.
+		authenticationCR, err := utils.GetAuthentication(ctx, r.client)
+		if err != nil && !errors.IsNotFound(err) {
+			r.status.SetDegraded("Error querying Authentication", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		keyValidatorConfig, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.clusterDomain)
+		if err != nil {
+			log.Error(err, "Failed to process the authentication CR.")
+			r.status.SetDegraded("Failed to process the authentication CR.", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		var pc = render.PacketCaptureAPI(pullSecrets, r.provider == operatorv1.ProviderOpenShift, network, keyValidatorConfig, packetCaptureCertSecret, r.clusterDomain)
+		components = append(components, pc)
+	}
+
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, components...); err != nil {
 		log.Error(err, "Error with images from ImageSet")
 		r.status.SetDegraded("Error with images from ImageSet", err.Error())
 		return reconcile.Result{}, err
 	}
 
-	if err := handler.CreateOrUpdateOrDelete(context.Background(), component, r.status); err != nil {
-		r.status.SetDegraded("Error creating / updating resource", err.Error())
-		return reconcile.Result{}, err
+	for _, component := range components {
+		if err := handler.CreateOrUpdateOrDelete(context.Background(), component, r.status); err != nil {
+			r.status.SetDegraded("Error creating / updating resource", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
-
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()
 

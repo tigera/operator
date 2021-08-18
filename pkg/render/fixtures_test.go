@@ -51,17 +51,18 @@ var elasticsearchSecret = v1.Secret{
 	},
 }
 
-var elasticsearchAdminUserSecret = v1.Secret{
+var kubeControllersUserSecret = v1.Secret{
 	TypeMeta: metav1.TypeMeta{
 		Kind:       "Secret",
 		APIVersion: "v1",
 	},
 	ObjectMeta: metav1.ObjectMeta{
-		Name:      render.ElasticsearchAdminUserSecret,
+		Name:      render.ElasticsearchKubeControllersUserSecret,
 		Namespace: rmeta.OperatorNamespace(),
 	},
 	Data: map[string][]byte{
-		"elastic": []byte("password"),
+		"username": []byte("password"),
+		"password": []byte("password"),
 	},
 }
 

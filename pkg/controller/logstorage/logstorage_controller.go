@@ -372,7 +372,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		r.status.SetDegraded("Error reading ManagementClusterConnection", err.Error())
 		return reconcile.Result{}, err
 	}
-
+	// Merge conflict test.
 	if managementClusterConnection != nil && managementCluster != nil {
 		err = fmt.Errorf("having both a ManagementCluster and a ManagementClusterConnection is not supported")
 		reqLogger.Error(err, "")

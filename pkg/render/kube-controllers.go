@@ -50,13 +50,13 @@ type KubeControllersConfiguration struct {
 	ManagementCluster           *operatorv1.ManagementCluster
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
 
-	ClusterDomain           string
-	MetricsPort             int
+	ClusterDomain string
+	MetricsPort   int
 
 	// Secrets - provided by the caller. Used to generate secrets in the destination
 	// namespace to be returned by the rendered. Expected that the calling code
 	// take care to pass the same secret on each reconcile where possible.
-	ManagerInternalSecret        *corev1.Secret
+	ManagerInternalSecret *corev1.Secret
 }
 
 func KubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {

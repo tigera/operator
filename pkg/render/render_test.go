@@ -105,13 +105,13 @@ func allCalicoComponents(
 		MigrateNamespaces:      up,
 	}
 	kcCfg := &render.KubeControllersConfiguration{
-		K8sServiceEp:                 k8sServiceEp,
-		Installation:                 cr,
-		ManagementCluster:            managementCluster,
-		ManagementClusterConnection:  managementClusterConnection,
-		ManagerInternalSecret:        managerInternalTLSSecret,
-		ClusterDomain:                clusterDomain,
-		MetricsPort:                  kubeControllersMetricsPort,
+		K8sServiceEp:                k8sServiceEp,
+		Installation:                cr,
+		ManagementCluster:           managementCluster,
+		ManagementClusterConnection: managementClusterConnection,
+		ManagerInternalSecret:       managerInternalTLSSecret,
+		ClusterDomain:               clusterDomain,
+		MetricsPort:                 kubeControllersMetricsPort,
 	}
 
 	return []render.Component{namespaces, secretsAndConfigMaps, render.Typha(typhaCfg), render.Node(nodeCfg), render.KubeControllers(kcCfg)}, nil

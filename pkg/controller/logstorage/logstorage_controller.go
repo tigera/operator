@@ -427,20 +427,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		var flowShards = common.CalculateFlowShards(ls.Spec.Nodes, common.DefaultElasticsearchShards)
 		clusterConfig = relasticsearch.NewClusterConfig(render.DefaultElasticsearchClusterName, ls.Replicas(), common.DefaultElasticsearchShards, flowShards)
 
-		// Check if there is a StorageClass available to run Elasticsearch on.
-		if err := r.client.Get(ctx, client.ObjectKey{Name: ls.Spec.StorageClassName}, &storagev1.StorageClass{}); err != nil {
-			if errors.IsNotFound(err) {
-				err := fmt.Errorf("couldn't find storage class %s, this must be provided", ls.Spec.StorageClassName)
-				reqLogger.Error(err, err.Error())
-				r.status.SetDegraded("Failed to get storage class", err.Error())
-				return reconcile.Result{}, nil
-			}
-
-			reqLogger.Error(err, err.Error())
-			r.status.SetDegraded("Failed to get storage class", err.Error())
-			return reconcile.Result{}, nil
-		}
-
 		if gatewayCertSecret, publicCertSecret, customerProvidedCert, err = common.GetESGatewayCertificateSecrets(ctx, install, r.client, r.clusterDomain, log); err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Failed to create Elasticsearch Gateway secrets", err.Error())
@@ -454,6 +440,20 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		}
 		if esAdminUserSecret != nil {
 			esAdminUserSecret = rsecret.CopyToNamespace(rmeta.OperatorNamespace(), esAdminUserSecret)[0]
+		}
+
+		// Check if there is a StorageClass available to run Elasticsearch on.
+		if err := r.client.Get(ctx, client.ObjectKey{Name: ls.Spec.StorageClassName}, &storagev1.StorageClass{}); err != nil {
+			if errors.IsNotFound(err) {
+				err := fmt.Errorf("couldn't find storage class %s, this must be provided", ls.Spec.StorageClassName)
+				reqLogger.Error(err, err.Error())
+				r.status.SetDegraded("Failed to get storage class", err.Error())
+				return reconcile.Result{}, nil
+			}
+
+			reqLogger.Error(err, err.Error())
+			r.status.SetDegraded("Failed to get storage class", err.Error())
+			return reconcile.Result{}, nil
 		}
 
 		if esCertSecret, esInternalCertSecret, err = r.getElasticsearchCertificateSecrets(ctx, install); err != nil {
@@ -486,6 +486,15 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 
 	}
 
+	// If this is a Managed cluster ls must be nil to get to this point (unless the DeletionTimestamp is set) so we must
+	// create the ComponentHandler from the managementClusterConnection.
+	var hdler utils.ComponentHandler
+	if ls != nil {
+		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
+	} else {
+		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, managementClusterConnection)
+	}
+
 	elasticsearch, err := r.getElasticsearch(ctx)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
@@ -498,15 +507,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		reqLogger.Error(err, err.Error())
 		r.status.SetDegraded("An error occurred trying to retrieve Kibana", err.Error())
 		return reconcile.Result{}, err
-	}
-
-	// If this is a Managed cluster ls must be nil to get to this point (unless the DeletionTimestamp is set) so we must
-	// create the ComponentHandler from the managementClusterConnection.
-	var hdler utils.ComponentHandler
-	if ls != nil {
-		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
-	} else {
-		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, managementClusterConnection)
 	}
 
 	// Fetch the Authentication spec. If present, we use it to configure dex as an authentication proxy.
@@ -558,6 +558,8 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		esLicenseType,
 	)
 
+	supportedOSType := component.SupportedOSType()
+
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
 		reqLogger.Error(err, "Error with images from ImageSet")
 		r.status.SetDegraded("Error with images from ImageSet", err.Error())
@@ -595,15 +597,17 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, err
 		}
 
-		esGatewayComponent := esgateway.EsGateway(
-			install,
-			pullSecrets,
-			[]*corev1.Secret{gatewayCertSecret, publicCertSecret},
-			[]*corev1.Secret{kubeControllersGatewaySecret, kubeControllersVerificationSecret, kubeControllersSecureUserSecret},
-			kibanaInternalCertSecret,
-			esInternalCertSecret,
-			r.clusterDomain,
-		)
+		c := &esgateway.Config{
+			Installation:               install,
+			PullSecrets:                pullSecrets,
+			CertSecrets:                []*corev1.Secret{gatewayCertSecret, publicCertSecret},
+			KubeControllersUserSecrets: []*corev1.Secret{kubeControllersGatewaySecret, kubeControllersVerificationSecret, kubeControllersSecureUserSecret},
+			KibanaInternalCertSecret:   kibanaInternalCertSecret,
+			EsInternalCertSecret:       esInternalCertSecret,
+			ClusterDomain:              r.clusterDomain,
+		}
+
+		esGatewayComponent := esgateway.EsGateway(c)
 
 		if err = imageset.ApplyImageSet(ctx, r.client, variant, esGatewayComponent); err != nil {
 			reqLogger.Error(err, "Error with images from ImageSet")
@@ -632,7 +636,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		}
 
 		// ES should be in ready phase when execution reaches here, apply ILM polices
-		esClient, err := r.esCliCreator(r.client, ctx, relasticsearch.HTTPSEndpoint(component.SupportedOSType(), r.clusterDomain))
+		esClient, err := r.esCliCreator(r.client, ctx, relasticsearch.HTTPSEndpoint(supportedOSType, r.clusterDomain))
 		if err != nil {
 			reqLogger.Error(err, "failed to create the Elasticsearch client")
 			r.status.SetDegraded("Failed to connect to Elasticsearch", err.Error())

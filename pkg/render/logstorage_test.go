@@ -16,6 +16,7 @@ package render_test
 
 import (
 	"fmt"
+
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 

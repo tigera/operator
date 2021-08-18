@@ -58,10 +58,10 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		// Set up a default config to pass to render.
 		cfg = render.KubeControllersConfiguration{
-			K8sServiceEp:     k8sServiceEp,
-			Installation:     instance,
-			ClusterDomain:    dns.DefaultClusterDomain,
-			MetricsPort:      9094,
+			K8sServiceEp:  k8sServiceEp,
+			Installation:  instance,
+			ClusterDomain: dns.DefaultClusterDomain,
+			MetricsPort:   9094,
 		}
 
 	})
@@ -82,9 +82,9 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}
 
 		cfg = render.KubeControllersConfiguration{
-			K8sServiceEp:                 k8sServiceEp,
-			Installation:                 instance,
-			ClusterDomain:                dns.DefaultClusterDomain,
+			K8sServiceEp:  k8sServiceEp,
+			Installation:  instance,
+			ClusterDomain: dns.DefaultClusterDomain,
 		}
 		component := render.KubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())

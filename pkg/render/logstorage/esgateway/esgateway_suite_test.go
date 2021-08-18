@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,20 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package common
+package esgateway
 
-const (
-	CalicoNamespace     = "calico-system"
-	TyphaDeploymentName = "calico-typha"
-	NodeDaemonSetName   = "calico-node"
+import (
+	"testing"
 
-	// Monitor + Prometheus related const
-	TigeraPrometheusNamespace = "tigera-prometheus"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 
-	// ComplianceFeature name
-	ComplianceFeature = "compliance-reports"
-	// ThreatDefenseFeature feature name
-	ThreatDefenseFeature = "threat-defense"
-	// ExportLogsFeature to 3rd party systems feature name
-	ExportLogsFeature = "export-logs"
+	"github.com/onsi/ginkgo/reporters"
 )
+
+func TestRender(t *testing.T) {
+	RegisterFailHandler(Fail)
+	junitReporter := reporters.NewJUnitReporter("../../../../report/esgateway_suite.xml")
+	RunSpecsWithDefaultAndCustomReporters(t, "pkg/logstorage/esgateway Suite", []Reporter{junitReporter})
+}

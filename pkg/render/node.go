@@ -75,6 +75,7 @@ func Node(
 	clusterDomain string,
 	nodeReporterMetricsPort int,
 	bgpLayoutHash string,
+	logCollector *operator.LogCollector,
 ) Component {
 	return &nodeComponent{
 		k8sServiceEp:            k8sServiceEp,
@@ -87,6 +88,7 @@ func Node(
 		clusterDomain:           clusterDomain,
 		nodeReporterMetricsPort: nodeReporterMetricsPort,
 		bgpLayoutHash:           bgpLayoutHash,
+		logCollector:            logCollector,
 	}
 }
 
@@ -105,6 +107,7 @@ type nodeComponent struct {
 	certSignReqImage        string
 	nodeReporterMetricsPort int
 	bgpLayoutHash           string
+	logCollector            *operator.LogCollector
 }
 
 func (c *nodeComponent) ResolveImages(is *operator.ImageSet) error {
@@ -188,7 +191,7 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 
 	if c.cr.CertificateManagement != nil {
 		objsToCreate = append(objsToCreate, csrClusterRole())
-		objsToCreate = append(objsToCreate, csrClusterRoleBinding("calico-node", common.CalicoNamespace))
+		objsToCreate = append(objsToCreate, CsrClusterRoleBinding("calico-node", common.CalicoNamespace))
 	}
 
 	return objsToCreate, objsToDelete
@@ -246,6 +249,12 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 		},
 
 		Rules: []rbacv1.PolicyRule{
+			{
+				// Calico uses endpoint slices for service-based network policy rules.
+				APIGroups: []string{"discovery.k8s.io"},
+				Resources: []string{"endpointslices"},
+				Verbs:     []string{"list", "watch"},
+			},
 			{
 				// The CNI plugin needs to get pods, nodes, namespaces.
 				APIGroups: []string{""},
@@ -667,6 +676,10 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 		ds.Spec.Template.Spec.InitContainers = append(ds.Spec.Template.Spec.InitContainers, c.cniContainer())
 	}
 
+	if c.collectProcessPathEnabled() {
+		ds.Spec.Template.Spec.HostPID = true
+	}
+
 	setCriticalPod(&(ds.Spec.Template))
 	if c.migrationNeeded {
 		migration.LimitDaemonSetToMigratedNodes(&ds)
@@ -794,6 +807,12 @@ func (c *nodeComponent) bpfDataplaneEnabled() bool {
 	return c.cr.CalicoNetwork != nil &&
 		c.cr.CalicoNetwork.LinuxDataplane != nil &&
 		*c.cr.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF
+}
+
+func (c *nodeComponent) collectProcessPathEnabled() bool {
+	return c.logCollector != nil &&
+		c.logCollector.Spec.CollectProcessPath != nil &&
+		*c.logCollector.Spec.CollectProcessPath == operatorv1.CollectProcessPathEnable
 }
 
 // cniContainer creates the node's init container that installs CNI.
@@ -1026,7 +1045,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 		{Name: "CLUSTER_TYPE", Value: clusterType},
-		{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
+		{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
 		{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 		{Name: "FELIX_HEALTHENABLED", Value: "true"},
 		{
@@ -1126,6 +1145,10 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 
 	if c.bpfDataplaneEnabled() {
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_BPFENABLED", Value: "true"})
+	}
+
+	if c.collectProcessPathEnabled() {
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_FLOWLOGSCOLLECTPROCESSPATH", Value: "true"})
 	}
 
 	// Determine MTU to use. If specified explicitly, use that. Otherwise, set defaults based on an overall
@@ -1240,6 +1263,11 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 			// We also need to configure a non-default trusted DNS server, since there's no kube-dns.
 			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"})
 		}
+	// For AKS and EKS/CalicoCNI, we must explicitly ask felix to add host IP's to wireguard ifaces
+	case operator.ProviderAKS:
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDHOSTENCRYPTIONENABLED", Value: "true"})
+	case operator.ProviderEKS:
+		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDHOSTENCRYPTIONENABLED", Value: "true"})
 	}
 
 	switch c.cr.CNI.Type {
@@ -1252,8 +1280,6 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		// The GKE CNI plugin has its own iptables rules. Defer to them after ours.
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"})
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESFILTERALLOWACTION", Value: "Return"})
-		// Don't conflict with the GKE CNI plugin's routes.
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_ROUTETABLERANGE", Value: "10-250"})
 	case operator.PluginAzureVNET:
 		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "azv"})
 	}
@@ -1324,6 +1350,7 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 				Port: livenessPort,
 			},
 		},
+		TimeoutSeconds: 10,
 	}
 	rp := &v1.Probe{
 		Handler: v1.Handler{Exec: &v1.ExecAction{Command: readinessCmd}},
@@ -1375,6 +1402,12 @@ func (c *nodeComponent) nodePodSecurityPolicy() *policyv1beta1.PodSecurityPolicy
 	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(true)
 	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
 	psp.Spec.HostNetwork = true
+	// CollectProcessPath feature in logCollectorSpec requires access to hostPID
+	// Hence setting hostPID to true in the calico-node PSP, for this feature
+	// to work with PSP turned on
+	if c.collectProcessPathEnabled() {
+		psp.Spec.HostPID = true
+	}
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
 	return psp
 }

@@ -213,7 +213,7 @@ type FelixConfigurationSpec struct {
 	// set to false. This reduces the number of metrics reported, reducing Prometheus load. [Default: true]
 	PrometheusProcessMetricsEnabled *bool `json:"prometheusProcessMetricsEnabled,omitempty"`
 	// PrometheusReporterPort specifies the TCP port on which to report denied packet metrics.
-	PrometheusReporterPort *int `json:"prometheusReporterPort"`
+	PrometheusReporterPort *int `json:"prometheusReporterPort,omitempty"`
 
 	// FailsafeInboundHostPorts is a comma-delimited list of UDP/TCP ports that Felix will allow incoming traffic to host endpoints
 	// on irrespective of the security policy. This is useful to avoid accidentally cutting off a host with incorrect configuration. Each

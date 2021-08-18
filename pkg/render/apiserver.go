@@ -249,7 +249,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		globalObjects = append(globalObjects, c.apiServiceRegistration(c.tlsSecrets[0].Data[APIServerSecretCertName]))
 	} else {
 		namespacedObjects = append(namespacedObjects, c.apiServiceRegistration(c.installation.CertificateManagement.CACert))
-		globalObjects = append(globalObjects, csrClusterRoleBinding(csrRolebindingName(c.installation.Variant), rmeta.APIServerNamespace(c.installation.Variant)))
+		globalObjects = append(globalObjects, CsrClusterRoleBinding(csrRolebindingName(c.installation.Variant), rmeta.APIServerNamespace(c.installation.Variant)))
 	}
 
 	// Global enterprise-only objects.
@@ -1158,6 +1158,8 @@ func (c *apiServerComponent) tigeraCustomResourcesClusterRole() *rbacv1.ClusterR
 				"remoteclusterconfigurations",
 				"managedclusters",
 				"packetcaptures",
+				"deeppacketinspections",
+				"deeppacketinspections/status",
 			},
 			Verbs: []string{
 				"get",

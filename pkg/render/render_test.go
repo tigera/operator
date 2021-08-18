@@ -87,10 +87,10 @@ var _ = Describe("Rendering tests", func() {
 		// - 4 secrets for Typha comms (2 in operator namespace and 2 in calico namespace)
 		// - 2 ConfigMap for Typha comms (1 in operator namespace and 1 in calico namespace)
 		// - 7 typha resources (Service, SA, Role, Binding, Deployment, PodDisruptionBudget, PodSecurityPolicy)
-		// - 6 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment, PodSecurityPolicy, Service)
+		// - 6 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment, PodSecurityPolicy, Service, Secret)
 		// - 1 namespace
 		// - 1 PriorityClass
-		c, err := render.Calico(k8sServiceEp, instance, false, nil, nil, nil, nil, typhaNodeTLS, nil, nil, nil, nil, operator.ProviderNone, nil, false, "", dns.DefaultClusterDomain, false, nil, 9094, 0, nil)
+		c, err := render.Calico(k8sServiceEp, instance, false, nil, nil, nil, nil, typhaNodeTLS, nil, nil, nil, nil, operator.ProviderNone, nil, false, "", dns.DefaultClusterDomain, false, nil, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		Expect(componentCount(c.Render())).To(Equal(6 + 4 + 2 + 7 + 6 + 1 + 1))
 	})
@@ -103,7 +103,7 @@ var _ = Describe("Rendering tests", func() {
 		var nodeMetricsPort int32 = 9081
 		instance.Variant = operator.TigeraSecureEnterprise
 		instance.NodeMetricsPort = &nodeMetricsPort
-		c, err := render.Calico(k8sServiceEp, instance, true, nil, nil, nil, nil, typhaNodeTLS, nil, nil, nil, nil, operator.ProviderNone, nil, false, "", dns.DefaultClusterDomain, false, nil, 9094, 0, nil)
+		c, err := render.Calico(k8sServiceEp, instance, true, nil, nil, nil, nil, typhaNodeTLS, nil, nil, nil, nil, operator.ProviderNone, nil, false, "", dns.DefaultClusterDomain, false, nil, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		Expect(componentCount(c.Render())).To(Equal((6 + 4 + 2 + 7 + 6 + 1 + 1) + 1 + 1))
 	})
@@ -122,7 +122,7 @@ var _ = Describe("Rendering tests", func() {
 				Name: render.ManagerInternalTLSSecretName, Namespace: rmeta.OperatorNamespace(),
 			},
 		}
-		c, err := render.Calico(k8sServiceEp, instance, true, &operator.ManagementCluster{}, nil, nil, nil, typhaNodeTLS, internalManagerTLSSecret, nil, nil, nil, operator.ProviderNone, nil, false, "", dns.DefaultClusterDomain, false, nil, 9094, 0, nil)
+		c, err := render.Calico(k8sServiceEp, instance, true, &operator.ManagementCluster{}, nil, nil, nil, typhaNodeTLS, internalManagerTLSSecret, nil, nil, nil, operator.ProviderNone, nil, false, "", dns.DefaultClusterDomain, false, nil, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 
 		expectedResources := []struct {
@@ -179,7 +179,7 @@ var _ = Describe("Rendering tests", func() {
 
 	It("should render calico with a apparmor profile if annotation is present in installation", func() {
 		apparmorProf := "foobar"
-		r, err := render.Calico(k8sServiceEp, instance, true, nil, nil, nil, nil, typhaNodeTLS, nil, nil, nil, nil, operator.ProviderNone, nil, false, apparmorProf, dns.DefaultClusterDomain, false, nil, 0, 0, nil)
+		r, err := render.Calico(k8sServiceEp, instance, true, nil, nil, nil, nil, typhaNodeTLS, nil, nil, nil, nil, operator.ProviderNone, nil, false, apparmorProf, dns.DefaultClusterDomain, false, nil, 0, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		comps := r.Render()
 		var cn *appsv1.DaemonSet
@@ -204,7 +204,7 @@ var _ = Describe("Rendering tests", func() {
 		}
 		bgpLayout.Name = "bgp-layout"
 		bgpLayout.Namespace = "tigera-operator"
-		r, err := render.Calico(k8sServiceEp, instance, true, nil, nil, nil, nil, typhaNodeTLS, nil, nil, nil, nil, operator.ProviderNone, nil, false, "", dns.DefaultClusterDomain, false, nil, 0, 0, bgpLayout)
+		r, err := render.Calico(k8sServiceEp, instance, true, nil, nil, nil, nil, typhaNodeTLS, nil, nil, nil, nil, operator.ProviderNone, nil, false, "", dns.DefaultClusterDomain, false, nil, 0, 0, bgpLayout, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		comps := r.Render()
 		var cm *corev1.ConfigMap
@@ -224,6 +224,41 @@ var _ = Describe("Rendering tests", func() {
 		Expect(ds).ToNot(BeNil())
 		Expect(ds.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/bgp-layout"))
 		Expect(ds.Spec.Template.Annotations["hash.operator.tigera.io/bgp-layout"]).NotTo(BeEmpty())
+	})
+
+	It("should handle collectProcessPath in logCollector", func() {
+		testNode := func(processPath operator.CollectProcessPathOption, expectedHostPID bool) {
+			var logCollector operator.LogCollector
+			logCollector.Spec.CollectProcessPath = &processPath
+			r, err := render.Calico(k8sServiceEp, instance, true, nil, nil, nil, nil, typhaNodeTLS, nil, nil, nil, nil, operator.ProviderNone, nil, false, "", dns.DefaultClusterDomain, false, nil, 0, 0, nil, &logCollector)
+			Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
+			comps := r.Render()
+			var ds *appsv1.DaemonSet
+			for _, comp := range comps {
+				resources, _ := comp.Objects()
+				r := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+				if r != nil {
+					ds = r.(*appsv1.DaemonSet)
+				}
+			}
+			checkEnvVar := func(ds *appsv1.DaemonSet) bool {
+				envPresent := false
+				for _, env := range ds.Spec.Template.Spec.Containers[0].Env {
+					if env.Name == "FELIX_FLOWLOGSCOLLECTPROCESSPATH" {
+						envPresent = true
+						if env.Value == "true" {
+							return true
+						}
+					}
+				}
+				return !envPresent
+			}
+			Expect(ds).ToNot(BeNil())
+			Expect(ds.Spec.Template.Spec.HostPID).To(Equal(expectedHostPID))
+			Expect(checkEnvVar(ds)).To(Equal(true))
+		}
+		testNode(operator.CollectProcessPathEnable, true)
+		testNode(operator.CollectProcessPathDisable, false)
 	})
 })
 

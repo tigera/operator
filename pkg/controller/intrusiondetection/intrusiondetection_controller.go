@@ -29,6 +29,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/cloudconfig"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
@@ -83,7 +84,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	go utils.WaitToAddResourceWatch(controller, k8sClient, log, dpiAPIReady,
 		&v3.DeepPacketInspection{TypeMeta: metav1.TypeMeta{Kind: v3.KindDeepPacketInspection}})
 
-	return add(mgr, controller)
+	return add(mgr, controller, opts.ElasticExternal)
 }
 
 // newReconciler returns a new reconcile.Reconciler
@@ -96,13 +97,14 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
 		dpiAPIReady:     dpiAPIReady,
+		elasticExternal: opts.ElasticExternal,
 	}
 	r.status.Run()
 	return r
 }
 
 // add adds watches for resources that are available at startup
-func add(mgr manager.Manager, c controller.Controller) error {
+func add(mgr manager.Manager, c controller.Controller, elasticExternal bool) error {
 	var err error
 
 	// Watch for changes to primary resource IntrusionDetection
@@ -170,6 +172,12 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
 	}
 
+	if elasticExternal {
+		if err = utils.AddConfigMapWatch(c, cloudconfig.CloudConfigConfigMapName, rmeta.OperatorNamespace()); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch the ConfigMap resource: %v", err)
+		}
+	}
+
 	return nil
 }
 
@@ -187,6 +195,7 @@ type ReconcileIntrusionDetection struct {
 	clusterDomain   string
 	licenseAPIReady *utils.ReadyFlag
 	dpiAPIReady     *utils.ReadyFlag
+	elasticExternal bool
 }
 
 // Reconcile reads that state of the cluster for a IntrusionDetection object and makes changes based on the state read
@@ -350,6 +359,23 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		}
 	}
 
+	tenantId := ""
+	if r.elasticExternal {
+		cloudConfig, err := utils.GetCloudConfig(ctx, r.client)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				reqLogger.Info("Failed to retrieve External Elasticsearch config map")
+				r.status.SetDegraded("Failed to retrieve External Elasticsearch config map", err.Error())
+				return reconcile.Result{}, nil
+			}
+			reqLogger.Error(err, err.Error())
+			r.status.SetDegraded("Unable to read External Elasticsearch config map", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		tenantId = cloudConfig.TenantId()
+	}
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -369,6 +395,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		managementClusterConnection != nil,
 		hasNoLicense,
 		managerInternalTLSSecret,
+		tenantId,
 	)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {

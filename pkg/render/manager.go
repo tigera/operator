@@ -102,6 +102,7 @@ func Manager(
 	internalTrafficSecret *corev1.Secret,
 	clusterDomain string,
 	esLicenseType ElasticsearchLicenseType,
+	tenantID string,
 ) (Component, error) {
 	var tlsSecrets []*corev1.Secret
 	tlsAnnotations := map[string]string{
@@ -146,6 +147,7 @@ func Manager(
 		installation:                  installation,
 		managementCluster:             managementCluster,
 		esLicenseType:                 esLicenseType,
+		tenantID:                      tenantID,
 	}, nil
 }
 
@@ -168,6 +170,7 @@ type managerComponent struct {
 	proxyImage                    string
 	esProxyImage                  string
 	csrInitImage                  string
+	tenantID                      string
 }
 
 func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -649,6 +652,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		{Name: "ELASTIC_LICENSE_TYPE", Value: string(c.esLicenseType)},
 		{Name: "ELASTIC_VERSION", Value: components.ComponentEckElasticsearch.Version},
 		{Name: "ELASTIC_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.clusterDomain)},
+		{Name: "ELASTIC_INDEX_TENANT_ID", Value: c.tenantID},
 	}
 
 	if c.keyValidatorConfig != nil {

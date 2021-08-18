@@ -34,6 +34,7 @@ import (
 	"github.com/tigera/operator/controllers"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/controller/options"
+	"github.com/tigera/operator/pkg/render/common/cloudconfig"
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	kerror "k8s.io/apimachinery/pkg/api/errors"
@@ -57,6 +58,11 @@ var _ = Describe("Mainline component function tests", func() {
 			Spec:       corev1.NamespaceSpec{},
 		}
 		err := c.Create(context.Background(), ns)
+		if err != nil && !kerror.IsAlreadyExists(err) {
+			Expect(err).NotTo(HaveOccurred())
+		}
+		cloudConfig := cloudconfig.NewCloudConfig("id", "tenantName", "externalES.com", "externalKB.com", false, false)
+		err = c.Create(context.Background(), cloudConfig.ConfigMap())
 		if err != nil && !kerror.IsAlreadyExists(err) {
 			Expect(err).NotTo(HaveOccurred())
 		}

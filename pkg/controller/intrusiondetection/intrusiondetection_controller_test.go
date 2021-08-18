@@ -36,6 +36,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/cloudconfig"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -83,6 +84,9 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
 		mockStatus.On("ReadyToMonitor")
 
+		cloudConfig := cloudconfig.NewCloudConfig("id", "tenantName", "externalES.com", "externalKB.com", false, false)
+		Expect(c.Create(ctx, cloudConfig.ConfigMap())).ToNot(HaveOccurred())
+
 		// Create an object we can use throughout the test to do the compliance reconcile loops.
 		// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 		r = ReconcileIntrusionDetection{
@@ -92,6 +96,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			status:          mockStatus,
 			licenseAPIReady: &utils.ReadyFlag{},
 			dpiAPIReady:     &utils.ReadyFlag{},
+			elasticExternal: false,
 		}
 
 		// We start off with a 'standard' installation, with nothing special

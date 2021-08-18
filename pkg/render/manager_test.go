@@ -397,7 +397,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			rtest.CreateCertSecret(render.ManagerTLSSecretName, rmeta.OperatorNamespace()),
 			nil, false,
 			i,
-			nil, nil, nil, "", render.ElasticsearchLicenseTypeUnknown)
+			nil, nil, nil, "", render.ElasticsearchLicenseTypeUnknown, "")
 		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 		resources, _ := component.Objects()
 		return rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -504,6 +504,7 @@ func renderObjects(oidc bool, managementCluster *operatorv1.ManagementCluster, i
 		internalTraffic,
 		dns.DefaultClusterDomain,
 		render.ElasticsearchLicenseTypeEnterpriseTrial,
+		"",
 	)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 	Expect(component.ResolveImages(nil)).To(BeNil())

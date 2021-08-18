@@ -61,6 +61,7 @@ func IntrusionDetection(
 	managedCluster bool,
 	hasNoLicense bool,
 	managerInternalTLSSecret *corev1.Secret,
+	tenantId string,
 ) Component {
 	return &intrusionDetectionComponent{
 		lc:                       lc,
@@ -75,6 +76,7 @@ func IntrusionDetection(
 		managedCluster:           managedCluster,
 		hasNoLicense:             hasNoLicense,
 		managerInternalTLSSecret: managerInternalTLSSecret,
+		tenantId:                 tenantId,
 	}
 }
 
@@ -93,6 +95,7 @@ type intrusionDetectionComponent struct {
 	managedCluster           bool
 	hasNoLicense             bool
 	managerInternalTLSSecret *corev1.Secret
+	tenantId                 string
 }
 
 func (c *intrusionDetectionComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -229,6 +232,10 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() corev1.Co
 			{
 				Name:  "KIBANA_SCHEME",
 				Value: kScheme,
+			},
+			{
+				Name:  "KIBANA_SPACE_ID",
+				Value: c.tenantId,
 			},
 			{
 				// We no longer need to start the xpack trial from the installer pod. Logstorage
@@ -475,6 +482,12 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 			{Name: "DISABLE_ALERTS", Value: "yes"},
 		}
 		container.Env = append(container.Env, envVars...)
+	}
+
+	if c.tenantId != "" {
+		container.Env = append(container.Env, []corev1.EnvVar{
+			{Name: "ELASTIC_INDEX_TENANT_ID", Value: c.tenantId},
+		}...)
 	}
 
 	return relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{

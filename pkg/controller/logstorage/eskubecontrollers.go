@@ -91,7 +91,8 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 			return reconcile.Result{}, false, err
 		}
 	}
-	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
+
+	kubeControllersCfg := &kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:                 k8sapi.Endpoint,
 		Installation:                 install,
 		ManagementCluster:            managementCluster,
@@ -104,7 +105,15 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 		KibanaSecret:                 kubeControllerKibanaPublicCertSecret,
 		LogStorageExists:             true,
 	}
-	esKubeControllerComponents := kubecontrollers.NewElasticsearchKubeControllers(&kubeControllersCfg)
+
+	// Multi-tenancy modifications.
+	if r.elasticExternal {
+		if result, proceed, err := r.esKubeControllersAddCloudModificationsToConfig(kubeControllersCfg, reqLogger, ctx); err != nil || !proceed {
+			return result, proceed, err
+		}
+	}
+
+	esKubeControllerComponents := kubecontrollers.NewElasticsearchKubeControllers(kubeControllersCfg)
 
 	imageSet, err := imageset.GetImageSet(ctx, r.client, install.Variant)
 	if err != nil {

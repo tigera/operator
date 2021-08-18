@@ -30,6 +30,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/cloudconfig"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
@@ -76,7 +77,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
 
-	return add(mgr, controller)
+	return add(mgr, controller, opts.ElasticExternal)
 }
 
 // newReconciler returns a new reconcile.Reconciler
@@ -88,6 +89,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		status:          status.New(mgr.GetClient(), "manager", opts.KubernetesVersion),
 		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
+		elasticExternal: opts.ElasticExternal,
 	}
 	c.status.Run()
 	return c
@@ -95,7 +97,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 }
 
 // add adds watches for resources that are available at startup
-func add(mgr manager.Manager, c controller.Controller) error {
+func add(mgr manager.Manager, c controller.Controller, elasticExternal bool) error {
 	var err error
 
 	// Watch for changes to primary resource Manager
@@ -139,6 +141,12 @@ func add(mgr manager.Manager, c controller.Controller) error {
 
 	if err = utils.AddConfigMapWatch(c, render.CloudManagerConfigOverrideName, rmeta.OperatorNamespace()); err != nil {
 		return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %v", err)
+	}
+
+	if elasticExternal {
+		if err = utils.AddConfigMapWatch(c, cloudconfig.CloudConfigConfigMapName, rmeta.OperatorNamespace()); err != nil {
+			return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %v", err)
+		}
 	}
 
 	if err = utils.AddNetworkWatch(c); err != nil {
@@ -189,6 +197,7 @@ type ReconcileManager struct {
 	status          status.StatusManager
 	clusterDomain   string
 	licenseAPIReady *utils.ReadyFlag
+	elasticExternal bool
 }
 
 // GetManager returns the default manager instance with defaults populated.
@@ -508,6 +517,23 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, nil
 	}
 
+	tenantId := ""
+	if r.elasticExternal {
+		cloudConfig, err := utils.GetCloudConfig(ctx, r.client)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				reqLogger.Info("Failed to retrieve External Elasticsearch config map")
+				r.status.SetDegraded("Failed to retrieve External Elasticsearch config map", err.Error())
+				return reconcile.Result{}, nil
+			}
+			reqLogger.Error(err, err.Error())
+			r.status.SetDegraded("Unable to read cloud config map", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		tenantId = cloudConfig.TenantId()
+	}
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -528,6 +554,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		internalTrafficSecret,
 		r.clusterDomain,
 		elasticLicenseType,
+		tenantId,
 	)
 	if err != nil {
 		log.Error(err, "Error rendering Manager")

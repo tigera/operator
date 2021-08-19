@@ -43,7 +43,6 @@ type ServiceEndpoint struct {
 	Port string
 }
 
-
 // EnvVars returns a slice of v1.EnvVars KUBERNETES_SERVICE_HOST/PORT if the Host and Port
 // of the ServiceEndpoint were set. It returns a nil slice if either was empty as both
 // need to be set.

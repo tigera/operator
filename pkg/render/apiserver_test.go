@@ -526,7 +526,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	It("should not set KUBERENETES_SERVICE_... variables if not host networked on Docker EE with proxy.local", func() {
 		k8sServiceEp.Host = "proxy.local"
 		k8sServiceEp.Port = "1234"
-		instance.KubernetesProvider=operator.ProviderDockerEE
+		instance.KubernetesProvider = operator.ProviderDockerEE
 
 		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
@@ -543,7 +543,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	It("should set KUBERENETES_SERVICE_... variables if not host networked on Docker EE with non-proxy address", func() {
 		k8sServiceEp.Host = "k8shost"
 		k8sServiceEp.Port = "1234"
-		instance.KubernetesProvider=operator.ProviderDockerEE
+		instance.KubernetesProvider = operator.ProviderDockerEE
 
 		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
@@ -1233,7 +1233,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 	It("should set KUBERNETES_SERVICE_... variables if host networked", func() {
 		k8sServiceEp.Host = "k8shost"
 		k8sServiceEp.Port = "1234"
-		instance.KubernetesProvider=operator.ProviderDockerEE
+		instance.KubernetesProvider = operator.ProviderDockerEE
 
 		component, err := render.APIServer(k8sServiceEp, instance, true, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
@@ -1250,7 +1250,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 	It("should not set KUBERNETES_SERVICE_... variables if Docker EE using proxy.local", func() {
 		k8sServiceEp.Host = "proxy.local"
 		k8sServiceEp.Port = "1234"
-		instance.KubernetesProvider=operator.ProviderDockerEE
+		instance.KubernetesProvider = operator.ProviderDockerEE
 
 		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
@@ -1267,7 +1267,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 	It("should not set KUBERNETES_SERVICE_... variables if Docker EE using non-proxy address", func() {
 		k8sServiceEp.Host = "k8shost"
 		k8sServiceEp.Port = "1234"
-		instance.KubernetesProvider=operator.ProviderDockerEE
+		instance.KubernetesProvider = operator.ProviderDockerEE
 
 		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)

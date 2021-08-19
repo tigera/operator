@@ -50,9 +50,10 @@ var _ = Describe("Node rendering tests", func() {
 	var typhaNodeTLS *render.TyphaNodeTLS
 	var k8sServiceEp k8sapi.ServiceEndpoint
 	one := intstr.FromInt(1)
-	defaultNumExpectedResources := 6
+	defaultNumExpectedResources := 9
 	const defaultClusterDomain = "svc.cluster.local"
 	var defaultMode int32 = 420
+	var cfg render.NodeConfiguration
 
 	BeforeEach(func() {
 		ff := true
@@ -76,12 +77,33 @@ var _ = Describe("Node rendering tests", func() {
 				},
 			},
 		}
+
+		// Create a dummy secret to pass as input.
 		typhaNodeTLS = &render.TyphaNodeTLS{
 			CAConfigMap: &v1.ConfigMap{},
 			TyphaSecret: &v1.Secret{},
 			NodeSecret:  &v1.Secret{},
 		}
+		typhaNodeTLS.NodeSecret.Name = "node-certs"
+		typhaNodeTLS.NodeSecret.Namespace = "tigera-operator"
+		typhaNodeTLS.NodeSecret.Kind = "Secret"
+		typhaNodeTLS.NodeSecret.APIVersion = "v1"
+
+		typhaNodeTLS.CAConfigMap.Name = "typha-node-ca"
+		typhaNodeTLS.CAConfigMap.Namespace = "tigera-operator"
+		typhaNodeTLS.CAConfigMap.Kind = "ConfigMap"
+		typhaNodeTLS.CAConfigMap.APIVersion = "v1"
+
+		// Dummy service endpoint for k8s API.
 		k8sServiceEp = k8sapi.ServiceEndpoint{}
+
+		// Create a default configuration.
+		cfg = render.NodeConfiguration{
+			K8sServiceEp:  k8sServiceEp,
+			Installation:  defaultInstance,
+			TLS:           typhaNodeTLS,
+			ClusterDomain: defaultClusterDomain,
+		}
 	})
 
 	It("should render all resources for a default configuration", func() {
@@ -92,16 +114,19 @@ var _ = Describe("Node rendering tests", func() {
 			version string
 			kind    string
 		}{
+			{name: "calico-priority", ns: "", group: "scheduling.k8s.io", version: "v1", kind: "PriorityClass"},
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
 		defaultInstance.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "", nil)
+		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -317,9 +342,12 @@ var _ = Describe("Node rendering tests", func() {
 			version string
 			kind    string
 		}{
+			{name: "calico-priority", ns: "", group: "scheduling.k8s.io", version: "v1", kind: "PriorityClass"},
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -328,7 +356,7 @@ var _ = Describe("Node rendering tests", func() {
 		defaultInstance.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
 		dpBPF := operator.LinuxDataplaneBPF
 		defaultInstance.CalicoNetwork.LinuxDataplane = &dpBPF
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "", nil)
+		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -559,7 +587,8 @@ var _ = Describe("Node rendering tests", func() {
 		mtu := int32(1450)
 		defaultInstance.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
 		defaultInstance.CalicoNetwork.MTU = &mtu
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "", nil)
+
+		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
@@ -625,17 +654,21 @@ var _ = Describe("Node rendering tests", func() {
 			version string
 			kind    string
 		}{
+			{name: "calico-priority", ns: "", group: "scheduling.k8s.io", version: "v1", kind: "PriorityClass"},
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "calico-node-metrics", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 		defaultInstance.Variant = operator.TigeraSecureEnterprise
+		cfg.NodeReporterMetricsPort = 9081
 
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 9081, "", nil)
+		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -731,9 +764,12 @@ var _ = Describe("Node rendering tests", func() {
 			version string
 			kind    string
 		}{
+			{name: "calico-priority", ns: "", group: "scheduling.k8s.io", version: "v1", kind: "PriorityClass"},
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -744,7 +780,7 @@ var _ = Describe("Node rendering tests", func() {
 		defaultInstance.KubernetesProvider = operator.ProviderEKS
 		defaultInstance.CalicoNetwork.BGP = &disabled
 		defaultInstance.CalicoNetwork.IPPools[0].Encapsulation = operator.EncapsulationVXLAN
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "", nil)
+		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -956,22 +992,27 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should properly render a configuration using the AmazonVPC CNI plugin", func() {
+		// Override the installation with one configured for AmazonVPC CNI.
 		amazonVPCInstalllation := &operator.InstallationSpec{
 			KubernetesProvider: operator.ProviderEKS,
 			CNI:                &operator.CNISpec{Type: operator.PluginAmazonVPC},
 			FlexVolumePath:     "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
 		}
+		cfg.Installation = amazonVPCInstalllation
 
-		component := render.Node(k8sServiceEp, amazonVPCInstalllation, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "", nil)
+		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(5))
+		Expect(len(resources)).To(Equal(8))
 
 		// Should render the correct resources.
 		Expect(rtest.GetResource(resources, "calico-node", "calico-system", "", "v1", "ServiceAccount")).ToNot(BeNil())
 		Expect(rtest.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")).ToNot(BeNil())
 		Expect(rtest.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")).ToNot(BeNil())
 		Expect(rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")).ToNot(BeNil())
+		Expect(rtest.GetResource(resources, "node-certs", "calico-system", "", "v1", "Secret")).ToNot(BeNil())
+		Expect(rtest.GetResource(resources, "typha-node-ca", "calico-system", "", "v1", "ConfigMap")).ToNot(BeNil())
+		Expect(rtest.GetResource(resources, "calico-priority", "", "scheduling.k8s.io", "v1", "PriorityClass")).ToNot(BeNil())
 		dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
 
@@ -1004,6 +1045,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "IP", Value: "none"},
 			{Name: "IP6", Value: "none"},
 			{Name: "NO_DEFAULT_POOLS", Value: "true"},
+			{Name: "CALICO_MANAGE_CNI", Value: "false"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
@@ -1114,8 +1156,9 @@ var _ = Describe("Node rendering tests", func() {
 				},
 				FlexVolumePath: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
 			}
+			cfg.Installation = installlation
 
-			component := render.Node(k8sServiceEp, installlation, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "", nil)
+			component := render.Node(&cfg)
 			Expect(component.ResolveImages(nil)).To(BeNil())
 			resources, _ := component.Objects()
 
@@ -1171,9 +1214,12 @@ var _ = Describe("Node rendering tests", func() {
 			version string
 			kind    string
 		}{
+			{name: "calico-priority", ns: "", group: "scheduling.k8s.io", version: "v1", kind: "PriorityClass"},
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -1184,7 +1230,7 @@ var _ = Describe("Node rendering tests", func() {
 		defaultInstance.KubernetesProvider = operator.ProviderEKS
 		defaultInstance.CalicoNetwork.BGP = &disabled
 		defaultInstance.CalicoNetwork.IPPools[0].Encapsulation = operator.EncapsulationVXLAN
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "", nil)
+		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -1395,22 +1441,25 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should properly render a configuration using the AmazonVPC CNI plugin", func() {
-		amazonVPCInstalllation := &operator.InstallationSpec{
+		cfg.Installation = &operator.InstallationSpec{
 			KubernetesProvider: operator.ProviderEKS,
 			CNI:                &operator.CNISpec{Type: operator.PluginAmazonVPC},
 			FlexVolumePath:     "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
 		}
 
-		component := render.Node(k8sServiceEp, amazonVPCInstalllation, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "", nil)
+		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(5))
+		Expect(len(resources)).To(Equal(8))
 
 		// Should render the correct resources.
 		Expect(rtest.GetResource(resources, "calico-node", "calico-system", "", "v1", "ServiceAccount")).ToNot(BeNil())
 		Expect(rtest.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")).ToNot(BeNil())
 		Expect(rtest.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")).ToNot(BeNil())
 		Expect(rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")).ToNot(BeNil())
+		Expect(rtest.GetResource(resources, "node-certs", "calico-system", "", "v1", "Secret")).ToNot(BeNil())
+		Expect(rtest.GetResource(resources, "typha-node-ca", "calico-system", "", "v1", "ConfigMap")).ToNot(BeNil())
+		Expect(rtest.GetResource(resources, "calico-priority", "", "scheduling.k8s.io", "v1", "PriorityClass")).ToNot(BeNil())
 		dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
 
@@ -1443,6 +1492,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "IP", Value: "none"},
 			{Name: "IP6", Value: "none"},
 			{Name: "NO_DEFAULT_POOLS", Value: "true"},
+			{Name: "CALICO_MANAGE_CNI", Value: "false"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
@@ -1552,16 +1602,19 @@ var _ = Describe("Node rendering tests", func() {
 			version string
 			kind    string
 		}{
+			{name: "calico-priority", ns: "", group: "scheduling.k8s.io", version: "v1", kind: "PriorityClass"},
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
 		defaultInstance.FlexVolumePath = "/etc/kubernetes/kubelet-plugins/volume/exec/"
 		defaultInstance.KubernetesProvider = operator.ProviderOpenShift
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "", nil)
+		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -1684,9 +1737,12 @@ var _ = Describe("Node rendering tests", func() {
 			version string
 			kind    string
 		}{
+			{name: "calico-priority", ns: "", group: "scheduling.k8s.io", version: "v1", kind: "PriorityClass"},
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "calico-node-metrics", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -1694,7 +1750,9 @@ var _ = Describe("Node rendering tests", func() {
 
 		defaultInstance.Variant = operator.TigeraSecureEnterprise
 		defaultInstance.KubernetesProvider = operator.ProviderOpenShift
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 9081, "", nil)
+		cfg.NodeReporterMetricsPort = 9081
+
+		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -1795,19 +1853,22 @@ var _ = Describe("Node rendering tests", func() {
 			version string
 			kind    string
 		}{
+			{name: "calico-priority", ns: "", group: "scheduling.k8s.io", version: "v1", kind: "PriorityClass"},
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: render.BirdTemplatesConfigMapName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
-		bt := map[string]string{
+		cfg.BirdTemplates = map[string]string{
 			"template-1.yaml": "dataforTemplate1 that is not used here",
 		}
 		defaultInstance.KubernetesProvider = operator.ProviderOpenShift
-		component := render.Node(k8sServiceEp, defaultInstance, bt, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "", nil)
+		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -1848,7 +1909,7 @@ var _ = Describe("Node rendering tests", func() {
 	Describe("AKS", func() {
 		It("should avoid virtual nodes", func() {
 			defaultInstance.KubernetesProvider = operator.ProviderAKS
-			component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "", nil)
+			component := render.Node(&cfg)
 			Expect(component.ResolveImages(nil)).To(BeNil())
 			resources, _ := component.Objects()
 			dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
@@ -1871,7 +1932,7 @@ var _ = Describe("Node rendering tests", func() {
 		It("should support canReach", func() {
 			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
 			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.CanReach = "1.1.1.1"
-			component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "", nil)
+			component := render.Node(&cfg)
 			Expect(component.ResolveImages(nil)).To(BeNil())
 			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(defaultNumExpectedResources))
@@ -1887,7 +1948,7 @@ var _ = Describe("Node rendering tests", func() {
 		It("should support interface regex", func() {
 			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
 			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.Interface = "eth*"
-			component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "", nil)
+			component := render.Node(&cfg)
 			Expect(component.ResolveImages(nil)).To(BeNil())
 			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(defaultNumExpectedResources))
@@ -1903,7 +1964,7 @@ var _ = Describe("Node rendering tests", func() {
 		It("should support skip-interface regex", func() {
 			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
 			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.SkipInterface = "eth*"
-			component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "", nil)
+			component := render.Node(&cfg)
 			Expect(component.ResolveImages(nil)).To(BeNil())
 			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(defaultNumExpectedResources))
@@ -1919,7 +1980,7 @@ var _ = Describe("Node rendering tests", func() {
 		It("should support cidr", func() {
 			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
 			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.CIDRS = []string{"10.0.1.0/24", "10.0.2.0/24"}
-			component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "", nil)
+			component := render.Node(&cfg)
 			Expect(component.ResolveImages(nil)).To(BeNil())
 			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(defaultNumExpectedResources))
@@ -1936,7 +1997,8 @@ var _ = Describe("Node rendering tests", func() {
 
 	It("should include updates needed for the core upgrade", func() {
 		defaultInstance.KubernetesProvider = operator.ProviderOpenShift
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, true, "", defaultClusterDomain, 0, "", nil)
+		cfg.MigrateNamespaces = true
+		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(defaultNumExpectedResources-1), fmt.Sprintf("resources are %v", resources))
@@ -1972,7 +2034,7 @@ var _ = Describe("Node rendering tests", func() {
 		func(pool operator.IPPool, expect map[string]string) {
 			// Provider does not matter for IPPool configuration
 			defaultInstance.CalicoNetwork.IPPools = []operator.IPPool{pool}
-			component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "", nil)
+			component := render.Node(&cfg)
 			Expect(component.ResolveImages(nil)).To(BeNil())
 			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(defaultNumExpectedResources))
@@ -2119,7 +2181,9 @@ var _ = Describe("Node rendering tests", func() {
 	It("should not enable prometheus metrics if NodeMetricsPort is nil", func() {
 		defaultInstance.Variant = operator.TigeraSecureEnterprise
 		defaultInstance.NodeMetricsPort = nil
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "", nil)
+		cfg.NodeReporterMetricsPort = 9081
+
+		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(defaultNumExpectedResources + 1))
@@ -2140,7 +2204,7 @@ var _ = Describe("Node rendering tests", func() {
 		var nodeMetricsPort int32 = 1234
 		defaultInstance.Variant = operator.TigeraSecureEnterprise
 		defaultInstance.NodeMetricsPort = &nodeMetricsPort
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "", nil)
+		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(defaultNumExpectedResources + 1))
@@ -2165,7 +2229,7 @@ var _ = Describe("Node rendering tests", func() {
 
 	It("should not render a FlexVolume container if FlexVolumePath is set to None", func() {
 		defaultInstance.FlexVolumePath = "None"
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "", nil)
+		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(defaultNumExpectedResources))
@@ -2180,7 +2244,7 @@ var _ = Describe("Node rendering tests", func() {
 	It("should render MaxUnavailable if a custom value was set", func() {
 		two := intstr.FromInt(2)
 		defaultInstance.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &two
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "", nil)
+		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(defaultNumExpectedResources))
@@ -2201,9 +2265,12 @@ var _ = Describe("Node rendering tests", func() {
 			version string
 			kind    string
 		}{
+			{name: "calico-priority", ns: "", group: "scheduling.k8s.io", version: "v1", kind: "PriorityClass"},
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -2212,7 +2279,7 @@ var _ = Describe("Node rendering tests", func() {
 		defaultInstance.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
 		hpd := operator.HostPortsDisabled
 		defaultInstance.CalicoNetwork.HostPorts = &hpd
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "", nil)
+		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -2300,7 +2367,7 @@ var _ = Describe("Node rendering tests", func() {
 	It("should render a proper 'allow_ip_forwarding' container setting in the cni config", func() {
 		cif := operator.ContainerIPForwardingEnabled
 		defaultInstance.CalicoNetwork.ContainerIPForwarding = &cif
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "", nil)
+		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(defaultNumExpectedResources))
@@ -2346,7 +2413,7 @@ var _ = Describe("Node rendering tests", func() {
 
 	It("should render cni config with host-local", func() {
 		defaultInstance.CNI.IPAM.Type = operator.IPAMPluginHostLocal
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "", nil)
+		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(defaultNumExpectedResources))
@@ -2383,7 +2450,8 @@ var _ = Describe("Node rendering tests", func() {
 	It("should render cni config with k8s endpoint", func() {
 		k8sServiceEp.Host = "k8shost"
 		k8sServiceEp.Port = "1234"
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "", nil)
+		cfg.K8sServiceEp = k8sServiceEp
+		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(defaultNumExpectedResources))
@@ -2438,7 +2506,8 @@ var _ = Describe("Node rendering tests", func() {
 
 	It("should render seccomp profiles", func() {
 		seccompProf := "localhost/calico-node-v1"
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, seccompProf, defaultClusterDomain, 0, "", nil)
+		cfg.NodeAppArmorProfile = seccompProf
+		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
@@ -2451,13 +2520,13 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should set TIGERA_*_SECURITY_GROUP variables when AmazonCloudIntegration is defined", func() {
-		aci := &operator.AmazonCloudIntegration{
+		cfg.AmazonCloudIntegration = &operator.AmazonCloudIntegration{
 			Spec: operator.AmazonCloudIntegrationSpec{
 				NodeSecurityGroupIDs: []string{"sg-nodeid", "sg-masterid"},
 				PodSecurityGroupID:   "sg-podsgid",
 			},
 		}
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, aci, false, "", defaultClusterDomain, 0, "", nil)
+		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
@@ -2494,7 +2563,7 @@ var _ = Describe("Node rendering tests", func() {
 			},
 		}
 
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "", nil)
+		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
@@ -2520,9 +2589,12 @@ var _ = Describe("Node rendering tests", func() {
 			version string
 			kind    string
 		}{
+			{name: "calico-priority", ns: "", group: "scheduling.k8s.io", version: "v1", kind: "PriorityClass"},
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -2537,7 +2609,7 @@ var _ = Describe("Node rendering tests", func() {
 			Encapsulation: operator.EncapsulationNone,
 			NATOutgoing:   operator.NATOutgoingEnabled,
 		}}
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "", nil)
+		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -2696,7 +2768,7 @@ var _ = Describe("Node rendering tests", func() {
 
 			defaultInstance.CalicoNetwork.BGP = &bgpOption
 
-			component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "", nil)
+			component := render.Node(&cfg)
 			Expect(component.ResolveImages(nil)).To(BeNil())
 			resources, _ := component.Objects()
 			dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
@@ -2718,11 +2790,11 @@ var _ = Describe("Node rendering tests", func() {
 
 	Context("with k8s overrides set", func() {
 		It("should override k8s endpoints", func() {
-			k8sServiceEp := k8sapi.ServiceEndpoint{
+			cfg.K8sServiceEp = k8sapi.ServiceEndpoint{
 				Host: "k8shost",
 				Port: "1234",
 			}
-			component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "", nil)
+			component := render.Node(&cfg)
 			Expect(component.ResolveImages(nil)).To(BeNil())
 			resources, _ := component.Objects()
 			Expect(len(resources)).To(Equal(defaultNumExpectedResources))
@@ -2759,6 +2831,8 @@ var _ = Describe("Node rendering tests", func() {
 
 	It("should render extra resources when certificate management is enabled", func() {
 		defaultInstance.CertificateManagement = &operator.CertificateManagement{CACert: []byte("<ca>"), SignerName: "a.b/c"}
+		cfg.TLS.NodeSecret = nil
+		cfg.TLS.TyphaSecret = nil
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -2766,9 +2840,11 @@ var _ = Describe("Node rendering tests", func() {
 			version string
 			kind    string
 		}{
+			{name: "calico-priority", ns: "", group: "scheduling.k8s.io", version: "v1", kind: "PriorityClass"},
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -2776,7 +2852,7 @@ var _ = Describe("Node rendering tests", func() {
 			{name: "calico-node:csr-creator", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "", nil)
+		component := render.Node(&cfg)
 		resources, _ := component.Objects()
 
 		// Should render the correct resources.
@@ -2800,7 +2876,8 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should handle BGP layout", func() {
-		component := render.Node(k8sServiceEp, defaultInstance, nil, typhaNodeTLS, nil, false, "", defaultClusterDomain, 0, "bgp-layout-hash", nil)
+		cfg.BGPLayouts = &v1.ConfigMap{Data: map[string]string{"test": "data"}}
+		component := render.Node(&cfg)
 		resources, _ := component.Objects()
 
 		dep := rtest.GetResource(resources, common.NodeDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet")
@@ -2808,7 +2885,7 @@ var _ = Describe("Node rendering tests", func() {
 		deploy, ok := dep.(*appsv1.DaemonSet)
 		Expect(ok).To(BeTrue())
 		Expect(deploy.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/bgp-layout"))
-		Expect(deploy.Spec.Template.Annotations["hash.operator.tigera.io/bgp-layout"]).To(Equal("bgp-layout-hash"))
+		Expect(deploy.Spec.Template.Annotations["hash.operator.tigera.io/bgp-layout"]).To(Equal("46aec5c60cd6c6fc95979e247a8370bdb9f23b0f"))
 		Expect(deploy.Spec.Template.Spec.Volumes).To(ContainElement(v1.Volume{
 			Name: render.BGPLayoutVolumeName,
 			VolumeSource: v1.VolumeSource{

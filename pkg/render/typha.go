@@ -37,6 +37,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
+	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
 const (
@@ -50,42 +51,43 @@ const (
 	typhaCertHashAnnotation       = "hash.operator.tigera.io/typha-cert"
 )
 
+var (
+	TyphaTLSSecretName   = "typha-certs"
+	TyphaCAConfigMapName = "typha-ca"
+	TyphaCABundleName    = "caBundle"
+)
+
+// TyphaConfiguration is the public API used to provide information to the render code to
+// generate Kubernetes objects for installing calico/typha on a cluster.
+type TyphaConfiguration struct {
+	K8sServiceEp           k8sapi.ServiceEndpoint
+	Installation           *operator.InstallationSpec
+	TLS                    *TyphaNodeTLS
+	AmazonCloudIntegration *operator.AmazonCloudIntegration
+	MigrateNamespaces      bool
+	ClusterDomain          string
+}
+
 // Typha creates the typha daemonset and other resources for the daemonset to operate normally.
-func Typha(
-	k8sServiceEp k8sapi.ServiceEndpoint,
-	installation *operator.InstallationSpec,
-	tnTLS *TyphaNodeTLS,
-	aci *operator.AmazonCloudIntegration,
-	migrationNeeded bool,
-	clusterDomain string,
-) Component {
-	return &typhaComponent{
-		k8sServiceEp:    k8sServiceEp,
-		installation:    installation,
-		typhaNodeTLS:    tnTLS,
-		amazonCloudInt:  aci,
-		migrationNeeded: migrationNeeded,
-		clusterDomain:   clusterDomain,
-	}
+func Typha(cfg *TyphaConfiguration) Component {
+	return &typhaComponent{cfg: cfg}
 }
 
 type typhaComponent struct {
-	k8sServiceEp     k8sapi.ServiceEndpoint
-	installation     *operator.InstallationSpec
-	typhaNodeTLS     *TyphaNodeTLS
-	amazonCloudInt   *operator.AmazonCloudIntegration
-	migrationNeeded  bool
-	clusterDomain    string
+	// Given configuration.
+	cfg *TyphaConfiguration
+
+	// Generated internal config, built from the given configuration.
 	typhaImage       string
 	certSignReqImage string
 }
 
 func (c *typhaComponent) ResolveImages(is *operator.ImageSet) error {
-	reg := c.installation.Registry
-	path := c.installation.ImagePath
-	prefix := c.installation.ImagePrefix
+	reg := c.cfg.Installation.Registry
+	path := c.cfg.Installation.ImagePath
+	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	if c.installation.Variant == operator.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant == operator.TigeraSecureEnterprise {
 		c.typhaImage, err = components.GetReference(components.ComponentTigeraTypha, reg, path, prefix, is)
 	} else {
 		c.typhaImage, err = components.GetReference(components.ComponentCalicoTypha, reg, path, prefix, is)
@@ -95,8 +97,8 @@ func (c *typhaComponent) ResolveImages(is *operator.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	if c.installation.CertificateManagement != nil {
-		c.certSignReqImage, err = ResolveCSRInitImage(c.installation, is)
+	if c.cfg.Installation.CertificateManagement != nil {
+		c.certSignReqImage, err = ResolveCSRInitImage(c.cfg.Installation, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
@@ -117,18 +119,24 @@ func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
 		c.typhaServiceAccount(),
 		c.typhaRole(),
 		c.typhaRoleBinding(),
-		c.typhaDeployment(),
 		c.typhaService(),
 		c.typhaPodDisruptionBudget(),
 	}
 
-	if c.installation.KubernetesProvider != operator.ProviderOpenShift {
+	if c.cfg.TLS.TyphaSecret != nil {
+		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(common.CalicoNamespace, c.cfg.TLS.TyphaSecret)...)...)
+	}
+
+	if c.cfg.Installation.KubernetesProvider != operator.ProviderOpenShift {
 		objs = append(objs, c.typhaPodSecurityPolicy())
 	}
 
-	if c.installation.CertificateManagement != nil {
-		objs = append(objs, CsrClusterRoleBinding("calico-typha", common.CalicoNamespace))
+	if c.cfg.Installation.CertificateManagement != nil {
+		objs = append(objs, CSRClusterRoleBinding("calico-typha", common.CalicoNamespace))
 	}
+
+	// Add deployment last, as it may depend on the creation of previous objects in the list.
+	objs = append(objs, c.typhaDeployment())
 
 	return objs, nil
 }
@@ -312,7 +320,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 			},
 		},
 	}
-	if c.installation.Variant == operator.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant == operator.TigeraSecureEnterprise {
 		extraRules := []rbacv1.PolicyRule{
 			{
 				// Tigera Secure needs to be able to read licenses, tiers, and config.
@@ -340,7 +348,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 		}
 		role.Rules = append(role.Rules, extraRules...)
 	}
-	if c.installation.KubernetesProvider != operator.ProviderOpenShift {
+	if c.cfg.Installation.KubernetesProvider != operator.ProviderOpenShift {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{APIGroups: []string{"policy"},
 			Resources:     []string{"podsecuritypolicies"},
@@ -360,25 +368,25 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 
 	var initContainers []v1.Container
 	annotations := make(map[string]string)
-	annotations[typhaCAHashAnnotation] = rmeta.AnnotationHash(c.typhaNodeTLS.CAConfigMap.Data)
-	if c.installation.CertificateManagement == nil {
-		annotations[typhaCertHashAnnotation] = rmeta.AnnotationHash(c.typhaNodeTLS.TyphaSecret.Data)
+	annotations[typhaCAHashAnnotation] = rmeta.AnnotationHash(c.cfg.TLS.CAConfigMap.Data)
+	if c.cfg.Installation.CertificateManagement == nil {
+		annotations[typhaCertHashAnnotation] = rmeta.AnnotationHash(c.cfg.TLS.TyphaSecret.Data)
 	} else {
 		initContainers = append(initContainers, CreateCSRInitContainer(
-			c.installation.CertificateManagement,
+			c.cfg.Installation.CertificateManagement,
 			c.certSignReqImage,
 			"typha-certs",
 			TyphaCommonName,
 			TLSSecretKeyName,
 			TLSSecretCertName,
-			dns.GetServiceDNSNames(TyphaServiceName, common.CalicoNamespace, c.clusterDomain),
+			dns.GetServiceDNSNames(TyphaServiceName, common.CalicoNamespace, c.cfg.ClusterDomain),
 			CSRLabelCalicoSystem))
 	}
 
 	// Include annotation for prometheus scraping configuration.
-	if c.installation.TyphaMetricsPort != nil {
+	if c.cfg.Installation.TyphaMetricsPort != nil {
 		annotations["prometheus.io/scrape"] = "true"
-		annotations["prometheus.io/port"] = fmt.Sprintf("%d", *c.installation.TyphaMetricsPort)
+		annotations["prometheus.io/port"] = fmt.Sprintf("%d", *c.cfg.Installation.TyphaMetricsPort)
 	}
 
 	d := apps.Deployment{
@@ -412,7 +420,7 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 				Spec: v1.PodSpec{
 					Tolerations:                   rmeta.TolerateAll,
 					Affinity:                      c.affinity(),
-					ImagePullSecrets:              c.installation.ImagePullSecrets,
+					ImagePullSecrets:              c.cfg.Installation.ImagePullSecrets,
 					ServiceAccountName:            TyphaServiceAccountName,
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					HostNetwork:                   true,
@@ -424,7 +432,7 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 		},
 	}
 	setCriticalPod(&(d.Spec.Template))
-	if c.migrationNeeded {
+	if c.cfg.MigrateNamespaces {
 		migration.SetTyphaAntiAffinity(&d)
 	}
 	return &d
@@ -445,7 +453,7 @@ func (c *typhaComponent) volumes() []v1.Volume {
 		},
 		{
 			Name:         "typha-certs",
-			VolumeSource: certificateVolumeSource(c.installation.CertificateManagement, TyphaTLSSecretName),
+			VolumeSource: certificateVolumeSource(c.cfg.Installation.CertificateManagement, TyphaTLSSecretName),
 		},
 	}
 
@@ -490,13 +498,13 @@ func (c *typhaComponent) typhaContainer() v1.Container {
 
 // typhaResources creates the typha's resource requirements.
 func (c *typhaComponent) typhaResources() v1.ResourceRequirements {
-	return rmeta.GetResourceRequirements(c.installation, operator.ComponentNameTypha)
+	return rmeta.GetResourceRequirements(c.cfg.Installation, operator.ComponentNameTypha)
 }
 
 // typhaEnvVars creates the typha's envvars.
 func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 	var cnEnv v1.EnvVar
-	if c.installation.CertificateManagement != nil {
+	if c.cfg.Installation.CertificateManagement != nil {
 		cnEnv = v1.EnvVar{
 			Name: "TYPHA_CLIENTCN", Value: FelixCommonName,
 		}
@@ -539,7 +547,7 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 		}},
 	}
 
-	switch c.installation.CNI.Type {
+	switch c.cfg.Installation.CNI.Type {
 	case operator.PluginAmazonVPC:
 		typhaEnv = append(typhaEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "eni"})
 	case operator.PluginGKE:
@@ -548,22 +556,22 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 		typhaEnv = append(typhaEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "azv"})
 	}
 
-	if c.installation.Variant == operator.TigeraSecureEnterprise {
-		if c.installation.CalicoNetwork != nil && c.installation.CalicoNetwork.MultiInterfaceMode != nil {
+	if c.cfg.Installation.Variant == operator.TigeraSecureEnterprise {
+		if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
 			typhaEnv = append(typhaEnv, v1.EnvVar{
 				Name:  "MULTI_INTERFACE_MODE",
-				Value: c.installation.CalicoNetwork.MultiInterfaceMode.Value()})
+				Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
 		}
 	}
 
-	typhaEnv = append(typhaEnv, GetTigeraSecurityGroupEnvVariables(c.amazonCloudInt)...)
-	typhaEnv = append(typhaEnv, c.k8sServiceEp.EnvVars(true, c.installation.KubernetesProvider)...)
+	typhaEnv = append(typhaEnv, GetTigeraSecurityGroupEnvVariables(c.cfg.AmazonCloudIntegration)...)
+	typhaEnv = append(typhaEnv, c.cfg.K8sServiceEp.EnvVars(true, c.installation.KubernetesProvider)...)
 
-	if c.installation.TyphaMetricsPort != nil {
+	if c.cfg.Installation.TyphaMetricsPort != nil {
 		// If a typha metrics port was given, then enable typha prometheus metrics and set the port.
 		typhaEnv = append(typhaEnv,
 			v1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSENABLED", Value: "true"},
-			v1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSPORT", Value: fmt.Sprintf("%d", *c.installation.TyphaMetricsPort)},
+			v1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSPORT", Value: fmt.Sprintf("%d", *c.cfg.Installation.TyphaMetricsPort)},
 		)
 	}
 
@@ -632,14 +640,14 @@ func (c *typhaComponent) typhaPodSecurityPolicy() *policyv1beta1.PodSecurityPoli
 
 // affinity sets the user-specified typha affinity if specified.
 func (c *typhaComponent) affinity() (aff *v1.Affinity) {
-	if c.installation.TyphaAffinity != nil && c.installation.TyphaAffinity.NodeAffinity != nil {
+	if c.cfg.Installation.TyphaAffinity != nil && c.cfg.Installation.TyphaAffinity.NodeAffinity != nil {
 		// this ensures we return nil if no affinity is specified.
-		if c.installation.TyphaAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil && len(c.installation.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution) == 0 {
+		if c.cfg.Installation.TyphaAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil && len(c.cfg.Installation.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution) == 0 {
 			return nil
 		}
 		aff = &v1.Affinity{NodeAffinity: &v1.NodeAffinity{
-			RequiredDuringSchedulingIgnoredDuringExecution:  c.installation.TyphaAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution,
-			PreferredDuringSchedulingIgnoredDuringExecution: c.installation.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
+			RequiredDuringSchedulingIgnoredDuringExecution:  c.cfg.Installation.TyphaAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution,
+			PreferredDuringSchedulingIgnoredDuringExecution: c.cfg.Installation.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
 		},
 		}
 

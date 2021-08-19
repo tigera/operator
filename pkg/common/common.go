@@ -18,6 +18,7 @@ const (
 	CalicoNamespace     = "calico-system"
 	TyphaDeploymentName = "calico-typha"
 	NodeDaemonSetName   = "calico-node"
+	VppNamespace        = "calico-vpp-dataplane"
 
 	// Monitor + Prometheus related const
 	TigeraPrometheusNamespace = "tigera-prometheus"

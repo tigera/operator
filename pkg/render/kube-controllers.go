@@ -324,7 +324,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 	}
 
-	env = append(env, c.cfg.K8sServiceEp.EnvVars()...)
+	env = append(env, c.cfg.K8sServiceEp.EnvVars(false, c.cr.KubernetesProvider)...)
 
 	enabledControllers := []string{"node"}
 	if c.cfg.Installation.Variant == operator.TigeraSecureEnterprise {

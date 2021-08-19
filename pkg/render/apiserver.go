@@ -131,7 +131,7 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
 
 	return &apiServerComponent{
 		installation:                installation,
-		hostNetwork:                 hostNetwork,
+		forceHostNetwork:            hostNetwork,
 		managementCluster:           managementCluster,
 		managementClusterConnection: managementClusterConnection,
 		amazonCloudIntegration:      aci,
@@ -155,7 +155,7 @@ type apiServerComponent struct {
 	pullSecrets                 []*corev1.Secret
 	openshift                   bool
 	isManagement                bool
-	hostNetwork                 bool
+	forceHostNetwork            bool
 	clusterDomain               string
 	apiServerImage              string
 	queryServerImage            string
@@ -783,16 +783,8 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 	}
 
 	var replicas int32 = 1
-	hostNetwork := c.hostNetwork
+	hostNetwork := c.hostNetwork()
 	dnsPolicy := corev1.DNSClusterFirst
-	if c.installation.KubernetesProvider == operatorv1.ProviderEKS &&
-		c.installation.CNI.Type == operatorv1.PluginCalico {
-		// Workaround the fact that webhooks don't work for non-host-networked pods
-		// when in this networking mode on EKS, because the control plane nodes don't run
-		// Calico.
-		hostNetwork = true
-	}
-
 	if hostNetwork {
 		// Adjust DNS policy so we can access in-cluster services.
 		dnsPolicy = corev1.DNSClusterFirstWithHostNet
@@ -860,6 +852,18 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 	return d
 }
 
+func (c *apiServerComponent) hostNetwork() bool {
+	hostNetwork := c.forceHostNetwork
+	if c.installation.KubernetesProvider == operatorv1.ProviderEKS &&
+		c.installation.CNI.Type == operatorv1.PluginCalico {
+		// Workaround the fact that webhooks don't work for non-host-networked pods
+		// when in this networking mode on EKS, because the control plane nodes don't run
+		// Calico.
+		hostNetwork = true
+	}
+	return hostNetwork
+}
+
 // apiServerContainer creates the API server container.
 func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	volumeMounts := []corev1.VolumeMount{}
@@ -894,7 +898,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 	}
 
-	env = append(env, c.k8sServiceEp.EnvVars()...)
+	env = append(env, c.k8sServiceEp.EnvVars(c.hostNetwork(), c.installation.KubernetesProvider)...)
 
 	if c.installation.CalicoNetwork != nil && c.installation.CalicoNetwork.MultiInterfaceMode != nil {
 		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.installation.CalicoNetwork.MultiInterfaceMode.Value()})
@@ -976,7 +980,8 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		{Name: "LOGLEVEL", Value: "info"},
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 	}
-	env = append(env, c.k8sServiceEp.EnvVars()...)
+
+	env = append(env, c.k8sServiceEp.EnvVars(c.hostNetwork(), c.installation.KubernetesProvider)...)
 	env = append(env, GetTigeraSecurityGroupEnvVariables(c.amazonCloudIntegration)...)
 
 	if c.installation.CalicoNetwork != nil && c.installation.CalicoNetwork.MultiInterfaceMode != nil {
@@ -1059,7 +1064,7 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 
 // tolerations creates the tolerations used by the API server deployment.
 func (c *apiServerComponent) tolerations() []corev1.Toleration {
-	if c.hostNetwork {
+	if c.hostNetwork() {
 		return rmeta.TolerateAll
 	}
 	return append(c.installation.ControlPlaneTolerations, rmeta.TolerateMaster)

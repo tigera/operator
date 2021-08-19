@@ -565,7 +565,7 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 	}
 
 	typhaEnv = append(typhaEnv, GetTigeraSecurityGroupEnvVariables(c.cfg.AmazonCloudIntegration)...)
-	typhaEnv = append(typhaEnv, c.cfg.K8sServiceEp.EnvVars()...)
+	typhaEnv = append(typhaEnv, c.cfg.K8sServiceEp.EnvVars(true, c.installation.KubernetesProvider)...)
 
 	if c.cfg.Installation.TyphaMetricsPort != nil {
 		// If a typha metrics port was given, then enable typha prometheus metrics and set the port.

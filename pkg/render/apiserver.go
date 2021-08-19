@@ -898,11 +898,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 	}
 
-	if c.hostNetwork() {
-		// Only use the k8s service endpoint if we're host-networked.  On some types of cluster (e.g. MKE) the
-		// service endpoints that we need for BPF mode are only valid on the host.
-		env = append(env, c.k8sServiceEp.EnvVars()...)
-	}
+	env = append(env, c.k8sServiceEp.EnvVars(c.hostNetwork(), c.installation.KubernetesProvider)...)
 
 	if c.installation.CalicoNetwork != nil && c.installation.CalicoNetwork.MultiInterfaceMode != nil {
 		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.installation.CalicoNetwork.MultiInterfaceMode.Value()})
@@ -985,12 +981,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 	}
 
-	if c.hostNetwork() {
-		// Only use the k8s service endpoint if we're host-networked.  On some types of cluster (e.g. MKE) the
-		// service endpoints that we need for BPF mode are only valid on the host.
-		env = append(env, c.k8sServiceEp.EnvVars()...)
-	}
-
+	env = append(env, c.k8sServiceEp.EnvVars(c.hostNetwork(), c.installation.KubernetesProvider)...)
 	env = append(env, GetTigeraSecurityGroupEnvVariables(c.amazonCloudIntegration)...)
 
 	if c.installation.CalicoNetwork != nil && c.installation.CalicoNetwork.MultiInterfaceMode != nil {

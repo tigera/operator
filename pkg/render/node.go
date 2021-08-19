@@ -906,7 +906,7 @@ func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
 		},
 	}
 
-	envVars = append(envVars, c.k8sServiceEp.EnvVars()...)
+	envVars = append(envVars, c.k8sServiceEp.EnvVars(true, c.cr.KubernetesProvider)...)
 
 	if c.cr.Variant == operator.TigeraSecureEnterprise {
 		if c.cr.CalicoNetwork != nil && c.cr.CalicoNetwork.MultiInterfaceMode != nil {
@@ -1300,7 +1300,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		})
 	}
 
-	nodeEnv = append(nodeEnv, c.k8sServiceEp.EnvVars()...)
+	nodeEnv = append(nodeEnv, c.k8sServiceEp.EnvVars(true, c.cr.KubernetesProvider)...)
 
 	if c.bgpLayoutHash != "" {
 		nodeEnv = append(nodeEnv, v1.EnvVar{

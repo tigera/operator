@@ -421,9 +421,24 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		})
 	})
 
-	It("should not add the KUBERNETES_SERVICE_... variables", func() {
+	It("should add the KUBERNETES_SERVICE_... variables", func() {
 		k8sServiceEp.Host = "k8shost"
 		k8sServiceEp.Port = "1234"
+
+		component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, nil, nil, nil, nil, false, dns.DefaultClusterDomain, nil, 0)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		depResource := rtest.GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")
+		Expect(depResource).ToNot(BeNil())
+		deployment := depResource.(*apps.Deployment)
+		rtest.ExpectK8sServiceEpEnvVars(deployment.Spec.Template.Spec, "k8shost", "1234")
+	})
+
+	It("should not add the KUBERNETES_SERVICE_... variables on docker EE using proxy.local", func() {
+		k8sServiceEp.Host = "proxy.local"
+		k8sServiceEp.Port = "1234"
+		instance.KubernetesProvider = operator.ProviderDockerEE
 
 		component := render.KubeControllers(k8sServiceEp, instance, true, nil, nil, nil, nil, nil, nil, false, dns.DefaultClusterDomain, nil, 0)
 		Expect(component.ResolveImages(nil)).To(BeNil())

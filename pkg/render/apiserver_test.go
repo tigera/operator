@@ -523,9 +523,10 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		rtest.ExpectK8sServiceEpEnvVars(deployment.Spec.Template.Spec, "k8shost", "1234")
 	})
 
-	It("should set KUBERENETES_SERVICE_... variables if not host networked", func() {
-		k8sServiceEp.Host = "k8shost"
+	It("should not set KUBERENETES_SERVICE_... variables if not host networked on Docker EE with proxy.local", func() {
+		k8sServiceEp.Host = "proxy.local"
 		k8sServiceEp.Port = "1234"
+		instance.KubernetesProvider=operator.ProviderDockerEE
 
 		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
@@ -537,6 +538,23 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		deployment := deploymentResource.(*v1.Deployment)
 		rtest.ExpectNoK8sServiceEpEnvVars(deployment.Spec.Template.Spec)
+	})
+
+	It("should set KUBERENETES_SERVICE_... variables if not host networked on Docker EE with non-proxy address", func() {
+		k8sServiceEp.Host = "k8shost"
+		k8sServiceEp.Port = "1234"
+		instance.KubernetesProvider=operator.ProviderDockerEE
+
+		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		deploymentResource := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment")
+		Expect(deploymentResource).ToNot(BeNil())
+
+		deployment := deploymentResource.(*v1.Deployment)
+		rtest.ExpectK8sServiceEpEnvVars(deployment.Spec.Template.Spec, "k8shost", "1234")
 	})
 
 	It("should render an API server with custom configuration with MCM enabled at startup", func() {
@@ -1212,9 +1230,10 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(tol, rmeta.TolerateMaster))
 	})
 
-	It("should set KUBERENETES_SERVICE_... variables if host networked", func() {
+	It("should set KUBERNETES_SERVICE_... variables if host networked", func() {
 		k8sServiceEp.Host = "k8shost"
 		k8sServiceEp.Port = "1234"
+		instance.KubernetesProvider=operator.ProviderDockerEE
 
 		component, err := render.APIServer(k8sServiceEp, instance, true, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
@@ -1228,9 +1247,10 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		rtest.ExpectK8sServiceEpEnvVars(deployment.Spec.Template.Spec, "k8shost", "1234")
 	})
 
-	It("should not set KUBERENETES_SERVICE_... variables if not host networked", func() {
-		k8sServiceEp.Host = "k8shost"
+	It("should not set KUBERNETES_SERVICE_... variables if Docker EE using proxy.local", func() {
+		k8sServiceEp.Host = "proxy.local"
 		k8sServiceEp.Port = "1234"
+		instance.KubernetesProvider=operator.ProviderDockerEE
 
 		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
@@ -1242,5 +1262,22 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 
 		deployment := deploymentResource.(*v1.Deployment)
 		rtest.ExpectNoK8sServiceEpEnvVars(deployment.Spec.Template.Spec)
+	})
+
+	It("should not set KUBERNETES_SERVICE_... variables if Docker EE using non-proxy address", func() {
+		k8sServiceEp.Host = "k8shost"
+		k8sServiceEp.Port = "1234"
+		instance.KubernetesProvider=operator.ProviderDockerEE
+
+		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		deploymentResource := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment")
+		Expect(deploymentResource).ToNot(BeNil())
+
+		deployment := deploymentResource.(*v1.Deployment)
+		rtest.ExpectK8sServiceEpEnvVars(deployment.Spec.Template.Spec, "k8shost", "1234")
 	})
 })

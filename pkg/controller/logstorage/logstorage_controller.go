@@ -111,6 +111,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler, elasticExternal bool) erro
 		if err := addLogStorageWatches(c); err != nil {
 			return err
 		}
+	} else {
+		if err := addMultiTenancyWatches(c); err != nil {
+			return err
+		}
 	}
 
 	// Watch all the elasticsearch user secrets in the operator namespace. In the future, we may want put this logic in
@@ -190,13 +194,13 @@ var _ reconcile.Reconciler = &ReconcileLogStorage{}
 type ReconcileLogStorage struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client        client.Client
-	scheme        *runtime.Scheme
-	status        status.StatusManager
-	provider      operatorv1.Provider
-	esCliCreator  utils.ElasticsearchClientCreator
-	clusterDomain string
-	elasticExternal   bool
+	client          client.Client
+	scheme          *runtime.Scheme
+	status          status.StatusManager
+	provider        operatorv1.Provider
+	esCliCreator    utils.ElasticsearchClientCreator
+	clusterDomain   string
+	elasticExternal bool
 }
 
 func GetLogStorage(ctx context.Context, cli client.Client) (*operatorv1.LogStorage, error) {
@@ -385,31 +389,44 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		var flowShards = common.CalculateFlowShards(ls.Spec.Nodes, common.DefaultElasticsearchShards)
 		clusterConfig = relasticsearch.NewClusterConfig(render.DefaultElasticsearchClusterName, ls.Replicas(), common.DefaultElasticsearchShards, flowShards)
 
-		// Get the admin user secret to copy to the operator namespace.
-		esAdminUserSecret, err = utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, render.ElasticsearchNamespace)
-		if err != nil {
-			reqLogger.Error(err, "failed to get Elasticsearch admin user secret")
-			r.status.SetDegraded("Failed to get Elasticsearch admin user secret", err.Error())
-			return reconcile.Result{}, err
-		}
-		if esAdminUserSecret != nil {
-			esAdminUserSecret = rsecret.CopyToNamespace(rmeta.OperatorNamespace(), esAdminUserSecret)[0]
-		}
-
-		curatorSecrets, err = utils.ElasticsearchSecrets(context.Background(), []string{render.ElasticsearchCuratorUserSecret}, r.client)
-		if err != nil && !errors.IsNotFound(err) {
-			r.status.SetDegraded("Failed to get curator credentials", err.Error())
-			return reconcile.Result{}, err
-		}
-
-		esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger)
-		if err != nil {
-			// If ECKLicenseConfigMapName is not found, it means ECK operator is not running yet, log the information and proceed
-			if errors.IsNotFound(err) {
-				reqLogger.Info("ConfigMap not found yet", "name", render.ECKLicenseConfigMapName)
-			} else {
-				r.status.SetDegraded("Failed to get elastic license", err.Error())
+		if !r.elasticExternal {
+			// Get the admin user secret to copy to the operator namespace.
+			esAdminUserSecret, err = utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, render.ElasticsearchNamespace)
+			if err != nil {
+				reqLogger.Error(err, "failed to get Elasticsearch admin user secret")
+				r.status.SetDegraded("Failed to get Elasticsearch admin user secret", err.Error())
 				return reconcile.Result{}, err
+			}
+			if esAdminUserSecret != nil {
+				esAdminUserSecret = rsecret.CopyToNamespace(rmeta.OperatorNamespace(), esAdminUserSecret)[0]
+			}
+
+			curatorSecrets, err = utils.ElasticsearchSecrets(context.Background(), []string{render.ElasticsearchCuratorUserSecret}, r.client)
+			if err != nil && !errors.IsNotFound(err) {
+				r.status.SetDegraded("Failed to get curator credentials", err.Error())
+				return reconcile.Result{}, err
+			}
+
+			esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger)
+			if err != nil {
+				// If ECKLicenseConfigMapName is not found, it means ECK operator is not running yet, log the information and proceed
+				if errors.IsNotFound(err) {
+					reqLogger.Info("ConfigMap not found yet", "name", render.ECKLicenseConfigMapName)
+				} else {
+					r.status.SetDegraded("Failed to get elastic license", err.Error())
+				}
+			}
+		} else {
+			// Multi-tenancy modifications.
+			esAdminUserSecret, err = utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, rmeta.OperatorNamespace())
+			if err != nil {
+				reqLogger.Error(err, "failed to get Elasticsearch admin user secret")
+				r.status.SetDegraded("Failed to get Elasticsearch admin user secret", err.Error())
+				return reconcile.Result{}, err
+			}
+			if esAdminUserSecret == nil {
+				r.status.SetDegraded("Waiting for admin Elasticsearch user secret to be available", "")
+				return reconcile.Result{}, nil
 			}
 		}
 	}
@@ -447,6 +464,18 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	if managementClusterConnection == nil {
+		if r.elasticExternal {
+			result, proceed, err := r.createExternalElasticsearch(
+				install,
+				clusterConfig,
+				hdler,
+				reqLogger,
+				ctx,
+			)
+			if err != nil || !proceed {
+				return result, err
+			}
+		}
 		result, proceed, err := r.createEsGateway(
 			install,
 			variant,

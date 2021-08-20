@@ -64,6 +64,13 @@ func (r *ReconcileLogStorage) createEsGateway(
 		ClusterDomain:              r.clusterDomain,
 	}
 
+	// Multi-tenancy modifications.
+	if r.elasticExternal {
+		if result, proceed, err := r.esGatewayAddCloudModificationsToConfig(cfg, esAdminUserSecret, reqLogger, ctx); err != nil || !proceed {
+			return result, proceed, err
+		}
+	}
+
 	esGatewayComponent := esgateway.EsGateway(cfg)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, esGatewayComponent); err != nil {

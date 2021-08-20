@@ -16,6 +16,7 @@ package esgateway
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -48,41 +49,76 @@ const (
 	ElasticsearchPort          = 9200
 	KibanaHTTPSEndpoint        = "https://tigera-secure-kb-http.tigera-kibana.svc:5601"
 	KibanaPort                 = 5601
+
+	ExternalCertsSecret      = "tigera-secure-external-es-certs"
+	ExternalCertsVolumeName  = "tigera-secure-external-es-certs"
+	ExternalCACertSecret     = "tigera-secure-external-es-ca-cert"
+	ExternalCACertVolumeName = "tigera-secure-external-es-ca-cert"
 )
 
 func EsGateway(c *Config) render.Component {
 	var certSecretsESCopy []*corev1.Secret
 	// Only render the public cert secret in the Operator namespace.
 	secrets := []*corev1.Secret{c.CertSecrets[1]}
+	tlsAnnotations := map[string]string{}
 
 	// Copy the Operator namespaced cert secrets to the Elasticsearch namespace.
 	certSecretsESCopy = append(certSecretsESCopy, secret.CopyToNamespace(render.ElasticsearchNamespace, c.CertSecrets...)...)
-	tlsAnnotations := map[string]string{render.ElasticsearchTLSHashAnnotation: rmeta.SecretsAnnotationHash(append(certSecretsESCopy, c.EsInternalCertSecret)...)}
+
+	if c.ExternalCertsSecret != nil {
+		certSecretsESCopy = append(certSecretsESCopy, secret.CopyToNamespace(render.ElasticsearchNamespace, c.ExternalCertsSecret)...)
+	}
+	if c.ExternalCACertSecret != nil {
+		certSecretsESCopy = append(certSecretsESCopy, secret.CopyToNamespace(render.ElasticsearchNamespace, c.ExternalCACertSecret)...)
+	}
+	tlsAnnotations[render.ElasticsearchTLSHashAnnotation] = rmeta.SecretsAnnotationHash(append(certSecretsESCopy, c.EsInternalCertSecret, c.EsAdminUserSecret)...)
 
 	secrets = append(secrets, certSecretsESCopy...)
+
+	// tigera-secure-es-http-certs-public, mounted by ES Gateway.
+	if c.EsInternalCertSecret != nil && c.EsInternalCertSecret.ObjectMeta.Namespace == rmeta.OperatorNamespace() {
+		secrets = append(secrets, secret.CopyToNamespace(render.ElasticsearchNamespace, c.EsInternalCertSecret)...)
+	}
 
 	// tigera-secure-kb-http-certs-public, mounted by ES Gateway.
 	secrets = append(secrets, secret.CopyToNamespace(render.ElasticsearchNamespace, c.KibanaInternalCertSecret)...)
 	tlsAnnotations[render.KibanaTLSAnnotationHash] = rmeta.SecretsAnnotationHash(c.KibanaInternalCertSecret)
 
+	// tigera-secure-es-elastic-user, mounted by ES Gateway.
+	if c.EsAdminUserSecret != nil {
+		secrets = append(secrets, secret.CopyToNamespace(render.ElasticsearchNamespace, c.EsAdminUserSecret)...)
+	}
+
 	secrets = append(secrets, c.KubeControllersUserSecrets...)
 	return &esGateway{
-		installation:   c.Installation,
-		pullSecrets:    c.PullSecrets,
-		secrets:        secrets,
-		tlsAnnotations: tlsAnnotations,
-		clusterDomain:  c.ClusterDomain,
+		installation:         c.Installation,
+		pullSecrets:          c.PullSecrets,
+		secrets:              secrets,
+		tlsAnnotations:       tlsAnnotations,
+		clusterDomain:        c.ClusterDomain,
+		tenantId:             c.TenantId,
+		enableMTLS:           c.EnableMTLS,
+		useCA:                c.UseCA,
+		externalElastic:      c.ExternalElastic,
+		externalESDomain:     c.ExternalESDomain,
+		externalKibanaDomain: c.ExternalKibanaDomain,
 	}
 }
 
 type esGateway struct {
-	installation   *operatorv1.InstallationSpec
-	pullSecrets    []*corev1.Secret
-	secrets        []*corev1.Secret
-	tlsAnnotations map[string]string
-	clusterDomain  string
-	csrImage       string
-	esGatewayImage string
+	installation         *operatorv1.InstallationSpec
+	pullSecrets          []*corev1.Secret
+	secrets              []*corev1.Secret
+	tlsAnnotations       map[string]string
+	clusterDomain        string
+	csrImage             string
+	esGatewayImage       string
+	tenantId             string
+	enableMTLS           bool
+	useCA                bool
+	externalElastic      bool
+	externalESDomain     string
+	externalKibanaDomain string
 }
 
 type Config struct {
@@ -93,6 +129,15 @@ type Config struct {
 	KibanaInternalCertSecret   *corev1.Secret
 	EsInternalCertSecret       *corev1.Secret
 	ClusterDomain              string
+	EsAdminUserSecret          *corev1.Secret
+	ExternalCertsSecret        *corev1.Secret
+	ExternalCACertSecret       *corev1.Secret
+	TenantId                   string
+	EnableMTLS                 bool
+	UseCA                      bool
+	ExternalElastic            bool
+	ExternalESDomain           string
+	ExternalKibanaDomain       string
 }
 
 func (e *esGateway) ResolveImages(is *operatorv1.ImageSet) error {
@@ -182,10 +227,17 @@ func (e esGateway) esGatewayRoleBinding() *rbacv1.RoleBinding {
 func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 	replicas := int32(2)
 
+	elasticEndpoint := ElasticsearchHTTPSEndpoint
+	kibanaEndpoint := KibanaHTTPSEndpoint
+	if e.externalElastic {
+		elasticEndpoint = "https://" + e.externalESDomain + ":443"
+		kibanaEndpoint = "https://" + e.externalKibanaDomain + ":443"
+	}
+
 	envVars := []corev1.EnvVar{
 		{Name: "ES_GATEWAY_LOG_LEVEL", Value: "INFO"},
-		{Name: "ES_GATEWAY_ELASTIC_ENDPOINT", Value: ElasticsearchHTTPSEndpoint},
-		{Name: "ES_GATEWAY_KIBANA_ENDPOINT", Value: KibanaHTTPSEndpoint},
+		{Name: "ES_GATEWAY_ELASTIC_ENDPOINT", Value: elasticEndpoint},
+		{Name: "ES_GATEWAY_KIBANA_ENDPOINT", Value: kibanaEndpoint},
 		{Name: "ES_GATEWAY_HTTPS_CERT", Value: "/certs/https/tls.crt"},
 		{Name: "ES_GATEWAY_HTTPS_KEY", Value: "/certs/https/tls.key"},
 		{Name: "ES_GATEWAY_ELASTIC_USERNAME", Value: "elastic"},
@@ -250,6 +302,56 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 		{Name: VolumeName, MountPath: "/certs/https", ReadOnly: true},
 		{Name: render.KibanaInternalCertSecret, MountPath: "/certs/kibana", ReadOnly: true},
 		{Name: relasticsearch.InternalCertSecret, MountPath: "/certs/elasticsearch", ReadOnly: true},
+	}
+
+	if e.enableMTLS {
+		envVars = append(envVars, []corev1.EnvVar{
+			{Name: "ES_GATEWAY_ELASTIC_CLIENT_CERT_PATH", Value: "/certs/elasticsearch/mtls/client.crt"},
+			{Name: "ES_GATEWAY_ELASTIC_CLIENT_KEY_PATH", Value: "/certs/elasticsearch/mtls/client.key"},
+			{Name: "ES_GATEWAY_ENABLE_ELASTIC_MUTUAL_TLS", Value: strconv.FormatBool(e.enableMTLS)},
+			{Name: "ES_GATEWAY_KIBANA_CLIENT_CERT_PATH", Value: "/certs/kibana/mtls/client.crt"},
+			{Name: "ES_GATEWAY_KIBANA_CLIENT_KEY_PATH", Value: "/certs/kibana/mtls/client.key"},
+			{Name: "ES_GATEWAY_ENABLE_KIBANA_MUTUAL_TLS", Value: strconv.FormatBool(e.enableMTLS)},
+		}...)
+
+		volumes = append(volumes, corev1.Volume{
+			Name: ExternalCertsVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: ExternalCertsSecret,
+				},
+			},
+		})
+
+		volumeMounts = append(volumeMounts, []corev1.VolumeMount{
+			{Name: ExternalCertsVolumeName, MountPath: "/certs/elasticsearch/mtls", ReadOnly: true},
+			{Name: ExternalCertsVolumeName, MountPath: "/certs/kibana/mtls", ReadOnly: true},
+		}...)
+	}
+
+	if e.useCA {
+		envVars = append(envVars, []corev1.EnvVar{
+			{Name: "ES_GATEWAY_ELASTIC_CA_BUNDLE_PATH", Value: "/certs/elasticsearch/ca/tls.crt"},
+			{Name: "ES_GATEWAY_KIBANA_CA_BUNDLE_PATH", Value: "/certs/kibana/ca/tls.crt"},
+		}...)
+
+		volumes = append(volumes, corev1.Volume{
+			Name: ExternalCACertVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: ExternalCACertSecret,
+				},
+			},
+		})
+
+		volumeMounts = append(volumeMounts, []corev1.VolumeMount{
+			{Name: ExternalCACertVolumeName, MountPath: "/certs/elasticsearch/ca", ReadOnly: true},
+			{Name: ExternalCACertVolumeName, MountPath: "/certs/kibana/ca", ReadOnly: true},
+		}...)
+	}
+
+	if e.tenantId != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: "ES_GATEWAY_TENANT_ID", Value: e.tenantId})
 	}
 
 	podTemplate := &corev1.PodTemplateSpec{

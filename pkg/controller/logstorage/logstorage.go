@@ -22,7 +22,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
@@ -127,13 +126,13 @@ func (r *ReconcileLogStorage) createLogStorage(
 	key := types.NamespacedName{Name: "cloud-kibana-config", Namespace: rmeta.OperatorNamespace()}
 	if err = r.client.Get(ctx, key, kbCm); err != nil {
 		if !errors.IsNotFound(err) {
-			return reconcile.Result{}, fmt.Errorf("Failed to read cloud-kibana-config ConfigMap: %s", err.Error())
+			return reconcile.Result{}, false, fmt.Errorf("Failed to read cloud-kibana-config ConfigMap: %s", err.Error())
 		}
 	} else {
 		render.CloudKibanaConfigOverrides = map[string]interface{}{}
 		if err = json.Unmarshal([]byte(kbCm.Data["config"]), &render.CloudKibanaConfigOverrides); err != nil {
 			r.status.SetDegraded("Failed to unmarshall config in cloud-kibana-config ConfigMap", err.Error())
-			return reconcile.Result{}, err
+			return reconcile.Result{}, false, err
 		}
 	}
 

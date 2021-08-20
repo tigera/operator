@@ -69,7 +69,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				{DeploymentName, render.ElasticsearchNamespace, &appsv1.Deployment{}, nil},
 			}
 
-			component := EsGateway(
+			component := EsGateway(&Config{
 				installation,
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
@@ -86,7 +86,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: rmeta.OperatorNamespace()}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.InternalCertSecret, Namespace: render.ElasticsearchNamespace}},
 				clusterDomain,
-			)
+			})
 
 			createResources, _ := component.Objects()
 			compareResources(createResources, expectedResources)
@@ -110,7 +110,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				{RoleName + ":csr-creator", "", &rbacv1.ClusterRoleBinding{}, nil},
 			}
 
-			component := EsGateway(
+			component := EsGateway(&Config{
 				installation,
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
@@ -127,7 +127,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: rmeta.OperatorNamespace()}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.InternalCertSecret, Namespace: render.ElasticsearchNamespace}},
 				clusterDomain,
-			)
+			})
 
 			createResources, _ := component.Objects()
 			compareResources(createResources, expectedResources)

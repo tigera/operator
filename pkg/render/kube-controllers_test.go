@@ -25,7 +25,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/resource"
 
-	operator "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render"
@@ -33,16 +33,16 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 
-	apps "k8s.io/api/apps/v1"
-	v1 "k8s.io/api/core/v1"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 )
 
 var _ = Describe("kube-controllers rendering tests", func() {
-	var instance *operator.InstallationSpec
+	var instance *operatorv1.InstallationSpec
 	var k8sServiceEp k8sapi.ServiceEndpoint
 	var cfg render.KubeControllersConfiguration
-	var esEnvs = []v1.EnvVar{
+	var esEnvs = []corev1.EnvVar{
 		{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
 		{Name: "ELASTIC_SCHEME", Value: "https"},
 		{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
@@ -50,9 +50,9 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		{Name: "ELASTIC_ACCESS_MODE", Value: "serviceuser"},
 		{Name: "ELASTIC_SSL_VERIFY", Value: "true"},
 		{Name: "ELASTIC_USER", Value: "",
-			ValueFrom: &v1.EnvVarSource{
-				SecretKeyRef: &v1.SecretKeySelector{
-					LocalObjectReference: v1.LocalObjectReference{
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
 						Name: "tigera-ee-kube-controllers-elasticsearch-access",
 					},
 					Key: "username",
@@ -60,9 +60,9 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			},
 		},
 		{Name: "ELASTIC_USERNAME", Value: "",
-			ValueFrom: &v1.EnvVarSource{
-				SecretKeyRef: &v1.SecretKeySelector{
-					LocalObjectReference: v1.LocalObjectReference{
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
 						Name: "tigera-ee-kube-controllers-elasticsearch-access",
 					},
 					Key: "username",
@@ -70,9 +70,9 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			},
 		},
 		{Name: "ELASTIC_PASSWORD", Value: "",
-			ValueFrom: &v1.EnvVarSource{
-				SecretKeyRef: &v1.SecretKeySelector{
-					LocalObjectReference: v1.LocalObjectReference{
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
 						Name: "tigera-ee-kube-controllers-elasticsearch-access",
 					},
 					Key: "password",
@@ -88,10 +88,10 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
 
-		miMode := operator.MultiInterfaceModeNone
-		instance = &operator.InstallationSpec{
-			CalicoNetwork: &operator.CalicoNetworkSpec{
-				IPPools:            []operator.IPPool{{CIDR: "192.168.1.0/16"}},
+		miMode := operatorv1.MultiInterfaceModeNone
+		instance = &operatorv1.InstallationSpec{
+			CalicoNetwork: &operatorv1.CalicoNetworkSpec{
+				IPPools:            []operatorv1.IPPool{{CIDR: "192.168.1.0/16"}},
 				MultiInterfaceMode: &miMode,
 			},
 			Registry: "test-reg/",
@@ -144,7 +144,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}
 
 		// The Deployment should have the correct configuration.
-		ds := rtest.GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment").(*apps.Deployment)
+		ds := rtest.GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 
 		// Image override results in correct image.
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(
@@ -152,7 +152,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		))
 
 		// Verify env
-		expectedEnv := []v1.EnvVar{
+		expectedEnv := []corev1.EnvVar{
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "ENABLED_CONTROLLERS", Value: "node"},
 		}
@@ -182,7 +182,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: "calico-kube-controllers-metrics", ns: common.CalicoNamespace, group: "", version: "v1", kind: "Service"},
 		}
 
-		instance.Variant = operator.TigeraSecureEnterprise
+		instance.Variant = operatorv1.TigeraSecureEnterprise
 		cfg.LogStorageExists = true
 		cfg.KubeControllersGatewaySecret = &kubeControllersUserSecret
 		cfg.ElasticsearchSecret = &elasticsearchSecret
@@ -203,11 +203,11 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}
 
 		// The Deployment should have the correct configuration.
-		dp := rtest.GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment").(*apps.Deployment)
+		dp := rtest.GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 
 		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:" + components.ComponentTigeraKubeControllers.Version))
 		envs := dp.Spec.Template.Spec.Containers[0].Env
-		Expect(envs).To(ContainElement(v1.EnvVar{
+		Expect(envs).To(ContainElement(corev1.EnvVar{
 			Name: "ENABLED_CONTROLLERS", Value: "node,service,federatedservices,authorization,elasticsearchconfiguration",
 		}))
 		Expect(envs).To(ContainElements(esEnvs))
@@ -248,9 +248,9 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}
 
 		// Override configuration to match expected Enterprise config.
-		instance.Variant = operator.TigeraSecureEnterprise
+		instance.Variant = operatorv1.TigeraSecureEnterprise
 		cfg.LogStorageExists = true
-		cfg.ManagementCluster = &operator.ManagementCluster{}
+		cfg.ManagementCluster = &operatorv1.ManagementCluster{}
 		cfg.KubeControllersGatewaySecret = &kubeControllersUserSecret
 		cfg.ElasticsearchSecret = &elasticsearchSecret
 		cfg.ManagerInternalSecret = &internalManagerTLSSecret
@@ -270,10 +270,10 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}
 
 		// The Deployment should have the correct configuration.
-		dp := rtest.GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment").(*apps.Deployment)
+		dp := rtest.GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 
 		envs := dp.Spec.Template.Spec.Containers[0].Env
-		Expect(envs).To(ContainElement(v1.EnvVar{
+		Expect(envs).To(ContainElement(corev1.EnvVar{
 			Name:  "ENABLED_CONTROLLERS",
 			Value: "node,service,federatedservices,authorization,elasticsearchconfiguration,managedcluster",
 		}))
@@ -323,7 +323,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		instance.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
 
 		// Simulate enterprise config.
-		instance.Variant = operator.TigeraSecureEnterprise
+		instance.Variant = operatorv1.TigeraSecureEnterprise
 		cfg.LogStorageExists = true
 		cfg.EnabledESOIDCWorkaround = true
 		cfg.MetricsPort = 0
@@ -340,38 +340,38 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			i++
 		}
 
-		d := rtest.GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment").(*apps.Deployment)
+		d := rtest.GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("nodeName", "control01"))
 	})
 
 	It("should include a ControlPlaneToleration when specified", func() {
-		t := v1.Toleration{
+		t := corev1.Toleration{
 			Key:      "foo",
-			Operator: v1.TolerationOpEqual,
+			Operator: corev1.TolerationOpEqual,
 			Value:    "bar",
 		}
-		instance.ControlPlaneTolerations = []v1.Toleration{t}
+		instance.ControlPlaneTolerations = []corev1.Toleration{t}
 		component := render.KubeControllers(&cfg)
 		resources, _ := component.Objects()
-		d := rtest.GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment").(*apps.Deployment)
+		d := rtest.GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(t, rmeta.TolerateMaster))
 	})
 
 	It("should render resourcerequirements", func() {
-		rr := &v1.ResourceRequirements{
-			Requests: v1.ResourceList{
-				v1.ResourceCPU:    resource.MustParse("250m"),
-				v1.ResourceMemory: resource.MustParse("64Mi"),
+		rr := &corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("250m"),
+				corev1.ResourceMemory: resource.MustParse("64Mi"),
 			},
-			Limits: v1.ResourceList{
-				v1.ResourceCPU:    resource.MustParse("500m"),
-				v1.ResourceMemory: resource.MustParse("500Mi"),
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("500m"),
+				corev1.ResourceMemory: resource.MustParse("500Mi"),
 			},
 		}
 
-		instance.ComponentResources = []operator.ComponentResource{
+		instance.ComponentResources = []operatorv1.ComponentResource{
 			{
-				ComponentName:        operator.ComponentNameKubeControllers,
+				ComponentName:        operatorv1.ComponentNameKubeControllers,
 				ResourceRequirements: rr,
 			},
 		}
@@ -382,7 +382,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		depResource := rtest.GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")
 		Expect(depResource).ToNot(BeNil())
-		deployment := depResource.(*apps.Deployment)
+		deployment := depResource.(*appsv1.Deployment)
 
 		passed := false
 		for _, container := range deployment.Spec.Template.Spec.Containers {
@@ -395,18 +395,18 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	})
 
 	It("should add the OIDC prefix env variables", func() {
-		instance.Variant = operator.TigeraSecureEnterprise
+		instance.Variant = operatorv1.TigeraSecureEnterprise
 		cfg.LogStorageExists = true
-		cfg.ManagementCluster = &operator.ManagementCluster{}
+		cfg.ManagementCluster = &operatorv1.ManagementCluster{}
 		cfg.KubeControllersGatewaySecret = &kubeControllersUserSecret
 		cfg.ElasticsearchSecret = &elasticsearchSecret
 		cfg.ManagerInternalSecret = &internalManagerTLSSecret
 		cfg.MetricsPort = 9094
 		cfg.EnabledESOIDCWorkaround = true
-		cfg.Authentication = &operator.Authentication{Spec: operator.AuthenticationSpec{
+		cfg.Authentication = &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{
 			UsernamePrefix: "uOIDC:",
 			GroupsPrefix:   "gOIDC:",
-			Openshift:      &operator.AuthenticationOpenshift{IssuerURL: "https://api.example.com"},
+			Openshift:      &operatorv1.AuthenticationOpenshift{IssuerURL: "https://api.example.com"},
 		}}
 
 		component := render.KubeControllers(&cfg)
@@ -415,7 +415,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		depResource := rtest.GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")
 		Expect(depResource).ToNot(BeNil())
-		deployment := depResource.(*apps.Deployment)
+		deployment := depResource.(*appsv1.Deployment)
 
 		var usernamePrefix, groupPrefix string
 		for _, container := range deployment.Spec.Template.Spec.Containers {
@@ -436,9 +436,9 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 	When("enableESOIDCWorkaround is true", func() {
 		It("should set the ENABLE_ELASTICSEARCH_OIDC_WORKAROUND env variable to true", func() {
-			instance.Variant = operator.TigeraSecureEnterprise
+			instance.Variant = operatorv1.TigeraSecureEnterprise
 			cfg.LogStorageExists = true
-			cfg.ManagementCluster = &operator.ManagementCluster{}
+			cfg.ManagementCluster = &operatorv1.ManagementCluster{}
 			cfg.KubeControllersGatewaySecret = &kubeControllersUserSecret
 			cfg.ElasticsearchSecret = &elasticsearchSecret
 			cfg.ManagerInternalSecret = &internalManagerTLSSecret
@@ -449,7 +449,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 			depResource := rtest.GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")
 			Expect(depResource).ToNot(BeNil())
-			deployment := depResource.(*apps.Deployment)
+			deployment := depResource.(*appsv1.Deployment)
 
 			var esLicenseType string
 			for _, container := range deployment.Spec.Template.Spec.Containers {
@@ -477,14 +477,14 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		depResource := rtest.GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")
 		Expect(depResource).ToNot(BeNil())
-		deployment := depResource.(*apps.Deployment)
+		deployment := depResource.(*appsv1.Deployment)
 		rtest.ExpectK8sServiceEpEnvVars(deployment.Spec.Template.Spec, "k8shost", "1234")
 	})
 
 	It("should not add the KUBERNETES_SERVICE_... variables on docker EE using proxy.local", func() {
 		k8sServiceEp.Host = "proxy.local"
 		k8sServiceEp.Port = "1234"
-		instance.KubernetesProvider = operator.ProviderDockerEE
+		instance.KubernetesProvider = operatorv1.ProviderDockerEE
 
 		component := render.KubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -492,7 +492,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		depResource := rtest.GetResource(resources, "calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")
 		Expect(depResource).ToNot(BeNil())
-		deployment := depResource.(*apps.Deployment)
+		deployment := depResource.(*appsv1.Deployment)
 		rtest.ExpectNoK8sServiceEpEnvVars(deployment.Spec.Template.Spec)
 	})
 })

@@ -380,7 +380,7 @@ var _ = Describe("LogStorage controller", func() {
 					result, err := r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 					// Expect to be waiting for Elasticsearch and Kibana to be functional
-					Expect(result).Should(Equal(reconcile.Result{}))
+					Expect(result).Should(Equal(reconcile.Result{Requeue: true}))
 
 					By("asserting the finalizers have been set on the LogStorage CR")
 					ls := &operatorv1.LogStorage{}
@@ -424,8 +424,7 @@ var _ = Describe("LogStorage controller", func() {
 							Namespace: render.ElasticsearchNamespace,
 						},
 						Data: map[string][]byte{
-							"username": []byte("elastic"),
-							"password": []byte("password"),
+							"elastic": []byte("password"),
 						},
 					}
 					Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
@@ -449,13 +448,12 @@ var _ = Describe("LogStorage controller", func() {
 					result, err = r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 					// Expect to be waiting for curator secret
-					Expect(result).Should(Equal(reconcile.Result{}))
+					Expect(result).Should(Equal(reconcile.Result{Requeue: true}))
 					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: curatorUsrSecretObjMeta})).ShouldNot(HaveOccurred())
 
 					mockStatus.On("SetDegraded", "Waiting for elasticsearch metrics secrets to become available", "").Return()
 					result, err = r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
-
 					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: esMetricsUsrSecretObjMeta})).ShouldNot(HaveOccurred())
 
 					mockStatus.On("ClearDegraded")
@@ -525,7 +523,7 @@ var _ = Describe("LogStorage controller", func() {
 					result, err := r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 					// Expect to be waiting for Elasticsearch and Kibana to be functional
-					Expect(result).Should(Equal(reconcile.Result{}))
+					Expect(result).Should(Equal(reconcile.Result{Requeue: true}))
 
 					By("asserting the finalizers have been set on the LogStorage CR")
 					ls := &operatorv1.LogStorage{}
@@ -563,8 +561,7 @@ var _ = Describe("LogStorage controller", func() {
 							Namespace: render.ElasticsearchNamespace,
 						},
 						Data: map[string][]byte{
-							"username": []byte("elastic"),
-							"password": []byte("password"),
+							"elastic": []byte("password"),
 						},
 					}
 					Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
@@ -585,7 +582,7 @@ var _ = Describe("LogStorage controller", func() {
 					result, err = r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 					// Expect to be waiting for curator secret
-					Expect(result).Should(Equal(reconcile.Result{}))
+					Expect(result).Should(Equal(reconcile.Result{Requeue: true}))
 					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: curatorUsrSecretObjMeta})).ShouldNot(HaveOccurred())
 					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: esMetricsUsrSecretObjMeta})).ShouldNot(HaveOccurred())
 
@@ -709,7 +706,7 @@ var _ = Describe("LogStorage controller", func() {
 					result, err := r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 					// Expect to be waiting for Elasticsearch and Kibana to be functional
-					Expect(result).Should(Equal(reconcile.Result{}))
+					Expect(result).Should(Equal(reconcile.Result{Requeue: true}))
 
 					By("asserting the finalizers have been set on the LogStorage CR")
 					ls := &operatorv1.LogStorage{}
@@ -773,8 +770,7 @@ var _ = Describe("LogStorage controller", func() {
 							Namespace: render.ElasticsearchNamespace,
 						},
 						Data: map[string][]byte{
-							"username": []byte("elastic"),
-							"password": []byte("password"),
+							"elastic": []byte("password"),
 						},
 					}
 					Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
@@ -883,8 +879,7 @@ var _ = Describe("LogStorage controller", func() {
 								Namespace: render.ElasticsearchNamespace,
 							},
 							Data: map[string][]byte{
-								"username": []byte("elastic"),
-								"password": []byte("password"),
+								"elastic": []byte("password"),
 							},
 						}
 						Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
@@ -1020,8 +1015,7 @@ var _ = Describe("LogStorage controller", func() {
 								Namespace: render.ElasticsearchNamespace,
 							},
 							Data: map[string][]byte{
-								"username": []byte("elastic"),
-								"password": []byte("password"),
+								"elastic": []byte("password"),
 							},
 						}
 						Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
@@ -1172,8 +1166,7 @@ var _ = Describe("LogStorage controller", func() {
 							Namespace: render.ElasticsearchNamespace,
 						},
 						Data: map[string][]byte{
-							"username": []byte("elastic"),
-							"password": []byte("password"),
+							"elastic": []byte("password"),
 						},
 					}
 					Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
@@ -1233,7 +1226,7 @@ var _ = Describe("LogStorage controller", func() {
 					mockStatus.On("SetDegraded", "Waiting for Elasticsearch cluster to be operational", "")
 					result, err = r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
-					Expect(result).Should(Equal(reconcile.Result{}))
+					Expect(result).Should(Equal(reconcile.Result{Requeue: true}))
 
 					By("expecting not to find the eck-cleanup finalizer in the LogStorage CR anymore")
 					ls = &operatorv1.LogStorage{}

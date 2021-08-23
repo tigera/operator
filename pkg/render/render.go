@@ -20,11 +20,12 @@ import (
 )
 
 var (
-	CommonName        = "common-name"
-	URISAN            = "uri-san"
-	TyphaCommonName   = "typha-server"
-	FelixCommonName   = "typha-client"
-	PriorityClassName = "calico-priority"
+	CommonName               = "common-name"
+	URISAN                   = "uri-san"
+	TyphaCommonName          = "typha-server"
+	FelixCommonName          = "typha-client"
+	NodePriorityClassName    = "system-node-critical"
+	ClusterPriorityClassName = "system-cluster-critical"
 )
 
 // A Renderer is capable of generating components to be installed on the cluster.
@@ -32,17 +33,14 @@ type Renderer interface {
 	Render() []Component
 }
 
-func appendNotNil(components []Component, c Component) []Component {
-	if c != nil {
-		components = append(components, c)
-	}
-	return components
-}
-
 func SetTestLogger(l logr.Logger) {
 	log = l
 }
 
-func setCriticalPod(t *v1.PodTemplateSpec) {
-	t.Spec.PriorityClassName = PriorityClassName
+func setNodeCriticalPod(t *v1.PodTemplateSpec) {
+	t.Spec.PriorityClassName = NodePriorityClassName
+}
+
+func setClusterCriticalPod(t *v1.PodTemplateSpec) {
+	t.Spec.PriorityClassName = ClusterPriorityClassName
 }

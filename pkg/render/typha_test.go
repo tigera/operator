@@ -19,12 +19,12 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gstruct"
 
-	apps "k8s.io/api/apps/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	operator "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render"
@@ -33,7 +33,7 @@ import (
 
 var _ = Describe("Typha rendering tests", func() {
 	const defaultClusterDomain = "svc.cluster.local"
-	var installation *operator.InstallationSpec
+	var installation *operatorv1.InstallationSpec
 	var registry string
 	var typhaNodeTLS *render.TyphaNodeTLS
 	k8sServiceEp := k8sapi.ServiceEndpoint{}
@@ -42,12 +42,12 @@ var _ = Describe("Typha rendering tests", func() {
 		registry = "test.registry.com/org"
 		// Initialize a default installation to use. Each test can override this to its
 		// desired configuration.
-		installation = &operator.InstallationSpec{
-			KubernetesProvider: operator.ProviderNone,
+		installation = &operatorv1.InstallationSpec{
+			KubernetesProvider: operatorv1.ProviderNone,
 			//Variant ProductVariant `json:"variant,omitempty"`
 			Registry: registry,
-			CNI: &operator.CNISpec{
-				Type: operator.PluginCalico,
+			CNI: &operatorv1.CNISpec{
+				Type: operatorv1.PluginCalico,
 			},
 		}
 		typhaNodeTLS = &render.TyphaNodeTLS{
@@ -100,7 +100,7 @@ var _ = Describe("Typha rendering tests", func() {
 
 		dResource := rtest.GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
 		Expect(dResource).ToNot(BeNil())
-		d := dResource.(*apps.Deployment)
+		d := dResource.(*appsv1.Deployment)
 		tc := d.Spec.Template.Spec.Containers[0]
 		Expect(tc.Name).To(Equal("calico-typha"))
 		// Expect the SECURITY_GROUP env variables to not be set
@@ -136,7 +136,7 @@ var _ = Describe("Typha rendering tests", func() {
 		Expect(dResource).ToNot(BeNil())
 
 		// The DaemonSet should have the correct configuration.
-		d := dResource.(*apps.Deployment)
+		d := dResource.(*appsv1.Deployment)
 		paa := d.Spec.Template.Spec.Affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution
 		Expect(paa).To(ContainElement(v1.PodAffinityTerm{
 			LabelSelector: &metav1.LabelSelector{
@@ -165,8 +165,8 @@ var _ = Describe("Typha rendering tests", func() {
 			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "Deployment"},
 		}
 
-		cfg.AmazonCloudIntegration = &operator.AmazonCloudIntegration{
-			Spec: operator.AmazonCloudIntegrationSpec{
+		cfg.AmazonCloudIntegration = &operatorv1.AmazonCloudIntegration{
+			Spec: operatorv1.AmazonCloudIntegrationSpec{
 				NodeSecurityGroupIDs: []string{"sg-nodeid", "sg-masterid"},
 				PodSecurityGroupID:   "sg-podsgid",
 			},
@@ -177,7 +177,7 @@ var _ = Describe("Typha rendering tests", func() {
 
 		deploymentResource := rtest.GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
 		Expect(deploymentResource).ToNot(BeNil())
-		d := deploymentResource.(*apps.Deployment)
+		d := deploymentResource.(*appsv1.Deployment)
 		tc := d.Spec.Template.Spec.Containers[0]
 		Expect(tc.Name).To(Equal("calico-typha"))
 
@@ -203,9 +203,9 @@ var _ = Describe("Typha rendering tests", func() {
 			},
 		}
 
-		installation.ComponentResources = []operator.ComponentResource{
+		installation.ComponentResources = []operatorv1.ComponentResource{
 			{
-				ComponentName:        operator.ComponentNameTypha,
+				ComponentName:        operatorv1.ComponentNameTypha,
 				ResourceRequirements: rr,
 			},
 		}
@@ -215,7 +215,7 @@ var _ = Describe("Typha rendering tests", func() {
 
 		depResource := rtest.GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
 		Expect(depResource).ToNot(BeNil())
-		deployment := depResource.(*apps.Deployment)
+		deployment := depResource.(*appsv1.Deployment)
 
 		passed := false
 		for _, container := range deployment.Spec.Template.Spec.Containers {
@@ -238,8 +238,8 @@ var _ = Describe("Typha rendering tests", func() {
 				}},
 			},
 		}}
-		installation.TyphaAffinity = &operator.TyphaAffinity{
-			NodeAffinity: &operator.NodeAffinity{
+		installation.TyphaAffinity = &operatorv1.TyphaAffinity{
+			NodeAffinity: &operatorv1.NodeAffinity{
 				PreferredDuringSchedulingIgnoredDuringExecution: pfts,
 			},
 		}
@@ -247,7 +247,7 @@ var _ = Describe("Typha rendering tests", func() {
 		resources, _ := component.Objects()
 		dResource := rtest.GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
 		Expect(dResource).ToNot(BeNil())
-		d := dResource.(*apps.Deployment)
+		d := dResource.(*appsv1.Deployment)
 		na := d.Spec.Template.Spec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution
 		Expect(na).To(Equal(pfts))
 	})
@@ -262,8 +262,8 @@ var _ = Describe("Typha rendering tests", func() {
 				}},
 			}},
 		}
-		installation.TyphaAffinity = &operator.TyphaAffinity{
-			NodeAffinity: &operator.NodeAffinity{
+		installation.TyphaAffinity = &operatorv1.TyphaAffinity{
+			NodeAffinity: &operatorv1.NodeAffinity{
 				RequiredDuringSchedulingIgnoredDuringExecution: rst,
 			},
 		}
@@ -271,13 +271,13 @@ var _ = Describe("Typha rendering tests", func() {
 		resources, _ := component.Objects()
 		dResource := rtest.GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
 		Expect(dResource).ToNot(BeNil())
-		d := dResource.(*apps.Deployment)
+		d := dResource.(*appsv1.Deployment)
 		na := d.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
 		Expect(na).To(Equal(rst))
 	})
 
 	It("should render all resources when certificate management is enabled", func() {
-		installation.CertificateManagement = &operator.CertificateManagement{CACert: []byte("<ca>"), SignerName: "a.b/c"}
+		installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: []byte("<ca>"), SignerName: "a.b/c"}
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -310,14 +310,14 @@ var _ = Describe("Typha rendering tests", func() {
 
 		dep := rtest.GetResource(resources, common.TyphaDeploymentName, common.CalicoNamespace, "", "v1", "Deployment")
 		Expect(dep).ToNot(BeNil())
-		deploy, ok := dep.(*apps.Deployment)
+		deploy, ok := dep.(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
 		Expect(deploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 		Expect(deploy.Spec.Template.Spec.InitContainers[0].Name).To(Equal(render.CSRInitContainerName))
 		rtest.ExpectEnv(deploy.Spec.Template.Spec.InitContainers[0].Env, "SIGNER", "a.b/c")
 	})
 	It("should not enable prometheus metrics if TyphaMetricsPort is nil", func() {
-		installation.Variant = operator.TigeraSecureEnterprise
+		installation.Variant = operatorv1.TigeraSecureEnterprise
 		installation.TyphaMetricsPort = nil
 		component := render.Typha(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -327,13 +327,13 @@ var _ = Describe("Typha rendering tests", func() {
 		Expect(dResource).ToNot(BeNil())
 
 		notExpectedEnvVar := v1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSENABLED"}
-		d := dResource.(*apps.Deployment)
+		d := dResource.(*appsv1.Deployment)
 		Expect(d.Spec.Template.Spec.Containers[0].Env).ToNot(ContainElement(notExpectedEnvVar))
 	})
 
 	It("should set TYPHA_PROMETHEUSMETRICSPORT with a custom value if TyphaMetricsPort is set", func() {
 		var typhaMetricsPort int32 = 1234
-		installation.Variant = operator.TigeraSecureEnterprise
+		installation.Variant = operatorv1.TigeraSecureEnterprise
 		installation.TyphaMetricsPort = &typhaMetricsPort
 		component := render.Typha(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -342,7 +342,7 @@ var _ = Describe("Typha rendering tests", func() {
 		dResource := rtest.GetResource(resources, "calico-typha", "calico-system", "", "v1", "Deployment")
 		Expect(dResource).ToNot(BeNil())
 
-		d := dResource.(*apps.Deployment)
+		d := dResource.(*appsv1.Deployment)
 		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(
 			v1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSPORT", Value: "1234"}))
 		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(

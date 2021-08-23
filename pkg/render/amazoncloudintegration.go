@@ -262,7 +262,7 @@ func (c *amazonCloudIntegrationComponent) deployment() *appsv1.Deployment {
 			},
 		},
 	}
-	setCriticalPod(&d.Spec.Template)
+	setClusterCriticalPod(&d.Spec.Template)
 
 	return d
 }

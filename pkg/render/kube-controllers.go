@@ -417,7 +417,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 	d := apps.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "calico-kube-controllers",
+			Name:      common.KubeControllersDeploymentName,
 			Namespace: common.CalicoNamespace,
 			Labels: map[string]string{
 				"k8s-app": "calico-kube-controllers",
@@ -446,7 +446,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 			},
 		},
 	}
-	setCriticalPod(&(d.Spec.Template))
+	setClusterCriticalPod(&(d.Spec.Template))
 
 	return &d
 }

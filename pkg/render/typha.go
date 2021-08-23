@@ -20,8 +20,7 @@ import (
 
 	"github.com/tigera/operator/pkg/ptr"
 
-	apps "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -29,7 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	operator "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
@@ -61,9 +60,9 @@ var (
 // generate Kubernetes objects for installing calico/typha on a cluster.
 type TyphaConfiguration struct {
 	K8sServiceEp           k8sapi.ServiceEndpoint
-	Installation           *operator.InstallationSpec
+	Installation           *operatorv1.InstallationSpec
 	TLS                    *TyphaNodeTLS
-	AmazonCloudIntegration *operator.AmazonCloudIntegration
+	AmazonCloudIntegration *operatorv1.AmazonCloudIntegration
 	MigrateNamespaces      bool
 	ClusterDomain          string
 }
@@ -82,12 +81,12 @@ type typhaComponent struct {
 	certSignReqImage string
 }
 
-func (c *typhaComponent) ResolveImages(is *operator.ImageSet) error {
+func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.cfg.Installation.Registry
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	if c.cfg.Installation.Variant == operator.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		c.typhaImage, err = components.GetReference(components.ComponentTigeraTypha, reg, path, prefix, is)
 	} else {
 		c.typhaImage, err = components.GetReference(components.ComponentCalicoTypha, reg, path, prefix, is)
@@ -127,7 +126,7 @@ func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(common.CalicoNamespace, c.cfg.TLS.TyphaSecret)...)...)
 	}
 
-	if c.cfg.Installation.KubernetesProvider != operator.ProviderOpenShift {
+	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
 		objs = append(objs, c.typhaPodSecurityPolicy())
 	}
 
@@ -320,7 +319,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 			},
 		},
 	}
-	if c.cfg.Installation.Variant == operator.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		extraRules := []rbacv1.PolicyRule{
 			{
 				// Tigera Secure needs to be able to read licenses, tiers, and config.
@@ -348,7 +347,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 		}
 		role.Rules = append(role.Rules, extraRules...)
 	}
-	if c.cfg.Installation.KubernetesProvider != operator.ProviderOpenShift {
+	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{APIGroups: []string{"policy"},
 			Resources:     []string{"podsecuritypolicies"},
@@ -360,7 +359,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 }
 
 // typhaDeployment creates the typha deployment.
-func (c *typhaComponent) typhaDeployment() *apps.Deployment {
+func (c *typhaComponent) typhaDeployment() *appsv1.Deployment {
 	var terminationGracePeriod int64 = 0
 	var revisionHistoryLimit int32 = 2
 	maxUnavailable := intstr.FromInt(1)
@@ -389,7 +388,7 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 		annotations["prometheus.io/port"] = fmt.Sprintf("%d", *c.cfg.Installation.TyphaMetricsPort)
 	}
 
-	d := apps.Deployment{
+	d := appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      common.TyphaDeploymentName,
@@ -398,13 +397,13 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 				AppLabelName: TyphaK8sAppName,
 			},
 		},
-		Spec: apps.DeploymentSpec{
+		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{AppLabelName: TyphaK8sAppName},
 			},
-			Strategy: apps.DeploymentStrategy{
-				Type: apps.RollingUpdateDeploymentStrategyType,
-				RollingUpdate: &apps.RollingUpdateDeployment{
+			Strategy: appsv1.DeploymentStrategy{
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
 					MaxUnavailable: &maxUnavailable,
 					MaxSurge:       &maxSurge,
 				},
@@ -431,7 +430,7 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 			},
 		},
 	}
-	setCriticalPod(&(d.Spec.Template))
+	setClusterCriticalPod(&(d.Spec.Template))
 	if c.cfg.MigrateNamespaces {
 		migration.SetTyphaAntiAffinity(&d)
 	}
@@ -475,7 +474,7 @@ func (c *typhaComponent) typhaPorts() []v1.ContainerPort {
 		{
 			ContainerPort: TyphaPort,
 			Name:          TyphaPortName,
-			Protocol:      corev1.ProtocolTCP,
+			Protocol:      v1.ProtocolTCP,
 		},
 	}
 }
@@ -498,7 +497,7 @@ func (c *typhaComponent) typhaContainer() v1.Container {
 
 // typhaResources creates the typha's resource requirements.
 func (c *typhaComponent) typhaResources() v1.ResourceRequirements {
-	return rmeta.GetResourceRequirements(c.cfg.Installation, operator.ComponentNameTypha)
+	return rmeta.GetResourceRequirements(c.cfg.Installation, operatorv1.ComponentNameTypha)
 }
 
 // typhaEnvVars creates the typha's envvars.
@@ -548,15 +547,15 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 	}
 
 	switch c.cfg.Installation.CNI.Type {
-	case operator.PluginAmazonVPC:
+	case operatorv1.PluginAmazonVPC:
 		typhaEnv = append(typhaEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "eni"})
-	case operator.PluginGKE:
+	case operatorv1.PluginGKE:
 		typhaEnv = append(typhaEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "gke"})
-	case operator.PluginAzureVNET:
+	case operatorv1.PluginAzureVNET:
 		typhaEnv = append(typhaEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "azv"})
 	}
 
-	if c.cfg.Installation.Variant == operator.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
 			typhaEnv = append(typhaEnv, v1.EnvVar{
 				Name:  "MULTI_INTERFACE_MODE",
@@ -606,7 +605,7 @@ func (c *typhaComponent) livenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 }
 
 func (c *typhaComponent) typhaService() *v1.Service {
-	return &corev1.Service{
+	return &v1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      TyphaServiceName,
@@ -615,11 +614,11 @@ func (c *typhaComponent) typhaService() *v1.Service {
 				AppLabelName: TyphaK8sAppName,
 			},
 		},
-		Spec: corev1.ServiceSpec{
-			Ports: []corev1.ServicePort{
+		Spec: v1.ServiceSpec{
+			Ports: []v1.ServicePort{
 				{
 					Port:       TyphaPort,
-					Protocol:   corev1.ProtocolTCP,
+					Protocol:   v1.ProtocolTCP,
 					TargetPort: intstr.FromString(TyphaPortName),
 					Name:       TyphaPortName,
 				},

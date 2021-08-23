@@ -17,7 +17,7 @@ package render_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	v1 "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/tigera/operator/pkg/render"
@@ -25,9 +25,9 @@ import (
 )
 
 var _ = Describe("Namespace rendering tests", func() {
-	var installation *v1.InstallationSpec
+	var installation *operatorv1.InstallationSpec
 	BeforeEach(func() {
-		installation = &v1.InstallationSpec{Variant: v1.Calico, KubernetesProvider: v1.ProviderNone}
+		installation = &operatorv1.InstallationSpec{Variant: operatorv1.Calico, KubernetesProvider: operatorv1.ProviderNone}
 	})
 
 	It("should render a namespace", func() {
@@ -43,7 +43,7 @@ var _ = Describe("Namespace rendering tests", func() {
 	})
 
 	It("should render a namespace for openshift", func() {
-		installation.KubernetesProvider = v1.ProviderOpenShift
+		installation.KubernetesProvider = operatorv1.ProviderOpenShift
 		component := render.Namespaces(installation, nil)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(1))
@@ -55,7 +55,7 @@ var _ = Describe("Namespace rendering tests", func() {
 	})
 
 	It("should render a namespace for aks", func() {
-		installation.KubernetesProvider = v1.ProviderAKS
+		installation.KubernetesProvider = operatorv1.ProviderAKS
 		component := render.Namespaces(installation, nil)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(1))
@@ -66,7 +66,7 @@ var _ = Describe("Namespace rendering tests", func() {
 	})
 
 	It("should render a namespace for tigera-dex on EE", func() {
-		installation.Variant = v1.TigeraSecureEnterprise
+		installation.Variant = operatorv1.TigeraSecureEnterprise
 		component := render.Namespaces(installation, nil)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(2))
@@ -78,8 +78,8 @@ var _ = Describe("Namespace rendering tests", func() {
 	})
 
 	It("should render a namespace for tigera-dex for openshift on EE", func() {
-		installation.Variant = v1.TigeraSecureEnterprise
-		installation.KubernetesProvider = v1.ProviderOpenShift
+		installation.Variant = operatorv1.TigeraSecureEnterprise
+		installation.KubernetesProvider = operatorv1.ProviderOpenShift
 		component := render.Namespaces(installation, nil)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(2))

@@ -19,7 +19,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	operator "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 )
 
 func Secrets(secrets []*corev1.Secret) Component {
@@ -30,7 +30,7 @@ type secretsComponent struct {
 	secrets []*corev1.Secret
 }
 
-func (c *secretsComponent) ResolveImages(is *operator.ImageSet) error {
+func (c *secretsComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	// No images to resolve
 	return nil
 }

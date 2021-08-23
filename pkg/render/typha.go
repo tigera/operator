@@ -20,16 +20,15 @@ import (
 
 	"github.com/tigera/operator/pkg/ptr"
 
-	apps "k8s.io/api/apps/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	operator "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
@@ -61,9 +60,9 @@ var (
 // generate Kubernetes objects for installing calico/typha on a cluster.
 type TyphaConfiguration struct {
 	K8sServiceEp           k8sapi.ServiceEndpoint
-	Installation           *operator.InstallationSpec
+	Installation           *operatorv1.InstallationSpec
 	TLS                    *TyphaNodeTLS
-	AmazonCloudIntegration *operator.AmazonCloudIntegration
+	AmazonCloudIntegration *operatorv1.AmazonCloudIntegration
 	MigrateNamespaces      bool
 	ClusterDomain          string
 }
@@ -82,12 +81,12 @@ type typhaComponent struct {
 	certSignReqImage string
 }
 
-func (c *typhaComponent) ResolveImages(is *operator.ImageSet) error {
+func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.cfg.Installation.Registry
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	if c.cfg.Installation.Variant == operator.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		c.typhaImage, err = components.GetReference(components.ComponentTigeraTypha, reg, path, prefix, is)
 	} else {
 		c.typhaImage, err = components.GetReference(components.ComponentCalicoTypha, reg, path, prefix, is)
@@ -127,7 +126,7 @@ func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(common.CalicoNamespace, c.cfg.TLS.TyphaSecret)...)...)
 	}
 
-	if c.cfg.Installation.KubernetesProvider != operator.ProviderOpenShift {
+	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
 		objs = append(objs, c.typhaPodSecurityPolicy())
 	}
 
@@ -165,8 +164,8 @@ func (c *typhaComponent) Ready() bool {
 }
 
 // typhaServiceAccount creates the typha's service account.
-func (c *typhaComponent) typhaServiceAccount() *v1.ServiceAccount {
-	return &v1.ServiceAccount{
+func (c *typhaComponent) typhaServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      TyphaServiceAccountName,
@@ -320,7 +319,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 			},
 		},
 	}
-	if c.cfg.Installation.Variant == operator.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		extraRules := []rbacv1.PolicyRule{
 			{
 				// Tigera Secure needs to be able to read licenses, tiers, and config.
@@ -348,7 +347,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 		}
 		role.Rules = append(role.Rules, extraRules...)
 	}
-	if c.cfg.Installation.KubernetesProvider != operator.ProviderOpenShift {
+	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{APIGroups: []string{"policy"},
 			Resources:     []string{"podsecuritypolicies"},
@@ -360,13 +359,13 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 }
 
 // typhaDeployment creates the typha deployment.
-func (c *typhaComponent) typhaDeployment() *apps.Deployment {
+func (c *typhaComponent) typhaDeployment() *appsv1.Deployment {
 	var terminationGracePeriod int64 = 0
 	var revisionHistoryLimit int32 = 2
 	maxUnavailable := intstr.FromInt(1)
 	maxSurge := intstr.FromString("25%")
 
-	var initContainers []v1.Container
+	var initContainers []corev1.Container
 	annotations := make(map[string]string)
 	annotations[typhaCAHashAnnotation] = rmeta.AnnotationHash(c.cfg.TLS.CAConfigMap.Data)
 	if c.cfg.Installation.CertificateManagement == nil {
@@ -389,8 +388,8 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 		annotations["prometheus.io/port"] = fmt.Sprintf("%d", *c.cfg.Installation.TyphaMetricsPort)
 	}
 
-	d := apps.Deployment{
-		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+	d := appsv1.Deployment{
+		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      common.TyphaDeploymentName,
 			Namespace: common.CalicoNamespace,
@@ -398,26 +397,26 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 				AppLabelName: TyphaK8sAppName,
 			},
 		},
-		Spec: apps.DeploymentSpec{
+		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{AppLabelName: TyphaK8sAppName},
 			},
-			Strategy: apps.DeploymentStrategy{
-				Type: apps.RollingUpdateDeploymentStrategyType,
-				RollingUpdate: &apps.RollingUpdateDeployment{
+			Strategy: appsv1.DeploymentStrategy{
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
 					MaxUnavailable: &maxUnavailable,
 					MaxSurge:       &maxSurge,
 				},
 			},
 			RevisionHistoryLimit: &revisionHistoryLimit,
-			Template: v1.PodTemplateSpec{
+			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
 						AppLabelName: TyphaK8sAppName,
 					},
 					Annotations: annotations,
 				},
-				Spec: v1.PodSpec{
+				Spec: corev1.PodSpec{
 					Tolerations:                   rmeta.TolerateAll,
 					Affinity:                      c.affinity(),
 					ImagePullSecrets:              c.cfg.Installation.ImagePullSecrets,
@@ -425,13 +424,13 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					HostNetwork:                   true,
 					InitContainers:                initContainers,
-					Containers:                    []v1.Container{c.typhaContainer()},
+					Containers:                    []corev1.Container{c.typhaContainer()},
 					Volumes:                       c.volumes(),
 				},
 			},
 		},
 	}
-	setCriticalPod(&(d.Spec.Template))
+	setClusterCriticalPod(&(d.Spec.Template))
 	if c.cfg.MigrateNamespaces {
 		migration.SetTyphaAntiAffinity(&d)
 	}
@@ -439,13 +438,13 @@ func (c *typhaComponent) typhaDeployment() *apps.Deployment {
 }
 
 // volumes creates the typha's volumes.
-func (c *typhaComponent) volumes() []v1.Volume {
-	volumes := []v1.Volume{
+func (c *typhaComponent) volumes() []corev1.Volume {
+	volumes := []corev1.Volume{
 		{
 			Name: "typha-ca",
-			VolumeSource: v1.VolumeSource{
-				ConfigMap: &v1.ConfigMapVolumeSource{
-					LocalObjectReference: v1.LocalObjectReference{
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
 						Name: TyphaCAConfigMapName,
 					},
 				},
@@ -461,8 +460,8 @@ func (c *typhaComponent) volumes() []v1.Volume {
 }
 
 // typhaVolumeMounts creates the typha's volume mounts.
-func (c *typhaComponent) typhaVolumeMounts() []v1.VolumeMount {
-	volumeMounts := []v1.VolumeMount{
+func (c *typhaComponent) typhaVolumeMounts() []corev1.VolumeMount {
+	volumeMounts := []corev1.VolumeMount{
 		{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
 		{MountPath: "/typha-certs", Name: "typha-certs", ReadOnly: true},
 	}
@@ -470,8 +469,8 @@ func (c *typhaComponent) typhaVolumeMounts() []v1.VolumeMount {
 	return volumeMounts
 }
 
-func (c *typhaComponent) typhaPorts() []v1.ContainerPort {
-	return []v1.ContainerPort{
+func (c *typhaComponent) typhaPorts() []corev1.ContainerPort {
+	return []corev1.ContainerPort{
 		{
 			ContainerPort: TyphaPort,
 			Name:          TyphaPortName,
@@ -481,10 +480,10 @@ func (c *typhaComponent) typhaPorts() []v1.ContainerPort {
 }
 
 // typhaContainer creates the main typha container.
-func (c *typhaComponent) typhaContainer() v1.Container {
+func (c *typhaComponent) typhaContainer() corev1.Container {
 	lp, rp := c.livenessReadinessProbes()
 
-	return v1.Container{
+	return corev1.Container{
 		Name:           "calico-typha",
 		Image:          c.typhaImage,
 		Resources:      c.typhaResources(),
@@ -497,22 +496,22 @@ func (c *typhaComponent) typhaContainer() v1.Container {
 }
 
 // typhaResources creates the typha's resource requirements.
-func (c *typhaComponent) typhaResources() v1.ResourceRequirements {
-	return rmeta.GetResourceRequirements(c.cfg.Installation, operator.ComponentNameTypha)
+func (c *typhaComponent) typhaResources() corev1.ResourceRequirements {
+	return rmeta.GetResourceRequirements(c.cfg.Installation, operatorv1.ComponentNameTypha)
 }
 
 // typhaEnvVars creates the typha's envvars.
-func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
-	var cnEnv v1.EnvVar
+func (c *typhaComponent) typhaEnvVars() []corev1.EnvVar {
+	var cnEnv corev1.EnvVar
 	if c.cfg.Installation.CertificateManagement != nil {
-		cnEnv = v1.EnvVar{
+		cnEnv = corev1.EnvVar{
 			Name: "TYPHA_CLIENTCN", Value: FelixCommonName,
 		}
 	} else {
-		cnEnv = v1.EnvVar{
-			Name: "TYPHA_CLIENTCN", ValueFrom: &v1.EnvVarSource{
-				SecretKeyRef: &v1.SecretKeySelector{
-					LocalObjectReference: v1.LocalObjectReference{
+		cnEnv = corev1.EnvVar{
+			Name: "TYPHA_CLIENTCN", ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
 						Name: NodeTLSSecretName,
 					},
 					Key:      CommonName,
@@ -522,7 +521,7 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 		}
 	}
 
-	typhaEnv := []v1.EnvVar{
+	typhaEnv := []corev1.EnvVar{
 		{Name: "TYPHA_LOGSEVERITYSCREEN", Value: "info"},
 		{Name: "TYPHA_LOGFILEPATH", Value: "none"},
 		{Name: "TYPHA_LOGSEVERITYSYS", Value: "none"},
@@ -536,9 +535,9 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 		// We need at least the CN or URISAN set, we depend on the validation
 		// done by the core_controller that the Secret will have one.
 		cnEnv,
-		{Name: "TYPHA_CLIENTURISAN", ValueFrom: &v1.EnvVarSource{
-			SecretKeyRef: &v1.SecretKeySelector{
-				LocalObjectReference: v1.LocalObjectReference{
+		{Name: "TYPHA_CLIENTURISAN", ValueFrom: &corev1.EnvVarSource{
+			SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
 					Name: NodeTLSSecretName,
 				},
 				Key:      URISAN,
@@ -548,17 +547,17 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 	}
 
 	switch c.cfg.Installation.CNI.Type {
-	case operator.PluginAmazonVPC:
-		typhaEnv = append(typhaEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "eni"})
-	case operator.PluginGKE:
-		typhaEnv = append(typhaEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "gke"})
-	case operator.PluginAzureVNET:
-		typhaEnv = append(typhaEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "azv"})
+	case operatorv1.PluginAmazonVPC:
+		typhaEnv = append(typhaEnv, corev1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "eni"})
+	case operatorv1.PluginGKE:
+		typhaEnv = append(typhaEnv, corev1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "gke"})
+	case operatorv1.PluginAzureVNET:
+		typhaEnv = append(typhaEnv, corev1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "azv"})
 	}
 
-	if c.cfg.Installation.Variant == operator.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
-			typhaEnv = append(typhaEnv, v1.EnvVar{
+			typhaEnv = append(typhaEnv, corev1.EnvVar{
 				Name:  "MULTI_INTERFACE_MODE",
 				Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
 		}
@@ -570,8 +569,8 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 	if c.cfg.Installation.TyphaMetricsPort != nil {
 		// If a typha metrics port was given, then enable typha prometheus metrics and set the port.
 		typhaEnv = append(typhaEnv,
-			v1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSENABLED", Value: "true"},
-			v1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSPORT", Value: fmt.Sprintf("%d", *c.cfg.Installation.TyphaMetricsPort)},
+			corev1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSENABLED", Value: "true"},
+			corev1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSPORT", Value: fmt.Sprintf("%d", *c.cfg.Installation.TyphaMetricsPort)},
 		)
 	}
 
@@ -579,12 +578,12 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 }
 
 // livenessReadinessProbes creates the typha's liveness and readiness probes.
-func (c *typhaComponent) livenessReadinessProbes() (*v1.Probe, *v1.Probe) {
+func (c *typhaComponent) livenessReadinessProbes() (*corev1.Probe, *corev1.Probe) {
 	// Determine liveness and readiness configuration for typha.
 	port := intstr.FromInt(9098)
-	lp := &v1.Probe{
-		Handler: v1.Handler{
-			HTTPGet: &v1.HTTPGetAction{
+	lp := &corev1.Probe{
+		Handler: corev1.Handler{
+			HTTPGet: &corev1.HTTPGetAction{
 				Host: "localhost",
 				Path: "/liveness",
 				Port: port,
@@ -592,9 +591,9 @@ func (c *typhaComponent) livenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 		},
 		TimeoutSeconds: 10,
 	}
-	rp := &v1.Probe{
-		Handler: v1.Handler{
-			HTTPGet: &v1.HTTPGetAction{
+	rp := &corev1.Probe{
+		Handler: corev1.Handler{
+			HTTPGet: &corev1.HTTPGetAction{
 				Host: "localhost",
 				Path: "/readiness",
 				Port: port,
@@ -605,7 +604,7 @@ func (c *typhaComponent) livenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 	return lp, rp
 }
 
-func (c *typhaComponent) typhaService() *v1.Service {
+func (c *typhaComponent) typhaService() *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -639,13 +638,13 @@ func (c *typhaComponent) typhaPodSecurityPolicy() *policyv1beta1.PodSecurityPoli
 }
 
 // affinity sets the user-specified typha affinity if specified.
-func (c *typhaComponent) affinity() (aff *v1.Affinity) {
+func (c *typhaComponent) affinity() (aff *corev1.Affinity) {
 	if c.cfg.Installation.TyphaAffinity != nil && c.cfg.Installation.TyphaAffinity.NodeAffinity != nil {
 		// this ensures we return nil if no affinity is specified.
 		if c.cfg.Installation.TyphaAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil && len(c.cfg.Installation.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution) == 0 {
 			return nil
 		}
-		aff = &v1.Affinity{NodeAffinity: &v1.NodeAffinity{
+		aff = &corev1.Affinity{NodeAffinity: &corev1.NodeAffinity{
 			RequiredDuringSchedulingIgnoredDuringExecution:  c.cfg.Installation.TyphaAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution,
 			PreferredDuringSchedulingIgnoredDuringExecution: c.cfg.Installation.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
 		},

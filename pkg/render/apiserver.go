@@ -23,7 +23,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -1114,7 +1113,7 @@ func (c *apiServerComponent) apiServerPodSecurityPolicy() (client.Object, client
 //
 // Calico only.
 func (c *apiServerComponent) networkPolicy() *netv1.NetworkPolicy {
-	tcp := v1.ProtocolTCP
+	tcp := corev1.ProtocolTCP
 	p := intstr.FromInt(5443)
 	return &netv1.NetworkPolicy{
 		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},

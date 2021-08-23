@@ -19,7 +19,6 @@ package render
 import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -65,7 +64,7 @@ func Guardian(
 
 type GuardianComponent struct {
 	url                 string
-	pullSecrets         []*v1.Secret
+	pullSecrets         []*corev1.Secret
 	openshift           bool
 	installation        *operatorv1.InstallationSpec
 	tunnelSecret        *corev1.Secret
@@ -148,7 +147,7 @@ func (c *GuardianComponent) service() *corev1.Service {
 }
 
 func (c *GuardianComponent) serviceAccount() client.Object {
-	return &v1.ServiceAccount{
+	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: GuardianServiceAccountName, Namespace: GuardianNamespace},
 	}
@@ -242,21 +241,21 @@ func (c *GuardianComponent) deployment() client.Object {
 	}
 }
 
-func (c *GuardianComponent) volumes() []v1.Volume {
-	return []v1.Volume{
+func (c *GuardianComponent) volumes() []corev1.Volume {
+	return []corev1.Volume{
 		{
 			Name: GuardianVolumeName,
-			VolumeSource: v1.VolumeSource{
-				Secret: &v1.SecretVolumeSource{
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
 					SecretName: GuardianSecretName,
 				},
 			},
 		},
 		{
 			Name: PacketCaptureCertSecret,
-			VolumeSource: v1.VolumeSource{
-				Secret: &v1.SecretVolumeSource{
-					Items: []v1.KeyToPath{{
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					Items: []corev1.KeyToPath{{
 						Key:  "tls.crt",
 						Path: "tls.crt",
 					}},
@@ -267,7 +266,7 @@ func (c *GuardianComponent) volumes() []v1.Volume {
 	}
 }
 
-func (c *GuardianComponent) container() []v1.Container {
+func (c *GuardianComponent) container() []corev1.Container {
 	return []corev1.Container{
 		{
 			Name:  GuardianDeploymentName,
@@ -303,7 +302,7 @@ func (c *GuardianComponent) container() []v1.Container {
 	}
 }
 
-func (c *GuardianComponent) volumeMounts() []v1.VolumeMount {
+func (c *GuardianComponent) volumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
 		{
 			Name:      GuardianVolumeName,

@@ -19,7 +19,7 @@ import (
 	"net/url"
 	"strconv"
 
-	operator "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -53,7 +53,7 @@ const (
 	tigeraPrometheusAPIListenPortFieldName = "tigeraPrometheusAPIListenPort"
 )
 
-func TigeraPrometheusAPI(cr *operator.InstallationSpec, pullSecrets []*corev1.Secret, configMap *corev1.ConfigMap) (Component, error) {
+func TigeraPrometheusAPI(cr *operatorv1.InstallationSpec, pullSecrets []*corev1.Secret, configMap *corev1.ConfigMap) (Component, error) {
 
 	return &tigeraPrometheusAPIComponent{
 		configMap:    configMap,
@@ -64,12 +64,12 @@ func TigeraPrometheusAPI(cr *operator.InstallationSpec, pullSecrets []*corev1.Se
 
 type tigeraPrometheusAPIComponent struct {
 	configMap              *corev1.ConfigMap
-	installation           *operator.InstallationSpec
+	installation           *operatorv1.InstallationSpec
 	pullSecrets            []*corev1.Secret
 	prometheusServiceImage string
 }
 
-func (p *tigeraPrometheusAPIComponent) ResolveImages(is *operator.ImageSet) error {
+func (p *tigeraPrometheusAPIComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := p.installation.Registry
 	path := p.installation.ImagePath
 	prefix := p.installation.ImagePrefix
@@ -109,7 +109,7 @@ func (p *tigeraPrometheusAPIComponent) Objects() (objsToCreate, objsToDelete []c
 	}
 
 	// openshift will use the default restricted SCCs if one is not provided
-	if p.installation.KubernetesProvider != operator.ProviderOpenShift {
+	if p.installation.KubernetesProvider != operatorv1.ProviderOpenShift {
 		namespacedObjects = append(namespacedObjects, p.podSecurityPolicy())
 	}
 
@@ -186,8 +186,8 @@ func (p *tigeraPrometheusAPIComponent) deployment(prometheusServiceListenPort in
 	// set to host networked if cluster is on EKS using Calico CNI since the EKS managed Kubernetes APIserver
 	// cannot reach the pod network in this configuration. This is because Calico cannot manage
 	// the managed control plane nodes' network
-	if p.installation.KubernetesProvider == operator.ProviderEKS &&
-		p.installation.CNI.Type == operator.PluginCalico {
+	if p.installation.KubernetesProvider == operatorv1.ProviderEKS &&
+		p.installation.CNI.Type == operatorv1.PluginCalico {
 		podHostNetworked = true
 		// corresponding dns policy for hostnetwoked pods to resolve the service hostname urls
 		podDnsPolicy = corev1.DNSClusterFirstWithHostNet

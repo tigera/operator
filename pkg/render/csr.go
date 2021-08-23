@@ -27,7 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	operator "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 )
 
 const (
@@ -39,7 +39,7 @@ const (
 // CreateCSRInitContainer creates an init container that can be added to a pod spec in order to create a CSR for its
 // TLS certificates. It uses the provided params and the k8s downward api to be able to specify certificate subject information.
 func CreateCSRInitContainer(
-	certificateManagement *operator.CertificateManagement,
+	certificateManagement *operatorv1.CertificateManagement,
 	image string,
 	mountName string,
 	commonName string,
@@ -89,7 +89,7 @@ func CreateCSRInitContainer(
 }
 
 // ResolveCsrInitImage resolves the image needed for the CSR init image taking into account the specified ImageSet
-func ResolveCSRInitImage(inst *operator.InstallationSpec, is *operator.ImageSet) (string, error) {
+func ResolveCSRInitImage(inst *operatorv1.InstallationSpec, is *operatorv1.ImageSet) (string, error) {
 	return components.GetReference(
 		components.ComponentCSRInitContainer,
 		inst.Registry,
@@ -142,7 +142,7 @@ func CSRClusterRoleBinding(name, namespace string) *rbacv1.ClusterRoleBinding {
 	return crb
 }
 
-func certificateVolumeSource(certificateManagement *operator.CertificateManagement, secretName string) corev1.VolumeSource {
+func certificateVolumeSource(certificateManagement *operatorv1.CertificateManagement, secretName string) corev1.VolumeSource {
 	var defaultMode int32 = 420
 	if certificateManagement != nil {
 		return corev1.VolumeSource{

@@ -21,19 +21,19 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	operator "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 )
 
-func AWSSecurityGroupSetup(ps []corev1.LocalObjectReference, installcr *operator.InstallationSpec) (Component, error) {
+func AWSSecurityGroupSetup(ps []corev1.LocalObjectReference, installcr *operatorv1.InstallationSpec) (Component, error) {
 	return &awsSGSetupComponent{pullSecrets: ps, installcr: installcr}, nil
 }
 
 type awsSGSetupComponent struct {
 	pullSecrets []corev1.LocalObjectReference
-	installcr   *operator.InstallationSpec
+	installcr   *operatorv1.InstallationSpec
 	image       string
 }
 
@@ -41,7 +41,7 @@ func (c *awsSGSetupComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
 
-func (c *awsSGSetupComponent) ResolveImages(is *operator.ImageSet) error {
+func (c *awsSGSetupComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.installcr.Registry
 	path := c.installcr.ImagePath
 	prefix := c.installcr.ImagePrefix

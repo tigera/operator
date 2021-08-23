@@ -26,14 +26,13 @@ import (
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	operator "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
@@ -91,8 +90,8 @@ func Manager(
 	tlsKeyPair *corev1.Secret,
 	pullSecrets []*corev1.Secret,
 	openshift bool,
-	installation *operator.InstallationSpec,
-	managementCluster *operator.ManagementCluster,
+	installation *operatorv1.InstallationSpec,
+	managementCluster *operatorv1.ManagementCluster,
 	tunnelSecret *corev1.Secret,
 	internalTrafficSecret *corev1.Secret,
 	clusterDomain string,
@@ -156,8 +155,8 @@ type managerComponent struct {
 	pullSecrets                   []*corev1.Secret
 	openshift                     bool
 	clusterDomain                 string
-	installation                  *operator.InstallationSpec
-	managementCluster             *operator.ManagementCluster
+	installation                  *operatorv1.InstallationSpec
+	managementCluster             *operatorv1.ManagementCluster
 	esLicenseType                 ElasticsearchLicenseType
 	managerImage                  string
 	proxyImage                    string
@@ -165,7 +164,7 @@ type managerComponent struct {
 	csrInitImage                  string
 }
 
-func (c *managerComponent) ResolveImages(is *operator.ImageSet) error {
+func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.installation.Registry
 	path := c.installation.ImagePath
 	prefix := c.installation.ImagePrefix
@@ -321,7 +320,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
 
 	d := &appsv1.Deployment{
-		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tigera-manager",
 			Namespace: ManagerNamespace,
@@ -346,29 +345,29 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 }
 
 // managerVolumes returns the volumes for the Tigera Secure manager component.
-func (c *managerComponent) managerVolumeMounts() []v1.VolumeMount {
+func (c *managerComponent) managerVolumeMounts() []corev1.VolumeMount {
 	if c.keyValidatorConfig != nil {
 		return c.keyValidatorConfig.RequiredVolumeMounts()
 	}
-	return []v1.VolumeMount{}
+	return []corev1.VolumeMount{}
 }
 
 // managerVolumes returns the volumes for the Tigera Secure manager component.
-func (c *managerComponent) managerVolumes() []v1.Volume {
-	var certificateManagement *operator.CertificateManagement
+func (c *managerComponent) managerVolumes() []corev1.Volume {
+	var certificateManagement *operatorv1.CertificateManagement
 	if c.installation.CertificateManagement != nil {
 		certificateManagement = c.installation.CertificateManagement
 	}
 	tlsVolumeSource := certificateVolumeSource(certificateManagement, ManagerTLSSecretName)
-	v := []v1.Volume{
+	v := []corev1.Volume{
 		{
 			Name:         ManagerTLSSecretName,
 			VolumeSource: tlsVolumeSource,
 		},
 		{
 			Name: KibanaPublicCertSecret,
-			VolumeSource: v1.VolumeSource{
-				Secret: &v1.SecretVolumeSource{
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
 					SecretName: KibanaPublicCertSecret,
 				},
 			},
@@ -376,11 +375,11 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 	}
 
 	if c.complianceServerCertSecret != nil {
-		v = append(v, v1.Volume{
+		v = append(v, corev1.Volume{
 			Name: ComplianceServerCertSecret,
-			VolumeSource: v1.VolumeSource{
-				Secret: &v1.SecretVolumeSource{
-					Items: []v1.KeyToPath{{
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					Items: []corev1.KeyToPath{{
 						Key:  "tls.crt",
 						Path: "tls.crt",
 					}},
@@ -391,11 +390,11 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 	}
 
 	if c.packetCaptureServerCertSecret != nil {
-		v = append(v, v1.Volume{
+		v = append(v, corev1.Volume{
 			Name: PacketCaptureCertSecret,
-			VolumeSource: v1.VolumeSource{
-				Secret: &v1.SecretVolumeSource{
-					Items: []v1.KeyToPath{{
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					Items: []corev1.KeyToPath{{
 						Key:  "tls.crt",
 						Path: "tls.crt",
 					}},
@@ -407,13 +406,13 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 
 	if c.managementCluster != nil {
 		v = append(v,
-			v1.Volume{
+			corev1.Volume{
 				// We only want to mount the cert, not the private key to es-proxy to establish a connection with voltron.
 				Name: ManagerInternalTLSSecretCertName,
-				VolumeSource: v1.VolumeSource{
-					Secret: &v1.SecretVolumeSource{
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
 						SecretName: ManagerInternalTLSSecretName,
-						Items: []v1.KeyToPath{
+						Items: []corev1.KeyToPath{
 							{
 								Key:  "cert",
 								Path: "cert",
@@ -422,20 +421,20 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 					},
 				},
 			},
-			v1.Volume{
+			corev1.Volume{
 				// We mount the full secret to be shared with Voltron.
 				Name: ManagerInternalTLSSecretName,
-				VolumeSource: v1.VolumeSource{
-					Secret: &v1.SecretVolumeSource{
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
 						SecretName: ManagerInternalTLSSecretName,
 					},
 				},
 			},
-			v1.Volume{
+			corev1.Volume{
 				// Append volume for tunnel certificate
 				Name: VoltronTunnelSecretName,
-				VolumeSource: v1.VolumeSource{
-					Secret: &v1.SecretVolumeSource{
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
 						SecretName: VoltronTunnelSecretName,
 					},
 				},
@@ -450,7 +449,7 @@ func (c *managerComponent) managerVolumes() []v1.Volume {
 }
 
 // managerProbe returns the probe for the manager container.
-func (c *managerComponent) managerProbe() *v1.Probe {
+func (c *managerComponent) managerProbe() *corev1.Probe {
 	return &corev1.Probe{
 		Handler: corev1.Handler{
 			HTTPGet: &corev1.HTTPGetAction{
@@ -465,7 +464,7 @@ func (c *managerComponent) managerProbe() *v1.Probe {
 }
 
 // managerEsProxyProbe returns the probe for the ES proxy container.
-func (c *managerComponent) managerEsProxyProbe() *v1.Probe {
+func (c *managerComponent) managerEsProxyProbe() *corev1.Probe {
 	return &corev1.Probe{
 		Handler: corev1.Handler{
 			HTTPGet: &corev1.HTTPGetAction{
@@ -480,7 +479,7 @@ func (c *managerComponent) managerEsProxyProbe() *v1.Probe {
 }
 
 // managerProxyProbe returns the probe for the proxy container.
-func (c *managerComponent) managerProxyProbe() *v1.Probe {
+func (c *managerComponent) managerProxyProbe() *corev1.Probe {
 	return &corev1.Probe{
 		Handler: corev1.Handler{
 			HTTPGet: &corev1.HTTPGetAction{
@@ -495,8 +494,8 @@ func (c *managerComponent) managerProxyProbe() *v1.Probe {
 }
 
 // managerEnvVars returns the envvars for the manager container.
-func (c *managerComponent) managerEnvVars() []v1.EnvVar {
-	envs := []v1.EnvVar{
+func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
+	envs := []corev1.EnvVar{
 		{Name: "CNX_PROMETHEUS_API_URL", Value: fmt.Sprintf("/api/v1/namespaces/%s/services/calico-node-prometheus:9090/proxy/api/v1", common.TigeraPrometheusNamespace)},
 		{Name: "CNX_COMPLIANCE_REPORTS_API_URL", Value: "/compliance/reports"},
 		{Name: "CNX_QUERY_API_URL", Value: "/api/v1/namespaces/tigera-system/services/https:tigera-api:8080/proxy"},
@@ -528,7 +527,7 @@ func (c *managerComponent) managerContainer() corev1.Container {
 }
 
 // managerOAuth2EnvVars returns the OAuth2/OIDC envvars depending on the authentication type.
-func (c *managerComponent) managerOAuth2EnvVars() []v1.EnvVar {
+func (c *managerComponent) managerOAuth2EnvVars() []corev1.EnvVar {
 	var envs []corev1.EnvVar
 
 	if c.keyValidatorConfig == nil {
@@ -580,7 +579,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 	}
 }
 
-func (c *managerComponent) volumeMountsForProxyManager() []v1.VolumeMount {
+func (c *managerComponent) volumeMountsForProxyManager() []corev1.VolumeMount {
 	var mounts = []corev1.VolumeMount{
 		{Name: ManagerTLSSecretName, MountPath: "/certs/https", ReadOnly: true},
 		{Name: KibanaPublicCertSecret, MountPath: "/certs/kibana", ReadOnly: true},
@@ -613,7 +612,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{Name: ManagerInternalTLSSecretCertName, MountPath: "/manager-tls", ReadOnly: true})
 	}
 
-	env := []v1.EnvVar{
+	env := []corev1.EnvVar{
 		{Name: "ELASTIC_LICENSE_TYPE", Value: string(c.esLicenseType)},
 		{Name: "ELASTIC_VERSION", Value: components.ComponentEckElasticsearch.Version},
 		{Name: "ELASTIC_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.clusterDomain)},
@@ -635,12 +634,12 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 }
 
 // managerTolerations returns the tolerations for the Tigera Secure manager deployment pods.
-func (c *managerComponent) managerTolerations() []v1.Toleration {
+func (c *managerComponent) managerTolerations() []corev1.Toleration {
 	return append(c.installation.ControlPlaneTolerations, rmeta.TolerateMaster, rmeta.TolerateCriticalAddonsOnly)
 }
 
 // managerService returns the service exposing the Tigera Secure web app.
-func (c *managerComponent) managerService() *v1.Service {
+func (c *managerComponent) managerService() *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -663,8 +662,8 @@ func (c *managerComponent) managerService() *v1.Service {
 }
 
 // managerServiceAccount creates the serviceaccount used by the Tigera Secure web app.
-func managerServiceAccount() *v1.ServiceAccount {
-	return &v1.ServiceAccount{
+func managerServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: ManagerServiceAccount, Namespace: ManagerNamespace},
 	}

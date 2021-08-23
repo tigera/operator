@@ -22,14 +22,13 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	operator "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rkibana "github.com/tigera/operator/pkg/render/common/kibana"
@@ -50,10 +49,10 @@ const (
 )
 
 func IntrusionDetection(
-	lc *operator.LogCollector,
+	lc *operatorv1.LogCollector,
 	esSecrets []*corev1.Secret,
 	kibanaCertSecret *corev1.Secret,
-	installation *operator.InstallationSpec,
+	installation *operatorv1.InstallationSpec,
 	esClusterConfig *relasticsearch.ClusterConfig,
 	pullSecrets []*corev1.Secret,
 	openshift bool,
@@ -80,10 +79,10 @@ func IntrusionDetection(
 }
 
 type intrusionDetectionComponent struct {
-	lc                       *operator.LogCollector
+	lc                       *operatorv1.LogCollector
 	esSecrets                []*corev1.Secret
 	kibanaCertSecret         *corev1.Secret
-	installation             *operator.InstallationSpec
+	installation             *operatorv1.InstallationSpec
 	esClusterConfig          *relasticsearch.ClusterConfig
 	pullSecrets              []*corev1.Secret
 	openshift                bool
@@ -96,7 +95,7 @@ type intrusionDetectionComponent struct {
 	managerInternalTLSSecret *corev1.Secret
 }
 
-func (c *intrusionDetectionComponent) ResolveImages(is *operator.ImageSet) error {
+func (c *intrusionDetectionComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.installation.Registry
 	path := c.installation.ImagePath
 	prefix := c.installation.ImagePrefix
@@ -167,25 +166,25 @@ func (c *intrusionDetectionComponent) Ready() bool {
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batchv1.Job {
-	podTemplate := relasticsearch.DecorateAnnotations(&v1.PodTemplateSpec{
+	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: map[string]string{"job-name": IntrusionDetectionInstallerJobName},
 		},
-		Spec: relasticsearch.PodSpecDecorate(v1.PodSpec{
+		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
 			Tolerations:      c.installation.ControlPlaneTolerations,
 			NodeSelector:     c.installation.ControlPlaneNodeSelector,
-			RestartPolicy:    v1.RestartPolicyOnFailure,
+			RestartPolicy:    corev1.RestartPolicyOnFailure,
 			ImagePullSecrets: secret.GetReferenceList(c.pullSecrets),
-			Containers: []v1.Container{
+			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorate(c.intrusionDetectionJobContainer(), c.esClusterConfig.ClusterName(),
 					ElasticsearchIntrusionDetectionJobUserSecret, c.clusterDomain, rmeta.OSTypeLinux),
 			},
 			Volumes: []corev1.Volume{{
 				Name: "kibana-ca-cert-volume",
-				VolumeSource: v1.VolumeSource{
-					Secret: &v1.SecretVolumeSource{
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
 						SecretName: KibanaPublicCertSecret,
-						Items: []v1.KeyToPath{
+						Items: []corev1.KeyToPath{
 							{Key: "tls.crt", Path: "ca.pem"},
 						},
 					},
@@ -193,7 +192,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 			}},
 			ServiceAccountName: IntrusionDetectionInstallerJobName,
 		}),
-	}, c.esClusterConfig, c.esSecrets).(*v1.PodTemplateSpec)
+	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
 
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
@@ -212,7 +211,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 	}
 }
 
-func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Container {
+func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() corev1.Container {
 	kScheme, kHost, kPort, _ := url.ParseEndpoint(rkibana.HTTPSEndpoint(c.SupportedOSType(), c.clusterDomain))
 	secretName := ElasticsearchIntrusionDetectionJobUserSecret
 	return corev1.Container{
@@ -261,8 +260,8 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() v1.Contai
 	}
 }
 
-func (c *intrusionDetectionComponent) intrusionDetectionServiceAccount() *v1.ServiceAccount {
-	return &v1.ServiceAccount{
+func (c *intrusionDetectionComponent) intrusionDetectionServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "intrusion-detection-controller",
@@ -271,8 +270,8 @@ func (c *intrusionDetectionComponent) intrusionDetectionServiceAccount() *v1.Ser
 	}
 }
 
-func (c *intrusionDetectionComponent) intrusionDetectionJobServiceAccount() *v1.ServiceAccount {
-	return &v1.ServiceAccount{
+func (c *intrusionDetectionComponent) intrusionDetectionJobServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      IntrusionDetectionInstallerJobName,
@@ -404,7 +403,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionDeployment() *appsv1.Dep
 	var replicas int32 = 1
 
 	return &appsv1.Deployment{
-		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "intrusion-detection-controller",
 			Namespace: IntrusionDetectionNamespace,
@@ -500,7 +499,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
 }
 
-func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() v1.Container {
+func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() corev1.Container {
 	envs := []corev1.EnvVar{
 		{
 			Name:  "CLUSTER_NAME",
@@ -566,7 +565,7 @@ func (c *intrusionDetectionComponent) syslogForwardingIsEnabled() bool {
 			if syslog.LogTypes != nil {
 				for _, t := range syslog.LogTypes {
 					switch t {
-					case operator.SyslogLogIDSEvents:
+					case operatorv1.SyslogLogIDSEvents:
 						return true
 					}
 				}

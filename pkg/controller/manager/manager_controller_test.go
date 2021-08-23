@@ -99,6 +99,7 @@ var _ = Describe("Manager controller tests", func() {
 			mockStatus.On("OnCRFound").Return()
 			mockStatus.On("ClearDegraded")
 			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+			mockStatus.On("SetDegraded", "Waiting for secret 'tigera-packetcapture-server-tls' to become available", "").Return().Maybe()
 			mockStatus.On("ReadyToMonitor")
 
 			r = ReconcileManager{
@@ -159,12 +160,18 @@ var _ = Describe("Manager controller tests", func() {
 					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.KibanaPublicCertSecret,
-					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-
+					Name:      render.ComplianceServerCertSecret,
+					Namespace: rmeta.OperatorNamespace(),
+				},
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				Data: map[string][]byte{
+					"tls.crt": []byte("crt"),
+					"tls.key": []byte("crt"),
+				},
+			})).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.ComplianceServerCertSecret,
+					Name:      render.PacketCaptureCertSecret,
 					Namespace: rmeta.OperatorNamespace(),
 				},
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
@@ -330,6 +337,7 @@ var _ = Describe("Manager controller tests", func() {
 			mockStatus.On("OnCRFound").Return()
 			mockStatus.On("ClearDegraded")
 			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+			mockStatus.On("SetDegraded", "Waiting for secret 'tigera-packetcapture-server-tls' to become available", "").Return().Maybe()
 			mockStatus.On("ReadyToMonitor")
 
 			r = ReconcileManager{
@@ -386,14 +394,21 @@ var _ = Describe("Manager controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ElasticsearchManagerUserSecret,
 					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.KibanaPublicCertSecret,
-					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ComplianceServerCertSecret,
+					Namespace: rmeta.OperatorNamespace(),
+				},
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				Data: map[string][]byte{
+					"tls.crt": []byte("crt"),
+					"tls.key": []byte("crt"),
+				},
+			})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.PacketCaptureCertSecret,
 					Namespace: rmeta.OperatorNamespace(),
 				},
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
@@ -431,7 +446,7 @@ var _ = Describe("Manager controller tests", func() {
 				},
 			}
 			Expect(test.GetResource(c, &d)).To(BeNil())
-			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(4))
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(3))
 			mgr := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-manager")
 			Expect(mgr).ToNot(BeNil())
 			Expect(mgr.Image).To(Equal(
@@ -450,12 +465,6 @@ var _ = Describe("Manager controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentManagerProxy.Image,
 					components.ComponentManagerProxy.Version)))
-			packetCapture := test.GetContainer(d.Spec.Template.Spec.Containers, render.PacketCaptureServer)
-			Expect(packetCapture).ToNot(BeNil())
-			Expect(packetCapture.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentPacketCapture.Image,
-					components.ComponentPacketCapture.Version)))
 		})
 		It("should use images from imageset", func() {
 			Expect(c.Create(ctx, &operatorv1.ImageSet{
@@ -465,7 +474,6 @@ var _ = Describe("Manager controller tests", func() {
 						{Image: "tigera/cnx-manager", Digest: "sha256:cnxmanagerhash"},
 						{Image: "tigera/es-proxy", Digest: "sha256:esproxyhash"},
 						{Image: "tigera/voltron", Digest: "sha256:voltronhash"},
-						{Image: "tigera/packetcapture-api", Digest: "sha256:packetcapturehash"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -480,7 +488,7 @@ var _ = Describe("Manager controller tests", func() {
 				},
 			}
 			Expect(test.GetResource(c, &d)).To(BeNil())
-			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(4))
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(3))
 			mgr := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-manager")
 			Expect(mgr).ToNot(BeNil())
 			Expect(mgr.Image).To(Equal(
@@ -499,12 +507,6 @@ var _ = Describe("Manager controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentManagerProxy.Image,
 					"sha256:voltronhash")))
-			packetCapture := test.GetContainer(d.Spec.Template.Spec.Containers, render.PacketCaptureServer)
-			Expect(packetCapture).ToNot(BeNil())
-			Expect(packetCapture.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentPacketCapture.Image,
-					"sha256:packetcapturehash")))
 		})
 	})
 })

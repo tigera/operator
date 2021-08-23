@@ -94,6 +94,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "es-gateway" }}
+	ComponentESGateway = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with .Components.fluentd }}
 	ComponentFluentd = component{
 		Version: "{{ .Version }}",
@@ -150,6 +156,12 @@ var (
 {{- end }}
 {{ with index .Components "prometheus" }}
 	ComponentPrometheus = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
+{{ with index .Components "tigera-prometheus-service" }}
+	ComponentTigeraPrometheusService = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
@@ -227,6 +239,7 @@ var (
 		ComponentManagerProxy,
 		ComponentPacketCapture,
 		ComponentPrometheus,
+		ComponentTigeraPrometheusService,
 		ComponentPrometheusAlertmanager,
 		ComponentQueryServer,
 		ComponentTigeraKubeControllers,
@@ -235,5 +248,6 @@ var (
 		ComponentTigeraCNI,
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
+		ComponentESGateway,
 	}
 )

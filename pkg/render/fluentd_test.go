@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -91,7 +91,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{Name: "FLOW_LOG_FILE", Value: "/var/log/calico/flowlogs/flows.log"},
 			{Name: "DNS_LOG_FILE", Value: "/var/log/calico/dnslogs/dns.log"},
 			{Name: "FLUENTD_ES_SECURE", Value: "true"},
-			{Name: "ELASTIC_HOST", Value: "tigera-secure-es-http.tigera-elasticsearch.svc"},
+			{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
 			{Name: "ELASTIC_PORT", Value: "9200"},
 			{
 				Name: "NODENAME",
@@ -139,8 +139,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		Expect(podExecRoleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      render.ManagerServiceAccount,
-				Namespace: render.ManagerNamespace,
+				Name:      render.PacketCaptureServiceAccountName,
+				Namespace: render.PacketCaptureNamespace,
 			},
 		}))
 	})
@@ -181,7 +181,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{Name: "FLOW_LOG_FILE", Value: "c:/var/log/calico/flowlogs/flows.log"},
 			{Name: "DNS_LOG_FILE", Value: "c:/var/log/calico/dnslogs/dns.log"},
 			{Name: "FLUENTD_ES_SECURE", Value: "true"},
-			{Name: "ELASTIC_HOST", Value: "tigera-secure-es-http.tigera-elasticsearch.svc.cluster.local"},
+			{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc.cluster.local"},
 			{Name: "ELASTIC_PORT", Value: "9200"},
 			{
 				Name: "NODENAME",
@@ -202,7 +202,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{Name: "FLOW_LOG_FILE", Value: "c:/var/log/calico/flowlogs/flows.log"},
 			{Name: "DNS_LOG_FILE", Value: "c:/var/log/calico/dnslogs/dns.log"},
 			{Name: "FLUENTD_ES_SECURE", Value: "true"},
-			{Name: "ELASTIC_HOST", Value: "tigera-secure-es-http.tigera-elasticsearch.svc.cluster.local"},
+			{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc.cluster.local"},
 			{Name: "ELASTIC_PORT", Value: "9200"},
 			{
 				Name: "NODENAME",
@@ -658,7 +658,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		envs := deploy.Spec.Template.Spec.Containers[0].Env
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "K8S_PLATFORM", Value: "eks"}))
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "AWS_REGION", Value: eksConfig.AwsRegion}))
-		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_HOST", Value: "tigera-secure-es-http.tigera-elasticsearch.svc"}))
+		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"}))
 
 		fetchIntervalVal := "900"
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "EKS_CLOUDWATCH_LOG_FETCH_INTERVAL", Value: fetchIntervalVal}))

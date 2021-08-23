@@ -3,35 +3,34 @@ apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.2.5
+    controller-gen.kubebuilder.io/version: v0.4.0
     "helm.sh/hook": "crd-install"
-  creationTimestamp: null
   name: apmservers.apm.k8s.elastic.co
 spec:
   additionalPrinterColumns:
-    - JSONPath: .status.health
-      name: health
-      type: string
-    - JSONPath: .status.availableNodes
-      description: Available nodes
-      name: nodes
-      type: integer
-    - JSONPath: .spec.version
-      description: APM version
-      name: version
-      type: string
-    - JSONPath: .metadata.creationTimestamp
-      name: age
-      type: date
+  - JSONPath: .status.health
+    name: health
+    type: string
+  - JSONPath: .status.availableNodes
+    description: Available nodes
+    name: nodes
+    type: integer
+  - JSONPath: .status.version
+    description: APM version
+    name: version
+    type: string
+  - JSONPath: .metadata.creationTimestamp
+    name: age
+    type: date
   group: apm.k8s.elastic.co
   names:
     categories:
-      - elastic
+    - elastic
     kind: ApmServer
     listKind: ApmServerList
     plural: apmservers
     shortNames:
-      - apm
+    - apm
     singular: apmserver
   scope: Namespaced
   subresources:
@@ -74,7 +73,7 @@ spec:
                     to the current namespace.
                   type: string
               required:
-                - name
+              - name
               type: object
             http:
               description: HTTP holds the HTTP layer configuration for the APM Server
@@ -179,6 +178,15 @@ spec:
                             description: ServicePort contains information on service's
                               port.
                             properties:
+                              appProtocol:
+                                description: The application protocol for this port.
+                                  This field follows standard Kubernetes label syntax.
+                                  Un-prefixed names are reserved for IANA standard
+                                  service names (as per RFC-6335 and http://www.iana.org/assignments/service-names).
+                                  Non-standard protocols should use prefixed names
+                                  such as mycompany.com/my-custom-protocol. Field
+                                  can be enabled with ServiceAppProtocol feature gate.
+                                type: string
                               name:
                                 description: The name of this port within the service.
                                   This must be a DNS_LABEL. All ports within a ServiceSpec
@@ -208,8 +216,8 @@ spec:
                                 type: string
                               targetPort:
                                 anyOf:
-                                  - type: integer
-                                  - type: string
+                                - type: integer
+                                - type: string
                                 description: 'Number or name of the port to access
                                   on the pods targeted by the service. Number must
                                   be in the range 1 to 65535. Name must be an IANA_SVC_NAME.
@@ -221,7 +229,7 @@ spec:
                                   omitted or set equal to the ''port'' field. More
                                   info: https://kubernetes.io/docs/concepts/services-networking/service/#defining-a-service'
                             required:
-                              - port
+                            - port
                             type: object
                           type: array
                         publishNotReadyAddresses:
@@ -391,14 +399,14 @@ spec:
                             contain any ".." components.
                           type: string
                       required:
-                        - key
+                      - key
                       type: object
                     type: array
                   secretName:
                     description: SecretName is the name of the secret.
                     type: string
                 required:
-                  - secretName
+                - secretName
                 type: object
               type: array
             serviceAccountName:
@@ -416,6 +424,8 @@ spec:
           description: ApmServerStatus defines the observed state of ApmServer
           properties:
             availableNodes:
+              description: AvailableNodes is the number of available replicas in the
+                deployment.
               format: int32
               type: integer
             elasticsearchAssociationStatus:
@@ -423,8 +433,7 @@ spec:
                 to Elasticsearch clusters.
               type: string
             health:
-              description: ApmServerHealth expresses the status of the Apm Server
-                instances.
+              description: Health of the deployment.
               type: string
             kibanaAssociationStatus:
               description: KibanaAssociationStatus is the status of any auto-linking
@@ -438,18 +447,23 @@ spec:
               description: ExternalService is the name of the service the agents should
                 connect to.
               type: string
+            version:
+              description: 'Version of the stack resource currently running. During
+                version upgrades, multiple versions may run in parallel: this value
+                specifies the lowest version currently running.'
+              type: string
           type: object
   version: v1
   versions:
-    - name: v1
-      served: true
-      storage: true
-    - name: v1beta1
-      served: true
-      storage: false
-    - name: v1alpha1
-      served: false
-      storage: false
+  - name: v1
+    served: true
+    storage: true
+  - name: v1beta1
+    served: true
+    storage: false
+  - name: v1alpha1
+    served: false
+    storage: false
 status:
   acceptedNames:
     kind: ""

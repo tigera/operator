@@ -15,7 +15,7 @@
 package render
 
 import (
-	operator "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -25,7 +25,7 @@ type Component interface {
 	// needs, passing 'is' to the GetReference call and if there are any errors those
 	// are returned. It is valid to pass nil for 'is' as GetReference accepts the value.
 	// ResolveImages must be called before Objects is called for the component.
-	ResolveImages(is *operator.ImageSet) error
+	ResolveImages(is *operatorv1.ImageSet) error
 
 	// Objects returns the lists of objects in this component that should be created and/or deleted during
 	// rendering.

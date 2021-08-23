@@ -17,11 +17,11 @@ package render_test
 import (
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var internalManagerTLSSecret = v1.Secret{
+var internalManagerTLSSecret = corev1.Secret{
 	TypeMeta: metav1.TypeMeta{
 		Kind:       "Secret",
 		APIVersion: "v1",
@@ -36,7 +36,7 @@ var internalManagerTLSSecret = v1.Secret{
 	},
 }
 
-var elasticsearchSecret = v1.Secret{
+var elasticsearchSecret = corev1.Secret{
 	TypeMeta: metav1.TypeMeta{
 		Kind:       "Secret",
 		APIVersion: "v1",
@@ -51,7 +51,7 @@ var elasticsearchSecret = v1.Secret{
 	},
 }
 
-var kubeControllersUserSecret = v1.Secret{
+var kubeControllersUserSecret = corev1.Secret{
 	TypeMeta: metav1.TypeMeta{
 		Kind:       "Secret",
 		APIVersion: "v1",
@@ -66,7 +66,7 @@ var kubeControllersUserSecret = v1.Secret{
 	},
 }
 
-var kibanaSecret = v1.Secret{
+var kibanaSecret = corev1.Secret{
 	TypeMeta: metav1.TypeMeta{
 		Kind:       "Secret",
 		APIVersion: "v1",
@@ -80,7 +80,7 @@ var kibanaSecret = v1.Secret{
 		"key":  []byte("key"),
 	},
 }
-var voltronTunnelSecret = v1.Secret{
+var voltronTunnelSecret = corev1.Secret{
 	TypeMeta: metav1.TypeMeta{
 		Kind:       "Secret",
 		APIVersion: "v1",

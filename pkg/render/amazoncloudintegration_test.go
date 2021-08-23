@@ -19,10 +19,10 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	v1 "k8s.io/api/apps/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 
-	operator "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -35,14 +35,14 @@ const (
 )
 
 var _ = Describe("AmazonCloudIntegration rendering tests", func() {
-	var instance *operator.AmazonCloudIntegration
+	var instance *operatorv1.AmazonCloudIntegration
 	var credential *render.AmazonCredential
-	var installation *operator.InstallationSpec
+	var installation *operatorv1.InstallationSpec
 
 	BeforeEach(func() {
-		instance = &operator.AmazonCloudIntegration{
-			Spec: operator.AmazonCloudIntegrationSpec{
-				DefaultPodMetadataAccess:     operator.MetadataAccessDenied,
+		instance = &operatorv1.AmazonCloudIntegration{
+			Spec: operatorv1.AmazonCloudIntegrationSpec{
+				DefaultPodMetadataAccess:     operatorv1.MetadataAccessDenied,
 				NodeSecurityGroupIDs:         []string{"sg-nodeid"},
 				PodSecurityGroupID:           "sg-podsgid",
 				VPCS:                         []string{"vpc-id"},
@@ -58,17 +58,17 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 			KeySecret: []byte("KeySecret"),
 		}
 
-		installation = &operator.InstallationSpec{}
+		installation = &operatorv1.InstallationSpec{}
 	})
 
 	It("should render controlPlaneNodeSelector", func() {
-		component, err := render.AmazonCloudIntegration(instance, &operator.InstallationSpec{
+		component, err := render.AmazonCloudIntegration(instance, &operatorv1.InstallationSpec{
 			ControlPlaneNodeSelector: map[string]string{"foo": "bar"},
 		}, credential, nil, false)
 		Expect(err).ToNot(HaveOccurred())
 		resources, _ := component.Objects()
-		resource := rtest.GetResource(resources, AwsCIName, AwsCINs, "", "v1", "Deployment")
-		d := resource.(*v1.Deployment)
+		resource := rtest.GetResource(resources, AwsCIName, AwsCINs, "apps", "v1", "Deployment")
+		d := resource.(*appsv1.Deployment)
 		Expect(d.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{"foo": "bar"}))
 	})
 
@@ -99,7 +99,7 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 			{name: AwsCIName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: AwsCIName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "amazon-cloud-integration-credentials", ns: AwsCINs, group: "", version: "v1", kind: "Secret"},
-			{name: AwsCIName, ns: AwsCINs, group: "", version: "v1", kind: "Deployment"},
+			{name: AwsCIName, ns: AwsCINs, group: "apps", version: "v1", kind: "Deployment"},
 		}
 
 		i := 0
@@ -108,15 +108,15 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 			i++
 		}
 
-		resource := rtest.GetResource(resources, AwsCIName, AwsCINs, "", "v1", "Deployment")
-		d := resource.(*v1.Deployment)
+		resource := rtest.GetResource(resources, AwsCIName, AwsCINs, "apps", "v1", "Deployment")
+		d := resource.(*appsv1.Deployment)
 
 		Expect(d.Name).To(Equal(AwsCIName))
 		Expect(len(d.Labels)).To(Equal(1))
 		Expect(d.Labels).To(HaveKeyWithValue("k8s-app", AwsCIName))
 
 		Expect(*d.Spec.Replicas).To(BeEquivalentTo(1))
-		Expect(d.Spec.Strategy.Type).To(Equal(v1.RecreateDeploymentStrategyType))
+		Expect(d.Spec.Strategy.Type).To(Equal(appsv1.RecreateDeploymentStrategyType))
 		Expect(len(d.Spec.Selector.MatchLabels)).To(Equal(1))
 		Expect(d.Spec.Selector.MatchLabels).To(HaveKeyWithValue("k8s-app", AwsCIName))
 
@@ -184,16 +184,16 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 	})
 
 	It("should set MetadataAccess when configured", func() {
-		instance.Spec.DefaultPodMetadataAccess = operator.MetadataAccessAllowed
+		instance.Spec.DefaultPodMetadataAccess = operatorv1.MetadataAccessAllowed
 		component, err := render.AmazonCloudIntegration(instance, installation, credential, nil, openshift)
 		Expect(err).To(BeNil(), "Expected AmazonCloudIntegration to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 
 		resources, _ := component.Objects()
 
-		resource := rtest.GetResource(resources, AwsCIName, AwsCINs, "", "v1", "Deployment")
+		resource := rtest.GetResource(resources, AwsCIName, AwsCINs, "apps", "v1", "Deployment")
 		Expect(resource).ToNot(BeNil())
-		d := resource.(*v1.Deployment)
+		d := resource.(*appsv1.Deployment)
 
 		Expect(d.Name).To(Equal(AwsCIName))
 

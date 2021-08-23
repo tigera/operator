@@ -26,7 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	operator "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -41,7 +41,7 @@ const (
 	credentialSecretHashAnnotation       = "hash.operator.tigera.io/credential-secret"
 )
 
-func AmazonCloudIntegration(aci *operator.AmazonCloudIntegration, installation *operator.InstallationSpec, cred *AmazonCredential, ps []*corev1.Secret, openshift bool) (Component, error) {
+func AmazonCloudIntegration(aci *operatorv1.AmazonCloudIntegration, installation *operatorv1.InstallationSpec, cred *AmazonCredential, ps []*corev1.Secret, openshift bool) (Component, error) {
 	return &amazonCloudIntegrationComponent{
 		amazonCloudIntegration: aci,
 		installation:           installation,
@@ -52,15 +52,15 @@ func AmazonCloudIntegration(aci *operator.AmazonCloudIntegration, installation *
 }
 
 type amazonCloudIntegrationComponent struct {
-	amazonCloudIntegration *operator.AmazonCloudIntegration
-	installation           *operator.InstallationSpec
+	amazonCloudIntegration *operatorv1.AmazonCloudIntegration
+	installation           *operatorv1.InstallationSpec
 	credentials            *AmazonCredential
 	pullSecrets            []*corev1.Secret
 	openshift              bool
 	image                  string
 }
 
-func (c *amazonCloudIntegrationComponent) ResolveImages(is *operator.ImageSet) error {
+func (c *amazonCloudIntegrationComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.installation.Registry
 	path := c.installation.ImagePath
 	prefix := c.installation.ImagePrefix
@@ -227,7 +227,7 @@ func (c *amazonCloudIntegrationComponent) deployment() *appsv1.Deployment {
 	annotations[credentialSecretHashAnnotation] = rmeta.AnnotationHash(c.credentials)
 
 	d := &appsv1.Deployment{
-		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      AmazonCloudIntegrationComponentName,
 			Namespace: AmazonCloudIntegrationNamespace,
@@ -262,7 +262,7 @@ func (c *amazonCloudIntegrationComponent) deployment() *appsv1.Deployment {
 			},
 		},
 	}
-	setCriticalPod(&d.Spec.Template)
+	setClusterCriticalPod(&d.Spec.Template)
 
 	return d
 }
@@ -296,7 +296,7 @@ func (c *amazonCloudIntegrationComponent) container() corev1.Container {
 		}},
 	}
 
-	if c.amazonCloudIntegration.Spec.DefaultPodMetadataAccess == operator.MetadataAccessAllowed {
+	if c.amazonCloudIntegration.Spec.DefaultPodMetadataAccess == operatorv1.MetadataAccessAllowed {
 		env = append(env, corev1.EnvVar{Name: "ALLOW_POD_METADATA_ACCESS", Value: "true"})
 	}
 
@@ -325,7 +325,7 @@ func (c *amazonCloudIntegrationComponent) container() corev1.Container {
 	}
 }
 
-func GetTigeraSecurityGroupEnvVariables(aci *operator.AmazonCloudIntegration) []corev1.EnvVar {
+func GetTigeraSecurityGroupEnvVariables(aci *operatorv1.AmazonCloudIntegration) []corev1.EnvVar {
 	envs := []corev1.EnvVar{}
 	if aci == nil {
 		return envs

@@ -1,7 +1,7 @@
 package render
 
 import (
-	operator "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -20,7 +20,7 @@ type passthroughComponent struct {
 // needs, passing 'is' to the GetReference call and if there are any errors those
 // are returned. It is valid to pass nil for 'is' as GetReference accepts the value.
 // ResolveImages must be called before Objects is called for the component.
-func (p *passthroughComponent) ResolveImages(is *operator.ImageSet) error {
+func (p *passthroughComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	return nil
 }
 

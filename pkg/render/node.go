@@ -23,17 +23,14 @@ import (
 
 	"github.com/tigera/operator/pkg/ptr"
 
-	apps "k8s.io/api/apps/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	schedv1 "k8s.io/api/scheduling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	operator "github.com/tigera/operator/api/v1"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
@@ -82,13 +79,13 @@ type TyphaNodeTLS struct {
 // generate Kubernetes objects for installing calico/node on a cluster.
 type NodeConfiguration struct {
 	K8sServiceEp  k8sapi.ServiceEndpoint
-	Installation  *operator.InstallationSpec
+	Installation  *operatorv1.InstallationSpec
 	TLS           *TyphaNodeTLS
 	ClusterDomain string
 
 	// Optional fields.
-	AmazonCloudIntegration  *operator.AmazonCloudIntegration
-	LogCollector            *operator.LogCollector
+	AmazonCloudIntegration  *operatorv1.AmazonCloudIntegration
+	LogCollector            *operatorv1.LogCollector
 	MigrateNamespaces       bool
 	NodeAppArmorProfile     string
 	BirdTemplates           map[string]string
@@ -98,7 +95,7 @@ type NodeConfiguration struct {
 	// so that it can be deployed into the cluster.
 	// TODO: The controller should pass the contents, the renderer should build its own
 	// configmap, rather than this "copy" semantic.
-	BGPLayouts *v1.ConfigMap
+	BGPLayouts *corev1.ConfigMap
 }
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
@@ -117,12 +114,12 @@ type nodeComponent struct {
 	certSignReqImage string
 }
 
-func (c *nodeComponent) ResolveImages(is *operator.ImageSet) error {
+func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.cfg.Installation.Registry
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	if c.cfg.Installation.Variant == operator.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		c.cniImage, err = components.GetReference(components.ComponentTigeraCNI, reg, path, prefix, is)
 	} else {
 		c.cniImage, err = components.GetReference(components.ComponentCalicoCNI, reg, path, prefix, is)
@@ -137,7 +134,7 @@ func (c *nodeComponent) ResolveImages(is *operator.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	if c.cfg.Installation.Variant == operator.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		c.nodeImage, err = components.GetReference(components.ComponentTigeraNode, reg, path, prefix, is)
 	} else {
 		c.nodeImage, err = components.GetReference(components.ComponentCalicoNode, reg, path, prefix, is)
@@ -165,7 +162,6 @@ func (c *nodeComponent) SupportedOSType() rmeta.OSType {
 
 func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 	objsToCreate := []client.Object{
-		c.calicoPriorityClass(),
 		c.nodeServiceAccount(),
 		c.nodeRole(),
 		c.nodeRoleBinding(),
@@ -185,7 +181,7 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 	}
 	var objsToDelete []client.Object
 
-	if c.cfg.Installation.Variant == operator.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		// Include Service for exposing node metrics.
 		objsToCreate = append(objsToCreate, c.nodeMetricsService())
 	}
@@ -199,11 +195,11 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 		objsToCreate = append(objsToCreate, btcm)
 	}
 
-	if c.cfg.Installation.KubernetesProvider == operator.ProviderDockerEE {
+	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderDockerEE {
 		objsToCreate = append(objsToCreate, c.clusterAdminClusterRoleBinding())
 	}
 
-	if c.cfg.Installation.KubernetesProvider != operator.ProviderOpenShift {
+	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
 		objsToCreate = append(objsToCreate, c.nodePodSecurityPolicy())
 	}
 
@@ -221,24 +217,9 @@ func (c *nodeComponent) Ready() bool {
 	return true
 }
 
-func (c *nodeComponent) calicoPriorityClass() *schedv1.PriorityClass {
-	return &schedv1.PriorityClass{
-		TypeMeta: metav1.TypeMeta{Kind: "PriorityClass", APIVersion: "scheduling.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: PriorityClassName,
-		},
-		// We would prefer to use the same value as system-node-critical (2000001000)
-		// but the highest value setable by a user is 1000000000
-		// and system-node-critical can only be used in the kube-system namespace
-		Value:         1000000000,
-		GlobalDefault: false,
-		Description:   "Priority class for Calico resources that should have a high priority",
-	}
-}
-
 // nodeServiceAccount creates the node's service account.
-func (c *nodeComponent) nodeServiceAccount() *v1.ServiceAccount {
-	return &v1.ServiceAccount{
+func (c *nodeComponent) nodeServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "calico-node",
@@ -405,7 +386,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			},
 		},
 	}
-	if c.cfg.Installation.Variant == operator.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		extraRules := []rbacv1.PolicyRule{
 			{
 				// Tigera Secure needs to be able to read licenses, tiers, and config.
@@ -440,7 +421,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 		}
 		role.Rules = append(role.Rules, extraRules...)
 	}
-	if c.cfg.Installation.KubernetesProvider != operator.ProviderOpenShift {
+	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -454,8 +435,8 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 
 // nodeCNIConfigMap returns a config map containing the CNI network config to be installed on each node.
 // Returns nil if no configmap is needed.
-func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
-	if c.cfg.Installation.CNI.Type != operator.PluginCalico {
+func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
+	if c.cfg.Installation.CNI.Type != operatorv1.PluginCalico {
 		// If calico cni is not being used, then no cni configmap is needed.
 		return nil
 	}
@@ -477,18 +458,18 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
 	// Pull out other settings.
 	ipForward := false
 	if c.cfg.Installation.CalicoNetwork.ContainerIPForwarding != nil {
-		ipForward = (*c.cfg.Installation.CalicoNetwork.ContainerIPForwarding == operator.ContainerIPForwardingEnabled)
+		ipForward = (*c.cfg.Installation.CalicoNetwork.ContainerIPForwarding == operatorv1.ContainerIPForwardingEnabled)
 	}
 
 	// Determine portmap configuration to use.
 	var portmap string = ""
-	if c.cfg.Installation.CalicoNetwork.HostPorts != nil && *c.cfg.Installation.CalicoNetwork.HostPorts == operator.HostPortsEnabled {
+	if c.cfg.Installation.CalicoNetwork.HostPorts != nil && *c.cfg.Installation.CalicoNetwork.HostPorts == operatorv1.HostPortsEnabled {
 		portmap = `,
     {"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}`
 	}
 
 	ipam := c.getCalicoIPAM()
-	if c.cfg.Installation.CNI.IPAM.Type == operator.IPAMPluginHostLocal {
+	if c.cfg.Installation.CNI.IPAM.Type == operatorv1.IPAMPluginHostLocal {
 		ipam = buildHostLocalIPAM(c.cfg.Installation.CalicoNetwork)
 	}
 
@@ -528,7 +509,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *v1.ConfigMap {
   ]
 }`, mtu, nodenameFileOptional, ipam, ipForward, k8sAPIRoot, portmap)
 
-	return &v1.ConfigMap{
+	return &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cni-config",
@@ -560,15 +541,15 @@ func (c *nodeComponent) getCalicoIPAM() string {
 	)
 }
 
-func buildHostLocalIPAM(cns *operator.CalicoNetworkSpec) string {
+func buildHostLocalIPAM(cns *operatorv1.CalicoNetworkSpec) string {
 	return `{ "type": "host-local", "subnet": "usePodCidr"}`
 }
 
-func (c *nodeComponent) birdTemplateConfigMap() *v1.ConfigMap {
+func (c *nodeComponent) birdTemplateConfigMap() *corev1.ConfigMap {
 	if len(c.cfg.BirdTemplates) == 0 {
 		return nil
 	}
-	cm := v1.ConfigMap{
+	cm := corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      BirdTemplatesConfigMapName,
@@ -609,9 +590,9 @@ func (c *nodeComponent) clusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBind
 }
 
 // nodeDaemonset creates the node daemonset.
-func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
+func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.DaemonSet {
 	var terminationGracePeriod int64 = nodeTerminationGracePeriodSeconds
-	var initContainers []v1.Container
+	var initContainers []corev1.Container
 
 	annotations := make(map[string]string)
 	if len(c.cfg.BirdTemplates) != 0 {
@@ -660,15 +641,15 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 		initContainers = append(initContainers, c.bpffsInitContainer())
 	}
 
-	var affinity *v1.Affinity
-	if c.cfg.Installation.KubernetesProvider == operator.ProviderAKS {
-		affinity = &v1.Affinity{
-			NodeAffinity: &v1.NodeAffinity{
-				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-					NodeSelectorTerms: []v1.NodeSelectorTerm{{
-						MatchExpressions: []v1.NodeSelectorRequirement{{
+	var affinity *corev1.Affinity
+	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderAKS {
+		affinity = &corev1.Affinity{
+			NodeAffinity: &corev1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+					NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+						MatchExpressions: []corev1.NodeSelectorRequirement{{
 							Key:      "type",
-							Operator: v1.NodeSelectorOpNotIn,
+							Operator: corev1.NodeSelectorOpNotIn,
 							Values:   []string{"virtual-kubelet"},
 						}},
 					}},
@@ -679,22 +660,22 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 
 	// Determine the name to use for the calico/node daemonset. For mixed-mode, we run the enterprise DaemonSet
 	// with its own name so as to not conflict.
-	ds := apps.DaemonSet{
+	ds := appsv1.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      common.NodeDaemonSetName,
 			Namespace: common.CalicoNamespace,
 		},
-		Spec: apps.DaemonSetSpec{
+		Spec: appsv1.DaemonSetSpec{
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "calico-node"}},
-			Template: v1.PodTemplateSpec{
+			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
 						"k8s-app": "calico-node",
 					},
 					Annotations: annotations,
 				},
-				Spec: v1.PodSpec{
+				Spec: corev1.PodSpec{
 					Tolerations:                   rmeta.TolerateAll,
 					Affinity:                      affinity,
 					ImagePullSecrets:              c.cfg.Installation.ImagePullSecrets,
@@ -702,7 +683,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					HostNetwork:                   true,
 					InitContainers:                initContainers,
-					Containers:                    []v1.Container{c.nodeContainer()},
+					Containers:                    []corev1.Container{c.nodeContainer()},
 					Volumes:                       c.nodeVolumes(),
 				},
 			},
@@ -710,7 +691,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 		},
 	}
 
-	if c.cfg.Installation.CNI.Type == operator.PluginCalico {
+	if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
 		ds.Spec.Template.Spec.InitContainers = append(ds.Spec.Template.Spec.InitContainers, c.cniContainer())
 	}
 
@@ -718,7 +699,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 		ds.Spec.Template.Spec.HostPID = true
 	}
 
-	setCriticalPod(&(ds.Spec.Template))
+	setNodeCriticalPod(&(ds.Spec.Template))
 	if c.cfg.MigrateNamespaces {
 		migration.LimitDaemonSetToMigratedNodes(&ds)
 	}
@@ -729,10 +710,10 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *v1.ConfigMap) *apps.DaemonSet {
 func (c *nodeComponent) cniDirectories() (string, string, string) {
 	var cniBinDir, cniNetDir, cniLogDir string
 	switch c.cfg.Installation.KubernetesProvider {
-	case operator.ProviderOpenShift:
+	case operatorv1.ProviderOpenShift:
 		cniNetDir = "/var/run/multus/cni/net.d"
 		cniBinDir = "/var/lib/cni/bin"
-	case operator.ProviderGKE:
+	case operatorv1.ProviderGKE:
 		// Used if we're installing a CNI plugin. If using the GKE plugin, these are not necessary.
 		cniBinDir = "/home/kubernetes/bin"
 		cniNetDir = "/etc/cni/net.d"
@@ -746,22 +727,22 @@ func (c *nodeComponent) cniDirectories() (string, string, string) {
 }
 
 // nodeVolumes creates the node's volumes.
-func (c *nodeComponent) nodeVolumes() []v1.Volume {
-	fileOrCreate := v1.HostPathFileOrCreate
-	dirOrCreate := v1.HostPathDirectoryOrCreate
-	dirMustExist := v1.HostPathDirectory
+func (c *nodeComponent) nodeVolumes() []corev1.Volume {
+	fileOrCreate := corev1.HostPathFileOrCreate
+	dirOrCreate := corev1.HostPathDirectoryOrCreate
+	dirMustExist := corev1.HostPathDirectory
 
-	volumes := []v1.Volume{
-		{Name: "lib-modules", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/lib/modules"}}},
-		{Name: "var-run-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/calico"}}},
-		{Name: "var-lib-calico", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
-		{Name: "xtables-lock", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
-		{Name: "policysync", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
+	volumes := []corev1.Volume{
+		{Name: "lib-modules", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/lib/modules"}}},
+		{Name: "var-run-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/calico"}}},
+		{Name: "var-lib-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
+		{Name: "xtables-lock", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
+		{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 		{
 			Name: "typha-ca",
-			VolumeSource: v1.VolumeSource{
-				ConfigMap: &v1.ConfigMapVolumeSource{
-					LocalObjectReference: v1.LocalObjectReference{
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
 						Name: TyphaCAConfigMapName,
 					},
 				},
@@ -776,47 +757,47 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 	if c.bpfDataplaneEnabled() {
 		volumes = append(volumes,
 			// Volume for the containing directory so that the init container can mount the child bpf directory if needed.
-			v1.Volume{Name: "sys-fs", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
+			corev1.Volume{Name: "sys-fs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
 			// Volume for the bpffs itself, used by the main node container.
-			v1.Volume{Name: "bpffs", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
+			corev1.Volume{Name: "bpffs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
 		)
 	}
 
 	// If needed for this configuration, then include the CNI volumes.
-	if c.cfg.Installation.CNI.Type == operator.PluginCalico {
+	if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
 		// Determine directories to use for CNI artifacts based on the provider.
 		cniNetDir, cniBinDir, cniLogDir := c.cniDirectories()
-		volumes = append(volumes, v1.Volume{Name: "cni-bin-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cniBinDir}}})
-		volumes = append(volumes, v1.Volume{Name: "cni-net-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cniNetDir}}})
-		volumes = append(volumes, v1.Volume{Name: "cni-log-dir", VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: cniLogDir}}})
+		volumes = append(volumes, corev1.Volume{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: cniBinDir}}})
+		volumes = append(volumes, corev1.Volume{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: cniNetDir}}})
+		volumes = append(volumes, corev1.Volume{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: cniLogDir}}})
 	}
 
 	// Override with Tigera-specific config.
-	if c.cfg.Installation.Variant == operator.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		// Add volume for calico logs.
-		calicoLogVol := v1.Volume{
+		calicoLogVol := corev1.Volume{
 			Name:         "var-log-calico",
-			VolumeSource: v1.VolumeSource{HostPath: &v1.HostPathVolumeSource{Path: "/var/log/calico", Type: &dirOrCreate}},
+			VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico", Type: &dirOrCreate}},
 		}
 		volumes = append(volumes, calicoLogVol)
 	}
 
 	// Create and append flexvolume
 	if c.cfg.Installation.FlexVolumePath != "None" {
-		volumes = append(volumes, v1.Volume{
+		volumes = append(volumes, corev1.Volume{
 			Name: "flexvol-driver-host",
-			VolumeSource: v1.VolumeSource{
-				HostPath: &v1.HostPathVolumeSource{Path: c.cfg.Installation.FlexVolumePath + "nodeagent~uds", Type: &dirOrCreate},
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{Path: c.cfg.Installation.FlexVolumePath + "nodeagent~uds", Type: &dirOrCreate},
 			},
 		})
 	}
 	if c.cfg.BirdTemplates != nil {
 		volumes = append(volumes,
-			v1.Volume{
+			corev1.Volume{
 				Name: "bird-templates",
-				VolumeSource: v1.VolumeSource{
-					ConfigMap: &v1.ConfigMapVolumeSource{
-						LocalObjectReference: v1.LocalObjectReference{
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{
 							Name: BirdTemplatesConfigMapName,
 						},
 					},
@@ -826,11 +807,11 @@ func (c *nodeComponent) nodeVolumes() []v1.Volume {
 
 	if c.cfg.BGPLayouts != nil {
 		volumes = append(volumes,
-			v1.Volume{
+			corev1.Volume{
 				Name: BGPLayoutVolumeName,
-				VolumeSource: v1.VolumeSource{
-					ConfigMap: &v1.ConfigMapVolumeSource{
-						LocalObjectReference: v1.LocalObjectReference{
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{
 							Name: BGPLayoutConfigMapName,
 						},
 					},
@@ -854,21 +835,21 @@ func (c *nodeComponent) collectProcessPathEnabled() bool {
 }
 
 // cniContainer creates the node's init container that installs CNI.
-func (c *nodeComponent) cniContainer() v1.Container {
+func (c *nodeComponent) cniContainer() corev1.Container {
 	// Determine environment to pass to the CNI init container.
 	cniEnv := c.cniEnvvars()
-	cniVolumeMounts := []v1.VolumeMount{
+	cniVolumeMounts := []corev1.VolumeMount{
 		{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
 		{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 	}
 
-	return v1.Container{
+	return corev1.Container{
 		Name:         "install-cni",
 		Image:        c.cniImage,
 		Command:      []string{"/opt/cni/bin/install"},
 		Env:          cniEnv,
 		VolumeMounts: cniVolumeMounts,
-		SecurityContext: &v1.SecurityContext{
+		SecurityContext: &corev1.SecurityContext{
 			Privileged: ptr.BoolToPtr(true),
 		},
 	}
@@ -876,16 +857,16 @@ func (c *nodeComponent) cniContainer() v1.Container {
 
 // flexVolumeContainer creates the node's init container that installs the Unix Domain Socket to allow Dikastes
 // to communicate with Felix over the Policy Sync API.
-func (c *nodeComponent) flexVolumeContainer() v1.Container {
-	flexVolumeMounts := []v1.VolumeMount{
+func (c *nodeComponent) flexVolumeContainer() corev1.Container {
+	flexVolumeMounts := []corev1.VolumeMount{
 		{MountPath: "/host/driver", Name: "flexvol-driver-host"},
 	}
 
-	return v1.Container{
+	return corev1.Container{
 		Name:         "flexvol-driver",
 		Image:        c.flexvolImage,
 		VolumeMounts: flexVolumeMounts,
-		SecurityContext: &v1.SecurityContext{
+		SecurityContext: &corev1.SecurityContext{
 			Privileged: ptr.BoolToPtr(true),
 		},
 	}
@@ -895,9 +876,9 @@ func (c *nodeComponent) flexVolumeContainer() v1.Container {
 // init container reduces the privileges needed by the main container.  It's important that the BPF filesystem is
 // mounted on the host itself, otherwise, a restart of the node container would tear down the mount and destroy
 // the BPF dataplane's BPF maps.
-func (c *nodeComponent) bpffsInitContainer() v1.Container {
-	bidirectional := v1.MountPropagationBidirectional
-	mounts := []v1.VolumeMount{
+func (c *nodeComponent) bpffsInitContainer() corev1.Container {
+	bidirectional := corev1.MountPropagationBidirectional
+	mounts := []corev1.VolumeMount{
 		{
 			MountPath: "/sys/fs",
 			Name:      "sys-fs",
@@ -907,11 +888,11 @@ func (c *nodeComponent) bpffsInitContainer() v1.Container {
 		},
 	}
 
-	return v1.Container{
+	return corev1.Container{
 		Name:         "mount-bpffs",
 		Image:        c.nodeImage,
 		VolumeMounts: mounts,
-		SecurityContext: &v1.SecurityContext{
+		SecurityContext: &corev1.SecurityContext{
 			Privileged: ptr.BoolToPtr(true),
 		},
 		Command: []string{"calico-node", "-init"},
@@ -919,24 +900,24 @@ func (c *nodeComponent) bpffsInitContainer() v1.Container {
 }
 
 // cniEnvvars creates the CNI container's envvars.
-func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
-	if c.cfg.Installation.CNI.Type != operator.PluginCalico {
-		return []v1.EnvVar{}
+func (c *nodeComponent) cniEnvvars() []corev1.EnvVar {
+	if c.cfg.Installation.CNI.Type != operatorv1.PluginCalico {
+		return []corev1.EnvVar{}
 	}
 
 	// Determine directories to use for CNI artifacts based on the provider.
 	cniNetDir, _, _ := c.cniDirectories()
 
-	envVars := []v1.EnvVar{
+	envVars := []corev1.EnvVar{
 		{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
 		{Name: "SLEEP", Value: "false"},
 		{Name: "CNI_NET_DIR", Value: cniNetDir},
 		{
 			Name: "CNI_NETWORK_CONFIG",
-			ValueFrom: &v1.EnvVarSource{
-				ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+			ValueFrom: &corev1.EnvVarSource{
+				ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 					Key: "config",
-					LocalObjectReference: v1.LocalObjectReference{
+					LocalObjectReference: corev1.LocalObjectReference{
 						Name: "cni-config",
 					},
 				},
@@ -946,9 +927,9 @@ func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
 
 	envVars = append(envVars, c.cfg.K8sServiceEp.EnvVars(true, c.cfg.Installation.KubernetesProvider)...)
 
-	if c.cfg.Installation.Variant == operator.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
-			envVars = append(envVars, v1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
+			envVars = append(envVars, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
 		}
 	}
 
@@ -956,13 +937,13 @@ func (c *nodeComponent) cniEnvvars() []v1.EnvVar {
 }
 
 // nodeContainer creates the main node container.
-func (c *nodeComponent) nodeContainer() v1.Container {
+func (c *nodeComponent) nodeContainer() corev1.Container {
 	lp, rp := c.nodeLivenessReadinessProbes()
-	return v1.Container{
+	return corev1.Container{
 		Name:            "calico-node",
 		Image:           c.nodeImage,
 		Resources:       c.nodeResources(),
-		SecurityContext: &v1.SecurityContext{Privileged: ptr.BoolToPtr(true)},
+		SecurityContext: &corev1.SecurityContext{Privileged: ptr.BoolToPtr(true)},
 		Env:             c.nodeEnvVars(),
 		VolumeMounts:    c.nodeVolumeMounts(),
 		LivenessProbe:   lp,
@@ -972,13 +953,13 @@ func (c *nodeComponent) nodeContainer() v1.Container {
 }
 
 // nodeResources creates the node's resource requirements.
-func (c *nodeComponent) nodeResources() v1.ResourceRequirements {
-	return rmeta.GetResourceRequirements(c.cfg.Installation, operator.ComponentNameNode)
+func (c *nodeComponent) nodeResources() corev1.ResourceRequirements {
+	return rmeta.GetResourceRequirements(c.cfg.Installation, operatorv1.ComponentNameNode)
 }
 
 // nodeVolumeMounts creates the node's volume mounts.
-func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
-	nodeVolumeMounts := []v1.VolumeMount{
+func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
+	nodeVolumeMounts := []corev1.VolumeMount{
 		{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
 		{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
 		{MountPath: "/var/run/calico", Name: "var-run-calico"},
@@ -988,20 +969,20 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 		{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
 	}
 	if c.bpfDataplaneEnabled() {
-		nodeVolumeMounts = append(nodeVolumeMounts, v1.VolumeMount{MountPath: "/sys/fs/bpf", Name: "bpffs"})
+		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/sys/fs/bpf", Name: "bpffs"})
 	}
-	if c.cfg.Installation.Variant == operator.TigeraSecureEnterprise {
-		extraNodeMounts := []v1.VolumeMount{
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		extraNodeMounts := []corev1.VolumeMount{
 			{MountPath: "/var/log/calico", Name: "var-log-calico"},
 		}
 		nodeVolumeMounts = append(nodeVolumeMounts, extraNodeMounts...)
-	} else if c.cfg.Installation.CNI.Type == operator.PluginCalico {
-		cniLogMount := v1.VolumeMount{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: true}
+	} else if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
+		cniLogMount := corev1.VolumeMount{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: true}
 		nodeVolumeMounts = append(nodeVolumeMounts, cniLogMount)
 	}
 
-	if c.cfg.Installation.CNI.Type == operator.PluginCalico {
-		nodeVolumeMounts = append(nodeVolumeMounts, v1.VolumeMount{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"})
+	if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
+		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"})
 	}
 
 	if c.cfg.BirdTemplates != nil {
@@ -1016,7 +997,7 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 
 		for _, k := range sortedKeys {
 			nodeVolumeMounts = append(nodeVolumeMounts,
-				v1.VolumeMount{
+				corev1.VolumeMount{
 					Name:      "bird-templates",
 					ReadOnly:  true,
 					MountPath: fmt.Sprintf("/etc/calico/confd/templates/%s", k),
@@ -1027,7 +1008,7 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 
 	if c.cfg.BGPLayouts != nil {
 		nodeVolumeMounts = append(nodeVolumeMounts,
-			v1.VolumeMount{
+			corev1.VolumeMount{
 				Name:      BGPLayoutVolumeName,
 				ReadOnly:  true,
 				MountPath: BGPLayoutPath,
@@ -1039,20 +1020,20 @@ func (c *nodeComponent) nodeVolumeMounts() []v1.VolumeMount {
 }
 
 // nodeEnvVars creates the node's envvars.
-func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
+func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 	// Set the clusterType.
 	clusterType := "k8s,operator"
 
 	// Note: Felix now activates certain special-case logic based on the provider in the cluster type; avoid changing
 	// these unless you also update Felix's parsing logic.
 	switch c.cfg.Installation.KubernetesProvider {
-	case operator.ProviderOpenShift:
+	case operatorv1.ProviderOpenShift:
 		clusterType = clusterType + ",openshift"
-	case operator.ProviderEKS:
+	case operatorv1.ProviderEKS:
 		clusterType = clusterType + ",ecs"
-	case operator.ProviderGKE:
+	case operatorv1.ProviderGKE:
 		clusterType = clusterType + ",gke"
-	case operator.ProviderAKS:
+	case operatorv1.ProviderAKS:
 		clusterType = clusterType + ",aks"
 	}
 
@@ -1060,16 +1041,16 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		clusterType = clusterType + ",bgp"
 	}
 
-	var cnEnv v1.EnvVar
+	var cnEnv corev1.EnvVar
 	if c.cfg.Installation.CertificateManagement != nil {
-		cnEnv = v1.EnvVar{
+		cnEnv = corev1.EnvVar{
 			Name: "FELIX_TYPHACN", Value: TyphaCommonName,
 		}
 	} else {
-		cnEnv = v1.EnvVar{
-			Name: "FELIX_TYPHACN", ValueFrom: &v1.EnvVarSource{
-				SecretKeyRef: &v1.SecretKeySelector{
-					LocalObjectReference: v1.LocalObjectReference{
+		cnEnv = corev1.EnvVar{
+			Name: "FELIX_TYPHACN", ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
 						Name: TyphaTLSSecretName,
 					},
 					Key:      CommonName,
@@ -1079,7 +1060,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		}
 	}
 
-	nodeEnv := []v1.EnvVar{
+	nodeEnv := []corev1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 		{Name: "CLUSTER_TYPE", Value: clusterType},
@@ -1088,14 +1069,14 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		{Name: "FELIX_HEALTHENABLED", Value: "true"},
 		{
 			Name: "NODENAME",
-			ValueFrom: &v1.EnvVarSource{
-				FieldRef: &v1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
 			},
 		},
 		{
 			Name: "NAMESPACE",
-			ValueFrom: &v1.EnvVarSource{
-				FieldRef: &v1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
 			},
 		},
 		{Name: "FELIX_TYPHAK8SNAMESPACE", Value: common.CalicoNamespace},
@@ -1107,9 +1088,9 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		// We need at least the CN or URISAN set, we depend on the validation
 		// done by the core_controller that the Secret will have one.
 		cnEnv,
-		{Name: "FELIX_TYPHAURISAN", ValueFrom: &v1.EnvVarSource{
-			SecretKeyRef: &v1.SecretKeySelector{
-				LocalObjectReference: v1.LocalObjectReference{
+		{Name: "FELIX_TYPHAURISAN", ValueFrom: &corev1.EnvVarSource{
+			SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
 					Name: TyphaTLSSecretName,
 				},
 				Key:      URISAN,
@@ -1118,77 +1099,77 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		}},
 	}
 
-	if c.cfg.Installation.CNI != nil && c.cfg.Installation.CNI.Type == operator.PluginCalico {
+	if c.cfg.Installation.CNI != nil && c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
 		// If using Calico CNI, we need to manage CNI credential rotation on the host.
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_MANAGE_CNI", Value: "true"})
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_MANAGE_CNI", Value: "true"})
 	} else {
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_MANAGE_CNI", Value: "false"})
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_MANAGE_CNI", Value: "false"})
 	}
 
-	if c.cfg.Installation.CNI != nil && c.cfg.Installation.CNI.Type == operator.PluginAmazonVPC {
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_BPFEXTTOSERVICECONNMARK", Value: "0x80"})
+	if c.cfg.Installation.CNI != nil && c.cfg.Installation.CNI.Type == operatorv1.PluginAmazonVPC {
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_BPFEXTTOSERVICECONNMARK", Value: "0x80"})
 	}
 
 	// If there are no IP pools specified, then configure no default IP pools.
 	if c.cfg.Installation.CalicoNetwork == nil || len(c.cfg.Installation.CalicoNetwork.IPPools) == 0 {
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "NO_DEFAULT_POOLS", Value: "true"})
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "NO_DEFAULT_POOLS", Value: "true"})
 	} else {
 		// Configure IPv4 pool
 		if v4pool := GetIPv4Pool(c.cfg.Installation.CalicoNetwork.IPPools); v4pool != nil {
-			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_CIDR", Value: v4pool.CIDR})
+			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_CIDR", Value: v4pool.CIDR})
 
 			switch v4pool.Encapsulation {
-			case operator.EncapsulationIPIPCrossSubnet:
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "CrossSubnet"})
-			case operator.EncapsulationIPIP:
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"})
-			case operator.EncapsulationVXLAN:
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_VXLAN", Value: "Always"})
-			case operator.EncapsulationVXLANCrossSubnet:
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_VXLAN", Value: "CrossSubnet"})
-			case operator.EncapsulationNone:
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "Never"})
+			case operatorv1.EncapsulationIPIPCrossSubnet:
+				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "CrossSubnet"})
+			case operatorv1.EncapsulationIPIP:
+				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"})
+			case operatorv1.EncapsulationVXLAN:
+				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_VXLAN", Value: "Always"})
+			case operatorv1.EncapsulationVXLANCrossSubnet:
+				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_VXLAN", Value: "CrossSubnet"})
+			case operatorv1.EncapsulationNone:
+				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "Never"})
 			default:
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"})
+				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"})
 			}
 
 			if v4pool.BlockSize != nil {
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_BLOCK_SIZE", Value: fmt.Sprintf("%d", *v4pool.BlockSize)})
+				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_BLOCK_SIZE", Value: fmt.Sprintf("%d", *v4pool.BlockSize)})
 			}
-			if v4pool.NATOutgoing == operator.NATOutgoingDisabled {
+			if v4pool.NATOutgoing == operatorv1.NATOutgoingDisabled {
 				// Default for IPv4 NAT Outgoing is enabled so it is only necessary to
 				// set when it is being disabled.
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_NAT_OUTGOING", Value: "false"})
+				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_NAT_OUTGOING", Value: "false"})
 			}
 			if v4pool.NodeSelector != "" {
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV4POOL_NODE_SELECTOR", Value: v4pool.NodeSelector})
+				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_NODE_SELECTOR", Value: v4pool.NodeSelector})
 			}
 		}
 
 		// Configure IPv6 pool.
 		if v6pool := GetIPv6Pool(c.cfg.Installation.CalicoNetwork.IPPools); v6pool != nil {
-			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV6POOL_CIDR", Value: v6pool.CIDR})
+			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_CIDR", Value: v6pool.CIDR})
 
 			if v6pool.BlockSize != nil {
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV6POOL_BLOCK_SIZE", Value: fmt.Sprintf("%d", *v6pool.BlockSize)})
+				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_BLOCK_SIZE", Value: fmt.Sprintf("%d", *v6pool.BlockSize)})
 			}
-			if v6pool.NATOutgoing == operator.NATOutgoingEnabled {
+			if v6pool.NATOutgoing == operatorv1.NATOutgoingEnabled {
 				// Default for IPv6 NAT Outgoing is disabled so it is only necessary to
 				// set when it is being enabled.
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV6POOL_NAT_OUTGOING", Value: "true"})
+				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_NAT_OUTGOING", Value: "true"})
 			}
 			if v6pool.NodeSelector != "" {
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_IPV6POOL_NODE_SELECTOR", Value: v6pool.NodeSelector})
+				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_NODE_SELECTOR", Value: v6pool.NodeSelector})
 			}
 		}
 	}
 
 	if c.bpfDataplaneEnabled() {
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_BPFENABLED", Value: "true"})
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_BPFENABLED", Value: "true"})
 	}
 
 	if c.collectProcessPathEnabled() {
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_FLOWLOGSCOLLECTPROCESSPATH", Value: "true"})
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_FLOWLOGSCOLLECTPROCESSPATH", Value: "true"})
 	}
 
 	// Determine MTU to use. If specified explicitly, use that. Otherwise, set defaults based on an overall
@@ -1197,33 +1178,33 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	if mtu != nil {
 		vxlanMtu := strconv.Itoa(int(*mtu))
 		wireguardMtu := strconv.Itoa(int(*mtu))
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_VXLANMTU", Value: vxlanMtu})
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDMTU", Value: wireguardMtu})
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_VXLANMTU", Value: vxlanMtu})
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_WIREGUARDMTU", Value: wireguardMtu})
 	}
 
 	// Configure whether or not BGP should be enabled.
 	if !bgpEnabled(c.cfg.Installation) {
-		if c.cfg.Installation.CNI.Type == operator.PluginCalico {
-			if c.cfg.Installation.CNI.IPAM.Type == operator.IPAMPluginHostLocal {
+		if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
+			if c.cfg.Installation.CNI.IPAM.Type == operatorv1.IPAMPluginHostLocal {
 				// If BGP is disabled and using HostLocal, then that means routing is done
 				// by Cloud routing, so networking backend is none. (because we don't support
 				// vxlan with HostLocal.)
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "none"})
+				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "none"})
 			} else {
 				// If BGP is disabled, then set the networking backend to "vxlan". This means that BIRD will be
 				// disabled, and VXLAN will optionally be configurable via IP pools.
-				nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "vxlan"})
+				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "vxlan"})
 			}
 		} else {
 			// If not using Calico networking at all, set the backend to "none".
-			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "none"})
+			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "none"})
 		}
 	} else {
 		// BGP is enabled.
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"})
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"})
 		if mtu != nil {
 			ipipMtu := strconv.Itoa(int(*mtu))
-			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPINIPMTU", Value: ipipMtu})
+			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_IPINIPMTU", Value: ipipMtu})
 		}
 	}
 
@@ -1234,11 +1215,11 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	}
 	if v4Method != "" {
 		// IPv4 Auto-detection is enabled.
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP", Value: "autodetect"})
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP_AUTODETECTION_METHOD", Value: v4Method})
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "IP", Value: "autodetect"})
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "IP_AUTODETECTION_METHOD", Value: v4Method})
 	} else {
 		// IPv4 Auto-detection is disabled.
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP", Value: "none"})
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "IP", Value: "none"})
 	}
 
 	// IPv6 auto-detection and ippool configuration.
@@ -1248,23 +1229,23 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	}
 	if v6Method != "" {
 		// IPv6 Auto-detection is enabled.
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6", Value: "autodetect"})
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6_AUTODETECTION_METHOD", Value: v6Method})
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPV6SUPPORT", Value: "true"})
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "IP6", Value: "autodetect"})
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "IP6_AUTODETECTION_METHOD", Value: v6Method})
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_IPV6SUPPORT", Value: "true"})
 
 		// Set CALICO_ROUTER_ID to "hash" if IPv6 only.
 		if v4Method == "" {
-			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "CALICO_ROUTER_ID", Value: "hash"})
+			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_ROUTER_ID", Value: "hash"})
 		}
 	} else {
 		// IPv6 Auto-detection is disabled.
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "IP6", Value: "none"})
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPV6SUPPORT", Value: "false"})
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "IP6", Value: "none"})
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_IPV6SUPPORT", Value: "false"})
 	}
 
-	if c.cfg.Installation.Variant == operator.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		// Add in Calico Enterprise specific configuration.
-		extraNodeEnv := []v1.EnvVar{
+		extraNodeEnv := []corev1.EnvVar{
 			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
 			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", c.cfg.NodeReporterMetricsPort)},
 			{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
@@ -1278,7 +1259,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 		}
 
 		if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
-			extraNodeEnv = append(extraNodeEnv, v1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
+			extraNodeEnv = append(extraNodeEnv, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
 		}
 
 		nodeEnv = append(nodeEnv, extraNodeEnv...)
@@ -1287,7 +1268,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	if c.cfg.Installation.NodeMetricsPort != nil {
 		// If a node metrics port was given, then enable felix prometheus metrics and set the port.
 		// Note that this takes precedence over any FelixConfiguration resources in the cluster.
-		extraNodeEnv := []v1.EnvVar{
+		extraNodeEnv := []corev1.EnvVar{
 			{Name: "FELIX_PROMETHEUSMETRICSENABLED", Value: "true"},
 			{Name: "FELIX_PROMETHEUSMETRICSPORT", Value: fmt.Sprintf("%d", *c.cfg.Installation.NodeMetricsPort)},
 		}
@@ -1296,45 +1277,45 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 
 	// Configure provider specific environment variables here.
 	switch c.cfg.Installation.KubernetesProvider {
-	case operator.ProviderOpenShift:
+	case operatorv1.ProviderOpenShift:
 		// For Openshift, we need special configuration since our default port is already in use.
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_HEALTHPORT", Value: "9199"})
-		if c.cfg.Installation.Variant == operator.TigeraSecureEnterprise {
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_HEALTHPORT", Value: "9199"})
+		if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 			// We also need to configure a non-default trusted DNS server, since there's no kube-dns.
-			nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"})
+			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"})
 		}
 	// For AKS and EKS/CalicoCNI, we must explicitly ask felix to add host IP's to wireguard ifaces
-	case operator.ProviderAKS:
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDHOSTENCRYPTIONENABLED", Value: "true"})
-	case operator.ProviderEKS:
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_WIREGUARDHOSTENCRYPTIONENABLED", Value: "true"})
+	case operatorv1.ProviderAKS:
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_WIREGUARDHOSTENCRYPTIONENABLED", Value: "true"})
+	case operatorv1.ProviderEKS:
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_WIREGUARDHOSTENCRYPTIONENABLED", Value: "true"})
 	}
 
 	switch c.cfg.Installation.CNI.Type {
-	case operator.PluginAmazonVPC:
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "eni"})
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"})
-	case operator.PluginGKE:
+	case operatorv1.PluginAmazonVPC:
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "eni"})
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"})
+	case operatorv1.PluginGKE:
 		// The GKE CNI plugin uses its own interface prefix.
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "gke"})
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "gke"})
 		// The GKE CNI plugin has its own iptables rules. Defer to them after ours.
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"})
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_IPTABLESFILTERALLOWACTION", Value: "Return"})
-	case operator.PluginAzureVNET:
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "azv"})
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"})
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_IPTABLESFILTERALLOWACTION", Value: "Return"})
+	case operatorv1.PluginAzureVNET:
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "azv"})
 	}
 
-	if c.cfg.Installation.CNI.Type != operator.PluginCalico {
-		nodeEnv = append(nodeEnv, v1.EnvVar{Name: "FELIX_ROUTESOURCE", Value: "WorkloadIPs"})
+	if c.cfg.Installation.CNI.Type != operatorv1.PluginCalico {
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_ROUTESOURCE", Value: "WorkloadIPs"})
 	}
 
 	if c.cfg.AmazonCloudIntegration != nil {
 		nodeEnv = append(nodeEnv, GetTigeraSecurityGroupEnvVariables(c.cfg.AmazonCloudIntegration)...)
-		nodeEnv = append(nodeEnv, v1.EnvVar{
+		nodeEnv = append(nodeEnv, corev1.EnvVar{
 			Name:  "FELIX_FAILSAFEINBOUNDHOSTPORTS",
 			Value: "tcp:22,udp:68,tcp:179,tcp:443,tcp:5473,tcp:6443",
 		})
-		nodeEnv = append(nodeEnv, v1.EnvVar{
+		nodeEnv = append(nodeEnv, corev1.EnvVar{
 			Name:  "FELIX_FAILSAFEOUTBOUNDHOSTPORTS",
 			Value: "udp:53,udp:67,tcp:179,tcp:443,tcp:5473,tcp:6443",
 		})
@@ -1343,7 +1324,7 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 	nodeEnv = append(nodeEnv, c.cfg.K8sServiceEp.EnvVars(true, c.cfg.Installation.KubernetesProvider)...)
 
 	if c.cfg.BGPLayouts != nil {
-		nodeEnv = append(nodeEnv, v1.EnvVar{
+		nodeEnv = append(nodeEnv, corev1.EnvVar{
 			Name:  "CALICO_EARLY_NETWORKING",
 			Value: BGPLayoutPath,
 		})
@@ -1353,22 +1334,22 @@ func (c *nodeComponent) nodeEnvVars() []v1.EnvVar {
 }
 
 // nodeLifecycle creates the node's postStart and preStop hooks.
-func (c *nodeComponent) nodeLifecycle() *v1.Lifecycle {
+func (c *nodeComponent) nodeLifecycle() *corev1.Lifecycle {
 	preStopCmd := []string{"/bin/calico-node", "-shutdown"}
-	lc := &v1.Lifecycle{
-		PreStop: &v1.Handler{Exec: &v1.ExecAction{Command: preStopCmd}},
+	lc := &corev1.Lifecycle{
+		PreStop: &corev1.Handler{Exec: &corev1.ExecAction{Command: preStopCmd}},
 	}
 	return lc
 }
 
 // nodeLivenessReadinessProbes creates the node's liveness and readiness probes.
-func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
+func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Probe) {
 	// Determine liveness and readiness configuration for node.
 	livenessPort := intstr.FromInt(9099)
 	readinessCmd := []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}
 
 	// Want to check for BGP metrics server if this is enterprise
-	if c.cfg.Installation.Variant == operator.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		readinessCmd = []string{"/bin/calico-node", "-bird-ready", "-felix-ready", "-bgp-metrics-ready"}
 	}
 
@@ -1378,13 +1359,13 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 	}
 
 	// For Openshift, we need a different port since our default port is already in use.
-	if c.cfg.Installation.KubernetesProvider == operator.ProviderOpenShift {
+	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
 		livenessPort = intstr.FromInt(9199)
 	}
 
-	lp := &v1.Probe{
-		Handler: v1.Handler{
-			HTTPGet: &v1.HTTPGetAction{
+	lp := &corev1.Probe{
+		Handler: corev1.Handler{
+			HTTPGet: &corev1.HTTPGetAction{
 				Host: "localhost",
 				Path: "/liveness",
 				Port: livenessPort,
@@ -1392,8 +1373,8 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 		},
 		TimeoutSeconds: 10,
 	}
-	rp := &v1.Probe{
-		Handler: v1.Handler{Exec: &v1.ExecAction{Command: readinessCmd}},
+	rp := &corev1.Probe{
+		Handler: corev1.Handler{Exec: &corev1.ExecAction{Command: readinessCmd}},
 		// Set the TimeoutSeconds greater than the default of 1 to allow additional time on loaded nodes.
 		// This timeout should be less than the PeriodSeconds.
 		TimeoutSeconds: 5,
@@ -1406,29 +1387,29 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 // reporting Prometheus metrics (for policy enforcement activity and BGP stats).
 // This service is used internally by Calico Enterprise and is separate from general
 // Prometheus metrics which are user-configurable.
-func (c *nodeComponent) nodeMetricsService() *v1.Service {
-	return &v1.Service{
+func (c *nodeComponent) nodeMetricsService() *corev1.Service {
+	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "calico-node-metrics",
 			Namespace: common.CalicoNamespace,
 			Labels:    map[string]string{"k8s-app": "calico-node"},
 		},
-		Spec: v1.ServiceSpec{
+		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{"k8s-app": "calico-node"},
-			Type:     v1.ServiceTypeClusterIP,
-			Ports: []v1.ServicePort{
+			Type:     corev1.ServiceTypeClusterIP,
+			Ports: []corev1.ServicePort{
 				{
 					Name:       "calico-metrics-port",
 					Port:       int32(c.cfg.NodeReporterMetricsPort),
 					TargetPort: intstr.FromInt(c.cfg.NodeReporterMetricsPort),
-					Protocol:   v1.ProtocolTCP,
+					Protocol:   corev1.ProtocolTCP,
 				},
 				{
 					Name:       "calico-bgp-metrics-port",
 					Port:       nodeBGPReporterPort,
 					TargetPort: intstr.FromInt(int(nodeBGPReporterPort)),
-					Protocol:   v1.ProtocolTCP,
+					Protocol:   corev1.ProtocolTCP,
 				},
 			},
 		},
@@ -1454,7 +1435,7 @@ func (c *nodeComponent) nodePodSecurityPolicy() *policyv1beta1.PodSecurityPolicy
 
 // getAutodetectionMethod returns the IP auto detection method in a form understandable by the calico/node
 // startup processing. It returns an empty string if IP auto detection should not be enabled.
-func getAutodetectionMethod(ad *operator.NodeAddressAutodetection) string {
+func getAutodetectionMethod(ad *operatorv1.NodeAddressAutodetection) string {
 	if ad != nil {
 		if len(ad.Interface) != 0 {
 			return fmt.Sprintf("interface=%s", ad.Interface)
@@ -1476,7 +1457,7 @@ func getAutodetectionMethod(ad *operator.NodeAddressAutodetection) string {
 }
 
 // GetIPv4Pool returns the IPv4 IPPool in an instalation, or nil if one can't be found.
-func GetIPv4Pool(pools []operator.IPPool) *operator.IPPool {
+func GetIPv4Pool(pools []operatorv1.IPPool) *operatorv1.IPPool {
 	for ii, pool := range pools {
 		addr, _, err := net.ParseCIDR(pool.CIDR)
 		if err == nil {
@@ -1490,7 +1471,7 @@ func GetIPv4Pool(pools []operator.IPPool) *operator.IPPool {
 }
 
 // GetIPv6Pool returns the IPv6 IPPool in an instalation, or nil if one can't be found.
-func GetIPv6Pool(pools []operator.IPPool) *operator.IPPool {
+func GetIPv6Pool(pools []operatorv1.IPPool) *operatorv1.IPPool {
 	for ii, pool := range pools {
 		addr, _, err := net.ParseCIDR(pool.CIDR)
 		if err == nil {
@@ -1504,14 +1485,14 @@ func GetIPv6Pool(pools []operator.IPPool) *operator.IPPool {
 }
 
 // bgpEnabled returns true if the given Installation enables BGP, false otherwise.
-func bgpEnabled(instance *operator.InstallationSpec) bool {
+func bgpEnabled(instance *operatorv1.InstallationSpec) bool {
 	return instance.CalicoNetwork != nil &&
 		instance.CalicoNetwork.BGP != nil &&
 		*instance.CalicoNetwork.BGP == operatorv1.BGPEnabled
 }
 
 // getMTU returns the MTU configured in the Installation if there is one, nil otherwise.
-func getMTU(instance *operator.InstallationSpec) *int32 {
+func getMTU(instance *operatorv1.InstallationSpec) *int32 {
 	var mtu *int32
 	if instance.CalicoNetwork != nil && instance.CalicoNetwork.MTU != nil {
 		mtu = instance.CalicoNetwork.MTU

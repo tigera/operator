@@ -25,7 +25,6 @@ import (
 
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
@@ -1118,14 +1117,6 @@ var _ = Describe("LogStorage controller", func() {
 					}
 					Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
 
-					esPublicCertSecret := &corev1.Secret{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      relasticsearch.PublicCertSecret,
-							Namespace: rmeta.OperatorNamespace(),
-						},
-					}
-					Expect(cli.Create(ctx, esPublicCertSecret)).ShouldNot(HaveOccurred())
-
 					kibanaInternalCertSecret := &corev1.Secret{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      render.KibanaInternalCertSecret,
@@ -1309,8 +1300,7 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 		[]*corev1.Secret{
 			{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: rmeta.OperatorNamespace()}},
 		},
-		nil, nil, "cluster.local", nil, render.ElasticsearchLicenseTypeBasic,
-		nil, false, nil, k8sapi.Endpoint)
+		nil, nil, "cluster.local", nil, render.ElasticsearchLicenseTypeBasic)
 
 	createObj, _ := component.Objects()
 	for _, obj := range createObj {

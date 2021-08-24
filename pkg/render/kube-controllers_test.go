@@ -326,6 +326,78 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(passed).To(Equal(true))
 	})
 
+	It("should add the OIDC prefix env variables", func() {
+		instance.Variant = operator.TigeraSecureEnterprise
+		cfg.LogStorageExists = true
+		cfg.ManagementCluster = &operator.ManagementCluster{}
+		cfg.KubeControllersGatewaySecret = &kubeControllersUserSecret
+		cfg.ElasticsearchSecret = &elasticsearchSecret
+		cfg.ManagerInternalSecret = &internalManagerTLSSecret
+		cfg.MetricsPort = 9094
+		cfg.EnabledESOIDCWorkaround = true
+		cfg.Authentication = &operator.Authentication{Spec: operator.AuthenticationSpec{
+			UsernamePrefix: "uOIDC:",
+			GroupsPrefix:   "gOIDC:",
+			Openshift:      &operator.AuthenticationOpenshift{IssuerURL: "https://api.example.com"},
+		}}
+
+		component := render.KubeControllers(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		depResource := rtest.GetResource(resources, "es-calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")
+		Expect(depResource).ToNot(BeNil())
+		deployment := depResource.(*apps.Deployment)
+
+		var usernamePrefix, groupPrefix string
+		for _, container := range deployment.Spec.Template.Spec.Containers {
+			if container.Name == "es-calico-kube-controllers" {
+				for _, env := range container.Env {
+					if env.Name == "OIDC_AUTH_USERNAME_PREFIX" {
+						usernamePrefix = env.Value
+					} else if env.Name == "OIDC_AUTH_GROUP_PREFIX" {
+						groupPrefix = env.Value
+					}
+				}
+			}
+		}
+
+		Expect(usernamePrefix).To(Equal("uOIDC:"))
+		Expect(groupPrefix).To(Equal("gOIDC:"))
+	})
+
+	When("enableESOIDCWorkaround is true", func() {
+		It("should set the ENABLE_ELASTICSEARCH_OIDC_WORKAROUND env variable to true", func() {
+			instance.Variant = operator.TigeraSecureEnterprise
+			cfg.LogStorageExists = true
+			cfg.ManagementCluster = &operator.ManagementCluster{}
+			cfg.KubeControllersGatewaySecret = &kubeControllersUserSecret
+			cfg.ElasticsearchSecret = &elasticsearchSecret
+			cfg.ManagerInternalSecret = &internalManagerTLSSecret
+			cfg.MetricsPort = 9094
+			cfg.EnabledESOIDCWorkaround = true
+			component := render.KubeControllers(&cfg)
+			resources, _ := component.Objects()
+
+			depResource := rtest.GetResource(resources, "es-calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")
+			Expect(depResource).ToNot(BeNil())
+			deployment := depResource.(*apps.Deployment)
+
+			var esLicenseType string
+			for _, container := range deployment.Spec.Template.Spec.Containers {
+				if container.Name == "es-calico-kube-controllers" {
+					for _, env := range container.Env {
+						if env.Name == "ENABLE_ELASTICSEARCH_OIDC_WORKAROUND" {
+							esLicenseType = env.Value
+						}
+					}
+				}
+			}
+
+			Expect(esLicenseType).To(Equal("true"))
+		})
+	})
+
 	It("should add the KUBERNETES_SERVICE_... variables", func() {
 		k8sServiceEp.Host = "k8shost"
 		k8sServiceEp.Port = "1234"

@@ -746,9 +746,8 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 					return nil, nil, err
 				}
 			}
-		} else {
-			certSecret = render.CreateCertificateSecret(esKeyCert.Data[corev1.TLSCertKey], relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
 		}
+		certSecret = render.CreateCertificateSecret(esKeyCert.Data[corev1.TLSCertKey], relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
 	}
 
 	return esKeyCert, certSecret, err

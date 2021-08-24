@@ -327,18 +327,18 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	})
 
 	It("should add the OIDC prefix env variables", func() {
-		instance.Variant = operator.TigeraSecureEnterprise
+		instance.Variant = operatorv1.TigeraSecureEnterprise
 		cfg.LogStorageExists = true
-		cfg.ManagementCluster = &operator.ManagementCluster{}
+		cfg.ManagementCluster = &operatorv1.ManagementCluster{}
 		cfg.KubeControllersGatewaySecret = &kubeControllersUserSecret
 		cfg.ElasticsearchSecret = &elasticsearchSecret
 		cfg.ManagerInternalSecret = &internalManagerTLSSecret
 		cfg.MetricsPort = 9094
 		cfg.EnabledESOIDCWorkaround = true
-		cfg.Authentication = &operator.Authentication{Spec: operator.AuthenticationSpec{
+		cfg.Authentication = &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{
 			UsernamePrefix: "uOIDC:",
 			GroupsPrefix:   "gOIDC:",
-			Openshift:      &operator.AuthenticationOpenshift{IssuerURL: "https://api.example.com"},
+			Openshift:      &operatorv1.AuthenticationOpenshift{IssuerURL: "https://api.example.com"},
 		}}
 
 		component := render.KubeControllers(&cfg)
@@ -347,7 +347,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		depResource := rtest.GetResource(resources, "es-calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")
 		Expect(depResource).ToNot(BeNil())
-		deployment := depResource.(*apps.Deployment)
+		deployment := depResource.(*appsv1.Deployment)
 
 		var usernamePrefix, groupPrefix string
 		for _, container := range deployment.Spec.Template.Spec.Containers {
@@ -368,9 +368,9 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 	When("enableESOIDCWorkaround is true", func() {
 		It("should set the ENABLE_ELASTICSEARCH_OIDC_WORKAROUND env variable to true", func() {
-			instance.Variant = operator.TigeraSecureEnterprise
+			instance.Variant = operatorv1.TigeraSecureEnterprise
 			cfg.LogStorageExists = true
-			cfg.ManagementCluster = &operator.ManagementCluster{}
+			cfg.ManagementCluster = &operatorv1.ManagementCluster{}
 			cfg.KubeControllersGatewaySecret = &kubeControllersUserSecret
 			cfg.ElasticsearchSecret = &elasticsearchSecret
 			cfg.ManagerInternalSecret = &internalManagerTLSSecret
@@ -381,7 +381,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 			depResource := rtest.GetResource(resources, "es-calico-kube-controllers", "calico-system", "apps", "v1", "Deployment")
 			Expect(depResource).ToNot(BeNil())
-			deployment := depResource.(*apps.Deployment)
+			deployment := depResource.(*appsv1.Deployment)
 
 			var esLicenseType string
 			for _, container := range deployment.Spec.Template.Spec.Containers {

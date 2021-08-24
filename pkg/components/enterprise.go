@@ -47,6 +47,11 @@ var (
 		Image:   "tigera/compliance-snapshotter",
 	}
 
+	ComponentDeepPacketInspection = component{
+		Version: "master",
+		Image:   "tigera/deep-packet-inspection",
+	}
+
 	ComponentEckElasticsearch = component{
 		Version: "7.11.2",
 		Image:   "tigera/elasticsearch",
@@ -189,6 +194,7 @@ var (
 		ComponentComplianceReporter,
 		ComponentComplianceServer,
 		ComponentComplianceSnapshotter,
+		ComponentDeepPacketInspection,
 		ComponentEckElasticsearch,
 		ComponentEckKibana,
 		ComponentElasticTseeInstaller,

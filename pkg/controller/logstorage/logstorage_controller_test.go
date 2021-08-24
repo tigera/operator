@@ -19,8 +19,6 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/tigera/operator/pkg/common"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -430,18 +428,6 @@ var _ = Describe("LogStorage controller", func() {
 					}
 					Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
 
-					kubeControllersElasticUserSecret := &corev1.Secret{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      render.ElasticsearchKubeControllersUserSecret,
-							Namespace: common.CalicoNamespace,
-						},
-						Data: map[string][]byte{
-							"username": []byte("username"),
-							"password": []byte("password"),
-						},
-					}
-					Expect(cli.Create(ctx, kubeControllersElasticUserSecret)).ShouldNot(HaveOccurred())
-
 					kbInternalSecret := createPubSecret(render.KibanaInternalCertSecret, render.KibanaNamespace, secret.Data["tls.crt"], "tls.crt")
 					Expect(cli.Create(ctx, kbInternalSecret)).ShouldNot(HaveOccurred())
 
@@ -568,18 +554,6 @@ var _ = Describe("LogStorage controller", func() {
 						},
 					}
 					Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
-
-					kubeControllersElasticUserSecret := &corev1.Secret{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      render.ElasticsearchKubeControllersUserSecret,
-							Namespace: common.CalicoNamespace,
-						},
-						Data: map[string][]byte{
-							"username": []byte("username"),
-							"password": []byte("password"),
-						},
-					}
-					Expect(cli.Create(ctx, kubeControllersElasticUserSecret)).ShouldNot(HaveOccurred())
 
 					mockStatus.On("SetDegraded", "Waiting for curator secrets to become available", "").Return()
 					result, err = r.Reconcile(ctx, reconcile.Request{})
@@ -747,18 +721,6 @@ var _ = Describe("LogStorage controller", func() {
 					)
 					Expect(err).ShouldNot(HaveOccurred())
 
-					kubeControllersElasticUserSecret := &corev1.Secret{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      render.ElasticsearchKubeControllersUserSecret,
-							Namespace: common.CalicoNamespace,
-						},
-						Data: map[string][]byte{
-							"username": []byte("username"),
-							"password": []byte("password"),
-						},
-					}
-					Expect(cli.Create(ctx, kubeControllersElasticUserSecret)).ShouldNot(HaveOccurred())
-
 					// Create the public ES and KB secrets that would come from
 					// the ECK operator. These public certs use the cert
 					// bytes from the certs above and so they have invalid DNS
@@ -864,18 +826,6 @@ var _ = Describe("LogStorage controller", func() {
 					It("should use default images", func() {
 						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain)
 						Expect(err).ShouldNot(HaveOccurred())
-
-						kubeControllersElasticUserSecret := &corev1.Secret{
-							ObjectMeta: metav1.ObjectMeta{
-								Name:      render.ElasticsearchKubeControllersUserSecret,
-								Namespace: common.CalicoNamespace,
-							},
-							Data: map[string][]byte{
-								"username": []byte("username"),
-								"password": []byte("password"),
-							},
-						}
-						Expect(cli.Create(ctx, kubeControllersElasticUserSecret)).ShouldNot(HaveOccurred())
 
 						esAdminUserSecret := &corev1.Secret{
 							ObjectMeta: metav1.ObjectMeta{
@@ -991,6 +941,7 @@ var _ = Describe("LogStorage controller", func() {
 							Spec: operatorv1.ImageSetSpec{
 								Images: []operatorv1.Image{
 									{Image: "tigera/elasticsearch", Digest: "sha256:elasticsearchhash"},
+									{Image: "tigera/kube-controllers", Digest: "sha256:kubecontrollershash"},
 									{Image: "tigera/kibana", Digest: "sha256:kibanahash"},
 									{Image: "tigera/eck-operator", Digest: "sha256:eckoperatorhash"},
 									{Image: "tigera/es-curator", Digest: "sha256:escuratorhash"},
@@ -1001,18 +952,6 @@ var _ = Describe("LogStorage controller", func() {
 						})).ToNot(HaveOccurred())
 						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain)
 						Expect(err).ShouldNot(HaveOccurred())
-
-						kubeControllersElasticUserSecret := &corev1.Secret{
-							ObjectMeta: metav1.ObjectMeta{
-								Name:      render.ElasticsearchKubeControllersUserSecret,
-								Namespace: common.CalicoNamespace,
-							},
-							Data: map[string][]byte{
-								"username": []byte("username"),
-								"password": []byte("password"),
-							},
-						}
-						Expect(cli.Create(ctx, kubeControllersElasticUserSecret)).ShouldNot(HaveOccurred())
 
 						esAdminUserSecret := &corev1.Secret{
 							ObjectMeta: metav1.ObjectMeta{
@@ -1177,18 +1116,6 @@ var _ = Describe("LogStorage controller", func() {
 						},
 					}
 					Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
-
-					kubeControllersElasticUserSecret := &corev1.Secret{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      render.ElasticsearchKubeControllersUserSecret,
-							Namespace: common.CalicoNamespace,
-						},
-						Data: map[string][]byte{
-							"username": []byte("username"),
-							"password": []byte("password"),
-						},
-					}
-					Expect(cli.Create(ctx, kubeControllersElasticUserSecret)).ShouldNot(HaveOccurred())
 
 					kibanaInternalCertSecret := &corev1.Secret{
 						ObjectMeta: metav1.ObjectMeta{

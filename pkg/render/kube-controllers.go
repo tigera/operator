@@ -15,9 +15,8 @@
 package render
 
 import (
-	"strings"
-
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -39,10 +38,15 @@ import (
 var replicas int32 = 1
 
 const (
-	ElasticsearchKubeControllersUserName               = "tigera-ee-kube-controllers"
-	ElasticsearchKubeControllersUserSecret             = "tigera-ee-kube-controllers-elasticsearch-access"
-	ElasticsearchKubeControllersSecureUserSecret       = "tigera-ee-kube-controllers-elasticsearch-access-gateway"
-	ElasticsearchKubeControllersVerificationUserSecret = "tigera-ee-kube-controllers-gateway-verification-credentials"
+	KubeController               = "calico-kube-controllers"
+	KubeControllerServiceAccount = "calico-kube-controllers"
+	KubeControllerRole           = "calico-kube-controllers"
+	KubeControllerRoleBinding    = "calico-kube-controllers"
+
+	EsKubeController               = "es-calico-kube-controllers"
+	EsKubeControllerServiceAccount = "calico-kube-controllers"
+	EsKubeControllerRole           = "es-calico-kube-controllers"
+	EsKubeControllerRoleBinding    = "es-calico-kube-controllers"
 )
 
 type KubeControllersConfiguration struct {
@@ -99,11 +103,25 @@ func (c *kubeControllersComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) {
+	var kubeControllerServiceAccountName, roleName, roleBindingName, kubeControllerName string
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise && c.cfg.LogStorageExists &&
+		c.cfg.KubeControllersGatewaySecret != nil && c.cfg.ElasticsearchSecret != nil {
+		kubeControllerServiceAccountName = EsKubeControllerServiceAccount
+		roleName = EsKubeControllerRole
+		roleBindingName = EsKubeControllerRoleBinding
+		kubeControllerName = EsKubeController
+	} else {
+		kubeControllerServiceAccountName = KubeControllerServiceAccount
+		roleName = KubeControllerRole
+		roleBindingName = KubeControllerRoleBinding
+		kubeControllerName = KubeController
+	}
+
 	objectsToCreate := []client.Object{
-		c.controllersServiceAccount(),
-		c.controllersRole(),
-		c.controllersRoleBinding(),
-		c.controllersDeployment(),
+		c.controllersServiceAccount(kubeControllerServiceAccountName),
+		c.controllersRole(roleName, kubeControllerName),
+		c.controllersRoleBinding(roleBindingName, roleName, kubeControllerServiceAccountName),
+		c.controllersDeployment(kubeControllerName, kubeControllerServiceAccountName),
 	}
 	objectsToDelete := []client.Object{}
 	if c.cfg.ManagerInternalSecret != nil {
@@ -122,7 +140,7 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 	}
 
 	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
-		objectsToCreate = append(objectsToCreate, c.controllersPodSecurityPolicy())
+		objectsToCreate = append(objectsToCreate, c.controllersPodSecurityPolicy(kubeControllerName))
 	}
 
 	if c.cfg.MetricsPort != 0 {
@@ -138,24 +156,45 @@ func (c *kubeControllersComponent) Ready() bool {
 	return true
 }
 
-func (c *kubeControllersComponent) controllersServiceAccount() *corev1.ServiceAccount {
+func (c *kubeControllersComponent) controllersServiceAccount(serviceAccountName string) *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "calico-kube-controllers",
+			Name:      serviceAccountName,
 			Namespace: common.CalicoNamespace,
 			Labels:    map[string]string{},
 		},
 	}
 }
 
-func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
+func (c *kubeControllersComponent) controllersRole(roleName, kubeControllerName string) *rbacv1.ClusterRole {
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "calico-kube-controllers",
+			Name: roleName,
 		},
-		Rules: []rbacv1.PolicyRule{
+	}
+
+	if c.cfg.ManagementClusterConnection != nil && kubeControllerName == EsKubeController {
+		role.Rules = []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"licensekeys"},
+				Verbs:     []string{"get", "create", "update", "list", "watch"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"get", "create", "update", "list", "watch"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"get", "create", "update", "list", "watch"},
+			},
+		}
+	} else {
+		role.Rules = []rbacv1.PolicyRule{
 			{
 				// Nodes are watched to monitor for deletions.
 				APIGroups: []string{""},
@@ -199,88 +238,91 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 				Resources: []string{"kubecontrollersconfigurations"},
 				Verbs:     []string{"get", "create", "update", "watch"},
 			},
-		},
-	}
-
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		extraRules := []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"elasticsearch.k8s.elastic.co"},
-				Resources: []string{"elasticsearches"},
-				Verbs:     []string{"watch", "get", "list"},
-			},
-			{
-				APIGroups: []string{""},
-				Resources: []string{"configmaps"},
-				Verbs:     []string{"watch", "list", "get", "update", "create"},
-			},
-			// Used for the creation, synchronization and deletion of elasticsearch related secrets.
-			{
-				APIGroups: []string{""},
-				Resources: []string{"secrets"},
-				Verbs:     []string{"watch", "list", "get", "update", "create", "deletecollection"},
-			},
-
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"managedclusters"},
-				Verbs:     []string{"watch", "list", "get"},
-			},
-			{
-				// Needed to validate the license
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"licensekeys"},
-				Verbs:     []string{"get", "watch", "list"},
-			},
-			{
-				// calico-kube-controllers requires tiers create
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{"tiers"},
-				Verbs:     []string{"create"},
-			},
-			{
-				// Needed to validate the license
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{"licensekeys"},
-				Verbs:     []string{"get"},
-			},
-			{
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{"remoteclusterconfigurations"},
-				Verbs:     []string{"watch", "list", "get"},
-			},
-			{
-				// For federated services.
-				APIGroups: []string{""},
-				Resources: []string{"endpoints"},
-				Verbs:     []string{"create", "update", "delete"},
-			},
-			{
-				APIGroups: []string{"rbac.authorization.k8s.io"},
-				Resources: []string{"clusterroles", "clusterrolebindings"},
-				Verbs:     []string{"watch", "list", "get"},
-			},
 		}
 
-		role.Rules = append(role.Rules, extraRules...)
+		if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+			extraRules := []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{""},
+					Resources: []string{"configmaps"},
+					Verbs:     []string{"watch", "list", "get", "update", "create"},
+				},
+				{
+					// Needed to validate the license
+					APIGroups: []string{"projectcalico.org"},
+					Resources: []string{"licensekeys"},
+					Verbs:     []string{"get", "watch", "list"},
+				},
+				{
+					// calico-kube-controllers requires tiers create
+					APIGroups: []string{"crd.projectcalico.org"},
+					Resources: []string{"tiers"},
+					Verbs:     []string{"create"},
+				},
+				{
+					// Needed to validate the license
+					APIGroups: []string{"crd.projectcalico.org"},
+					Resources: []string{"licensekeys"},
+					Verbs:     []string{"get"},
+				},
+			}
 
-		if c.cfg.ManagementCluster != nil {
-			// For cross-cluster requests an authentication review will be done for authenticating the kube-controllers.
-			// Requests on behalf of the kube-controllers will be sent to Voltron, where an authentication review will
-			// take place with its bearer token.
-			role.Rules = append(role.Rules, rbacv1.PolicyRule{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"authenticationreviews"},
-				Verbs:     []string{"create"},
-			})
-		}
+			if kubeControllerName == KubeController {
+				extraRules = append(extraRules,
+					rbacv1.PolicyRule{
+						APIGroups: []string{""},
+						Resources: []string{"secrets"},
+						Verbs:     []string{"deletecollection"},
+					},
+					rbacv1.PolicyRule{
+						APIGroups: []string{"crd.projectcalico.org"},
+						Resources: []string{"remoteclusterconfigurations"},
+						Verbs:     []string{"watch", "list", "get"},
+					},
+					rbacv1.PolicyRule{
+						APIGroups: []string{""},
+						Resources: []string{"endpoints"},
+						Verbs:     []string{"create", "update", "delete"},
+					})
+			} else {
+				extraRules = append(extraRules,
+					rbacv1.PolicyRule{
+						APIGroups: []string{"elasticsearch.k8s.elastic.co"},
+						Resources: []string{"elasticsearches"},
+						Verbs:     []string{"watch", "get", "list"},
+					},
+					rbacv1.PolicyRule{
+						APIGroups: []string{""},
+						Resources: []string{"secrets"},
+						Verbs:     []string{"watch", "list", "get", "update", "create"},
+					},
+					rbacv1.PolicyRule{
+						APIGroups: []string{"projectcalico.org"},
+						Resources: []string{"managedclusters"},
+						Verbs:     []string{"watch", "list", "get"},
+					})
+			}
 
-		if c.cfg.ManagementClusterConnection != nil {
-			role.Rules = append(role.Rules, rbacv1.PolicyRule{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"licensekeys"},
-				Verbs:     []string{"create", "update"},
-			})
+			role.Rules = append(role.Rules, extraRules...)
+
+			if c.cfg.ManagementCluster != nil {
+				// For cross-cluster requests an authentication review will be done for authenticating the kube-controllers.
+				// Requests on behalf of the kube-controllers will be sent to Voltron, where an authentication review will
+				// take place with its bearer token.
+				role.Rules = append(role.Rules, rbacv1.PolicyRule{
+					APIGroups: []string{"projectcalico.org"},
+					Resources: []string{"authenticationreviews"},
+					Verbs:     []string{"create"},
+				})
+			}
+
+			if c.cfg.ManagementClusterConnection != nil {
+				role.Rules = append(role.Rules, rbacv1.PolicyRule{
+					APIGroups: []string{"projectcalico.org"},
+					Resources: []string{"licensekeys"},
+					Verbs:     []string{"create", "update"},
+				})
+			}
 		}
 	}
 
@@ -290,37 +332,23 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 			APIGroups:     []string{"policy"},
 			Resources:     []string{"podsecuritypolicies"},
 			Verbs:         []string{"use"},
-			ResourceNames: []string{"calico-kube-controllers"},
+			ResourceNames: []string{KubeController},
 		})
 	}
 
 	return role
 }
 
-func (c *kubeControllersComponent) controllersRoleBinding() *rbacv1.ClusterRoleBinding {
-	return &rbacv1.ClusterRoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   "calico-kube-controllers",
-			Labels: map[string]string{},
-		},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     "calico-kube-controllers",
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      "calico-kube-controllers",
-				Namespace: common.CalicoNamespace,
-			},
-		},
+func (c *kubeControllersComponent) controllersDeployment(kubeControllerName, serviceAccountName string) *appsv1.Deployment {
+	var kubeControllerConfigName string
+	if kubeControllerName == KubeController {
+		kubeControllerConfigName = "default"
+	} else {
+		kubeControllerConfigName = "elasticsearch"
 	}
-}
 
-func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	env := []corev1.EnvVar{
+		{Name: "KUBE_CONTROLLERS_CONFIG_NAME", Value: kubeControllerConfigName},
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 	}
 
@@ -328,29 +356,25 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 
 	enabledControllers := []string{"node"}
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		enabledControllers = append(enabledControllers, "service", "federatedservices")
-
-		if c.cfg.LogStorageExists && c.cfg.KubeControllersGatewaySecret != nil && c.cfg.ElasticsearchSecret != nil {
-			// These controllers require that Elasticsearch exists within the cluster Kube Controllers is running in, i.e.
-			// Full Standalone and Management clusters, not Minimal Standalone and Managed clusters.
+		if kubeControllerName == KubeController {
+			enabledControllers = append(enabledControllers, "service", "federatedservices")
+		} else {
 			enabledControllers = append(enabledControllers, "authorization", "elasticsearchconfiguration")
 
 			if c.cfg.EnabledESOIDCWorkaround {
 				env = append(env, corev1.EnvVar{Name: "ENABLE_ELASTICSEARCH_OIDC_WORKAROUND", Value: "true"})
 			}
 
-			// These environment variables are for the "authorization" controller, so if it's not enabled don't provide
-			// them.
+			if c.cfg.ManagementCluster != nil {
+				enabledControllers = append(enabledControllers, "managedcluster")
+			}
+
 			if c.cfg.Authentication != nil {
 				env = append(env,
 					corev1.EnvVar{Name: "OIDC_AUTH_USERNAME_PREFIX", Value: c.cfg.Authentication.Spec.UsernamePrefix},
 					corev1.EnvVar{Name: "OIDC_AUTH_GROUP_PREFIX", Value: c.cfg.Authentication.Spec.GroupsPrefix},
 				)
 			}
-		}
-
-		if c.cfg.ManagementCluster != nil {
-			enabledControllers = append(enabledControllers, "managedcluster")
 		}
 
 		if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
@@ -363,7 +387,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	defaultMode := int32(420)
 
 	container := corev1.Container{
-		Name:      "calico-kube-controllers",
+		Name:      kubeControllerName,
 		Image:     c.image,
 		Env:       env,
 		Resources: c.kubeControllersResources(),
@@ -396,7 +420,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		VolumeMounts: kubeControllersVolumeMounts(c.cfg.ManagerInternalSecret),
 	}
 
-	if c.cfg.LogStorageExists && c.cfg.KubeControllersGatewaySecret != nil && c.cfg.ElasticsearchSecret != nil {
+	if kubeControllerName == EsKubeController {
 		container = relasticsearch.ContainerDecorate(container, DefaultElasticsearchClusterName,
 			ElasticsearchKubeControllersUserSecret, c.cfg.ClusterDomain, rmeta.OSTypeLinux)
 	}
@@ -405,22 +429,22 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 		Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster, rmeta.TolerateCriticalAddonsOnly),
 		ImagePullSecrets:   c.cfg.Installation.ImagePullSecrets,
-		ServiceAccountName: "calico-kube-controllers",
+		ServiceAccountName: serviceAccountName,
 		Containers:         []corev1.Container{container},
 		Volumes:            kubeControllersVolumes(defaultMode, c.cfg.ManagerInternalSecret),
 	}
 
-	if c.cfg.LogStorageExists && c.cfg.KubeControllersGatewaySecret != nil && c.cfg.ElasticsearchSecret != nil {
+	if kubeControllerName == EsKubeController {
 		podSpec = relasticsearch.PodSpecDecorate(podSpec)
 	}
 
 	d := appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      common.KubeControllersDeploymentName,
+			Name:      kubeControllerName,
 			Namespace: common.CalicoNamespace,
 			Labels: map[string]string{
-				"k8s-app": "calico-kube-controllers",
+				"k8s-app": kubeControllerName,
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -430,15 +454,15 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 			},
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"k8s-app": "calico-kube-controllers",
+					"k8s-app": kubeControllerName,
 				},
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "calico-kube-controllers",
+					Name:      kubeControllerName,
 					Namespace: common.CalicoNamespace,
 					Labels: map[string]string{
-						"k8s-app": "calico-kube-controllers",
+						"k8s-app": kubeControllerName,
 					},
 					Annotations: c.annotations(),
 				},
@@ -451,6 +475,28 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	return &d
 }
 
+func (c *kubeControllersComponent) controllersRoleBinding(roleBindingName, roleName, serviceAccountName string) *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   roleBindingName,
+			Labels: map[string]string{},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     roleName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      serviceAccountName,
+				Namespace: common.CalicoNamespace,
+			},
+		},
+	}
+}
+
 // prometheusService creates a Service which exposes and endpoint on kube-controllers for
 // reporting Prometheus metrics.
 func (c *kubeControllersComponent) prometheusService() *corev1.Service {
@@ -459,10 +505,10 @@ func (c *kubeControllersComponent) prometheusService() *corev1.Service {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "calico-kube-controllers-metrics",
 			Namespace: common.CalicoNamespace,
-			Labels:    map[string]string{"k8s-app": "calico-kube-controllers"},
+			Labels:    map[string]string{"k8s-app": KubeController},
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{"k8s-app": "calico-kube-controllers"},
+			Selector: map[string]string{"k8s-app": KubeController},
 			Type:     corev1.ServiceTypeClusterIP,
 			Ports: []corev1.ServicePort{
 				{
@@ -502,9 +548,9 @@ func (c *kubeControllersComponent) annotations() map[string]string {
 	return am
 }
 
-func (c *kubeControllersComponent) controllersPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+func (c *kubeControllersComponent) controllersPodSecurityPolicy(kubeControllerName string) *policyv1beta1.PodSecurityPolicy {
 	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName("calico-kube-controllers")
+	psp.GetObjectMeta().SetName(kubeControllerName)
 	return psp
 }
 

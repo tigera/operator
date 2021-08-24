@@ -746,6 +746,11 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 					return nil, nil, err
 				}
 			}
+
+			newInternalSecret := render.CreateCertificateSecret(esKeyCert.Data[corev1.TLSCertKey], relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
+			if rmeta.SecretsAnnotationHash([]*corev1.Secret{internalSecret}...) != rmeta.SecretsAnnotationHash([]*corev1.Secret{newInternalSecret}...) {
+				certSecret = newInternalSecret
+			}
 		} else {
 			certSecret = render.CreateCertificateSecret(esKeyCert.Data[corev1.TLSCertKey], relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
 		}

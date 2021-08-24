@@ -238,7 +238,7 @@ ifeq ($(ARCH),amd64)
 endif
 
 .PHONY: images
-images: image
+images: register image
 
 # Build the images for the target architecture
 .PHONY: images-all
@@ -346,7 +346,7 @@ foss-checks:
 ###############################################################################
 .PHONY: ci
 ## Run what CI runs
-ci: clean format-check images test dirty-check validate-gen-versions
+ci: clean format-check images-all test dirty-check validate-gen-versions
 
 validate-gen-versions:
 	make gen-versions

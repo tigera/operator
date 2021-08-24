@@ -432,7 +432,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	var gatewayCertSecret, gatewayPublicCertSecret *corev1.Secret
 	var kubeControllersUserSecret, kubeControllerEsPublicCertSecret, kubeControllerKibanaPublicCertSecret *corev1.Secret
 	var esInternalCertSecret, esAdminUserSecret, esCertSecret *corev1.Secret
-	var elasticsearchSecrets, kibanaSecrets, curatorSecrets []*corev1.Secret
+	var kibanaSecrets, curatorSecrets []*corev1.Secret
 	var clusterConfig *relasticsearch.ClusterConfig
 	var esLicenseType render.ElasticsearchLicenseType
 	customerProvidedCert := false
@@ -521,18 +521,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 
 	}
 
-	elasticsearchSecrets = []*corev1.Secret{esCertSecret, esInternalCertSecret, esAdminUserSecret}
-	if kubeControllersUserSecret != nil {
-		elasticsearchSecrets = append(elasticsearchSecrets, kubeControllersUserSecret)
-	}
-	if kubeControllerEsPublicCertSecret != nil {
-		elasticsearchSecrets = append(elasticsearchSecrets, kubeControllerEsPublicCertSecret)
-	}
-
-	if kubeControllerKibanaPublicCertSecret != nil {
-		kibanaSecrets = append(kibanaSecrets, kubeControllerKibanaPublicCertSecret)
-	}
-
 	elasticsearch, err := r.getElasticsearch(ctx)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
@@ -593,30 +581,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexCertSecret, dexSecret, r.clusterDomain)
 	}
 
-	var managerInternalTLSSecret *corev1.Secret
-	managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
-		common.CalicoNamespace,
-		render.ManagerInternalTLSSecretName,
-		render.ManagerInternalSecretKeyName,
-		render.ManagerInternalSecretCertName,
-	)
-
-	if install.Variant == operatorv1.TigeraSecureEnterprise && managementCluster != nil {
-		var err error
-		svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
-		svcDNSNames = append(svcDNSNames, render.ManagerServiceIP)
-		certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
-
-		managerInternalTLSSecret, err = utils.EnsureCertificateSecret(
-			render.ManagerInternalTLSSecretName, managerInternalTLSSecret, render.ManagerInternalSecretKeyName, render.ManagerInternalSecretCertName, certDur, svcDNSNames...,
-		)
-
-		if err != nil {
-			r.status.SetDegraded(fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err.Error())
-			return reconcile.Result{}, err
-		}
-	}
-
 	component := render.LogStorage(
 		ls,
 		install,
@@ -625,7 +589,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		elasticsearch,
 		kibana,
 		clusterConfig,
-		elasticsearchSecrets,
+		[]*corev1.Secret{esCertSecret, esInternalCertSecret, esAdminUserSecret},
 		kibanaSecrets,
 		pullSecrets,
 		r.provider,
@@ -635,10 +599,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		r.clusterDomain,
 		dexCfg,
 		esLicenseType,
-		authentication,
-		enableESOIDCWorkaround,
-		managerInternalTLSSecret,
-		k8sapi.Endpoint,
 	)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
@@ -654,6 +614,70 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	if managementClusterConnection == nil {
+		var managerInternalTLSSecret *corev1.Secret
+		managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
+			common.CalicoNamespace,
+			render.ManagerInternalTLSSecretName,
+			render.ManagerInternalSecretKeyName,
+			render.ManagerInternalSecretCertName,
+		)
+
+		if managementCluster != nil {
+			var err error
+			svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
+			svcDNSNames = append(svcDNSNames, render.ManagerServiceIP)
+			certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
+
+			managerInternalTLSSecret, err = utils.EnsureCertificateSecret(
+				render.ManagerInternalTLSSecretName, managerInternalTLSSecret, render.ManagerInternalSecretKeyName, render.ManagerInternalSecretCertName, certDur, svcDNSNames...,
+			)
+
+			if err != nil {
+				r.status.SetDegraded(fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err.Error())
+				return reconcile.Result{}, err
+			}
+		}
+		kubeControllersCfg := render.KubeControllersConfiguration{
+			K8sServiceEp:                 k8sapi.Endpoint,
+			Installation:                 install,
+			ManagementCluster:            managementCluster,
+			ManagementClusterConnection:  managementClusterConnection,
+			ClusterDomain:                r.clusterDomain,
+			ManagerInternalSecret:        managerInternalTLSSecret,
+			EnabledESOIDCWorkaround:      enableESOIDCWorkaround,
+			Authentication:               authentication,
+			ElasticsearchSecret:          kubeControllerEsPublicCertSecret,
+			KubeControllersGatewaySecret: kubeControllersUserSecret,
+			KibanaSecret:                 kubeControllerKibanaPublicCertSecret,
+			LogStorageExists:             true,
+		}
+		esKubeControllerComponents := render.KubeControllers(&kubeControllersCfg)
+
+		imageSet, err := imageset.GetImageSet(ctx, r.client, install.Variant)
+		if err != nil {
+			reqLogger.Error(err, "Error getting ImageSet")
+			r.status.SetDegraded("Error getting ImageSet", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		if err = imageset.ValidateImageSet(imageSet); err != nil {
+			reqLogger.Error(err, "Error validating ImageSet")
+			r.status.SetDegraded("Error validating ImageSet", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		if err = imageset.ResolveImages(imageSet, esKubeControllerComponents); err != nil {
+			reqLogger.Error(err, "Error resolving ImageSet for elasticsearch kube-controllers components")
+			r.status.SetDegraded("Error resolving ImageSet for elasticsearch kube-controllers components", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		if err := hdler.CreateOrUpdateOrDelete(ctx, esKubeControllerComponents, nil); err != nil {
+			reqLogger.Error(err, "Error creating / updating  elasticsearch kube-controllers resource")
+			r.status.SetDegraded("Error creating / updating  elasticsearch kube-controllers resource", err.Error())
+			return reconcile.Result{}, err
+		}
+
 		if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
 			r.status.SetDegraded("Waiting for Elasticsearch cluster to be operational", "")
 			return reconcile.Result{}, nil

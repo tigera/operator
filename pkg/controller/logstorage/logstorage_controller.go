@@ -17,6 +17,7 @@ package logstorage
 import (
 	"context"
 	"fmt"
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"time"
 
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
@@ -483,7 +484,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, err
 		}
 
-		kubeControllersUserSecret, err = utils.GetSecret(ctx, r.client, render.ElasticsearchKubeControllersUserSecret, rmeta.OperatorNamespace())
+		kubeControllersUserSecret, err = utils.GetSecret(ctx, r.client, kubecontrollers.ElasticsearchKubeControllersUserSecret, rmeta.OperatorNamespace())
 		if err != nil {
 			log.Error(err, err.Error())
 			r.status.SetDegraded("Failed to get kube controllers gateway secret", err.Error())
@@ -637,7 +638,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 				return reconcile.Result{}, err
 			}
 		}
-		kubeControllersCfg := render.KubeControllersConfiguration{
+		kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
 			K8sServiceEp:                 k8sapi.Endpoint,
 			Installation:                 install,
 			ManagementCluster:            managementCluster,
@@ -651,7 +652,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			KibanaSecret:                 kubeControllerKibanaPublicCertSecret,
 			LogStorageExists:             true,
 		}
-		esKubeControllerComponents := render.KubeControllers(&kubeControllersCfg)
+		esKubeControllerComponents := kubecontrollers.KubeControllers(&kubeControllersCfg)
 
 		imageSet, err := imageset.GetImageSet(ctx, r.client, install.Variant)
 		if err != nil {

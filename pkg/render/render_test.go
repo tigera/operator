@@ -18,6 +18,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	glog "log"
 	"reflect"
 
@@ -103,7 +104,7 @@ func allCalicoComponents(
 		AmazonCloudIntegration: aci,
 		MigrateNamespaces:      up,
 	}
-	kcCfg := &render.KubeControllersConfiguration{
+	kcCfg := &kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:                k8sServiceEp,
 		Installation:                cr,
 		ManagementCluster:           managementCluster,
@@ -113,7 +114,7 @@ func allCalicoComponents(
 		MetricsPort:                 kubeControllersMetricsPort,
 	}
 
-	return []render.Component{namespaces, secretsAndConfigMaps, render.Typha(typhaCfg), render.Node(nodeCfg), render.KubeControllers(kcCfg)}, nil
+	return []render.Component{namespaces, secretsAndConfigMaps, render.Typha(typhaCfg), render.Node(nodeCfg), kubecontrollers.KubeControllers(kcCfg)}, nil
 }
 
 var _ = Describe("Rendering tests", func() {
@@ -211,7 +212,7 @@ var _ = Describe("Rendering tests", func() {
 	It("should render all resources when variant is Tigera Secure and Management Cluster", func() {
 		// For this scenario, we expect the basic resources plus the following for Tigera Secure:
 		// - X Same as default config for EE
-		// - pass in internalManagerTLSSecret
+		// - pass in InternalManagerTLSSecret
 		var nodeMetricsPort int32 = 9081
 		instance.Variant = operatorv1.TigeraSecureEnterprise
 		instance.NodeMetricsPort = &nodeMetricsPort

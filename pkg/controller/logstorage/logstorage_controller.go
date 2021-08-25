@@ -15,6 +15,7 @@
 package logstorage
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -930,6 +931,12 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 			err = utils.SecretHasExpectedDNSNames(internalSecret, corev1.TLSCertKey, svcDNSNames)
 			if err == utils.ErrInvalidCertDNSNames {
 				if err := r.deleteInvalidECKManagedPublicCertSecret(ctx, internalSecret); err != nil {
+					return nil, nil, err
+				}
+			} else if !bytes.Equal(internalSecret.Data[corev1.TLSCertKey], esKeyCert.Data[corev1.TLSCertKey]) {
+				// The internalSecret and esKeyCert Cert Key might be different if ES has been updated
+				// like during an upgrade so we need to delete the internalSecret so it can be recreated.
+				if err := r.client.Delete(ctx, internalSecret); err != nil {
 					return nil, nil, err
 				}
 			}

@@ -109,7 +109,7 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
 			// We only need to add the tlsKeyPair if we created it, otherwise
 			// it already exists.
 			tlsSecrets = []*corev1.Secret{tlsKeyPair}
-			tlsHashAnnotations[tlsSecretHashAnnotation] = rmeta.AnnotationHash(tlsKeyPair.Data)
+			tlsHashAnnotations[TlsSecretHashAnnotation] = rmeta.AnnotationHash(tlsKeyPair.Data)
 		}
 		copy := tlsKeyPair.DeepCopy()
 		copy.ObjectMeta = metav1.ObjectMeta{

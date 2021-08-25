@@ -430,7 +430,7 @@ func (c *typhaComponent) typhaDeployment() *appsv1.Deployment {
 			},
 		},
 	}
-	setClusterCriticalPod(&(d.Spec.Template))
+	SetClusterCriticalPod(&(d.Spec.Template))
 	if c.cfg.MigrateNamespaces {
 		migration.SetTyphaAntiAffinity(&d)
 	}

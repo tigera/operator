@@ -23,6 +23,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/render/testutils"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -133,7 +134,7 @@ var _ = Describe("compliance rendering tests", func() {
 
 	Context("Management cluster", func() {
 		It("should render all resources for a default configuration", func() {
-			component, err := render.Compliance(nil, &internalManagerTLSSecret,
+			component, err := render.Compliance(nil, &testutils.InternalManagerTLSSecret,
 				&operatorv1.InstallationSpec{
 					KubernetesProvider: operatorv1.ProviderNone,
 					Registry:           "testregistry.com/",

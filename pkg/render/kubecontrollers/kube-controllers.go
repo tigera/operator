@@ -311,6 +311,11 @@ func (c *kubeControllersComponent) controllersRole(roleName, kubeControllerName 
 						APIGroups: []string{"projectcalico.org"},
 						Resources: []string{"managedclusters"},
 						Verbs:     []string{"watch", "list", "get"},
+					},
+					rbacv1.PolicyRule{
+						APIGroups: []string{"rbac.authorization.k8s.io"},
+						Resources: []string{"clusterroles", "clusterrolebindings"},
+						Verbs:     []string{"watch", "list", "get"},
 					})
 			}
 

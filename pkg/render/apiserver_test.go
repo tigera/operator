@@ -19,8 +19,9 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"github.com/tigera/operator/pkg/render/testutils"
 	"time"
+
+	"github.com/tigera/operator/pkg/render/testutils"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"

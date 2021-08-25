@@ -15,9 +15,10 @@
 package kubecontrollers
 
 import (
+	"strings"
+
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -133,19 +134,21 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 		c.controllersDeployment(kubeControllerName, kubeControllerServiceAccountName),
 	}
 	objectsToDelete := []client.Object{}
-	if c.cfg.ManagerInternalSecret != nil {
+	if kubeControllerName == KubeController && c.cfg.ManagerInternalSecret != nil {
 		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
 			secret.CopyToNamespace(common.CalicoNamespace, c.cfg.ManagerInternalSecret)...)...)
 	}
 
-	if c.cfg.ElasticsearchSecret != nil {
-		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
-			secret.CopyToNamespace(common.CalicoNamespace, c.cfg.ElasticsearchSecret)...)...)
-	}
+	if kubeControllerName == EsKubeController {
+		if c.cfg.ElasticsearchSecret != nil {
+			objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
+				secret.CopyToNamespace(common.CalicoNamespace, c.cfg.ElasticsearchSecret)...)...)
+		}
 
-	if !c.isManagedCluster() && c.cfg.KubeControllersGatewaySecret != nil {
-		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
-			secret.CopyToNamespace(common.CalicoNamespace, c.cfg.KubeControllersGatewaySecret)...)...)
+		if !c.isManagedCluster() && c.cfg.KubeControllersGatewaySecret != nil {
+			objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
+				secret.CopyToNamespace(common.CalicoNamespace, c.cfg.KubeControllersGatewaySecret)...)...)
+		}
 	}
 
 	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {

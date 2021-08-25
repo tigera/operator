@@ -868,21 +868,7 @@ func (r *ReconcileLogStorage) getESGatewayCertificateSecrets(ctx context.Context
 			return nil, nil, false, err
 		}
 
-		if publicCertSecret != nil {
-			// If the provided certificate secret (secret) is managed by the operator we need to check if the secret has the expected DNS names.
-			// If it doesn't, delete the public secret so it can get recreated.
-			if !customerProvidedCert {
-				err = utils.SecretHasExpectedDNSNames(publicCertSecret, corev1.TLSCertKey, svcDNSNames)
-				if err == utils.ErrInvalidCertDNSNames {
-					if err := r.deleteInvalidECKManagedPublicCertSecret(ctx, publicCertSecret); err != nil {
-						return nil, nil, false, err
-					}
-					publicCertSecret = render.CreateCertificateSecret(oprKeyCert.Data[corev1.TLSCertKey], relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
-				}
-			}
-		} else {
-			publicCertSecret = render.CreateCertificateSecret(oprKeyCert.Data[corev1.TLSCertKey], relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
-		}
+		publicCertSecret = render.CreateCertificateSecret(oprKeyCert.Data[corev1.TLSCertKey], relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
 	}
 
 	return oprKeyCert, publicCertSecret, customerProvidedCert, nil
@@ -918,18 +904,18 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 		certSecret = render.CreateCertificateSecret(instl.CertificateManagement.CACert, relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
 	} else {
 		// Get the internal public cert secret - might be nil.
-		internalSecret, err := utils.GetSecret(ctx, r.client, relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
+		certSecret, err := utils.GetSecret(ctx, r.client, relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
 		if err != nil {
 			return nil, nil, err
 		}
 
-		if internalSecret != nil {
+		if certSecret != nil {
 			// When the provided certificate secret (secret) is managed by the operator we need to check if the secret that
 			// Elasticsearch creates from that given secret (internalSecret) has the expected DNS name. If it doesn't, delete the
 			// public secret so it can get recreated.
-			err = utils.SecretHasExpectedDNSNames(internalSecret, corev1.TLSCertKey, svcDNSNames)
+			err = utils.SecretHasExpectedDNSNames(certSecret, corev1.TLSCertKey, svcDNSNames)
 			if err == utils.ErrInvalidCertDNSNames {
-				if err := r.deleteInvalidECKManagedPublicCertSecret(ctx, internalSecret); err != nil {
+				if err := r.deleteInvalidECKManagedPublicCertSecret(ctx, certSecret); err != nil {
 					return nil, nil, err
 				}
 			}

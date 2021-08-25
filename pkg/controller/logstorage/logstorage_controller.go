@@ -17,12 +17,16 @@ package logstorage
 import (
 	"context"
 	"fmt"
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
+	"time"
 
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/controller/logstorage/common"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
+	logstoragecommon "github.com/tigera/operator/pkg/controller/logstorage/common"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -147,15 +151,15 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// the utils folder where the other watch logic is.
 	err = c.Watch(&source.Kind{Type: &corev1.Secret{}}, &handler.EnqueueRequestForObject{}, &predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
-			_, hasLabel := e.Object.GetLabels()[common.TigeraElasticsearchUserSecretLabel]
+			_, hasLabel := e.Object.GetLabels()[logstoragecommon.TigeraElasticsearchUserSecretLabel]
 			return e.Object.GetNamespace() == rmeta.OperatorNamespace() && hasLabel
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			_, hasLabel := e.ObjectNew.GetLabels()[common.TigeraElasticsearchUserSecretLabel]
+			_, hasLabel := e.ObjectNew.GetLabels()[logstoragecommon.TigeraElasticsearchUserSecretLabel]
 			return e.ObjectNew.GetNamespace() == rmeta.OperatorNamespace() && hasLabel
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
-			_, hasLabel := e.Object.GetLabels()[common.TigeraElasticsearchUserSecretLabel]
+			_, hasLabel := e.Object.GetLabels()[logstoragecommon.TigeraElasticsearchUserSecretLabel]
 			return e.Object.GetNamespace() == rmeta.OperatorNamespace() && hasLabel
 		},
 	})
@@ -175,6 +179,16 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Catch if something modifies the certs that this controller creates.
 	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, render.ElasticsearchNamespace); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
+	}
+
+	if err = utils.AddSecretsWatch(c, render.ElasticsearchAdminUserSecret, rmeta.OperatorNamespace()); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch Secret '%s' in '%s': %w",
+			render.ElasticsearchAdminUserSecret, rmeta.OperatorNamespace(), err)
+	}
+
+	if err = utils.AddSecretsWatch(c, render.KibanaPublicCertSecret, rmeta.OperatorNamespace()); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch Secret '%s' in '%s' namespace: %w",
+			render.KibanaPublicCertSecret, rmeta.OperatorNamespace(), err)
 	}
 
 	if err = utils.AddSecretsWatch(c, render.TigeraElasticsearchInternalCertSecret, render.ElasticsearchNamespace); err != nil {
@@ -416,7 +430,8 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	var gatewayCertSecret, publicCertSecret *corev1.Secret
+	var gatewayCertSecret, gatewayPublicCertSecret *corev1.Secret
+	var kubeControllersUserSecret, kubeControllerEsPublicCertSecret, kubeControllerKibanaPublicCertSecret *corev1.Secret
 	var esInternalCertSecret, esAdminUserSecret, esCertSecret *corev1.Secret
 	var kibanaSecrets, curatorSecrets []*corev1.Secret
 	var clusterConfig *relasticsearch.ClusterConfig
@@ -424,8 +439,8 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	customerProvidedCert := false
 
 	if managementClusterConnection == nil {
-		var flowShards = common.CalculateFlowShards(ls.Spec.Nodes, common.DefaultElasticsearchShards)
-		clusterConfig = relasticsearch.NewClusterConfig(render.DefaultElasticsearchClusterName, ls.Replicas(), common.DefaultElasticsearchShards, flowShards)
+		var flowShards = logstoragecommon.CalculateFlowShards(ls.Spec.Nodes, logstoragecommon.DefaultElasticsearchShards)
+		clusterConfig = relasticsearch.NewClusterConfig(render.DefaultElasticsearchClusterName, ls.Replicas(), logstoragecommon.DefaultElasticsearchShards, flowShards)
 
 		// Check if there is a StorageClass available to run Elasticsearch on.
 		if err := r.client.Get(ctx, client.ObjectKey{Name: ls.Spec.StorageClassName}, &storagev1.StorageClass{}); err != nil {
@@ -441,7 +456,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, nil
 		}
 
-		if gatewayCertSecret, publicCertSecret, customerProvidedCert, err = common.GetESGatewayCertificateSecrets(ctx, install, r.client, r.clusterDomain, log); err != nil {
+		if gatewayCertSecret, gatewayPublicCertSecret, customerProvidedCert, err = logstoragecommon.GetESGatewayCertificateSecrets(ctx, install, r.client, r.clusterDomain, log); err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Failed to create Elasticsearch Gateway secrets", err.Error())
 			return reconcile.Result{}, err
@@ -459,6 +474,27 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		if esCertSecret, esInternalCertSecret, err = r.getElasticsearchCertificateSecrets(ctx, install); err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Failed to create Elasticsearch secrets", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		kubeControllerEsPublicCertSecret, err = utils.GetSecret(ctx, r.client, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
+		if err != nil {
+			log.Error(err, err.Error())
+			r.status.SetDegraded("Failed to get Elasticsearch pub cert secret used by kube controllers", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		kubeControllersUserSecret, err = utils.GetSecret(ctx, r.client, kubecontrollers.ElasticsearchKubeControllersUserSecret, rmeta.OperatorNamespace())
+		if err != nil {
+			log.Error(err, err.Error())
+			r.status.SetDegraded("Failed to get kube controllers gateway secret", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		kubeControllerKibanaPublicCertSecret, err = utils.GetSecret(ctx, r.client, render.KibanaPublicCertSecret, rmeta.OperatorNamespace())
+		if err != nil {
+			log.Error(err, err.Error())
+			r.status.SetDegraded("Failed to get Kibana pub cert secret used by kube controllers", err.Error())
 			return reconcile.Result{}, err
 		}
 
@@ -520,6 +556,14 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, nil
 	}
 
+	// If the Elasticsearch license type is basic OR there is an Authentication CR with OIDC type Tigera, then
+	// enable the Elasticsearch OIDC workaround in kube controllers.
+	enableESOIDCWorkaround := false
+	if (authentication != nil && authentication.Spec.OIDC != nil && authentication.Spec.OIDC.Type == operatorv1.OIDCTypeTigera) ||
+		esLicenseType == render.ElasticsearchLicenseTypeBasic {
+		enableESOIDCWorkaround = true
+	}
+
 	var dexCfg render.DexRelyingPartyConfig
 	// If the authentication CR is available and it is not configured to use the Tigera OIDC type then configure dex.
 	if authentication != nil && (authentication.Spec.OIDC == nil || authentication.Spec.OIDC.Type != operatorv1.OIDCTypeTigera) {
@@ -571,6 +615,70 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	if managementClusterConnection == nil {
+		var managerInternalTLSSecret *corev1.Secret
+		managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
+			common.CalicoNamespace,
+			render.ManagerInternalTLSSecretName,
+			render.ManagerInternalSecretKeyName,
+			render.ManagerInternalSecretCertName,
+		)
+
+		if managementCluster != nil {
+			var err error
+			svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
+			svcDNSNames = append(svcDNSNames, render.ManagerServiceIP)
+			certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
+
+			managerInternalTLSSecret, err = utils.EnsureCertificateSecret(
+				render.ManagerInternalTLSSecretName, managerInternalTLSSecret, render.ManagerInternalSecretKeyName, render.ManagerInternalSecretCertName, certDur, svcDNSNames...,
+			)
+
+			if err != nil {
+				r.status.SetDegraded(fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err.Error())
+				return reconcile.Result{}, err
+			}
+		}
+		kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
+			K8sServiceEp:                 k8sapi.Endpoint,
+			Installation:                 install,
+			ManagementCluster:            managementCluster,
+			ManagementClusterConnection:  managementClusterConnection,
+			ClusterDomain:                r.clusterDomain,
+			ManagerInternalSecret:        managerInternalTLSSecret,
+			EnabledESOIDCWorkaround:      enableESOIDCWorkaround,
+			Authentication:               authentication,
+			ElasticsearchSecret:          kubeControllerEsPublicCertSecret,
+			KubeControllersGatewaySecret: kubeControllersUserSecret,
+			KibanaSecret:                 kubeControllerKibanaPublicCertSecret,
+			LogStorageExists:             true,
+		}
+		esKubeControllerComponents := kubecontrollers.KubeControllers(&kubeControllersCfg)
+
+		imageSet, err := imageset.GetImageSet(ctx, r.client, install.Variant)
+		if err != nil {
+			reqLogger.Error(err, "Error getting ImageSet")
+			r.status.SetDegraded("Error getting ImageSet", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		if err = imageset.ValidateImageSet(imageSet); err != nil {
+			reqLogger.Error(err, "Error validating ImageSet")
+			r.status.SetDegraded("Error validating ImageSet", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		if err = imageset.ResolveImages(imageSet, esKubeControllerComponents); err != nil {
+			reqLogger.Error(err, "Error resolving ImageSet for elasticsearch kube-controllers components")
+			r.status.SetDegraded("Error resolving ImageSet for elasticsearch kube-controllers components", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		if err := hdler.CreateOrUpdateOrDelete(ctx, esKubeControllerComponents, nil); err != nil {
+			reqLogger.Error(err, "Error creating / updating  elasticsearch kube-controllers resource")
+			r.status.SetDegraded("Error creating / updating  elasticsearch kube-controllers resource", err.Error())
+			return reconcile.Result{}, err
+		}
+
 		if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
 			r.status.SetDegraded("Waiting for Elasticsearch cluster to be operational", "")
 			return reconcile.Result{}, nil
@@ -588,7 +696,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, err
 		}
 
-		kubeControllersGatewaySecret, kubeControllersVerificationSecret, kubeControllersSecureUserSecret, err := common.CreateKubeControllersSecrets(ctx, esAdminUserSecret, r.client)
+		kubeControllersGatewaySecret, kubeControllersVerificationSecret, kubeControllersSecureUserSecret, err := logstoragecommon.CreateKubeControllersSecrets(ctx, esAdminUserSecret, r.client)
 		if err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Failed to create kube-controllers secrets for Elasticsearch gateway", "")
@@ -598,7 +706,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		esGatewayComponent := esgateway.EsGateway(
 			install,
 			pullSecrets,
-			[]*corev1.Secret{gatewayCertSecret, publicCertSecret},
+			[]*corev1.Secret{gatewayCertSecret, gatewayPublicCertSecret},
 			[]*corev1.Secret{kubeControllersGatewaySecret, kubeControllersVerificationSecret, kubeControllersSecureUserSecret},
 			kibanaInternalCertSecret,
 			esInternalCertSecret,
@@ -742,7 +850,7 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 			// public secret so it can get recreated.
 			err = utils.SecretHasExpectedDNSNames(internalSecret, corev1.TLSCertKey, svcDNSNames)
 			if err == utils.ErrInvalidCertDNSNames {
-				if err := common.DeleteInvalidECKManagedPublicCertSecret(ctx, internalSecret, r.client, log); err != nil {
+				if err := logstoragecommon.DeleteInvalidECKManagedPublicCertSecret(ctx, internalSecret, r.client, log); err != nil {
 					return nil, nil, err
 				}
 			}
@@ -801,7 +909,7 @@ func (r *ReconcileLogStorage) kibanaInternalSecrets(ctx context.Context, instl *
 	if utils.IsOperatorIssued(issuer) {
 		err = utils.SecretHasExpectedDNSNames(internalSecret, corev1.TLSCertKey, svcDNSNames)
 		if err == utils.ErrInvalidCertDNSNames {
-			if err := common.DeleteInvalidECKManagedPublicCertSecret(ctx, internalSecret, r.client, log); err != nil {
+			if err := logstoragecommon.DeleteInvalidECKManagedPublicCertSecret(ctx, internalSecret, r.client, log); err != nil {
 				return nil, err
 			}
 		}

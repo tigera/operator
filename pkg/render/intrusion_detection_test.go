@@ -22,6 +22,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/render/testutils"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -45,7 +46,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			&operatorv1.InstallationSpec{Registry: "testregistry.com/"},
 			esConfigMap, nil, notOpenshift, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, notManagedCluster,
 			false,
-			&internalManagerTLSSecret,
+			&testutils.InternalManagerTLSSecret,
 		)
 		resources, _ := component.Objects()
 

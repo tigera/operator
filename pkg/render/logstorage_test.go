@@ -153,9 +153,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{render.TigeraKibanaCertSecret, render.KibanaNamespace, &corev1.Secret{}, nil},
 					{render.KibanaName, render.KibanaNamespace, &kbv1.Kibana{}, nil},
 					{render.EsManagerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
-					{render.EsKubeControllerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
 					{render.EsManagerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
-					{render.EsKubeControllerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
 				}
 				component := render.LogStorage(
 					logStorage,
@@ -242,9 +240,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{render.TigeraKibanaCertSecret, render.KibanaNamespace, &corev1.Secret{}, nil},
 					{render.KibanaName, render.KibanaNamespace, &kbv1.Kibana{}, nil},
 					{render.EsManagerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
-					{render.EsKubeControllerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
 					{render.EsManagerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
-					{render.EsKubeControllerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
 				}
 
 				expectedDeleteResources := []resourceTestObj{
@@ -322,9 +318,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{render.TigeraKibanaCertSecret, render.KibanaNamespace, &corev1.Secret{}, nil},
 					{render.KibanaName, render.KibanaNamespace, &kbv1.Kibana{}, nil},
 					{render.EsManagerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
-					{render.EsKubeControllerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
 					{render.EsManagerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
-					{render.EsKubeControllerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
 					// Certificate management comes with two additional cluster role bindings:
 					{"tigera-elasticsearch:csr-creator", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"tigera-kibana:csr-creator", "", &rbacv1.ClusterRoleBinding{}, nil},
@@ -423,9 +417,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{render.EsCuratorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{render.EsCuratorName, render.ElasticsearchNamespace, &batchv1beta.CronJob{}, nil},
 					{render.EsManagerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
-					{render.EsKubeControllerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
 					{render.EsManagerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
-					{render.EsKubeControllerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
 				}
 				component := render.LogStorage(
 					logStorage,

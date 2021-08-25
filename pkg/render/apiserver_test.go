@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tigera/operator/pkg/render/testutils"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -641,7 +643,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	It("should render an API server with custom configuration with MCM enabled at restart", func() {
-		component, err := render.APIServer(k8sServiceEp, instance, false, managementCluster, nil, nil, nil, nil, openshift, &voltronTunnelSecret, dns.DefaultClusterDomain)
+		component, err := render.APIServer(k8sServiceEp, instance, false, managementCluster, nil, nil, nil, nil, openshift, &testutils.VoltronTunnelSecret, dns.DefaultClusterDomain)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 

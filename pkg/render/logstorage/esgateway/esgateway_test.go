@@ -16,6 +16,7 @@ package esgateway
 
 import (
 	"fmt"
+
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"

@@ -3,6 +3,7 @@ package common
 import (
 	"context"
 	"fmt"
+
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 
 	"github.com/go-logr/logr"

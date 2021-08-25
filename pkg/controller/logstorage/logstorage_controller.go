@@ -17,8 +17,9 @@ package logstorage
 import (
 	"context"
 	"fmt"
-	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"time"
+
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
 
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"

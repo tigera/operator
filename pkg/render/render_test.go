@@ -18,9 +18,10 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	glog "log"
 	"reflect"
+
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
 
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 

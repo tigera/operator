@@ -19,7 +19,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"io/ioutil"
 	"net"
 	"os"
@@ -27,6 +26,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
 
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"

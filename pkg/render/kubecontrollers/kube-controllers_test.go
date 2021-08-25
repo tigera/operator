@@ -16,6 +16,7 @@ package kubecontrollers_test
 
 import (
 	"fmt"
+
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/testutils"
@@ -229,7 +230,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: kubecontrollers.EsKubeControllerRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: kubecontrollers.EsKubeControllerRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: kubecontrollers.EsKubeController, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "Deployment"},
-			{name: render.ManagerInternalTLSSecretName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: render.TigeraElasticsearchCertSecret, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: kubecontrollers.ElasticsearchKubeControllersUserSecret, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: kubecontrollers.EsKubeControllerPodSecurityPolicy, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
@@ -358,7 +358,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: kubecontrollers.EsKubeControllerRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: kubecontrollers.EsKubeControllerRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: kubecontrollers.EsKubeController, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "Deployment"},
-			{name: render.ManagerInternalTLSSecretName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: render.TigeraElasticsearchCertSecret, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: kubecontrollers.ElasticsearchKubeControllersUserSecret, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: kubecontrollers.EsKubeControllerPodSecurityPolicy, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},

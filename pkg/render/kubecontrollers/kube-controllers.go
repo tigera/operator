@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package render
+package kubecontrollers
 
 import (
+	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"strings"
 
@@ -35,18 +36,26 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
-var replicas int32 = 1
+var kubeControllerReplicas int32 = 1
 
 const (
-	KubeController               = "calico-kube-controllers"
-	KubeControllerServiceAccount = "calico-kube-controllers"
-	KubeControllerRole           = "calico-kube-controllers"
-	KubeControllerRoleBinding    = "calico-kube-controllers"
+	KubeController                  = "calico-kube-controllers"
+	KubeControllerServiceAccount    = "calico-kube-controllers"
+	KubeControllerRole              = "calico-kube-controllers"
+	KubeControllerRoleBinding       = "calico-kube-controllers"
+	KubeControllerPodSecurityPolicy = "calico-kube-controllers"
+	KubeControllerMetrics           = "calico-kube-controllers-metrics"
 
-	EsKubeController               = "es-calico-kube-controllers"
-	EsKubeControllerServiceAccount = "calico-kube-controllers"
-	EsKubeControllerRole           = "es-calico-kube-controllers"
-	EsKubeControllerRoleBinding    = "es-calico-kube-controllers"
+	EsKubeController                  = "es-calico-kube-controllers"
+	EsKubeControllerServiceAccount    = "calico-kube-controllers"
+	EsKubeControllerRole              = "es-calico-kube-controllers"
+	EsKubeControllerRoleBinding       = "es-calico-kube-controllers"
+	EsKubeControllerPodSecurityPolicy = "es-calico-kube-controllers"
+
+	ElasticsearchKubeControllersUserSecret             = "tigera-ee-kube-controllers-elasticsearch-access"
+	ElasticsearchKubeControllersUserName               = "tigera-ee-kube-controllers"
+	ElasticsearchKubeControllersSecureUserSecret       = "tigera-ee-kube-controllers-elasticsearch-access-gateway"
+	ElasticsearchKubeControllersVerificationUserSecret = "tigera-ee-kube-controllers-gateway-verification-credentials"
 )
 
 type KubeControllersConfiguration struct {
@@ -143,10 +152,12 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 		objectsToCreate = append(objectsToCreate, c.controllersPodSecurityPolicy(kubeControllerName))
 	}
 
-	if c.cfg.MetricsPort != 0 {
-		objectsToCreate = append(objectsToCreate, c.prometheusService())
-	} else {
-		objectsToDelete = append(objectsToDelete, c.prometheusService())
+	if kubeControllerName == KubeController {
+		if c.cfg.MetricsPort != 0 {
+			objectsToCreate = append(objectsToCreate, c.prometheusService())
+		} else {
+			objectsToDelete = append(objectsToDelete, c.prometheusService())
+		}
 	}
 
 	return objectsToCreate, objectsToDelete
@@ -354,7 +365,11 @@ func (c *kubeControllersComponent) controllersDeployment(kubeControllerName, ser
 
 	env = append(env, c.cfg.K8sServiceEp.EnvVars(false, c.cfg.Installation.KubernetesProvider)...)
 
-	enabledControllers := []string{"node"}
+	enabledControllers := make([]string, 0)
+	if kubeControllerName == KubeController {
+		enabledControllers = append(enabledControllers, "node")
+	}
+
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		if kubeControllerName == KubeController {
 			enabledControllers = append(enabledControllers, "service", "federatedservices")
@@ -421,7 +436,7 @@ func (c *kubeControllersComponent) controllersDeployment(kubeControllerName, ser
 	}
 
 	if kubeControllerName == EsKubeController {
-		container = relasticsearch.ContainerDecorate(container, DefaultElasticsearchClusterName,
+		container = relasticsearch.ContainerDecorate(container, render.DefaultElasticsearchClusterName,
 			ElasticsearchKubeControllersUserSecret, c.cfg.ClusterDomain, rmeta.OSTypeLinux)
 	}
 
@@ -448,7 +463,7 @@ func (c *kubeControllersComponent) controllersDeployment(kubeControllerName, ser
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: &kubeControllerReplicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
@@ -470,7 +485,7 @@ func (c *kubeControllersComponent) controllersDeployment(kubeControllerName, ser
 			},
 		},
 	}
-	setClusterCriticalPod(&(d.Spec.Template))
+	render.SetClusterCriticalPod(&(d.Spec.Template))
 
 	return &d
 }
@@ -534,16 +549,16 @@ func (c *kubeControllersComponent) kubeControllersResources() corev1.ResourceReq
 func (c *kubeControllersComponent) annotations() map[string]string {
 	am := map[string]string{}
 	if c.cfg.ManagerInternalSecret != nil {
-		am[ManagerInternalTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.ManagerInternalSecret.Data)
+		am[render.ManagerInternalTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.ManagerInternalSecret.Data)
 	}
 	if c.cfg.ElasticsearchSecret != nil {
-		am[tlsSecretHashAnnotation] = rmeta.AnnotationHash(c.cfg.ElasticsearchSecret.Data)
+		am[render.TlsSecretHashAnnotation] = rmeta.AnnotationHash(c.cfg.ElasticsearchSecret.Data)
 	}
 	if c.cfg.KubeControllersGatewaySecret != nil {
-		am[ElasticsearchUserHashAnnotation] = rmeta.AnnotationHash(c.cfg.KubeControllersGatewaySecret.Data)
+		am[render.ElasticsearchUserHashAnnotation] = rmeta.AnnotationHash(c.cfg.KubeControllersGatewaySecret.Data)
 	}
 	if c.cfg.KibanaSecret != nil {
-		am[KibanaTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.KibanaSecret.Data)
+		am[render.KibanaTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.KibanaSecret.Data)
 	}
 	return am
 }
@@ -557,7 +572,7 @@ func (c *kubeControllersComponent) controllersPodSecurityPolicy(kubeControllerNa
 func kubeControllersVolumeMounts(managerSecret *corev1.Secret) []corev1.VolumeMount {
 	if managerSecret != nil {
 		return []corev1.VolumeMount{{
-			Name:      ManagerInternalTLSSecretName,
+			Name:      render.ManagerInternalTLSSecretName,
 			MountPath: "/manager-tls",
 			ReadOnly:  true,
 		}}
@@ -571,11 +586,11 @@ func kubeControllersVolumes(defaultMode int32, managerSecret *corev1.Secret) []c
 
 		return []corev1.Volume{
 			{
-				Name: ManagerInternalTLSSecretName,
+				Name: render.ManagerInternalTLSSecretName,
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
 						DefaultMode: &defaultMode,
-						SecretName:  ManagerInternalTLSSecretName,
+						SecretName:  render.ManagerInternalTLSSecretName,
 						Items: []corev1.KeyToPath{
 							{
 								Key:  "cert",

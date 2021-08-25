@@ -68,11 +68,6 @@ const (
 	ElasticsearchOperatorUserSecret       = "tigera-ee-operator-elasticsearch-access"
 	ElasticsearchAdminUserSecret          = "tigera-secure-es-elastic-user"
 
-	ElasticsearchKubeControllersUserSecret             = "tigera-ee-kube-controllers-elasticsearch-access"
-	ElasticsearchKubeControllersUserName               = "tigera-ee-kube-controllers"
-	ElasticsearchKubeControllersSecureUserSecret       = "tigera-ee-kube-controllers-elasticsearch-access-gateway"
-	ElasticsearchKubeControllersVerificationUserSecret = "tigera-ee-kube-controllers-gateway-verification-credentials"
-
 	KibanaName               = "tigera-secure"
 	KibanaNamespace          = "tigera-kibana"
 	KibanaPublicCertSecret   = "tigera-secure-es-gateway-http-certs-public"

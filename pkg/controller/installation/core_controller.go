@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"io/ioutil"
 	"net"
 	"os"
@@ -1067,7 +1068,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	components = append(components, render.Node(&nodeCfg))
 
 	// Build a configuration for rendering calico/kube-controllers.
-	kubeControllersCfg := render.KubeControllersConfiguration{
+	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:                k8sapi.Endpoint,
 		Installation:                &instance.Spec,
 		ManagementCluster:           managementCluster,
@@ -1076,7 +1077,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		MetricsPort:                 kubeControllersMetricsPort,
 		ManagerInternalSecret:       managerInternalTLSSecret,
 	}
-	components = append(components, render.KubeControllers(&kubeControllersCfg))
+	components = append(components, kubecontrollers.KubeControllers(&kubeControllersCfg))
 
 	imageSet, err := imageset.GetImageSet(ctx, r.client, instance.Spec.Variant)
 	if err != nil {

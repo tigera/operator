@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -34,14 +33,9 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
-	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
-
-	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -113,35 +107,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("log-storage-controller failed to watch ImageSet: %w", err)
 	}
 
-	// Watch for changes in storage classes, as new storage classes may be made available for LogStorage.
-	err = c.Watch(&source.Kind{
-		Type: &storagev1.StorageClass{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch StorageClass resource: %w", err)
-	}
-
-	if err = c.Watch(&source.Kind{Type: &apps.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKOperatorName},
-	}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch StatefulSet resource: %w", err)
-	}
-
-	if err = c.Watch(&source.Kind{Type: &esv1.Elasticsearch{
-		ObjectMeta: metav1.ObjectMeta{Namespace: render.ElasticsearchNamespace, Name: render.ElasticsearchName},
-	}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Elasticsearch resource: %w", err)
-	}
-
-	if err = c.Watch(&source.Kind{Type: &kbv1.Kibana{
-		ObjectMeta: metav1.ObjectMeta{Namespace: render.KibanaNamespace, Name: render.KibanaName},
-	}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Kibana resource: %w", err)
-	}
-
-	if err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{
-		ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultTSEEInstanceKey.Name},
-	}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch Authentication resource: %w", err)
+	if err := addLogStorageWatches(c); err != nil {
+		return err
 	}
 
 	// Watch all the elasticsearch user secrets in the operator namespace. In the future, we may want put this logic in
@@ -167,26 +134,22 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch all the secrets created by this controller so we can regenerate any that are deleted
 	for _, secretName := range []string{
 		render.TigeraElasticsearchCertSecret, render.TigeraKibanaCertSecret,
-		render.OIDCSecretName, render.DexObjectName, relasticsearch.PublicCertSecret} {
+		render.OIDCSecretName, render.DexObjectName} {
 		if err = utils.AddSecretsWatch(c, secretName, rmeta.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 		}
 	}
 
 	// Catch if something modifies the certs that this controller creates.
+	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace()); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
+	}
+
 	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, render.ElasticsearchNamespace); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 	}
 
-	if err = utils.AddSecretsWatch(c, render.TigeraElasticsearchInternalCertSecret, render.ElasticsearchNamespace); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
-	}
-
 	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, rmeta.OperatorNamespace()); err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch the ConfigMap resource: %w", err)
-	}
-
-	if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
@@ -208,18 +171,6 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch primary resource: %w", err)
-	}
-
-	err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("log-storage-controller failed to watch primary resource: %w", err)
-	}
-
-	for _, name := range []string{render.OIDCUsersConfigMapName, render.OIDCUsersEsSecreteName,
-		render.ElasticsearchAdminUserSecret} {
-		if err = utils.AddConfigMapWatch(c, name, render.ElasticsearchNamespace); err != nil {
-			return fmt.Errorf("log-storage-controller failed to watch the ConfigMap resource: %w", err)
-		}
 	}
 
 	// Cloud modifications
@@ -422,56 +373,24 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	var gatewayCertSecret, publicCertSecret *corev1.Secret
-	var esInternalCertSecret, esAdminUserSecret, esCertSecret *corev1.Secret
-	var kibanaSecrets, curatorSecrets []*corev1.Secret
+	var esAdminUserSecret *corev1.Secret
 	var clusterConfig *relasticsearch.ClusterConfig
+	var curatorSecrets []*corev1.Secret
 	var esLicenseType render.ElasticsearchLicenseType
-	customerProvidedCert := false
 
 	if managementClusterConnection == nil {
 		var flowShards = common.CalculateFlowShards(ls.Spec.Nodes, common.DefaultElasticsearchShards)
 		clusterConfig = relasticsearch.NewClusterConfig(render.DefaultElasticsearchClusterName, ls.Replicas(), common.DefaultElasticsearchShards, flowShards)
 
-		// Check if there is a StorageClass available to run Elasticsearch on.
-		if err := r.client.Get(ctx, client.ObjectKey{Name: ls.Spec.StorageClassName}, &storagev1.StorageClass{}); err != nil {
-			if errors.IsNotFound(err) {
-				err := fmt.Errorf("couldn't find storage class %s, this must be provided", ls.Spec.StorageClassName)
-				reqLogger.Error(err, err.Error())
-				r.status.SetDegraded("Failed to get storage class", err.Error())
-				return reconcile.Result{}, nil
-			}
-
-			reqLogger.Error(err, err.Error())
-			r.status.SetDegraded("Failed to get storage class", err.Error())
-			return reconcile.Result{}, nil
-		}
-
-		if gatewayCertSecret, publicCertSecret, customerProvidedCert, err = common.GetESGatewayCertificateSecrets(ctx, install, r.client, r.clusterDomain, log); err != nil {
-			reqLogger.Error(err, err.Error())
-			r.status.SetDegraded("Failed to create Elasticsearch Gateway secrets", err.Error())
-			return reconcile.Result{}, err
-		}
-
 		// Get the admin user secret to copy to the operator namespace.
 		esAdminUserSecret, err = utils.GetSecret(ctx, r.client, render.ElasticsearchAdminUserSecret, render.ElasticsearchNamespace)
 		if err != nil {
+			reqLogger.Error(err, "failed to get Elasticsearch admin user secret")
+			r.status.SetDegraded("Failed to get Elasticsearch admin user secret", err.Error())
 			return reconcile.Result{}, err
 		}
 		if esAdminUserSecret != nil {
 			esAdminUserSecret = rsecret.CopyToNamespace(rmeta.OperatorNamespace(), esAdminUserSecret)[0]
-		}
-
-		if esCertSecret, esInternalCertSecret, err = r.getElasticsearchCertificateSecrets(ctx, install); err != nil {
-			reqLogger.Error(err, err.Error())
-			r.status.SetDegraded("Failed to create Elasticsearch secrets", err.Error())
-			return reconcile.Result{}, err
-		}
-
-		if kibanaSecrets, err = r.kibanaInternalSecrets(ctx, install); err != nil {
-			reqLogger.Error(err, err.Error())
-			r.status.SetDegraded("Failed to create kibana secrets", err.Error())
-			return reconcile.Result{}, err
 		}
 
 		curatorSecrets, err = utils.ElasticsearchSecrets(context.Background(), []string{render.ElasticsearchCuratorUserSecret}, r.client)
@@ -480,7 +399,8 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, err
 		}
 
-		if esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger); err != nil {
+		esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger)
+		if err != nil {
 			// If ECKLicenseConfigMapName is not found, it means ECK operator is not running yet, log the information and proceed
 			if errors.IsNotFound(err) {
 				reqLogger.Info("ConfigMap not found yet", "name", render.ECKLicenseConfigMapName)
@@ -489,21 +409,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 				return reconcile.Result{}, err
 			}
 		}
-
-	}
-
-	elasticsearch, err := r.getElasticsearch(ctx)
-	if err != nil {
-		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("An error occurred trying to retrieve Elasticsearch", err.Error())
-		return reconcile.Result{}, err
-	}
-
-	kibana, err := r.getKibana(ctx)
-	if err != nil {
-		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("An error occurred trying to retrieve Kibana", err.Error())
-		return reconcile.Result{}, err
 	}
 
 	// If this is a Managed cluster ls must be nil to get to this point (unless the DeletionTimestamp is set) so we must
@@ -513,35 +418,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
 	} else {
 		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, managementClusterConnection)
-	}
-
-	// Fetch the Authentication spec. If present, we use it to configure dex as an authentication proxy.
-	authentication, err := utils.GetAuthentication(ctx, r.client)
-	if err != nil && !errors.IsNotFound(err) {
-		r.status.SetDegraded("Error while fetching Authentication", err.Error())
-		return reconcile.Result{}, err
-	}
-	if authentication != nil && authentication.Status.State != operatorv1.TigeraStatusReady {
-		r.status.SetDegraded("Authentication is not ready", fmt.Sprintf("authentication status: %s", authentication.Status.State))
-		return reconcile.Result{}, nil
-	}
-
-	var dexCfg render.DexRelyingPartyConfig
-	// If the authentication CR is available and it is not configured to use the Tigera OIDC type then configure dex.
-	if authentication != nil && (authentication.Spec.OIDC == nil || authentication.Spec.OIDC.Type != operatorv1.OIDCTypeTigera) {
-		var dexCertSecret *corev1.Secret
-		dexCertSecret = &corev1.Secret{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexCertSecretName, Namespace: rmeta.OperatorNamespace()}, dexCertSecret); err != nil {
-			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
-			return reconcile.Result{}, err
-		}
-
-		dexSecret := &corev1.Secret{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexObjectName, Namespace: rmeta.OperatorNamespace()}, dexSecret); err != nil {
-			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
-			return reconcile.Result{}, err
-		}
-		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexCertSecret, dexSecret, r.clusterDomain)
 	}
 
 	// Cloud modifications
@@ -559,152 +435,62 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		}
 	}
 
-	component := render.LogStorage(
+	result, proceed, err := r.createLogStorage(
 		ls,
 		install,
+		variant,
+		clusterConfig,
 		managementCluster,
 		managementClusterConnection,
-		elasticsearch,
-		kibana,
-		clusterConfig,
-		[]*corev1.Secret{esCertSecret, esInternalCertSecret, esAdminUserSecret},
-		kibanaSecrets,
-		pullSecrets,
-		r.provider,
+		esAdminUserSecret,
 		curatorSecrets,
+		esLicenseType,
 		esService,
 		kbService,
-		r.clusterDomain,
-		dexCfg,
-		esLicenseType,
+		pullSecrets,
+		hdler,
+		reqLogger,
+		ctx,
 	)
-
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
-		reqLogger.Error(err, "Error with images from ImageSet")
-		r.status.SetDegraded("Error with images from ImageSet", err.Error())
-		return reconcile.Result{}, err
-	}
-
-	if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
-		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Error creating / updating resource", err.Error())
-		return reconcile.Result{}, err
+	if err != nil || !proceed {
+		return result, err
 	}
 
 	if managementClusterConnection == nil {
-		if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
-			r.status.SetDegraded("Waiting for Elasticsearch cluster to be operational", "")
-			return reconcile.Result{}, nil
-		}
-
-		if kibana == nil || kibana.Status.AssociationStatus != cmnv1.AssociationEstablished {
-			r.status.SetDegraded("Waiting for Kibana cluster to be operational", "")
-			return reconcile.Result{}, nil
-		}
-
-		kibanaInternalCertSecret, err := utils.GetSecret(ctx, r.client, render.KibanaInternalCertSecret, rmeta.OperatorNamespace())
-		if err != nil {
-			reqLogger.Error(err, err.Error())
-			r.status.SetDegraded("Waiting for internal Kibana tls certificate secret to be available", "")
-			return reconcile.Result{}, err
-		}
-
-		kubeControllersGatewaySecret, kubeControllersVerificationSecret, kubeControllersSecureUserSecret, err := common.CreateKubeControllersSecrets(ctx, esAdminUserSecret, r.client)
-		if err != nil {
-			reqLogger.Error(err, err.Error())
-			r.status.SetDegraded("Failed to create kube-controllers secrets for Elasticsearch gateway", "")
-			return reconcile.Result{}, err
-		}
-
-		esGatewayComponent := esgateway.EsGateway(
+		result, proceed, err = r.createEsGateway(
 			install,
+			variant,
 			pullSecrets,
-			[]*corev1.Secret{gatewayCertSecret, publicCertSecret},
-			[]*corev1.Secret{kubeControllersGatewaySecret, kubeControllersVerificationSecret, kubeControllersSecureUserSecret},
-			kibanaInternalCertSecret,
-			esInternalCertSecret,
-			r.clusterDomain,
+			esAdminUserSecret,
+			hdler,
+			reqLogger,
+			ctx,
 		)
-
-		if err = imageset.ApplyImageSet(ctx, r.client, variant, esGatewayComponent); err != nil {
-			reqLogger.Error(err, "Error with images from ImageSet")
-			r.status.SetDegraded("Error with images from ImageSet", err.Error())
-			return reconcile.Result{}, err
+		if err != nil || !proceed {
+			return result, err
 		}
 
-		if !customerProvidedCert {
-			if err := hdler.CreateOrUpdateOrDelete(ctx, render.Secrets([]*corev1.Secret{gatewayCertSecret}), r.status); err != nil {
-				reqLogger.Error(err, err.Error())
-				r.status.SetDegraded("Error creating / updating resource", err.Error())
-				return reconcile.Result{}, err
-			}
+		result, proceed, err = r.applyILMPolicies(ls, reqLogger, ctx)
+		if err != nil || !proceed {
+			return result, err
 		}
 
-		if err := hdler.CreateOrUpdateOrDelete(ctx, esGatewayComponent, r.status); err != nil {
-			reqLogger.Error(err, err.Error())
-			r.status.SetDegraded("Error creating / updating resource", err.Error())
-			return reconcile.Result{}, err
+		result, proceed, err = r.validateLogStorage(curatorSecrets, esLicenseType, reqLogger, ctx)
+		if err != nil || !proceed {
+			return result, err
 		}
 
-		if len(curatorSecrets) == 0 {
-			reqLogger.Info("waiting for curator secrets to become available")
-			r.status.SetDegraded("Waiting for curator secrets to become available", "")
-			return reconcile.Result{}, nil
-		}
-
-		// ES should be in ready phase when execution reaches here, apply ILM polices
-		esClient, err := r.esCliCreator(r.client, ctx, relasticsearch.HTTPSEndpoint(component.SupportedOSType(), r.clusterDomain))
-		if err != nil {
-			reqLogger.Error(err, "failed to create the Elasticsearch client")
-			r.status.SetDegraded("Failed to connect to Elasticsearch", err.Error())
-			return reconcile.Result{}, err
-		}
-
-		if err = esClient.SetILMPolicies(ctx, ls); err != nil {
-			reqLogger.Error(err, "failed to create or update Elasticsearch lifecycle policies")
-			r.status.SetDegraded("Failed to create or update Elasticsearch lifecycle policies", err.Error())
-			return reconcile.Result{}, err
-		}
-
-		// kube-controller creates the ConfigMap and Secret needed for SSO into Kibana.
-		// If elastisearch uses basic license, degrade logstorage if the ConfigMap and Secret
-		// needed for logging user into Kibana is not available.
-		if esLicenseType == render.ElasticsearchLicenseTypeBasic {
-			if err = r.checkOIDCUsersEsResource(ctx); err != nil {
-				r.status.SetDegraded("Failed to get oidc user Secret and ConfigMap", err.Error())
-				return reconcile.Result{}, err
-			}
-		}
-
-		esMetricsSecret, err := utils.GetSecret(context.Background(), r.client, esmetrics.ElasticsearchMetricsSecret, rmeta.OperatorNamespace())
-		if err != nil {
-			r.status.SetDegraded("Failed to retrieve Elasticsearch metrics user secret.", err.Error())
-			return reconcile.Result{}, err
-		} else if esMetricsSecret == nil {
-			r.status.SetDegraded("Waiting for elasticsearch metrics secrets to become available", "")
-			return reconcile.Result{}, nil
-		}
-
-		publicCertSecretESCopy, err := utils.GetSecret(context.Background(), r.client, relasticsearch.PublicCertSecret, render.ElasticsearchNamespace)
-		if err != nil {
-			r.status.SetDegraded("Failed to retrieve Elasticsearch public cert secret.", err.Error())
-			return reconcile.Result{}, err
-		} else if publicCertSecretESCopy == nil {
-			r.status.SetDegraded("Waiting for elasticsearch public cert secret to become available", "")
-			return reconcile.Result{}, nil
-		}
-
-		esMetricsComponent := esmetrics.ElasticsearchMetrics(install, pullSecrets, clusterConfig, esMetricsSecret, publicCertSecretESCopy, r.clusterDomain)
-		if err = imageset.ApplyImageSet(ctx, r.client, variant, esMetricsComponent); err != nil {
-			reqLogger.Error(err, "Error with images from ImageSet")
-			r.status.SetDegraded("Error with images from ImageSet", err.Error())
-			return reconcile.Result{}, err
-		}
-
-		if err := hdler.CreateOrUpdateOrDelete(ctx, esMetricsComponent, r.status); err != nil {
-			reqLogger.Error(err, err.Error())
-			r.status.SetDegraded("Error creating / updating resource", err.Error())
-			return reconcile.Result{}, err
+		result, proceed, err = r.createEsMetrics(
+			install,
+			variant,
+			pullSecrets,
+			reqLogger,
+			clusterConfig,
+			ctx,
+			hdler,
+		)
+		if err != nil || !proceed {
+			return result, err
 		}
 	}
 
@@ -752,18 +538,18 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 		certSecret = render.CreateCertificateSecret(instl.CertificateManagement.CACert, relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
 	} else {
 		// Get the internal public cert secret - might be nil.
-		internalSecret, err := utils.GetSecret(ctx, r.client, relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
+		certSecret, err = utils.GetSecret(ctx, r.client, relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
 		if err != nil {
 			return nil, nil, err
 		}
 
-		if internalSecret != nil {
+		if certSecret != nil {
 			// When the provided certificate secret (secret) is managed by the operator we need to check if the secret that
 			// Elasticsearch creates from that given secret (internalSecret) has the expected DNS name. If it doesn't, delete the
 			// public secret so it can get recreated.
-			err = utils.SecretHasExpectedDNSNames(internalSecret, corev1.TLSCertKey, svcDNSNames)
+			err = utils.SecretHasExpectedDNSNames(certSecret, corev1.TLSCertKey, svcDNSNames)
 			if err == utils.ErrInvalidCertDNSNames {
-				if err := common.DeleteInvalidECKManagedPublicCertSecret(ctx, internalSecret, r.client, log); err != nil {
+				if err := common.DeleteInvalidECKManagedPublicCertSecret(ctx, certSecret, r.client, log); err != nil {
 					return nil, nil, err
 				}
 			}

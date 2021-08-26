@@ -424,8 +424,7 @@ var _ = Describe("LogStorage controller", func() {
 							Namespace: render.ElasticsearchNamespace,
 						},
 						Data: map[string][]byte{
-							"username": []byte("elastic"),
-							"password": []byte("password"),
+							"elastic": []byte("password"),
 						},
 					}
 					Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
@@ -563,8 +562,7 @@ var _ = Describe("LogStorage controller", func() {
 							Namespace: render.ElasticsearchNamespace,
 						},
 						Data: map[string][]byte{
-							"username": []byte("elastic"),
-							"password": []byte("password"),
+							"elastic": []byte("password"),
 						},
 					}
 					Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
@@ -773,8 +771,7 @@ var _ = Describe("LogStorage controller", func() {
 							Namespace: render.ElasticsearchNamespace,
 						},
 						Data: map[string][]byte{
-							"username": []byte("elastic"),
-							"password": []byte("password"),
+							"elastic": []byte("password"),
 						},
 					}
 					Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
@@ -883,8 +880,7 @@ var _ = Describe("LogStorage controller", func() {
 								Namespace: render.ElasticsearchNamespace,
 							},
 							Data: map[string][]byte{
-								"username": []byte("elastic"),
-								"password": []byte("password"),
+								"elastic": []byte("password"),
 							},
 						}
 						Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
@@ -1020,8 +1016,7 @@ var _ = Describe("LogStorage controller", func() {
 								Namespace: render.ElasticsearchNamespace,
 							},
 							Data: map[string][]byte{
-								"username": []byte("elastic"),
-								"password": []byte("password"),
+								"elastic": []byte("password"),
 							},
 						}
 						Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
@@ -1172,8 +1167,7 @@ var _ = Describe("LogStorage controller", func() {
 							Namespace: render.ElasticsearchNamespace,
 						},
 						Data: map[string][]byte{
-							"username": []byte("elastic"),
-							"password": []byte("password"),
+							"elastic": []byte("password"),
 						},
 					}
 					Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())

@@ -154,27 +154,7 @@ func GetESGatewayCertificateSecrets(ctx context.Context, instl *operatorv1.Insta
 		oprKeyCert.Data[corev1.TLSCertKey] = instl.CertificateManagement.CACert
 		publicCertSecret = render.CreateCertificateSecret(instl.CertificateManagement.CACert, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
 	} else {
-		// Get the es gateway pub secret - might be nil
-		publicCertSecret, err = utils.GetSecret(ctx, cli, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
-		if err != nil {
-			return nil, nil, false, err
-		}
-
-		if publicCertSecret != nil {
-			// If the provided certificate secret (secret) is managed by the operator we need to check if the secret has the expected DNS names.
-			// If it doesn't, delete the public secret so it can get recreated.
-			if !customerProvidedCert {
-				err = utils.SecretHasExpectedDNSNames(publicCertSecret, corev1.TLSCertKey, svcDNSNames)
-				if err == utils.ErrInvalidCertDNSNames {
-					if err := DeleteInvalidECKManagedPublicCertSecret(ctx, publicCertSecret, cli, log); err != nil {
-						return nil, nil, false, err
-					}
-					publicCertSecret = render.CreateCertificateSecret(oprKeyCert.Data[corev1.TLSCertKey], relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
-				}
-			}
-		} else {
-			publicCertSecret = render.CreateCertificateSecret(oprKeyCert.Data[corev1.TLSCertKey], relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
-		}
+		publicCertSecret = render.CreateCertificateSecret(oprKeyCert.Data[corev1.TLSCertKey], relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
 	}
 
 	return oprKeyCert, publicCertSecret, customerProvidedCert, nil

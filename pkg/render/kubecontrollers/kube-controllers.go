@@ -187,28 +187,7 @@ func (c *kubeControllersComponent) controllersRole(roleName, kubeControllerName 
 		ObjectMeta: metav1.ObjectMeta{
 			Name: roleName,
 		},
-	}
-
-	if c.cfg.ManagementClusterConnection != nil && kubeControllerName == EsKubeController {
-		role.Rules = []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"licensekeys"},
-				Verbs:     []string{"get", "create", "update", "list", "watch"},
-			},
-			{
-				APIGroups: []string{""},
-				Resources: []string{"secrets"},
-				Verbs:     []string{"get", "create", "update", "list", "watch"},
-			},
-			{
-				APIGroups: []string{""},
-				Resources: []string{"configmaps"},
-				Verbs:     []string{"get", "create", "update", "list", "watch"},
-			},
-		}
-	} else {
-		role.Rules = []rbacv1.PolicyRule{
+		Rules: []rbacv1.PolicyRule{
 			{
 				// Nodes are watched to monitor for deletions.
 				APIGroups: []string{""},
@@ -252,96 +231,108 @@ func (c *kubeControllersComponent) controllersRole(roleName, kubeControllerName 
 				Resources: []string{"kubecontrollersconfigurations"},
 				Verbs:     []string{"get", "create", "update", "watch"},
 			},
+		},
+	}
+
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		extraRules := []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"watch", "list", "get", "update", "create"},
+			},
+			{
+				// Needed to validate the license
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"licensekeys"},
+				Verbs:     []string{"get", "watch", "list"},
+			},
+			{
+				// calico-kube-controllers requires tiers create
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"tiers"},
+				Verbs:     []string{"create"},
+			},
+			{
+				// Needed to validate the license
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"licensekeys"},
+				Verbs:     []string{"get"},
+			},
 		}
 
-		if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-			extraRules := []rbacv1.PolicyRule{
-				{
+		if kubeControllerName == KubeController {
+			extraRules = append(extraRules,
+				rbacv1.PolicyRule{
 					APIGroups: []string{""},
-					Resources: []string{"configmaps"},
+					Resources: []string{"secrets"},
+					Verbs:     []string{"deletecollection"},
+				},
+				rbacv1.PolicyRule{
+					APIGroups: []string{"crd.projectcalico.org"},
+					Resources: []string{"remoteclusterconfigurations"},
+					Verbs:     []string{"watch", "list", "get"},
+				},
+				rbacv1.PolicyRule{
+					APIGroups: []string{""},
+					Resources: []string{"endpoints"},
+					Verbs:     []string{"create", "update", "delete"},
+				})
+		} else {
+			extraRules = append(extraRules,
+				rbacv1.PolicyRule{
+					APIGroups: []string{"elasticsearch.k8s.elastic.co"},
+					Resources: []string{"elasticsearches"},
+					Verbs:     []string{"watch", "get", "list"},
+				},
+				rbacv1.PolicyRule{
+					APIGroups: []string{""},
+					Resources: []string{"secrets"},
 					Verbs:     []string{"watch", "list", "get", "update", "create"},
 				},
-				{
-					// Needed to validate the license
+				rbacv1.PolicyRule{
 					APIGroups: []string{"projectcalico.org"},
-					Resources: []string{"licensekeys"},
-					Verbs:     []string{"get", "watch", "list"},
+					Resources: []string{"managedclusters"},
+					Verbs:     []string{"watch", "list", "get"},
 				},
-				{
-					// calico-kube-controllers requires tiers create
-					APIGroups: []string{"crd.projectcalico.org"},
-					Resources: []string{"tiers"},
-					Verbs:     []string{"create"},
-				},
-				{
-					// Needed to validate the license
-					APIGroups: []string{"crd.projectcalico.org"},
-					Resources: []string{"licensekeys"},
-					Verbs:     []string{"get"},
-				},
-			}
-
-			if kubeControllerName == KubeController {
-				extraRules = append(extraRules,
-					rbacv1.PolicyRule{
-						APIGroups: []string{""},
-						Resources: []string{"secrets"},
-						Verbs:     []string{"deletecollection"},
-					},
-					rbacv1.PolicyRule{
-						APIGroups: []string{"crd.projectcalico.org"},
-						Resources: []string{"remoteclusterconfigurations"},
-						Verbs:     []string{"watch", "list", "get"},
-					},
-					rbacv1.PolicyRule{
-						APIGroups: []string{""},
-						Resources: []string{"endpoints"},
-						Verbs:     []string{"create", "update", "delete"},
-					})
-			} else {
-				extraRules = append(extraRules,
-					rbacv1.PolicyRule{
-						APIGroups: []string{"elasticsearch.k8s.elastic.co"},
-						Resources: []string{"elasticsearches"},
-						Verbs:     []string{"watch", "get", "list"},
-					},
-					rbacv1.PolicyRule{
-						APIGroups: []string{""},
-						Resources: []string{"secrets"},
-						Verbs:     []string{"watch", "list", "get", "update", "create"},
-					},
-					rbacv1.PolicyRule{
-						APIGroups: []string{"projectcalico.org"},
-						Resources: []string{"managedclusters"},
-						Verbs:     []string{"watch", "list", "get"},
-					},
-					rbacv1.PolicyRule{
-						APIGroups: []string{"rbac.authorization.k8s.io"},
-						Resources: []string{"clusterroles", "clusterrolebindings"},
-						Verbs:     []string{"watch", "list", "get"},
-					})
-			}
-
-			role.Rules = append(role.Rules, extraRules...)
-
-			if c.cfg.ManagementCluster != nil {
-				// For cross-cluster requests an authentication review will be done for authenticating the kube-controllers.
-				// Requests on behalf of the kube-controllers will be sent to Voltron, where an authentication review will
-				// take place with its bearer token.
-				role.Rules = append(role.Rules, rbacv1.PolicyRule{
-					APIGroups: []string{"projectcalico.org"},
-					Resources: []string{"authenticationreviews"},
-					Verbs:     []string{"create"},
+				rbacv1.PolicyRule{
+					APIGroups: []string{"rbac.authorization.k8s.io"},
+					Resources: []string{"clusterroles", "clusterrolebindings"},
+					Verbs:     []string{"watch", "list", "get"},
 				})
-			}
+		}
 
-			if c.cfg.ManagementClusterConnection != nil {
-				role.Rules = append(role.Rules, rbacv1.PolicyRule{
+		role.Rules = append(role.Rules, extraRules...)
+
+		if c.cfg.ManagementCluster != nil {
+			// For cross-cluster requests an authentication review will be done for authenticating the kube-controllers.
+			// Requests on behalf of the kube-controllers will be sent to Voltron, where an authentication review will
+			// take place with its bearer token.
+			role.Rules = append(role.Rules, rbacv1.PolicyRule{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"authenticationreviews"},
+				Verbs:     []string{"create"},
+			})
+		}
+
+		if c.cfg.ManagementClusterConnection != nil {
+			role.Rules = append(role.Rules,
+				rbacv1.PolicyRule{
 					APIGroups: []string{"projectcalico.org"},
 					Resources: []string{"licensekeys"},
-					Verbs:     []string{"create", "update"},
-				})
-			}
+					Verbs:     []string{"get", "create", "update", "list", "watch"},
+				},
+				rbacv1.PolicyRule{
+					APIGroups: []string{""},
+					Resources: []string{"secrets"},
+					Verbs:     []string{"get", "create", "update", "list", "watch"},
+				},
+				rbacv1.PolicyRule{
+					APIGroups: []string{""},
+					Resources: []string{"configmaps"},
+					Verbs:     []string{"get", "create", "update", "list", "watch"},
+				},
+			)
 		}
 	}
 

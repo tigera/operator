@@ -424,7 +424,7 @@ var _ = Describe("LogStorage controller", func() {
 							Namespace: render.ElasticsearchNamespace,
 						},
 						Data: map[string][]byte{
-							"username": []byte("elastic"),
+							"username": []byte("username"),
 							"password": []byte("password"),
 						},
 					}
@@ -455,7 +455,6 @@ var _ = Describe("LogStorage controller", func() {
 					mockStatus.On("SetDegraded", "Waiting for elasticsearch metrics secrets to become available", "").Return()
 					result, err = r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
-
 					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: esMetricsUsrSecretObjMeta})).ShouldNot(HaveOccurred())
 
 					mockStatus.On("ClearDegraded")
@@ -563,7 +562,7 @@ var _ = Describe("LogStorage controller", func() {
 							Namespace: render.ElasticsearchNamespace,
 						},
 						Data: map[string][]byte{
-							"username": []byte("elastic"),
+							"username": []byte("username"),
 							"password": []byte("password"),
 						},
 					}
@@ -773,7 +772,7 @@ var _ = Describe("LogStorage controller", func() {
 							Namespace: render.ElasticsearchNamespace,
 						},
 						Data: map[string][]byte{
-							"username": []byte("elastic"),
+							"username": []byte("username"),
 							"password": []byte("password"),
 						},
 					}
@@ -883,7 +882,7 @@ var _ = Describe("LogStorage controller", func() {
 								Namespace: render.ElasticsearchNamespace,
 							},
 							Data: map[string][]byte{
-								"username": []byte("elastic"),
+								"username": []byte("username"),
 								"password": []byte("password"),
 							},
 						}
@@ -1020,7 +1019,7 @@ var _ = Describe("LogStorage controller", func() {
 								Namespace: render.ElasticsearchNamespace,
 							},
 							Data: map[string][]byte{
-								"username": []byte("elastic"),
+								"username": []byte("username"),
 								"password": []byte("password"),
 							},
 						}
@@ -1172,7 +1171,7 @@ var _ = Describe("LogStorage controller", func() {
 							Namespace: render.ElasticsearchNamespace,
 						},
 						Data: map[string][]byte{
-							"username": []byte("elastic"),
+							"username": []byte("username"),
 							"password": []byte("password"),
 						},
 					}

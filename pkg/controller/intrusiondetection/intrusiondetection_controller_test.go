@@ -87,6 +87,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			provider:        operatorv1.ProviderNone,
 			status:          mockStatus,
 			licenseAPIReady: &utils.ReadyFlag{},
+			dpiAPIReady:     &utils.ReadyFlag{},
 		}
 
 		// We start off with a 'standard' installation, with nothing special
@@ -141,11 +142,29 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Data: map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterpriseTrial)},
 		})).NotTo(HaveOccurred())
 
+		Expect(c.Create(ctx, &v3.DeepPacketInspection{ObjectMeta: metav1.ObjectMeta{Name: "test-dpi", Namespace: "test-dpi-ns"}})).ShouldNot(HaveOccurred())
+		Expect(c.Create(ctx, &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      render.NodeTLSSecretName,
+				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      render.TyphaTLSSecretName,
+				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      render.TyphaCAConfigMapName,
+				Namespace: "tigera-operator",
+			},
+			Data: map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterpriseTrial)},
+		})).NotTo(HaveOccurred())
+
 		// Apply the intrusiondetection CR to the fake cluster.
 		Expect(c.Create(ctx, &operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
 
-		// mark that the watch for license key was successful
+		// mark that the watch for license key and dpi was successful
 		r.licenseAPIReady.MarkAsReady()
+		r.dpiAPIReady.MarkAsReady()
 	})
 
 	Context("image reconciliation", func() {
@@ -199,6 +218,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 					Images: []operatorv1.Image{
 						{Image: "tigera/intrusion-detection-job-installer", Digest: "sha256:intrusiondetectionjobinstallerhash"},
 						{Image: "tigera/intrusion-detection-controller", Digest: "sha256:intrusiondetectioncontrollerhash"},
+						{Image: "tigera/deep-packet-inspection", Digest: "sha256:deeppacketinspectionhash"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -237,6 +257,22 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentElasticTseeInstaller.Image,
 					"sha256:intrusiondetectionjobinstallerhash")))
+
+			ds := appsv1.DaemonSet{
+				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.DeepPacketInspectionName,
+					Namespace: render.DeepPacketInspectionNamespace,
+				}}
+			Expect(test.GetResource(c, &ds)).To(BeNil())
+			Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+			dpiContainer := test.GetContainer(ds.Spec.Template.Spec.Containers, render.DeepPacketInspectionName)
+			Expect(dpiContainer).ToNot(BeNil())
+			Expect(dpiContainer.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentDeepPacketInspection.Image,
+					"sha256:deeppacketinspectionhash")))
+
 		})
 		It("should not register intrusion-detection-job-installer image when cluster is managed", func() {
 			Expect(c.Create(ctx, &operatorv1.ManagementClusterConnection{

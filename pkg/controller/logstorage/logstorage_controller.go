@@ -904,7 +904,7 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 		certSecret = render.CreateCertificateSecret(instl.CertificateManagement.CACert, relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
 	} else {
 		// Get the internal public cert secret - might be nil.
-		certSecret, err := utils.GetSecret(ctx, r.client, relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
+		certSecret, err = utils.GetSecret(ctx, r.client, relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
 		if err != nil {
 			return nil, nil, err
 		}

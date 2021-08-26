@@ -396,7 +396,7 @@ release-publish-images: release-prereqs
 	@echo "Checking if $(IMAGE_REGISTRY)/$(BUILD_IMAGE):$(VERSION) exists already"; \
 	if docker manifest inspect $(IMAGE_REGISTRY)/$(BUILD_IMAGE):$(VERSION) >/dev/null; \
 		then echo "Image $(IMAGE_REGISTRY)/$(BUILD_IMAGE):$(VERSION) already exists"; \
-		false; \
+		exit 1; \
 	else \
 		echo "Image tag check passed; image does not exist"; \
 	fi

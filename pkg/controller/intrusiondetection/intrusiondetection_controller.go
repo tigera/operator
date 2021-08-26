@@ -79,7 +79,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
 
-	go waitToAddDPIWatch(controller, k8sClient, dpiAPIReady)
+	go utils.WaitToAddResourceWatch(controller, k8sClient, log, dpiAPIReady, v3.KindDeepPacketInspection)
 
 	return add(mgr, controller)
 }
@@ -425,54 +425,4 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
-}
-
-// waitToAddDPIWatch will check if projectcalico.org APIs are available and if so, it will add a watch for DeepPacketInspection
-// The completion of this operation will be signaled on a ready channel
-func waitToAddDPIWatch(controller controller.Controller, client kubernetes.Interface, flag *utils.ReadyFlag) {
-	maxDuration := 30 * time.Second
-	duration := 1 * time.Second
-	ticker := time.NewTicker(duration)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			duration = duration * 2
-			if duration >= maxDuration {
-				duration = maxDuration
-			}
-			ticker.Reset(duration)
-			if isDPIReady(client) {
-				err := addDPIWatch(controller)
-				if err != nil {
-					log.V(4).Info("failed to watch DeepPacketInspection resource: %v. Will retry to add watch", err)
-				} else {
-					flag.MarkAsReady()
-					return
-				}
-			}
-		}
-	}
-}
-
-func isDPIReady(client kubernetes.Interface) bool {
-	_, res, err := client.Discovery().ServerGroupsAndResources()
-	if err != nil {
-		return false
-	}
-	for _, group := range res {
-		if group.GroupVersion == v3.GroupVersionCurrent {
-			for _, r := range group.APIResources {
-				if r.Kind == v3.KindDeepPacketInspection {
-					return true
-				}
-			}
-		}
-	}
-	return false
-}
-
-func addDPIWatch(c controller.Controller) error {
-	dpi := &v3.DeepPacketInspection{TypeMeta: metav1.TypeMeta{Kind: v3.KindDeepPacketInspection}}
-	return c.Watch(&source.Kind{Type: dpi}, &handler.EnqueueRequestForObject{})
 }

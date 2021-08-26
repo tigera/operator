@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
+
 	"github.com/go-logr/logr"
 	"golang.org/x/crypto/bcrypt"
 	corev1 "k8s.io/api/core/v1"
@@ -36,7 +38,7 @@ const (
 // the gateway credentials, and a secret containing real admin level credentials is created and stored in the tigera-elasticsearch namespace to be swapped in once
 // ES Gateway has confirmed that the gateway credentials match.
 func CreateKubeControllersSecrets(ctx context.Context, esAdminUserSecret *corev1.Secret, cli client.Client) (*corev1.Secret, *corev1.Secret, *corev1.Secret, error) {
-	kubeControllersGatewaySecret, err := utils.GetSecret(ctx, cli, render.ElasticsearchKubeControllersUserSecret, rmeta.OperatorNamespace())
+	kubeControllersGatewaySecret, err := utils.GetSecret(ctx, cli, kubecontrollers.ElasticsearchKubeControllersUserSecret, rmeta.OperatorNamespace())
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -44,11 +46,11 @@ func CreateKubeControllersSecrets(ctx context.Context, esAdminUserSecret *corev1
 		password := crypto.GeneratePassword(16)
 		kubeControllersGatewaySecret = &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.ElasticsearchKubeControllersUserSecret,
+				Name:      kubecontrollers.ElasticsearchKubeControllersUserSecret,
 				Namespace: rmeta.OperatorNamespace(),
 			},
 			Data: map[string][]byte{
-				"username": []byte(render.ElasticsearchKubeControllersUserName),
+				"username": []byte(kubecontrollers.ElasticsearchKubeControllersUserName),
 				"password": []byte(password),
 			},
 		}
@@ -58,34 +60,34 @@ func CreateKubeControllersSecrets(ctx context.Context, esAdminUserSecret *corev1
 		return nil, nil, nil, err
 	}
 
-	kubeControllersVerificationSecret, err := utils.GetSecret(ctx, cli, render.ElasticsearchKubeControllersVerificationUserSecret, render.ElasticsearchNamespace)
+	kubeControllersVerificationSecret, err := utils.GetSecret(ctx, cli, kubecontrollers.ElasticsearchKubeControllersVerificationUserSecret, render.ElasticsearchNamespace)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	if kubeControllersVerificationSecret == nil {
 		kubeControllersVerificationSecret = &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.ElasticsearchKubeControllersVerificationUserSecret,
+				Name:      kubecontrollers.ElasticsearchKubeControllersVerificationUserSecret,
 				Namespace: render.ElasticsearchNamespace,
 				Labels: map[string]string{
 					ESGatewaySelectorLabel: ESGatewaySelectorLabelValue,
 				},
 			},
 			Data: map[string][]byte{
-				"username": []byte(render.ElasticsearchKubeControllersUserName),
+				"username": []byte(kubecontrollers.ElasticsearchKubeControllersUserName),
 				"password": hashedPassword,
 			},
 		}
 	}
 
-	kubeControllersSecureUserSecret, err := utils.GetSecret(ctx, cli, render.ElasticsearchKubeControllersSecureUserSecret, render.ElasticsearchNamespace)
+	kubeControllersSecureUserSecret, err := utils.GetSecret(ctx, cli, kubecontrollers.ElasticsearchKubeControllersSecureUserSecret, render.ElasticsearchNamespace)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	if kubeControllersSecureUserSecret == nil {
 		kubeControllersSecureUserSecret = &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.ElasticsearchKubeControllersSecureUserSecret,
+				Name:      kubecontrollers.ElasticsearchKubeControllersSecureUserSecret,
 				Namespace: render.ElasticsearchNamespace,
 				Labels: map[string]string{
 					ESGatewaySelectorLabel: ESGatewaySelectorLabelValue,

@@ -16,6 +16,13 @@ if [[ ! "$(git rev-parse --abbrev-ref HEAD)" =~ (release-v*.*|master) ]]; then
 	exit 0
 fi
 
+# Skip releasing if the image already exists. No guarantee that a tagged build will only be run once. We want the build to
+# pass in the case where the image exists.
+if ! make release-check-image-exists; then
+	echo "Image tag already exists, no need to release"
+	exit 0
+fi
+
 echo "On a git tag - building release: ${tag}"
 make release VERSION=${tag}
 

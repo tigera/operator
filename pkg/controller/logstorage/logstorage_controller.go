@@ -533,6 +533,9 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 				}
 			}
 		} else {
+			// TODO: Understand why this is needed. This is creating a secret that it is expected will be created
+			// by the ECK operator but the understanding is that this is an optimization. Ideally this can be
+			// removed and we can count on the ECK operator to do what is expected.
 			certSecret = render.CreateCertificateSecret(esKeyCert.Data[corev1.TLSCertKey], relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
 		}
 	}

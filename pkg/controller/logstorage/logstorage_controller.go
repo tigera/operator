@@ -414,6 +414,12 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, managementClusterConnection)
 	}
 
+	authentication, err := utils.GetAuthentication(ctx, r.client)
+	if err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded("Error while fetching Authentication", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	result, proceed, err := r.createLogStorage(
 		ls,
 		install,
@@ -427,6 +433,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		esService,
 		kbService,
 		pullSecrets,
+		authentication,
 		hdler,
 		reqLogger,
 		ctx,
@@ -436,6 +443,20 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	if managementClusterConnection == nil {
+		result, proceed, err = r.createEsKubeControllers(
+			install,
+			hdler,
+			reqLogger,
+			managementClusterConnection,
+			managementCluster,
+			authentication,
+			esLicenseType,
+			ctx,
+		)
+		if err != nil || !proceed {
+			return result, err
+		}
+
 		result, proceed, err = r.createEsGateway(
 			install,
 			variant,

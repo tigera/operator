@@ -200,6 +200,8 @@ func (c *GuardianComponent) clusterRoleBinding() client.Object {
 }
 
 func (c *GuardianComponent) deployment() client.Object {
+	var replicas int32 = 1
+
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{

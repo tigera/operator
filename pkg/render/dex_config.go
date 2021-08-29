@@ -83,6 +83,7 @@ type DexConfig interface {
 	Connector() map[string]interface{}
 	CreateCertSecret() *corev1.Secret
 	RedirectURIs() []string
+	Replicas() *int32
 	authentication.KeyValidatorConfig
 }
 
@@ -127,8 +128,12 @@ func NewDexConfig(
 	tlsSecret *corev1.Secret,
 	dexSecret *corev1.Secret,
 	idpSecret *corev1.Secret,
-	clusterDomain string) DexConfig {
-	return &dexConfig{baseCfg(certificateManagement, authentication, tlsSecret, dexSecret, idpSecret, nil, clusterDomain)}
+	clusterDomain string,
+	replicas *int32) DexConfig {
+	return &dexConfig{
+		replicas:   replicas,
+		dexBaseCfg: baseCfg(certificateManagement, authentication, tlsSecret, dexSecret, idpSecret, nil, clusterDomain),
+	}
 }
 
 type DexKeyValidatorConfig struct {
@@ -136,6 +141,7 @@ type DexKeyValidatorConfig struct {
 }
 
 type dexConfig struct {
+	replicas *int32
 	*dexBaseCfg
 }
 
@@ -611,4 +617,8 @@ func (d *dexConfig) Connector() map[string]interface{} {
 		"name":   connectorType,
 		"config": config,
 	}
+}
+
+func (d *dexConfig) Replicas() *int32 {
+	return d.replicas
 }

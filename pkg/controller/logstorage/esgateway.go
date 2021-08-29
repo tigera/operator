@@ -75,6 +75,7 @@ func (r *ReconcileLogStorage) createEsGateway(
 		EsInternalCertSecret:       esInternalCertSecret,
 		ClusterDomain:              r.clusterDomain,
 		EsAdminUserName:            esAdminUserName,
+		Replicas:                   install.ControlPlaneReplicas,
 	}
 
 	esGatewayComponent := esgateway.EsGateway(cfg)

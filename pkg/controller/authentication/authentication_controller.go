@@ -259,6 +259,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
 	component := render.Dex(
+		authentication,
 		pullSecrets,
 		r.provider == oprv1.ProviderOpenShift,
 		install,

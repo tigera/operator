@@ -179,7 +179,7 @@ func (p *tigeraPrometheusAPIComponent) calicoNodePrometheusService(prometheusSer
 
 // deployment for the Prometheus Service/Proxy pod and image
 func (p *tigeraPrometheusAPIComponent) deployment(prometheusServiceListenPort int) *appsv1.Deployment {
-	var replicas int32 = 1
+	var replicas int32 = DefaultReplicas
 	podDnsPolicy := corev1.DNSClusterFirst
 	podHostNetworked := false
 

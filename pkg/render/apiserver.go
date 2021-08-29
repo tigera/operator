@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 
@@ -77,7 +78,8 @@ func csrRolebindingName(v operatorv1.ProductVariant) string {
 	return "tigera-apiserver"
 }
 
-func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
+func APIServer(
+	k8sServiceEndpoint k8sapi.ServiceEndpoint,
 	installation *operatorv1.InstallationSpec,
 	hostNetwork bool,
 	managementCluster *operatorv1.ManagementCluster,
@@ -85,7 +87,8 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
 	aci *operatorv1.AmazonCloudIntegration,
 	tlsKeyPair *corev1.Secret,
 	pullSecrets []*corev1.Secret,
-	openshift bool, tunnelCASecret *corev1.Secret, clusterDomain string) (Component, error) {
+	openshift bool, tunnelCASecret *corev1.Secret, clusterDomain string,
+	replicas *int32) (Component, error) {
 
 	tlsSecrets := []*corev1.Secret{}
 	tlsHashAnnotations := make(map[string]string)
@@ -140,10 +143,12 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
 		openshift:                   openshift,
 		k8sServiceEp:                k8sServiceEndpoint,
 		clusterDomain:               clusterDomain,
+		replicas:                    replicas,
 	}, nil
 }
 
 type apiServerComponent struct {
+	apiServer                   *operatorv1.APIServer
 	k8sServiceEp                k8sapi.ServiceEndpoint
 	installation                *operatorv1.InstallationSpec
 	managementCluster           *operatorv1.ManagementCluster
@@ -153,12 +158,12 @@ type apiServerComponent struct {
 	tlsAnnotations              map[string]string
 	pullSecrets                 []*corev1.Secret
 	openshift                   bool
-	isManagement                bool
 	forceHostNetwork            bool
 	clusterDomain               string
 	apiServerImage              string
 	queryServerImage            string
 	certSignReqImage            string
+	replicas                    *int32
 }
 
 func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -275,7 +280,6 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	// Compile the final arrays based on the variant.
-	objsToCreate := []client.Object{}
 	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {
 		// Create any enterprise specific objects.
 		globalObjects = append(globalObjects, globalEnterpriseObjects...)
@@ -296,7 +300,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		objsToDelete = append(objsToDelete, globalEnterpriseObjects...)
 	}
 
-	objsToCreate = append(globalObjects, namespacedObjects...)
+	objsToCreate := append(globalObjects, namespacedObjects...)
 	return objsToCreate, objsToDelete
 }
 
@@ -781,7 +785,6 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 		name = "calico-apiserver"
 	}
 
-	var replicas int32 = 1
 	hostNetwork := c.hostNetwork()
 	dnsPolicy := corev1.DNSClusterFirst
 	if hostNetwork {
@@ -812,7 +815,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: c.replicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
@@ -838,7 +841,8 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 					Containers: []corev1.Container{
 						c.apiServerContainer(),
 					},
-					Volumes: c.apiServerVolumes(),
+					Volumes:  c.apiServerVolumes(),
+					Affinity: podaffinity.NewPodAntiAffinity(name, rmeta.APIServerNamespace(c.installation.Variant)),
 				},
 			},
 		},

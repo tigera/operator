@@ -32,10 +32,10 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/secret"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/test"
@@ -203,7 +203,7 @@ var _ = Describe("Manager controller tests", func() {
 			// Create a manager cert managed by the operator.
 			ca, err := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 			Expect(err).ShouldNot(HaveOccurred())
-			oldCert, err := secret.CreateTLSSecret(
+			oldCert, err := rsecret.CreateTLSSecret(
 				ca, render.ManagerTLSSecretName, rmeta.OperatorNamespace(), render.ManagerSecretKeyName,
 				render.ManagerSecretCertName, rmeta.DefaultCertificateDuration, nil, "tigera-manager.tigera-manager.svc")
 			Expect(err).ShouldNot(HaveOccurred())
@@ -225,7 +225,7 @@ var _ = Describe("Manager controller tests", func() {
 			// Create a manager cert secret.
 			dnsNames := []string{"manager.example.com", "192.168.10.22"}
 			testCA := test.MakeTestCA("manager-test")
-			userSecret, err := secret.CreateTLSSecret(
+			userSecret, err := rsecret.CreateTLSSecret(
 				testCA, render.ManagerTLSSecretName, rmeta.OperatorNamespace(), render.ManagerSecretKeyName,
 				render.ManagerSecretCertName, rmeta.DefaultCertificateDuration, nil, dnsNames...)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -288,7 +288,7 @@ var _ = Describe("Manager controller tests", func() {
 			if byoTLS {
 				dnsNames := []string{"manager.example.com", "192.168.10.22"}
 				testCA := test.MakeTestCA("manager-test")
-				userSecret, err := secret.CreateTLSSecret(
+				userSecret, err := rsecret.CreateTLSSecret(
 					testCA, render.ManagerTLSSecretName, rmeta.OperatorNamespace(), render.ManagerSecretKeyName,
 					render.ManagerSecretCertName, rmeta.DefaultCertificateDuration, nil, dnsNames...)
 				Expect(err).ShouldNot(HaveOccurred())
@@ -507,6 +507,54 @@ var _ = Describe("Manager controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentManagerProxy.Image,
 					"sha256:voltronhash")))
+		})
+	})
+
+	Context("Tigera Manager replicas", func() {
+		var (
+			c      client.Client
+			ctx    context.Context
+			scheme *runtime.Scheme
+		)
+
+		BeforeEach(func() {
+			// Create a Kubernetes client.
+			scheme = runtime.NewScheme()
+			err := apis.AddToScheme(scheme)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(corev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+
+			c = fake.NewClientBuilder().WithScheme(scheme).Build()
+			ctx = context.Background()
+		})
+
+		AfterEach(func() {
+			obj := &operatorv1.Manager{}
+			Expect(c.Get(ctx, utils.DefaultTSEEInstanceKey, obj)).NotTo(HaveOccurred())
+			Expect(c.Delete(ctx, obj)).NotTo(HaveOccurred())
+		})
+
+		It("should set default replicas to 1", func() {
+			Expect(c.Create(ctx, &operatorv1.Manager{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+			})).NotTo(HaveOccurred())
+			manager, err := GetManager(ctx, c)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(manager.Spec.Replicas).To(Equal(ptr.Int32ToPtr(1)))
+		})
+
+		It("should hornor replicas in spec", func() {
+			Expect(c.Create(ctx, &operatorv1.Manager{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.ManagerSpec{
+					Replicas: ptr.Int32ToPtr(3),
+				},
+			})).NotTo(HaveOccurred())
+			manager, err := GetManager(ctx, c)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(manager.Spec.Replicas).To(Equal(ptr.Int32ToPtr(3)))
 		})
 	})
 })

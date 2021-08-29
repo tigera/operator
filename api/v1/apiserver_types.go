@@ -23,6 +23,9 @@ import (
 
 // APIServerSpec defines the desired state of Tigera API server.
 type APIServerSpec struct {
+	// Replicas defines how many Tigera API server replicas in the cluster. Defaults to 1.
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
 }
 
 // APIServerStatus defines the observed state of Tigera API server.

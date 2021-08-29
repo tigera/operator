@@ -588,6 +588,12 @@ func fillDefaults(instance *operator.Installation) error {
 		}
 	}
 
+	// If not specified by the user, set the default control plane replicas to 2.
+	if instance.Spec.ControlPlaneReplicas == nil {
+		var replicas int32 = 2
+		instance.Spec.ControlPlaneReplicas = &replicas
+	}
+
 	// If not specified by the user, set the flex volume plugin location based on platform.
 	if len(instance.Spec.FlexVolumePath) == 0 {
 		if instance.Spec.KubernetesProvider == operator.ProviderOpenShift {

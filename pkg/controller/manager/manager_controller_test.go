@@ -56,6 +56,7 @@ var _ = Describe("Manager controller tests", func() {
 	var scheme *runtime.Scheme
 	var instance *operatorv1.Manager
 	var ctx context.Context
+	var replicas int32
 
 	BeforeEach(func() {
 		// Create a Kubernetes client.
@@ -65,6 +66,7 @@ var _ = Describe("Manager controller tests", func() {
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		c = fake.NewFakeClientWithScheme(scheme)
 		ctx = context.Background()
+		replicas = 2
 	})
 
 	It("should query a default manager instance", func() {
@@ -125,8 +127,9 @@ var _ = Describe("Manager controller tests", func() {
 				&operatorv1.Installation{
 					ObjectMeta: metav1.ObjectMeta{Name: "default"},
 					Spec: operatorv1.InstallationSpec{
-						Variant:  operatorv1.TigeraSecureEnterprise,
-						Registry: "some.registry.org/",
+						ControlPlaneReplicas: &replicas,
+						Variant:              operatorv1.TigeraSecureEnterprise,
+						Registry:             "some.registry.org/",
 					},
 					Status: operatorv1.InstallationStatus{
 						Variant: operatorv1.TigeraSecureEnterprise,
@@ -326,6 +329,7 @@ var _ = Describe("Manager controller tests", func() {
 	Context("image reconciliation", func() {
 		var r ReconcileManager
 		var mockStatus *status.MockStatus
+
 		BeforeEach(func() {
 			// Create an object we can use throughout the test to do the compliance reconcile loops.
 			mockStatus = &status.MockStatus{}
@@ -362,8 +366,9 @@ var _ = Describe("Manager controller tests", func() {
 				&operatorv1.Installation{
 					ObjectMeta: metav1.ObjectMeta{Name: "default"},
 					Spec: operatorv1.InstallationSpec{
-						Variant:  operatorv1.TigeraSecureEnterprise,
-						Registry: "some.registry.org/",
+						ControlPlaneReplicas: &replicas,
+						Variant:              operatorv1.TigeraSecureEnterprise,
+						Registry:             "some.registry.org/",
 					},
 					Status: operatorv1.InstallationStatus{
 						Variant: operatorv1.TigeraSecureEnterprise,

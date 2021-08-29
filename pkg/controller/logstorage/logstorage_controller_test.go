@@ -195,6 +195,7 @@ var _ = Describe("LogStorage controller", func() {
 			Context("LogStorage is nil", func() {
 				var install *operatorv1.Installation
 				BeforeEach(func() {
+					var replicas int32 = 2
 					install = &operatorv1.Installation{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: "default",
@@ -204,7 +205,8 @@ var _ = Describe("LogStorage controller", func() {
 							Computed: &operatorv1.InstallationSpec{},
 						},
 						Spec: operatorv1.InstallationSpec{
-							Variant: operatorv1.TigeraSecureEnterprise,
+							ControlPlaneReplicas: &replicas,
+							Variant:              operatorv1.TigeraSecureEnterprise,
 						},
 					}
 					Expect(cli.Create(ctx, install)).ShouldNot(HaveOccurred())
@@ -317,6 +319,7 @@ var _ = Describe("LogStorage controller", func() {
 				var mockStatus *status.MockStatus
 				var install *operatorv1.Installation
 				BeforeEach(func() {
+					var replicas int32 = 2
 					install = &operatorv1.Installation{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: "default",
@@ -326,8 +329,9 @@ var _ = Describe("LogStorage controller", func() {
 							Computed: &operatorv1.InstallationSpec{},
 						},
 						Spec: operatorv1.InstallationSpec{
-							Variant:  operatorv1.TigeraSecureEnterprise,
-							Registry: "some.registry.org/",
+							ControlPlaneReplicas: &replicas,
+							Variant:              operatorv1.TigeraSecureEnterprise,
+							Registry:             "some.registry.org/",
 						},
 					}
 					Expect(cli.Create(ctx, install)).ShouldNot(HaveOccurred())
@@ -1075,7 +1079,7 @@ var _ = Describe("LogStorage controller", func() {
 				var mockStatus *status.MockStatus
 
 				BeforeEach(func() {
-
+					var replicas int32 = 2
 					Expect(cli.Create(ctx, &operatorv1.Installation{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: "default",
@@ -1085,7 +1089,8 @@ var _ = Describe("LogStorage controller", func() {
 							Computed: &operatorv1.InstallationSpec{},
 						},
 						Spec: operatorv1.InstallationSpec{
-							Variant: operatorv1.TigeraSecureEnterprise,
+							ControlPlaneReplicas: &replicas,
+							Variant:              operatorv1.TigeraSecureEnterprise,
 						},
 					})).ShouldNot(HaveOccurred())
 

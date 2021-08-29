@@ -54,9 +54,11 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	var k8sServiceEp k8sapi.ServiceEndpoint
 
 	BeforeEach(func() {
+		var replicas int32 = 2
 		instance = &operatorv1.InstallationSpec{
-			Registry: "testregistry.com/",
-			Variant:  operatorv1.TigeraSecureEnterprise,
+			ControlPlaneReplicas: &replicas,
+			Registry:             "testregistry.com/",
+			Variant:              operatorv1.TigeraSecureEnterprise,
 		}
 		k8sServiceEp = k8sapi.ServiceEndpoint{}
 	})
@@ -152,7 +154,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(d.Labels).To(HaveKeyWithValue("apiserver", "true"))
 		Expect(d.Labels).To(HaveKeyWithValue("k8s-app", "tigera-apiserver"))
 
-		Expect(*d.Spec.Replicas).To(BeEquivalentTo(1))
+		Expect(*d.Spec.Replicas).To(BeEquivalentTo(2))
 		Expect(d.Spec.Strategy.Type).To(Equal(appsv1.RecreateDeploymentStrategyType))
 		Expect(len(d.Spec.Selector.MatchLabels)).To(Equal(1))
 		Expect(d.Spec.Selector.MatchLabels).To(HaveKeyWithValue("apiserver", "true"))
@@ -718,6 +720,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		}
 		Expect((dep.(*appsv1.Deployment)).Spec.Template.Spec.Containers[0].Args).To(ConsistOf(expectedArgs))
 	})
+
 	It("should add an init container if certificate management is enabled", func() {
 		instance.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c"}
 		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
@@ -769,7 +772,6 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(deploy.Spec.Template.Spec.InitContainers[0].Name).To(Equal(render.CSRInitContainerName))
 		rtest.ExpectEnv(deploy.Spec.Template.Spec.InitContainers[0].Env, "SIGNER", "a.b/c")
 	})
-
 })
 
 func verifyAPIService(service *apiregv1.APIService, enterprise bool, clusterDomain string) {
@@ -1038,9 +1040,11 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 	var k8sServiceEp k8sapi.ServiceEndpoint
 
 	BeforeEach(func() {
+		var replicas int32 = 2
 		instance = &operatorv1.InstallationSpec{
-			Registry: "testregistry.com/",
-			Variant:  operatorv1.Calico,
+			ControlPlaneReplicas: &replicas,
+			Registry:             "testregistry.com/",
+			Variant:              operatorv1.Calico,
 		}
 		k8sServiceEp = k8sapi.ServiceEndpoint{}
 	})
@@ -1112,7 +1116,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(d.Labels).To(HaveKeyWithValue("apiserver", "true"))
 		Expect(d.Labels).To(HaveKeyWithValue("k8s-app", "calico-apiserver"))
 
-		Expect(*d.Spec.Replicas).To(BeEquivalentTo(1))
+		Expect(*d.Spec.Replicas).To(BeEquivalentTo(2))
 		Expect(d.Spec.Strategy.Type).To(Equal(appsv1.RecreateDeploymentStrategyType))
 		Expect(len(d.Spec.Selector.MatchLabels)).To(Equal(1))
 		Expect(d.Spec.Selector.MatchLabels).To(HaveKeyWithValue("apiserver", "true"))

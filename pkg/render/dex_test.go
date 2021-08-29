@@ -3,6 +3,7 @@ package render_test
 import (
 	"fmt"
 
+	"github.com/tigera/operator/pkg/ptr"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 
 	. "github.com/onsi/ginkgo"
@@ -86,7 +87,7 @@ var _ = Describe("dex rendering tests", func() {
 
 			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName)
 
-			component := render.Dex(pullSecrets, false, installation, dexCfg, clusterName, false)
+			component := render.Dex(authentication, pullSecrets, false, installation, dexCfg, clusterName, false)
 			resources, _ := component.Objects()
 
 			expectedResources := []struct {
@@ -143,7 +144,7 @@ var _ = Describe("dex rendering tests", func() {
 			}
 
 			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName)
-			component := render.Dex(pullSecrets, false, &operatorv1.InstallationSpec{
+			component := render.Dex(authentication, pullSecrets, false, &operatorv1.InstallationSpec{
 				ControlPlaneTolerations: []corev1.Toleration{t},
 			}, dexCfg, clusterName, false)
 			resources, _ := component.Objects()
@@ -155,7 +156,7 @@ var _ = Describe("dex rendering tests", func() {
 			installation.CertificateManagement = &operatorv1.CertificateManagement{}
 			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName)
 
-			component := render.Dex(pullSecrets, false, installation, dexCfg, clusterName, false)
+			component := render.Dex(authentication, pullSecrets, false, installation, dexCfg, clusterName, false)
 			resources, _ := component.Objects()
 
 			expectedResources := []struct {
@@ -186,6 +187,25 @@ var _ = Describe("dex rendering tests", func() {
 				rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 			Expect(len(resources)).To(Equal(len(expectedResources)))
+		})
+
+		It("should set correct replicas", func() {
+			// render default replicas to 1
+			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName)
+			component := render.Dex(authentication, pullSecrets, false, installation, dexCfg, clusterName, false)
+			resources, _ := component.Objects()
+			deploy, ok := rtest.GetResource(resources, render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue())
+			Expect(deploy.Spec.Replicas).To(Equal(ptr.Int32ToPtr(1)))
+
+			// render replicas in spec
+			dexCfg = render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName)
+			authentication.Spec.OIDC.Replicas = ptr.Int32ToPtr(3)
+			component = render.Dex(authentication, pullSecrets, false, installation, dexCfg, clusterName, false)
+			resources, _ = component.Objects()
+			deploy, ok = rtest.GetResource(resources, render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue())
+			Expect(deploy.Spec.Replicas).To(Equal(ptr.Int32ToPtr(3)))
 		})
 	})
 })

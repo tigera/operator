@@ -25,6 +25,7 @@ func (r *ReconcileLogStorage) createEsGateway(
 	hdler utils.ComponentHandler,
 	reqLogger logr.Logger,
 	ctx context.Context,
+	replicas *int32,
 ) (reconcile.Result, bool, error) {
 	gatewayCertSecret, publicCertSecret, customerProvidedCert, err := common.GetESGatewayCertificateSecrets(ctx, install, r.client, r.clusterDomain, log)
 	if err != nil {
@@ -75,6 +76,7 @@ func (r *ReconcileLogStorage) createEsGateway(
 		EsInternalCertSecret:       esInternalCertSecret,
 		ClusterDomain:              r.clusterDomain,
 		EsAdminUserName:            esAdminUserName,
+		Replicas:                   replicas,
 	}
 
 	esGatewayComponent := esgateway.EsGateway(cfg)

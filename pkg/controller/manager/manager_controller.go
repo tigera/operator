@@ -497,6 +497,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	// Render the desired objects from the CRD and create or update them.
 	component, err := render.Manager(
+		instance,
 		keyValidatorConfig,
 		esSecrets,
 		[]*corev1.Secret{kibanaPublicCertSecret},
@@ -508,6 +509,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		r.provider == operatorv1.ProviderOpenShift,
 		installation,
 		managementCluster,
+		managementClusterConnection,
 		tunnelSecret,
 		internalTrafficSecret,
 		r.clusterDomain,

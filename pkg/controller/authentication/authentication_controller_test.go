@@ -97,6 +97,7 @@ var _ = Describe("authentication controller tests", func() {
 	Context("OIDC connector config options", func() {
 		It("should set oidc defaults ", func() {
 			// Apply prerequisites for the basic reconcile to succeed.
+			var replicas int32 = 2
 			Expect(cli.Create(ctx, &operatorv1.Installation{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "default",
@@ -106,7 +107,8 @@ var _ = Describe("authentication controller tests", func() {
 					Computed: &operatorv1.InstallationSpec{},
 				},
 				Spec: operatorv1.InstallationSpec{
-					Variant: operatorv1.TigeraSecureEnterprise,
+					ControlPlaneReplicas: &replicas,
+					Variant:              operatorv1.TigeraSecureEnterprise,
 				},
 			})).ToNot(HaveOccurred())
 
@@ -138,6 +140,7 @@ var _ = Describe("authentication controller tests", func() {
 
 	Context("image reconciliation", func() {
 		BeforeEach(func() {
+			var replicas int32 = 2
 			Expect(cli.Create(ctx, &operatorv1.Installation{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "default",
@@ -147,8 +150,9 @@ var _ = Describe("authentication controller tests", func() {
 					Computed: &operatorv1.InstallationSpec{},
 				},
 				Spec: operatorv1.InstallationSpec{
-					Variant:  operatorv1.TigeraSecureEnterprise,
-					Registry: "some.registry.org/",
+					ControlPlaneReplicas: &replicas,
+					Variant:              operatorv1.TigeraSecureEnterprise,
+					Registry:             "some.registry.org/",
 				},
 			})).To(BeNil())
 			Expect(cli.Create(ctx, &operatorv1.Authentication{
@@ -243,6 +247,7 @@ var _ = Describe("authentication controller tests", func() {
 	)
 	DescribeTable("LDAP connector config options should be validated", func(ldap *operatorv1.AuthenticationLDAP, secretDN, secretPW, secretCA []byte, expectReconcilePass bool) {
 		// Apply prerequisites for the basic reconcile to succeed.
+		var replicas int32 = 2
 		Expect(cli.Create(ctx, &operatorv1.Installation{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "default",
@@ -252,7 +257,8 @@ var _ = Describe("authentication controller tests", func() {
 				Computed: &operatorv1.InstallationSpec{},
 			},
 			Spec: operatorv1.InstallationSpec{
-				Variant: operatorv1.TigeraSecureEnterprise,
+				ControlPlaneReplicas: &replicas,
+				Variant:              operatorv1.TigeraSecureEnterprise,
 			},
 		})).ToNot(HaveOccurred())
 

@@ -83,6 +83,7 @@ var _ = Describe("Manager controller tests", func() {
 		var r ReconcileManager
 		var cr *operatorv1.Manager
 		var mockStatus *status.MockStatus
+		var replicas int32 = 2
 
 		clusterDomain := "some.domain"
 		expectedDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)
@@ -125,8 +126,9 @@ var _ = Describe("Manager controller tests", func() {
 				&operatorv1.Installation{
 					ObjectMeta: metav1.ObjectMeta{Name: "default"},
 					Spec: operatorv1.InstallationSpec{
-						Variant:  operatorv1.TigeraSecureEnterprise,
-						Registry: "some.registry.org/",
+						ControlPlaneReplicas: &replicas,
+						Variant:              operatorv1.TigeraSecureEnterprise,
+						Registry:             "some.registry.org/",
 					},
 					Status: operatorv1.InstallationStatus{
 						Variant: operatorv1.TigeraSecureEnterprise,
@@ -326,6 +328,8 @@ var _ = Describe("Manager controller tests", func() {
 	Context("image reconciliation", func() {
 		var r ReconcileManager
 		var mockStatus *status.MockStatus
+		var replicas int32 = 2
+
 		BeforeEach(func() {
 			// Create an object we can use throughout the test to do the compliance reconcile loops.
 			mockStatus = &status.MockStatus{}
@@ -362,8 +366,9 @@ var _ = Describe("Manager controller tests", func() {
 				&operatorv1.Installation{
 					ObjectMeta: metav1.ObjectMeta{Name: "default"},
 					Spec: operatorv1.InstallationSpec{
-						Variant:  operatorv1.TigeraSecureEnterprise,
-						Registry: "some.registry.org/",
+						ControlPlaneReplicas: &replicas,
+						Variant:              operatorv1.TigeraSecureEnterprise,
+						Registry:             "some.registry.org/",
 					},
 					Status: operatorv1.InstallationStatus{
 						Variant: operatorv1.TigeraSecureEnterprise,

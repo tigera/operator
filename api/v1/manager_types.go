@@ -25,6 +25,10 @@ type ManagerSpec struct {
 	// Deprecated. Please use the Authentication CR for configuring authentication.
 	// +optional
 	Auth *Auth `json:"auth,omitempty"`
+
+	// Replicas defines how many replicas of the Calico Enterprise manager components will be deployed. Defaults to 1.
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
 }
 
 // ManagerStatus defines the observed state of the Calico Enterprise manager GUI.

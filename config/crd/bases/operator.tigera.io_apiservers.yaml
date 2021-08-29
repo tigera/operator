@@ -35,6 +35,12 @@ spec:
             type: object
           spec:
             description: Specification of the desired state for the Tigera API server.
+            properties:
+              replicas:
+                description: Replicas defines how many replicas of the API server
+                  components will be deployed. Defaults to 1.
+                format: int32
+                type: integer
             type: object
           status:
             description: Most recently observed status for the Tigera API server.

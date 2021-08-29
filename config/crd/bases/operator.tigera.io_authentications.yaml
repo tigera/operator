@@ -203,6 +203,11 @@ spec:
                 required:
                 - issuerURL
                 type: object
+              replicas:
+                description: Replicas defines how many replicas of the Authentication
+                  components will be deployed. Defaults to 1.
+                format: int32
+                type: integer
               usernamePrefix:
                 description: If specified, UsernamePrefix is prepended to each user
                   obtained from the identity provider. Note that Kibana does not support

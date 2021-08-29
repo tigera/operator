@@ -34,6 +34,10 @@ type LogStorageSpec struct {
 	// +optional
 	Retention *Retention `json:"retention,omitempty"`
 
+	// Gateway defines the configuration for the Gateway.
+	// +optional
+	Gateway *Gateway `json:"gateway,omitempty"`
+
 	// StorageClassName will populate the PersistentVolumeClaim.StorageClassName that is used to provision disks to the
 	// Tigera Elasticsearch cluster. The StorageClassName should only be modified when no LogStorage is currently
 	// active. We recommend choosing a storage class dedicated to Tigera LogStorage only. Otherwise, data retention
@@ -140,6 +144,13 @@ type Retention struct {
 	// Default: 91
 	// +optional
 	ComplianceReports *int32 `json:"complianceReports"`
+}
+
+// Gateway defines the configuration for the Gateway.
+type Gateway struct {
+	// Replicas defines how many replicas of the Gateway components will be deployed. Defaults to 2.
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
 }
 
 // LogStorageComponentName CRD enum

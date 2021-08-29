@@ -19,17 +19,18 @@ import (
 	"fmt"
 	"time"
 
-	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/authentication"
 	"github.com/tigera/operator/pkg/controller/compliance"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
+	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
@@ -199,7 +200,17 @@ func GetManager(ctx context.Context, cli client.Client) (*operatorv1.Manager, er
 		return nil, fmt.Errorf("auth types other than 'Token' can no longer be configured using the Manager CR, " +
 			"please use the Authentication CR instead")
 	}
+
+	fillDefaults(instance)
+
 	return instance, nil
+}
+
+func fillDefaults(opr *operatorv1.Manager) {
+	if opr.Spec.Replicas == nil {
+		var replicas int32 = 1
+		opr.Spec.Replicas = &replicas
+	}
 }
 
 // Reconcile reads that state of the cluster for a Manager object and makes changes based on the state read
@@ -450,7 +461,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Fetch the Authentication spec. If present, we use to configure user authentication.
-	authenticationCR, err := utils.GetAuthentication(ctx, r.client)
+	authenticationCR, err := authentication.GetAuthentication(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded("Error while fetching Authentication", err.Error())
 		return reconcile.Result{}, err
@@ -495,6 +506,14 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
+	// Reset replicas to 1 in management or managed clusters
+	// TODO: Support MCM tigera-manager HA deployment
+	if managementCluster != nil || managementClusterConnection != nil {
+		if *instance.Spec.Replicas != 1 {
+			instance.Spec.Replicas = ptr.Int32ToPtr(1)
+		}
+	}
+
 	// Render the desired objects from the CRD and create or update them.
 	component, err := render.Manager(
 		keyValidatorConfig,
@@ -512,6 +531,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		internalTrafficSecret,
 		r.clusterDomain,
 		elasticLicenseType,
+		instance.Spec.Replicas,
 	)
 	if err != nil {
 		log.Error(err, "Error rendering Manager")

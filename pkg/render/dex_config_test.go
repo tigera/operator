@@ -24,6 +24,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
@@ -79,6 +80,17 @@ var _ = Describe("dex config tests", func() {
 			connector := render.NewDexConfig(nil, authentication, tlsSecret, dexSecret, idpSecret, dns.DefaultClusterDomain).Connector()
 			cfg := connector["config"].(map[string]interface{})
 			Expect(cfg["insecureSkipEmailVerified"]).To(Equal(true))
+		})
+
+		It("should set default replicas to 1", func() {
+			cfg := render.NewDexConfig(nil, authentication, tlsSecret, dexSecret, idpSecret, dns.DefaultClusterDomain)
+			Expect(cfg.Replicas()).To(Equal(ptr.Int32ToPtr(1)))
+		})
+
+		It("should hornor replicas in spec", func() {
+			authentication.Spec.OIDC.Replicas = ptr.Int32ToPtr(3)
+			cfg := render.NewDexConfig(nil, authentication, tlsSecret, dexSecret, idpSecret, dns.DefaultClusterDomain)
+			Expect(cfg.Replicas()).To(Equal(ptr.Int32ToPtr(3)))
 		})
 	})
 

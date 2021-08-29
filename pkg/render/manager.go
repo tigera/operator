@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
+	"github.com/tigera/operator/pkg/render/common/podaffinity"
 
 	ocsv1 "github.com/openshift/api/security/v1"
 	"github.com/tigera/operator/pkg/render/common/authentication"
@@ -96,6 +97,7 @@ func Manager(
 	internalTrafficSecret *corev1.Secret,
 	clusterDomain string,
 	esLicenseType ElasticsearchLicenseType,
+	replicas *int32,
 ) (Component, error) {
 	var tlsSecrets []*corev1.Secret
 	tlsAnnotations := map[string]string{
@@ -140,6 +142,7 @@ func Manager(
 		installation:                  installation,
 		managementCluster:             managementCluster,
 		esLicenseType:                 esLicenseType,
+		replicas:                      replicas,
 	}, nil
 }
 
@@ -162,6 +165,7 @@ type managerComponent struct {
 	proxyImage                    string
 	esProxyImage                  string
 	csrInitImage                  string
+	replicas                      *int32
 }
 
 func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -262,7 +266,6 @@ func (c *managerComponent) Ready() bool {
 
 // managerDeployment creates a deployment for the Tigera Secure manager component.
 func (c *managerComponent) managerDeployment() *appsv1.Deployment {
-	var replicas int32 = 1
 	annotations := make(map[string]string)
 
 	if c.complianceServerCertSecret != nil {
@@ -315,7 +318,8 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 				relasticsearch.ContainerDecorate(c.managerEsProxyContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.clusterDomain, c.SupportedOSType()),
 				c.managerProxyContainer(),
 			},
-			Volumes: c.managerVolumes(),
+			Volumes:  c.managerVolumes(),
+			Affinity: podaffinity.NewPodAntiAffinity("tigera-manager", ManagerNamespace),
 		}),
 	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
 
@@ -334,7 +338,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 					"k8s-app": "tigera-manager",
 				},
 			},
-			Replicas: &replicas,
+			Replicas: c.replicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},

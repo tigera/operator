@@ -21,10 +21,7 @@ import (
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -85,7 +82,7 @@ func AddComplianceWatch(c controller.Controller) error {
 }
 
 func AddNamespaceWatch(c controller.Controller, name string) error {
-	ns := &v1.Namespace{
+	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
@@ -97,7 +94,7 @@ func AddNamespaceWatch(c controller.Controller, name string) error {
 type MetaMatch func(metav1.ObjectMeta) bool
 
 func AddSecretsWatch(c controller.Controller, name, namespace string, metaMatches ...MetaMatch) error {
-	s := &v1.Secret{
+	s := &corev1.Secret{
 		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	}
@@ -105,7 +102,7 @@ func AddSecretsWatch(c controller.Controller, name, namespace string, metaMatche
 }
 
 func AddConfigMapWatch(c controller.Controller, name, namespace string) error {
-	cm := &v1.ConfigMap{
+	cm := &corev1.ConfigMap{
 		TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	}
@@ -113,7 +110,7 @@ func AddConfigMapWatch(c controller.Controller, name, namespace string) error {
 }
 
 func AddServiceWatch(c controller.Controller, name, namespace string) error {
-	return AddNamespacedWatch(c, &v1.Service{
+	return AddNamespacedWatch(c, &corev1.Service{
 		TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	})
@@ -157,7 +154,7 @@ func AddNamespacedWatch(c controller.Controller, obj client.Object, metaMatches 
 func IsAPIServerReady(client client.Client, l logr.Logger) bool {
 	instance, msg, err := GetAPIServer(context.Background(), client)
 	if err != nil {
-		if kerrors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			l.V(3).Info("APIServer resource does not exist")
 			return false
 		}
@@ -176,7 +173,7 @@ func LogStorageExists(ctx context.Context, cli client.Client) (bool, error) {
 	instance := &operatorv1.LogStorage{}
 	err := cli.Get(ctx, DefaultTSEEInstanceKey, instance)
 	if err != nil {
-		if kerrors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return false, nil
 		}
 		return false, err
@@ -189,7 +186,7 @@ func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCol
 	logCollector := &operatorv1.LogCollector{}
 	err := cli.Get(ctx, DefaultTSEEInstanceKey, logCollector)
 	if err != nil {
-		if kerrors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return nil, nil
 		}
 		return nil, err
@@ -235,7 +232,7 @@ func ValidateCertPair(client client.Client, namespace, certPairSecretName, keyNa
 	if err != nil {
 		// If the reason for the error is not found then that is acceptable
 		// so return valid in that case.
-		statErr, ok := err.(*kerrors.StatusError)
+		statErr, ok := err.(*apierrors.StatusError)
 		if ok && statErr.ErrStatus.Reason == metav1.StatusReasonNotFound {
 			return nil, nil
 		} else {
@@ -268,7 +265,7 @@ func GetK8sServiceEndPoint(client client.Client) error {
 	}
 	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
 		// If the configmap is unavailable, do not return error
-		if !kerrors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			return fmt.Errorf("Failed to read ConfigMap %q: %s", cmName, err)
 		}
 	} else {
@@ -298,7 +295,7 @@ func GetManagementCluster(ctx context.Context, c client.Client) (*operatorv1.Man
 
 	err := c.Get(ctx, DefaultTSEEInstanceKey, managementCluster)
 	if err != nil {
-		if kerrors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return nil, nil
 		}
 		return nil, err
@@ -313,7 +310,7 @@ func GetManagementClusterConnection(ctx context.Context, c client.Client) (*oper
 
 	err := c.Get(ctx, DefaultTSEEInstanceKey, managementClusterConnection)
 	if err != nil {
-		if kerrors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return nil, nil
 		}
 		return nil, err
@@ -376,7 +373,7 @@ func GetAPIServer(ctx context.Context, client client.Client) (*operatorv1.APISer
 	instance := &operatorv1.APIServer{}
 	err := client.Get(ctx, DefaultInstanceKey, instance)
 	if err != nil {
-		if !errors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			return nil, "failed to get apiserver 'default'", err
 		}
 
@@ -394,6 +391,7 @@ func GetAPIServer(ctx context.Context, client client.Client) (*operatorv1.APISer
 				fmt.Errorf("Multiple APIServer CRs provided. To fix, run \"kubectl delete apiserver tigera-secure\"")
 		}
 	}
+
 	return instance, "", nil
 }
 
@@ -406,7 +404,7 @@ func GetElasticLicenseType(ctx context.Context, cli client.Client, logger logr.L
 	}
 	license, ok := cm.Data["eck_license_level"]
 	if !ok {
-		return render.ElasticsearchLicenseTypeUnknown, fmt.Errorf("eck_license_level not available.")
+		return render.ElasticsearchLicenseTypeUnknown, fmt.Errorf("eck_license_level not available")
 	}
 
 	return StrToElasticLicenseType(license, logger), nil

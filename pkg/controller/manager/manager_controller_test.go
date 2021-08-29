@@ -35,7 +35,6 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/secret"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/test"
@@ -203,7 +202,7 @@ var _ = Describe("Manager controller tests", func() {
 			// Create a manager cert managed by the operator.
 			ca, err := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 			Expect(err).ShouldNot(HaveOccurred())
-			oldCert, err := secret.CreateTLSSecret(
+			oldCert, err := rsecret.CreateTLSSecret(
 				ca, render.ManagerTLSSecretName, rmeta.OperatorNamespace(), render.ManagerSecretKeyName,
 				render.ManagerSecretCertName, rmeta.DefaultCertificateDuration, nil, "tigera-manager.tigera-manager.svc")
 			Expect(err).ShouldNot(HaveOccurred())
@@ -225,7 +224,7 @@ var _ = Describe("Manager controller tests", func() {
 			// Create a manager cert secret.
 			dnsNames := []string{"manager.example.com", "192.168.10.22"}
 			testCA := test.MakeTestCA("manager-test")
-			userSecret, err := secret.CreateTLSSecret(
+			userSecret, err := rsecret.CreateTLSSecret(
 				testCA, render.ManagerTLSSecretName, rmeta.OperatorNamespace(), render.ManagerSecretKeyName,
 				render.ManagerSecretCertName, rmeta.DefaultCertificateDuration, nil, dnsNames...)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -288,7 +287,7 @@ var _ = Describe("Manager controller tests", func() {
 			if byoTLS {
 				dnsNames := []string{"manager.example.com", "192.168.10.22"}
 				testCA := test.MakeTestCA("manager-test")
-				userSecret, err := secret.CreateTLSSecret(
+				userSecret, err := rsecret.CreateTLSSecret(
 					testCA, render.ManagerTLSSecretName, rmeta.OperatorNamespace(), render.ManagerSecretKeyName,
 					render.ManagerSecretCertName, rmeta.DefaultCertificateDuration, nil, dnsNames...)
 				Expect(err).ShouldNot(HaveOccurred())

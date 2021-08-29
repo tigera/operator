@@ -947,6 +947,11 @@ func (in *InstallationSpec) DeepCopyInto(out *InstallationSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	if in.ControlPlaneReplicas != nil {
+		in, out := &in.ControlPlaneReplicas, &out.ControlPlaneReplicas
+		*out = new(int32)
+		**out = **in
+	}
 	if in.NodeMetricsPort != nil {
 		in, out := &in.NodeMetricsPort, &out.NodeMetricsPort
 		*out = new(int32)

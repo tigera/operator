@@ -94,6 +94,15 @@ spec:
                   the indicated key-value pairs as labels as well as access to the
                   specified StorageClassName.
                 type: object
+              gateway:
+                description: Gateway defines the configuration for the Gateway.
+                properties:
+                  replicas:
+                    description: Replicas defines how many replicas of the Gateway
+                      components will be deployed. Defaults to 2.
+                    format: int32
+                    type: integer
+                type: object
               indices:
                 description: Index defines the configuration for the indices in the
                   Elasticsearch cluster.

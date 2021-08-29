@@ -29,6 +29,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/test"
@@ -126,7 +127,7 @@ var _ = Describe("authentication controller tests", func() {
 			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, ""}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
-			authentication, err := utils.GetAuthentication(ctx, cli)
+			authentication, err := GetAuthentication(ctx, cli)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify all the expected defaults.
@@ -229,6 +230,54 @@ var _ = Describe("authentication controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentDex.Image,
 					"sha256:dexhash")))
+		})
+	})
+
+	Context("Tigera Authentication replicas", func() {
+		var (
+			c      client.Client
+			ctx    context.Context
+			scheme *runtime.Scheme
+		)
+
+		BeforeEach(func() {
+			// Create a Kubernetes client.
+			scheme = runtime.NewScheme()
+			err := apis.AddToScheme(scheme)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(corev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+
+			c = fake.NewClientBuilder().WithScheme(scheme).Build()
+			ctx = context.Background()
+		})
+
+		AfterEach(func() {
+			obj := &operatorv1.Authentication{}
+			Expect(c.Get(ctx, utils.DefaultTSEEInstanceKey, obj)).NotTo(HaveOccurred())
+			Expect(c.Delete(ctx, obj)).NotTo(HaveOccurred())
+		})
+
+		It("should set default replicas to 1", func() {
+			Expect(c.Create(ctx, &operatorv1.Authentication{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+			})).NotTo(HaveOccurred())
+			authentication, err := GetAuthentication(ctx, c)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(authentication.Spec.Replicas).To(Equal(ptr.Int32ToPtr(1)))
+		})
+
+		It("should honor replicas in the spec", func() {
+			Expect(c.Create(ctx, &operatorv1.Authentication{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.AuthenticationSpec{
+					Replicas: ptr.Int32ToPtr(3),
+				},
+			})).NotTo(HaveOccurred())
+			authentication, err := GetAuthentication(ctx, c)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(authentication.Spec.Replicas).To(Equal(ptr.Int32ToPtr(3)))
 		})
 	})
 

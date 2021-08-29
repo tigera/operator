@@ -105,6 +105,11 @@ type InstallationSpec struct {
 	// +optional
 	ControlPlaneTolerations []v1.Toleration `json:"controlPlaneTolerations,omitempty"`
 
+	// Replicas defines how many replicas of the control plane core components will be deployed.
+	// This field applies to all control plane components that support High Availability. Defaults to 2.
+	// +optional
+	ControlPlaneReplicas *int32 `json:"controlPlaneReplicas,omitempty"`
+
 	// NodeMetricsPort specifies which port calico/node serves prometheus metrics on. By default, metrics are not enabled.
 	// If specified, this overrides any FelixConfiguration resources which may exist. If omitted, then
 	// prometheus metrics may still be configured through FelixConfiguration.

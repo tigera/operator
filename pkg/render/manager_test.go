@@ -21,6 +21,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/render/testutils"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -479,8 +480,8 @@ func renderObjects(oidc bool, managementCluster *operatorv1.ManagementCluster, i
 	var tunnelSecret *corev1.Secret
 	var internalTraffic *corev1.Secret
 	if managementCluster != nil {
-		tunnelSecret = &voltronTunnelSecret
-		internalTraffic = &internalManagerTLSSecret
+		tunnelSecret = &testutils.VoltronTunnelSecret
+		internalTraffic = &testutils.InternalManagerTLSSecret
 	}
 	var managerTLS *corev1.Secret
 	if includeManagerTLSSecret {

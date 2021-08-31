@@ -691,7 +691,6 @@ func (c *managerComponent) securityContextConstraints() *ocsv1.SecurityContextCo
 		SELinuxContext:           ocsv1.SELinuxContextStrategyOptions{Type: ocsv1.SELinuxStrategyMustRunAs},
 		SupplementalGroups:       ocsv1.SupplementalGroupsStrategyOptions{Type: ocsv1.SupplementalGroupsStrategyRunAsAny},
 		Users:                    []string{fmt.Sprintf("system:serviceaccount:%s:tigera-manager", ManagerNamespace)},
-		Groups:                   []string{"system:authenticated"},
 		Volumes:                  []ocsv1.FSType{"*"},
 	}
 }

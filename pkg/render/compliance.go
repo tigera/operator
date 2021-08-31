@@ -1111,7 +1111,6 @@ func (c *complianceComponent) complianceBenchmarkerSecurityContextConstraints() 
 		Users: []string{
 			fmt.Sprintf("system:serviceaccount:%s:tigera-compliance-benchmarker", ComplianceNamespace),
 		},
-		Groups:  []string{"system:authenticated"},
 		Volumes: []ocsv1.FSType{"*"},
 	}
 }

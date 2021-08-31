@@ -59,7 +59,12 @@ var _ = Describe("monitor rendering tests", func() {
 			{"tigera-pull-secret", common.TigeraPrometheusNamespace, "", "", ""},
 			{"tigera-prometheus-role", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "Role"},
 			{"tigera-prometheus-role-binding", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding"},
+			{"alertmanager-calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Secret"},
+			{"calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Service"},
 			{"calico-node-alertmanager", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.AlertmanagersKind},
+			{"prometheus", common.TigeraPrometheusNamespace, "", "v1", "ServiceAccount"},
+			{"prometheus", "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
+			{"prometheus", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
 			{"calico-node-prometheus", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind},
 			{"tigera-prometheus-dp-rate", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusRuleKind},
 			{"calico-node-monitor", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
@@ -100,6 +105,36 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(*alertmanagerObj.Spec.Replicas).To(Equal(int32(3)))
 		Expect(alertmanagerObj.Spec.Version).To(Equal(alertmanagerCom.Version))
 
+		// Alertmanager Secret
+		secretObj, ok := rtest.GetResource(toCreate, "alertmanager-calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Secret").(*corev1.Secret)
+		Expect(ok).To(BeTrue())
+		Expect(secretObj.Data).To(HaveLen(1))
+		expectedAlertmanagerConfig := `global:
+  resolve_timeout: 5m
+route:
+  group_by: ['job']
+  group_wait: 30s
+  group_interval: 1m
+  repeat_interval: 5m
+  receiver: 'webhook'
+receivers:
+- name: 'webhook'
+  webhook_configs:
+  - url: 'http://calico-alertmanager-webhook:30501/'
+`
+		Expect(secretObj.Data["alertmanager.yaml"]).To(Equal([]byte(expectedAlertmanagerConfig)))
+
+		// Alertmanager Service
+		serviceObj, ok := rtest.GetResource(toCreate, "calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Service").(*corev1.Service)
+		Expect(ok).To(BeTrue())
+		Expect(serviceObj.Spec.Ports).To(HaveLen(1))
+		Expect(serviceObj.Spec.Ports[0].Name).To(Equal("web"))
+		Expect(serviceObj.Spec.Ports[0].Port).To(Equal(int32(9093)))
+		Expect(serviceObj.Spec.Ports[0].Protocol).To(Equal(corev1.ProtocolTCP))
+		Expect(serviceObj.Spec.Ports[0].TargetPort).To(Equal(intstr.FromString("web")))
+		Expect(serviceObj.Spec.Selector).To(HaveLen(1))
+		Expect(serviceObj.Spec.Selector["alertmanager"]).To(Equal("calico-node-alertmanager"))
+
 		// Prometheus
 		prometheusObj, ok := rtest.GetResource(toCreate, render.CalicoNodePrometheus, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind).(*monitoringv1.Prometheus)
 		Expect(ok).To(BeTrue())
@@ -118,6 +153,51 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(prometheusObj.Spec.Alerting.Alertmanagers[0].Namespace).To(Equal("tigera-prometheus"))
 		Expect(prometheusObj.Spec.Alerting.Alertmanagers[0].Port).To(Equal(intstr.FromString("web")))
 		Expect(prometheusObj.Spec.Alerting.Alertmanagers[0].Scheme).To(Equal("HTTP"))
+
+		// Prometheus ServiceAccount
+		_, ok = rtest.GetResource(toCreate, "prometheus", common.TigeraPrometheusNamespace, "", "v1", "ServiceAccount").(*corev1.ServiceAccount)
+		Expect(ok).To(BeTrue())
+
+		// Prometheus ClusterRole
+		prometheusClusterRoleObj, ok := rtest.GetResource(toCreate, "prometheus", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(ok).To(BeTrue())
+		Expect(prometheusClusterRoleObj.Rules).To(HaveLen(3))
+		Expect(prometheusClusterRoleObj.Rules[0].APIGroups).To(HaveLen(1))
+		Expect(prometheusClusterRoleObj.Rules[0].APIGroups[0]).To(Equal(""))
+		Expect(prometheusClusterRoleObj.Rules[0].Resources).To(HaveLen(4))
+		Expect(prometheusClusterRoleObj.Rules[0].Resources).To(BeEquivalentTo([]string{
+			"endpoints",
+			"nodes",
+			"pods",
+			"services",
+		}))
+		Expect(prometheusClusterRoleObj.Rules[0].Verbs).To(HaveLen(3))
+		Expect(prometheusClusterRoleObj.Rules[0].Verbs).To(BeEquivalentTo([]string{
+			"get",
+			"list",
+			"watch",
+		}))
+		Expect(prometheusClusterRoleObj.Rules[1].APIGroups).To(HaveLen(1))
+		Expect(prometheusClusterRoleObj.Rules[1].APIGroups[0]).To(Equal(""))
+		Expect(prometheusClusterRoleObj.Rules[1].Resources).To(HaveLen(1))
+		Expect(prometheusClusterRoleObj.Rules[1].Resources[0]).To(Equal("configmaps"))
+		Expect(prometheusClusterRoleObj.Rules[1].Verbs).To(HaveLen(1))
+		Expect(prometheusClusterRoleObj.Rules[1].Verbs[0]).To(Equal("get"))
+		Expect(prometheusClusterRoleObj.Rules[2].NonResourceURLs).To(HaveLen(1))
+		Expect(prometheusClusterRoleObj.Rules[2].NonResourceURLs[0]).To(Equal("/metrics"))
+		Expect(prometheusClusterRoleObj.Rules[2].Verbs).To(HaveLen(1))
+		Expect(prometheusClusterRoleObj.Rules[2].Verbs[0]).To(Equal("get"))
+
+		// Prometheus ClusterRoleBinding
+		prometheusClusterRolebindingObj, ok := rtest.GetResource(toCreate, "prometheus", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+		Expect(ok).To(BeTrue())
+		Expect(prometheusClusterRolebindingObj.RoleRef.APIGroup).To(Equal("rbac.authorization.k8s.io"))
+		Expect(prometheusClusterRolebindingObj.RoleRef.Kind).To(Equal("ClusterRole"))
+		Expect(prometheusClusterRolebindingObj.RoleRef.Name).To(Equal("prometheus"))
+		Expect(prometheusClusterRolebindingObj.Subjects).To(HaveLen(1))
+		Expect(prometheusClusterRolebindingObj.Subjects[0].Kind).To(Equal("ServiceAccount"))
+		Expect(prometheusClusterRolebindingObj.Subjects[0].Name).To(Equal("prometheus"))
+		Expect(prometheusClusterRolebindingObj.Subjects[0].Namespace).To(Equal("tigera-prometheus"))
 
 		// Prometheus HTTP API service
 		prometheusServiceObj, ok := rtest.GetResource(toCreate, render.PrometheusHTTPAPIServiceName, common.TigeraPrometheusNamespace, "", "v1", "Service").(*corev1.Service)
@@ -220,7 +300,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(ok).To(BeTrue())
 		Expect(rolebindingObj.RoleRef.APIGroup).To(Equal("rbac.authorization.k8s.io"))
 		Expect(rolebindingObj.RoleRef.Kind).To(Equal("Role"))
-		Expect(rolebindingObj.RoleRef.Name).To(Equal(render.TigeraPrometheusRole))
+		Expect(rolebindingObj.RoleRef.Name).To(Equal("tigera-prometheus-role"))
 		Expect(rolebindingObj.Subjects).To(HaveLen(1))
 		Expect(rolebindingObj.Subjects[0].Kind).To(Equal("ServiceAccount"))
 		Expect(rolebindingObj.Subjects[0].Name).To(Equal("tigera-operator"))

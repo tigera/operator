@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package render
+package monitor
 
 import (
+	_ "embed"
 	"fmt"
 	"strings"
 
@@ -31,6 +32,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
+	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 )
@@ -49,23 +51,30 @@ const (
 
 	PrometheusHTTPAPIServiceName = "prometheus-http-api"
 	PrometheusDefaultPort        = 9090
+
+	AlertmanagerConfigSecret = "alertmanager-calico-node-alertmanager"
+
+	prometheusServiceAccountName = "prometheus"
 )
 
 func Monitor(
 	installation *operatorv1.InstallationSpec,
 	pullSecrets []*corev1.Secret,
-) Component {
+	alertmanagerConfigSecret *corev1.Secret,
+) render.Component {
 	return &monitorComponent{
-		installation: installation,
-		pullSecrets:  pullSecrets,
+		installation:             installation,
+		pullSecrets:              pullSecrets,
+		alertmanagerConfigSecret: alertmanagerConfigSecret,
 	}
 }
 
 type monitorComponent struct {
-	installation      *operatorv1.InstallationSpec
-	pullSecrets       []*corev1.Secret
-	alertmanagerImage string
-	prometheusImage   string
+	installation             *operatorv1.InstallationSpec
+	pullSecrets              []*corev1.Secret
+	alertmanagerImage        string
+	prometheusImage          string
+	alertmanagerConfigSecret *corev1.Secret
 }
 
 func (mc *monitorComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -98,17 +107,24 @@ func (mc *monitorComponent) SupportedOSType() rmeta.OSType {
 
 func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 	toCreate := []client.Object{
-		CreateNamespace(common.TigeraPrometheusNamespace, mc.installation.KubernetesProvider),
+		render.CreateNamespace(common.TigeraPrometheusNamespace, mc.installation.KubernetesProvider),
 	}
+
 	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.pullSecrets...)...)...)
+	toCreate = append(toCreate, secret.ToRuntimeObjects(mc.alertmanagerSecrets()...)...)
+
 	toCreate = append(toCreate,
 		mc.role(),
 		mc.roleBinding(),
+		mc.alertmanagerService(),
 		mc.alertmanager(),
+		mc.prometheusServiceAccount(),
+		mc.prometheusClusterRole(),
+		mc.prometheusClusterRoleBinding(),
 		mc.prometheus(),
 		mc.prometheusRule(),
 		mc.serviceMonitorCalicoNode(),
-		mc.serviceMonitorElasicsearch(),
+		mc.serviceMonitorElasticsearch(),
 		mc.podMonitor(),
 		mc.prometheusHTTPAPIService(),
 	)
@@ -144,6 +160,59 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 	}
 }
 
+//go:embed alertmanager-config.yaml
+var alertmanagerConfig string
+
+func (mc *monitorComponent) alertmanagerSecrets() []*corev1.Secret {
+	// This secret will be mounted as the Alertmanager configuration file.
+	// Source secret is in the tigera-operator namespace and the target secret is in the tigera-prometheus namespace.
+	var secrets []*corev1.Secret
+
+	if mc.alertmanagerConfigSecret != nil {
+		secrets = append(secrets, mc.alertmanagerConfigSecret)
+		secrets = append(secrets, secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.alertmanagerConfigSecret)...)
+	} else {
+		s := &corev1.Secret{
+			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      AlertmanagerConfigSecret,
+				Namespace: common.OperatorNamespace(),
+			},
+			Data: map[string][]byte{
+				"alertmanager.yaml": []byte(alertmanagerConfig),
+			},
+		}
+
+		secrets = append(secrets, s)
+		secrets = append(secrets, secret.CopyToNamespace(common.TigeraPrometheusNamespace, s)...)
+	}
+
+	return secrets
+}
+
+func (mc *monitorComponent) alertmanagerService() *corev1.Service {
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      CalicoNodeAlertmanager,
+			Namespace: common.TigeraPrometheusNamespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{
+				{
+					Name:       "web",
+					Port:       9093,
+					Protocol:   corev1.ProtocolTCP,
+					TargetPort: intstr.FromString("web"),
+				},
+			},
+			Selector: map[string]string{
+				"alertmanager": CalicoNodeAlertmanager,
+			},
+		},
+	}
+}
+
 func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 	return &monitoringv1.Prometheus{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PrometheusesKind, APIVersion: MonitoringAPIVersion},
@@ -154,7 +223,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		Spec: monitoringv1.PrometheusSpec{
 			Image:                  &mc.prometheusImage,
 			ImagePullSecrets:       secret.GetReferenceList(mc.pullSecrets),
-			ServiceAccountName:     "prometheus",
+			ServiceAccountName:     prometheusServiceAccountName,
 			ServiceMonitorSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"team": "network-operators"}},
 			PodMonitorSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"team": "network-operators"}},
 			Version:                components.ComponentPrometheus.Version,
@@ -176,6 +245,71 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 					},
 				},
 			},
+		},
+	}
+}
+
+func (mc *monitorComponent) prometheusServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      prometheusServiceAccountName,
+			Namespace: common.TigeraPrometheusNamespace,
+		},
+	}
+}
+
+func (mc *monitorComponent) prometheusClusterRole() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "prometheus",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{
+					"endpoints",
+					"nodes",
+					"pods",
+					"services",
+				},
+				Verbs: []string{
+					"get",
+					"list",
+					"watch",
+				},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"get"},
+			},
+			{
+				NonResourceURLs: []string{"/metrics"},
+				Verbs:           []string{"get"},
+			},
+		},
+	}
+}
+
+func (mc *monitorComponent) prometheusClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "prometheus",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      prometheusServiceAccountName,
+				Namespace: common.TigeraPrometheusNamespace,
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "prometheus",
 		},
 	}
 }
@@ -292,7 +426,7 @@ func (mc *monitorComponent) serviceMonitorCalicoNode() *monitoringv1.ServiceMoni
 	}
 }
 
-func (mc *monitorComponent) serviceMonitorElasicsearch() *monitoringv1.ServiceMonitor {
+func (mc *monitorComponent) serviceMonitorElasticsearch() *monitoringv1.ServiceMonitor {
 	return &monitoringv1.ServiceMonitor{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{

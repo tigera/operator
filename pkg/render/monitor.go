@@ -49,6 +49,22 @@ const (
 
 	PrometheusHTTPAPIServiceName = "prometheus-http-api"
 	PrometheusDefaultPort        = 9090
+
+	// Write your alertmanager configuration file based on
+	// https://prometheus.io/docs/alerting/configuration/
+	alertmanagerConfig = `global:
+  resolve_timeout: 5m
+route:
+  group_by: ['job']
+  group_wait: 30s
+  group_interval: 1m
+  repeat_interval: 5m
+  receiver: 'webhook'
+receivers:
+- name: 'webhook'
+  webhook_configs:
+  - url: 'http://calico-alertmanager-webhook:30501/'
+`
 )
 
 func Monitor(
@@ -105,6 +121,8 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		mc.role(),
 		mc.roleBinding(),
 		mc.alertmanager(),
+		mc.alertmanagerSecret(),
+		mc.alertmanagerService(),
 		mc.prometheus(),
 		mc.prometheusRule(),
 		mc.serviceMonitorCalicoNode(),
@@ -138,6 +156,44 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 			ImagePullSecrets: secret.GetReferenceList(mc.pullSecrets),
 			Replicas:         ptr.Int32ToPtr(3),
 			Version:          components.ComponentPrometheusAlertmanager.Version,
+		},
+	}
+}
+
+func (mc *monitorComponent) alertmanagerSecret() *corev1.Secret {
+	// This secret will be mounted as the Alertmanager configuration file.
+	// TODO: We should use the native CR support for this instead of using a secret for it.
+	return &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "alertmanager-calico-node-alertmanager",
+			Namespace: common.TigeraPrometheusNamespace,
+		},
+		Data: map[string][]byte{
+			"alertmanager.yaml": []byte(alertmanagerConfig),
+		},
+	}
+}
+
+func (mc *monitorComponent) alertmanagerService() *corev1.Service {
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      CalicoNodeAlertmanager,
+			Namespace: common.TigeraPrometheusNamespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{
+				{
+					Name:       "web",
+					Port:       9093,
+					Protocol:   corev1.ProtocolTCP,
+					TargetPort: intstr.FromString("web"),
+				},
+			},
+			Selector: map[string]string{
+				"alertmanager": CalicoNodeAlertmanager,
+			},
 		},
 	}
 }

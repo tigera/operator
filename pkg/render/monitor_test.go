@@ -60,6 +60,8 @@ var _ = Describe("monitor rendering tests", func() {
 			{"tigera-prometheus-role", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "Role"},
 			{"tigera-prometheus-role-binding", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding"},
 			{"calico-node-alertmanager", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.AlertmanagersKind},
+			{"alertmanager-calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Secret"},
+			{"calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Service"},
 			{"calico-node-prometheus", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind},
 			{"tigera-prometheus-dp-rate", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusRuleKind},
 			{"calico-node-monitor", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
@@ -99,6 +101,36 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(*alertmanagerObj.Spec.Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", alertmanagerCom.Image, alertmanagerCom.Version)))
 		Expect(*alertmanagerObj.Spec.Replicas).To(Equal(int32(3)))
 		Expect(alertmanagerObj.Spec.Version).To(Equal(alertmanagerCom.Version))
+
+		// Alertmanager Secret
+		secretObj, ok := rtest.GetResource(toCreate, "alertmanager-calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Secret").(*corev1.Secret)
+		Expect(ok).To(BeTrue())
+		Expect(secretObj.Data).To(HaveLen(1))
+		expectedAlertmanagerConfig := `global:
+  resolve_timeout: 5m
+route:
+  group_by: ['job']
+  group_wait: 30s
+  group_interval: 1m
+  repeat_interval: 5m
+  receiver: 'webhook'
+receivers:
+- name: 'webhook'
+  webhook_configs:
+  - url: 'http://calico-alertmanager-webhook:30501/'
+`
+		Expect(secretObj.Data["alertmanager.yaml"]).To(Equal([]byte(expectedAlertmanagerConfig)))
+
+		// Alertmanager Service
+		serviceObj, ok := rtest.GetResource(toCreate, "calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Service").(*corev1.Service)
+		Expect(ok).To(BeTrue())
+		Expect(serviceObj.Spec.Ports).To(HaveLen(1))
+		Expect(serviceObj.Spec.Ports[0].Name).To(Equal("web"))
+		Expect(serviceObj.Spec.Ports[0].Port).To(Equal(int32(9093)))
+		Expect(serviceObj.Spec.Ports[0].Protocol).To(Equal(corev1.ProtocolTCP))
+		Expect(serviceObj.Spec.Ports[0].TargetPort).To(Equal(intstr.FromString("web")))
+		Expect(serviceObj.Spec.Selector).To(HaveLen(1))
+		Expect(serviceObj.Spec.Selector["alertmanager"]).To(Equal("calico-node-alertmanager"))
 
 		// Prometheus
 		prometheusObj, ok := rtest.GetResource(toCreate, render.CalicoNodePrometheus, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind).(*monitoringv1.Prometheus)

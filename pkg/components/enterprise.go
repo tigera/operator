@@ -113,7 +113,7 @@ var (
 	}
 
 	ComponentManager = component{
-		Version: "tesla-v3.9.0",
+		Version: "tesla-v3.9.1-1",
 		Image:   "tigera/cnx-manager",
 	}
 

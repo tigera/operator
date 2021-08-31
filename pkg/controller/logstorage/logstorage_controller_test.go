@@ -879,9 +879,15 @@ var _ = Describe("LogStorage controller", func() {
 						Expect(escfg.Spec.NodeSets).To(HaveLen(1))
 						// The Image is not populated for the container so no need to get and check it
 						Expect(escfg.Spec.NodeSets[0].PodTemplate.Spec.Containers).To(HaveLen(1))
-						Expect(escfg.Spec.NodeSets[0].PodTemplate.Spec.InitContainers).To(HaveLen(1))
+						Expect(escfg.Spec.NodeSets[0].PodTemplate.Spec.InitContainers).To(HaveLen(2))
 						initset := test.GetContainer(escfg.Spec.NodeSets[0].PodTemplate.Spec.InitContainers, "elastic-internal-init-os-settings")
 						Expect(initset).ToNot(BeNil())
+						Expect(initset.Image).To(Equal(
+							fmt.Sprintf("some.registry.org/%s:%s",
+								components.ComponentElasticsearch.Image,
+								components.ComponentElasticsearch.Version)))
+						initlogctx := test.GetContainer(escfg.Spec.NodeSets[0].PodTemplate.Spec.InitContainers, "elastic-internal-init-log-selinux-context")
+						Expect(initlogctx).ToNot(BeNil())
 						Expect(initset.Image).To(Equal(
 							fmt.Sprintf("some.registry.org/%s:%s",
 								components.ComponentElasticsearch.Image,
@@ -1004,10 +1010,16 @@ var _ = Describe("LogStorage controller", func() {
 						Expect(escfg.Spec.NodeSets).To(HaveLen(1))
 						// The Image is not populated for the container so no need to get and check it
 						Expect(escfg.Spec.NodeSets[0].PodTemplate.Spec.Containers).To(HaveLen(1))
-						Expect(escfg.Spec.NodeSets[0].PodTemplate.Spec.InitContainers).To(HaveLen(1))
+						Expect(escfg.Spec.NodeSets[0].PodTemplate.Spec.InitContainers).To(HaveLen(2))
 						initset := test.GetContainer(escfg.Spec.NodeSets[0].PodTemplate.Spec.InitContainers, "elastic-internal-init-os-settings")
 						Expect(initset).ToNot(BeNil())
 						Expect(initset.Image).To(Equal(
+							fmt.Sprintf("some.registry.org/%s@%s",
+								components.ComponentElasticsearch.Image,
+								"sha256:elasticsearchhash")))
+						initlogctx := test.GetContainer(escfg.Spec.NodeSets[0].PodTemplate.Spec.InitContainers, "elastic-internal-init-log-selinux-context")
+						Expect(initlogctx).ToNot(BeNil())
+						Expect(initlogctx.Image).To(Equal(
 							fmt.Sprintf("some.registry.org/%s@%s",
 								components.ComponentElasticsearch.Image,
 								"sha256:elasticsearchhash")))

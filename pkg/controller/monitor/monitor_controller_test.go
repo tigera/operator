@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -37,7 +38,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/monitor"
 )
 
 var _ = Describe("Monitor controller tests", func() {
@@ -114,25 +115,130 @@ var _ = Describe("Monitor controller tests", func() {
 
 		BeforeEach(func() {
 			// Prometheus related objects should not exist.
-			Expect(cli.Get(ctx, client.ObjectKey{Name: render.CalicoNodeAlertmanager, Namespace: common.TigeraPrometheusNamespace}, am)).To(HaveOccurred())
-			Expect(cli.Get(ctx, client.ObjectKey{Name: render.CalicoNodePrometheus, Namespace: common.TigeraPrometheusNamespace}, p)).To(HaveOccurred())
-			Expect(cli.Get(ctx, client.ObjectKey{Name: render.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}, pm)).To(HaveOccurred())
-			Expect(cli.Get(ctx, client.ObjectKey{Name: render.TigeraPrometheusDPRate, Namespace: common.TigeraPrometheusNamespace}, pr)).To(HaveOccurred())
-			Expect(cli.Get(ctx, client.ObjectKey{Name: render.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
-			Expect(cli.Get(ctx, client.ObjectKey{Name: render.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeAlertmanager, Namespace: common.TigeraPrometheusNamespace}, am)).To(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodePrometheus, Namespace: common.TigeraPrometheusNamespace}, p)).To(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}, pm)).To(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.TigeraPrometheusDPRate, Namespace: common.TigeraPrometheusNamespace}, pr)).To(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
 		})
 
 		It("should create Prometheus related resources", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).NotTo(HaveOccurred())
 
-			// Prometheus related objects should be rendered after reconcilation.
-			Expect(cli.Get(ctx, client.ObjectKey{Name: render.CalicoNodeAlertmanager, Namespace: common.TigeraPrometheusNamespace}, am)).NotTo(HaveOccurred())
-			Expect(cli.Get(ctx, client.ObjectKey{Name: render.CalicoNodePrometheus, Namespace: common.TigeraPrometheusNamespace}, p)).NotTo(HaveOccurred())
-			Expect(cli.Get(ctx, client.ObjectKey{Name: render.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}, pm)).NotTo(HaveOccurred())
-			Expect(cli.Get(ctx, client.ObjectKey{Name: render.TigeraPrometheusDPRate, Namespace: common.TigeraPrometheusNamespace}, pr)).NotTo(HaveOccurred())
-			Expect(cli.Get(ctx, client.ObjectKey{Name: render.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
-			Expect(cli.Get(ctx, client.ObjectKey{Name: render.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
+			// Prometheus related objects should be rendered after reconciliation.
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeAlertmanager, Namespace: common.TigeraPrometheusNamespace}, am)).NotTo(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodePrometheus, Namespace: common.TigeraPrometheusNamespace}, p)).NotTo(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}, pm)).NotTo(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.TigeraPrometheusDPRate, Namespace: common.TigeraPrometheusNamespace}, pr)).NotTo(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
+		})
+	})
+
+	Context("Alertmanager Configuration secrets", func() {
+		It("should create the Alertmanager secret for new install", func() {
+			// Make sure Alertmanager secrets don't exist in either Operator or Prometheus namespace.
+			var s = &corev1.Secret{}
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.AlertmanagerConfigSecret, Namespace: common.OperatorNamespace()}, s)).To(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.AlertmanagerConfigSecret, Namespace: common.TigeraPrometheusNamespace}, s)).To(HaveOccurred())
+
+			s, setOwner, err := r.readOrCreateAlertmanagerConfigSecret(ctx)
+			Expect(err).To(BeNil())
+			Expect(setOwner).To(BeTrue())
+			Expect(s.Data).To(HaveKeyWithValue("alertmanager.yaml", []byte(alertmanagerConfig)))
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.AlertmanagerConfigSecret, Namespace: common.OperatorNamespace()}, s)).NotTo(HaveOccurred())
+		})
+
+		It("should read Alertmanager secret from the Operator namespace if exists", func() {
+			secretOperator := &corev1.Secret{
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      monitor.AlertmanagerConfigSecret,
+					Namespace: common.OperatorNamespace(),
+				},
+				Data: map[string][]byte{
+					"alertmanager.yaml": []byte("Alertmanager secret in tigera-operator"),
+				},
+			}
+			secretPrometheus := &corev1.Secret{
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      monitor.AlertmanagerConfigSecret,
+					Namespace: common.TigeraPrometheusNamespace,
+				},
+				Data: map[string][]byte{
+					"alertmanager.yaml": []byte("Alertmanager secret in tigera-prometheus"),
+				},
+			}
+
+			Expect(cli.Create(ctx, secretOperator)).To(BeNil())
+			Expect(cli.Create(ctx, secretPrometheus)).To(BeNil())
+
+			s, setOwner, err := r.readOrCreateAlertmanagerConfigSecret(ctx)
+			Expect(err).To(BeNil())
+			Expect(setOwner).To(BeFalse())
+			Expect(s).NotTo(BeNil())
+
+			Expect(s.GetName()).To(Equal(monitor.AlertmanagerConfigSecret))
+			Expect(s.GetNamespace()).To(Equal(common.OperatorNamespace()))
+			Expect(s.Data).To(HaveKeyWithValue("alertmanager.yaml", []byte("Alertmanager secret in tigera-operator")))
+
+			Expect(cli.Delete(ctx, secretOperator)).To(BeNil())
+			Expect(cli.Delete(ctx, secretPrometheus)).To(BeNil())
+		})
+
+		It("should copy back the Alertmanager secret when upgrading and take ownership if it is unmodified", func() {
+			secretPrometheus := &corev1.Secret{
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      monitor.AlertmanagerConfigSecret,
+					Namespace: common.TigeraPrometheusNamespace,
+				},
+				Data: map[string][]byte{
+					"alertmanager.yaml": []byte(alertmanagerConfig),
+				},
+			}
+
+			Expect(cli.Create(ctx, secretPrometheus)).To(BeNil())
+
+			s, setOwner, err := r.readOrCreateAlertmanagerConfigSecret(ctx)
+			Expect(err).To(BeNil())
+			Expect(setOwner).To(BeTrue())
+			Expect(s).NotTo(BeNil())
+
+			Expect(s.GetName()).To(Equal(monitor.AlertmanagerConfigSecret))
+			Expect(s.GetNamespace()).To(Equal(common.OperatorNamespace()))
+			Expect(s.Data).To(HaveKeyWithValue("alertmanager.yaml", []byte(alertmanagerConfig)))
+
+			Expect(cli.Delete(ctx, secretPrometheus)).To(BeNil())
+		})
+
+		It("should copy back the Alertmanager secret when upgrading and won't take ownership if it is modified", func() {
+			secretPrometheus := &corev1.Secret{
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      monitor.AlertmanagerConfigSecret,
+					Namespace: common.TigeraPrometheusNamespace,
+				},
+				Data: map[string][]byte{
+					"alertmanager.yaml": []byte("Alertmanager secret in tigera-prometheus namespace"),
+				},
+			}
+
+			Expect(cli.Create(ctx, secretPrometheus)).To(BeNil())
+
+			s, setOwner, err := r.readOrCreateAlertmanagerConfigSecret(ctx)
+			Expect(err).To(BeNil())
+			Expect(setOwner).To(BeFalse())
+			Expect(s).NotTo(BeNil())
+
+			Expect(s.GetName()).To(Equal(monitor.AlertmanagerConfigSecret))
+			Expect(s.GetNamespace()).To(Equal(common.OperatorNamespace()))
+			Expect(s.Data).To(HaveKeyWithValue("alertmanager.yaml", []byte("Alertmanager secret in tigera-prometheus namespace")))
+
+			Expect(cli.Delete(ctx, secretPrometheus)).To(BeNil())
 		})
 	})
 })

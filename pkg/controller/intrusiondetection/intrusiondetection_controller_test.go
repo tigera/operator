@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
@@ -261,12 +263,12 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			ds := appsv1.DaemonSet{
 				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.DeepPacketInspectionName,
-					Namespace: render.DeepPacketInspectionNamespace,
+					Name:      dpi.DeepPacketInspectionName,
+					Namespace: dpi.DeepPacketInspectionNamespace,
 				}}
 			Expect(test.GetResource(c, &ds)).To(BeNil())
 			Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
-			dpiContainer := test.GetContainer(ds.Spec.Template.Spec.Containers, render.DeepPacketInspectionName)
+			dpiContainer := test.GetContainer(ds.Spec.Template.Spec.Containers, dpi.DeepPacketInspectionName)
 			Expect(dpiContainer).ToNot(BeNil())
 			Expect(dpiContainer.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",

@@ -60,7 +60,6 @@ type IntrusionDetectionList struct {
 	Items           []IntrusionDetection `json:"items"`
 }
 
-// IntrusionDetectionComponentName CRD enum
 type IntrusionDetectionComponentName string
 
 const (

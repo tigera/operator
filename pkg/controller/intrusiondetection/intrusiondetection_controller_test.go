@@ -19,6 +19,10 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/resource"
+
+	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
@@ -261,12 +265,12 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			ds := appsv1.DaemonSet{
 				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.DeepPacketInspectionName,
-					Namespace: render.DeepPacketInspectionNamespace,
+					Name:      dpi.DeepPacketInspectionName,
+					Namespace: dpi.DeepPacketInspectionNamespace,
 				}}
 			Expect(test.GetResource(c, &ds)).To(BeNil())
 			Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
-			dpiContainer := test.GetContainer(ds.Spec.Template.Spec.Containers, render.DeepPacketInspectionName)
+			dpiContainer := test.GetContainer(ds.Spec.Template.Spec.Containers, dpi.DeepPacketInspectionName)
 			Expect(dpiContainer).ToNot(BeNil())
 			Expect(dpiContainer.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
@@ -392,6 +396,75 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		AfterEach(func() {
 			By("Deleting the previous license")
 			Expect(c.Delete(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}, Status: v3.LicenseKeyStatus{Features: []string{}}})).NotTo(HaveOccurred())
+		})
+	})
+
+	Context("Reconcile tests", func() {
+		BeforeEach(func() {
+			mockStatus.On("SetDegraded", mock.Anything, mock.Anything).Return()
+		})
+
+		It("should Reconcile with default values for intrusion detection resource", func() {
+			result, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(0 * time.Second))
+
+			ids := operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}}
+			Expect(test.GetResource(c, &ids)).To(BeNil())
+			Expect(ids.Spec.ComponentResources).ShouldNot(BeNil())
+			Expect(len(ids.Spec.ComponentResources)).Should(Equal(1))
+			Expect(ids.Spec.ComponentResources[0].ComponentName).Should(Equal(operatorv1.ComponentNameDeepPacketInspection))
+			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Requests.Cpu()).Should(Equal(resource.MustParse(dpi.DefaultCPURequestDPI)))
+			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Limits.Cpu()).Should(Equal(resource.MustParse(dpi.DefaultCPULimitDPI)))
+			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Requests.Memory()).Should(Equal(resource.MustParse(dpi.DefaultMemoryRequestDPI)))
+			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Limits.Memory()).Should(Equal(resource.MustParse(dpi.DefaultMemoryLimitDPI)))
+		})
+
+		It("should not overwrite resource requirements if they are already set", func() {
+			By("Deleting the previous IntrusionDetection")
+			Expect(c.Delete(ctx, &operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
+
+			memoryLimit := "5Gi"
+			memoryRequest := "5Gi"
+			cpuLimit := "3"
+			cpuRequest := "2"
+
+			By("Creating IntrusionDetection resource with custom resource requirements")
+			Expect(c.Create(ctx, &operatorv1.IntrusionDetection{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.IntrusionDetectionSpec{
+					ComponentResources: []operatorv1.IntrusionDetectionComponentResource{
+						{
+							ComponentName: operatorv1.ComponentNameDeepPacketInspection,
+							ResourceRequirements: &corev1.ResourceRequirements{
+								Limits: corev1.ResourceList{
+									corev1.ResourceMemory: resource.MustParse(memoryLimit),
+									corev1.ResourceCPU:    resource.MustParse(cpuLimit),
+								},
+								Requests: corev1.ResourceList{
+									corev1.ResourceMemory: resource.MustParse(memoryRequest),
+									corev1.ResourceCPU:    resource.MustParse(cpuRequest),
+								},
+							},
+						},
+					},
+				},
+			})).
+				NotTo(HaveOccurred())
+
+			result, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(0 * time.Second))
+
+			ids := operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}}
+			Expect(test.GetResource(c, &ids)).To(BeNil())
+			Expect(ids.Spec.ComponentResources).ShouldNot(BeNil())
+			Expect(len(ids.Spec.ComponentResources)).Should(Equal(1))
+			Expect(ids.Spec.ComponentResources[0].ComponentName).Should(Equal(operatorv1.ComponentNameDeepPacketInspection))
+			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Requests.Cpu()).Should(Equal(resource.MustParse(cpuRequest)))
+			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Limits.Cpu()).Should(Equal(resource.MustParse(cpuLimit)))
+			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Requests.Memory()).Should(Equal(resource.MustParse(memoryRequest)))
+			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Limits.Memory()).Should(Equal(resource.MustParse(memoryLimit)))
 		})
 	})
 })

@@ -21,11 +21,7 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
-
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/logcollector"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -35,11 +31,16 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
+
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -79,7 +80,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
 
-	go utils.WaitToAddResourceWatch(controller, k8sClient, log, dpiAPIReady, v3.KindDeepPacketInspection)
+	go utils.WaitToAddResourceWatch(controller, k8sClient, log, dpiAPIReady,
+		&v3.DeepPacketInspection{TypeMeta: metav1.TypeMeta{Kind: v3.KindDeepPacketInspection}})
 
 	return add(mgr, controller)
 }
@@ -216,6 +218,12 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
+	if err := r.setDefaultsOnIntrusionDetection(ctx, instance); err != nil {
+		log.Error(err, "Failed to set defaults on IntrusionDetection CR")
+		r.status.SetDegraded("Unable to set defaults on IntrusionDetection", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	if !utils.IsAPIServerReady(r.client, reqLogger) {
 		r.status.SetDegraded("Waiting for Tigera API server to be ready", "")
 		return reconcile.Result{}, err
@@ -316,35 +324,9 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	if !r.dpiAPIReady.IsReady() {
+		log.Info("Waiting for DeepPacketInspection API to be ready")
 		r.status.SetDegraded("Waiting for DeepPacketInspection API to be ready", "")
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-	}
-
-	var typhaTLSSecret, nodeTLSSecret *corev1.Secret
-	typhaCAConfigMap := &corev1.ConfigMap{}
-	dpi := &v3.DeepPacketInspectionList{}
-	if err := r.client.List(ctx, dpi); err != nil {
-		r.status.SetDegraded("Failed to retrieve DeepPacketInspection resource", err.Error())
-		return reconcile.Result{}, err
-	}
-	if len(dpi.Items) > 0 {
-		nodeTLSSecret, err = utils.GetSecret(ctx, r.client, render.NodeTLSSecretName, rmeta.OperatorNamespace())
-		if err != nil {
-			r.status.SetDegraded("Failed to retrieve node cert secret", err.Error())
-			return reconcile.Result{}, err
-		}
-
-		typhaTLSSecret, err = utils.GetSecret(ctx, r.client, render.TyphaTLSSecretName, rmeta.OperatorNamespace())
-		if err != nil {
-			r.status.SetDegraded("Failed to retrieve typha cert secret", err.Error())
-			return reconcile.Result{}, err
-		}
-
-		err = r.client.Get(ctx, types.NamespacedName{Name: render.TyphaCAConfigMapName, Namespace: rmeta.OperatorNamespace()}, typhaCAConfigMap)
-		if err != nil {
-			r.status.SetDegraded("Failed to retrieve typha ca configmap", err.Error())
-			return reconcile.Result{}, err
-		}
 	}
 
 	var esLicenseType render.ElasticsearchLicenseType
@@ -375,7 +357,6 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	// Render the desired objects from the CRD and create or update them.
 	var hasNoLicense = !utils.IsFeatureActive(license, common.ThreatDefenseFeature)
 	component := render.IntrusionDetection(
-		instance,
 		lc,
 		esSecrets,
 		kibanaPublicCertSecret,
@@ -388,9 +369,6 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		managementClusterConnection != nil,
 		hasNoLicense,
 		managerInternalTLSSecret,
-		nodeTLSSecret,
-		typhaTLSSecret,
-		typhaCAConfigMap,
 	)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
@@ -400,6 +378,70 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	if err := handler.CreateOrUpdateOrDelete(context.Background(), component, r.status); err != nil {
+		r.status.SetDegraded("Error creating / updating resource", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	var typhaTLSSecret, nodeTLSSecret *corev1.Secret
+	typhaCAConfigMap := &corev1.ConfigMap{}
+	dpiList := &v3.DeepPacketInspectionList{}
+	if err := r.client.List(ctx, dpiList); err != nil {
+		r.status.SetDegraded("Failed to retrieve DeepPacketInspection resource", err.Error())
+		return reconcile.Result{}, err
+	}
+	hasNoDPIResource := len(dpiList.Items) == 0
+	if !hasNoDPIResource {
+		nodeTLSSecret, err = utils.GetSecret(ctx, r.client, render.NodeTLSSecretName, rmeta.OperatorNamespace())
+		if err != nil {
+			reqLogger.Error(err, fmt.Sprintf("Failed to retrieve %s secret", render.NodeTLSSecretName))
+			r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s secret", render.NodeTLSSecretName), err.Error())
+			return reconcile.Result{}, err
+		}
+		if nodeTLSSecret == nil {
+			reqLogger.Error(err, fmt.Sprintf("Waiting for %s secrets to be available", render.NodeTLSSecretName))
+			r.status.SetDegraded(fmt.Sprintf("Waiting for %s secrets to be available", render.NodeTLSSecretName), "")
+			return reconcile.Result{}, err
+		}
+
+		typhaTLSSecret, err = utils.GetSecret(ctx, r.client, render.TyphaTLSSecretName, rmeta.OperatorNamespace())
+		if err != nil {
+			reqLogger.Error(err, fmt.Sprintf("Failed to retrieve %s secret", render.TyphaTLSSecretName))
+			r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s secret", render.TyphaTLSSecretName), err.Error())
+			return reconcile.Result{}, err
+		}
+		if typhaTLSSecret == nil {
+			reqLogger.Error(err, fmt.Sprintf("Waiting for %s secrets to be available", render.TyphaTLSSecretName))
+			r.status.SetDegraded(fmt.Sprintf("Waiting for %s secrets to be available", render.TyphaTLSSecretName), "")
+			return reconcile.Result{}, err
+		}
+
+		err = r.client.Get(ctx, types.NamespacedName{Name: render.TyphaCAConfigMapName, Namespace: rmeta.OperatorNamespace()}, typhaCAConfigMap)
+		if err != nil {
+			reqLogger.Error(err, fmt.Sprintf("Failed to retrieve %s configmap", render.TyphaCAConfigMapName))
+			r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s configmap", render.TyphaCAConfigMapName), err.Error())
+			return reconcile.Result{}, err
+		}
+	}
+
+	dpiComponent := dpi.DPI(&dpi.DPIConfig{
+		IntrusionDetection: instance,
+		Installation:       network,
+		NodeTLSSecret:      nodeTLSSecret,
+		TyphaTLSSecret:     typhaTLSSecret,
+		TyphaCAConfigMap:   typhaCAConfigMap,
+		PullSecrets:        pullSecrets,
+		Openshift:          r.provider == operatorv1.ProviderOpenShift,
+		HasNoLicense:       hasNoLicense,
+		HasNoDPIResource:   hasNoDPIResource,
+	})
+
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, dpiComponent); err != nil {
+		reqLogger.Error(err, "Error with images from ImageSet")
+		r.status.SetDegraded("Error with images from ImageSet", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	if err := handler.CreateOrUpdateOrDelete(context.Background(), dpiComponent, r.status); err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())
 		return reconcile.Result{}, err
 	}
@@ -425,4 +467,31 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
+}
+
+// setDefaultsOnIntrusionDetection updates the IntrusionDetection resource with defaults if ComponentResources is not populated.
+func (r *ReconcileIntrusionDetection) setDefaultsOnIntrusionDetection(ctx context.Context, ids *operatorv1.IntrusionDetection) error {
+	if ids.Spec.ComponentResources == nil {
+		ids.Spec.ComponentResources = []operatorv1.IntrusionDetectionComponentResource{
+			{
+				ComponentName: operatorv1.ComponentNameDeepPacketInspection,
+				ResourceRequirements: &corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{
+						corev1.ResourceMemory: resource.MustParse(dpi.DefaultMemoryLimit),
+						corev1.ResourceCPU:    resource.MustParse(dpi.DefaultCPULimit),
+					},
+					Requests: corev1.ResourceList{
+						corev1.ResourceMemory: resource.MustParse(dpi.DefaultMemoryRequest),
+						corev1.ResourceCPU:    resource.MustParse(dpi.DefaultCPURequest),
+					},
+				},
+			},
+		}
+
+		if err := r.client.Update(ctx, ids); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

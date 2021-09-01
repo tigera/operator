@@ -120,7 +120,7 @@ func AddServiceWatch(c controller.Controller, name, namespace string) error {
 }
 
 func WaitToAddLicenseKeyWatch(controller controller.Controller, client kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
-	WaitToAddResourceWatch(controller, client, log, flag, v3.KindLicenseKey)
+	WaitToAddResourceWatch(controller, client, log, flag, &v3.LicenseKey{TypeMeta: metav1.TypeMeta{Kind: v3.KindLicenseKey}})
 }
 
 // AddNamespacedWatch creates a watch on the given object. If a name and namespace are provided, then it will
@@ -426,7 +426,7 @@ func StrToElasticLicenseType(license string, logger logr.Logger) render.Elastics
 
 // WaitToAddResourceWatch will check if projectcalico.org APIs are available and if so, it will add a watch for resource
 // The completion of this operation will be signaled on a ready channel
-func WaitToAddResourceWatch(controller controller.Controller, client kubernetes.Interface, log logr.Logger, flag *ReadyFlag, resourceKind string) {
+func WaitToAddResourceWatch(controller controller.Controller, client kubernetes.Interface, log logr.Logger, flag *ReadyFlag, obj client.Object) {
 	maxDuration := 30 * time.Second
 	duration := 1 * time.Second
 	ticker := time.NewTicker(duration)
@@ -439,10 +439,10 @@ func WaitToAddResourceWatch(controller controller.Controller, client kubernetes.
 				duration = maxDuration
 			}
 			ticker.Reset(duration)
-			if isResourceReady(client, resourceKind) {
-				err := addResourceWatch(controller, resourceKind)
+			if isResourceReady(client, obj.GetObjectKind().GroupVersionKind().Kind) {
+				err := controller.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{})
 				if err != nil {
-					log.Info("failed to watch %s resource: %v. Will retry to add watch", resourceKind, err)
+					log.Info("failed to watch %s resource: %v. Will retry to add watch", obj.GetObjectKind().GroupVersionKind().Kind, err)
 				} else {
 					flag.MarkAsReady()
 					return
@@ -450,17 +450,6 @@ func WaitToAddResourceWatch(controller controller.Controller, client kubernetes.
 			}
 		}
 	}
-}
-
-func addResourceWatch(c controller.Controller, resourceKind string) error {
-	var obj client.Object
-	switch resourceKind {
-	case v3.KindLicenseKey:
-		obj = &v3.LicenseKey{TypeMeta: metav1.TypeMeta{Kind: v3.KindLicenseKey}}
-	case v3.KindDeepPacketInspection:
-		obj = &v3.DeepPacketInspection{TypeMeta: metav1.TypeMeta{Kind: v3.KindDeepPacketInspection}}
-	}
-	return c.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{})
 }
 
 func isResourceReady(client kubernetes.Interface, resourceKind string) bool {

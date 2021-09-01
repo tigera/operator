@@ -46,8 +46,8 @@ const (
 	TyphaServiceAccountName       = "calico-typha"
 	AppLabelName                  = "k8s-app"
 	TyphaPort               int32 = 5473
-	typhaCAHashAnnotation         = "hash.operator.tigera.io/typha-ca"
-	typhaCertHashAnnotation       = "hash.operator.tigera.io/typha-cert"
+	TyphaCAHashAnnotation         = "hash.operator.tigera.io/typha-ca"
+	TyphaCertHashAnnotation       = "hash.operator.tigera.io/typha-cert"
 )
 
 var (
@@ -367,9 +367,9 @@ func (c *typhaComponent) typhaDeployment() *appsv1.Deployment {
 
 	var initContainers []corev1.Container
 	annotations := make(map[string]string)
-	annotations[typhaCAHashAnnotation] = rmeta.AnnotationHash(c.cfg.TLS.CAConfigMap.Data)
+	annotations[TyphaCAHashAnnotation] = rmeta.AnnotationHash(c.cfg.TLS.CAConfigMap.Data)
 	if c.cfg.Installation.CertificateManagement == nil {
-		annotations[typhaCertHashAnnotation] = rmeta.AnnotationHash(c.cfg.TLS.TyphaSecret.Data)
+		annotations[TyphaCertHashAnnotation] = rmeta.AnnotationHash(c.cfg.TLS.TyphaSecret.Data)
 	} else {
 		initContainers = append(initContainers, CreateCSRInitContainer(
 			c.cfg.Installation.CertificateManagement,

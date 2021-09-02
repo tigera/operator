@@ -12,16 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package render_test
+package testutils
 
 import (
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var internalManagerTLSSecret = corev1.Secret{
+var InternalManagerTLSSecret = corev1.Secret{
 	TypeMeta: metav1.TypeMeta{
 		Kind:       "Secret",
 		APIVersion: "v1",
@@ -36,7 +37,7 @@ var internalManagerTLSSecret = corev1.Secret{
 	},
 }
 
-var elasticsearchSecret = corev1.Secret{
+var ElasticsearchSecret = corev1.Secret{
 	TypeMeta: metav1.TypeMeta{
 		Kind:       "Secret",
 		APIVersion: "v1",
@@ -51,13 +52,13 @@ var elasticsearchSecret = corev1.Secret{
 	},
 }
 
-var kubeControllersUserSecret = corev1.Secret{
+var KubeControllersUserSecret = corev1.Secret{
 	TypeMeta: metav1.TypeMeta{
 		Kind:       "Secret",
 		APIVersion: "v1",
 	},
 	ObjectMeta: metav1.ObjectMeta{
-		Name:      render.ElasticsearchKubeControllersUserSecret,
+		Name:      kubecontrollers.ElasticsearchKubeControllersUserSecret,
 		Namespace: rmeta.OperatorNamespace(),
 	},
 	Data: map[string][]byte{
@@ -66,7 +67,7 @@ var kubeControllersUserSecret = corev1.Secret{
 	},
 }
 
-var kibanaSecret = corev1.Secret{
+var KibanaSecret = corev1.Secret{
 	TypeMeta: metav1.TypeMeta{
 		Kind:       "Secret",
 		APIVersion: "v1",
@@ -80,7 +81,7 @@ var kibanaSecret = corev1.Secret{
 		"key":  []byte("key"),
 	},
 }
-var voltronTunnelSecret = corev1.Secret{
+var VoltronTunnelSecret = corev1.Secret{
 	TypeMeta: metav1.TypeMeta{
 		Kind:       "Secret",
 		APIVersion: "v1",

@@ -46,7 +46,7 @@ import (
 const (
 	BirdTemplatesConfigMapName        = "bird-templates"
 	birdTemplateHashAnnotation        = "hash.operator.tigera.io/bird-templates"
-	nodeCertHashAnnotation            = "hash.operator.tigera.io/node-cert"
+	NodeCertHashAnnotation            = "hash.operator.tigera.io/node-cert"
 	nodeCniConfigAnnotation           = "hash.operator.tigera.io/cni-config"
 	bgpLayoutHashAnnotation           = "hash.operator.tigera.io/bgp-layout"
 	CSRLabelCalicoSystem              = "calico-system"
@@ -599,9 +599,9 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 		annotations[birdTemplateHashAnnotation] = rmeta.AnnotationHash(c.cfg.BirdTemplates)
 	}
 
-	annotations[typhaCAHashAnnotation] = rmeta.AnnotationHash(c.cfg.TLS.CAConfigMap.Data)
+	annotations[TyphaCAHashAnnotation] = rmeta.AnnotationHash(c.cfg.TLS.CAConfigMap.Data)
 	if c.cfg.Installation.CertificateManagement == nil {
-		annotations[nodeCertHashAnnotation] = rmeta.AnnotationHash(c.cfg.TLS.NodeSecret.Data)
+		annotations[NodeCertHashAnnotation] = rmeta.AnnotationHash(c.cfg.TLS.NodeSecret.Data)
 	} else {
 		initContainers = append(initContainers, CreateCSRInitContainer(
 			c.cfg.Installation.CertificateManagement,

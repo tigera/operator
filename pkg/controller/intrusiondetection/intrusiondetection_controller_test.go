@@ -19,6 +19,10 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/resource"
+
+	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
@@ -87,6 +91,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			provider:        operatorv1.ProviderNone,
 			status:          mockStatus,
 			licenseAPIReady: &utils.ReadyFlag{},
+			dpiAPIReady:     &utils.ReadyFlag{},
 		}
 
 		// We start off with a 'standard' installation, with nothing special
@@ -141,11 +146,29 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Data: map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterpriseTrial)},
 		})).NotTo(HaveOccurred())
 
+		Expect(c.Create(ctx, &v3.DeepPacketInspection{ObjectMeta: metav1.ObjectMeta{Name: "test-dpi", Namespace: "test-dpi-ns"}})).ShouldNot(HaveOccurred())
+		Expect(c.Create(ctx, &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      render.NodeTLSSecretName,
+				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      render.TyphaTLSSecretName,
+				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      render.TyphaCAConfigMapName,
+				Namespace: "tigera-operator",
+			},
+			Data: map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterpriseTrial)},
+		})).NotTo(HaveOccurred())
+
 		// Apply the intrusiondetection CR to the fake cluster.
 		Expect(c.Create(ctx, &operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
 
-		// mark that the watch for license key was successful
+		// mark that the watch for license key and dpi was successful
 		r.licenseAPIReady.MarkAsReady()
+		r.dpiAPIReady.MarkAsReady()
 	})
 
 	Context("image reconciliation", func() {
@@ -199,6 +222,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 					Images: []operatorv1.Image{
 						{Image: "tigera/intrusion-detection-job-installer", Digest: "sha256:intrusiondetectionjobinstallerhash"},
 						{Image: "tigera/intrusion-detection-controller", Digest: "sha256:intrusiondetectioncontrollerhash"},
+						{Image: "tigera/deep-packet-inspection", Digest: "sha256:deeppacketinspectionhash"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -237,6 +261,22 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentElasticTseeInstaller.Image,
 					"sha256:intrusiondetectionjobinstallerhash")))
+
+			ds := appsv1.DaemonSet{
+				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      dpi.DeepPacketInspectionName,
+					Namespace: dpi.DeepPacketInspectionNamespace,
+				}}
+			Expect(test.GetResource(c, &ds)).To(BeNil())
+			Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+			dpiContainer := test.GetContainer(ds.Spec.Template.Spec.Containers, dpi.DeepPacketInspectionName)
+			Expect(dpiContainer).ToNot(BeNil())
+			Expect(dpiContainer.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentDeepPacketInspection.Image,
+					"sha256:deeppacketinspectionhash")))
+
 		})
 		It("should not register intrusion-detection-job-installer image when cluster is managed", func() {
 			Expect(c.Create(ctx, &operatorv1.ManagementClusterConnection{
@@ -356,6 +396,75 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		AfterEach(func() {
 			By("Deleting the previous license")
 			Expect(c.Delete(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}, Status: v3.LicenseKeyStatus{Features: []string{}}})).NotTo(HaveOccurred())
+		})
+	})
+
+	Context("Reconcile tests", func() {
+		BeforeEach(func() {
+			mockStatus.On("SetDegraded", mock.Anything, mock.Anything).Return()
+		})
+
+		It("should Reconcile with default values for intrusion detection resource", func() {
+			result, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(0 * time.Second))
+
+			ids := operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}}
+			Expect(test.GetResource(c, &ids)).To(BeNil())
+			Expect(ids.Spec.ComponentResources).ShouldNot(BeNil())
+			Expect(len(ids.Spec.ComponentResources)).Should(Equal(1))
+			Expect(ids.Spec.ComponentResources[0].ComponentName).Should(Equal(operatorv1.ComponentNameDeepPacketInspection))
+			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Requests.Cpu()).Should(Equal(resource.MustParse(dpi.DefaultCPURequest)))
+			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Limits.Cpu()).Should(Equal(resource.MustParse(dpi.DefaultCPULimit)))
+			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Requests.Memory()).Should(Equal(resource.MustParse(dpi.DefaultMemoryRequest)))
+			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Limits.Memory()).Should(Equal(resource.MustParse(dpi.DefaultMemoryLimit)))
+		})
+
+		It("should not overwrite resource requirements if they are already set", func() {
+			By("Deleting the previous IntrusionDetection")
+			Expect(c.Delete(ctx, &operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
+
+			memoryLimit := "5Gi"
+			memoryRequest := "5Gi"
+			cpuLimit := "3"
+			cpuRequest := "2"
+
+			By("Creating IntrusionDetection resource with custom resource requirements")
+			Expect(c.Create(ctx, &operatorv1.IntrusionDetection{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.IntrusionDetectionSpec{
+					ComponentResources: []operatorv1.IntrusionDetectionComponentResource{
+						{
+							ComponentName: operatorv1.ComponentNameDeepPacketInspection,
+							ResourceRequirements: &corev1.ResourceRequirements{
+								Limits: corev1.ResourceList{
+									corev1.ResourceMemory: resource.MustParse(memoryLimit),
+									corev1.ResourceCPU:    resource.MustParse(cpuLimit),
+								},
+								Requests: corev1.ResourceList{
+									corev1.ResourceMemory: resource.MustParse(memoryRequest),
+									corev1.ResourceCPU:    resource.MustParse(cpuRequest),
+								},
+							},
+						},
+					},
+				},
+			})).
+				NotTo(HaveOccurred())
+
+			result, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(0 * time.Second))
+
+			ids := operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}}
+			Expect(test.GetResource(c, &ids)).To(BeNil())
+			Expect(ids.Spec.ComponentResources).ShouldNot(BeNil())
+			Expect(len(ids.Spec.ComponentResources)).Should(Equal(1))
+			Expect(ids.Spec.ComponentResources[0].ComponentName).Should(Equal(operatorv1.ComponentNameDeepPacketInspection))
+			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Requests.Cpu()).Should(Equal(resource.MustParse(cpuRequest)))
+			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Limits.Cpu()).Should(Equal(resource.MustParse(cpuLimit)))
+			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Requests.Memory()).Should(Equal(resource.MustParse(memoryRequest)))
+			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Limits.Memory()).Should(Equal(resource.MustParse(memoryLimit)))
 		})
 	})
 })

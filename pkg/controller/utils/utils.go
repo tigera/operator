@@ -119,39 +119,8 @@ func AddServiceWatch(c controller.Controller, name, namespace string) error {
 	})
 }
 
-func addLicenseWatch(c controller.Controller) error {
-	lic := &v3.LicenseKey{
-		TypeMeta: metav1.TypeMeta{Kind: "LicenseKey"},
-	}
-	return c.Watch(&source.Kind{Type: lic}, &handler.EnqueueRequestForObject{})
-}
-
-// WaitToAddLicenseKeyWatch will check if projectcalico.org APIs are available and if so, it will add a watch for LicenseKey
-// The completion of this operation will be signaled on a ready channel
 func WaitToAddLicenseKeyWatch(controller controller.Controller, client kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
-	maxDuration := 30 * time.Second
-	duration := 1 * time.Second
-	ticker := time.NewTicker(duration)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			duration = duration * 2
-			if duration >= maxDuration {
-				duration = maxDuration
-			}
-			ticker.Reset(duration)
-			if isLicenseKeyReady(client) {
-				err := addLicenseWatch(controller)
-				if err != nil {
-					log.Info("failed to watch LicenseKey resource: %v. Will retry to add watch", err)
-				} else {
-					flag.MarkAsReady()
-					return
-				}
-			}
-		}
-	}
+	WaitToAddResourceWatch(controller, client, log, flag, &v3.LicenseKey{TypeMeta: metav1.TypeMeta{Kind: v3.KindLicenseKey}})
 }
 
 // AddNamespacedWatch creates a watch on the given object. If a name and namespace are provided, then it will
@@ -202,23 +171,6 @@ func IsAPIServerReady(client client.Client, l logr.Logger) bool {
 		return false
 	}
 	return true
-}
-
-func isLicenseKeyReady(client kubernetes.Interface) bool {
-	_, res, err := client.Discovery().ServerGroupsAndResources()
-	if err != nil {
-		return false
-	}
-	for _, group := range res {
-		if group.GroupVersion == "projectcalico.org/v3" {
-			for _, r := range group.APIResources {
-				if r.Kind == "LicenseKey" {
-					return true
-				}
-			}
-		}
-	}
-	return false
 }
 
 func LogStorageExists(ctx context.Context, cli client.Client) (bool, error) {
@@ -470,4 +422,49 @@ func StrToElasticLicenseType(license string, logger logr.Logger) render.Elastics
 	}
 	logger.V(3).Info("Elasticsearch license %s is unexpected", license)
 	return render.ElasticsearchLicenseTypeUnknown
+}
+
+// WaitToAddResourceWatch will check if projectcalico.org APIs are available and if so, it will add a watch for resource
+// The completion of this operation will be signaled on a ready channel
+func WaitToAddResourceWatch(controller controller.Controller, client kubernetes.Interface, log logr.Logger, flag *ReadyFlag, obj client.Object) {
+	maxDuration := 30 * time.Second
+	duration := 1 * time.Second
+	ticker := time.NewTicker(duration)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			duration = duration * 2
+			if duration >= maxDuration {
+				duration = maxDuration
+			}
+			ticker.Reset(duration)
+			if isResourceReady(client, obj.GetObjectKind().GroupVersionKind().Kind) {
+				err := controller.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{})
+				if err != nil {
+					log.Info("failed to watch %s resource: %v. Will retry to add watch", obj.GetObjectKind().GroupVersionKind().Kind, err)
+				} else {
+					flag.MarkAsReady()
+					return
+				}
+			}
+		}
+	}
+}
+
+func isResourceReady(client kubernetes.Interface, resourceKind string) bool {
+	_, res, err := client.Discovery().ServerGroupsAndResources()
+	if err != nil {
+		return false
+	}
+	for _, group := range res {
+		if group.GroupVersion == v3.GroupVersionCurrent {
+			for _, r := range group.APIResources {
+				if r.Kind == resourceKind {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }

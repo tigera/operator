@@ -17,6 +17,8 @@ package logstorage
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -29,14 +31,12 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"time"
 )
 
 func (r *ReconcileLogStorage) createEsKubeControllers(
 	install *operatorv1.InstallationSpec,
 	hdler utils.ComponentHandler,
 	reqLogger logr.Logger,
-	managementClusterConnection *operatorv1.ManagementClusterConnection,
 	managementCluster *operatorv1.ManagementCluster,
 	authentication *operatorv1.Authentication,
 	esLicenseType render.ElasticsearchLicenseType,
@@ -95,7 +95,6 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 		K8sServiceEp:                 k8sapi.Endpoint,
 		Installation:                 install,
 		ManagementCluster:            managementCluster,
-		ManagementClusterConnection:  managementClusterConnection,
 		ClusterDomain:                r.clusterDomain,
 		ManagerInternalSecret:        managerInternalTLSSecret,
 		EnabledESOIDCWorkaround:      enableESOIDCWorkaround,
@@ -105,7 +104,7 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 		KibanaSecret:                 kubeControllerKibanaPublicCertSecret,
 		LogStorageExists:             true,
 	}
-	esKubeControllerComponents := kubecontrollers.KubeControllers(&kubeControllersCfg)
+	esKubeControllerComponents := kubecontrollers.NewElasticsearchKubeControllers(&kubeControllersCfg)
 
 	imageSet, err := imageset.GetImageSet(ctx, r.client, install.Variant)
 	if err != nil {

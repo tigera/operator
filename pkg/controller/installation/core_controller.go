@@ -1078,7 +1078,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		MetricsPort:                 kubeControllersMetricsPort,
 		ManagerInternalSecret:       managerInternalTLSSecret,
 	}
-	components = append(components, kubecontrollers.KubeControllers(&kubeControllersCfg))
+	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 
 	imageSet, err := imageset.GetImageSet(ctx, r.client, instance.Spec.Variant)
 	if err != nil {

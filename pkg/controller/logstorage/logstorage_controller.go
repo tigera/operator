@@ -451,7 +451,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			install,
 			hdler,
 			reqLogger,
-			managementClusterConnection,
 			managementCluster,
 			authentication,
 			esLicenseType,

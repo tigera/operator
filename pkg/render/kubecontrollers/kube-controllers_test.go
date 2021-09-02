@@ -131,7 +131,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Installation:  instance,
 			ClusterDomain: dns.DefaultClusterDomain,
 		}
-		component := kubecontrollers.KubeControllers(&cfg)
+		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -185,7 +185,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cfg.ManagerInternalSecret = &testutils.InternalManagerTLSSecret
 		cfg.MetricsPort = 9094
 
-		component := kubecontrollers.KubeControllers(&cfg)
+		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -243,7 +243,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cfg.MetricsPort = 9094
 		cfg.EnabledESOIDCWorkaround = true
 
-		component := kubecontrollers.KubeControllers(&cfg)
+		component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -304,7 +304,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cfg.ManagerInternalSecret = &testutils.InternalManagerTLSSecret
 		cfg.MetricsPort = 9094
 
-		component := kubecontrollers.KubeControllers(&cfg)
+		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -373,7 +373,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cfg.MetricsPort = 9094
 		cfg.EnabledESOIDCWorkaround = true
 
-		component := kubecontrollers.KubeControllers(&cfg)
+		component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -441,7 +441,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		instance.Variant = operatorv1.TigeraSecureEnterprise
 		cfg.MetricsPort = 0
 
-		component := kubecontrollers.KubeControllers(&cfg)
+		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -464,7 +464,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Value:    "bar",
 		}
 		instance.ControlPlaneTolerations = []corev1.Toleration{t}
-		component := kubecontrollers.KubeControllers(&cfg)
+		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		resources, _ := component.Objects()
 		d := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(t, rmeta.TolerateMaster))
@@ -489,7 +489,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			},
 		}
 
-		component := kubecontrollers.KubeControllers(&cfg)
+		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
@@ -522,7 +522,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Openshift:      &operatorv1.AuthenticationOpenshift{IssuerURL: "https://api.example.com"},
 		}}
 
-		component := kubecontrollers.KubeControllers(&cfg)
+		component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
@@ -557,7 +557,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			cfg.ManagerInternalSecret = &testutils.InternalManagerTLSSecret
 			cfg.MetricsPort = 9094
 			cfg.EnabledESOIDCWorkaround = true
-			component := kubecontrollers.KubeControllers(&cfg)
+			component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
 			resources, _ := component.Objects()
 
 			depResource := rtest.GetResource(resources, kubecontrollers.EsKubeController, common.CalicoNamespace, "apps", "v1", "Deployment")
@@ -584,7 +584,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		k8sServiceEp.Port = "1234"
 		cfg.K8sServiceEp = k8sServiceEp
 
-		component := kubecontrollers.KubeControllers(&cfg)
+		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
@@ -599,7 +599,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		k8sServiceEp.Port = "1234"
 		instance.KubernetesProvider = operatorv1.ProviderDockerEE
 
-		component := kubecontrollers.KubeControllers(&cfg)
+		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 

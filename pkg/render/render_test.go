@@ -115,7 +115,7 @@ func allCalicoComponents(
 		MetricsPort:                 kubeControllersMetricsPort,
 	}
 
-	return []render.Component{namespaces, secretsAndConfigMaps, render.Typha(typhaCfg), render.Node(nodeCfg), kubecontrollers.KubeControllers(kcCfg)}, nil
+	return []render.Component{namespaces, secretsAndConfigMaps, render.Typha(typhaCfg), render.Node(nodeCfg), kubecontrollers.NewCalicoKubeControllers(kcCfg)}, nil
 }
 
 var _ = Describe("Rendering tests", func() {

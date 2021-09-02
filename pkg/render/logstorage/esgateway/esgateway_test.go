@@ -86,6 +86,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: rmeta.OperatorNamespace()}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.InternalCertSecret, Namespace: render.ElasticsearchNamespace}},
 				clusterDomain,
+				nil, nil, nil, "", false, false, false, "", "",
 			})
 
 			createResources, _ := component.Objects()
@@ -127,6 +128,54 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: rmeta.OperatorNamespace()}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.InternalCertSecret, Namespace: render.ElasticsearchNamespace}},
 				clusterDomain,
+				nil, nil, nil, "", false, false, false, "", "",
+			})
+
+			createResources, _ := component.Objects()
+			compareResources(createResources, expectedResources)
+		})
+
+		It("should render an ES Gateway deployment and all supporting resources for multi-tenancy", func() {
+			expectedResources := []resourceTestObj{
+				{relasticsearch.PublicCertSecret, rmeta.OperatorNamespace(), &corev1.Secret{}, nil},
+				{render.TigeraElasticsearchCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+				{relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+				{ExternalCertsSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+				{ExternalCACertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+				{relasticsearch.InternalCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+				{render.KibanaInternalCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+				{render.ElasticsearchAdminUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+				{render.ElasticsearchKubeControllersUserSecret, rmeta.OperatorNamespace(), &corev1.Secret{}, nil},
+				{render.ElasticsearchKubeControllersVerificationUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+				{render.ElasticsearchKubeControllersSecureUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+				{ServiceName, render.ElasticsearchNamespace, &corev1.Service{}, nil},
+				{RoleName, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
+				{RoleName, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
+				{ServiceAccountName, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
+				{DeploymentName, render.ElasticsearchNamespace, &appsv1.Deployment{}, nil},
+			}
+
+			component := EsGateway(&Config{
+				installation,
+				[]*corev1.Secret{
+					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+				},
+				[]*corev1.Secret{
+					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: rmeta.OperatorNamespace()}},
+					{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: rmeta.OperatorNamespace()}},
+				},
+				[]*corev1.Secret{
+					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchKubeControllersUserSecret, Namespace: rmeta.OperatorNamespace()}},
+					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchKubeControllersVerificationUserSecret, Namespace: render.ElasticsearchNamespace}},
+					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchKubeControllersSecureUserSecret, Namespace: render.ElasticsearchNamespace}},
+				},
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: rmeta.OperatorNamespace()}},
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.InternalCertSecret, Namespace: rmeta.OperatorNamespace()}},
+				clusterDomain,
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchAdminUserSecret, Namespace: rmeta.OperatorNamespace()}},
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: ExternalCertsSecret, Namespace: rmeta.OperatorNamespace()}},
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: ExternalCACertSecret, Namespace: rmeta.OperatorNamespace()}}, "tenantId", true, true, true,
+				"externalEs.com", "externalKb.com",
 			})
 
 			createResources, _ := component.Objects()

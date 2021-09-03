@@ -440,6 +440,28 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	envoyConfig, err := getEnvoyConfig(r.client)
+
+	if err != nil {
+		log.Error(err, "Error retrieving envoy config")
+		r.status.SetDegraded("Error retrieving envoy config", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	// Render the l7 component for Linux
+	l7component := render.L7LogCollector(pullSecrets, envoyConfig, installation, rmeta.OSTypeLinux)
+
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, l7component); err != nil {
+		reqLogger.Error(err, "Error with images from ImageSet")
+		r.status.SetDegraded("Error with images from ImageSet", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	if err := handler.CreateOrUpdateOrDelete(ctx, l7component, r.status); err != nil {
+		r.status.SetDegraded("Error creating / updating resource", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	// Render a fluentd component for Windows if the cluster has Windows nodes.
 	hasWindowsNodes, err := hasWindowsNodes(r.client)
 	if err != nil {
@@ -600,6 +622,24 @@ func getFluentdFilters(client client.Client) (*render.FluentdFilters, error) {
 	return &render.FluentdFilters{
 		Flow: cm.Data[render.FluentdFilterFlowName],
 		DNS:  cm.Data[render.FluentdFilterDNSName],
+	}, nil
+}
+
+func getEnvoyConfig(client client.Client) (*render.EnvoyConfig, error) {
+	cm := &corev1.ConfigMap{}
+	cmNamespacedName := types.NamespacedName{
+		Name:      render.EnvoyConfigMapKey,
+		Namespace: render.CalicoSystemNamespace,
+	}
+	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("Failed to read ConfigMap %q: %s", render.EnvoyConfigMapKey, err)
+	}
+
+	return &render.EnvoyConfig{
+		Config: cm.Data["envoy-config.yaml"],
 	}, nil
 }
 

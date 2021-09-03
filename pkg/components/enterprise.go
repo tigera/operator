@@ -189,7 +189,7 @@ var (
 
 	ComponentEnvoyProxy = component{
 		Version: "master",
-		Image:   "tigera/envoy-proxy",
+		Image:   "tigera/envoy",
 	}
 
 	EnterpriseComponents = []component{

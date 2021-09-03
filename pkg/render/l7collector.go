@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tigera/operator/pkg/ptr"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -36,20 +38,22 @@ const (
 	L7LogCollectorDeamonsetName = "l7-log-collector"
 	L7CollectorContainerName    = "l7-collector"
 	ProxyContainerName          = "envoy-proxy"
-	EnvoyLogsVolumeKey          = "envoy-logs"
-	EnvoyConfigVolumeKey        = "envoy-config"
-	FelixSyncVolumeKey          = "felix-sync"
+	EnvoyLogsKey                = "envoy-logs"
+	EnvoyConfigKey              = "envoy-config"
+	EnvoyConfigMapKey           = EnvoyConfigKey
 )
 
-func L7LogCollector(
-	pullSecrets []*corev1.Secret,
-	installation *operatorv1.InstallationSpec,
-	clusterDomain string,
-	osType rmeta.OSType,
-) Component {
+type EnvoyConfig struct {
+	Config string
+}
+
+func L7LogCollector(pullSecrets []*corev1.Secret, envoyConfig *EnvoyConfig,
+	installation *operatorv1.InstallationSpec, osType rmeta.OSType) Component {
+
 	return &l7LogCollectorComponent{
 		pullSecrets:  pullSecrets,
 		installation: installation,
+		envoyConfig:  envoyConfig,
 		osType:       osType,
 	}
 }
@@ -58,6 +62,7 @@ type l7LogCollectorComponent struct {
 	pullSecrets    []*corev1.Secret
 	installation   *operatorv1.InstallationSpec
 	osType         rmeta.OSType
+	envoyConfig    *EnvoyConfig
 	proxyImage     string
 	collectorImage string
 }
@@ -72,14 +77,14 @@ func (c *l7LogCollectorComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	var err error
-	errMsgs := []string{}
+	var errMsgs []string
 
 	c.proxyImage, err = components.GetReference(components.ComponentEnvoyProxy, reg, path, prefix, is)
 
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
-	c.proxyImage, err = components.GetReference(components.ComponentL7Collector, reg, path, prefix, is)
+	c.collectorImage, err = components.GetReference(components.ComponentL7Collector, reg, path, prefix, is)
 
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
@@ -96,21 +101,14 @@ func (c *l7LogCollectorComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
 
-func (c *l7LogCollectorComponent) readinessCmd() []string {
-	return []string{"sh", "-c", "/bin/readiness.sh"}
-}
-
-func (c *l7LogCollectorComponent) livenessCmd() []string {
-	return []string{"sh", "-c", "/bin/liveness.sh"}
-}
-
 func (c *l7LogCollectorComponent) Objects() ([]client.Object, []client.Object) {
 	var objs []client.Object
 	objs = append(objs,
 		CreateNamespace(
-			LogCollectorNamespace,
+			CalicoSystemNamespace,
 			c.installation.KubernetesProvider))
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(CalicoSystemNamespace, c.pullSecrets...)...)...)
+	objs = append(objs, c.daemonset())
 
 	return objs, nil
 }
@@ -121,7 +119,6 @@ func (c *l7LogCollectorComponent) Ready() bool {
 
 // daemonset creates a daemonset for the L7 log collector component.
 func (c *l7LogCollectorComponent) daemonset() *appsv1.DaemonSet {
-	var terminationGracePeriod int64 = 0
 	maxUnavailable := intstr.FromInt(1)
 
 	annots := map[string]string{}
@@ -134,12 +131,11 @@ func (c *l7LogCollectorComponent) daemonset() *appsv1.DaemonSet {
 			Annotations: annots,
 		},
 		Spec: corev1.PodSpec{
-			NodeSelector:                  map[string]string{},
-			Tolerations:                   c.tolerations(),
-			ImagePullSecrets:              secret.GetReferenceList(c.pullSecrets),
-			TerminationGracePeriodSeconds: &terminationGracePeriod,
-			Containers:                    c.containers(),
-			Volumes:                       c.volumes(),
+			NodeSelector:     map[string]string{},
+			Tolerations:      c.tolerations(),
+			ImagePullSecrets: secret.GetReferenceList(c.pullSecrets),
+			Containers:       c.containers(),
+			Volumes:          c.volumes(),
 		},
 	}
 
@@ -147,7 +143,7 @@ func (c *l7LogCollectorComponent) daemonset() *appsv1.DaemonSet {
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      L7LogCollectorDeamonsetName,
-			Namespace: LogCollectorNamespace,
+			Namespace: CalicoSystemNamespace,
 		},
 		Spec: appsv1.DaemonSetSpec{
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": L7LogCollectorDeamonsetName}},
@@ -160,8 +156,6 @@ func (c *l7LogCollectorComponent) daemonset() *appsv1.DaemonSet {
 		},
 	}
 
-	setNodeCriticalPod(&(ds.Spec.Template))
-
 	return ds
 }
 
@@ -170,27 +164,30 @@ func (c *l7LogCollectorComponent) containers() []corev1.Container {
 	var containers []corev1.Container
 
 	proxy := corev1.Container{
-		Name:           ProxyContainerName,
-		Image:          c.proxyImage,
-		StartupProbe:   c.startup(),
-		LivenessProbe:  c.liveness(),
-		ReadinessProbe: c.readiness(),
-		Env:            c.proxyEnv(),
-		VolumeMounts:   c.proxyVolMounts(),
+		Name:  ProxyContainerName,
+		Image: c.proxyImage,
+		Command: []string{
+			"envoy", "-c", "/etc/envoy/envoy-config.yaml",
+		},
+		SecurityContext: &corev1.SecurityContext{
+			Privileged: ptr.BoolToPtr(false),
+			Capabilities: &corev1.Capabilities{
+				Add: []corev1.Capability{"NET_ADMIN", "NET_RAW"},
+			},
+			RunAsUser:  ptr.Int64ToPtr(0),
+			RunAsGroup: ptr.Int64ToPtr(0),
+		},
+		Env:          c.proxyEnv(),
+		VolumeMounts: c.proxyVolMounts(),
 	}
-
 	containers = append(containers, proxy)
 
 	collector := corev1.Container{
-		Name:           L7CollectorContainerName,
-		Image:          c.collectorImage,
-		StartupProbe:   c.startup(),
-		LivenessProbe:  c.liveness(),
-		ReadinessProbe: c.readiness(),
-		Env:            c.collectorEnv(),
-		VolumeMounts:   c.collectorVolMounts(),
+		Name:         L7CollectorContainerName,
+		Image:        c.collectorImage,
+		Env:          c.collectorEnv(),
+		VolumeMounts: c.collectorVolMounts(),
 	}
-
 	containers = append(containers, collector)
 
 	return containers
@@ -214,48 +211,6 @@ func (c *l7LogCollectorComponent) collectorEnv() []corev1.EnvVar {
 	return envs
 }
 
-// The startup probe uses the same action as the liveness probe, but with
-// a higher failure threshold and double the timeout to account for slow
-// networks.
-func (c *l7LogCollectorComponent) startup() *corev1.Probe {
-	return &corev1.Probe{
-		Handler: corev1.Handler{
-			Exec: &corev1.ExecAction{
-				Command: c.livenessCmd(),
-			},
-		},
-		TimeoutSeconds:   90,
-		PeriodSeconds:    10,
-		FailureThreshold: startupProbeFailureThreshold,
-	}
-}
-
-func (c *l7LogCollectorComponent) liveness() *corev1.Probe {
-	return &corev1.Probe{
-		Handler: corev1.Handler{
-			Exec: &corev1.ExecAction{
-				Command: c.livenessCmd(),
-			},
-		},
-		TimeoutSeconds:   90,
-		PeriodSeconds:    10,
-		FailureThreshold: probeFailureThreshold,
-	}
-}
-
-func (c *l7LogCollectorComponent) readiness() *corev1.Probe {
-	return &corev1.Probe{
-		Handler: corev1.Handler{
-			Exec: &corev1.ExecAction{
-				Command: c.readinessCmd(),
-			},
-		},
-		TimeoutSeconds:   90,
-		PeriodSeconds:    10,
-		FailureThreshold: probeFailureThreshold,
-	}
-}
-
 // tolerations creates the node's toleration.
 func (c *l7LogCollectorComponent) tolerations() []corev1.Toleration {
 	// ensures that l7 log collector pods are scheduled on master node as well
@@ -268,7 +223,23 @@ func (c *l7LogCollectorComponent) tolerations() []corev1.Toleration {
 
 func (c *l7LogCollectorComponent) volumes() []corev1.Volume {
 
-	volumes := []corev1.Volume{}
+	var volumes []corev1.Volume
+
+	volumes = append(volumes, corev1.Volume{
+		Name: EnvoyLogsKey,
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+	})
+
+	volumes = append(volumes, corev1.Volume{
+		Name: EnvoyConfigKey,
+		VolumeSource: corev1.VolumeSource{
+			ConfigMap: &corev1.ConfigMapVolumeSource{
+				LocalObjectReference: corev1.LocalObjectReference{Name: EnvoyConfigKey},
+			},
+		},
+	})
 
 	return volumes
 }
@@ -276,14 +247,8 @@ func (c *l7LogCollectorComponent) volumes() []corev1.Volume {
 func (c *l7LogCollectorComponent) proxyVolMounts() []corev1.VolumeMount {
 
 	volumes := []corev1.VolumeMount{
-		{
-			Name:      EnvoyConfigVolumeKey,
-			MountPath: "/etc/envoy",
-		},
-		{
-			Name:      EnvoyLogsVolumeKey,
-			MountPath: "/tmp/",
-		},
+		{Name: EnvoyConfigKey, MountPath: "/etc/envoy"},
+		{Name: EnvoyLogsKey, MountPath: "/tmp/"},
 	}
 
 	return volumes
@@ -292,14 +257,7 @@ func (c *l7LogCollectorComponent) proxyVolMounts() []corev1.VolumeMount {
 func (c *l7LogCollectorComponent) collectorVolMounts() []corev1.VolumeMount {
 
 	volumes := []corev1.VolumeMount{
-		{
-			Name:      FelixSyncVolumeKey,
-			MountPath: "/var/run/felix",
-		},
-		{
-			Name:      EnvoyLogsVolumeKey,
-			MountPath: "/tmp/",
-		},
+		{Name: EnvoyLogsKey, MountPath: "/tmp/"},
 	}
 
 	return volumes

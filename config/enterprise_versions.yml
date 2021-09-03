@@ -2,7 +2,7 @@ title: v3.9.0
 components:
   cnx-manager:
     image: tigera/cnx-manager
-    version: v3.9.1-1
+    version: v3.9.1-2
   voltron:
     image: tigera/voltron
     version: v3.9.0
@@ -14,7 +14,7 @@ components:
     version: v3.9.0
   cnx-kube-controllers:
     image: tigera/kube-controllers
-    version: v3.9.0
+    version: v3.9.1-1
   typha:
     image: tigera/typha
     version: v3.9.0

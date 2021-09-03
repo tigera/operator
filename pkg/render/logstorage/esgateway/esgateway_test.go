@@ -17,6 +17,8 @@ package esgateway
 import (
 	"fmt"
 
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
+
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -59,9 +61,9 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				{render.TigeraElasticsearchCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 				{relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 				{render.KibanaInternalCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
-				{render.ElasticsearchKubeControllersUserSecret, rmeta.OperatorNamespace(), &corev1.Secret{}, nil},
-				{render.ElasticsearchKubeControllersVerificationUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
-				{render.ElasticsearchKubeControllersSecureUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+				{kubecontrollers.ElasticsearchKubeControllersUserSecret, rmeta.OperatorNamespace(), &corev1.Secret{}, nil},
+				{kubecontrollers.ElasticsearchKubeControllersVerificationUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+				{kubecontrollers.ElasticsearchKubeControllersSecureUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 				{ServiceName, render.ElasticsearchNamespace, &corev1.Service{}, nil},
 				{RoleName, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
 				{RoleName, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
@@ -79,9 +81,9 @@ var _ = Describe("ES Gateway rendering tests", func() {
 					{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: rmeta.OperatorNamespace()}},
 				},
 				[]*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchKubeControllersUserSecret, Namespace: rmeta.OperatorNamespace()}},
-					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchKubeControllersVerificationUserSecret, Namespace: render.ElasticsearchNamespace}},
-					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchKubeControllersSecureUserSecret, Namespace: render.ElasticsearchNamespace}},
+					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersUserSecret, Namespace: rmeta.OperatorNamespace()}},
+					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersVerificationUserSecret, Namespace: render.ElasticsearchNamespace}},
+					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersSecureUserSecret, Namespace: render.ElasticsearchNamespace}},
 				},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: rmeta.OperatorNamespace()}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.InternalCertSecret, Namespace: render.ElasticsearchNamespace}},
@@ -99,9 +101,9 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				{render.TigeraElasticsearchCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 				{relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 				{render.KibanaInternalCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
-				{render.ElasticsearchKubeControllersUserSecret, rmeta.OperatorNamespace(), &corev1.Secret{}, nil},
-				{render.ElasticsearchKubeControllersVerificationUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
-				{render.ElasticsearchKubeControllersSecureUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+				{kubecontrollers.ElasticsearchKubeControllersUserSecret, rmeta.OperatorNamespace(), &corev1.Secret{}, nil},
+				{kubecontrollers.ElasticsearchKubeControllersVerificationUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+				{kubecontrollers.ElasticsearchKubeControllersSecureUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 				{ServiceName, render.ElasticsearchNamespace, &corev1.Service{}, nil},
 				{RoleName, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
 				{RoleName, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
@@ -120,9 +122,9 @@ var _ = Describe("ES Gateway rendering tests", func() {
 					{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: rmeta.OperatorNamespace()}},
 				},
 				[]*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchKubeControllersUserSecret, Namespace: rmeta.OperatorNamespace()}},
-					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchKubeControllersVerificationUserSecret, Namespace: render.ElasticsearchNamespace}},
-					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchKubeControllersSecureUserSecret, Namespace: render.ElasticsearchNamespace}},
+					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersUserSecret, Namespace: rmeta.OperatorNamespace()}},
+					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersVerificationUserSecret, Namespace: render.ElasticsearchNamespace}},
+					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersSecureUserSecret, Namespace: render.ElasticsearchNamespace}},
 				},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: rmeta.OperatorNamespace()}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.InternalCertSecret, Namespace: render.ElasticsearchNamespace}},

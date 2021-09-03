@@ -41,6 +41,6 @@ func setNodeCriticalPod(t *corev1.PodTemplateSpec) {
 	t.Spec.PriorityClassName = NodePriorityClassName
 }
 
-func setClusterCriticalPod(t *corev1.PodTemplateSpec) {
+func SetClusterCriticalPod(t *corev1.PodTemplateSpec) {
 	t.Spec.PriorityClassName = ClusterPriorityClassName
 }

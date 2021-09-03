@@ -51,6 +51,8 @@ const (
 	DexCNPattern = "tigera-dex.tigera-dex.svc.%s"
 )
 
+var dexReplicas int32 = 1
+
 func Dex(
 	pullSecrets []*corev1.Secret,
 	openshift bool,
@@ -227,7 +229,7 @@ func (c *dexComponent) deployment() client.Object {
 					"k8s-app": DexObjectName,
 				},
 			},
-			Replicas: &replicas,
+			Replicas: &dexReplicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},

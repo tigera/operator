@@ -394,6 +394,7 @@ func handleAutoDetectionMethod(c *components, install *operatorv1.Installation) 
 		AutodetectionMethodCanReach      = "can-reach="
 		AutodetectionMethodInterface     = "interface="
 		AutodetectionMethodSkipInterface = "skip-interface="
+		AutodetectionMethodCIDR          = "cidr="
 	)
 
 	// first-found
@@ -424,10 +425,17 @@ func handleAutoDetectionMethod(c *components, install *operatorv1.Installation) 
 		return nil
 	}
 
+	if strings.HasPrefix(*method, AutodetectionMethodCIDR) {
+		ifStr := strings.TrimPrefix(*method, AutodetectionMethodSkipInterface)
+		cidrs := strings.Split(ifStr, ",")
+		install.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operatorv1.NodeAddressAutodetection{CIDRS: cidrs}
+		return nil
+	}
+
 	return ErrIncompatibleCluster{
 		err:       fmt.Sprintf("IP_AUTODETECTION_METHOD=%s is not supported", *method),
 		component: ComponentCalicoNode,
-		fix:       "remove the IP_AUTODETECTION_METHOD env var or set it to 'first-found', 'can-reach=*', 'interface=*', or 'skip-interface=*'",
+		fix:       "remove the IP_AUTODETECTION_METHOD env var or set it to 'first-found', 'can-reach=*', 'interface=*', 'cidr=*', or 'skip-interface=*'",
 	}
 }
 

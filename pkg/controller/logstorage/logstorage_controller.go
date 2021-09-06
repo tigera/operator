@@ -436,6 +436,11 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	if managementClusterConnection == nil {
+		var replicas *int32
+		if ls.Spec.ESGateway != nil {
+			replicas = ls.Spec.ESGateway.Replicas
+		}
+
 		result, proceed, err = r.createEsGateway(
 			install,
 			variant,
@@ -444,6 +449,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			hdler,
 			reqLogger,
 			ctx,
+			replicas,
 		)
 		if err != nil || !proceed {
 			return result, err

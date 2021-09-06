@@ -36,8 +36,6 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
-var replicas int32 = 1
-
 const (
 	ElasticsearchKubeControllersUserName               = "tigera-ee-kube-controllers"
 	ElasticsearchKubeControllersUserSecret             = "tigera-ee-kube-controllers-elasticsearch-access"
@@ -413,6 +411,8 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	if c.cfg.LogStorageExists && c.cfg.KubeControllersGatewaySecret != nil && c.cfg.ElasticsearchSecret != nil {
 		podSpec = relasticsearch.PodSpecDecorate(podSpec)
 	}
+
+	var replicas int32 = 1
 
 	d := appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},

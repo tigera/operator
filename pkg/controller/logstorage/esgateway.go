@@ -25,6 +25,7 @@ func (r *ReconcileLogStorage) createEsGateway(
 	hdler utils.ComponentHandler,
 	reqLogger logr.Logger,
 	ctx context.Context,
+	replicas *int32,
 ) (reconcile.Result, bool, error) {
 	gatewayCertSecret, publicCertSecret, customerProvidedCert, err := common.GetESGatewayCertificateSecrets(ctx, install, r.client, r.clusterDomain, log)
 	if err != nil {
@@ -54,6 +55,11 @@ func (r *ReconcileLogStorage) createEsGateway(
 		return reconcile.Result{}, false, err
 	}
 
+	var rep int32 = 2
+	if replicas != nil {
+		rep = *replicas
+	}
+
 	cfg := &esgateway.Config{
 		Installation:               install,
 		PullSecrets:                pullSecrets,
@@ -62,6 +68,7 @@ func (r *ReconcileLogStorage) createEsGateway(
 		KibanaInternalCertSecret:   kibanaInternalCertSecret,
 		EsInternalCertSecret:       esInternalCertSecret,
 		ClusterDomain:              r.clusterDomain,
+		Replicas:                   &rep,
 	}
 
 	esGatewayComponent := esgateway.EsGateway(cfg)

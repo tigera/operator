@@ -86,7 +86,7 @@ var _ = Describe("dex rendering tests", func() {
 
 			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName)
 
-			component := render.Dex(pullSecrets, false, installation, dexCfg, clusterName, false)
+			component := render.Dex(authentication, pullSecrets, false, installation, dexCfg, clusterName, false)
 			resources, _ := component.Objects()
 
 			expectedResources := []struct {
@@ -143,7 +143,7 @@ var _ = Describe("dex rendering tests", func() {
 			}
 
 			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName)
-			component := render.Dex(pullSecrets, false, &operatorv1.InstallationSpec{
+			component := render.Dex(authentication, pullSecrets, false, &operatorv1.InstallationSpec{
 				ControlPlaneTolerations: []corev1.Toleration{t},
 			}, dexCfg, clusterName, false)
 			resources, _ := component.Objects()
@@ -155,7 +155,7 @@ var _ = Describe("dex rendering tests", func() {
 			installation.CertificateManagement = &operatorv1.CertificateManagement{}
 			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName)
 
-			component := render.Dex(pullSecrets, false, installation, dexCfg, clusterName, false)
+			component := render.Dex(authentication, pullSecrets, false, installation, dexCfg, clusterName, false)
 			resources, _ := component.Objects()
 
 			expectedResources := []struct {

@@ -31,6 +31,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
@@ -66,12 +67,14 @@ func EsGateway(c *Config) render.Component {
 	tlsAnnotations[render.KibanaTLSAnnotationHash] = rmeta.SecretsAnnotationHash(c.KibanaInternalCertSecret)
 
 	secrets = append(secrets, c.KubeControllersUserSecrets...)
+
 	return &esGateway{
 		installation:   c.Installation,
 		pullSecrets:    c.PullSecrets,
 		secrets:        secrets,
 		tlsAnnotations: tlsAnnotations,
 		clusterDomain:  c.ClusterDomain,
+		replicas:       c.Replicas,
 	}
 }
 
@@ -83,6 +86,7 @@ type esGateway struct {
 	clusterDomain  string
 	csrImage       string
 	esGatewayImage string
+	replicas       *int32
 }
 
 type Config struct {
@@ -93,6 +97,7 @@ type Config struct {
 	KibanaInternalCertSecret   *corev1.Secret
 	EsInternalCertSecret       *corev1.Secret
 	ClusterDomain              string
+	Replicas                   *int32
 }
 
 func (e *esGateway) ResolveImages(is *operatorv1.ImageSet) error {
@@ -180,8 +185,6 @@ func (e esGateway) esGatewayRoleBinding() *rbacv1.RoleBinding {
 }
 
 func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
-	replicas := int32(2)
-
 	envVars := []corev1.EnvVar{
 		{Name: "ES_GATEWAY_LOG_LEVEL", Value: "INFO"},
 		{Name: "ES_GATEWAY_ELASTIC_ENDPOINT", Value: ElasticsearchHTTPSEndpoint},
@@ -285,6 +288,7 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 					},
 				},
 			},
+			Affinity: podaffinity.NewPodAntiAffinity(DeploymentName, render.ElasticsearchName),
 		},
 	}
 	return &appsv1.Deployment{
@@ -302,7 +306,7 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 			},
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": DeploymentName}},
 			Template: *podTemplate,
-			Replicas: &replicas,
+			Replicas: e.replicas,
 		},
 	}
 }

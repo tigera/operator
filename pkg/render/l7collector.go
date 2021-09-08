@@ -131,6 +131,9 @@ func (c *l7LogCollectorComponent) daemonset() *appsv1.DaemonSet {
 			Annotations: annots,
 		},
 		Spec: corev1.PodSpec{
+			HostIPC:          true,
+			HostNetwork:      true,
+			DNSPolicy:        corev1.DNSClusterFirstWithHostNet,
 			NodeSelector:     map[string]string{},
 			Tolerations:      c.tolerations(),
 			ImagePullSecrets: secret.GetReferenceList(c.pullSecrets),

@@ -221,7 +221,7 @@ func (c *amazonCloudIntegrationComponent) credentialSecret() *corev1.Secret {
 
 // deployment creates a deployment containing the API and query servers.
 func (c *amazonCloudIntegrationComponent) deployment() *appsv1.Deployment {
-	var replicas int32 = 1
+	var replicas int32 = DefaultReplicas
 
 	annotations := make(map[string]string)
 	annotations[credentialSecretHashAnnotation] = rmeta.AnnotationHash(c.credentials)

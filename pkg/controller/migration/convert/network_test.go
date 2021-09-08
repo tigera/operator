@@ -82,6 +82,23 @@ var _ = Describe("Convert network tests", func() {
 		})
 	})
 
+	Describe("handle IP_AUTODETECTION_METHOD env", func() {
+		It("migrate cidr=", func() {
+			ds := emptyNodeSpec()
+			ds.Spec.Template.Spec.Containers[0].Env = append(ds.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{
+				Name:  "IP_AUTODETECTION_METHOD",
+				Value: "cidr=10.0.0.0/24,10.0.1.0/24",
+			})
+
+			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
+			cfg, err := Convert(ctx, c)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cfg).ToNot(BeNil())
+			Expect(cfg.Spec.CalicoNetwork.NodeAddressAutodetectionV4).NotTo(BeNil())
+			Expect(*&cfg.Spec.CalicoNetwork.NodeAddressAutodetectionV4.CIDRS).To(Equal([]string{"10.0.0.0/24", "10.0.1.0/24"}))
+		})
+	})
+
 	Describe("handle Calico CNI migration", func() {
 		It("migrate default", func() {
 			c := fake.NewFakeClientWithScheme(scheme, emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig())

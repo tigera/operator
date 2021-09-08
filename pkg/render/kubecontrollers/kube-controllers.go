@@ -89,21 +89,37 @@ func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeController
 	enabledControllers := []string{"node"}
 	if cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, kubeControllersRoleEnterpriseCommonRules(cfg)...)
-		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, calicoKubeControllersRoleSpecificRules()...)
+		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules,
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"deletecollection"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"remoteclusterconfigurations"},
+				Verbs:     []string{"watch", "list", "get"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"endpoints"},
+				Verbs:     []string{"create", "update", "delete"},
+			},
+		)
 		enabledControllers = append(enabledControllers, "service", "federatedservices")
 	}
 
 	return &kubeControllersComponent{
-		cfg:                               cfg,
-		kubeControllerServiceAccountName:  KubeControllerServiceAccount,
-		kubeControllerRoleName:            KubeControllerRole,
-		kubeControllerRoleBindingName:     KubeControllerRoleBinding,
-		kubeControllerName:                KubeController,
-		kubeControllerConfigName:          "default",
-		kubeControllerMetricsName:         KubeControllerMetrics,
-		shouldRenderManagerInternalSecret: cfg.ManagerInternalSecret != nil,
-		kubeControllersRules:              kubeControllerRolePolicyRules,
-		enabledControllers:                enabledControllers,
+		cfg:                              cfg,
+		kubeControllerServiceAccountName: KubeControllerServiceAccount,
+		kubeControllerRoleName:           KubeControllerRole,
+		kubeControllerRoleBindingName:    KubeControllerRoleBinding,
+		kubeControllerName:               KubeController,
+		kubeControllerConfigName:         "default",
+		kubeControllerMetricsName:        KubeControllerMetrics,
+		renderManagerInternalSecret:      cfg.ManagerInternalSecret != nil,
+		kubeControllersRules:             kubeControllerRolePolicyRules,
+		enabledControllers:               enabledControllers,
 	}
 }
 
@@ -111,7 +127,28 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 	kubeControllerRolePolicyRules := kubeControllersRoleCommonRules(cfg, EsKubeController)
 	if cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, kubeControllersRoleEnterpriseCommonRules(cfg)...)
-		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, elasticsearchKubeControllersRoleSpecificRules()...)
+		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules,
+			rbacv1.PolicyRule{
+				APIGroups: []string{"elasticsearch.k8s.elastic.co"},
+				Resources: []string{"elasticsearches"},
+				Verbs:     []string{"watch", "get", "list"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"watch", "list", "get", "update", "create"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs:     []string{"watch", "list", "get"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"rbac.authorization.k8s.io"},
+				Resources: []string{"clusterroles", "clusterrolebindings"},
+				Verbs:     []string{"watch", "list", "get"},
+			},
+		)
 	}
 
 	enabledControllers := []string{"authorization", "elasticsearchconfiguration"}
@@ -120,17 +157,17 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 	}
 
 	return &kubeControllersComponent{
-		cfg:                                      cfg,
-		kubeControllerServiceAccountName:         EsKubeControllerServiceAccount,
-		kubeControllerRoleName:                   EsKubeControllerRole,
-		kubeControllerRoleBindingName:            EsKubeControllerRoleBinding,
-		kubeControllerName:                       EsKubeController,
-		kubeControllerConfigName:                 "elasticsearch",
-		kubeControllerMetricsName:                EsKubeControllerMetrics,
-		shouldRenderElasticsearchSecret:          cfg.ElasticsearchSecret != nil,
-		shouldRenderKubeControllersGatewaySecret: cfg.KubeControllersGatewaySecret != nil,
-		kubeControllersRules:                     kubeControllerRolePolicyRules,
-		enabledControllers:                       enabledControllers,
+		cfg:                                cfg,
+		kubeControllerServiceAccountName:   EsKubeControllerServiceAccount,
+		kubeControllerRoleName:             EsKubeControllerRole,
+		kubeControllerRoleBindingName:      EsKubeControllerRoleBinding,
+		kubeControllerName:                 EsKubeController,
+		kubeControllerConfigName:           "elasticsearch",
+		kubeControllerMetricsName:          EsKubeControllerMetrics,
+		renderElasticsearchSecret:          cfg.ElasticsearchSecret != nil,
+		renderKubeControllersGatewaySecret: cfg.KubeControllersGatewaySecret != nil,
+		kubeControllersRules:               kubeControllerRolePolicyRules,
+		enabledControllers:                 enabledControllers,
 	}
 }
 
@@ -148,9 +185,9 @@ type kubeControllersComponent struct {
 	kubeControllerConfigName         string
 	kubeControllerMetricsName        string
 
-	shouldRenderElasticsearchSecret          bool
-	shouldRenderManagerInternalSecret        bool
-	shouldRenderKubeControllersGatewaySecret bool
+	renderElasticsearchSecret          bool
+	renderManagerInternalSecret        bool
+	renderKubeControllersGatewaySecret bool
 
 	kubeControllersRules []rbacv1.PolicyRule
 
@@ -182,17 +219,17 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 		c.controllersDeployment(),
 	}
 	objectsToDelete := []client.Object{}
-	if c.shouldRenderManagerInternalSecret {
+	if c.renderManagerInternalSecret {
 		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
 			secret.CopyToNamespace(common.CalicoNamespace, c.cfg.ManagerInternalSecret)...)...)
 	}
 
-	if c.shouldRenderElasticsearchSecret {
+	if c.renderElasticsearchSecret {
 		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
 			secret.CopyToNamespace(common.CalicoNamespace, c.cfg.ElasticsearchSecret)...)...)
 	}
 
-	if c.shouldRenderKubeControllersGatewaySecret {
+	if c.renderKubeControllersGatewaySecret {
 		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
 			secret.CopyToNamespace(common.CalicoNamespace, c.cfg.KubeControllersGatewaySecret)...)...)
 	}
@@ -333,51 +370,6 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 	}
 
 	return rules
-}
-
-func calicoKubeControllersRoleSpecificRules() []rbacv1.PolicyRule {
-	return []rbacv1.PolicyRule{
-		{
-			APIGroups: []string{""},
-			Resources: []string{"secrets"},
-			Verbs:     []string{"deletecollection"},
-		},
-		{
-			APIGroups: []string{"crd.projectcalico.org"},
-			Resources: []string{"remoteclusterconfigurations"},
-			Verbs:     []string{"watch", "list", "get"},
-		},
-		{
-			APIGroups: []string{""},
-			Resources: []string{"endpoints"},
-			Verbs:     []string{"create", "update", "delete"},
-		},
-	}
-}
-
-func elasticsearchKubeControllersRoleSpecificRules() []rbacv1.PolicyRule {
-	return []rbacv1.PolicyRule{
-		{
-			APIGroups: []string{"elasticsearch.k8s.elastic.co"},
-			Resources: []string{"elasticsearches"},
-			Verbs:     []string{"watch", "get", "list"},
-		},
-		{
-			APIGroups: []string{""},
-			Resources: []string{"secrets"},
-			Verbs:     []string{"watch", "list", "get", "update", "create"},
-		},
-		{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"managedclusters"},
-			Verbs:     []string{"watch", "list", "get"},
-		},
-		{
-			APIGroups: []string{"rbac.authorization.k8s.io"},
-			Resources: []string{"clusterroles", "clusterrolebindings"},
-			Verbs:     []string{"watch", "list", "get"},
-		},
-	}
 }
 
 func (c *kubeControllersComponent) controllersServiceAccount() *corev1.ServiceAccount {

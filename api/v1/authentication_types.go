@@ -111,6 +111,10 @@ type AuthenticationOIDC struct {
 	// Default: "Dex"
 	// +optional
 	Type OIDCType `json:"type,omitempty"`
+
+	// Replicas defines the OIDC provider replicas. It only applies to OIDCType Dex. Defaults to 1.
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
 }
 
 // OIDCType defines how OIDC is configured for Tigera Enterprise. Dex should be the best option for most use-cases.

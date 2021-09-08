@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
+	"github.com/tigera/operator/pkg/render/common/podaffinity"
 
 	ocsv1 "github.com/openshift/api/security/v1"
 	"github.com/tigera/operator/pkg/render/common/authentication"
@@ -81,6 +82,7 @@ const (
 )
 
 func Manager(
+	manager *operatorv1.Manager,
 	keyValidatorConfig authentication.KeyValidatorConfig,
 	esSecrets []*corev1.Secret,
 	kibanaSecrets []*corev1.Secret,
@@ -92,6 +94,7 @@ func Manager(
 	openshift bool,
 	installation *operatorv1.InstallationSpec,
 	managementCluster *operatorv1.ManagementCluster,
+	managementClusterConnection *operatorv1.ManagementClusterConnection,
 	tunnelSecret *corev1.Secret,
 	internalTrafficSecret *corev1.Secret,
 	clusterDomain string,
@@ -139,11 +142,14 @@ func Manager(
 		clusterDomain:                 clusterDomain,
 		installation:                  installation,
 		managementCluster:             managementCluster,
+		managementClusterConnection:   managementClusterConnection,
+		manager:                       manager,
 		esLicenseType:                 esLicenseType,
 	}, nil
 }
 
 type managerComponent struct {
+	manager                       *operatorv1.Manager
 	keyValidatorConfig            authentication.KeyValidatorConfig
 	esSecrets                     []*corev1.Secret
 	kibanaSecrets                 []*corev1.Secret
@@ -157,6 +163,7 @@ type managerComponent struct {
 	clusterDomain                 string
 	installation                  *operatorv1.InstallationSpec
 	managementCluster             *operatorv1.ManagementCluster
+	managementClusterConnection   *operatorv1.ManagementClusterConnection
 	esLicenseType                 ElasticsearchLicenseType
 	managerImage                  string
 	proxyImage                    string
@@ -262,7 +269,6 @@ func (c *managerComponent) Ready() bool {
 
 // managerDeployment creates a deployment for the Tigera Secure manager component.
 func (c *managerComponent) managerDeployment() *appsv1.Deployment {
-	var replicas int32 = 1
 	annotations := make(map[string]string)
 
 	if c.complianceServerCertSecret != nil {
@@ -315,9 +321,18 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 				relasticsearch.ContainerDecorate(c.managerEsProxyContainer(), c.esClusterConfig.ClusterName(), ElasticsearchManagerUserSecret, c.clusterDomain, c.SupportedOSType()),
 				c.managerProxyContainer(),
 			},
-			Volumes: c.managerVolumes(),
+			Volumes:  c.managerVolumes(),
+			Affinity: podaffinity.NewPodAntiAffinity("tigera-manager", ManagerNamespace),
 		}),
 	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
+
+	var replicas int32 = DefaultReplicas
+	if c.manager.Spec.Replicas != nil {
+		// TODO: Support MCM tigera-manager HA deployment
+		if c.managementCluster == nil && c.managementClusterConnection == nil {
+			replicas = *c.manager.Spec.Replicas
+		}
+	}
 
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},

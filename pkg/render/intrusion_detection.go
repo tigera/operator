@@ -400,7 +400,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionRoleBinding() *rbacv1.Ro
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionDeployment() *appsv1.Deployment {
-	var replicas int32 = 1
+	var replicas int32 = DefaultReplicas
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},

@@ -865,7 +865,12 @@ var (
 		{
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"packetcaptures/files"},
-			Verbs:     []string{"get"},
+			Verbs:     []string{"get", "delete"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"packetcaptureslist"},
+			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
 			APIGroups: []string{""},
@@ -954,7 +959,12 @@ var (
 		{
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"packetcaptures/files"},
-			Verbs:     []string{"get"},
+			Verbs:     []string{"get", "delete"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"packetcaptureslist"},
+			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
 			APIGroups: []string{""},

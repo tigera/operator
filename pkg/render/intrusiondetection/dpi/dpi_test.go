@@ -18,7 +18,9 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
 	appsv1 "k8s.io/api/apps/v1"
@@ -31,6 +33,7 @@ import (
 
 var (
 	defaultMode int32 = 420
+	dirOrCreate       = corev1.HostPathDirectoryOrCreate
 
 	ids = &operatorv1.IntrusionDetection{
 		TypeMeta:   metav1.TypeMeta{Kind: "IntrusionDetection", APIVersion: "v1"},
@@ -104,11 +107,37 @@ var (
 					DefaultMode: &defaultMode,
 				}},
 		},
+		{
+			Name: "elastic-ca-cert-volume",
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: relasticsearch.PublicCertSecret,
+					Items: []corev1.KeyToPath{
+						{Key: "tls.crt", Path: "ca.pem"},
+					},
+				},
+			},
+		},
+		{
+			Name: "log-snort-alters",
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: "/var/log/calico/snort-alerts",
+					Type: &dirOrCreate,
+				},
+			},
+		},
 	}
 
 	expectedVolumeMounts = []corev1.VolumeMount{
 		{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
 		{MountPath: "/node-certs", Name: "node-certs", ReadOnly: true},
+		{
+			MountPath: "/etc/ssl/elastic/", Name: "elastic-ca-cert-volume",
+		},
+		{
+			MountPath: "/var/log/calico/snort-alerts", Name: "log-snort-alters",
+		},
 	}
 
 	typhaCAConfigMap = &corev1.ConfigMap{TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: render.TyphaCAConfigMapName}}
@@ -116,6 +145,8 @@ var (
 	typhaTLSSecret = &corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: render.TyphaTLSSecretName}}
 
 	nodeTLSSecret = &corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: render.NodeTLSSecretName}}
+
+	esConfigMap = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 )
 
 type resourceTestObj struct {
@@ -139,6 +170,9 @@ var _ = Describe("DPI rendering tests", func() {
 			Openshift:          false,
 			HasNoLicense:       false,
 			HasNoDPIResource:   false,
+			ESClusterConfig:    esConfigMap,
+			ESSecrets:          nil,
+			ClusterDomain:      dns.DefaultClusterDomain,
 		})
 
 		resources, _ := component.Objects()
@@ -195,6 +229,9 @@ var _ = Describe("DPI rendering tests", func() {
 			Openshift:          true,
 			HasNoLicense:       false,
 			HasNoDPIResource:   false,
+			ESClusterConfig:    esConfigMap,
+			ESSecrets:          nil,
+			ClusterDomain:      dns.DefaultClusterDomain,
 		})
 
 		resources, _ := component.Objects()
@@ -237,6 +274,9 @@ var _ = Describe("DPI rendering tests", func() {
 			Openshift:          false,
 			HasNoLicense:       true,
 			HasNoDPIResource:   false,
+			ESClusterConfig:    esConfigMap,
+			ESSecrets:          nil,
+			ClusterDomain:      dns.DefaultClusterDomain,
 		})
 
 		createResources, deleteResource := component.Objects()
@@ -263,6 +303,9 @@ var _ = Describe("DPI rendering tests", func() {
 			Openshift:          false,
 			HasNoLicense:       false,
 			HasNoDPIResource:   true,
+			ESClusterConfig:    esConfigMap,
+			ESSecrets:          nil,
+			ClusterDomain:      dns.DefaultClusterDomain,
 		})
 		createResources, deleteResource := component.Objects()
 		expectedResources := []resourceTestObj{

@@ -322,7 +322,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			ctx = context.Background()
 
 			// Create a fake clientset for the autoscaler.
-			var replicas int32 = 1
+			var replicas int32 = render.DefaultReplicas
 			objs := []runtime.Object{
 				&corev1.Node{
 					TypeMeta: metav1.TypeMeta{},
@@ -647,7 +647,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			ctx = context.Background()
 
 			// Create a fake clientset for the autoscaler.
-			var replicas int32 = 1
+			var replicas int32 = render.DefaultReplicas
 			objs := []runtime.Object{
 				&corev1.Node{
 					TypeMeta: metav1.TypeMeta{},
@@ -785,7 +785,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			ctx = context.Background()
 
 			// Create a fake clientset for the autoscaler.
-			var replicas int32 = 1
+			var replicas int32 = render.DefaultReplicas
 			objs := []runtime.Object{
 				&corev1.Node{
 					TypeMeta: metav1.TypeMeta{},

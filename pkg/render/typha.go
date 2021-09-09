@@ -388,6 +388,12 @@ func (c *typhaComponent) typhaDeployment() *appsv1.Deployment {
 		annotations["prometheus.io/port"] = fmt.Sprintf("%d", *c.cfg.Installation.TyphaMetricsPort)
 	}
 
+	// Allow tolerations to be overwritten by the end-user.
+	tolerations := rmeta.TolerateAll
+	if len(c.cfg.Installation.ControlPlaneTolerations) != 0 {
+		tolerations = c.cfg.Installation.ControlPlaneTolerations
+	}
+
 	d := appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -417,7 +423,7 @@ func (c *typhaComponent) typhaDeployment() *appsv1.Deployment {
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
-					Tolerations:                   rmeta.TolerateAll,
+					Tolerations:                   tolerations,
 					Affinity:                      c.affinity(),
 					ImagePullSecrets:              c.cfg.Installation.ImagePullSecrets,
 					ServiceAccountName:            TyphaServiceAccountName,

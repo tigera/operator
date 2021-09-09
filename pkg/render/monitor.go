@@ -49,6 +49,23 @@ const (
 
 	PrometheusHTTPAPIServiceName = "prometheus-http-api"
 	PrometheusDefaultPort        = 9090
+
+	// Write your alertmanager configuration file based on
+	// https://prometheus.io/docs/alerting/configuration/
+	alertmanagerConfig = `global:
+  resolve_timeout: 5m
+route:
+  group_by: ['job']
+  group_wait: 30s
+  group_interval: 1m
+  repeat_interval: 5m
+  receiver: 'webhook'
+receivers:
+- name: 'webhook'
+  webhook_configs:
+  - url: 'http://calico-alertmanager-webhook:30501/'
+`
+	prometheusServiceAccountName = "prometheus"
 )
 
 func Monitor(
@@ -104,7 +121,12 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 	toCreate = append(toCreate,
 		mc.role(),
 		mc.roleBinding(),
+		mc.alertmanagerSecret(),
+		mc.alertmanagerService(),
 		mc.alertmanager(),
+		mc.prometheusServiceAccount(),
+		mc.prometheusClusterRole(),
+		mc.prometheusClusterRoleBinding(),
 		mc.prometheus(),
 		mc.prometheusRule(),
 		mc.serviceMonitorCalicoNode(),
@@ -142,6 +164,44 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 	}
 }
 
+func (mc *monitorComponent) alertmanagerSecret() *corev1.Secret {
+	// This secret will be mounted as the Alertmanager configuration file.
+	// TODO: We should use the native CR support for this instead of using a secret for it.
+	return &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "alertmanager-calico-node-alertmanager",
+			Namespace: common.TigeraPrometheusNamespace,
+		},
+		Data: map[string][]byte{
+			"alertmanager.yaml": []byte(alertmanagerConfig),
+		},
+	}
+}
+
+func (mc *monitorComponent) alertmanagerService() *corev1.Service {
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      CalicoNodeAlertmanager,
+			Namespace: common.TigeraPrometheusNamespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{
+				{
+					Name:       "web",
+					Port:       9093,
+					Protocol:   corev1.ProtocolTCP,
+					TargetPort: intstr.FromString("web"),
+				},
+			},
+			Selector: map[string]string{
+				"alertmanager": CalicoNodeAlertmanager,
+			},
+		},
+	}
+}
+
 func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 	return &monitoringv1.Prometheus{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PrometheusesKind, APIVersion: MonitoringAPIVersion},
@@ -152,7 +212,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		Spec: monitoringv1.PrometheusSpec{
 			Image:                  &mc.prometheusImage,
 			ImagePullSecrets:       secret.GetReferenceList(mc.pullSecrets),
-			ServiceAccountName:     "prometheus",
+			ServiceAccountName:     prometheusServiceAccountName,
 			ServiceMonitorSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"team": "network-operators"}},
 			PodMonitorSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"team": "network-operators"}},
 			Version:                components.ComponentPrometheus.Version,
@@ -172,6 +232,71 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 					},
 				},
 			},
+		},
+	}
+}
+
+func (mc *monitorComponent) prometheusServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      prometheusServiceAccountName,
+			Namespace: common.TigeraPrometheusNamespace,
+		},
+	}
+}
+
+func (mc *monitorComponent) prometheusClusterRole() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "prometheus",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{
+					"endpoints",
+					"nodes",
+					"pods",
+					"services",
+				},
+				Verbs: []string{
+					"get",
+					"list",
+					"watch",
+				},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"get"},
+			},
+			{
+				NonResourceURLs: []string{"/metrics"},
+				Verbs:           []string{"get"},
+			},
+		},
+	}
+}
+
+func (mc *monitorComponent) prometheusClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "prometheus",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      prometheusServiceAccountName,
+				Namespace: common.TigeraPrometheusNamespace,
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "prometheus",
 		},
 	}
 }

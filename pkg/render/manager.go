@@ -62,7 +62,7 @@ const (
 	ManagerInternalSecretCertName    = "cert"
 
 	ElasticsearchManagerUserSecret   = "tigera-ee-manager-elasticsearch-access"
-	tlsSecretHashAnnotation          = "hash.operator.tigera.io/tls-secret"
+	TlsSecretHashAnnotation          = "hash.operator.tigera.io/tls-secret"
 	ManagerInternalTLSHashAnnotation = "hash.operator.tigera.io/internal-tls-secret"
 
 	KibanaTLSHashAnnotation         = "hash.operator.tigera.io/kibana-secrets"
@@ -107,7 +107,7 @@ func Manager(
 		tlsSecrets = append(tlsSecrets, secret.CopyToNamespace(ManagerNamespace, tlsKeyPair)...)
 		tlsAnnotation = rmeta.AnnotationHash(tlsKeyPair.Data)
 	}
-	tlsAnnotations[tlsSecretHashAnnotation] = tlsAnnotation
+	tlsAnnotations[TlsSecretHashAnnotation] = tlsAnnotation
 
 	if keyValidatorConfig != nil {
 		tlsSecrets = append(tlsSecrets, keyValidatorConfig.RequiredSecrets(ManagerNamespace)...)

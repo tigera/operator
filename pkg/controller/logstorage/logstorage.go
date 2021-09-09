@@ -42,6 +42,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 	esService *corev1.Service,
 	kbService *corev1.Service,
 	pullSecrets []*corev1.Secret,
+	authentication *operatorv1.Authentication,
 	hdler utils.ComponentHandler,
 	reqLogger logr.Logger,
 	ctx context.Context,
@@ -91,12 +92,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 		return reconcile.Result{}, false, err
 	}
 
-	// Fetch the Authentication spec. If present, we use it to configure dex as an authentication proxy.
-	authentication, err := utils.GetAuthentication(ctx, r.client)
-	if err != nil && !errors.IsNotFound(err) {
-		r.status.SetDegraded("Error while fetching Authentication", err.Error())
-		return reconcile.Result{}, false, err
-	}
+	// If Authentication spec present, we use it to configure dex as an authentication proxy.
 	if authentication != nil && authentication.Status.State != operatorv1.TigeraStatusReady {
 		r.status.SetDegraded("Authentication is not ready", fmt.Sprintf("authentication status: %s", authentication.Status.State))
 		return reconcile.Result{}, false, nil

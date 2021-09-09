@@ -22,6 +22,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"gopkg.in/yaml.v2"
@@ -51,9 +52,8 @@ const (
 	DexCNPattern = "tigera-dex.tigera-dex.svc.%s"
 )
 
-var dexReplicas int32 = 1
-
 func Dex(
+	authentication *operatorv1.Authentication,
 	pullSecrets []*corev1.Secret,
 	openshift bool,
 	installation *operatorv1.InstallationSpec,
@@ -63,26 +63,28 @@ func Dex(
 ) Component {
 
 	return &dexComponent{
-		dexConfig:     dexConfig,
-		pullSecrets:   pullSecrets,
-		openshift:     openshift,
-		installation:  installation,
-		connector:     dexConfig.Connector(),
-		clusterDomain: clusterDomain,
-		deleteDex:     deleteDex,
+		authentication: authentication,
+		dexConfig:      dexConfig,
+		pullSecrets:    pullSecrets,
+		openshift:      openshift,
+		installation:   installation,
+		connector:      dexConfig.Connector(),
+		clusterDomain:  clusterDomain,
+		deleteDex:      deleteDex,
 	}
 }
 
 type dexComponent struct {
-	dexConfig     DexConfig
-	pullSecrets   []*corev1.Secret
-	openshift     bool
-	installation  *operatorv1.InstallationSpec
-	connector     map[string]interface{}
-	image         string
-	csrInitImage  string
-	clusterDomain string
-	deleteDex     bool
+	authentication *operatorv1.Authentication
+	dexConfig      DexConfig
+	pullSecrets    []*corev1.Secret
+	openshift      bool
+	installation   *operatorv1.InstallationSpec
+	connector      map[string]interface{}
+	image          string
+	csrInitImage   string
+	clusterDomain  string
+	deleteDex      bool
 }
 
 func (c *dexComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -214,6 +216,11 @@ func (c *dexComponent) deployment() client.Object {
 			DexNamespace))
 	}
 
+	var replicas int32 = DefaultReplicas
+	if c.authentication.Spec.OIDC != nil && c.authentication.Spec.OIDC.Replicas != nil {
+		replicas = *c.authentication.Spec.OIDC.Replicas
+	}
+
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -229,7 +236,7 @@ func (c *dexComponent) deployment() client.Object {
 					"k8s-app": DexObjectName,
 				},
 			},
-			Replicas: &dexReplicas,
+			Replicas: &replicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
@@ -268,7 +275,8 @@ func (c *dexComponent) deployment() client.Object {
 							VolumeMounts: c.dexConfig.RequiredVolumeMounts(),
 						},
 					},
-					Volumes: c.dexConfig.RequiredVolumes(),
+					Volumes:  c.dexConfig.RequiredVolumes(),
+					Affinity: podaffinity.NewPodAntiAffinity(DexObjectName, DexNamespace),
 				},
 			},
 		},

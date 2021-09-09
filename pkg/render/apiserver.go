@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 
@@ -77,7 +78,9 @@ func csrRolebindingName(v operatorv1.ProductVariant) string {
 	return "tigera-apiserver"
 }
 
-func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
+func APIServer(
+	apiServer *operatorv1.APIServer,
+	k8sServiceEndpoint k8sapi.ServiceEndpoint,
 	installation *operatorv1.InstallationSpec,
 	hostNetwork bool,
 	managementCluster *operatorv1.ManagementCluster,
@@ -129,6 +132,7 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
 	}
 
 	return &apiServerComponent{
+		apiServer:                   apiServer,
 		installation:                installation,
 		forceHostNetwork:            hostNetwork,
 		managementCluster:           managementCluster,
@@ -144,6 +148,7 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
 }
 
 type apiServerComponent struct {
+	apiServer                   *operatorv1.APIServer
 	k8sServiceEp                k8sapi.ServiceEndpoint
 	installation                *operatorv1.InstallationSpec
 	managementCluster           *operatorv1.ManagementCluster
@@ -781,7 +786,6 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 		name = "calico-apiserver"
 	}
 
-	var replicas int32 = 1
 	hostNetwork := c.hostNetwork()
 	dnsPolicy := corev1.DNSClusterFirst
 	if hostNetwork {
@@ -799,6 +803,11 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 			APIServerSecretCertName,
 			dns.GetServiceDNSNames(apiserverServiceName(c.installation.Variant), rmeta.APIServerNamespace(c.installation.Variant), c.clusterDomain),
 			rmeta.APIServerNamespace(c.installation.Variant)))
+	}
+
+	var replicas int32 = DefaultReplicas
+	if c.apiServer.Spec.Replicas != nil {
+		replicas = *c.apiServer.Spec.Replicas
 	}
 
 	d := &appsv1.Deployment{
@@ -838,7 +847,8 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 					Containers: []corev1.Container{
 						c.apiServerContainer(),
 					},
-					Volumes: c.apiServerVolumes(),
+					Volumes:  c.apiServerVolumes(),
+					Affinity: podaffinity.NewPodAntiAffinity(name, rmeta.APIServerNamespace(c.installation.Variant)),
 				},
 			},
 		},

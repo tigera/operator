@@ -19,6 +19,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+const (
+	DefaultReplicas = 1
+)
+
 var (
 	CommonName               = "common-name"
 	URISAN                   = "uri-san"

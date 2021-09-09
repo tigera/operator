@@ -23,9 +23,11 @@ import (
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/configmap"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/meta"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -53,6 +55,9 @@ type DPIConfig struct {
 	Openshift          bool
 	HasNoLicense       bool
 	HasNoDPIResource   bool
+	ESSecrets          []*corev1.Secret
+	ESClusterConfig    *relasticsearch.ClusterConfig
+	ClusterDomain      string
 }
 
 func DPI(cfg *DPIConfig) render.Component {
@@ -90,6 +95,7 @@ func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 	toCreate = append(toCreate, render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider))
 	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.NodeTLSSecret)...)...)
 	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.TyphaTLSSecret)...)...)
+	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.ESSecrets...)...)...)
 	toCreate = append(toCreate, configmap.ToRuntimeObjects(configmap.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.TyphaCAConfigMap)...)...)
 	toCreate = append(toCreate,
 		d.dpiServiceAccount(),
@@ -111,6 +117,25 @@ func (d *dpiComponent) SupportedOSType() meta.OSType {
 func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 	var terminationGracePeriod int64 = 0
 
+	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels: map[string]string{
+				"k8s-app": DeepPacketInspectionName,
+			},
+			Annotations: d.dpiAnnotations(),
+		},
+		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
+			Tolerations:                   rmeta.TolerateAll,
+			ImagePullSecrets:              secret.GetReferenceList(d.cfg.PullSecrets),
+			ServiceAccountName:            DeepPacketInspectionName,
+			TerminationGracePeriodSeconds: &terminationGracePeriod,
+			HostNetwork:                   true,
+			// Adjust DNS policy so we can access in-cluster services.
+			DNSPolicy:  corev1.DNSClusterFirstWithHostNet,
+			Containers: []corev1.Container{d.dpiContainer()},
+			Volumes:    d.dpiVolumes(),
+		}),
+	}, d.cfg.ESClusterConfig, d.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 	return &appsv1.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -119,25 +144,7 @@ func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 		},
 		Spec: appsv1.DaemonSetSpec{
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": DeepPacketInspectionName}},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"k8s-app": DeepPacketInspectionName,
-					},
-					Annotations: d.dpiAnnotations(),
-				},
-				Spec: corev1.PodSpec{
-					Tolerations:                   rmeta.TolerateAll,
-					ImagePullSecrets:              secret.GetReferenceList(d.cfg.PullSecrets),
-					ServiceAccountName:            DeepPacketInspectionName,
-					TerminationGracePeriodSeconds: &terminationGracePeriod,
-					HostNetwork:                   true,
-					// Adjust DNS policy so we can access in-cluster services.
-					DNSPolicy:  corev1.DNSClusterFirstWithHostNet,
-					Containers: []corev1.Container{d.dpiContainer()},
-					Volumes:    d.dpiVolumes(),
-				},
-			},
+			Template: *podTemplate,
 		},
 	}
 }
@@ -149,7 +156,7 @@ func (d *dpiComponent) dpiContainer() corev1.Container {
 		privileged = true
 	}
 
-	return corev1.Container{
+	dpiContainer := corev1.Container{
 		Name:         DeepPacketInspectionName,
 		Image:        d.dpiImage,
 		Resources:    *d.cfg.IntrusionDetection.Spec.ComponentResources[0].ResourceRequirements,
@@ -160,10 +167,16 @@ func (d *dpiComponent) dpiContainer() corev1.Container {
 		},
 		ReadinessProbe: d.dpiReadinessProbes(),
 	}
+
+	return relasticsearch.ContainerDecorateIndexCreator(
+		relasticsearch.ContainerDecorate(dpiContainer, d.cfg.ESClusterConfig.ClusterName(),
+			render.ElasticsearchIntrusionDetectionUserSecret, d.cfg.ClusterDomain, rmeta.OSTypeLinux),
+		d.cfg.ESClusterConfig.Replicas(), d.cfg.ESClusterConfig.Shards())
 }
 
 func (d *dpiComponent) dpiVolumes() []corev1.Volume {
 	var defaultMode int32 = 420
+	dirOrCreate := corev1.HostPathDirectoryOrCreate
 
 	return []corev1.Volume{
 		{
@@ -182,6 +195,15 @@ func (d *dpiComponent) dpiVolumes() []corev1.Volume {
 				Secret: &corev1.SecretVolumeSource{
 					SecretName:  render.NodeTLSSecretName,
 					DefaultMode: &defaultMode,
+				},
+			},
+		},
+		{
+			Name: "log-snort-alters",
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: "/var/log/calico/snort-alerts",
+					Type: &dirOrCreate,
 				},
 			},
 		},
@@ -239,6 +261,7 @@ func (d *dpiComponent) dpiVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
 		{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
 		{MountPath: "/node-certs", Name: "node-certs", ReadOnly: true},
+		{MountPath: "/var/log/calico/snort-alerts", Name: "log-snort-alters"},
 	}
 }
 

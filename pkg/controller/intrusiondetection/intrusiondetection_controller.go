@@ -433,6 +433,9 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		Openshift:          r.provider == operatorv1.ProviderOpenShift,
 		HasNoLicense:       hasNoLicense,
 		HasNoDPIResource:   hasNoDPIResource,
+		ESClusterConfig:    esClusterConfig,
+		ESSecrets:          esSecrets,
+		ClusterDomain:      r.clusterDomain,
 	})
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, dpiComponent); err != nil {

@@ -31,7 +31,7 @@ import (
 	certV1beta1 "k8s.io/api/certificates/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
@@ -510,9 +510,15 @@ func (m *statusManager) removeTigeraStatus() bool {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	if m.enabled != nil && !*m.enabled {
-		ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: m.component}}
-		err := m.client.Delete(context.TODO(), ts)
-		if err != nil && !errors.IsNotFound(err) {
+		ctx := context.TODO()
+		ts := &operator.TigeraStatus{}
+		if err := m.client.Get(ctx, client.ObjectKey{Name: m.component}, ts); err != nil && kerrors.IsNotFound(err) {
+			// If tigerastatus does not exist then do not try to delete it.
+			return true
+		}
+		ts = &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: m.component}}
+		err := m.client.Delete(ctx, ts)
+		if err != nil && !kerrors.IsNotFound(err) {
 			log.WithValues("error", err).Info("Failed to remove TigeraStatus", m.component)
 		}
 		return true
@@ -572,7 +578,7 @@ func (m *statusManager) set(conditions ...operator.TigeraStatusCondition) {
 
 	var ts operator.TigeraStatus
 	err := m.client.Get(context.TODO(), types.NamespacedName{Name: m.component}, &ts)
-	isNotFound := errors.IsNotFound(err)
+	isNotFound := kerrors.IsNotFound(err)
 	if err != nil && !isNotFound {
 		log.WithValues("error", err).Info("Failed to get TigeraStatus %q: %v", m.component, err)
 		return

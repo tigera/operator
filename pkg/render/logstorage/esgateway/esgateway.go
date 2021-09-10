@@ -249,6 +249,8 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 				Key: "elastic",
 			},
 		}},
+		// Currently Cloud only. Enable prometheus metrics endpoint at :METRICS_PORT/metrics (Default is 9091).
+		{Name: "ES_GATEWAY_METRICS_ENABLED", Value: "true"},
 	}
 
 	certVolume := corev1.Volume{

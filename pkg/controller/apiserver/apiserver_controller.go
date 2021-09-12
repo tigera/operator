@@ -297,8 +297,14 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
 	var components []render.Component
-	component, err := render.APIServer(k8sapi.Endpoint, network, false, managementCluster, managementClusterConnection, amazon, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift,
-		tunnelCASecret, r.clusterDomain)
+	component, err := render.APIServer(
+		k8sapi.Endpoint, network, false,
+		managementCluster, managementClusterConnection,
+		amazon,
+		tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift,
+		tunnelCASecret, r.clusterDomain,
+		instance.Spec.Replicas,
+	)
 	if err != nil {
 		log.Error(err, "Error rendering APIServer")
 		r.status.SetDegraded("Error rendering APIServer", err.Error())

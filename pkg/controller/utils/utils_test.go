@@ -26,14 +26,15 @@ import (
 
 	"github.com/stretchr/testify/mock"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 
-	apps "k8s.io/api/apps/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/discovery"
@@ -57,12 +58,12 @@ var _ = Describe("Utils elasticsearch license type tests", func() {
 		err := apis.AddToScheme(scheme)
 		Expect(err).NotTo(HaveOccurred())
 
-		Expect(v1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-		Expect(apps.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(corev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(batchv1beta.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
-		c = fake.NewFakeClientWithScheme(scheme)
+		c = fake.NewClientBuilder().WithScheme(scheme).Build()
 		ctx = context.Background()
 		log = logf.Log.WithName("utils-test-logger")
 	})
@@ -91,6 +92,56 @@ var _ = Describe("Utils elasticsearch license type tests", func() {
 		Expect(err).Should(HaveOccurred())
 	})
 
+})
+
+var _ = Describe("Get Tigera APIServer tests", func() {
+	var (
+		c      client.Client
+		ctx    context.Context
+		scheme *runtime.Scheme
+	)
+
+	BeforeEach(func() {
+		// Create a Kubernetes client.
+		scheme = runtime.NewScheme()
+		err := apis.AddToScheme(scheme)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(corev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+
+		c = fake.NewClientBuilder().WithScheme(scheme).Build()
+		ctx = context.Background()
+	})
+
+	AfterEach(func() {
+		obj := &operatorv1.APIServer{}
+		Expect(c.Get(ctx, DefaultTSEEInstanceKey, obj)).NotTo(HaveOccurred())
+		Expect(c.Delete(ctx, obj)).NotTo(HaveOccurred())
+	})
+
+	It("should set default replicas to 1", func() {
+		Expect(c.Create(ctx, &operatorv1.APIServer{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+		})).NotTo(HaveOccurred())
+		apiServer, msg, err := GetAPIServer(ctx, c)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(msg).To(Equal(""))
+		Expect(apiServer.Spec.Replicas).To(Equal(ptr.Int32ToPtr(1)))
+	})
+
+	It("should honor replicas in the spec", func() {
+		Expect(c.Create(ctx, &operatorv1.APIServer{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+			Spec: operatorv1.APIServerSpec{
+				Replicas: ptr.Int32ToPtr(3),
+			},
+		})).NotTo(HaveOccurred())
+		apiServer, msg, err := GetAPIServer(ctx, c)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(msg).To(Equal(""))
+		Expect(apiServer.Spec.Replicas).To(Equal(ptr.Int32ToPtr(3)))
+	})
 })
 
 var _ = Describe("Tigera License polling test", func() {

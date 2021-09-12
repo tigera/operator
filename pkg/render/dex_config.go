@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 
 	oprv1 "github.com/tigera/operator/api/v1"
@@ -83,6 +84,7 @@ type DexConfig interface {
 	Connector() map[string]interface{}
 	CreateCertSecret() *corev1.Secret
 	RedirectURIs() []string
+	Replicas() *int32
 	authentication.KeyValidatorConfig
 }
 
@@ -172,6 +174,11 @@ func baseCfg(
 		connType = connectorTypeLDAP
 	}
 
+	var replicas *int32 = ptr.Int32ToPtr(1)
+	if authentication.Spec.OIDC != nil && authentication.Spec.OIDC.Replicas != nil {
+		replicas = authentication.Spec.OIDC.Replicas
+	}
+
 	return &dexBaseCfg{
 		certificateManagement: certificateManagement,
 		authentication:        authentication,
@@ -182,6 +189,7 @@ func baseCfg(
 		connectorType:         connType,
 		baseURL:               baseUrl,
 		clusterDomain:         clusterDomain,
+		replicas:              replicas,
 	}
 }
 
@@ -195,6 +203,7 @@ type dexBaseCfg struct {
 	baseURL               string
 	connectorType         string
 	clusterDomain         string
+	replicas              *int32
 }
 
 func (d *dexBaseCfg) BaseURL() string {
@@ -219,6 +228,10 @@ func (d *dexBaseCfg) RedirectURIs() []string {
 	}
 
 	return redirectURIs
+}
+
+func (d *dexBaseCfg) Replicas() *int32 {
+	return d.replicas
 }
 
 func (d *dexBaseCfg) RequiredConfigMaps(namespace string) []*corev1.ConfigMap {

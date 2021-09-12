@@ -28,6 +28,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -1222,6 +1223,9 @@ var _ = Describe("LogStorage controller", func() {
 			},
 			Indices: &operatorv1.Indices{
 				Replicas: &replicas,
+			},
+			ESGateway: &operatorv1.ESGateway{
+				Replicas: ptr.Int32ToPtr(2),
 			},
 			StorageClassName: DefaultElasticsearchStorageClass,
 			ComponentResources: []operatorv1.LogStorageComponentResource{

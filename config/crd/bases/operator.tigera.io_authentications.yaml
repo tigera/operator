@@ -167,6 +167,11 @@ spec:
                       - SelectAccount
                       type: string
                     type: array
+                  replicas:
+                    description: Replicas defines the OIDC provider replicas. It only
+                      applies to OIDCType Dex. Defaults to 1.
+                    format: int32
+                    type: integer
                   requestedScopes:
                     description: 'RequestedScopes is a list of scopes to request from
                       the OIDC provider. If not provided, the following scopes are

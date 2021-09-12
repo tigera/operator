@@ -17,9 +17,9 @@ package esgateway
 import (
 	"fmt"
 
-	"github.com/tigera/operator/pkg/render/kubecontrollers"
-
+	"github.com/tigera/operator/pkg/ptr"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -88,6 +88,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: rmeta.OperatorNamespace()}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.InternalCertSecret, Namespace: render.ElasticsearchNamespace}},
 				clusterDomain,
+				ptr.Int32ToPtr(2),
 			})
 
 			createResources, _ := component.Objects()
@@ -129,12 +130,12 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: rmeta.OperatorNamespace()}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.InternalCertSecret, Namespace: render.ElasticsearchNamespace}},
 				clusterDomain,
+				ptr.Int32ToPtr(2),
 			})
 
 			createResources, _ := component.Objects()
 			compareResources(createResources, expectedResources)
 		})
-
 	})
 })
 

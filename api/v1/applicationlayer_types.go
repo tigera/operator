@@ -18,7 +18,6 @@ package v1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // ApplicationLayerSpec defines the desired state of ApplicationLayer
@@ -73,10 +72,6 @@ type ApplicationLayer struct {
 	Status ApplicationLayerStatus `json:"status,omitempty"`
 }
 
-func (a ApplicationLayer) DeepCopyObject() runtime.Object {
-	panic("implement me")
-}
-
 // +kubebuilder:object:root=true
 
 // ApplicationLayerList contains a list of ApplicationLayer
@@ -84,10 +79,6 @@ type ApplicationLayerList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []ApplicationLayer `json:"items"`
-}
-
-func (a ApplicationLayerList) DeepCopyObject() runtime.Object {
-	panic("implement me")
 }
 
 func init() {

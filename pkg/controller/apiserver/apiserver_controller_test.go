@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,6 +31,7 @@ import (
 	"github.com/tigera/operator/test"
 
 	appsv1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -132,6 +133,37 @@ var _ = Describe("apiserver controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentCSRInitContainer.Image,
 					components.ComponentCSRInitContainer.Version)))
+
+			pcDeployment := appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.PacketCaptureName,
+					Namespace: render.PacketCaptureNamespace,
+				},
+			}
+			Expect(test.GetResource(cli, &pcDeployment)).To(BeNil())
+			Expect(pcDeployment.Spec.Template.Spec.Containers).To(HaveLen(1))
+			pcContainer := test.GetContainer(pcDeployment.Spec.Template.Spec.Containers, render.PacketCaptureContainerName)
+			Expect(pcContainer).ToNot(BeNil())
+			Expect(pcContainer.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentPacketCapture.Image,
+					components.ComponentPacketCapture.Version)))
+			csrinitContainer := test.GetContainer(pcDeployment.Spec.Template.Spec.InitContainers, render.CSRInitContainerName)
+			Expect(csrinitContainer).ToNot(BeNil())
+			Expect(csrinitContainer.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentCSRInitContainer.Image,
+					components.ComponentCSRInitContainer.Version)))
+			pcSecret := v1.Secret{
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.PacketCaptureCertSecret,
+					Namespace: "tigera-operator",
+				},
+			}
+			Expect(test.GetResource(cli, &pcSecret)).To(BeNil())
+			Expect(pcSecret).NotTo(BeNil())
 		})
 		It("should use images from imageset", func() {
 			Expect(cli.Create(ctx, &operatorv1.ImageSet{
@@ -141,6 +173,7 @@ var _ = Describe("apiserver controller tests", func() {
 						{Image: "tigera/cnx-apiserver", Digest: "sha256:apiserverhash"},
 						{Image: "tigera/cnx-queryserver", Digest: "sha256:queryserverhash"},
 						{Image: "tigera/key-cert-provisioner", Digest: "sha256:calicocsrinithash"},
+						{Image: "tigera/packetcapture-api", Digest: "sha256:packetcapturehash"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -181,6 +214,37 @@ var _ = Describe("apiserver controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentCSRInitContainer.Image,
 					"sha256:calicocsrinithash")))
+
+			pcDeployment := appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.PacketCaptureName,
+					Namespace: render.PacketCaptureNamespace,
+				},
+			}
+			Expect(test.GetResource(cli, &pcDeployment)).To(BeNil())
+			Expect(pcDeployment.Spec.Template.Spec.Containers).To(HaveLen(1))
+			pcContainer := test.GetContainer(pcDeployment.Spec.Template.Spec.Containers, render.PacketCaptureContainerName)
+			Expect(pcContainer).ToNot(BeNil())
+			Expect(pcContainer.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentPacketCapture.Image,
+					"sha256:packetcapturehash")))
+			csrinitContainer := test.GetContainer(pcDeployment.Spec.Template.Spec.InitContainers, render.CSRInitContainerName)
+			Expect(csrinitContainer).ToNot(BeNil())
+			Expect(csrinitContainer.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentCSRInitContainer.Image,
+					"sha256:calicocsrinithash")))
+			pcSecret := v1.Secret{
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.PacketCaptureCertSecret,
+					Namespace: "tigera-operator",
+				},
+			}
+			Expect(test.GetResource(cli, &pcSecret)).To(BeNil())
+			Expect(pcSecret).NotTo(BeNil())
 		})
 	})
 })

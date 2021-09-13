@@ -62,7 +62,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	reconciler := newReconciler(mgr, opts, licenseAPIReady)
 
 	// Create a new controller
-	c, err := controller.New("applicationlayer-c", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
+	c, err := controller.New("applicationlayer-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
 	if err != nil {
 		return err
 	}

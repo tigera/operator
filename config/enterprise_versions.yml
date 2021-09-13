@@ -99,4 +99,11 @@ components:
   alertmanager:
     image: tigera/alertmanager
     version: v0.20.0
+  l7-collector:
+    image: tigera/l7-collector
+    version: master
+  envoy:
+    image: tigera/envoy
+    version: master
+
 

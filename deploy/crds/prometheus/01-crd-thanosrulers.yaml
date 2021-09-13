@@ -6,6 +6,8 @@ metadata:
     "helm.sh/hook": "crd-install"
   name: thanosrulers.monitoring.coreos.com
 spec:
+  # preserveUnknownFields - set to false to pickup udpate to v1/CRD structure 
+  preserveUnknownFields: false
   group: monitoring.coreos.com
   names:
     kind: ThanosRuler

@@ -11,6 +11,8 @@ metadata:
     app.kubernetes.io/version: '1.7.1'
   name: enterprisesearches.enterprisesearch.k8s.elastic.co
 spec:
+  # preserveUnknownFields - set to false to pickup udpate to v1/CRD structure 
+  preserveUnknownFields: false
   group: enterprisesearch.k8s.elastic.co
   names:
     categories:

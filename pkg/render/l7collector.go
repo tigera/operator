@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/ptr"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -30,6 +31,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/statik"
 )
 
 const (
@@ -103,12 +105,11 @@ func (c *l7LogCollectorComponent) SupportedOSType() rmeta.OSType {
 
 func (c *l7LogCollectorComponent) Objects() ([]client.Object, []client.Object) {
 	var objs []client.Object
-	objs = append(objs,
-		CreateNamespace(
-			CalicoSystemNamespace,
-			c.installation.KubernetesProvider))
+
+	objs = append(objs, CreateNamespace(CalicoSystemNamespace, c.installation.KubernetesProvider))
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(CalicoSystemNamespace, c.pullSecrets...)...)...)
 	objs = append(objs, c.daemonset())
+	objs = append(objs, c.envoyConfigMap())
 
 	return objs, nil
 }
@@ -264,4 +265,24 @@ func (c *l7LogCollectorComponent) collectorVolMounts() []corev1.VolumeMount {
 	}
 
 	return volumes
+}
+
+func (c *l7LogCollectorComponent) envoyConfigMap() *corev1.ConfigMap {
+	config, err := statik.GetStatikFile("/envoy-config.yaml")
+
+	if err != nil || config == "" {
+		log.Error(err, "Failed to get envoy-config.yaml file")
+	}
+
+	return &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "envoy-config",
+			Namespace: common.CalicoNamespace,
+			Labels:    map[string]string{},
+		},
+		Data: map[string]string{
+			"envoy-config.yaml": config,
+		},
+	}
 }

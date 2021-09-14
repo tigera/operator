@@ -1065,6 +1065,16 @@ func (es elasticsearchComponent) eckOperatorClusterRole() *rbacv1.ClusterRole {
 			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 		},
 		{
+			APIGroups: []string{"agent.k8s.elastic.co"},
+			Resources: []string{"agents", "agents/status", "agents/finalizers"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		{
+			APIGroups: []string{"maps.k8s.elastic.co"},
+			Resources: []string{"elasticmapsservers", "elasticmapsservers/status", "elasticmapsservers/finalizers"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		{
 			APIGroups: []string{"associations.k8s.elastic.co"},
 			Resources: []string{"apmserverelasticsearchassociations", "apmserverelasticsearchassociations/status"},
 			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},

@@ -73,7 +73,7 @@ var (
 	}
 
 	ComponentElasticsearchOperator = component{
-		Version: "1.3.2",
+		Version: "1.7.1",
 		Image:   "tigera/eck-operator",
 	}
 

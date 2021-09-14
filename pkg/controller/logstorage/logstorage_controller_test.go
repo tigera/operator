@@ -422,7 +422,8 @@ var _ = Describe("LogStorage controller", func() {
 							Namespace: render.ElasticsearchNamespace,
 						},
 						Data: map[string][]byte{
-							"elastic": []byte("password"),
+							"elastic":     []byte("password"),
+							"not-elastic": []byte("not-password"),
 						},
 					}
 					Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
@@ -447,6 +448,27 @@ var _ = Describe("LogStorage controller", func() {
 					result, err = r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 					Expect(result).Should(Equal(reconcile.Result{}))
+
+					By("confirming es-gateway is created with the correct es admin username and password")
+					dp := appsv1.Deployment{
+						TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      esgateway.DeploymentName,
+							Namespace: render.ElasticsearchNamespace,
+						},
+					}
+					Expect(test.GetResource(cli, &dp)).To(BeNil())
+					// ES_GATEWAY_ELASTIC_USERNAME.
+					Expect(dp.Spec.Template.Spec.Containers[0].Env[5].Value).To(Equal("elastic"))
+					// ES_GATEWAY_ELASTIC_PASSWORD.
+					Expect(dp.Spec.Template.Spec.Containers[0].Env[6].ValueFrom).To(Equal(&corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: render.ElasticsearchAdminUserSecret,
+							},
+							Key: "elastic",
+						},
+					}))
 
 					By("confirming curator job is created")
 					Expect(cli.Get(ctx, curatorObjKey, &batchv1beta.CronJob{})).ShouldNot(HaveOccurred())

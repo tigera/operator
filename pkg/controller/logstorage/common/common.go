@@ -37,7 +37,7 @@ const (
 // are generated and stored in the user secret, a hashed version of the credentials is stored in the tigera-elasticsearch namespace for ES Gateway to retrieve and use to compare
 // the gateway credentials, and a secret containing real admin level credentials is created and stored in the tigera-elasticsearch namespace to be swapped in once
 // ES Gateway has confirmed that the gateway credentials match.
-func CreateKubeControllersSecrets(ctx context.Context, esAdminUserSecret *corev1.Secret, cli client.Client) (*corev1.Secret, *corev1.Secret, *corev1.Secret, error) {
+func CreateKubeControllersSecrets(ctx context.Context, esAdminUserSecret *corev1.Secret, esAdminUserName string, cli client.Client) (*corev1.Secret, *corev1.Secret, *corev1.Secret, error) {
 	kubeControllersGatewaySecret, err := utils.GetSecret(ctx, cli, kubecontrollers.ElasticsearchKubeControllersUserSecret, rmeta.OperatorNamespace())
 	if err != nil {
 		return nil, nil, nil, err
@@ -94,8 +94,8 @@ func CreateKubeControllersSecrets(ctx context.Context, esAdminUserSecret *corev1
 				},
 			},
 			Data: map[string][]byte{
-				"username": []byte("elastic"),
-				"password": esAdminUserSecret.Data["elastic"],
+				"username": []byte(esAdminUserName),
+				"password": esAdminUserSecret.Data[esAdminUserName],
 			},
 		}
 	}

@@ -270,17 +270,7 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 					Image:        e.esGatewayImage,
 					Env:          envVars,
 					VolumeMounts: volumeMounts,
-					ReadinessProbe: &corev1.Probe{
-						Handler: corev1.Handler{
-							HTTPGet: &corev1.HTTPGetAction{
-								Path:   "/health",
-								Port:   intstr.FromInt(Port),
-								Scheme: corev1.URISchemeHTTPS,
-							},
-						},
-						InitialDelaySeconds: 10,
-						PeriodSeconds:       5,
-					},
+					// CC: Removed temporarily
 				},
 			},
 		},

@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"strings"
 
-	oprv1 "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -51,10 +51,12 @@ const (
 	DexCNPattern = "tigera-dex.tigera-dex.svc.%s"
 )
 
+var dexReplicas int32 = 1
+
 func Dex(
 	pullSecrets []*corev1.Secret,
 	openshift bool,
-	installation *oprv1.InstallationSpec,
+	installation *operatorv1.InstallationSpec,
 	dexConfig DexConfig,
 	clusterDomain string,
 	deleteDex bool,
@@ -75,7 +77,7 @@ type dexComponent struct {
 	dexConfig     DexConfig
 	pullSecrets   []*corev1.Secret
 	openshift     bool
-	installation  *oprv1.InstallationSpec
+	installation  *operatorv1.InstallationSpec
 	connector     map[string]interface{}
 	image         string
 	csrInitImage  string
@@ -83,7 +85,7 @@ type dexComponent struct {
 	deleteDex     bool
 }
 
-func (c *dexComponent) ResolveImages(is *oprv1.ImageSet) error {
+func (c *dexComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.installation.Registry
 	path := c.installation.ImagePath
 	prefix := c.installation.ImagePrefix
@@ -134,7 +136,7 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(DexNamespace, c.pullSecrets...)...)...)
 
 	if c.installation.CertificateManagement != nil {
-		objs = append(objs, CsrClusterRoleBinding(DexObjectName, DexNamespace))
+		objs = append(objs, CSRClusterRoleBinding(DexObjectName, DexNamespace))
 	}
 
 	if c.deleteDex {
@@ -227,7 +229,7 @@ func (c *dexComponent) deployment() client.Object {
 					"k8s-app": DexObjectName,
 				},
 			},
-			Replicas: &replicas,
+			Replicas: &dexReplicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},

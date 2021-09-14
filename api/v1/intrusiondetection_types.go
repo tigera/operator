@@ -17,11 +17,16 @@ limitations under the License.
 package v1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // IntrusionDetectionSpec defines the desired state of Tigera intrusion detection capabilities.
 type IntrusionDetectionSpec struct {
+	// ComponentResources can be used to customize the resource requirements for each component.
+	// Only DeepPacketInspection is supported for this spec.
+	// +optional
+	ComponentResources []IntrusionDetectionComponentResource `json:"componentResources,omitempty"`
 }
 
 // IntrusionDetectionStatus defines the observed state of Tigera intrusion detection capabilities.
@@ -53,6 +58,21 @@ type IntrusionDetectionList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []IntrusionDetection `json:"items"`
+}
+
+type IntrusionDetectionComponentName string
+
+const (
+	ComponentNameDeepPacketInspection IntrusionDetectionComponentName = "DeepPacketInspection"
+)
+
+// The ComponentResource struct associates a ResourceRequirements with a component by name
+type IntrusionDetectionComponentResource struct {
+	// ComponentName is an enum which identifies the component
+	// +kubebuilder:validation:Enum=DeepPacketInspection
+	ComponentName IntrusionDetectionComponentName `json:"componentName"`
+	// ResourceRequirements allows customization of limits and requests for compute resources such as cpu and memory.
+	ResourceRequirements *corev1.ResourceRequirements `json:"resourceRequirements"`
 }
 
 func init() {

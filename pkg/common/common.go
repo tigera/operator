@@ -15,9 +15,10 @@
 package common
 
 const (
-	CalicoNamespace     = "calico-system"
-	TyphaDeploymentName = "calico-typha"
-	NodeDaemonSetName   = "calico-node"
+	CalicoNamespace               = "calico-system"
+	TyphaDeploymentName           = "calico-typha"
+	NodeDaemonSetName             = "calico-node"
+	KubeControllersDeploymentName = "calico-kube-controllers"
 
 	// Monitor + Prometheus related const
 	TigeraPrometheusNamespace = "tigera-prometheus"

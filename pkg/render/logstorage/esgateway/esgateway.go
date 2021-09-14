@@ -171,7 +171,7 @@ func (e *esGateway) Objects() (toCreate, toDelete []client.Object) {
 	toCreate = append(toCreate, e.esGatewayServiceAccount())
 	toCreate = append(toCreate, e.esGatewayDeployment())
 	if e.installation.CertificateManagement != nil {
-		toCreate = append(toCreate, render.CsrClusterRoleBinding(RoleName, render.ElasticsearchNamespace))
+		toCreate = append(toCreate, render.CSRClusterRoleBinding(RoleName, render.ElasticsearchNamespace))
 	}
 	return toCreate, toDelete
 }

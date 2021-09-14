@@ -17,7 +17,7 @@ package render_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	operator "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -33,7 +33,7 @@ var _ = Describe("Rendering tests", func() {
 	var g render.Component
 	var resources []client.Object
 
-	var renderGuardian = func(i operator.InstallationSpec) {
+	var renderGuardian = func(i operatorv1.InstallationSpec) {
 		addr := "127.0.0.1:1234"
 		secret := &corev1.Secret{
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
@@ -77,7 +77,7 @@ var _ = Describe("Rendering tests", func() {
 	}
 
 	BeforeEach(func() {
-		renderGuardian(operator.InstallationSpec{Registry: "my-reg/"})
+		renderGuardian(operatorv1.InstallationSpec{Registry: "my-reg/"})
 	})
 
 	It("should render all resources for a managed cluster", func() {
@@ -117,7 +117,7 @@ var _ = Describe("Rendering tests", func() {
 			Operator: corev1.TolerationOpEqual,
 			Value:    "bar",
 		}
-		renderGuardian(operator.InstallationSpec{
+		renderGuardian(operatorv1.InstallationSpec{
 			ControlPlaneTolerations: []corev1.Toleration{t},
 		})
 		deployment := rtest.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)

@@ -21,7 +21,7 @@ import (
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/controller/logstorage/common"
+	logstoragecommon "github.com/tigera/operator/pkg/controller/logstorage/common"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -122,15 +122,15 @@ func add(mgr manager.Manager, r reconcile.Reconciler, elasticExternal bool) erro
 	// the utils folder where the other watch logic is.
 	err = c.Watch(&source.Kind{Type: &corev1.Secret{}}, &handler.EnqueueRequestForObject{}, &predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
-			_, hasLabel := e.Object.GetLabels()[common.TigeraElasticsearchUserSecretLabel]
+			_, hasLabel := e.Object.GetLabels()[logstoragecommon.TigeraElasticsearchUserSecretLabel]
 			return e.Object.GetNamespace() == rmeta.OperatorNamespace() && hasLabel
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
-			_, hasLabel := e.ObjectNew.GetLabels()[common.TigeraElasticsearchUserSecretLabel]
+			_, hasLabel := e.ObjectNew.GetLabels()[logstoragecommon.TigeraElasticsearchUserSecretLabel]
 			return e.ObjectNew.GetNamespace() == rmeta.OperatorNamespace() && hasLabel
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
-			_, hasLabel := e.Object.GetLabels()[common.TigeraElasticsearchUserSecretLabel]
+			_, hasLabel := e.Object.GetLabels()[logstoragecommon.TigeraElasticsearchUserSecretLabel]
 			return e.Object.GetNamespace() == rmeta.OperatorNamespace() && hasLabel
 		},
 	})
@@ -141,7 +141,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler, elasticExternal bool) erro
 	// Watch all the secrets created by this controller so we can regenerate any that are deleted
 	for _, secretName := range []string{
 		render.TigeraElasticsearchCertSecret, render.TigeraKibanaCertSecret,
-		render.OIDCSecretName, render.DexObjectName, relasticsearch.PublicCertSecret} {
+		render.OIDCSecretName, render.DexObjectName} {
 		if err = utils.AddSecretsWatch(c, secretName, rmeta.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 		}
@@ -153,6 +153,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler, elasticExternal bool) erro
 	}
 
 	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, render.ElasticsearchNamespace); err != nil {
+		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
+	}
+
+	if err = utils.AddSecretsWatch(c, render.ElasticsearchAdminUserSecret, rmeta.OperatorNamespace()); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 	}
 
@@ -387,8 +391,8 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	var esLicenseType render.ElasticsearchLicenseType
 
 	if managementClusterConnection == nil {
-		var flowShards = common.CalculateFlowShards(ls.Spec.Nodes, common.DefaultElasticsearchShards)
-		clusterConfig = relasticsearch.NewClusterConfig(render.DefaultElasticsearchClusterName, ls.Replicas(), common.DefaultElasticsearchShards, flowShards)
+		var flowShards = logstoragecommon.CalculateFlowShards(ls.Spec.Nodes, logstoragecommon.DefaultElasticsearchShards)
+		clusterConfig = relasticsearch.NewClusterConfig(render.DefaultElasticsearchClusterName, ls.Replicas(), logstoragecommon.DefaultElasticsearchShards, flowShards)
 
 		if !r.elasticExternal {
 			// Get the admin user secret to copy to the operator namespace.
@@ -441,6 +445,12 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, managementClusterConnection)
 	}
 
+	authentication, err := utils.GetAuthentication(ctx, r.client)
+	if err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded("Error while fetching Authentication", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	if !r.elasticExternal {
 		result, proceed, err := r.createLogStorage(
 			ls,
@@ -455,6 +465,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			esService,
 			kbService,
 			pullSecrets,
+			authentication,
 			hdler,
 			reqLogger,
 			ctx,
@@ -477,7 +488,21 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 				return result, err
 			}
 		}
-		result, proceed, err := r.createEsGateway(
+
+		result, proceed, err := r.createEsKubeControllers(
+			install,
+			hdler,
+			reqLogger,
+			managementCluster,
+			authentication,
+			esLicenseType,
+			ctx,
+		)
+		if err != nil || !proceed {
+			return result, err
+		}
+
+		result, proceed, err = r.createEsGateway(
 			install,
 			variant,
 			pullSecrets,
@@ -572,11 +597,14 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 			// public secret so it can get recreated.
 			err = utils.SecretHasExpectedDNSNames(certSecret, corev1.TLSCertKey, svcDNSNames)
 			if err == utils.ErrInvalidCertDNSNames {
-				if err := common.DeleteInvalidECKManagedPublicCertSecret(ctx, certSecret, r.client, log); err != nil {
+				if err := logstoragecommon.DeleteInvalidECKManagedPublicCertSecret(ctx, certSecret, r.client, log); err != nil {
 					return nil, nil, err
 				}
 			}
 		} else {
+			// TODO: Understand why this is needed. This is creating a secret that it is expected will be created
+			// by the ECK operator but the understanding is that this is an optimization. Ideally this can be
+			// removed and we can count on the ECK operator to do what is expected.
 			certSecret = render.CreateCertificateSecret(esKeyCert.Data[corev1.TLSCertKey], relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
 		}
 	}
@@ -631,7 +659,7 @@ func (r *ReconcileLogStorage) kibanaInternalSecrets(ctx context.Context, instl *
 	if utils.IsOperatorIssued(issuer) {
 		err = utils.SecretHasExpectedDNSNames(internalSecret, corev1.TLSCertKey, svcDNSNames)
 		if err == utils.ErrInvalidCertDNSNames {
-			if err := common.DeleteInvalidECKManagedPublicCertSecret(ctx, internalSecret, r.client, log); err != nil {
+			if err := logstoragecommon.DeleteInvalidECKManagedPublicCertSecret(ctx, internalSecret, r.client, log); err != nil {
 				return nil, err
 			}
 		}

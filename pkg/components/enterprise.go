@@ -182,6 +182,16 @@ var (
 		Image:   "tigera/elasticsearch-metrics",
 	}
 
+	ComponentL7Collector = component{
+		Version: "master",
+		Image:   "tigera/l7-collector",
+	}
+
+	ComponentEnvoyProxy = component{
+		Version: "master",
+		Image:   "tigera/envoy",
+	}
+
 	EnterpriseComponents = []component{
 		ComponentAPIServer,
 		ComponentComplianceBenchmarker,
@@ -216,5 +226,7 @@ var (
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
+		ComponentL7Collector,
+		ComponentEnvoyProxy,
 	}
 )

@@ -84,26 +84,44 @@ func (d *dpiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 }
 
 func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
-	var toDelete []client.Object
-	var toCreate []client.Object
+	var commonObjs []client.Object
 
+	nsObj := []client.Object{render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider)}
 	if d.cfg.HasNoDPIResource || d.cfg.HasNoLicense {
-		toDelete = append(toDelete, d.dpiNamespace())
-		return nil, toDelete
+		// create empty secret and configmap when resource needs to be deleted.
+		commonObjs = append(commonObjs, &corev1.Secret{
+			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: render.NodeTLSSecretName, Namespace: DeepPacketInspectionNamespace}})
+		commonObjs = append(commonObjs, &corev1.Secret{
+			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: render.TyphaTLSSecretName, Namespace: DeepPacketInspectionNamespace}})
+		commonObjs = append(commonObjs, &corev1.Secret{
+			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: DeepPacketInspectionNamespace}})
+		commonObjs = append(commonObjs, &corev1.ConfigMap{
+			TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: render.TyphaCAConfigMapName, Namespace: DeepPacketInspectionNamespace}})
+	} else {
+		commonObjs = append(commonObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.NodeTLSSecret)...)...)
+		commonObjs = append(commonObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.TyphaTLSSecret)...)...)
+		commonObjs = append(commonObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.ESSecrets...)...)...)
+		commonObjs = append(commonObjs, configmap.ToRuntimeObjects(configmap.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.TyphaCAConfigMap)...)...)
 	}
 
-	toCreate = append(toCreate, render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider))
-	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.NodeTLSSecret)...)...)
-	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.TyphaTLSSecret)...)...)
-	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.ESSecrets...)...)...)
-	toCreate = append(toCreate, configmap.ToRuntimeObjects(configmap.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.TyphaCAConfigMap)...)...)
-	toCreate = append(toCreate,
+	commonObjs = append(commonObjs,
 		d.dpiServiceAccount(),
 		d.dpiClusterRole(),
 		d.dpiClusterRoleBinding(),
 		d.dpiDaemonset(),
 	)
-	return toCreate, nil
+
+	if d.cfg.HasNoLicense {
+		return nil, append(nsObj, commonObjs...)
+	}
+	if d.cfg.HasNoDPIResource {
+		return nsObj, commonObjs
+	}
+	return append(nsObj, commonObjs...), nil
 }
 
 func (d *dpiComponent) Ready() bool {
@@ -366,6 +384,9 @@ func (d *dpiComponent) dpiNamespace() *corev1.Namespace {
 }
 
 func (d *dpiComponent) dpiAnnotations() map[string]string {
+	if d.cfg.HasNoDPIResource || d.cfg.HasNoLicense {
+		return nil
+	}
 	return map[string]string{
 		render.TyphaCAHashAnnotation:   rmeta.AnnotationHash(d.cfg.TyphaCAConfigMap.Data),
 		render.NodeCertHashAnnotation:  rmeta.AnnotationHash(d.cfg.NodeTLSSecret.Data),

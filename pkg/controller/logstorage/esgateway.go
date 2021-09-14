@@ -47,7 +47,9 @@ func (r *ReconcileLogStorage) createEsGateway(
 		return reconcile.Result{}, false, nil
 	}
 
-	kubeControllersGatewaySecret, kubeControllersVerificationSecret, kubeControllersSecureUserSecret, err := common.CreateKubeControllersSecrets(ctx, esAdminUserSecret, r.client)
+	esAdminUserName := "elastic"
+
+	kubeControllersGatewaySecret, kubeControllersVerificationSecret, kubeControllersSecureUserSecret, err := common.CreateKubeControllersSecrets(ctx, esAdminUserSecret, esAdminUserName, r.client)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
 		r.status.SetDegraded("Failed to create kube-controllers secrets for Elasticsearch gateway", "")
@@ -62,6 +64,7 @@ func (r *ReconcileLogStorage) createEsGateway(
 		KibanaInternalCertSecret:   kibanaInternalCertSecret,
 		EsInternalCertSecret:       esInternalCertSecret,
 		ClusterDomain:              r.clusterDomain,
+		EsAdminUserName:            esAdminUserName,
 	}
 
 	esGatewayComponent := esgateway.EsGateway(cfg)

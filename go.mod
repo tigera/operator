@@ -10,6 +10,7 @@ require (
 	github.com/go-ldap/ldap v3.0.3+incompatible
 	github.com/go-logr/logr v0.3.0
 	github.com/hashicorp/go-version v1.2.1
+	github.com/markbates/pkger v0.17.1
 	github.com/olivere/elastic/v7 v7.0.6
 	github.com/onsi/ginkgo v1.14.1
 	github.com/onsi/gomega v1.10.2
@@ -22,7 +23,6 @@ require (
 	github.com/tigera/api v0.0.0-20210805201339-a9f52be9823d
 	go.uber.org/zap v1.15.0
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
-	google.golang.org/protobuf v1.25.0 // indirect
 	gopkg.in/inf.v0 v0.9.1
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.21.0-rc.0

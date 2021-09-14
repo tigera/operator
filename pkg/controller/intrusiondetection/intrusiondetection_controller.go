@@ -390,37 +390,35 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 	hasNoDPIResource := len(dpiList.Items) == 0
-	if !hasNoDPIResource {
-		nodeTLSSecret, err = utils.GetSecret(ctx, r.client, render.NodeTLSSecretName, rmeta.OperatorNamespace())
-		if err != nil {
-			reqLogger.Error(err, fmt.Sprintf("Failed to retrieve %s secret", render.NodeTLSSecretName))
-			r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s secret", render.NodeTLSSecretName), err.Error())
-			return reconcile.Result{}, err
-		}
-		if nodeTLSSecret == nil {
-			reqLogger.Error(err, fmt.Sprintf("Waiting for %s secrets to be available", render.NodeTLSSecretName))
-			r.status.SetDegraded(fmt.Sprintf("Waiting for %s secrets to be available", render.NodeTLSSecretName), "")
-			return reconcile.Result{}, err
-		}
+	nodeTLSSecret, err = utils.GetSecret(ctx, r.client, render.NodeTLSSecretName, rmeta.OperatorNamespace())
+	if err != nil {
+		reqLogger.Error(err, fmt.Sprintf("Failed to retrieve %s secret", render.NodeTLSSecretName))
+		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s secret", render.NodeTLSSecretName), err.Error())
+		return reconcile.Result{}, err
+	}
+	if nodeTLSSecret == nil {
+		reqLogger.Error(err, fmt.Sprintf("Waiting for %s secrets to be available", render.NodeTLSSecretName))
+		r.status.SetDegraded(fmt.Sprintf("Waiting for %s secrets to be available", render.NodeTLSSecretName), "")
+		return reconcile.Result{}, err
+	}
 
-		typhaTLSSecret, err = utils.GetSecret(ctx, r.client, render.TyphaTLSSecretName, rmeta.OperatorNamespace())
-		if err != nil {
-			reqLogger.Error(err, fmt.Sprintf("Failed to retrieve %s secret", render.TyphaTLSSecretName))
-			r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s secret", render.TyphaTLSSecretName), err.Error())
-			return reconcile.Result{}, err
-		}
-		if typhaTLSSecret == nil {
-			reqLogger.Error(err, fmt.Sprintf("Waiting for %s secrets to be available", render.TyphaTLSSecretName))
-			r.status.SetDegraded(fmt.Sprintf("Waiting for %s secrets to be available", render.TyphaTLSSecretName), "")
-			return reconcile.Result{}, err
-		}
+	typhaTLSSecret, err = utils.GetSecret(ctx, r.client, render.TyphaTLSSecretName, rmeta.OperatorNamespace())
+	if err != nil {
+		reqLogger.Error(err, fmt.Sprintf("Failed to retrieve %s secret", render.TyphaTLSSecretName))
+		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s secret", render.TyphaTLSSecretName), err.Error())
+		return reconcile.Result{}, err
+	}
+	if typhaTLSSecret == nil {
+		reqLogger.Error(err, fmt.Sprintf("Waiting for %s secrets to be available", render.TyphaTLSSecretName))
+		r.status.SetDegraded(fmt.Sprintf("Waiting for %s secrets to be available", render.TyphaTLSSecretName), "")
+		return reconcile.Result{}, err
+	}
 
-		err = r.client.Get(ctx, types.NamespacedName{Name: render.TyphaCAConfigMapName, Namespace: rmeta.OperatorNamespace()}, typhaCAConfigMap)
-		if err != nil {
-			reqLogger.Error(err, fmt.Sprintf("Failed to retrieve %s configmap", render.TyphaCAConfigMapName))
-			r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s configmap", render.TyphaCAConfigMapName), err.Error())
-			return reconcile.Result{}, err
-		}
+	err = r.client.Get(ctx, types.NamespacedName{Name: render.TyphaCAConfigMapName, Namespace: rmeta.OperatorNamespace()}, typhaCAConfigMap)
+	if err != nil {
+		reqLogger.Error(err, fmt.Sprintf("Failed to retrieve %s configmap", render.TyphaCAConfigMapName))
+		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s configmap", render.TyphaCAConfigMapName), err.Error())
+		return reconcile.Result{}, err
 	}
 
 	dpiComponent := dpi.DPI(&dpi.DPIConfig{

@@ -22,6 +22,7 @@ static_resources:
           filters:
             - name: envoy.filters.network.tcp_proxy
               typed_config:
+                &default_tcp_proxy_filter_typed_config
                 "@type": type.googleapis.com/envoy.extensions.filters.network.tcp_proxy.v3.TcpProxy
                 stat_prefix: ingress_tls
                 cluster: original_dst_cluster
@@ -56,6 +57,7 @@ static_resources:
           filters:
             - name: envoy.http_connection_manager
               typed_config:
+                &default_http_manager_typed_config
                 "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
                 stat_prefix: ingress_http
                 access_log:
@@ -66,13 +68,16 @@ static_resources:
                         <<: *default_json_format
                         type: "%PROTOCOL%"
                 route_config:
+                  &default_route_config
                   name: local_service
                   virtual_hosts:
-                    - name: backend
+                    - &default_virtual_hosts
+                      name: backend
                       domains:
                         - "*"
                       routes:
-                        - match:
+                        - &default_routes
+                          match:
                             prefix: "/"
                           route:
                             cluster: original_dst_cluster
@@ -87,24 +92,13 @@ static_resources:
           filters:
             - name: envoy.http_connection_manager
               typed_config:
-                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
-                stat_prefix: ingress_http
-                access_log:
-                  - name: envoy.access_loggers.file
-                    typed_config:
-                      <<: *default_access_log_typed_config
-                      typed_json_format:
-                        <<: *default_json_format
-                        type: "%PROTOCOL%"
+                <<: *default_http_manager_typed_config
                 route_config:
-                  name: local_service
+                  <<: *default_route_config
                   virtual_hosts:
-                    - name: backend
-                      domains:
-                        - "*"
+                    - <<: *default_virtual_hosts
                       routes:
-                        - match:
-                            prefix: "/"
+                        - <<: *default_routes
                           route:
                             cluster: original_dst_cluster_h2c
                 http_filters:
@@ -114,9 +108,7 @@ static_resources:
           filters:
             - name: envoy.filters.network.tcp_proxy
               typed_config:
-                "@type": type.googleapis.com/envoy.extensions.filters.network.tcp_proxy.v3.TcpProxy
-                stat_prefix: ingress_tcp
-                cluster: original_dst_cluster
+                <<: *default_tcp_proxy_filter_typed_config
                 access_log:
                   - name: envoy.access_loggers.file
                     typed_config:

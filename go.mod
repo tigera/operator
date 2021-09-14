@@ -10,6 +10,7 @@ require (
 	github.com/go-ldap/ldap v3.0.3+incompatible
 	github.com/go-logr/logr v0.3.0
 	github.com/hashicorp/go-version v1.2.1
+	github.com/markbates/pkger v0.17.1
 	github.com/olivere/elastic/v7 v7.0.6
 	github.com/onsi/ginkgo v1.14.1
 	github.com/onsi/gomega v1.10.2

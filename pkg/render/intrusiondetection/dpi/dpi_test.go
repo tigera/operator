@@ -263,7 +263,7 @@ var _ = Describe("DPI rendering tests", func() {
 		validateDPIComponents(resources, true)
 	})
 
-	It("Should delete resources for deep packet inspection if there is no valid product license", func() {
+	It("should delete resources for deep packet inspection if there is no valid product license", func() {
 		component := dpi.DPI(&dpi.DPIConfig{
 			IntrusionDetection: ids,
 			Installation:       &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
@@ -282,6 +282,14 @@ var _ = Describe("DPI rendering tests", func() {
 		createResources, deleteResource := component.Objects()
 		expectedResources := []resourceTestObj{
 			{name: dpi.DeepPacketInspectionNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.NodeTLSSecretName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: render.TyphaTLSSecretName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: relasticsearch.PublicCertSecret, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: render.TyphaCAConfigMapName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
 		Expect(len(deleteResource)).To(Equal(len(expectedResources)))
@@ -292,7 +300,7 @@ var _ = Describe("DPI rendering tests", func() {
 		}
 	})
 
-	It("Should delete resources for deep packet inspection if TLS configs are not set", func() {
+	It("should delete resources for deep packet inspection if there is no DPI resource", func() {
 		component := dpi.DPI(&dpi.DPIConfig{
 			IntrusionDetection: ids,
 			Installation:       &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
@@ -309,14 +317,26 @@ var _ = Describe("DPI rendering tests", func() {
 		})
 		createResources, deleteResource := component.Objects()
 		expectedResources := []resourceTestObj{
+			{name: render.NodeTLSSecretName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: render.TyphaTLSSecretName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: relasticsearch.PublicCertSecret, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: render.TyphaCAConfigMapName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
+		}
+		expectedCreateResources := []resourceTestObj{
 			{name: dpi.DeepPacketInspectionNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
 		}
-
 		Expect(len(deleteResource)).To(Equal(len(expectedResources)))
-		Expect(len(createResources)).To(Equal(0))
+		Expect(len(createResources)).To(Equal(len(expectedCreateResources)))
 
 		for i, expectedRes := range expectedResources {
 			rtest.ExpectResource(deleteResource[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+		}
+		for i, expectedRes := range expectedCreateResources {
+			rtest.ExpectResource(createResources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 	})
 })

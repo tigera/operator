@@ -84,26 +84,26 @@ func (d *dpiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 }
 
 func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
-	var toDelete []client.Object
-	var toCreate []client.Object
+	var commonObjs []client.Object
 
-	if d.cfg.HasNoDPIResource || d.cfg.HasNoLicense {
-		toDelete = append(toDelete, d.dpiNamespace())
-		return nil, toDelete
-	}
-
-	toCreate = append(toCreate, render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider))
-	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.NodeTLSSecret)...)...)
-	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.TyphaTLSSecret)...)...)
-	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.ESSecrets...)...)...)
-	toCreate = append(toCreate, configmap.ToRuntimeObjects(configmap.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.TyphaCAConfigMap)...)...)
-	toCreate = append(toCreate,
+	objsToCreate = append(objsToCreate, render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider))
+	commonObjs = append(commonObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.NodeTLSSecret)...)...)
+	commonObjs = append(commonObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.TyphaTLSSecret)...)...)
+	commonObjs = append(commonObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.ESSecrets...)...)...)
+	commonObjs = append(commonObjs, configmap.ToRuntimeObjects(configmap.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.TyphaCAConfigMap)...)...)
+	commonObjs = append(commonObjs,
 		d.dpiServiceAccount(),
 		d.dpiClusterRole(),
 		d.dpiClusterRoleBinding(),
 		d.dpiDaemonset(),
 	)
-	return toCreate, nil
+
+	if d.cfg.HasNoDPIResource || d.cfg.HasNoLicense {
+		return nil, commonObjs
+	}
+
+	objsToCreate = append(objsToCreate, commonObjs...)
+	return objsToCreate, nil
 }
 
 func (d *dpiComponent) Ready() bool {

@@ -91,6 +91,7 @@ func EsGateway(c *Config) render.Component {
 		secrets:              secrets,
 		tlsAnnotations:       tlsAnnotations,
 		clusterDomain:        c.ClusterDomain,
+		esAdminUserName:      c.EsAdminUserName,
 		tenantId:             c.TenantId,
 		enableMTLS:           c.EnableMTLS,
 		externalElastic:      c.ExternalElastic,
@@ -107,6 +108,7 @@ type esGateway struct {
 	clusterDomain        string
 	csrImage             string
 	esGatewayImage       string
+	esAdminUserName      string
 	tenantId             string
 	enableMTLS           bool
 	externalElastic      bool
@@ -122,6 +124,7 @@ type Config struct {
 	KibanaInternalCertSecret   *corev1.Secret
 	EsInternalCertSecret       *corev1.Secret
 	ClusterDomain              string
+	EsAdminUserName            string
 	EsAdminUserSecret          *corev1.Secret
 	ExternalCertsSecret        *corev1.Secret
 	TenantId                   string
@@ -231,13 +234,13 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 		{Name: "ES_GATEWAY_KIBANA_ENDPOINT", Value: kibanaEndpoint},
 		{Name: "ES_GATEWAY_HTTPS_CERT", Value: "/certs/https/tls.crt"},
 		{Name: "ES_GATEWAY_HTTPS_KEY", Value: "/certs/https/tls.key"},
-		{Name: "ES_GATEWAY_ELASTIC_USERNAME", Value: "elastic"},
+		{Name: "ES_GATEWAY_ELASTIC_USERNAME", Value: e.esAdminUserName},
 		{Name: "ES_GATEWAY_ELASTIC_PASSWORD", ValueFrom: &corev1.EnvVarSource{
 			SecretKeyRef: &corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{
 					Name: render.ElasticsearchAdminUserSecret,
 				},
-				Key: "elastic",
+				Key: e.esAdminUserName,
 			},
 		}},
 		// Currently Cloud only. Enable prometheus metrics endpoint at :METRICS_PORT/metrics (Default is 9091).

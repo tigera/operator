@@ -88,7 +88,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: rmeta.OperatorNamespace()}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.InternalCertSecret, Namespace: render.ElasticsearchNamespace}},
 				clusterDomain,
-				nil, nil, nil, "", false, false, false, "", "",
+				nil, nil, "", false, false, "", "",
 			})
 
 			createResources, _ := component.Objects()
@@ -130,7 +130,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: rmeta.OperatorNamespace()}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.InternalCertSecret, Namespace: render.ElasticsearchNamespace}},
 				clusterDomain,
-				nil, nil, nil, "", false, false, false, "", "",
+				nil, nil, "", false, false, "", "",
 			})
 
 			createResources, _ := component.Objects()
@@ -143,7 +143,6 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				{render.TigeraElasticsearchCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 				{relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 				{ExternalCertsSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
-				{ExternalCACertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 				{relasticsearch.InternalCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 				{render.KibanaInternalCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 				{render.ElasticsearchAdminUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
@@ -176,8 +175,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				clusterDomain,
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchAdminUserSecret, Namespace: rmeta.OperatorNamespace()}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: ExternalCertsSecret, Namespace: rmeta.OperatorNamespace()}},
-				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: ExternalCACertSecret, Namespace: rmeta.OperatorNamespace()}}, "tenantId", true, true, true,
-				"externalEs.com", "externalKb.com",
+				"tenantId", true, true, "externalEs.com", "externalKb.com",
 			})
 
 			createResources, _ := component.Objects()

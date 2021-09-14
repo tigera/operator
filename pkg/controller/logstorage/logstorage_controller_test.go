@@ -1239,9 +1239,6 @@ var _ = Describe("LogStorage controller", func() {
 					externalCertsSecret := createPubSecret(esgateway.ExternalCertsSecret, rmeta.OperatorNamespace(), []byte{}, "tls.crt")
 					Expect(cli.Create(ctx, externalCertsSecret)).ShouldNot(HaveOccurred())
 
-					externalCACertSecret := createPubSecret(esgateway.ExternalCACertSecret, rmeta.OperatorNamespace(), []byte{}, "tls.crt")
-					Expect(cli.Create(ctx, externalCACertSecret)).ShouldNot(HaveOccurred())
-
 					kubeControllersElasticUserSecret := &corev1.Secret{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      kubecontrollers.ElasticsearchKubeControllersUserSecret,
@@ -1259,7 +1256,7 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(err).ToNot(HaveOccurred())
 					Expect(result).Should(Equal(reconcile.Result{}))
 
-					cloudConfig := cloudconfig.NewCloudConfig("tenantId", "tenantName", "externalES.com", "externalKb.com", true, true)
+					cloudConfig := cloudconfig.NewCloudConfig("tenantId", "tenantName", "externalES.com", "externalKb.com", true)
 					Expect(cli.Create(ctx, cloudConfig.ConfigMap())).ShouldNot(HaveOccurred())
 
 					mockStatus.On("ClearDegraded")

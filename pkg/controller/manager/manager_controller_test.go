@@ -67,7 +67,7 @@ var _ = Describe("Manager controller tests", func() {
 		c = fake.NewFakeClientWithScheme(scheme)
 		ctx = context.Background()
 
-		cloudConfig := cloudconfig.NewCloudConfig("id", "tenantName", "externalES.com", "externalKB.com", false, false)
+		cloudConfig := cloudconfig.NewCloudConfig("id", "tenantName", "externalES.com", "externalKB.com", false)
 		Expect(c.Create(ctx, cloudConfig.ConfigMap())).ToNot(HaveOccurred())
 	})
 

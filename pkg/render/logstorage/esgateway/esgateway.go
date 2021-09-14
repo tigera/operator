@@ -50,10 +50,8 @@ const (
 	KibanaHTTPSEndpoint        = "https://tigera-secure-kb-http.tigera-kibana.svc:5601"
 	KibanaPort                 = 5601
 
-	ExternalCertsSecret      = "tigera-secure-external-es-certs"
-	ExternalCertsVolumeName  = "tigera-secure-external-es-certs"
-	ExternalCACertSecret     = "tigera-secure-external-es-ca-cert"
-	ExternalCACertVolumeName = "tigera-secure-external-es-ca-cert"
+	ExternalCertsSecret     = "tigera-secure-external-es-certs"
+	ExternalCertsVolumeName = "tigera-secure-external-es-certs"
 )
 
 func EsGateway(c *Config) render.Component {
@@ -67,9 +65,6 @@ func EsGateway(c *Config) render.Component {
 
 	if c.ExternalCertsSecret != nil {
 		certSecretsESCopy = append(certSecretsESCopy, secret.CopyToNamespace(render.ElasticsearchNamespace, c.ExternalCertsSecret)...)
-	}
-	if c.ExternalCACertSecret != nil {
-		certSecretsESCopy = append(certSecretsESCopy, secret.CopyToNamespace(render.ElasticsearchNamespace, c.ExternalCACertSecret)...)
 	}
 	tlsAnnotations[render.ElasticsearchTLSHashAnnotation] = rmeta.SecretsAnnotationHash(append(certSecretsESCopy, c.EsInternalCertSecret, c.EsAdminUserSecret)...)
 
@@ -98,7 +93,6 @@ func EsGateway(c *Config) render.Component {
 		clusterDomain:        c.ClusterDomain,
 		tenantId:             c.TenantId,
 		enableMTLS:           c.EnableMTLS,
-		useCA:                c.UseCA,
 		externalElastic:      c.ExternalElastic,
 		externalESDomain:     c.ExternalESDomain,
 		externalKibanaDomain: c.ExternalKibanaDomain,
@@ -115,7 +109,6 @@ type esGateway struct {
 	esGatewayImage       string
 	tenantId             string
 	enableMTLS           bool
-	useCA                bool
 	externalElastic      bool
 	externalESDomain     string
 	externalKibanaDomain string
@@ -131,10 +124,8 @@ type Config struct {
 	ClusterDomain              string
 	EsAdminUserSecret          *corev1.Secret
 	ExternalCertsSecret        *corev1.Secret
-	ExternalCACertSecret       *corev1.Secret
 	TenantId                   string
 	EnableMTLS                 bool
-	UseCA                      bool
 	ExternalElastic            bool
 	ExternalESDomain           string
 	ExternalKibanaDomain       string
@@ -328,27 +319,6 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 		volumeMounts = append(volumeMounts, []corev1.VolumeMount{
 			{Name: ExternalCertsVolumeName, MountPath: "/certs/elasticsearch/mtls", ReadOnly: true},
 			{Name: ExternalCertsVolumeName, MountPath: "/certs/kibana/mtls", ReadOnly: true},
-		}...)
-	}
-
-	if e.useCA {
-		envVars = append(envVars, []corev1.EnvVar{
-			{Name: "ES_GATEWAY_ELASTIC_CA_BUNDLE_PATH", Value: "/certs/elasticsearch/ca/tls.crt"},
-			{Name: "ES_GATEWAY_KIBANA_CA_BUNDLE_PATH", Value: "/certs/kibana/ca/tls.crt"},
-		}...)
-
-		volumes = append(volumes, corev1.Volume{
-			Name: ExternalCACertVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: ExternalCACertSecret,
-				},
-			},
-		})
-
-		volumeMounts = append(volumeMounts, []corev1.VolumeMount{
-			{Name: ExternalCACertVolumeName, MountPath: "/certs/elasticsearch/ca", ReadOnly: true},
-			{Name: ExternalCACertVolumeName, MountPath: "/certs/kibana/ca", ReadOnly: true},
 		}...)
 	}
 

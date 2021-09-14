@@ -61,7 +61,7 @@ var _ = Describe("Mainline component function tests", func() {
 		if err != nil && !kerror.IsAlreadyExists(err) {
 			Expect(err).NotTo(HaveOccurred())
 		}
-		cloudConfig := cloudconfig.NewCloudConfig("id", "tenantName", "externalES.com", "externalKB.com", false, false)
+		cloudConfig := cloudconfig.NewCloudConfig("id", "tenantName", "externalES.com", "externalKB.com", false)
 		err = c.Create(context.Background(), cloudConfig.ConfigMap())
 		if err != nil && !kerror.IsAlreadyExists(err) {
 			Expect(err).NotTo(HaveOccurred())

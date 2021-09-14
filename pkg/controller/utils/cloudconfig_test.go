@@ -62,7 +62,6 @@ var _ = Describe("CloudConfig utils tests", func() {
 					"externalESDomain":     "externalES.com",
 					"externalKibanaDomain": "externalKibana.com",
 					"enableMTLS":           strconv.FormatBool(false),
-					"useCA":                strconv.FormatBool(false),
 				}})).To(BeNil())
 
 			cloudConfig, err := GetCloudConfig(ctx, cli)
@@ -73,7 +72,6 @@ var _ = Describe("CloudConfig utils tests", func() {
 			Expect(cloudConfig.ExternalESDomain()).Should(Equal("externalES.com"))
 			Expect(cloudConfig.ExternalKibanaDomain()).Should(Equal("externalKibana.com"))
 			Expect(cloudConfig.EnableMTLS()).Should(BeFalse())
-			Expect(cloudConfig.UseCA()).Should(BeFalse())
 		})
 	})
 })

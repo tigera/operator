@@ -163,7 +163,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		if l7Spec.CollectL7Logs != nil && *l7Spec.CollectL7Logs == operatorv1.L7LogCollectionEnabled {
 
 			_, _ = r.PatchFelixTproxyMode(ctx)
-			l7component := render.L7LogCollector(pullSecrets, installation, rmeta.OSTypeLinux, instance)
+			l7component := render.ApplicationLayer(pullSecrets, installation, rmeta.OSTypeLinux, instance)
 
 			ch := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 

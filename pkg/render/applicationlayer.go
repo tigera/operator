@@ -45,27 +45,27 @@ const (
 	EnvoyConfigMapKey           = "envoy-config.yaml"
 )
 
-func L7LogCollector(pullSecrets []*corev1.Secret, installation *operatorv1.InstallationSpec, osType rmeta.OSType,
-	al *operatorv1.ApplicationLayer) Component {
+func ApplicationLayer(pullSecrets []*corev1.Secret, installation *operatorv1.InstallationSpec, osType rmeta.OSType,
+	applicationLayer *operatorv1.ApplicationLayer) Component {
 
-	return &l7LogCollectorComponent{
-		pullSecrets:  pullSecrets,
-		installation: installation,
-		osType:       osType,
-		al:           al,
+	return &ApplicationLayerComponent{
+		pullSecrets:      pullSecrets,
+		installation:     installation,
+		osType:           osType,
+		applicationLayer: applicationLayer,
 	}
 }
 
-type l7LogCollectorComponent struct {
-	pullSecrets    []*corev1.Secret
-	installation   *operatorv1.InstallationSpec
-	osType         rmeta.OSType
-	proxyImage     string
-	collectorImage string
-	al             *operatorv1.ApplicationLayer
+type ApplicationLayerComponent struct {
+	pullSecrets      []*corev1.Secret
+	installation     *operatorv1.InstallationSpec
+	osType           rmeta.OSType
+	applicationLayer *operatorv1.ApplicationLayer
+	proxyImage       string
+	collectorImage   string
 }
 
-func (c *l7LogCollectorComponent) ResolveImages(is *operatorv1.ImageSet) error {
+func (c *ApplicationLayerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.installation.Registry
 	path := c.installation.ImagePath
 	prefix := c.installation.ImagePrefix
@@ -95,25 +95,25 @@ func (c *l7LogCollectorComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	return nil
 }
 
-func (c *l7LogCollectorComponent) SupportedOSType() rmeta.OSType {
+func (c *ApplicationLayerComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
 
-func (c *l7LogCollectorComponent) Objects() ([]client.Object, []client.Object) {
+func (c *ApplicationLayerComponent) Objects() ([]client.Object, []client.Object) {
 	var objs []client.Object
 	// TODO: ensure that namespace exists before proceeding
-	objs = append(objs, c.envoyConfigMap())
+	objs = append(objs, c.envoyL7ConfigMap())
 	objs = append(objs, c.daemonset())
 
 	return objs, nil
 }
 
-func (c *l7LogCollectorComponent) Ready() bool {
+func (c *ApplicationLayerComponent) Ready() bool {
 	return true
 }
 
 // daemonset creates a daemonset for the L7 log collector component.
-func (c *l7LogCollectorComponent) daemonset() *appsv1.DaemonSet {
+func (c *ApplicationLayerComponent) daemonset() *appsv1.DaemonSet {
 	maxUnavailable := intstr.FromInt(1)
 
 	annots := map[string]string{}
@@ -157,7 +157,7 @@ func (c *l7LogCollectorComponent) daemonset() *appsv1.DaemonSet {
 	return ds
 }
 
-func (c *l7LogCollectorComponent) containers() []corev1.Container {
+func (c *ApplicationLayerComponent) containers() []corev1.Container {
 
 	var containers []corev1.Container
 
@@ -191,16 +191,16 @@ func (c *l7LogCollectorComponent) containers() []corev1.Container {
 	return containers
 }
 
-func (c *l7LogCollectorComponent) proxyEnv() []corev1.EnvVar {
+func (c *ApplicationLayerComponent) proxyEnv() []corev1.EnvVar {
 	envs := []corev1.EnvVar{
 		{Name: "ENVOY_UID", Value: "0"},
-		{Name: "ENVOY_UID", Value: "0"},
+		{Name: "ENVOY_GID", Value: "0"},
 	}
 
 	return envs
 }
 
-func (c *l7LogCollectorComponent) collectorEnv() []corev1.EnvVar {
+func (c *ApplicationLayerComponent) collectorEnv() []corev1.EnvVar {
 	envs := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "Info"},
 		{Name: "FELIX_DIAL_TARGET", Value: "/var/run/felix/nodeagent/socket"},
@@ -210,7 +210,7 @@ func (c *l7LogCollectorComponent) collectorEnv() []corev1.EnvVar {
 }
 
 // tolerations creates the node's toleration.
-func (c *l7LogCollectorComponent) tolerations() []corev1.Toleration {
+func (c *ApplicationLayerComponent) tolerations() []corev1.Toleration {
 	// ensures that l7 log collector pods are scheduled on master node as well
 	toleration := []corev1.Toleration{
 		{Key: "node-role.kubernetes.io/master", Operator: corev1.TolerationOpExists, Effect: corev1.TaintEffectNoSchedule},
@@ -219,7 +219,7 @@ func (c *l7LogCollectorComponent) tolerations() []corev1.Toleration {
 	return toleration
 }
 
-func (c *l7LogCollectorComponent) volumes() []corev1.Volume {
+func (c *ApplicationLayerComponent) volumes() []corev1.Volume {
 
 	var volumes []corev1.Volume
 
@@ -242,7 +242,7 @@ func (c *l7LogCollectorComponent) volumes() []corev1.Volume {
 	return volumes
 }
 
-func (c *l7LogCollectorComponent) proxyVolMounts() []corev1.VolumeMount {
+func (c *ApplicationLayerComponent) proxyVolMounts() []corev1.VolumeMount {
 
 	volumes := []corev1.VolumeMount{
 		{Name: EnvoyConfigKey, MountPath: "/etc/envoy"},
@@ -252,7 +252,7 @@ func (c *l7LogCollectorComponent) proxyVolMounts() []corev1.VolumeMount {
 	return volumes
 }
 
-func (c *l7LogCollectorComponent) collectorVolMounts() []corev1.VolumeMount {
+func (c *ApplicationLayerComponent) collectorVolMounts() []corev1.VolumeMount {
 
 	volumes := []corev1.VolumeMount{
 		{Name: EnvoyLogsKey, MountPath: "/tmp/"},
@@ -261,7 +261,7 @@ func (c *l7LogCollectorComponent) collectorVolMounts() []corev1.VolumeMount {
 	return volumes
 }
 
-func (c *l7LogCollectorComponent) envoyConfigMap() *corev1.ConfigMap {
+func (c *ApplicationLayerComponent) envoyL7ConfigMap() *corev1.ConfigMap {
 	config, err := statik.GetStatikFile("/envoy-config.yaml")
 
 	if err != nil || config == "" {

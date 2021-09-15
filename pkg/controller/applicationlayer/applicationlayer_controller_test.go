@@ -18,6 +18,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/stretchr/testify/mock"
+
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/tigera/operator/pkg/components"
@@ -54,6 +58,20 @@ var _ = Describe("Application layer controller tests", func() {
 			Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(operatorv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+			// Create a client that will have a crud interface of k8s objects.
+			c = fake.NewClientBuilder().WithScheme(scheme).Build()
+			ctx = context.Background()
+
+			mockStatus = &status.MockStatus{}
+			mockStatus.On("AddDaemonsets", mock.Anything).Return()
+			mockStatus.On("AddDeployments", mock.Anything).Return()
+			mockStatus.On("IsAvailable").Return(true)
+			mockStatus.On("AddStatefulSets", mock.Anything).Return()
+			mockStatus.On("AddCronJobs", mock.Anything)
+			mockStatus.On("OnCRFound").Return()
+			mockStatus.On("ClearDegraded")
+			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+			mockStatus.On("ReadyToMonitor")
 
 			r = ReconcileApplicationLayer{
 				client:          c,
@@ -63,9 +81,39 @@ var _ = Describe("Application layer controller tests", func() {
 				licenseAPIReady: &utils.ReadyFlag{},
 			}
 
+			Expect(c.Create(ctx, &operatorv1.Installation{
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+				Spec: operatorv1.InstallationSpec{
+					Variant:  operatorv1.TigeraSecureEnterprise,
+					Registry: "some.registry.org/",
+				},
+				Status: operatorv1.InstallationStatus{
+					Variant: operatorv1.TigeraSecureEnterprise,
+					Computed: &operatorv1.InstallationSpec{
+						Registry: "my-reg",
+						// The test is provider agnostic.
+						KubernetesProvider: operatorv1.ProviderNone,
+					},
+				},
+			})).NotTo(HaveOccurred())
+
+			// mark that the watch for license key was successful
+			r.licenseAPIReady.MarkAsReady()
 		})
 
-		It("should use builtin images", func() {
+		It("should render configmap and deamon set for log collection", func() {
+
+			enableLogCollection := operatorv1.L7LogCollectionEnabled
+			// Apply the logcollector CR to the fake cluster.
+			Expect(c.Create(ctx, &operatorv1.ApplicationLayer{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.ApplicationLayerSpec{
+					L7LogCollection: &operatorv1.L7LogCollectionSpec{
+						CollectL7Logs: &enableLogCollection,
+					},
+				},
+			})).NotTo(HaveOccurred())
+
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -76,6 +124,7 @@ var _ = Describe("Application layer controller tests", func() {
 					Namespace: render.CalicoSystemNamespace,
 				},
 			}
+
 			Expect(test.GetResource(c, &ds)).To(BeNil())
 			Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(2))
 

@@ -162,21 +162,28 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 
 		if l7Spec.CollectL7Logs != nil && *l7Spec.CollectL7Logs == operatorv1.L7LogCollectionEnabled {
 
-			_, _ = r.PatchFelixTproxyMode(ctx)
+			_, err := r.PatchFelixTproxyMode(ctx)
+
+			if err != nil {
+				r.status.SetDegraded("Error patching felix configuration", err.Error())
+				panic("Error patching felix configuration")
+			}
+
 			l7component := render.ApplicationLayer(pullSecrets, installation, rmeta.OSTypeLinux, instance)
 
 			ch := utils.NewComponentHandler(log, r.client, r.scheme, instance)
-
-			if err := ch.CreateOrUpdateOrDelete(ctx, l7component, r.status); err != nil {
-				r.status.SetDegraded("Error creating / updating resource", err.Error())
-				return reconcile.Result{}, err
-			}
 
 			if err = imageset.ApplyImageSet(ctx, r.client, variant, l7component); err != nil {
 				reqLogger.Error(err, "Error with images from ImageSet")
 				r.status.SetDegraded("Error with images from ImageSet", err.Error())
 				return reconcile.Result{}, err
 			}
+
+			if err := ch.CreateOrUpdateOrDelete(ctx, l7component, r.status); err != nil {
+				r.status.SetDegraded("Error creating / updating resource", err.Error())
+				return reconcile.Result{}, err
+			}
+
 		}
 
 	}

@@ -15,6 +15,7 @@
 package installation
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -25,6 +26,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
 
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -43,10 +46,12 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/tls"
 
 	configv1 "github.com/openshift/api/config/v1"
+	"github.com/openshift/library-go/pkg/crypto"
 
 	"github.com/go-logr/logr"
 	apps "k8s.io/api/apps/v1"
@@ -232,27 +237,6 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		err = c.Watch(&source.Kind{Type: &operator.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
-		}
-
-		err = c.Watch(&source.Kind{Type: &operator.Authentication{}}, &handler.EnqueueRequestForObject{})
-		if err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
-		}
-
-		if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", render.ECKLicenseConfigMapName, err)
-		}
-
-		if err = utils.AddSecretsWatch(c, render.ElasticsearchAdminUserSecret, rmeta.OperatorNamespace()); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch Secret %s: %w", render.ElasticsearchAdminUserSecret, err)
-		}
-
-		if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace()); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch Secret '%s' in '%s' namespace: %w", relasticsearch.PublicCertSecret, rmeta.OperatorNamespace(), err)
-		}
-
-		if err = utils.AddSecretsWatch(c, render.KibanaPublicCertSecret, rmeta.OperatorNamespace()); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch Secret '%s' in '%s' namespace: %w", render.KibanaPublicCertSecret, rmeta.OperatorNamespace(), err)
 		}
 
 		// Watch the internal manager TLS secret in the calico namespace, where it's copied for kube-controllers.
@@ -811,20 +795,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	var managementCluster *operator.ManagementCluster
 	var managementClusterConnection *operator.ManagementClusterConnection
-	var logStorageExists bool
-	var authentication *operator.Authentication
-	var esLicenseType render.ElasticsearchLicenseType
-	var elasticsearchSecret *corev1.Secret
-	var kibanaSecret *corev1.Secret
 	var logCollector *operator.LogCollector
 	if r.enterpriseCRDsExist {
-		logStorageExists, err = utils.LogStorageExists(ctx, r.client)
-		if err != nil {
-			log.Error(err, "Error checking if LogStorage exists")
-			r.SetDegraded("Error checking if LogStorage exists", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
 		logCollector, err = utils.GetLogCollector(ctx, r.client)
 		if logCollector != nil {
 			if err != nil {
@@ -856,42 +828,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.status.SetDegraded(err.Error(), "")
 			return reconcile.Result{}, err
 		}
-
-		authentication, err = utils.GetAuthentication(ctx, r.client)
-		if err != nil && !apierrors.IsNotFound(err) {
-			log.Error(err, err.Error())
-			r.status.SetDegraded("An error occurred retrieving the authentication configuration", err.Error())
-			return reconcile.Result{}, err
-		}
-
-		esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger)
-		if err != nil && !apierrors.IsNotFound(err) {
-			log.Error(err, err.Error())
-			r.status.SetDegraded("Failed to get Elasticsearch license type", err.Error())
-			return reconcile.Result{}, err
-		}
-
-		elasticsearchSecret, err = utils.GetSecret(ctx, r.client, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
-		if err != nil {
-			log.Error(err, err.Error())
-			r.status.SetDegraded("Failed to get Elasticsearch pub cert secret", err.Error())
-			return reconcile.Result{}, err
-		}
-
-		kibanaSecret, err = utils.GetSecret(ctx, r.client, render.KibanaPublicCertSecret, rmeta.OperatorNamespace())
-		if err != nil {
-			log.Error(err, err.Error())
-			r.status.SetDegraded("Failed to get Kibana pub cert secret", err.Error())
-			return reconcile.Result{}, err
-		}
-	}
-
-	// If the Elasticsearch license type is basic OR there is an Authentication CR with OIDC type Tigera, then
-	// enable the Elasticsearch OIDC workaround in kube controllers.
-	enableESOIDCWorkaround := false
-	if (authentication != nil && authentication.Spec.OIDC != nil && authentication.Spec.OIDC.Type == operator.OIDCTypeTigera) ||
-		esLicenseType == render.ElasticsearchLicenseTypeBasic {
-		enableESOIDCWorkaround = true
 	}
 
 	var managerInternalTLSSecret *corev1.Secret
@@ -921,21 +857,38 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	var kubeControllersGatewaySecret *v1.Secret
-	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
-		kubeControllersGatewaySecret, err = utils.GetSecret(ctx, r.client, render.ElasticsearchKubeControllersUserSecret, rmeta.OperatorNamespace())
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-	}
-
 	var typhaNodeTLS *render.TyphaNodeTLS
 	if instance.Spec.CertificateManagement == nil {
-		typhaNodeTLS, err = r.GetTyphaFelixTLSConfig()
+		// First, attempt to load TLS secrets from the cluster, if any exist.
+		typhaNodeTLS, err = r.GetTyphaNodeTLSConfig()
 		if err != nil {
 			log.Error(err, "Error with Typha/Felix secrets")
 			r.SetDegraded("Error with Typha/Felix secrets", err, reqLogger)
 			return reconcile.Result{}, err
+		}
+
+		if typhaNodeTLS.CAConfigMap == nil || typhaNodeTLS.TyphaSecret == nil || typhaNodeTLS.NodeSecret == nil {
+			// Unable to find at least one necessary bit of TLS config. Generate new ones ourselves.
+			typhaNodeTLS, err = CreateNewTyphaNodeTLS()
+			if err != nil {
+				log.Error(err, "Error generating Typha/Felix secrets")
+				r.SetDegraded("Error generating Typha/Felix secrets", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+		}
+	} else {
+		// Use CSR-based certificate signing.
+		typhaNodeTLS = &render.TyphaNodeTLS{
+			CAConfigMap: &corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.TyphaCAConfigMapName,
+					Namespace: rmeta.OperatorNamespace(),
+				},
+				Data: map[string]string{
+					render.TyphaCABundleName: string(instance.Spec.CertificateManagement.CACert),
+				},
+			},
 		}
 	}
 
@@ -1053,43 +1006,28 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		nodeAppArmorProfile = val
 	}
 
-	// Create a component handler to manage the rendered components.
-	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
-
-	// Render the desired Calico components based on our configuration and then
-	// create or update them.
-	calico, err := render.Calico(
-		k8sapi.Endpoint,
-		&instance.Spec,
-		logStorageExists,
-		managementCluster,
-		managementClusterConnection,
-		authentication,
-		pullSecrets,
-		typhaNodeTLS,
-		managerInternalTLSSecret,
-		elasticsearchSecret,
-		kibanaSecret,
-		birdTemplates,
-		instance.Spec.KubernetesProvider,
-		aci,
-		needNsMigration,
-		nodeAppArmorProfile,
-		r.clusterDomain,
-		enableESOIDCWorkaround,
-		kubeControllersGatewaySecret,
-		kubeControllersMetricsPort,
-		nodeReporterMetricsPort,
-		bgpLayout,
-		logCollector,
-	)
-	if err != nil {
-		log.Error(err, "Error with rendering Calico")
-		r.SetDegraded("Error with rendering Calico resources", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	components := []render.Component{}
+
+	// Create a passthrough component for the simple purpose of caching generated resources in the tigera-operator namespace.
+	// We store TLS secrets and config to be fetched on future reconcile iterations.
+	objs := []client.Object{
+		typhaNodeTLS.CAConfigMap,
+	}
+	if typhaNodeTLS.NodeSecret != nil {
+		objs = append(objs, typhaNodeTLS.NodeSecret)
+	}
+	if typhaNodeTLS.TyphaSecret != nil {
+		objs = append(objs, typhaNodeTLS.TyphaSecret)
+	}
+	if managerInternalTLSSecret != nil {
+		objs = append(objs, managerInternalTLSSecret)
+	}
+	operatorComponent := render.NewPassthrough(objs)
+	components = append(components, operatorComponent)
+
+	// Render namespaces for Calico.
+	components = append(components, render.Namespaces(&instance.Spec, pullSecrets))
+
 	// If we're on OpenShift on AWS render a Job (and needed resources) to
 	// setup the security groups we need for IPIP, BGP, and Typha communication.
 	if openShiftOnAws {
@@ -1102,7 +1040,45 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			components = append(components, awsSetup)
 		}
 	}
-	components = append(components, calico.Render()...)
+
+	// Build a configuration for rendering calico/typha.
+	typhaCfg := render.TyphaConfiguration{
+		K8sServiceEp:           k8sapi.Endpoint,
+		Installation:           &instance.Spec,
+		TLS:                    typhaNodeTLS,
+		AmazonCloudIntegration: aci,
+		MigrateNamespaces:      needNsMigration,
+		ClusterDomain:          r.clusterDomain,
+	}
+	components = append(components, render.Typha(&typhaCfg))
+
+	// Build a configuration for rendering calico/node.
+	nodeCfg := render.NodeConfiguration{
+		K8sServiceEp:            k8sapi.Endpoint,
+		Installation:            &instance.Spec,
+		AmazonCloudIntegration:  aci,
+		LogCollector:            logCollector,
+		BirdTemplates:           birdTemplates,
+		TLS:                     typhaNodeTLS,
+		ClusterDomain:           r.clusterDomain,
+		NodeReporterMetricsPort: nodeReporterMetricsPort,
+		BGPLayouts:              bgpLayout,
+		NodeAppArmorProfile:     nodeAppArmorProfile,
+		MigrateNamespaces:       needNsMigration,
+	}
+	components = append(components, render.Node(&nodeCfg))
+
+	// Build a configuration for rendering calico/kube-controllers.
+	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
+		K8sServiceEp:                k8sapi.Endpoint,
+		Installation:                &instance.Spec,
+		ManagementCluster:           managementCluster,
+		ManagementClusterConnection: managementClusterConnection,
+		ClusterDomain:               r.clusterDomain,
+		MetricsPort:                 kubeControllersMetricsPort,
+		ManagerInternalSecret:       managerInternalTLSSecret,
+	}
+	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 
 	imageSet, err := imageset.GetImageSet(ctx, r.client, instance.Spec.Variant)
 	if err != nil {
@@ -1120,6 +1096,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	// Create a component handler to create or update the rendered components.
+	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 	for _, component := range components {
 		if err := handler.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
 			r.SetDegraded("Error creating / updating resource", err, reqLogger)
@@ -1261,10 +1239,10 @@ func (r *ReconcileInstallation) SetDegraded(reason string, err error, log logr.L
 	r.status.SetDegraded(reason, err.Error())
 }
 
-// GetTyphaFelixTLSConfig reads and validates the CA ConfigMap and Secrets for
+// GetTyphaNodeTLSConfig reads and validates the CA ConfigMap and Secrets for
 // Typha and Felix configuration. It returns the validated resources or error
 // if there was one.
-func (r *ReconcileInstallation) GetTyphaFelixTLSConfig() (*render.TyphaNodeTLS, error) {
+func (r *ReconcileInstallation) GetTyphaNodeTLSConfig() (*render.TyphaNodeTLS, error) {
 	// accumulate all the error messages so all problems with the certs
 	// and CA are reported.
 	errMsgs := []string{}
@@ -1410,6 +1388,67 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 		}
 	}
 	return nil
+}
+
+func CreateNewTyphaNodeTLS() (*render.TyphaNodeTLS, error) {
+	// Make CA
+	ca, err := tls.MakeCA(fmt.Sprintf("%s@%d", rmeta.TigeraOperatorCAIssuerPrefix, time.Now().Unix()))
+	if err != nil {
+		return nil, err
+	}
+	crtContent := &bytes.Buffer{}
+	keyContent := &bytes.Buffer{}
+	if err := ca.Config.WriteCertConfig(crtContent, keyContent); err != nil {
+		return nil, err
+	}
+
+	tntls := render.TyphaNodeTLS{}
+
+	// Take CA cert and create ConfigMap
+	data := make(map[string]string)
+	data[render.TyphaCABundleName] = crtContent.String()
+	tntls.CAConfigMap = &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      render.TyphaCAConfigMapName,
+			Namespace: rmeta.OperatorNamespace(),
+		},
+		Data: data,
+	}
+
+	// Create TLS Secret for Felix using ca from above
+	tntls.NodeSecret, err = secret.CreateTLSSecret(ca,
+		render.NodeTLSSecretName,
+		rmeta.OperatorNamespace(),
+		render.TLSSecretKeyName,
+		render.TLSSecretCertName,
+		rmeta.DefaultCertificateDuration,
+		[]crypto.CertificateExtensionFunc{tls.SetClientAuth},
+		render.FelixCommonName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set the CommonName used to create cert
+	tntls.NodeSecret.Data[render.CommonName] = []byte(render.FelixCommonName)
+
+	// Create TLS Secret for Felix using ca from above
+	tntls.TyphaSecret, err = secret.CreateTLSSecret(ca,
+		render.TyphaTLSSecretName,
+		rmeta.OperatorNamespace(),
+		render.TLSSecretKeyName,
+		render.TLSSecretCertName,
+		rmeta.DefaultCertificateDuration,
+		[]crypto.CertificateExtensionFunc{tls.SetServerAuth},
+		render.TyphaCommonName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set the CommonName used to create cert
+	tntls.TyphaSecret.Data[render.CommonName] = []byte(render.TyphaCommonName)
+
+	return &tntls, nil
 }
 
 func getConfigMap(client client.Client, cmName string) (*corev1.ConfigMap, error) {

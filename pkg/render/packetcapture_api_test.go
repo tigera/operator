@@ -20,7 +20,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	operator "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/ptr"
@@ -60,10 +60,10 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		},
 	}}
 	// Installation with minimal setup
-	var defaultInstallation = operator.InstallationSpec{}
+	var defaultInstallation = operatorv1.InstallationSpec{}
 
 	// Rendering packet capture resources
-	var renderPacketCapture = func(i operator.InstallationSpec, config authentication.KeyValidatorConfig) (resources []client.Object) {
+	var renderPacketCapture = func(i operatorv1.InstallationSpec, config authentication.KeyValidatorConfig) (resources []client.Object) {
 		var pc = render.PacketCaptureAPI(
 			pullSecrets,
 			false,
@@ -342,7 +342,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 			Operator: corev1.TolerationOpEqual,
 			Value:    "bar",
 		}
-		var resources = renderPacketCapture(operator.InstallationSpec{
+		var resources = renderPacketCapture(operatorv1.InstallationSpec{
 			ControlPlaneTolerations: []corev1.Toleration{t},
 		}, nil)
 
@@ -354,17 +354,17 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 	})
 
 	It("should render all resources for an installation with certificate management", func() {
-		var resources = renderPacketCapture(operator.InstallationSpec{CertificateManagement: &operator.CertificateManagement{}}, nil)
+		var resources = renderPacketCapture(operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{}}, nil)
 
 		checkPacketCaptureResources(resources, true, false)
 	})
 
 	It("should render all resources for an installation with oidc configured", func() {
-		var authentication *operator.Authentication
-		authentication = &operator.Authentication{
-			Spec: operator.AuthenticationSpec{
+		var authentication *operatorv1.Authentication
+		authentication = &operatorv1.Authentication{
+			Spec: operatorv1.AuthenticationSpec{
 				ManagerDomain: "https://127.0.0.1",
-				OIDC:          &operator.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"}}}
+				OIDC:          &operatorv1.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"}}}
 
 		var dexCfg = render.NewDexKeyValidatorConfig(authentication, nil, render.CreateDexTLSSecret("cn"), dns.DefaultClusterDomain)
 		var resources = renderPacketCapture(defaultInstallation, dexCfg)

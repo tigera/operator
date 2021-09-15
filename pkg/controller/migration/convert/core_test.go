@@ -1,6 +1,8 @@
 package convert
 
 import (
+	"time"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -455,7 +457,11 @@ var _ = Describe("core handler", func() {
 				Expect(handleAnnotations(&comps, i)).To(HaveOccurred())
 			})
 			It("should not error for acceptable annotations", func() {
-				updateAnnotations(map[string]string{"kubectl.kubernetes.io/last-applied-configuration": "{}"})
+				updateAnnotations(map[string]string{
+					"kubectl.kubernetes.io/last-applied-configuration": "{}",
+					"kubectl.kubernetes.io/restartedAt":                time.Now().String(),
+					"kubectl.kubernetes.io/whatever":                   "whatever",
+				})
 				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
 			})
 			It("should not panic for nil annotations", func() {

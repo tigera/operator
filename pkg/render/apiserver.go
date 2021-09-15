@@ -23,7 +23,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -110,7 +109,7 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
 			// We only need to add the tlsKeyPair if we created it, otherwise
 			// it already exists.
 			tlsSecrets = []*corev1.Secret{tlsKeyPair}
-			tlsHashAnnotations[tlsSecretHashAnnotation] = rmeta.AnnotationHash(tlsKeyPair.Data)
+			tlsHashAnnotations[TlsSecretHashAnnotation] = rmeta.AnnotationHash(tlsKeyPair.Data)
 		}
 		copy := tlsKeyPair.DeepCopy()
 		copy.ObjectMeta = metav1.ObjectMeta{
@@ -131,7 +130,7 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
 
 	return &apiServerComponent{
 		installation:                installation,
-		hostNetwork:                 hostNetwork,
+		forceHostNetwork:            hostNetwork,
 		managementCluster:           managementCluster,
 		managementClusterConnection: managementClusterConnection,
 		amazonCloudIntegration:      aci,
@@ -155,7 +154,7 @@ type apiServerComponent struct {
 	pullSecrets                 []*corev1.Secret
 	openshift                   bool
 	isManagement                bool
-	hostNetwork                 bool
+	forceHostNetwork            bool
 	clusterDomain               string
 	apiServerImage              string
 	queryServerImage            string
@@ -249,7 +248,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		globalObjects = append(globalObjects, c.apiServiceRegistration(c.tlsSecrets[0].Data[APIServerSecretCertName]))
 	} else {
 		namespacedObjects = append(namespacedObjects, c.apiServiceRegistration(c.installation.CertificateManagement.CACert))
-		globalObjects = append(globalObjects, CsrClusterRoleBinding(csrRolebindingName(c.installation.Variant), rmeta.APIServerNamespace(c.installation.Variant)))
+		globalObjects = append(globalObjects, CSRClusterRoleBinding(csrRolebindingName(c.installation.Variant), rmeta.APIServerNamespace(c.installation.Variant)))
 	}
 
 	// Global enterprise-only objects.
@@ -783,16 +782,8 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 	}
 
 	var replicas int32 = 1
-	hostNetwork := c.hostNetwork
+	hostNetwork := c.hostNetwork()
 	dnsPolicy := corev1.DNSClusterFirst
-	if c.installation.KubernetesProvider == operatorv1.ProviderEKS &&
-		c.installation.CNI.Type == operatorv1.PluginCalico {
-		// Workaround the fact that webhooks don't work for non-host-networked pods
-		// when in this networking mode on EKS, because the control plane nodes don't run
-		// Calico.
-		hostNetwork = true
-	}
-
 	if hostNetwork {
 		// Adjust DNS policy so we can access in-cluster services.
 		dnsPolicy = corev1.DNSClusterFirstWithHostNet
@@ -860,6 +851,18 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 	return d
 }
 
+func (c *apiServerComponent) hostNetwork() bool {
+	hostNetwork := c.forceHostNetwork
+	if c.installation.KubernetesProvider == operatorv1.ProviderEKS &&
+		c.installation.CNI.Type == operatorv1.PluginCalico {
+		// Workaround the fact that webhooks don't work for non-host-networked pods
+		// when in this networking mode on EKS, because the control plane nodes don't run
+		// Calico.
+		hostNetwork = true
+	}
+	return hostNetwork
+}
+
 // apiServerContainer creates the API server container.
 func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	volumeMounts := []corev1.VolumeMount{}
@@ -894,7 +897,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 	}
 
-	env = append(env, c.k8sServiceEp.EnvVars()...)
+	env = append(env, c.k8sServiceEp.EnvVars(c.hostNetwork(), c.installation.KubernetesProvider)...)
 
 	if c.installation.CalicoNetwork != nil && c.installation.CalicoNetwork.MultiInterfaceMode != nil {
 		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.installation.CalicoNetwork.MultiInterfaceMode.Value()})
@@ -976,7 +979,8 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		{Name: "LOGLEVEL", Value: "info"},
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 	}
-	env = append(env, c.k8sServiceEp.EnvVars()...)
+
+	env = append(env, c.k8sServiceEp.EnvVars(c.hostNetwork(), c.installation.KubernetesProvider)...)
 	env = append(env, GetTigeraSecurityGroupEnvVariables(c.amazonCloudIntegration)...)
 
 	if c.installation.CalicoNetwork != nil && c.installation.CalicoNetwork.MultiInterfaceMode != nil {
@@ -1059,7 +1063,7 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 
 // tolerations creates the tolerations used by the API server deployment.
 func (c *apiServerComponent) tolerations() []corev1.Toleration {
-	if c.hostNetwork {
+	if c.hostNetwork() {
 		return rmeta.TolerateAll
 	}
 	return append(c.installation.ControlPlaneTolerations, rmeta.TolerateMaster)
@@ -1109,7 +1113,7 @@ func (c *apiServerComponent) apiServerPodSecurityPolicy() (client.Object, client
 //
 // Calico only.
 func (c *apiServerComponent) networkPolicy() *netv1.NetworkPolicy {
-	tcp := v1.ProtocolTCP
+	tcp := corev1.ProtocolTCP
 	p := intstr.FromInt(5443)
 	return &netv1.NetworkPolicy{
 		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
@@ -1300,7 +1304,12 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 		{
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"packetcaptures/files"},
-			Verbs:     []string{"get"},
+			Verbs:     []string{"get", "delete"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"packetcaptureslist"},
+			Verbs:     []string{"get", "list", "watch"},
 		},
 		// Additional "list" requests required to view flows.
 		{
@@ -1423,7 +1432,12 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 		{
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"packetcaptures/files"},
-			Verbs:     []string{"get"},
+			Verbs:     []string{"get", "delete"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"packetcaptureslist"},
+			Verbs:     []string{"get", "list", "watch"},
 		},
 		// Additional "list" requests that the Tigera Secure manager needs
 		{

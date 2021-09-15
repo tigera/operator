@@ -26,7 +26,6 @@ import (
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	"github.com/elastic/cloud-on-k8s/pkg/utils/stringsutil"
-
 	"gopkg.in/inf.v0"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -41,7 +40,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/ptr"
@@ -115,10 +113,8 @@ const (
 	ElasticsearchLicenseTypeEnterpriseTrial ElasticsearchLicenseType = "enterprise_trial"
 	ElasticsearchLicenseTypeUnknown         ElasticsearchLicenseType = ""
 
-	EsManagerRole               = "es-manager"
-	EsManagerRoleBinding        = "es-manager"
-	EsKubeControllerRole        = "es-calico-kube-controllers"
-	EsKubeControllerRoleBinding = "es-calico-kube-controllers"
+	EsManagerRole        = "es-manager"
+	EsManagerRoleBinding = "es-manager"
 
 	KibanaTLSAnnotationHash        = "hash.operator.tigera.io/kb-secrets"
 	ElasticsearchTLSHashAnnotation = "hash.operator.tigera.io/es-secrets"
@@ -244,7 +240,7 @@ func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := es.installation.ImagePrefix
 	var err error
 	es.esImage, err = components.GetReference(components.ComponentElasticsearch, reg, path, prefix, is)
-	errMsgs := []string{}
+	errMsgs := make([]string, 0)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -404,8 +400,8 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 			toCreate = append(toCreate, es.curatorCronJob())
 		}
 
-		toCreate = append(toCreate, es.oidcUserRole()...)
-		toCreate = append(toCreate, es.oidcUserRoleBinding()...)
+		toCreate = append(toCreate, es.oidcUserRole())
+		toCreate = append(toCreate, es.oidcUserRoleBinding())
 
 		// If we converted from a ManagedCluster to a Standalone or Management then we need to delete the elasticsearch
 		// service as it differs between these cluster types
@@ -428,8 +424,8 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	if es.installation.CertificateManagement != nil {
-		toCreate = append(toCreate, CsrClusterRoleBinding("tigera-elasticsearch", ElasticsearchNamespace))
-		toCreate = append(toCreate, CsrClusterRoleBinding("tigera-kibana", KibanaNamespace))
+		toCreate = append(toCreate, CSRClusterRoleBinding("tigera-elasticsearch", ElasticsearchNamespace))
+		toCreate = append(toCreate, CSRClusterRoleBinding("tigera-kibana", KibanaNamespace))
 	}
 
 	return toCreate, toDelete
@@ -1614,91 +1610,47 @@ func (es *elasticsearchComponent) supportsOIDC() bool {
 		es.dexCfg != nil
 }
 
-func (es elasticsearchComponent) oidcUserRole() []client.Object {
-	return []client.Object{
-		&rbacv1.Role{
-			TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      EsManagerRole,
-				Namespace: ElasticsearchNamespace,
-			},
-			Rules: []rbacv1.PolicyRule{
-				{
-					APIGroups:     []string{""},
-					Resources:     []string{"configmaps"},
-					ResourceNames: []string{OIDCUsersConfigMapName},
-					Verbs:         []string{"update", "patch"},
-				},
-				{
-					APIGroups:     []string{""},
-					Resources:     []string{"secrets"},
-					ResourceNames: []string{OIDCUsersEsSecreteName},
-					Verbs:         []string{"get", "list"},
-				},
-			},
+func (es elasticsearchComponent) oidcUserRole() client.Object {
+	return &rbacv1.Role{
+		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      EsManagerRole,
+			Namespace: ElasticsearchNamespace,
 		},
-		&rbacv1.Role{
-			TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      EsKubeControllerRole,
-				Namespace: ElasticsearchNamespace,
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"configmaps"},
+				ResourceNames: []string{OIDCUsersConfigMapName},
+				Verbs:         []string{"update", "patch"},
 			},
-			Rules: []rbacv1.PolicyRule{
-				{
-					APIGroups:     []string{""},
-					Resources:     []string{"configmaps"},
-					ResourceNames: []string{OIDCUsersConfigMapName},
-					Verbs:         []string{"get", "list", "watch", "create", "delete"},
-				},
-				{
-					APIGroups:     []string{""},
-					Resources:     []string{"secrets"},
-					ResourceNames: []string{OIDCUsersEsSecreteName},
-					Verbs:         []string{"get", "list", "watch", "create", "update", "delete"},
-				},
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"secrets"},
+				ResourceNames: []string{OIDCUsersEsSecreteName},
+				Verbs:         []string{"get", "list"},
 			},
 		},
 	}
 }
 
-func (es elasticsearchComponent) oidcUserRoleBinding() []client.Object {
-	return []client.Object{
-		&rbacv1.RoleBinding{
-			TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      EsManagerRoleBinding,
-				Namespace: ElasticsearchNamespace,
-			},
-			RoleRef: rbacv1.RoleRef{
-				Kind:     "Role",
-				Name:     EsManagerRole,
-				APIGroup: "rbac.authorization.k8s.io",
-			},
-			Subjects: []rbacv1.Subject{
-				{
-					Kind:      "ServiceAccount",
-					Name:      ManagerServiceAccount,
-					Namespace: ManagerNamespace,
-				},
-			},
+func (es elasticsearchComponent) oidcUserRoleBinding() client.Object {
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      EsManagerRoleBinding,
+			Namespace: ElasticsearchNamespace,
 		},
-		&rbacv1.RoleBinding{
-			TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      EsKubeControllerRoleBinding,
-				Namespace: ElasticsearchNamespace,
-			},
-			RoleRef: rbacv1.RoleRef{
-				APIGroup: "rbac.authorization.k8s.io",
-				Kind:     "Role",
-				Name:     EsKubeControllerRole,
-			},
-			Subjects: []rbacv1.Subject{
-				{
-					Kind:      "ServiceAccount",
-					Name:      "calico-kube-controllers",
-					Namespace: common.CalicoNamespace,
-				},
+		RoleRef: rbacv1.RoleRef{
+			Kind:     "Role",
+			Name:     EsManagerRole,
+			APIGroup: "rbac.authorization.k8s.io",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      ManagerServiceAccount,
+				Namespace: ManagerNamespace,
 			},
 		},
 	}

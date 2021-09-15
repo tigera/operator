@@ -47,6 +47,13 @@ ifeq ($(ARCH),x86_64)
     override ARCH=amd64
 endif
 
+# Required to prevent `FROM SCRATCH` from pulling an amd64 image in the build phase.
+ifeq ($(ARCH),arm64)
+	TARGET_PLATFORM=arm64/v8
+else
+	TARGET_PLATFORM=amd64
+endif
+
 # we want to be able to run the same recipe on multiple targets keyed on the image name
 # to do that, we would use the entire image name, e.g. calico/node:abcdefg, as the stem, or '%', in the target
 # however, make does **not** allow the usage of invalid filename characters - like / and : - in a stem, and thus errors out
@@ -81,7 +88,7 @@ VALIDARCHES = $(filter-out $(EXCLUDEARCH),$(ARCHES))
 PACKAGE_NAME?=github.com/tigera/operator-cloud
 LOCAL_USER_ID?=$(shell id -u $$USER)
 GO_BUILD_VER?=v0.50
-CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)
+CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(ARCH)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./api -name '*.go')
 SRC_FILES+=$(shell find ./controllers -name '*.go')
@@ -214,8 +221,8 @@ sub-image-%:
 	$(MAKE) image ARCH=$*
 
 $(BUILD_IMAGE): $(BUILD_IMAGE)-$(ARCH)
-$(BUILD_IMAGE)-$(ARCH): $(BINDIR)/operator-$(ARCH)
-	docker build --pull -t $(BUILD_IMAGE):latest-$(ARCH) --build-arg GIT_VERSION=$(GIT_VERSION) -f ./build/Dockerfile.$(ARCH) .
+$(BUILD_IMAGE)-$(ARCH): register $(BINDIR)/operator-$(ARCH)
+	docker build --pull -t $(BUILD_IMAGE):latest-$(ARCH) --platform=linux/$(TARGET_PLATFORM) --build-arg GIT_VERSION=$(GIT_VERSION) -f ./build/Dockerfile.$(ARCH) .
 ifeq ($(ARCH),amd64)
 	docker tag $(BUILD_IMAGE):latest-$(ARCH) $(BUILD_IMAGE):latest
 endif
@@ -231,7 +238,7 @@ ifeq ($(ARCH),amd64)
 endif
 
 .PHONY: images
-images: image
+images: register image
 
 # Build the images for the target architecture
 .PHONY: images-all
@@ -339,7 +346,7 @@ foss-checks:
 ###############################################################################
 .PHONY: ci
 ## Run what CI runs
-ci: clean format-check images test dirty-check validate-gen-versions
+ci: clean format-check images-all test dirty-check validate-gen-versions
 
 validate-gen-versions:
 	make gen-versions
@@ -393,7 +400,16 @@ release-verify: release-prereqs
 	# Check the reported version is correct for each release artifact.
 	if ! docker run $(IMAGE_REGISTRY)/$(BUILD_IMAGE):$(VERSION)-$(ARCH) --version | grep '^Operator: $(VERSION)$$'; then echo "Reported version:" `docker run $(IMAGE_REGISTRY)/$(BUILD_IMAGE):$(VERSION)-$(ARCH) --version ` "\nExpected version: $(VERSION)"; false; else echo "\nVersion check passed\n"; fi
 
-release-publish-images: release-prereqs
+release-check-image-exists: release-prereqs
+	@echo "Checking if $(IMAGE_REGISTRY)/$(BUILD_IMAGE):$(VERSION) exists already"; \
+	if docker manifest inspect $(IMAGE_REGISTRY)/$(BUILD_IMAGE):$(VERSION) >/dev/null; \
+		then echo "Image $(IMAGE_REGISTRY)/$(BUILD_IMAGE):$(VERSION) already exists"; \
+		exit 1; \
+	else \
+		echo "Image tag check passed; image does not already exist"; \
+	fi
+
+release-publish-images: release-prereqs release-check-image-exists
 	# Push images.
 	$(MAKE) push-all push-manifests push-non-manifests RELEASE=true IMAGETAG=$(VERSION)
 

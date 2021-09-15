@@ -19,8 +19,11 @@ import (
 	"os"
 	"strings"
 
+	operator "github.com/tigera/operator/api/v1"
 	v1 "k8s.io/api/core/v1"
 )
+
+const dockerEEProxyLocal = "proxy.local"
 
 // Endpoint is the default ServiceEndpoint learned from environment variables.
 var Endpoint ServiceEndpoint
@@ -43,8 +46,16 @@ type ServiceEndpoint struct {
 // EnvVars returns a slice of v1.EnvVars KUBERNETES_SERVICE_HOST/PORT if the Host and Port
 // of the ServiceEndpoint were set. It returns a nil slice if either was empty as both
 // need to be set.
-func (k8s ServiceEndpoint) EnvVars() []v1.EnvVar {
+func (k8s ServiceEndpoint) EnvVars(hostNetworked bool, provider operator.Provider) []v1.EnvVar {
 	if k8s.Host == "" || k8s.Port == "" {
+		return nil
+	}
+
+	if provider == operator.ProviderDockerEE && !hostNetworked && k8s.Host == dockerEEProxyLocal {
+		// Special case: Docker EE (now MKE) has a proxy on each host that is only accessible from the host
+		// namespace.  Don't try to use it from non-host network pods.
+		//
+		// It's also possible for the user to configure a different route to the API server; we let those through.
 		return nil
 	}
 

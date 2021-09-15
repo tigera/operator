@@ -223,7 +223,7 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 		)
 
 		if c.installation.CertificateManagement != nil {
-			complianceObjs = append(complianceObjs, CsrClusterRoleBinding("tigera-compliance-server", ComplianceNamespace))
+			complianceObjs = append(complianceObjs, CSRClusterRoleBinding("tigera-compliance-server", ComplianceNamespace))
 		}
 
 	} else {
@@ -232,7 +232,7 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 		)
 		objsToDelete = []client.Object{c.complianceServerDeployment()}
 		if c.installation.CertificateManagement != nil {
-			objsToDelete = append(objsToDelete, CsrClusterRoleBinding("tigera-compliance-server", ComplianceNamespace))
+			objsToDelete = append(objsToDelete, CSRClusterRoleBinding("tigera-compliance-server", ComplianceNamespace))
 		}
 	}
 
@@ -1144,7 +1144,6 @@ func (c *complianceComponent) complianceBenchmarkerSecurityContextConstraints() 
 		Users: []string{
 			fmt.Sprintf("system:serviceaccount:%s:tigera-compliance-benchmarker", ComplianceNamespace),
 		},
-		Groups:  []string{"system:authenticated"},
 		Volumes: []ocsv1.FSType{"*"},
 	}
 }

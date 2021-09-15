@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package render
+package dpi_test
 
 import (
-	glog "log"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
@@ -25,8 +24,7 @@ import (
 )
 
 func TestRender(t *testing.T) {
-	glog.SetOutput(GinkgoWriter)
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../report/render_suite.xml")
-	RunSpecsWithDefaultAndCustomReporters(t, "pkg/render Suite", []Reporter{junitReporter})
+	junitReporter := reporters.NewJUnitReporter("../../../../report/dpi_suite.xml")
+	RunSpecsWithDefaultAndCustomReporters(t, "pkg/intusiondetection/dpi Suite", []Reporter{junitReporter})
 }

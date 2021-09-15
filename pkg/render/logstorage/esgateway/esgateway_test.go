@@ -87,7 +87,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: rmeta.OperatorNamespace()}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.InternalCertSecret, Namespace: render.ElasticsearchNamespace}},
-				clusterDomain,
+				clusterDomain, "elastic",
 			})
 
 			createResources, _ := component.Objects()
@@ -128,7 +128,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: rmeta.OperatorNamespace()}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.InternalCertSecret, Namespace: render.ElasticsearchNamespace}},
-				clusterDomain,
+				clusterDomain, "elastic",
 			})
 
 			createResources, _ := component.Objects()

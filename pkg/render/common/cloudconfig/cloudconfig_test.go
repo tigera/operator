@@ -27,7 +27,6 @@ var _ = Describe("CloudConfig ConfigMap tests", func() {
 					"externalESDomain":     "externalES.com",
 					"externalKibanaDomain": "externalKibana.com",
 					"enableMTLS":           strconv.FormatBool(false),
-					"useCA":                strconv.FormatBool(false),
 				},
 			}
 		})
@@ -39,7 +38,6 @@ var _ = Describe("CloudConfig ConfigMap tests", func() {
 				externalESDomain:     "externalES.com",
 				externalKibanaDomain: "externalKibana.com",
 				enableMTLS:           false,
-				useCA:                false,
 			}
 
 			cc, err := NewCloudConfigFromConfigMap(configMap)
@@ -76,12 +74,6 @@ var _ = Describe("CloudConfig ConfigMap tests", func() {
 			_, err := NewCloudConfigFromConfigMap(configMap)
 			Expect(err).Should(HaveOccurred())
 		})
-
-		It("should return an error when useCA is not a valid boolean", func() {
-			configMap.Data["useCA"] = "falsee"
-			_, err := NewCloudConfigFromConfigMap(configMap)
-			Expect(err).Should(HaveOccurred())
-		})
 	})
 
 	Context("ConfigMap from CloudConfig", func() {
@@ -94,7 +86,6 @@ var _ = Describe("CloudConfig ConfigMap tests", func() {
 				externalESDomain:     "externalES.com",
 				externalKibanaDomain: "externalKibana.com",
 				enableMTLS:           false,
-				useCA:                false,
 			}
 		})
 
@@ -110,7 +101,6 @@ var _ = Describe("CloudConfig ConfigMap tests", func() {
 					"externalESDomain":     "externalES.com",
 					"externalKibanaDomain": "externalKibana.com",
 					"enableMTLS":           strconv.FormatBool(false),
-					"useCA":                strconv.FormatBool(false),
 				},
 			}
 			cm := cloudConfig.ConfigMap()

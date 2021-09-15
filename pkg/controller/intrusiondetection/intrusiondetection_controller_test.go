@@ -84,7 +84,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
 		mockStatus.On("ReadyToMonitor")
 
-		cloudConfig := cloudconfig.NewCloudConfig("id", "tenantName", "externalES.com", "externalKB.com", false, false)
+		cloudConfig := cloudconfig.NewCloudConfig("id", "tenantName", "externalES.com", "externalKB.com", false)
 		Expect(c.Create(ctx, cloudConfig.ConfigMap())).ToNot(HaveOccurred())
 
 		// Create an object we can use throughout the test to do the compliance reconcile loops.

@@ -15,19 +15,18 @@ const (
 	CloudConfigConfigMapName = "tigera-secure-cloud-config"
 )
 
-func NewCloudConfig(tenantId string, tenantName string, externalESDomain string, externalKibanaDomain string, enableMTLS bool, useCA bool) *CloudConfig {
+func NewCloudConfig(tenantId string, tenantName string, externalESDomain string, externalKibanaDomain string, enableMTLS bool) *CloudConfig {
 	return &CloudConfig{
 		tenantId:             tenantId,
 		tenantName:           tenantName,
 		externalESDomain:     externalESDomain,
 		externalKibanaDomain: externalKibanaDomain,
 		enableMTLS:           enableMTLS,
-		useCA:                useCA,
 	}
 }
 
 func NewCloudConfigFromConfigMap(configMap *corev1.ConfigMap) (*CloudConfig, error) {
-	var enableMTLS, useCA bool
+	var enableMTLS bool
 	var err error
 
 	if configMap.Data["tenantId"] == "" {
@@ -54,15 +53,7 @@ func NewCloudConfigFromConfigMap(configMap *corev1.ConfigMap) (*CloudConfig, err
 		}
 	}
 
-	if configMap.Data["useCA"] == "" {
-		useCA = false
-	} else {
-		if useCA, err = strconv.ParseBool(configMap.Data["useCA"]); err != nil {
-			return nil, errors.Wrap(err, "'useCA' must be a bool")
-		}
-	}
-
-	return NewCloudConfig(configMap.Data["tenantId"], configMap.Data["tenantName"], configMap.Data["externalESDomain"], configMap.Data["externalKibanaDomain"], enableMTLS, useCA), nil
+	return NewCloudConfig(configMap.Data["tenantId"], configMap.Data["tenantName"], configMap.Data["externalESDomain"], configMap.Data["externalKibanaDomain"], enableMTLS), nil
 }
 
 type CloudConfig struct {
@@ -71,7 +62,6 @@ type CloudConfig struct {
 	externalESDomain     string
 	externalKibanaDomain string
 	enableMTLS           bool
-	useCA                bool
 }
 
 func (c CloudConfig) TenantId() string {
@@ -94,10 +84,6 @@ func (c CloudConfig) EnableMTLS() bool {
 	return c.enableMTLS
 }
 
-func (c CloudConfig) UseCA() bool {
-	return c.useCA
-}
-
 func (c CloudConfig) ConfigMap() *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -110,7 +96,6 @@ func (c CloudConfig) ConfigMap() *corev1.ConfigMap {
 			"externalESDomain":     c.externalESDomain,
 			"externalKibanaDomain": c.externalKibanaDomain,
 			"enableMTLS":           strconv.FormatBool(c.enableMTLS),
-			"useCA":                strconv.FormatBool(c.useCA),
 		},
 	}
 }

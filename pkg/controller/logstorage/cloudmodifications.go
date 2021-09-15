@@ -52,20 +52,6 @@ func (r *ReconcileLogStorage) esGatewayAddCloudModificationsToConfig(
 		c.EnableMTLS = cloudConfig.EnableMTLS()
 	}
 
-	if cloudConfig.UseCA() {
-		c.ExternalCACertSecret, err = utils.GetSecret(ctx, r.client, esgateway.ExternalCACertSecret, rmeta.OperatorNamespace())
-		if err != nil {
-			reqLogger.Error(err, err.Error())
-			r.status.SetDegraded("Waiting for external Elasticsearch CA cert secret to be available", "")
-			return reconcile.Result{}, false, err
-		}
-		if c.ExternalCACertSecret == nil {
-			r.status.SetDegraded("Waiting for external Elasticsearch CA cert secret to be available", "")
-			return reconcile.Result{}, false, nil
-		}
-		c.UseCA = cloudConfig.UseCA()
-	}
-
 	if cloudConfig.TenantId() != "" {
 		c.TenantId = cloudConfig.TenantId()
 	}

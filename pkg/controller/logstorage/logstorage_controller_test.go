@@ -1225,7 +1225,7 @@ var _ = Describe("LogStorage controller", func() {
 							Namespace: rmeta.OperatorNamespace(),
 						},
 						Data: map[string][]byte{
-							"elastic": []byte("password"),
+							"tigera-mgmt": []byte("password"),
 						},
 					}
 					Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())

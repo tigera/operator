@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,16 +16,13 @@ package render
 
 import (
 	"github.com/go-logr/logr"
-	corev1 "k8s.io/api/core/v1"
 )
 
 var (
-	CommonName               = "common-name"
-	URISAN                   = "uri-san"
-	TyphaCommonName          = "typha-server"
-	FelixCommonName          = "typha-client"
-	NodePriorityClassName    = "system-node-critical"
-	ClusterPriorityClassName = "system-cluster-critical"
+	CommonName      = "common-name"
+	URISAN          = "uri-san"
+	TyphaCommonName = "typha-server"
+	FelixCommonName = "typha-client"
 )
 
 // A Renderer is capable of generating components to be installed on the cluster.
@@ -35,12 +32,4 @@ type Renderer interface {
 
 func SetTestLogger(l logr.Logger) {
 	log = l
-}
-
-func setNodeCriticalPod(t *corev1.PodTemplateSpec) {
-	t.Spec.PriorityClassName = NodePriorityClassName
-}
-
-func SetClusterCriticalPod(t *corev1.PodTemplateSpec) {
-	t.Spec.PriorityClassName = ClusterPriorityClassName
 }

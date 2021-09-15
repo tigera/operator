@@ -453,7 +453,7 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 		},
 	}
 
-	setNodeCriticalPod(&(ds.Spec.Template))
+	setCalicoCriticalPod(&(ds.Spec.Template))
 	return ds
 }
 

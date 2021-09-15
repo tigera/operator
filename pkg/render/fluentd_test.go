@@ -145,6 +145,17 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}))
 	})
 
+	It("should render with a resource quota for provider GKE", func() {
+		installation.KubernetesProvider = operatorv1.ProviderGKE
+
+		// Should render the correct resources.
+		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain, rmeta.OSTypeLinux)
+		resources, _ := component.Objects()
+
+		// Should render resource quota
+		Expect(rtest.GetResource(resources, "tigera-critical-pods", "tigera-fluentd", "", "v1", "ResourceQuota")).ToNot(BeNil())
+	})
+
 	It("should render for Windows nodes", func() {
 		expectedResources := []struct {
 			name    string

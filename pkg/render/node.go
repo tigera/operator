@@ -40,6 +40,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
+	"github.com/tigera/operator/pkg/render/common/resourcequota"
 	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
@@ -167,6 +168,14 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 		c.nodeRoleBinding(),
 	}
 
+	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderGKE {
+		// We do this only for GKE as other providers don't (yet?)
+		// automatically add resource quota that constrains whether
+		// Calico components that are marked cluster or node critical
+		// can be scheduled.
+		objsToCreate = append(objsToCreate, c.calicoResourceQuota())
+	}
+
 	if c.cfg.BGPLayouts != nil {
 		objsToCreate = append(objsToCreate, configmap.ToRuntimeObjects(configmap.CopyToNamespace(common.CalicoNamespace, c.cfg.BGPLayouts)...)...)
 	}
@@ -215,6 +224,11 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 
 func (c *nodeComponent) Ready() bool {
 	return true
+}
+
+func (c *nodeComponent) calicoResourceQuota() *corev1.ResourceQuota {
+	criticalPriorityClasses := []string{NodePriorityClassName, ClusterPriorityClassName}
+	return resourcequota.ResourceQuotaForPriorityClassScope(resourcequota.CalicoCriticalResourceQuotaName, common.CalicoNamespace, criticalPriorityClasses)
 }
 
 // nodeServiceAccount creates the node's service account.

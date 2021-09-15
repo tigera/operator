@@ -82,6 +82,8 @@ type KubeControllersConfiguration struct {
 	ElasticsearchSecret          *corev1.Secret
 	KubeControllersGatewaySecret *corev1.Secret
 	KibanaSecret                 *corev1.Secret
+
+	TenantId string
 }
 
 func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
@@ -420,6 +422,10 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 
 		if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
 			env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
+		}
+
+		if c.cfg.TenantId != "" {
+			env = append(env, corev1.EnvVar{Name: "ELASTIC_INDEX_TENANT_ID", Value: c.cfg.TenantId})
 		}
 	}
 

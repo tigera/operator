@@ -47,6 +47,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			esConfigMap, nil, notOpenshift, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, notManagedCluster,
 			false,
 			&testutils.InternalManagerTLSSecret,
+			"",
 		)
 		resources, _ := component.Objects()
 
@@ -136,6 +137,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			esConfigMap, nil, notOpenshift, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, notManagedCluster,
 			false,
 			nil,
+			"",
 		)
 		resources, _ := component.Objects()
 
@@ -219,6 +221,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			esConfigMap, nil, notOpenshift, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, managedCluster,
 			false,
 			nil,
+			"",
 		)
 		resources, _ := component.Objects()
 
@@ -290,6 +293,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			&relasticsearch.ClusterConfig{}, nil, false, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, notManagedCluster,
 			false,
 			nil,
+			"",
 		)
 		resources, _ := component.Objects()
 		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -308,7 +312,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			&operatorv1.InstallationSpec{
 				ControlPlaneTolerations: []corev1.Toleration{t},
 			},
-			&relasticsearch.ClusterConfig{}, nil, false, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, notManagedCluster, false, nil)
+			&relasticsearch.ClusterConfig{}, nil, false, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, notManagedCluster, false, nil, "")
 		resources, _ := component.Objects()
 		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		job := rtest.GetResource(resources, render.IntrusionDetectionInstallerJobName, render.IntrusionDetectionNamespace, "batch", "v1", "Job").(*batchv1.Job)

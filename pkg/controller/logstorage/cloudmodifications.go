@@ -15,6 +15,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/cloudconfig"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/logstorage/externalelasticsearch"
 )
@@ -29,15 +30,8 @@ func (r *ReconcileLogStorage) esGatewayAddCloudModificationsToConfig(
 	c.EsAdminUserSecret = esAdminUserSecret
 	c.ExternalElastic = true
 
-	cloudConfig, err := utils.GetCloudConfig(ctx, r.client)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			reqLogger.Info("Failed to retrieve Elasticsearch Gateway config map")
-			r.status.SetDegraded("Failed to retrieve Elasticsearch Gateway config map", err.Error())
-			return reconcile.Result{}, false, nil
-		}
-		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Failed to retrieve Elasticsearch Gateway config map", err.Error())
+	cloudConfig, err := r.getCloudConfig(reqLogger, ctx)
+	if cloudConfig == nil || err != nil {
 		return reconcile.Result{}, false, err
 	}
 
@@ -79,6 +73,24 @@ func (r *ReconcileLogStorage) esGatewayAddCloudModificationsToConfig(
 	return reconcile.Result{}, true, nil
 }
 
+// esKubeControllersAddCloudModificationsToConfig modifies the provided *kubecontrollers.KubeControllersConfiguration to include multi-tenancy specific configuration.
+func (r *ReconcileLogStorage) esKubeControllersAddCloudModificationsToConfig(
+	c *kubecontrollers.KubeControllersConfiguration,
+	reqLogger logr.Logger,
+	ctx context.Context,
+) (reconcile.Result, bool, error) {
+	cloudConfig, err := r.getCloudConfig(reqLogger, ctx)
+	if cloudConfig == nil || err != nil {
+		return reconcile.Result{}, false, err
+	}
+
+	if cloudConfig.TenantId() != "" {
+		c.TenantId = cloudConfig.TenantId()
+	}
+
+	return reconcile.Result{}, true, nil
+}
+
 // createExternalElasticsearch pre-prends the tenantId from the tigera-secure-cloud-config Config map to the clusterName
 // field in the tigera-secure-elasticsearch Config map. It then creates the ExternalElasticsearch component.
 func (r *ReconcileLogStorage) createExternalElasticsearch(
@@ -88,15 +100,8 @@ func (r *ReconcileLogStorage) createExternalElasticsearch(
 	reqLogger logr.Logger,
 	ctx context.Context,
 ) (reconcile.Result, bool, error) {
-	cloudConfig, err := utils.GetCloudConfig(ctx, r.client)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			reqLogger.Info("Failed to retrieve Elasticsearch Gateway config map")
-			r.status.SetDegraded("Failed to retrieve Elasticsearch Gateway config map", err.Error())
-			return reconcile.Result{}, false, nil
-		}
-		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Failed to retrieve Elasticsearch Gateway config map", err.Error())
+	cloudConfig, err := r.getCloudConfig(reqLogger, ctx)
+	if cloudConfig == nil || err != nil {
 		return reconcile.Result{}, false, err
 	}
 
@@ -113,6 +118,22 @@ func (r *ReconcileLogStorage) createExternalElasticsearch(
 	}
 
 	return reconcile.Result{}, true, nil
+}
+
+func (r *ReconcileLogStorage) getCloudConfig(reqLogger logr.Logger, ctx context.Context) (*cloudconfig.CloudConfig, error) {
+	cloudConfig, err := utils.GetCloudConfig(ctx, r.client)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			reqLogger.Info("Failed to retrieve Elasticsearch Gateway config map")
+			r.status.SetDegraded("Failed to retrieve Elasticsearch Gateway config map", err.Error())
+			return nil, nil
+		}
+		reqLogger.Error(err, err.Error())
+		r.status.SetDegraded("Failed to retrieve Elasticsearch Gateway config map", err.Error())
+		return nil, err
+	}
+
+	return cloudConfig, nil
 }
 
 func addMultiTenancyWatches(c controller.Controller) error {

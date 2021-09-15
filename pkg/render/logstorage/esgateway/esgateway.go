@@ -67,22 +67,24 @@ func EsGateway(c *Config) render.Component {
 
 	secrets = append(secrets, c.KubeControllersUserSecrets...)
 	return &esGateway{
-		installation:   c.Installation,
-		pullSecrets:    c.PullSecrets,
-		secrets:        secrets,
-		tlsAnnotations: tlsAnnotations,
-		clusterDomain:  c.ClusterDomain,
+		installation:    c.Installation,
+		pullSecrets:     c.PullSecrets,
+		secrets:         secrets,
+		tlsAnnotations:  tlsAnnotations,
+		clusterDomain:   c.ClusterDomain,
+		esAdminUserName: c.EsAdminUserName,
 	}
 }
 
 type esGateway struct {
-	installation   *operatorv1.InstallationSpec
-	pullSecrets    []*corev1.Secret
-	secrets        []*corev1.Secret
-	tlsAnnotations map[string]string
-	clusterDomain  string
-	csrImage       string
-	esGatewayImage string
+	installation    *operatorv1.InstallationSpec
+	pullSecrets     []*corev1.Secret
+	secrets         []*corev1.Secret
+	tlsAnnotations  map[string]string
+	clusterDomain   string
+	csrImage        string
+	esGatewayImage  string
+	esAdminUserName string
 }
 
 type Config struct {
@@ -93,6 +95,7 @@ type Config struct {
 	KibanaInternalCertSecret   *corev1.Secret
 	EsInternalCertSecret       *corev1.Secret
 	ClusterDomain              string
+	EsAdminUserName            string
 }
 
 func (e *esGateway) ResolveImages(is *operatorv1.ImageSet) error {
@@ -188,13 +191,13 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 		{Name: "ES_GATEWAY_KIBANA_ENDPOINT", Value: KibanaHTTPSEndpoint},
 		{Name: "ES_GATEWAY_HTTPS_CERT", Value: "/certs/https/tls.crt"},
 		{Name: "ES_GATEWAY_HTTPS_KEY", Value: "/certs/https/tls.key"},
-		{Name: "ES_GATEWAY_ELASTIC_USERNAME", Value: "elastic"},
+		{Name: "ES_GATEWAY_ELASTIC_USERNAME", Value: e.esAdminUserName},
 		{Name: "ES_GATEWAY_ELASTIC_PASSWORD", ValueFrom: &corev1.EnvVarSource{
 			SecretKeyRef: &corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{
 					Name: render.ElasticsearchAdminUserSecret,
 				},
-				Key: "elastic",
+				Key: e.esAdminUserName,
 			},
 		}},
 	}

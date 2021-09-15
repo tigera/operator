@@ -44,6 +44,7 @@ const (
 	ElasticsearchIntrusionDetectionUserSecret    = "tigera-ee-intrusion-detection-elasticsearch-access"
 	ElasticsearchIntrusionDetectionJobUserSecret = "tigera-ee-installer-elasticsearch-access"
 	ElasticsearchADJobUserSecret                 = "tigera-ee-ad-job-elasticsearch-access"
+	ElasticsearchPerformanceHotspotsbUserSecret  = "tigera-ee-performance-hotspots-elasticsearch-access"
 
 	IntrusionDetectionInstallerJobName = "intrusion-detection-es-job-installer"
 )

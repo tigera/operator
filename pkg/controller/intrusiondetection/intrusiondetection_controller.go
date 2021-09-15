@@ -139,10 +139,14 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	for _, secretName := range []string{
-		relasticsearch.PublicCertSecret, render.ElasticsearchIntrusionDetectionUserSecret,
-		render.ElasticsearchIntrusionDetectionJobUserSecret, render.ElasticsearchADJobUserSecret,
+		relasticsearch.PublicCertSecret,
+		render.ElasticsearchIntrusionDetectionUserSecret,
+		render.ElasticsearchIntrusionDetectionJobUserSecret,
+		render.ElasticsearchADJobUserSecret,
+		render.ElasticsearchPerformanceHotspotsbUserSecret,
 		render.ManagerInternalTLSSecretName,
-		render.NodeTLSSecretName, render.TyphaTLSSecretName,
+		render.NodeTLSSecretName,
+		render.TyphaTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, rmeta.OperatorNamespace()); err != nil {
 			return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
@@ -295,6 +299,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	secrets := []string{
 		render.ElasticsearchIntrusionDetectionUserSecret,
 		render.ElasticsearchADJobUserSecret,
+		render.ElasticsearchPerformanceHotspotsbUserSecret,
 	}
 
 	if managementClusterConnection == nil {

@@ -1025,8 +1025,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	operatorComponent := render.NewPassthrough(objs)
 	components = append(components, operatorComponent)
 
+	// Render priority classes.
+	components = append(components, render.PriorityClassDefinitions())
+
 	// Render namespaces for Calico.
 	components = append(components, render.Namespaces(&instance.Spec, pullSecrets))
+
+	// Render resources quotas.
+	components = append(components, render.ResourceQuotas())
 
 	// If we're on OpenShift on AWS render a Job (and needed resources) to
 	// setup the security groups we need for IPIP, BGP, and Typha communication.

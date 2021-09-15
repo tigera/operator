@@ -190,7 +190,7 @@ func (c *typhaComponent) typhaRoleBinding() *rbacv1.ClusterRoleBinding {
 	}
 }
 
-// typhaRole creates the clusterrole containing policy rules that allow the typha daemonset to operate normally.
+// typhaRole creates the clusterrole containing policy rules that allow the typha deployment to operate normally.
 func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -200,6 +200,12 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 		},
 
 		Rules: []rbacv1.PolicyRule{
+			{
+				// Calico uses endpoint slices for service-based network policy rules.
+				APIGroups: []string{"discovery.k8s.io"},
+				Resources: []string{"endpointslices"},
+				Verbs:     []string{"list", "watch"},
+			},
 			{
 				// The CNI plugin needs to get pods, nodes, namespaces.
 				APIGroups: []string{""},
@@ -319,6 +325,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 					"stagednetworkpolicies",
 					"tiers",
 					"packetcaptures",
+					"deeppacketinspections",
 				},
 				Verbs: []string{"get", "list", "watch"},
 			},
@@ -575,6 +582,7 @@ func (c *typhaComponent) livenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 				Port: port,
 			},
 		},
+		TimeoutSeconds: 10,
 	}
 	rp := &v1.Probe{
 		Handler: v1.Handler{
@@ -584,6 +592,7 @@ func (c *typhaComponent) livenessReadinessProbes() (*v1.Probe, *v1.Probe) {
 				Port: port,
 			},
 		},
+		TimeoutSeconds: 10,
 	}
 	return lp, rp
 }

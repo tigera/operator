@@ -160,6 +160,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "tigera-prometheus-service" }}
+	ComponentTigeraPrometheusService = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "alertmanager" }}
 	ComponentPrometheusAlertmanager = component{
 		Version: "{{ .Version }}",
@@ -233,6 +239,7 @@ var (
 		ComponentManagerProxy,
 		ComponentPacketCapture,
 		ComponentPrometheus,
+		ComponentTigeraPrometheusService,
 		ComponentPrometheusAlertmanager,
 		ComponentQueryServer,
 		ComponentTigeraKubeControllers,

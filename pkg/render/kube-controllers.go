@@ -179,10 +179,10 @@ func (c *kubeControllersComponent) controllersRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"watch", "list", "get"},
 			},
 			{
-				// Pods are queried to check for existence.
+				// Pods are watched to check for existence as part of IPAM GC.
 				APIGroups: []string{""},
 				Resources: []string{"pods"},
-				Verbs:     []string{"get"},
+				Verbs:     []string{"get", "list", "watch"},
 			},
 			{
 				// IPAM resources are manipulated when nodes are deleted.
@@ -393,6 +393,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 					},
 				},
 			},
+			TimeoutSeconds: 10,
 		},
 		LivenessProbe: &v1.Probe{
 			PeriodSeconds:       int32(10),
@@ -406,6 +407,7 @@ func (c *kubeControllersComponent) controllersDeployment() *apps.Deployment {
 					},
 				},
 			},
+			TimeoutSeconds: 10,
 		},
 		VolumeMounts: kubeControllersVolumeMounts(c.managerInternalSecret),
 	}

@@ -205,7 +205,7 @@ func calicoDefaultConfig() []runtime.Object {
 										},
 									},
 								},
-								{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "true"},
+								{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
 								{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 								{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 								{Name: "FELIX_LOGSEVERITYSCREEN", Value: "info"},

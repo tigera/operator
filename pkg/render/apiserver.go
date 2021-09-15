@@ -1158,6 +1158,8 @@ func (c *apiServerComponent) tigeraCustomResourcesClusterRole() *rbacv1.ClusterR
 				"remoteclusterconfigurations",
 				"managedclusters",
 				"packetcaptures",
+				"deeppacketinspections",
+				"deeppacketinspections/status",
 			},
 			Verbs: []string{
 				"get",

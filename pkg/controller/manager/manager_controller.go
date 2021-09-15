@@ -119,7 +119,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		for _, secretName := range []string{
 			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret,
 			render.ElasticsearchManagerUserSecret, render.KibanaPublicCertSecret,
-			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret,
+			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureCertSecret,
 			render.ManagerInternalTLSSecretName, render.DexCertSecretName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
@@ -488,6 +488,24 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	} else {
 		render.CloudPortalAPIURL = mgrCfg.Data["portalAPIURL"]
+		render.CloudAuth0OrgID = mgrCfg.Data["auth0OrgID"]
+	}
+
+	var packetCaptureServerCertSecret *corev1.Secret
+	packetCaptureServerCertSecret, err = utils.ValidateCertPair(r.client,
+		rmeta.OperatorNamespace(),
+		render.PacketCaptureCertSecret,
+		"", // We don't need the key.
+		corev1.TLSCertKey,
+	)
+	if err != nil {
+		reqLogger.Error(err, fmt.Sprintf("failed to retrieve %s", render.PacketCaptureCertSecret))
+		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s", render.PacketCaptureCertSecret), err.Error())
+		return reconcile.Result{}, err
+	} else if packetCaptureServerCertSecret == nil {
+		reqLogger.Info(fmt.Sprintf("Waiting for secret '%s' to become available", render.PacketCaptureCertSecret))
+		r.status.SetDegraded(fmt.Sprintf("Waiting for secret '%s' to become available", render.PacketCaptureCertSecret), "")
+		return reconcile.Result{}, nil
 	}
 
 	// Create a component handler to manage the rendered component.
@@ -499,6 +517,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		esSecrets,
 		[]*corev1.Secret{kibanaPublicCertSecret},
 		complianceServerCertSecret,
+		packetCaptureServerCertSecret,
 		esClusterConfig,
 		tlsSecret,
 		pullSecrets,

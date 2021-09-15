@@ -24,7 +24,7 @@ echo "Publish release ${tag}"
 make release-publish-images VERSION=${tag}
 make release-publish-images VERSION=${tag} BUILD_IMAGE=tigera-tesla/operator-cloud
 
-if [[ ! "$(git rev-parse --abbrev-ref HEAD)" =~ (cloud-dev) ]]; then
+if [[ "$(git rev-parse --abbrev-ref HEAD)" =~ (cloud-*) ]]; then
 	echo "on 'cloud-dev' branch, do not push to RedHat for certification"
 	exit 0
 fi

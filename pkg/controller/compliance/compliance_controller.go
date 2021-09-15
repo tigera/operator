@@ -24,6 +24,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/authentication"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -335,7 +336,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	// Fetch the Authentication spec. If present, we use to configure user authentication.
-	authenticationCR, err := utils.GetAuthentication(ctx, r.client)
+	authenticationCR, err := authentication.GetAuthentication(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded("Error querying Authentication", err.Error())
 		return reconcile.Result{}, err

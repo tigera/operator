@@ -21,7 +21,7 @@ import (
 
 	"github.com/go-ldap/ldap"
 
-	oprv1 "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -80,7 +80,7 @@ func add(mgr manager.Manager, r *ReconcileAuthentication) error {
 		return fmt.Errorf("failed to create %s: %w", controllerName, err)
 	}
 
-	err = c.Watch(&source.Kind{Type: &oprv1.Authentication{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("%s failed to watch resource: %w", controllerName, err)
 	}
@@ -89,7 +89,7 @@ func add(mgr manager.Manager, r *ReconcileAuthentication) error {
 		return fmt.Errorf("%s failed to watch installation resource: %w", controllerName, err)
 	}
 
-	err = c.Watch(&source.Kind{Type: &oprv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("%s failed to watch resource: %w", controllerName, err)
 	}
@@ -118,9 +118,30 @@ var _ reconcile.Reconciler = &ReconcileAuthentication{}
 type ReconcileAuthentication struct {
 	client        client.Client
 	scheme        *runtime.Scheme
-	provider      oprv1.Provider
+	provider      operatorv1.Provider
 	status        status.StatusManager
 	clusterDomain string
+}
+
+// GetAuthentication finds the authentication CR in your cluster.
+func GetAuthentication(ctx context.Context, cli client.Client) (*operatorv1.Authentication, error) {
+	authentication := &operatorv1.Authentication{}
+	err := cli.Get(ctx, utils.DefaultTSEEInstanceKey, authentication)
+	if err != nil {
+		return nil, err
+	}
+
+	fillDefaults(authentication)
+
+	return authentication, nil
+}
+
+// fillDefaults populates the default values onto an Authentication object.
+func fillDefaults(opr *operatorv1.Authentication) {
+	if opr.Spec.Replicas == nil {
+		var replicas int32 = 1
+		opr.Spec.Replicas = &replicas
+	}
 }
 
 // Reconciles the cluster state with the Authentication object that is found in the cluster.
@@ -132,7 +153,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	reqLogger.Info("Reconciling ", "controller", controllerName)
 
 	// Fetch the Authentication spec. If present, we deploy dex in the cluster.
-	authentication, err := utils.GetAuthentication(ctx, r.client)
+	authentication, err := GetAuthentication(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.OnCRNotFound()
@@ -172,9 +193,9 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		r.status.SetDegraded("Error querying installation", err.Error())
 		return reconcile.Result{}, err
 	}
-	if variant != oprv1.TigeraSecureEnterprise {
-		log.Error(err, fmt.Sprintf("Waiting for network to be %s", oprv1.TigeraSecureEnterprise))
-		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", oprv1.TigeraSecureEnterprise), "")
+	if variant != operatorv1.TigeraSecureEnterprise {
+		log.Error(err, fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise))
+		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), "")
 		return reconcile.Result{}, nil
 	}
 
@@ -246,7 +267,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	}
 
 	disableDex := false
-	if authentication.Spec.OIDC != nil && authentication.Spec.OIDC.Type == oprv1.OIDCTypeTigera {
+	if authentication.Spec.OIDC != nil && authentication.Spec.OIDC.Type == operatorv1.OIDCTypeTigera {
 		disableDex = true
 	}
 
@@ -260,7 +281,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	reqLogger.V(3).Info("rendering components")
 	component := render.Dex(
 		pullSecrets,
-		r.provider == oprv1.ProviderOpenShift,
+		r.provider == operatorv1.ProviderOpenShift,
 		install,
 		dexCfg,
 		r.clusterDomain,
@@ -288,7 +309,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	}
 
 	// Everything is available - update the CRD status.
-	authentication.Status.State = oprv1.TigeraStatusReady
+	authentication.Status.State = operatorv1.TigeraStatusReady
 	if err = r.client.Status().Update(ctx, authentication); err != nil {
 		return reconcile.Result{}, err
 	}
@@ -296,7 +317,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 }
 
 // updateAuthenticationWithDefaults sets values for backwards compatibility.
-func updateAuthenticationWithDefaults(authentication *oprv1.Authentication) {
+func updateAuthenticationWithDefaults(authentication *operatorv1.Authentication) {
 	if authentication.Spec.OIDC != nil {
 		if authentication.Spec.OIDC.UsernamePrefix != "" && authentication.Spec.UsernamePrefix == "" {
 			authentication.Spec.UsernamePrefix = authentication.Spec.OIDC.UsernamePrefix
@@ -305,7 +326,7 @@ func updateAuthenticationWithDefaults(authentication *oprv1.Authentication) {
 			authentication.Spec.GroupsPrefix = authentication.Spec.OIDC.GroupsPrefix
 		}
 		if authentication.Spec.OIDC.EmailVerification == nil {
-			defaultVerification := oprv1.EmailVerificationTypeVerify
+			defaultVerification := operatorv1.EmailVerificationTypeVerify
 			authentication.Spec.OIDC.EmailVerification = &defaultVerification
 		}
 	}
@@ -318,7 +339,7 @@ func updateAuthenticationWithDefaults(authentication *oprv1.Authentication) {
 }
 
 // validateAuthentication makes sure that the authentication spec is ready for use.
-func validateAuthentication(authentication *oprv1.Authentication) error {
+func validateAuthentication(authentication *operatorv1.Authentication) error {
 	oidc := authentication.Spec.OIDC
 	ldp := authentication.Spec.LDAP
 	// We support using only one connector at once.
@@ -352,7 +373,7 @@ func validateAuthentication(authentication *oprv1.Authentication) error {
 		promptTypes := authentication.Spec.OIDC.PromptTypes
 		if promptTypes != nil && len(authentication.Spec.OIDC.PromptTypes) > 1 {
 			for _, pt := range promptTypes {
-				if pt == oprv1.PromptTypeNone {
+				if pt == operatorv1.PromptTypeNone {
 					return fmt.Errorf("you cannot combine PromptType None with other prompt types, please modify Authentication.Spec.OIDC.PromptType")
 				}
 			}

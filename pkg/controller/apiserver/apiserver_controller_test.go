@@ -27,11 +27,13 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/test"
 
 	appsv1 "k8s.io/api/apps/v1"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -155,7 +157,7 @@ var _ = Describe("apiserver controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentCSRInitContainer.Image,
 					components.ComponentCSRInitContainer.Version)))
-			pcSecret := v1.Secret{
+			pcSecret := corev1.Secret{
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.PacketCaptureCertSecret,
@@ -236,7 +238,7 @@ var _ = Describe("apiserver controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentCSRInitContainer.Image,
 					"sha256:calicocsrinithash")))
-			pcSecret := v1.Secret{
+			pcSecret := corev1.Secret{
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.PacketCaptureCertSecret,
@@ -245,6 +247,56 @@ var _ = Describe("apiserver controller tests", func() {
 			}
 			Expect(test.GetResource(cli, &pcSecret)).To(BeNil())
 			Expect(pcSecret).NotTo(BeNil())
+		})
+	})
+
+	Context("Tigera APIServer replicas", func() {
+		var (
+			c      client.Client
+			ctx    context.Context
+			scheme *runtime.Scheme
+		)
+
+		BeforeEach(func() {
+			// Create a Kubernetes client.
+			scheme = runtime.NewScheme()
+			err := apis.AddToScheme(scheme)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(corev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+
+			c = fake.NewClientBuilder().WithScheme(scheme).Build()
+			ctx = context.Background()
+		})
+
+		AfterEach(func() {
+			obj := &operatorv1.APIServer{}
+			Expect(c.Get(ctx, utils.DefaultTSEEInstanceKey, obj)).NotTo(HaveOccurred())
+			Expect(c.Delete(ctx, obj)).NotTo(HaveOccurred())
+		})
+
+		It("should set default replicas to 1", func() {
+			Expect(c.Create(ctx, &operatorv1.APIServer{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+			})).NotTo(HaveOccurred())
+			apiServer, msg, err := GetAPIServer(ctx, c)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(msg).To(Equal(""))
+			Expect(apiServer.Spec.Replicas).To(Equal(ptr.Int32ToPtr(1)))
+		})
+
+		It("should honor replicas in the spec", func() {
+			Expect(c.Create(ctx, &operatorv1.APIServer{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.APIServerSpec{
+					Replicas: ptr.Int32ToPtr(3),
+				},
+			})).NotTo(HaveOccurred())
+			apiServer, msg, err := GetAPIServer(ctx, c)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(msg).To(Equal(""))
+			Expect(apiServer.Spec.Replicas).To(Equal(ptr.Int32ToPtr(3)))
 		})
 	})
 })

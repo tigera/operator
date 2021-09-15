@@ -58,6 +58,10 @@ type AuthenticationSpec struct {
 	// LDAP contains the configuration needed to setup LDAP authentication.
 	// +optional
 	LDAP *AuthenticationLDAP `json:"ldap,omitempty"`
+
+	// Replicas defines how many replicas of the Authentication components will be deployed. Defaults to 1.
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
 }
 
 // AuthenticationStatus defines the observed state of Authentication

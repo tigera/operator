@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/authentication"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -159,6 +160,44 @@ type ReconcileAPIServer struct {
 	clusterDomain       string
 }
 
+// GetAPIServer finds the correct API server instance and returns a message and error in the case of an error.
+func GetAPIServer(ctx context.Context, client client.Client) (*operatorv1.APIServer, string, error) {
+	// Fetch the APIServer instance. Look for the "default" instance first.
+	instance := &operatorv1.APIServer{}
+	err := client.Get(ctx, utils.DefaultInstanceKey, instance)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			return nil, "failed to get apiserver 'default'", err
+		}
+
+		// Default instance doesn't exist. Check for the legacy (enterprise only) CR.
+		err = client.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
+		if err != nil {
+			return nil, "failed to get apiserver 'tigera-secure'", err
+		}
+	} else {
+		// Assert there is no legacy "tigera-secure" instance present.
+		err = client.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
+		if err == nil {
+			return nil,
+				"Duplicate configuration detected",
+				fmt.Errorf("Multiple APIServer CRs provided. To fix, run \"kubectl delete apiserver tigera-secure\"")
+		}
+	}
+
+	fillDefaults(instance)
+
+	return instance, "", nil
+}
+
+// fillDefaults populates the default values onto an APIServer object.
+func fillDefaults(opr *operatorv1.APIServer) {
+	if opr.Spec.Replicas == nil {
+		var replicas int32 = 1
+		opr.Spec.Replicas = &replicas
+	}
+}
+
 // Reconcile reads that state of the cluster for a APIServer object and makes changes based on the state read
 // and what is in the APIServer.Spec
 // Note:
@@ -168,7 +207,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling APIServer")
 
-	instance, msg, err := utils.GetAPIServer(ctx, r.client)
+	instance, msg, err := GetAPIServer(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.Info("APIServer config not found")
@@ -297,8 +336,14 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
 	var components []render.Component
-	component, err := render.APIServer(k8sapi.Endpoint, network, false, managementCluster, managementClusterConnection, amazon, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift,
-		tunnelCASecret, r.clusterDomain)
+	component, err := render.APIServer(
+		k8sapi.Endpoint, network, false,
+		managementCluster, managementClusterConnection,
+		amazon,
+		tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift,
+		tunnelCASecret, r.clusterDomain,
+		instance.Spec.Replicas,
+	)
 	if err != nil {
 		log.Error(err, "Error rendering APIServer")
 		r.status.SetDegraded("Error rendering APIServer", err.Error())
@@ -348,7 +393,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}
 
 		// Fetch the Authentication spec. If present, we use to configure user authentication.
-		authenticationCR, err := utils.GetAuthentication(ctx, r.client)
+		authenticationCR, err := authentication.GetAuthentication(ctx, r.client)
 		if err != nil && !errors.IsNotFound(err) {
 			r.status.SetDegraded("Error querying Authentication", err.Error())
 			return reconcile.Result{}, err

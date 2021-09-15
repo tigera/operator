@@ -60,6 +60,11 @@ spec:
                     - OAuth
                     type: string
                 type: object
+              replicas:
+                description: Replicas defines how many replicas of the Calico Enterprise
+                  manager components will be deployed. Defaults to 1.
+                format: int32
+                type: integer
             type: object
           status:
             description: Most recently observed state for the Calico Enterprise manager.

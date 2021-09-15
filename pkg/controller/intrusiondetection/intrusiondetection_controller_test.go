@@ -140,7 +140,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.ElasticsearchADJobUserSecret,
+				Name:      render.ElasticsearchPerformanceHotspotsUserSecret,
 				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{

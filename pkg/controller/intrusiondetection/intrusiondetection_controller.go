@@ -143,7 +143,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		render.ElasticsearchIntrusionDetectionUserSecret,
 		render.ElasticsearchIntrusionDetectionJobUserSecret,
 		render.ElasticsearchADJobUserSecret,
-		render.ElasticsearchPerformanceHotspotsbUserSecret,
+		render.ElasticsearchPerformanceHotspotsUserSecret,
 		render.ManagerInternalTLSSecretName,
 		render.NodeTLSSecretName,
 		render.TyphaTLSSecretName,
@@ -299,7 +299,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	secrets := []string{
 		render.ElasticsearchIntrusionDetectionUserSecret,
 		render.ElasticsearchADJobUserSecret,
-		render.ElasticsearchPerformanceHotspotsbUserSecret,
+		render.ElasticsearchPerformanceHotspotsUserSecret,
 	}
 
 	if managementClusterConnection == nil {

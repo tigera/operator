@@ -18,33 +18,27 @@ import (
 	"context"
 	"fmt"
 
-	corev1 "k8s.io/api/core/v1"
-
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-
-	"github.com/tigera/operator/pkg/render"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	"k8s.io/client-go/kubernetes"
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/render"
 
+	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -54,7 +48,7 @@ var log = logf.Log.WithName("controller_applicationlayer")
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if !opts.EnterpriseCRDExists {
-		// No need to start this c.
+		// No need to start this controller.
 		return nil
 	}
 	var licenseAPIReady = &utils.ReadyFlag{}
@@ -147,7 +141,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
-		r.status.SetDegraded("Error querying for LogCollector", err.Error())
+		r.status.SetDegraded("Error querying for Application Layer", err.Error())
 		return reconcile.Result{}, err
 	}
 
@@ -164,49 +158,30 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
 
-	envoyConfig, err := getEnvoyConfig(r.client)
+	if l7Spec := instance.Spec.L7LogCollection; l7Spec != nil {
 
-	if err != nil {
-		log.Error(err, "Error retrieving envoy config")
-		r.status.SetDegraded("Error retrieving envoy config", err.Error())
-		return reconcile.Result{}, err
-	}
+		if l7Spec.CollectL7Logs != nil && *l7Spec.CollectL7Logs == operatorv1.L7LogCollectionEnabled {
 
-	// Render the l7 component for Linux
-	l7component := render.L7LogCollector(pullSecrets, envoyConfig, installation, rmeta.OSTypeLinux)
+			_, _ = r.PatchFelixTproxyMode(ctx)
+			l7component := render.L7LogCollector(pullSecrets, installation, rmeta.OSTypeLinux, instance)
 
-	ch := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+			ch := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, l7component); err != nil {
-		reqLogger.Error(err, "Error with images from ImageSet")
-		r.status.SetDegraded("Error with images from ImageSet", err.Error())
-		return reconcile.Result{}, err
-	}
+			if err := ch.CreateOrUpdateOrDelete(ctx, l7component, r.status); err != nil {
+				r.status.SetDegraded("Error creating / updating resource", err.Error())
+				return reconcile.Result{}, err
+			}
 
-	if err := ch.CreateOrUpdateOrDelete(ctx, l7component, r.status); err != nil {
-		r.status.SetDegraded("Error creating / updating resource", err.Error())
-		return reconcile.Result{}, err
+			if err = imageset.ApplyImageSet(ctx, r.client, variant, l7component); err != nil {
+				reqLogger.Error(err, "Error with images from ImageSet")
+				r.status.SetDegraded("Error with images from ImageSet", err.Error())
+				return reconcile.Result{}, err
+			}
+		}
+
 	}
 
 	return reconcile.Result{}, nil
-}
-
-func getEnvoyConfig(client client.Client) (*render.EnvoyConfig, error) {
-	cm := &corev1.ConfigMap{}
-	cmNamespacedName := types.NamespacedName{
-		Name:      render.EnvoyConfigMapKey,
-		Namespace: render.CalicoSystemNamespace,
-	}
-	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
-		if errors.IsNotFound(err) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("Failed to read ConfigMap %q: %s", render.EnvoyConfigMapKey, err)
-	}
-
-	return &render.EnvoyConfig{
-		Config: cm.Data["envoy-config.yaml"],
-	}, nil
 }
 
 // GetApplicationLayer returns the default LogCollector instance with defaults populated.
@@ -219,4 +194,20 @@ func GetApplicationLayer(ctx context.Context, cli client.Client) (*operatorv1.Ap
 	}
 
 	return instance, nil
+}
+
+func (r *ReconcileApplicationLayer) PatchFelixTproxyMode(ctx context.Context) (reconcile.Result, error) {
+	// Fetch any existing default FelixConfiguration object.
+	felixConfiguration := &crdv1.FelixConfiguration{}
+	err := r.client.Get(ctx, types.NamespacedName{Name: "default"}, felixConfiguration)
+
+	if err != nil && !apierrors.IsNotFound(err) {
+		r.status.SetDegraded("Unable to read FelixConfiguration", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	enableTproxy := crdv1.TPROXYModeOptionEnabled
+	felixConfiguration.Spec.TPROXYMode = &enableTproxy
+
+	return reconcile.Result{}, nil
 }

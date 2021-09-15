@@ -42,21 +42,17 @@ const (
 	ProxyContainerName          = "envoy-proxy"
 	EnvoyLogsKey                = "envoy-logs"
 	EnvoyConfigKey              = "envoy-config"
-	EnvoyConfigMapKey           = EnvoyConfigKey
+	EnvoyConfigMapKey           = "envoy-config.yaml"
 )
 
-type EnvoyConfig struct {
-	Config string
-}
-
-func L7LogCollector(pullSecrets []*corev1.Secret, envoyConfig *EnvoyConfig,
-	installation *operatorv1.InstallationSpec, osType rmeta.OSType) Component {
+func L7LogCollector(pullSecrets []*corev1.Secret, installation *operatorv1.InstallationSpec, osType rmeta.OSType,
+	al *operatorv1.ApplicationLayer) Component {
 
 	return &l7LogCollectorComponent{
 		pullSecrets:  pullSecrets,
 		installation: installation,
-		envoyConfig:  envoyConfig,
 		osType:       osType,
+		al:           al,
 	}
 }
 
@@ -64,9 +60,9 @@ type l7LogCollectorComponent struct {
 	pullSecrets    []*corev1.Secret
 	installation   *operatorv1.InstallationSpec
 	osType         rmeta.OSType
-	envoyConfig    *EnvoyConfig
 	proxyImage     string
 	collectorImage string
+	al             *operatorv1.ApplicationLayer
 }
 
 func (c *l7LogCollectorComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -105,11 +101,9 @@ func (c *l7LogCollectorComponent) SupportedOSType() rmeta.OSType {
 
 func (c *l7LogCollectorComponent) Objects() ([]client.Object, []client.Object) {
 	var objs []client.Object
-
-	objs = append(objs, CreateNamespace(CalicoSystemNamespace, c.installation.KubernetesProvider))
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(CalicoSystemNamespace, c.pullSecrets...)...)...)
-	objs = append(objs, c.daemonset())
+	// TODO: ensure that namespace exists before proceeding
 	objs = append(objs, c.envoyConfigMap())
+	objs = append(objs, c.daemonset())
 
 	return objs, nil
 }
@@ -277,12 +271,12 @@ func (c *l7LogCollectorComponent) envoyConfigMap() *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "envoy-config",
+			Name:      EnvoyConfigKey,
 			Namespace: common.CalicoNamespace,
 			Labels:    map[string]string{},
 		},
 		Data: map[string]string{
-			"envoy-config.yaml": config,
+			EnvoyConfigMapKey: config,
 		},
 	}
 }

@@ -47,6 +47,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/resourcequota"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/tls"
 
@@ -1039,6 +1040,19 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		} else {
 			components = append(components, awsSetup)
 		}
+	}
+
+	if instance.Spec.KubernetesProvider == operator.ProviderGKE {
+		// We do this only for GKE as other providers don't (yet?)
+		// automatically add resource quota that constrains whether
+		// Calico components that are marked cluster or node critical
+		// can be scheduled.
+		criticalPriorityClasses := []string{render.NodePriorityClassName, render.ClusterPriorityClassName}
+		resourceQuotaObj := resourcequota.ResourceQuotaForPriorityClassScope(resourcequota.CalicoCriticalResourceQuotaName,
+			common.CalicoNamespace, criticalPriorityClasses)
+		resourceQuotaComponent := render.NewPassthrough([]client.Object{resourceQuotaObj})
+		components = append(components, resourceQuotaComponent)
+
 	}
 
 	// Build a configuration for rendering calico/typha.

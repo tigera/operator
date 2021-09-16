@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/tigera/operator/pkg/common"
@@ -46,14 +47,21 @@ const (
 )
 
 func ApplicationLayer(pullSecrets []*corev1.Secret, installation *operatorv1.InstallationSpec, osType rmeta.OSType,
-	applicationLayer *operatorv1.ApplicationLayer) Component {
+	applicationLayer *operatorv1.ApplicationLayer, l7Spec *L7LogCollectionSpec) Component {
 
 	return &ApplicationLayerComponent{
 		pullSecrets:      pullSecrets,
 		installation:     installation,
 		osType:           osType,
 		applicationLayer: applicationLayer,
+		l7Spec:           l7Spec,
 	}
+}
+
+type L7LogCollectionSpec struct {
+	Enabled                bool
+	LogIntervalSeconds     *int64
+	LogRequestsPerInterval *int64
 }
 
 type ApplicationLayerComponent struct {
@@ -61,6 +69,7 @@ type ApplicationLayerComponent struct {
 	installation     *operatorv1.InstallationSpec
 	osType           rmeta.OSType
 	applicationLayer *operatorv1.ApplicationLayer
+	l7Spec           *L7LogCollectionSpec
 	proxyImage       string
 	collectorImage   string
 }
@@ -102,8 +111,11 @@ func (c *ApplicationLayerComponent) SupportedOSType() rmeta.OSType {
 func (c *ApplicationLayerComponent) Objects() ([]client.Object, []client.Object) {
 	var objs []client.Object
 	// TODO: ensure that namespace exists before proceeding
-	objs = append(objs, c.envoyL7ConfigMap())
-	objs = append(objs, c.daemonset())
+	// if l7spec is provided render the required objects
+	if c.l7Spec != nil && c.l7Spec.Enabled {
+		objs = append(objs, c.envoyL7ConfigMap())
+		objs = append(objs, c.daemonset())
+	}
 
 	return objs, nil
 }
@@ -204,6 +216,20 @@ func (c *ApplicationLayerComponent) collectorEnv() []corev1.EnvVar {
 	envs := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "Info"},
 		{Name: "FELIX_DIAL_TARGET", Value: "/var/run/felix/nodeagent/socket"},
+	}
+	// set rate limiters if provided
+	if c.l7Spec.LogRequestsPerInterval != nil {
+		envs = append(envs, corev1.EnvVar{
+			Name:  "ENVOY_LOG_REQUESTS_PER_INTERVAL",
+			Value: strconv.FormatInt(*c.l7Spec.LogRequestsPerInterval, 10),
+		})
+	}
+
+	if c.l7Spec.LogIntervalSeconds != nil {
+		envs = append(envs, corev1.EnvVar{
+			Name:  "ENVOY_LOG_INTERVAL_SECONDS",
+			Value: strconv.FormatInt(*c.l7Spec.LogIntervalSeconds, 10),
+		})
 	}
 
 	return envs

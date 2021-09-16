@@ -174,7 +174,13 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 
 	if r.enableL7LogsCollection(l7Spec) {
 
-		l7component := render.ApplicationLayer(pullSecrets, installation, rmeta.OSTypeLinux, instance)
+		l7 := &render.L7LogCollectionSpec{
+			Enabled:                true,
+			LogIntervalSeconds:     l7Spec.LogIntervalSeconds,
+			LogRequestsPerInterval: l7Spec.LogRequestsPerInterval,
+		}
+
+		l7component := render.ApplicationLayer(pullSecrets, installation, rmeta.OSTypeLinux, instance, l7)
 
 		ch := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 

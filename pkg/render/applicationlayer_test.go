@@ -28,7 +28,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-var _ = FDescribe("Tigera Secure Application Layer rendering tests", func() {
+var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 	var instance *operatorv1.ApplicationLayer
 	var installation *operatorv1.InstallationSpec
 
@@ -42,6 +42,7 @@ var _ = FDescribe("Tigera Secure Application Layer rendering tests", func() {
 	})
 
 	It("should render with l7 collector configuration", func() {
+
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -54,7 +55,8 @@ var _ = FDescribe("Tigera Secure Application Layer rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		component := render.ApplicationLayer(nil, installation, rmeta.OSTypeLinux, instance)
+		l7 := &render.L7LogCollectionSpec{Enabled: true}
+		component := render.ApplicationLayer(nil, installation, rmeta.OSTypeLinux, instance, l7)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 

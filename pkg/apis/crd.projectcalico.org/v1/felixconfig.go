@@ -358,8 +358,7 @@ type FelixConfigurationSpec struct {
 	// [Default: DoNothing]
 	AWSSrcDstCheck *AWSSrcDstCheckOption `json:"awsSrcDstCheck,omitempty" validate:"omitempty,oneof=DoNothing Enable Disable"`
 
-	// TPROXYMode sets whether traffic is directed through a transparent proxy for further processing
-	// or not and how is the proxying done.
+	// TPROXYMode sets whether traffic is directed through a transparent proxy for further processing or not
 	// [Default: Disabled]
 	TPROXYMode *TPROXYModeOption `json:"tproxyMode,omitempty"`
 }

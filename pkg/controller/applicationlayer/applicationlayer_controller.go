@@ -194,7 +194,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	return reconcile.Result{}, nil
 }
 
-// GetApplicationLayer returns the default LogCollector instance with defaults populated.
+// GetApplicationLayer returns the default ApplicationLayer instance with defaults populated.
 func GetApplicationLayer(ctx context.Context, cli client.Client) (*operatorv1.ApplicationLayer, error) {
 
 	instance := &operatorv1.ApplicationLayer{}
@@ -210,6 +210,8 @@ func (r *ReconcileApplicationLayer) enableL7LogsCollection(l7Spec *operatorv1.L7
 	return l7Spec != nil && l7Spec.CollectL7Logs != nil && *l7Spec.CollectL7Logs == operatorv1.L7LogCollectionEnabled
 }
 
+// patchFelixTproxyMode takes all application layer specs as arguments and patches felix config.
+// If at least one of the specs requires TPROXYMode as enabled it'll be pacthed as Enabled else disabled
 func (r *ReconcileApplicationLayer) patchFelixTproxyMode(ctx context.Context, l7Spec *operatorv1.L7LogCollectionSpec) error {
 	// Fetch any existing default FelixConfiguration object.
 	fc := &crdv1.FelixConfiguration{}

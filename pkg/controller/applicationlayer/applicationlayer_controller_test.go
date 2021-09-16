@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
+
 	"github.com/stretchr/testify/mock"
 
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -97,19 +99,28 @@ var _ = Describe("Application layer controller tests", func() {
 				},
 			})).NotTo(HaveOccurred())
 
+			Expect(c.Create(ctx, &crdv1.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+				Spec: crdv1.FelixConfigurationSpec{
+					TPROXYMode: nil,
+				},
+			})).NotTo(HaveOccurred())
+
 			// mark that the watch for license key was successful
 			r.licenseAPIReady.MarkAsReady()
 		})
 
-		It("should render configmap and deamon set for log collection", func() {
+		It("should render accurate resources for for log collection", func() {
 
-			enableLogCollection := operatorv1.L7LogCollectionEnabled
+			enabled := operatorv1.L7LogCollectionEnabled
 			// Apply the logcollector CR to the fake cluster.
 			Expect(c.Create(ctx, &operatorv1.ApplicationLayer{
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Spec: operatorv1.ApplicationLayerSpec{
 					L7LogCollection: &operatorv1.L7LogCollectionSpec{
-						CollectL7Logs: &enableLogCollection,
+						CollectL7Logs: &enabled,
 					},
 				},
 			})).NotTo(HaveOccurred())

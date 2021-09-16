@@ -28,7 +28,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
+var _ = FDescribe("Tigera Secure Application Layer rendering tests", func() {
 	var instance *operatorv1.ApplicationLayer
 	var installation *operatorv1.InstallationSpec
 
@@ -41,7 +41,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		}
 	})
 
-	It("should render with a l7 collector configuration", func() {
+	It("should render with l7 collector configuration", func() {
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -49,7 +49,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{name: render.EnvoyConfigKey, ns: render.CalicoSystemNamespace, group: "apps", version: "v1", kind: "ConfigMap"},
+			{name: render.EnvoyConfigKey, ns: render.CalicoSystemNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: render.L7LogCollectorDeamonsetName, ns: render.CalicoSystemNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
@@ -66,9 +66,50 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 
 		ds := rtest.GetResource(resources, render.L7LogCollectorDeamonsetName, render.CalicoSystemNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 
-		proxyContainer := ds.Spec.Template.Spec.Containers[0]
-		proxyEnvs := proxyContainer.Env
+		// check rendering of daemonset
+		Expect(ds.Spec.Template.Spec.HostNetwork).To(BeTrue())
+		Expect(ds.Spec.Template.Spec.HostIPC).To(BeTrue())
+		Expect(ds.Spec.Template.Spec.DNSPolicy).To(Equal(corev1.DNSClusterFirstWithHostNet))
+		Expect(len(ds.Spec.Template.Spec.Volumes)).To(Equal(2))
+		Expect(len(ds.Spec.Template.Spec.Containers)).To(Equal(2))
+		Expect(len(ds.Spec.Template.Spec.Tolerations)).To(Equal(1))
 
+		// check each volume
+		dsVols := ds.Spec.Template.Spec.Volumes
+		expectedVolumes := []corev1.Volume{
+			corev1.Volume{
+				Name: render.EnvoyLogsKey,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+			corev1.Volume{
+				Name: render.EnvoyConfigKey,
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{Name: render.EnvoyConfigKey},
+					},
+				},
+			},
+		}
+
+		for _, expected := range expectedVolumes {
+			Expect(dsVols).To(ContainElement(expected))
+		}
+
+		// check each toleration
+		dsTolerations := ds.Spec.Template.Spec.Tolerations
+		expectedToleration := []corev1.Toleration{
+			{Key: "node-role.kubernetes.io/master", Operator: corev1.TolerationOpExists, Effect: corev1.TaintEffectNoSchedule},
+		}
+		for _, expected := range expectedToleration {
+			Expect(dsTolerations).To(ContainElement(expected))
+		}
+
+		// check proxy container redering in details
+		proxyContainer := ds.Spec.Template.Spec.Containers[0]
+
+		proxyEnvs := proxyContainer.Env
 		expectedProxyEnvs := []corev1.EnvVar{
 			{Name: "ENVOY_UID", Value: "0"},
 			{Name: "ENVOY_GID", Value: "0"},
@@ -77,17 +118,33 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			Expect(proxyEnvs).To(ContainElement(expected))
 		}
 
-		collectorContainer := ds.Spec.Template.Spec.Containers[1]
-		collectorEnvs := collectorContainer.Env
+		proxyVolMounts := proxyContainer.VolumeMounts
+		expectedProxyVolMounts := []corev1.VolumeMount{
+			{Name: render.EnvoyConfigKey, MountPath: "/etc/envoy"},
+			{Name: render.EnvoyLogsKey, MountPath: "/tmp/"},
+		}
+		for _, expected := range expectedProxyVolMounts {
+			Expect(proxyVolMounts).To(ContainElement(expected))
+		}
 
+		collectorContainer := ds.Spec.Template.Spec.Containers[1]
+
+		collectorEnvs := collectorContainer.Env
 		expectedCollectorEnvs := []corev1.EnvVar{
-			{Name: "LOG_LEVEL", Value: "0"},
-			{Name: "FELIX_DIAL_TARGET", Value: "0"},
+			{Name: "LOG_LEVEL", Value: "Info"},
+			{Name: "FELIX_DIAL_TARGET", Value: "/var/run/felix/nodeagent/socket"},
 		}
 		for _, element := range expectedCollectorEnvs {
 			Expect(collectorEnvs).To(ContainElement(element))
 		}
 
+		collectorVolMounts := proxyContainer.VolumeMounts
+		expectedCollectorVolMounts := []corev1.VolumeMount{
+			{Name: render.EnvoyLogsKey, MountPath: "/tmp/"},
+		}
+		for _, expected := range expectedCollectorVolMounts {
+			Expect(collectorVolMounts).To(ContainElement(expected))
+		}
 	})
 
 })

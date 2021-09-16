@@ -929,5 +929,20 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(*fc.Spec.RouteTableRange).To(Equal(crdv1.RouteTableRange{Min: 65, Max: 99}))
 			Expect(fc.Spec.LogSeverityScreen).To(Equal("Error"))
 		})
+		It("should Reconcile with GKE and create a resource quota", func() {
+			cr.Spec.KubernetesProvider = operator.ProviderGKE
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			rq := corev1.ResourceQuota{
+				TypeMeta: metav1.TypeMeta{Kind: "ResourceQuota", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "calico-critical-pods",
+					Namespace: common.CalicoNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &rq)).To(BeNil())
+		})
 	})
 })

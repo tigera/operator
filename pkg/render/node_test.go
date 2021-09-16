@@ -1894,24 +1894,6 @@ var _ = Describe("Node rendering tests", func() {
 				SubPath:   "template-1.yaml",
 			}))
 	})
-
-	Describe("GKE", func() {
-		It("should render a resource quota resource", func() {
-			// Override the installation with one configured for GKE.
-			gkeInstallation := &operatorv1.InstallationSpec{
-				KubernetesProvider: operatorv1.ProviderGKE,
-				CNI:                &operatorv1.CNISpec{Type: operatorv1.PluginGKE},
-			}
-			cfg.Installation = gkeInstallation
-
-			component := render.Node(&cfg)
-			Expect(component.ResolveImages(nil)).To(BeNil())
-			resources, _ := component.Objects()
-
-			// Should render resource quota
-			Expect(rtest.GetResource(resources, "calico-critical-pods", "calico-system", "", "v1", "ResourceQuota")).ToNot(BeNil())
-		})
-	})
 	Describe("AKS", func() {
 		It("should avoid virtual nodes", func() {
 			defaultInstance.KubernetesProvider = operatorv1.ProviderAKS

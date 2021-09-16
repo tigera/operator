@@ -250,6 +250,8 @@ var (
 		ComponentDex,
 		ComponentManagerProxy,
 		ComponentPacketCapture,
+		ComponentL7Collector,
+		ComponentEnvoyProxy,
 		ComponentPrometheus,
 		ComponentTigeraPrometheusService,
 		ComponentPrometheusAlertmanager,

@@ -132,6 +132,16 @@ var (
 		Image:   "tigera/packetcapture-api",
 	}
 
+	ComponentL7Collector = component{
+		Version: "master",
+		Image:   "tigera/l7-collector",
+	}
+
+	ComponentEnvoyProxy = component{
+		Version: "master",
+		Image:   "tigera/envoy",
+	}
+
 	ComponentPrometheus = component{
 		Version: "v2.17.2",
 		Image:   "tigera/prometheus",
@@ -182,16 +192,6 @@ var (
 		Image:   "tigera/elasticsearch-metrics",
 	}
 
-	ComponentL7Collector = component{
-		Version: "master",
-		Image:   "tigera/l7-collector",
-	}
-
-	ComponentEnvoyProxy = component{
-		Version: "master",
-		Image:   "tigera/envoy",
-	}
-
 	EnterpriseComponents = []component{
 		ComponentAPIServer,
 		ComponentComplianceBenchmarker,
@@ -215,6 +215,8 @@ var (
 		ComponentDex,
 		ComponentManagerProxy,
 		ComponentPacketCapture,
+		ComponentL7Collector,
+		ComponentEnvoyProxy,
 		ComponentPrometheus,
 		ComponentTigeraPrometheusService,
 		ComponentPrometheusAlertmanager,
@@ -226,7 +228,5 @@ var (
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
-		ComponentL7Collector,
-		ComponentEnvoyProxy,
 	}
 )

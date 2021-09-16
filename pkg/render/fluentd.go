@@ -24,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	schedv1 "k8s.io/api/scheduling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -33,6 +34,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
+	"github.com/tigera/operator/pkg/render/common/resourcequota"
 	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
@@ -234,6 +236,14 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 			LogCollectorNamespace,
 			c.installation.KubernetesProvider))
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.pullSecrets...)...)...)
+
+	if c.installation.KubernetesProvider == operatorv1.ProviderGKE {
+		// We do this only for GKE as other providers don't (yet?)
+		// automatically add resource quota that constrains whether
+		// components that are marked cluster or node critical
+		// can be scheduled.
+		objs = append(objs, c.fluentdResourceQuota())
+	}
 	if c.s3Credential != nil {
 		objs = append(objs, c.s3CredentialSecret())
 	}
@@ -274,6 +284,11 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 
 func (c *fluentdComponent) Ready() bool {
 	return true
+}
+
+func (c *fluentdComponent) fluentdResourceQuota() *corev1.ResourceQuota {
+	criticalPriorityClasses := []string{NodePriorityClassName}
+	return resourcequota.ResourceQuotaForPriorityClassScope(resourcequota.TigeraCriticalResourceQuotaName, LogCollectorNamespace, criticalPriorityClasses)
 }
 
 func (c *fluentdComponent) s3CredentialSecret() *corev1.Secret {

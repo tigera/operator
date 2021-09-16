@@ -42,8 +42,8 @@ const (
 type TPROXYModeOption string
 
 const (
-	TPROXYModeOptionEnabled  TPROXYModeOption = "Enable"
-	TPROXYModeOptionDisabled                  = "Disable"
+	TPROXYModeOptionEnabled  TPROXYModeOption = "Enabled"
+	TPROXYModeOptionDisabled TPROXYModeOption = "Disabled"
 )
 
 // +genclient

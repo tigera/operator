@@ -158,32 +158,35 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
 
-	if l7Spec := instance.Spec.L7LogCollection; l7Spec != nil {
+	if err != nil {
+		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
+		return reconcile.Result{}, err
+	}
 
-		if l7Spec.CollectL7Logs != nil && *l7Spec.CollectL7Logs == operatorv1.L7LogCollectionEnabled {
+	l7Spec := instance.Spec.L7LogCollection
 
-			_, err := r.PatchFelixTproxyMode(ctx)
+	err = r.patchFelixTproxyMode(ctx, l7Spec)
 
-			if err != nil {
-				r.status.SetDegraded("Error patching felix configuration", err.Error())
-				panic("Error patching felix configuration")
-			}
+	if err != nil {
+		r.status.SetDegraded("Error patching felix configuration", err.Error())
+		return reconcile.Result{}, err
+	}
 
-			l7component := render.ApplicationLayer(pullSecrets, installation, rmeta.OSTypeLinux, instance)
+	if r.enableL7LogsCollection(l7Spec) {
 
-			ch := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+		l7component := render.ApplicationLayer(pullSecrets, installation, rmeta.OSTypeLinux, instance)
 
-			if err = imageset.ApplyImageSet(ctx, r.client, variant, l7component); err != nil {
-				reqLogger.Error(err, "Error with images from ImageSet")
-				r.status.SetDegraded("Error with images from ImageSet", err.Error())
-				return reconcile.Result{}, err
-			}
+		ch := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
-			if err := ch.CreateOrUpdateOrDelete(ctx, l7component, r.status); err != nil {
-				r.status.SetDegraded("Error creating / updating resource", err.Error())
-				return reconcile.Result{}, err
-			}
+		if err = imageset.ApplyImageSet(ctx, r.client, variant, l7component); err != nil {
+			reqLogger.Error(err, "Error with images from ImageSet")
+			r.status.SetDegraded("Error with images from ImageSet", err.Error())
+			return reconcile.Result{}, err
+		}
 
+		if err := ch.CreateOrUpdateOrDelete(ctx, l7component, r.status); err != nil {
+			r.status.SetDegraded("Error creating / updating resource", err.Error())
+			return reconcile.Result{}, err
 		}
 
 	}
@@ -203,18 +206,36 @@ func GetApplicationLayer(ctx context.Context, cli client.Client) (*operatorv1.Ap
 	return instance, nil
 }
 
-func (r *ReconcileApplicationLayer) PatchFelixTproxyMode(ctx context.Context) (reconcile.Result, error) {
+func (r *ReconcileApplicationLayer) enableL7LogsCollection(l7Spec *operatorv1.L7LogCollectionSpec) bool {
+	return l7Spec != nil && l7Spec.CollectL7Logs != nil && *l7Spec.CollectL7Logs == operatorv1.L7LogCollectionEnabled
+}
+
+func (r *ReconcileApplicationLayer) patchFelixTproxyMode(ctx context.Context, l7Spec *operatorv1.L7LogCollectionSpec) error {
 	// Fetch any existing default FelixConfiguration object.
-	felixConfiguration := &crdv1.FelixConfiguration{}
-	err := r.client.Get(ctx, types.NamespacedName{Name: "default"}, felixConfiguration)
+	fc := &crdv1.FelixConfiguration{}
+	err := r.client.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 
 	if err != nil && !apierrors.IsNotFound(err) {
 		r.status.SetDegraded("Unable to read FelixConfiguration", err.Error())
-		return reconcile.Result{}, err
+		return err
 	}
 
-	enableTproxy := crdv1.TPROXYModeOptionEnabled
-	felixConfiguration.Spec.TPROXYMode = &enableTproxy
+	patchFrom := client.MergeFrom(fc.DeepCopy())
 
-	return reconcile.Result{}, nil
+	if r.enableL7LogsCollection(l7Spec) {
+		enabled := crdv1.TPROXYModeOptionEnabled
+		fc.Spec.TPROXYMode = &enabled
+	} else {
+		disabled := crdv1.TPROXYModeOptionDisabled
+		fc.Spec.TPROXYMode = &disabled
+	}
+
+	//log.Info("Patch default FelixConfiguration with %s", *fc.Spec.TPROXYMode)
+
+	if err := r.client.Patch(ctx, fc, patchFrom); err != nil {
+		r.status.SetDegraded("Unable to Patch default FelixConfiguration", err.Error())
+		return err
+	}
+
+	return nil
 }

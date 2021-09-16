@@ -96,7 +96,7 @@ var (
 {{- end }}
 {{ with index .Components "es-proxy" }}
 	ComponentEsProxy = component{
-		Version: "{{ .Version }}",
+		Version: "tesla-{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
@@ -126,7 +126,7 @@ var (
 {{- end }}
 {{ with index .Components "intrusion-detection-controller" }}
 	ComponentIntrusionDetectionController = component{
-		Version: "{{ .Version }}",
+		Version: "tesla-{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
@@ -186,7 +186,7 @@ var (
 {{- end }}
 {{ with index .Components "cnx-kube-controllers" }}
 	ComponentTigeraKubeControllers = component{
-		Version: "{{ .Version }}",
+		Version: "tesla-{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}

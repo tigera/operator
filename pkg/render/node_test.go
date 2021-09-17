@@ -1894,7 +1894,6 @@ var _ = Describe("Node rendering tests", func() {
 				SubPath:   "template-1.yaml",
 			}))
 	})
-
 	Describe("AKS", func() {
 		It("should avoid virtual nodes", func() {
 			defaultInstance.KubernetesProvider = operatorv1.ProviderAKS

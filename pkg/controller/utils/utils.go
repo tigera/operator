@@ -186,14 +186,13 @@ func AddNamespacedWatch(c controller.Controller, obj client.Object, metaMatches 
 }
 
 func IsAPIServerReady(client client.Client, l logr.Logger) bool {
-	instance := &operatorv1.APIServer{}
-	err := client.Get(context.Background(), DefaultTSEEInstanceKey, instance)
+	instance, msg, err := GetAPIServer(context.Background(), client)
 	if err != nil {
 		if kerrors.IsNotFound(err) {
 			l.V(3).Info("APIServer resource does not exist")
 			return false
 		}
-		l.Error(err, "Unable to retrieve APIServer resource")
+		l.Error(err, "Unable to retrieve APIServer resource", "msg", msg)
 		return false
 	}
 

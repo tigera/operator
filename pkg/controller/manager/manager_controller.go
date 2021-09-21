@@ -19,8 +19,6 @@ import (
 	"fmt"
 	"time"
 
-	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/compliance"
@@ -30,6 +28,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
@@ -199,6 +198,7 @@ func GetManager(ctx context.Context, cli client.Client) (*operatorv1.Manager, er
 		return nil, fmt.Errorf("auth types other than 'Token' can no longer be configured using the Manager CR, " +
 			"please use the Authentication CR instead")
 	}
+
 	return instance, nil
 }
 
@@ -495,6 +495,13 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
+	// Set replicas to 1 for management or managed clusters.
+	// TODO Remove after MCM tigera-manager HA deployment is supported.
+	var replicas int32 = *installation.ControlPlaneReplicas
+	if managementCluster != nil || managementClusterConnection != nil {
+		replicas = 1
+	}
+
 	// Render the desired objects from the CRD and create or update them.
 	component, err := render.Manager(
 		keyValidatorConfig,
@@ -512,6 +519,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		internalTrafficSecret,
 		r.clusterDomain,
 		elasticLicenseType,
+		&replicas,
 	)
 	if err != nil {
 		log.Error(err, "Error rendering Manager")

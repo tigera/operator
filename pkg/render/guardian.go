@@ -44,8 +44,6 @@ const (
 	GuardianSecretName             = "tigera-managed-cluster-connection"
 )
 
-var guardianReplicas int32 = 1
-
 func Guardian(
 	url string,
 	pullSecrets []*corev1.Secret,
@@ -202,6 +200,8 @@ func (c *GuardianComponent) clusterRoleBinding() client.Object {
 }
 
 func (c *GuardianComponent) deployment() client.Object {
+	var replicas int32 = 1
+
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -218,7 +218,7 @@ func (c *GuardianComponent) deployment() client.Object {
 					"k8s-app": GuardianName,
 				},
 			},
-			Replicas: &guardianReplicas,
+			Replicas: &replicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},

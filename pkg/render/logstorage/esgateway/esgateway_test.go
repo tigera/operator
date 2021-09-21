@@ -17,9 +17,8 @@ package esgateway
 import (
 	"fmt"
 
-	"github.com/tigera/operator/pkg/render/kubecontrollers"
-
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -46,6 +45,7 @@ type resourceTestObj struct {
 var _ = Describe("ES Gateway rendering tests", func() {
 	Context("ES Gateway deployment", func() {
 		var installation *operatorv1.InstallationSpec
+		var replicas int32 = 2
 		clusterDomain := "cluster.local"
 
 		BeforeEach(func() {
@@ -88,6 +88,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: rmeta.OperatorNamespace()}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.InternalCertSecret, Namespace: render.ElasticsearchNamespace}},
 				clusterDomain, "elastic",
+				&replicas,
 			})
 
 			createResources, _ := component.Objects()
@@ -129,6 +130,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: rmeta.OperatorNamespace()}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.InternalCertSecret, Namespace: render.ElasticsearchNamespace}},
 				clusterDomain, "elastic",
+				&replicas,
 			})
 
 			createResources, _ := component.Objects()

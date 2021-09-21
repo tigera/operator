@@ -389,6 +389,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 	// renderManager passes in as few parameters as possible to render.Manager without it
 	// panicing. It accepts variations on the installspec for testing purposes.
+	var replicas int32 = 2
 	renderManager := func(i *operatorv1.InstallationSpec) *appsv1.Deployment {
 		component, err := render.Manager(nil, nil, nil,
 			rtest.CreateCertSecret(render.ComplianceServerCertSecret, rmeta.OperatorNamespace()),
@@ -397,7 +398,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			rtest.CreateCertSecret(render.ManagerTLSSecretName, rmeta.OperatorNamespace()),
 			nil, false,
 			i,
-			nil, nil, nil, "", render.ElasticsearchLicenseTypeUnknown)
+			nil, nil, nil, "", render.ElasticsearchLicenseTypeUnknown,
+			&replicas)
 		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 		resources, _ := component.Objects()
 		return rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -411,6 +413,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		})
 		Expect(deployment.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{"foo": "bar"}))
 	})
+
 	It("should apply controlPlaneTolerations", func() {
 		t := corev1.Toleration{
 			Key:      "foo",
@@ -468,8 +471,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 func renderObjects(oidc bool, managementCluster *operatorv1.ManagementCluster, installation *operatorv1.InstallationSpec, includeManagerTLSSecret bool) []client.Object {
 	var dexCfg authentication.KeyValidatorConfig
 	if oidc {
-		var authentication *operatorv1.Authentication
-		authentication = &operatorv1.Authentication{
+		authentication := &operatorv1.Authentication{
 			Spec: operatorv1.AuthenticationSpec{
 				ManagerDomain: "https://127.0.0.1",
 				OIDC:          &operatorv1.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"}}}
@@ -489,7 +491,9 @@ func renderObjects(oidc bool, managementCluster *operatorv1.ManagementCluster, i
 	}
 
 	esConfigMap := relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
-	component, err := render.Manager(dexCfg,
+	var replicas int32 = 2
+	component, err := render.Manager(
+		dexCfg,
 		nil,
 		nil,
 		rtest.CreateCertSecret(render.ComplianceServerCertSecret, rmeta.OperatorNamespace()),
@@ -504,6 +508,7 @@ func renderObjects(oidc bool, managementCluster *operatorv1.ManagementCluster, i
 		internalTraffic,
 		dns.DefaultClusterDomain,
 		render.ElasticsearchLicenseTypeEnterpriseTrial,
+		&replicas,
 	)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 	Expect(component.ResolveImages(nil)).To(BeNil())

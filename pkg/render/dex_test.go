@@ -36,6 +36,7 @@ var _ = Describe("dex rendering tests", func() {
 			dexSecret      *corev1.Secret
 			idpSecret      *corev1.Secret
 			pullSecrets    []*corev1.Secret
+			replicas       int32 = 2
 		)
 
 		BeforeEach(func() {
@@ -84,7 +85,7 @@ var _ = Describe("dex rendering tests", func() {
 
 		It("should render all resources for a OIDC setup", func() {
 
-			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName)
+			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName, &replicas)
 
 			component := render.Dex(pullSecrets, false, installation, dexCfg, clusterName, false)
 			resources, _ := component.Objects()
@@ -142,7 +143,7 @@ var _ = Describe("dex rendering tests", func() {
 				Effect:   corev1.TaintEffectNoExecute,
 			}
 
-			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName)
+			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName, &replicas)
 			component := render.Dex(pullSecrets, false, &operatorv1.InstallationSpec{
 				ControlPlaneTolerations: []corev1.Toleration{t},
 			}, dexCfg, clusterName, false)
@@ -153,7 +154,7 @@ var _ = Describe("dex rendering tests", func() {
 
 		It("should render all resources for a certificate management", func() {
 			installation.CertificateManagement = &operatorv1.CertificateManagement{}
-			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName)
+			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName, &replicas)
 
 			component := render.Dex(pullSecrets, false, installation, dexCfg, clusterName, false)
 			resources, _ := component.Objects()

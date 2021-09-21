@@ -343,6 +343,11 @@ spec:
                   nodes on which to run Calico components. This is globally applied
                   to all resources created by the operator excluding daemonsets.
                 type: object
+              controlPlaneReplicas:
+                description: Replicas defines how many replicas of the control plane
+                  core components will be deployed. Defaults to 2.
+                format: int32
+                type: integer
               controlPlaneTolerations:
                 description: ControlPlaneTolerations specify tolerations which are
                   then globally applied to all resources created by the operator.
@@ -1038,6 +1043,11 @@ spec:
                       plane nodes on which to run Calico components. This is globally
                       applied to all resources created by the operator excluding daemonsets.
                     type: object
+                  controlPlaneReplicas:
+                    description: Replicas defines how many replicas of the control
+                      plane core components will be deployed. Defaults to 2.
+                    format: int32
+                    type: integer
                   controlPlaneTolerations:
                     description: ControlPlaneTolerations specify tolerations which
                       are then globally applied to all resources created by the operator.

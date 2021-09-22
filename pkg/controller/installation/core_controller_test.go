@@ -944,5 +944,93 @@ var _ = Describe("Testing core-controller installation", func() {
 			}
 			Expect(test.GetResource(c, &rq)).To(BeNil())
 		})
+		It("should Reconcile with no active operator ConfigMap", func() {
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			cm := corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "active-operator",
+					Namespace: common.CalicoNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &cm)).To(BeNil())
+			Expect(cm.Data["active-namespace"]).To(Equal("tigera-operator"))
+		})
+		It("should exit Reconcile when active operator is a different namespace", func() {
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "active-operator",
+					Namespace: common.CalicoNamespace,
+				},
+				Data: map[string]string{"active-namespace": "other-namespace"},
+			})).NotTo(HaveOccurred())
+
+			exited := false
+			osExitOverride = func(_ int) { exited = true }
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).Should(HaveOccurred())
+			Expect(exited).Should(BeTrue())
+		})
+		It("should not exit Reconcile when active operator is current namespace", func() {
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "active-operator",
+					Namespace: common.CalicoNamespace,
+				},
+				Data: map[string]string{"active-namespace": "tigera-operator"},
+			})).NotTo(HaveOccurred())
+
+			exited := false
+			osExitOverride = func(_ int) { exited = false }
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(exited).Should(BeFalse())
+			cm := corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "active-operator",
+					Namespace: common.CalicoNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &cm)).To(BeNil())
+			Expect(cm.Data["active-namespace"]).To(Equal("tigera-operator"))
+		})
+		It("should not overwrite active-operator CM when it already exists", func() {
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "active-operator",
+					Namespace: common.CalicoNamespace,
+				},
+				Data: map[string]string{
+					"active-namespace": "tigera-operator",
+					"extra-dummy":      "dummy-value",
+				},
+			})).NotTo(HaveOccurred())
+
+			exited := false
+			osExitOverride = func(_ int) { exited = false }
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(exited).Should(BeFalse())
+			cm := corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "active-operator",
+					Namespace: common.CalicoNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &cm)).To(BeNil())
+			Expect(cm.Data["active-namespace"]).To(Equal("tigera-operator"))
+			Expect(cm.Data).To(HaveKey("extra-dummy"))
+		})
 	})
 })

@@ -1,96 +1,96 @@
-title: v3.9.0
+title: v3.10.0
 components:
   cnx-manager:
     image: tigera/cnx-manager
-    version: v3.9.1-2
+    version: release-calient-v3.10
   voltron:
     image: tigera/voltron
-    version: v3.9.0
+    version: release-calient-v3.10
   cnx-apiserver:
     image: tigera/cnx-apiserver
-    version: v3.9.0
+    version: release-calient-v3.10
   cnx-queryserver:
     image: tigera/cnx-queryserver
-    version: v3.9.0
+    version: release-calient-v3.10
   cnx-kube-controllers:
     image: tigera/kube-controllers
-    version: v3.9.1-1
+    version: release-calient-v3.10
   typha:
     image: tigera/typha
-    version: v3.9.0
+    version: release-calient-v3.10
   cnx-node:
     image: tigera/cnx-node
-    version: v3.9.0
+    version: release-calient-v3.10
   fluentd:
     image: tigera/fluentd
-    version: v3.9.0
+    version: release-calient-v3.10
   fluentd-windows:
     image: tigera/fluentd-windows
-    version: v3.9.0
+    version: release-calient-v3.10
   es-proxy:
     image: tigera/es-proxy
-    version: v3.9.0
+    version: release-calient-v3.10
   es-gateway:
     image: tigera/es-gateway
-    version: v3.9.0
+    version: release-calient-v3.10
   eck-kibana:
     version: 7.11.2
   dex:
     image: tigera/dex
-    version: v3.9.0
+    version: release-calient-v3.10
   kibana:
     image: tigera/kibana
-    version: v3.9.0
+    version: release-calient-v3.10
   eck-elasticsearch:
     version: 7.11.2
   elasticsearch:
     image: tigera/elasticsearch
-    version: v3.9.0
+    version: release-calient-v3.10
   elastic-tsee-installer:
     image: tigera/intrusion-detection-job-installer
-    version: v3.9.0
+    version: release-calient-v3.10
   es-curator:
     image: tigera/es-curator
-    version: v3.9.0
+    version: release-calient-v3.10
   intrusion-detection-controller:
     image: tigera/intrusion-detection-controller
-    version: v3.9.0
+    version: release-calient-v3.10
   compliance-controller:
     image: tigera/compliance-controller
-    version: v3.9.0
+    version: release-calient-v3.10
   compliance-reporter:
     image: tigera/compliance-reporter
-    version: v3.9.0
+    version: release-calient-v3.10
   compliance-snapshotter:
     image: tigera/compliance-snapshotter
-    version: v3.9.0
+    version: release-calient-v3.10
   compliance-server:
     image: tigera/compliance-server
-    version: v3.9.0
+    version: release-calient-v3.10
   compliance-benchmarker:
     image: tigera/compliance-benchmarker
-    version: v3.9.0
+    version: release-calient-v3.10
   guardian:
     image: tigera/guardian
-    version: v3.9.0
+    version: release-calient-v3.10
   tigera-cni:
     image: tigera/cni
-    version: v3.9.0
+    version: release-calient-v3.10
   cloud-controllers:
     image: tigera/cloud-controllers
-    version: v3.9.0
+    version: release-calient-v3.10
   elasticsearch-metrics:
     image: tigera/elasticsearch-metrics
-    version: v3.9.0
+    version: release-calient-v3.10
   packetcapture-api:
     image: tigera/packetcapture-api
-    version: v3.9.0
+    version: release-calient-v3.10
   tigera-prometheus-service:
     image: tigera/prometheus-service
-    version: v3.9.0
+    version: release-calient-v3.10
   deep-packet-inspection:
     image: tigera/deep-packet-inspection
-    version: master
+    version: release-calient-v3.10
   # The components below are third-party images that have been retagged under
   # quay.io/tigera so all enterprise images come from the same repository and org.
   elasticsearch-operator:

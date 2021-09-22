@@ -166,13 +166,13 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 	// Watch for secrets in the operator namespace. We watch for all secrets, since we care
 	// about specifically named ones - e.g., manager-tls, as well as image pull secrets that
 	// may have been provided by the user with arbitrary names.
-	err = utils.AddSecretsWatch(c, "", rmeta.OperatorNamespace())
+	err = utils.AddSecretsWatch(c, "", common.OperatorNamespace())
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch secrets: %w", err)
 	}
 
 	for _, cm := range []string{render.BirdTemplatesConfigMapName, render.BGPLayoutConfigMapName, render.K8sSvcEndpointConfigMapName} {
-		if err = utils.AddConfigMapWatch(c, cm, rmeta.OperatorNamespace()); err != nil {
+		if err = utils.AddConfigMapWatch(c, cm, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", cm, err)
 		}
 	}
@@ -242,7 +242,7 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 
 		// Watch the internal manager TLS secret in the calico namespace, where it's copied for kube-controllers.
 		if err = utils.AddSecretsWatch(c, render.ManagerInternalTLSSecretName, common.CalicoNamespace); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch secret '%s' in '%s' namespace: %w", render.ManagerInternalTLSSecretName, rmeta.OperatorNamespace(), err)
+			return fmt.Errorf("tigera-installation-controller failed to watch secret '%s' in '%s' namespace: %w", render.ManagerInternalTLSSecretName, common.OperatorNamespace(), err)
 		}
 
 		//watch for change to primary resource LogCollector
@@ -890,7 +890,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.TyphaCAConfigMapName,
-					Namespace: rmeta.OperatorNamespace(),
+					Namespace: common.OperatorNamespace(),
 				},
 				Data: map[string]string{
 					render.TyphaCABundleName: string(instance.Spec.CertificateManagement.CACert),
@@ -1273,7 +1273,7 @@ func (r *ReconcileInstallation) GetTyphaNodeTLSConfig() (*render.TyphaNodeTLS, e
 
 	node, err := utils.ValidateCertPair(
 		r.client,
-		rmeta.OperatorNamespace(),
+		common.OperatorNamespace(),
 		render.NodeTLSSecretName,
 		render.TLSSecretKeyName,
 		render.TLSSecretCertName,
@@ -1293,7 +1293,7 @@ func (r *ReconcileInstallation) GetTyphaNodeTLSConfig() (*render.TyphaNodeTLS, e
 
 	typha, err := utils.ValidateCertPair(
 		r.client,
-		rmeta.OperatorNamespace(),
+		common.OperatorNamespace(),
 		render.TyphaTLSSecretName,
 		render.TLSSecretKeyName,
 		render.TLSSecretCertName,
@@ -1336,7 +1336,7 @@ func (r *ReconcileInstallation) validateTyphaCAConfigMap() (*corev1.ConfigMap, e
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{
 		Name:      render.TyphaCAConfigMapName,
-		Namespace: rmeta.OperatorNamespace(),
+		Namespace: common.OperatorNamespace(),
 	}
 	err := r.client.Get(context.Background(), cmNamespacedName, cm)
 	if err != nil {
@@ -1431,7 +1431,7 @@ func CreateNewTyphaNodeTLS() (*render.TyphaNodeTLS, error) {
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      render.TyphaCAConfigMapName,
-			Namespace: rmeta.OperatorNamespace(),
+			Namespace: common.OperatorNamespace(),
 		},
 		Data: data,
 	}
@@ -1439,7 +1439,7 @@ func CreateNewTyphaNodeTLS() (*render.TyphaNodeTLS, error) {
 	// Create TLS Secret for Felix using ca from above
 	tntls.NodeSecret, err = secret.CreateTLSSecret(ca,
 		render.NodeTLSSecretName,
-		rmeta.OperatorNamespace(),
+		common.OperatorNamespace(),
 		render.TLSSecretKeyName,
 		render.TLSSecretCertName,
 		rmeta.DefaultCertificateDuration,
@@ -1455,7 +1455,7 @@ func CreateNewTyphaNodeTLS() (*render.TyphaNodeTLS, error) {
 	// Create TLS Secret for Felix using ca from above
 	tntls.TyphaSecret, err = secret.CreateTLSSecret(ca,
 		render.TyphaTLSSecretName,
-		rmeta.OperatorNamespace(),
+		common.OperatorNamespace(),
 		render.TLSSecretKeyName,
 		render.TLSSecretCertName,
 		rmeta.DefaultCertificateDuration,
@@ -1475,7 +1475,7 @@ func getConfigMap(client client.Client, cmName string) (*corev1.ConfigMap, error
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{
 		Name:      cmName,
-		Namespace: rmeta.OperatorNamespace(),
+		Namespace: common.OperatorNamespace(),
 	}
 	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
 		if apierrors.IsNotFound(err) {

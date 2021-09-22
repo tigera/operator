@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/dns"
@@ -97,7 +98,7 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
 			var err error
 			tlsKeyPair, err = secret.CreateTLSSecret(nil,
 				apiServerTLSSecretName(installation.Variant),
-				rmeta.OperatorNamespace(),
+				common.OperatorNamespace(),
 				APIServerSecretKeyName,
 				APIServerSecretCertName,
 				rmeta.DefaultCertificateDuration,

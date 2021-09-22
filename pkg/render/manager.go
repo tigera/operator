@@ -250,7 +250,7 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      ManagerTLSSecretName,
-				Namespace: rmeta.OperatorNamespace(),
+				Namespace: common.OperatorNamespace(),
 			},
 		}
 		toDelete = append(toDelete, secretToDelete)

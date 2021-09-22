@@ -725,7 +725,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ManagerInternalTLSSecretName,
-					Namespace: rmeta.OperatorNamespace(),
+					Namespace: common.OperatorNamespace(),
 				},
 			}
 
@@ -746,7 +746,7 @@ var _ = Describe("Testing core-controller installation", func() {
 		It("should replace the internal manager TLS cert secret if its DNS names are invalid", func() {
 			// Create a internal manager TLS secret with old DNS name.
 			oldSecret, err := secret.CreateTLSSecret(nil,
-				render.ManagerInternalTLSSecretName, rmeta.OperatorNamespace(), render.ManagerInternalSecretKeyName,
+				render.ManagerInternalTLSSecretName, common.OperatorNamespace(), render.ManagerInternalSecretKeyName,
 				render.ManagerInternalSecretCertName, rmeta.DefaultCertificateDuration, nil, "tigera-manager.tigera-manager.svc",
 			)
 			Expect(err).ShouldNot(HaveOccurred())

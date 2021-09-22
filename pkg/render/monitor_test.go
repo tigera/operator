@@ -31,7 +31,6 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 )
 
@@ -224,6 +223,6 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(rolebindingObj.Subjects).To(HaveLen(1))
 		Expect(rolebindingObj.Subjects[0].Kind).To(Equal("ServiceAccount"))
 		Expect(rolebindingObj.Subjects[0].Name).To(Equal("tigera-operator"))
-		Expect(rolebindingObj.Subjects[0].Namespace).To(Equal(rmeta.OperatorNamespace()))
+		Expect(rolebindingObj.Subjects[0].Namespace).To(Equal(common.OperatorNamespace()))
 	})
 })

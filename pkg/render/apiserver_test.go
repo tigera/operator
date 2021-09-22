@@ -39,6 +39,7 @@ import (
 	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/dns"
@@ -601,7 +602,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "tigera-apiserver-certs", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-apiserver-certs", ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
-			{name: render.VoltronTunnelSecretName, ns: rmeta.OperatorNamespace(), group: "", version: "v1", kind: "Secret"},
+			{name: render.VoltronTunnelSecretName, ns: common.OperatorNamespace(), group: "", version: "v1", kind: "Secret"},
 			{name: render.VoltronTunnelSecretName, ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
 			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1", kind: "APIService"},
 			{name: "tigera-apiserver", ns: "tigera-system", group: "apps", version: "v1", kind: "Deployment"},
@@ -623,7 +624,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		By("Validating the newly created tunnel secret")
 		// Use the x509 package to validate that the cert was signed with the privatekey
-		operatorTunnelSec := rtest.GetResource(resources, render.VoltronTunnelSecretName, rmeta.OperatorNamespace(), "", "v1", "Secret")
+		operatorTunnelSec := rtest.GetResource(resources, render.VoltronTunnelSecretName, common.OperatorNamespace(), "", "v1", "Secret")
 		apiServerTunnelSec := rtest.GetResource(resources, render.VoltronTunnelSecretName, "tigera-system", "", "v1", "Secret")
 		validateTunnelSecret(operatorTunnelSec.(*corev1.Secret))
 		validateTunnelSecret(apiServerTunnelSec.(*corev1.Secret))

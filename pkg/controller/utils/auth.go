@@ -7,10 +7,10 @@ import (
 	"github.com/go-ldap/ldap"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
 	rauth "github.com/tigera/operator/pkg/render/common/authentication"
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -50,7 +50,7 @@ func GetKeyValidatorConfig(ctx context.Context, cli client.Client, authenticatio
 			}
 		} else {
 			dexTLSSecret := &corev1.Secret{}
-			if err := cli.Get(ctx, types.NamespacedName{Name: render.DexCertSecretName, Namespace: rmeta.OperatorNamespace()}, dexTLSSecret); err != nil {
+			if err := cli.Get(ctx, types.NamespacedName{Name: render.DexCertSecretName, Namespace: common.OperatorNamespace()}, dexTLSSecret); err != nil {
 				return nil, err
 			}
 
@@ -78,8 +78,8 @@ func GetIdpSecret(ctx context.Context, client client.Client, authentication *ope
 	}
 
 	secret := &corev1.Secret{}
-	if err := client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: rmeta.OperatorNamespace()}, secret); err != nil {
-		return nil, fmt.Errorf("missing secret %s/%s: %w", rmeta.OperatorNamespace(), secretName, err)
+	if err := client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: common.OperatorNamespace()}, secret); err != nil {
+		return nil, fmt.Errorf("missing secret %s/%s: %w", common.OperatorNamespace(), secretName, err)
 	}
 
 	for _, field := range requiredFields {
@@ -90,7 +90,7 @@ func GetIdpSecret(ctx context.Context, client client.Client, authentication *ope
 
 		if field == render.BindDNSecretField {
 			if _, err := ldap.ParseDN(string(data)); err != nil {
-				return nil, fmt.Errorf("secret %s/%s field %s: should have be a valid LDAP DN", rmeta.OperatorNamespace(), secretName, field)
+				return nil, fmt.Errorf("secret %s/%s field %s: should have be a valid LDAP DN", common.OperatorNamespace(), secretName, field)
 			}
 		}
 	}

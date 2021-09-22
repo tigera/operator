@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -128,7 +129,7 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 	// TODO so we can't just do a blanket delete of the secrets in the operator namespace. We need to refactor
 	// TODO the RequiredSecrets in the dex condig to not pass back secrets of this type.
 	if !c.deleteDex {
-		objs = append(objs, secret.ToRuntimeObjects(c.dexConfig.RequiredSecrets(rmeta.OperatorNamespace())...)...)
+		objs = append(objs, secret.ToRuntimeObjects(c.dexConfig.RequiredSecrets(common.OperatorNamespace())...)...)
 	}
 
 	objs = append(objs, c.dexConfig.CreateCertSecret())

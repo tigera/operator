@@ -40,6 +40,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	operatorv1beta1 "github.com/tigera/operator/api/v1beta1"
 	"github.com/tigera/operator/controllers"
+	"github.com/tigera/operator/pkg/active"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/awssgsetup"
 	"github.com/tigera/operator/pkg/common"
@@ -133,21 +134,32 @@ func main() {
 
 	ctx := context.Background()
 
+	cfg, err := config.GetConfig()
+	if err != nil {
+		log.Error(err, "")
+		os.Exit(1)
+	}
+
+	c, err := client.New(cfg, client.Options{})
+	if err != nil {
+		log.Error(err, "")
+		os.Exit(1)
+	}
+
+	cs, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		log.Error(err, "")
+		os.Exit(1)
+	}
+
+	sigHandler := ctrl.SetupSignalHandler()
+	active.WaitUntilActive(cs, c, sigHandler, setupLog)
+	log.Info("Active operator: proceeding")
+
 	if sgSetup {
 		log.Info("Setting up AWS Security Groups")
-		cfg, err := config.GetConfig()
-		if err != nil {
-			log.Error(err, "")
-			os.Exit(1)
-		}
 
-		client, err := client.New(cfg, client.Options{})
-		if err != nil {
-			log.Error(err, "")
-			os.Exit(1)
-		}
-
-		err = awssgsetup.SetupAWSSecurityGroups(ctx, client)
+		err = awssgsetup.SetupAWSSecurityGroups(ctx, c)
 		if err != nil {
 			log.Error(err, "")
 			os.Exit(1)
@@ -232,7 +244,7 @@ func main() {
 	}
 
 	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(sigHandler); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}

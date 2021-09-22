@@ -23,9 +23,9 @@ import (
 	. "github.com/onsi/gomega"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -61,7 +61,7 @@ var _ = Describe("dex config tests", func() {
 	idpSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      render.OIDCSecretName,
-			Namespace: rmeta.OperatorNamespace(),
+			Namespace: common.OperatorNamespace(),
 		},
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		Data: map[string][]byte{
@@ -128,9 +128,9 @@ var _ = Describe("dex config tests", func() {
 		google      = &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{ManagerDomain: domain, OIDC: &operatorv1.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"}}}
 		ocp         = &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{ManagerDomain: domain, Openshift: &operatorv1.AuthenticationOpenshift{IssuerURL: iss}}}
 		ldap        = &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{ManagerDomain: domain, LDAP: &operatorv1.AuthenticationLDAP{Host: iss, UserSearch: &operatorv1.UserSearch{BaseDN: validDN, Filter: validFilter, NameAttribute: attribute}, GroupSearch: &operatorv1.GroupSearch{NameAttribute: attribute, Filter: validFilter, BaseDN: validDN, UserMatchers: []operatorv1.UserMatch{{UserAttribute: attribute, GroupAttribute: attribute}}}}}}
-		ldapSecret  = &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.LDAPSecretName, Namespace: rmeta.OperatorNamespace()}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ldapSecret  = &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.LDAPSecretName, Namespace: common.OperatorNamespace()}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			Data: map[string][]byte{"bindDN": []byte(validDN), "bindPW": []byte("my-secret"), "rootCA": []byte("ca")}}
-		ocpSecret = &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.OpenshiftSecretName, Namespace: rmeta.OperatorNamespace()}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ocpSecret = &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.OpenshiftSecretName, Namespace: common.OperatorNamespace()}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			Data: map[string][]byte{"clientID": []byte(validDN), "clientSecret": []byte("my-secret"), "rootCA": []byte("ca")}}
 	)
 
@@ -332,7 +332,7 @@ var _ = Describe("dex config tests", func() {
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      render.OIDCSecretName,
-				Namespace: rmeta.OperatorNamespace(),
+				Namespace: common.OperatorNamespace(),
 			},
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			Data:     secretData,

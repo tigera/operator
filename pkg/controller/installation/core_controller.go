@@ -35,6 +35,7 @@ import (
 	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 
 	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/active"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
@@ -166,15 +167,19 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 	// Watch for secrets in the operator namespace. We watch for all secrets, since we care
 	// about specifically named ones - e.g., manager-tls, as well as image pull secrets that
 	// may have been provided by the user with arbitrary names.
-	err = utils.AddSecretsWatch(c, "", rmeta.OperatorNamespace())
+	err = utils.AddSecretsWatch(c, "", common.OperatorNamespace())
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch secrets: %w", err)
 	}
 
 	for _, cm := range []string{render.BirdTemplatesConfigMapName, render.BGPLayoutConfigMapName, render.K8sSvcEndpointConfigMapName} {
-		if err = utils.AddConfigMapWatch(c, cm, rmeta.OperatorNamespace()); err != nil {
+		if err = utils.AddConfigMapWatch(c, cm, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", cm, err)
 		}
+	}
+
+	if err = utils.AddConfigMapWatch(c, active.ActiveConfigMapName, common.CalicoNamespace); err != nil {
+		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", active.ActiveConfigMapName, err)
 	}
 
 	// Only watch the AmazonCloudIntegration if the CRD is available
@@ -242,7 +247,7 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 
 		// Watch the internal manager TLS secret in the calico namespace, where it's copied for kube-controllers.
 		if err = utils.AddSecretsWatch(c, render.ManagerInternalTLSSecretName, common.CalicoNamespace); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch secret '%s' in '%s' namespace: %w", render.ManagerInternalTLSSecretName, rmeta.OperatorNamespace(), err)
+			return fmt.Errorf("tigera-installation-controller failed to watch secret '%s' in '%s' namespace: %w", render.ManagerInternalTLSSecretName, common.OperatorNamespace(), err)
 		}
 
 		//watch for change to primary resource LogCollector
@@ -644,6 +649,11 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.V(1).Info("Reconciling Installation.operator.tigera.io")
 
+	newActiveCM, err := r.checkActive(reqLogger)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
 	// Get the installation object if it exists so that we can save the original
 	// status before we merge/fill that object with other values.
 	instance := &operator.Installation{}
@@ -884,7 +894,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.TyphaCAConfigMapName,
-					Namespace: rmeta.OperatorNamespace(),
+					Namespace: common.OperatorNamespace(),
 				},
 				Data: map[string]string{
 					render.TyphaCABundleName: string(instance.Spec.CertificateManagement.CACert),
@@ -1029,6 +1039,11 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Render namespaces for Calico.
 	components = append(components, render.Namespaces(&instance.Spec, pullSecrets))
 
+	if newActiveCM != nil {
+		log.Info("adding active configmap")
+		components = append(components, render.NewPassthrough([]client.Object{newActiveCM}))
+	}
+
 	// If we're on OpenShift on AWS render a Job (and needed resources) to
 	// setup the security groups we need for IPIP, BGP, and Typha communication.
 	if openShiftOnAws {
@@ -1057,9 +1072,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Build a configuration for rendering calico/typha.
 	typhaCfg := render.TyphaConfiguration{
-		K8sServiceEp:           k8sapi.Endpoint,
-		Installation:           &instance.Spec,
-		TLS:                    typhaNodeTLS,
+		K8sServiceEp: k8sapi.Endpoint,
+		Installation: &instance.Spec,
+		TLS:          typhaNodeTLS,
 		AmazonCloudIntegration: aci,
 		MigrateNamespaces:      needNsMigration,
 		ClusterDomain:          r.clusterDomain,
@@ -1267,7 +1282,7 @@ func (r *ReconcileInstallation) GetTyphaNodeTLSConfig() (*render.TyphaNodeTLS, e
 
 	node, err := utils.ValidateCertPair(
 		r.client,
-		rmeta.OperatorNamespace(),
+		common.OperatorNamespace(),
 		render.NodeTLSSecretName,
 		render.TLSSecretKeyName,
 		render.TLSSecretCertName,
@@ -1287,7 +1302,7 @@ func (r *ReconcileInstallation) GetTyphaNodeTLSConfig() (*render.TyphaNodeTLS, e
 
 	typha, err := utils.ValidateCertPair(
 		r.client,
-		rmeta.OperatorNamespace(),
+		common.OperatorNamespace(),
 		render.TyphaTLSSecretName,
 		render.TLSSecretKeyName,
 		render.TLSSecretCertName,
@@ -1330,7 +1345,7 @@ func (r *ReconcileInstallation) validateTyphaCAConfigMap() (*corev1.ConfigMap, e
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{
 		Name:      render.TyphaCAConfigMapName,
-		Namespace: rmeta.OperatorNamespace(),
+		Namespace: common.OperatorNamespace(),
 	}
 	err := r.client.Get(context.Background(), cmNamespacedName, cm)
 	if err != nil {
@@ -1404,6 +1419,41 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 	return nil
 }
 
+var osExitOverride = os.Exit
+
+// checkActive verifies the operator that calls this function is designated as the active operator.
+// If this operator is not designated as active then this function does an os.Exit(0) so the operator
+// gets restarted.
+// If this operator is the designated operator (or assumed because there is no designation) then
+// this function returns with no error.
+// If the active operator designation needs to be set then the first return field is a ConfigMap that
+// should be created to set the designation, other wise the field is nil.
+// The second returned field reports if there was an error when trying to determine active operator.
+func (r *ReconcileInstallation) checkActive(log logr.Logger) (*corev1.ConfigMap, error) {
+	cm, err := active.GetActiveConfigMap(r.client)
+	if err != nil {
+		r.SetDegraded(
+			fmt.Sprintf("Error determining if operator in %s namespace is active", common.OperatorNamespace()),
+			err,
+			log)
+		return nil, err
+	}
+	imActive, activeNs := active.IsThisOperatorActive(cm)
+	if !imActive {
+		log.Info("Exiting because this operator is not designated active",
+			"my-namespace", common.OperatorNamespace(),
+			"active-namespace", activeNs)
+		osExitOverride(0)
+		return nil, fmt.Errorf("Returning error for test purposes")
+	}
+
+	if cm == nil {
+		return active.GenerateMyActiveConfigMap(), nil
+	} else {
+		return nil, nil
+	}
+}
+
 func CreateNewTyphaNodeTLS() (*render.TyphaNodeTLS, error) {
 	// Make CA
 	ca, err := tls.MakeCA(fmt.Sprintf("%s@%d", rmeta.TigeraOperatorCAIssuerPrefix, time.Now().Unix()))
@@ -1425,7 +1475,7 @@ func CreateNewTyphaNodeTLS() (*render.TyphaNodeTLS, error) {
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      render.TyphaCAConfigMapName,
-			Namespace: rmeta.OperatorNamespace(),
+			Namespace: common.OperatorNamespace(),
 		},
 		Data: data,
 	}
@@ -1433,7 +1483,7 @@ func CreateNewTyphaNodeTLS() (*render.TyphaNodeTLS, error) {
 	// Create TLS Secret for Felix using ca from above
 	tntls.NodeSecret, err = secret.CreateTLSSecret(ca,
 		render.NodeTLSSecretName,
-		rmeta.OperatorNamespace(),
+		common.OperatorNamespace(),
 		render.TLSSecretKeyName,
 		render.TLSSecretCertName,
 		rmeta.DefaultCertificateDuration,
@@ -1449,7 +1499,7 @@ func CreateNewTyphaNodeTLS() (*render.TyphaNodeTLS, error) {
 	// Create TLS Secret for Felix using ca from above
 	tntls.TyphaSecret, err = secret.CreateTLSSecret(ca,
 		render.TyphaTLSSecretName,
-		rmeta.OperatorNamespace(),
+		common.OperatorNamespace(),
 		render.TLSSecretKeyName,
 		render.TLSSecretCertName,
 		rmeta.DefaultCertificateDuration,
@@ -1469,7 +1519,7 @@ func getConfigMap(client client.Client, cmName string) (*corev1.ConfigMap, error
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{
 		Name:      cmName,
-		Namespace: rmeta.OperatorNamespace(),
+		Namespace: common.OperatorNamespace(),
 	}
 	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
 		if apierrors.IsNotFound(err) {

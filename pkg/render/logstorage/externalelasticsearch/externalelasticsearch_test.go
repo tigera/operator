@@ -5,11 +5,12 @@ package externalelasticsearch
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/tigera/operator/pkg/render"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
@@ -38,6 +39,8 @@ var _ = Describe("External Elasticsearch rendering tests", func() {
 			expectedResources := []resourceTestObj{
 				{render.ElasticsearchNamespace, "", &corev1.Namespace{}},
 				{relasticsearch.ClusterConfigConfigMapName, rmeta.OperatorNamespace(), &corev1.ConfigMap{}},
+				{render.EsManagerRole, render.ElasticsearchNamespace, &rbacv1.Role{}},
+				{render.EsManagerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}},
 			}
 
 			component := ExternalElasticsearch(installation, clusterConfig)

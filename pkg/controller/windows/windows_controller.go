@@ -84,9 +84,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) reconcile.Recon
 
 // add adds watches for resources that are available at startup
 func add(mgr manager.Manager, c controller.Controller) error {
-
-	c.Watch(&source.Kind{Type: &operatorv1.Installation{}}, &handler.EnqueueRequestForObject{})
-	return nil
+	return c.Watch(&source.Kind{Type: &operatorv1.Installation{}}, &handler.EnqueueRequestForObject{})
 }
 
 // blank assignment to verify that reconcileWindows implements reconcile.Reconciler

@@ -178,8 +178,10 @@ func add(mgr manager.Manager, c controller.Controller, elasticExternal bool) err
 		return fmt.Errorf("manager-controller failed to watch resource: %w", err)
 	}
 
-	if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace); err != nil {
-		return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %v", err)
+	if !elasticExternal {
+		if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace); err != nil {
+			return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %v", err)
+		}
 	}
 
 	return nil
@@ -482,9 +484,13 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	var elasticLicenseType render.ElasticsearchLicenseType
 	if managementClusterConnection == nil {
-		if elasticLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger); err != nil {
-			r.status.SetDegraded("Failed to get Elasticsearch license", err.Error())
-			return reconcile.Result{}, err
+		if !r.elasticExternal {
+			if elasticLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger); err != nil {
+				r.status.SetDegraded("Failed to get Elasticsearch license", err.Error())
+				return reconcile.Result{}, err
+			}
+		} else {
+			elasticLicenseType = render.ElasticsearchLicenseTypeBasic
 		}
 	}
 

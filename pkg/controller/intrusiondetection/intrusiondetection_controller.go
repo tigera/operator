@@ -164,8 +164,10 @@ func add(mgr manager.Manager, c controller.Controller, elasticExternal bool) err
 		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
 	}
 
-	if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace); err != nil {
-		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
+	if !elasticExternal {
+		if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace); err != nil {
+			return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
+		}
 	}
 
 	if err = utils.AddConfigMapWatch(c, render.TyphaCAConfigMapName, rmeta.OperatorNamespace()); err != nil {
@@ -341,9 +343,13 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	var esLicenseType render.ElasticsearchLicenseType
 	var managerInternalTLSSecret *corev1.Secret
 	if managementClusterConnection == nil {
-		if esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger); err != nil {
-			r.status.SetDegraded("Failed to get Elasticsearch license", err.Error())
-			return reconcile.Result{}, err
+		if !r.elasticExternal {
+			if esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger); err != nil {
+				r.status.SetDegraded("Failed to get Elasticsearch license", err.Error())
+				return reconcile.Result{}, err
+			}
+		} else {
+			esLicenseType = render.ElasticsearchLicenseTypeBasic
 		}
 
 		managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,

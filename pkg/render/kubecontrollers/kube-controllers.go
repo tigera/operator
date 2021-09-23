@@ -404,6 +404,16 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		{Name: "ENABLED_CONTROLLERS", Value: strings.Join(c.enabledControllers, ",")},
 	}
 
+	if c.cfg.TenantId != "" {
+		env = append(env, corev1.EnvVar{Name: "ELASTIC_INDEX_TENANT_ID", Value: c.cfg.TenantId})
+	} else {
+		// The Tesla variant of the kube-controllers image contains a check for ELASTIC_INDEX_TENANT_ID
+		// in the init() function. Since the kube-controllers were split into separate deployments, but they
+		// still use the same code base, we must set this value to something valid even though it will never be
+		// used.
+		env = append(env, corev1.EnvVar{Name: "ELASTIC_INDEX_TENANT_ID", Value: "tenant"})
+	}
+
 	env = append(env, c.cfg.K8sServiceEp.EnvVars(false, c.cfg.Installation.KubernetesProvider)...)
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
@@ -422,10 +432,6 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 
 		if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
 			env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
-		}
-
-		if c.cfg.TenantId != "" {
-			env = append(env, corev1.EnvVar{Name: "ELASTIC_INDEX_TENANT_ID", Value: c.cfg.TenantId})
 		}
 	}
 

@@ -1072,9 +1072,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Build a configuration for rendering calico/typha.
 	typhaCfg := render.TyphaConfiguration{
-		K8sServiceEp: k8sapi.Endpoint,
-		Installation: &instance.Spec,
-		TLS:          typhaNodeTLS,
+		K8sServiceEp:           k8sapi.Endpoint,
+		Installation:           &instance.Spec,
+		TLS:                    typhaNodeTLS,
 		AmazonCloudIntegration: aci,
 		MigrateNamespaces:      needNsMigration,
 		ClusterDomain:          r.clusterDomain,

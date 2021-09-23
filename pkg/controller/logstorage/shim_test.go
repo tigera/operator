@@ -17,6 +17,8 @@
 package logstorage
 
 import (
+	"net/http/httptest"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -31,7 +33,8 @@ func NewReconcilerWithShims(
 	provider operatorv1.Provider,
 	esCliCreator utils.ElasticsearchClientCreator,
 	clusterDomain string,
-	elasticExternal bool) (*ReconcileLogStorage, error) {
+	elasticExternal bool,
+	mockServer *httptest.Server) (*ReconcileLogStorage, error) {
 
-	return newReconciler(cli, schema, status, provider, esCliCreator, clusterDomain, elasticExternal)
+	return newReconciler(cli, schema, status, provider, esCliCreator, clusterDomain, elasticExternal, mockServer.Client(), mockServer.URL)
 }

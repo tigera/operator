@@ -16,7 +16,10 @@ package logstorage
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 
 	. "github.com/onsi/ginkgo"
@@ -105,6 +108,8 @@ var _ = Describe("LogStorage controller", func() {
 		mockStatus *status.MockStatus
 		scheme     *runtime.Scheme
 		ctx        context.Context
+
+		mockServer = &httptest.Server{}
 	)
 
 	BeforeEach(func() {
@@ -232,7 +237,7 @@ var _ = Describe("LogStorage controller", func() {
 						mockStatus.On("ReadyToMonitor")
 					})
 					DescribeTable("tests that the ExternalService is setup with the default service name", func(clusterDomain, expectedSvcName string) {
-						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, clusterDomain, false)
+						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, clusterDomain, false, mockServer)
 						Expect(err).ShouldNot(HaveOccurred())
 						_, err = r.Reconcile(ctx, reconcile.Request{})
 						Expect(err).ShouldNot(HaveOccurred())
@@ -256,7 +261,7 @@ var _ = Describe("LogStorage controller", func() {
 					})
 
 					It("returns an error if the LogStorage resource exists and is not marked for deletion", func() {
-						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, false)
+						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, false, mockServer)
 						Expect(err).ShouldNot(HaveOccurred())
 						mockStatus.On("SetDegraded", "LogStorage validation failed", "cluster type is managed but LogStorage CR still exists").Return()
 						result, err := r.Reconcile(ctx, reconcile.Request{})
@@ -274,7 +279,7 @@ var _ = Describe("LogStorage controller", func() {
 						mockStatus.On("ClearDegraded", mock.Anything).Return()
 						mockStatus.On("ReadyToMonitor")
 
-						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, false)
+						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, false, mockServer)
 						Expect(err).ShouldNot(HaveOccurred())
 
 						ls := &operatorv1.LogStorage{}
@@ -351,6 +356,15 @@ var _ = Describe("LogStorage controller", func() {
 					mockStatus.On("ReadyToMonitor")
 				})
 				It("test LogStorage reconciles successfully", func() {
+					mockServer = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Write([]byte{})
+					}))
+					mockServer.Config.TLSConfig = &tls.Config{InsecureSkipVerify: true}
+					mockServer.Start()
+					defer mockServer.Close()
+
+					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: operatorUsrSecretObjMeta})).ShouldNot(HaveOccurred())
+
 					Expect(cli.Create(ctx, &storagev1.StorageClass{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: storageClassName,
@@ -374,7 +388,7 @@ var _ = Describe("LogStorage controller", func() {
 						Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 					})).ShouldNot(HaveOccurred())
 
-					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, false)
+					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, false, mockServer)
 					Expect(err).ShouldNot(HaveOccurred())
 
 					mockStatus.On("SetDegraded", "Waiting for Elasticsearch cluster to be operational", "").Return()
@@ -458,6 +472,14 @@ var _ = Describe("LogStorage controller", func() {
 				})
 
 				It("test LogStorage reconciles successfully for elasticsearch basic license", func() {
+					mockServer = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Write([]byte{})
+					}))
+					mockServer.Config.TLSConfig = &tls.Config{InsecureSkipVerify: true}
+					mockServer.Start()
+					defer mockServer.Close()
+
+					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: operatorUsrSecretObjMeta})).ShouldNot(HaveOccurred())
 
 					Expect(cli.Create(ctx, &operatorv1.Authentication{
 						ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
@@ -506,7 +528,7 @@ var _ = Describe("LogStorage controller", func() {
 						ObjectMeta: metav1.ObjectMeta{Namespace: render.ElasticsearchNamespace, Name: render.OIDCUsersEsSecreteName},
 					})).ShouldNot(HaveOccurred())
 
-					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, false)
+					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, false, mockServer)
 					Expect(err).ShouldNot(HaveOccurred())
 
 					mockStatus.On("SetDegraded", "Waiting for Elasticsearch cluster to be operational", "").Return()
@@ -589,6 +611,13 @@ var _ = Describe("LogStorage controller", func() {
 				})
 
 				It("test that LogStorage reconciles if the user-supplied certs have any DNS names", func() {
+					mockServer = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Write([]byte{})
+					}))
+					mockServer.Config.TLSConfig = &tls.Config{InsecureSkipVerify: true}
+					mockServer.Start()
+					defer mockServer.Close()
+
 					// This test currently just validates that user-provided
 					// certs will reconcile and not return an error and won't be
 					// overwritten by the operator. This test
@@ -638,7 +667,7 @@ var _ = Describe("LogStorage controller", func() {
 						Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 					})).ShouldNot(HaveOccurred())
 
-					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, false)
+					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, false, mockServer)
 					Expect(err).ShouldNot(HaveOccurred())
 
 					// Elasticsearch and kibana secrets are good.
@@ -654,6 +683,15 @@ var _ = Describe("LogStorage controller", func() {
 				})
 
 				It("test that LogStorage creates new certs if operator managed certs have invalid DNS names", func() {
+					mockServer = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Write([]byte{})
+					}))
+					mockServer.Config.TLSConfig = &tls.Config{InsecureSkipVerify: true}
+					mockServer.Start()
+					defer mockServer.Close()
+
+					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: operatorUsrSecretObjMeta})).ShouldNot(HaveOccurred())
+
 					Expect(cli.Create(ctx, &storagev1.StorageClass{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: storageClassName,
@@ -677,7 +715,7 @@ var _ = Describe("LogStorage controller", func() {
 						Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 					})).ShouldNot(HaveOccurred())
 
-					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, false)
+					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, false, mockServer)
 					Expect(err).ShouldNot(HaveOccurred())
 
 					mockStatus.On("SetDegraded", "Waiting for Elasticsearch cluster to be operational", "").Return()
@@ -824,7 +862,16 @@ var _ = Describe("LogStorage controller", func() {
 						}
 					})
 					It("should use default images", func() {
-						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, false)
+						mockServer = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+							w.Write([]byte{})
+						}))
+						mockServer.Config.TLSConfig = &tls.Config{InsecureSkipVerify: true}
+						mockServer.Start()
+						defer mockServer.Close()
+
+						Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: operatorUsrSecretObjMeta})).ShouldNot(HaveOccurred())
+
+						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, false, mockServer)
 						Expect(err).ShouldNot(HaveOccurred())
 
 						esAdminUserSecret := &corev1.Secret{
@@ -935,6 +982,15 @@ var _ = Describe("LogStorage controller", func() {
 								components.ComponentESGateway.Version)))
 					})
 					It("should use images from ImageSet", func() {
+						mockServer = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+							w.Write([]byte{})
+						}))
+						mockServer.Config.TLSConfig = &tls.Config{InsecureSkipVerify: true}
+						mockServer.Start()
+						defer mockServer.Close()
+
+						Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: operatorUsrSecretObjMeta})).ShouldNot(HaveOccurred())
+
 						Expect(cli.Create(ctx, &operatorv1.ImageSet{
 							ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
 							Spec: operatorv1.ImageSetSpec{
@@ -949,7 +1005,7 @@ var _ = Describe("LogStorage controller", func() {
 								},
 							},
 						})).ToNot(HaveOccurred())
-						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, false)
+						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, false, mockServer)
 						Expect(err).ShouldNot(HaveOccurred())
 
 						esAdminUserSecret := &corev1.Secret{
@@ -1100,7 +1156,16 @@ var _ = Describe("LogStorage controller", func() {
 				})
 
 				It("deletes Elasticsearch and Kibana then removes the finalizers on the LogStorage CR", func() {
-					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, false)
+					mockServer = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Write([]byte{})
+					}))
+					mockServer.Config.TLSConfig = &tls.Config{InsecureSkipVerify: true}
+					mockServer.Start()
+					defer mockServer.Close()
+
+					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: operatorUsrSecretObjMeta})).ShouldNot(HaveOccurred())
+
+					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, false, mockServer)
 					Expect(err).ShouldNot(HaveOccurred())
 
 					esAdminUserSecret := &corev1.Secret{
@@ -1204,6 +1269,15 @@ var _ = Describe("LogStorage controller", func() {
 					mockStatus.On("ReadyToMonitor")
 				})
 				It("test LogStorage reconciles successfully", func() {
+					mockServer = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.Write([]byte{})
+					}))
+					mockServer.Config.TLSConfig = &tls.Config{InsecureSkipVerify: true}
+					mockServer.Start()
+					defer mockServer.Close()
+
+					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: operatorUsrSecretObjMeta}))
+
 					Expect(cli.Create(ctx, &operatorv1.LogStorage{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: "tigera-secure",
@@ -1216,7 +1290,7 @@ var _ = Describe("LogStorage controller", func() {
 						},
 					})).ShouldNot(HaveOccurred())
 
-					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, true)
+					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, true, mockServer)
 					Expect(err).ShouldNot(HaveOccurred())
 
 					esAdminUserSecret := &corev1.Secret{
@@ -1279,6 +1353,73 @@ var _ = Describe("LogStorage controller", func() {
 					clusterConfig := &corev1.ConfigMap{}
 					Expect(cli.Get(ctx, client.ObjectKey{Name: relasticsearch.ClusterConfigConfigMapName, Namespace: rmeta.OperatorNamespace()}, clusterConfig)).ToNot(HaveOccurred())
 					Expect(clusterConfig.Data["clusterName"]).To(Equal("tenantId.cluster"))
+				})
+				It("test that a failed Elasticsearch health check degrades LogStorage status", func() {
+					mockServer = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						w.WriteHeader(http.StatusInternalServerError)
+					}))
+					mockServer.Config.TLSConfig = &tls.Config{InsecureSkipVerify: true}
+					mockServer.Start()
+					defer mockServer.Close()
+
+					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: operatorUsrSecretObjMeta}))
+
+					Expect(cli.Create(ctx, &operatorv1.LogStorage{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "tigera-secure",
+						},
+						Spec: operatorv1.LogStorageSpec{
+							Nodes: &operatorv1.Nodes{
+								Count: int64(1),
+							},
+							StorageClassName: storageClassName,
+						},
+					})).ShouldNot(HaveOccurred())
+
+					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, true, mockServer)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					esAdminUserSecret := &corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      render.ElasticsearchAdminUserSecret,
+							Namespace: rmeta.OperatorNamespace(),
+						},
+						Data: map[string][]byte{
+							"tigera-mgmt": []byte("password"),
+						},
+					}
+					Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
+
+					esInterncalCertSecret := createPubSecret(relasticsearch.InternalCertSecret, rmeta.OperatorNamespace(), []byte{}, "tls.crt")
+					Expect(cli.Create(ctx, esInterncalCertSecret)).ShouldNot(HaveOccurred())
+
+					kbInterncalCertSecret := createPubSecret(render.KibanaInternalCertSecret, rmeta.OperatorNamespace(), []byte{}, "tls.crt")
+					Expect(cli.Create(ctx, kbInterncalCertSecret)).ShouldNot(HaveOccurred())
+
+					externalCertsSecret := createPubSecret(esgateway.ExternalCertsSecret, rmeta.OperatorNamespace(), []byte{}, "tls.crt")
+					Expect(cli.Create(ctx, externalCertsSecret)).ShouldNot(HaveOccurred())
+
+					kubeControllersElasticUserSecret := &corev1.Secret{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      kubecontrollers.ElasticsearchKubeControllersUserSecret,
+							Namespace: common.CalicoNamespace,
+						},
+						Data: map[string][]byte{
+							"username": []byte("username"),
+							"password": []byte("password"),
+						},
+					}
+					Expect(cli.Create(ctx, kubeControllersElasticUserSecret)).ShouldNot(HaveOccurred())
+
+					cloudConfig := cloudconfig.NewCloudConfig("tenantId", "tenantName", "externalES.com", "externalKb.com", true)
+					Expect(cli.Create(ctx, cloudConfig.ConfigMap())).ShouldNot(HaveOccurred())
+
+					mockStatus.On("ClearDegraded")
+
+					mockStatus.On("SetDegraded", "Elasticsearch health check failed", "").Return()
+					result, err := r.Reconcile(ctx, reconcile.Request{})
+					Expect(err).ShouldNot(HaveOccurred())
+					Expect(result).Should(Equal(reconcile.Result{}))
 				})
 			})
 		})

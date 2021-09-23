@@ -123,7 +123,7 @@ type esClient struct {
 }
 
 func NewElasticClient(client client.Client, ctx context.Context, elasticHTTPSEndpoint string) (ElasticClient, error) {
-	user, password, root, err := getClientCredentials(client, ctx)
+	user, password, root, err := GetClientCredentials(client, ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -303,7 +303,7 @@ func calculateRolloverAge(retention int) string {
 	return age
 }
 
-func getClientCredentials(client client.Client, ctx context.Context) (string, string, *x509.CertPool, error) {
+func GetClientCredentials(client client.Client, ctx context.Context) (string, string, *x509.CertPool, error) {
 	esSecret := &corev1.Secret{}
 	if err := client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchOperatorUserSecret, Namespace: rmeta.OperatorNamespace()}, esSecret); err != nil {
 		return "", "", nil, err

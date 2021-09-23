@@ -17,6 +17,7 @@ package logstorage
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
@@ -63,7 +64,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 
-	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage", opts.KubernetesVersion), opts.DetectedProvider, utils.NewElasticClient, opts.ClusterDomain, opts.ElasticExternal)
+	url := relasticsearch.HTTPSEndpoint(rmeta.OSTypeLinux, opts.ClusterDomain)
+	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage", opts.KubernetesVersion), opts.DetectedProvider, utils.NewElasticClient, opts.ClusterDomain, opts.ElasticExternal, nil, url)
 	if err != nil {
 		return err
 	}
@@ -72,15 +74,17 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, provider operatorv1.Provider, esCliCreator utils.ElasticsearchClientCreator, clusterDomain string, elasticExternal bool) (*ReconcileLogStorage, error) {
+func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, provider operatorv1.Provider, esCliCreator utils.ElasticsearchClientCreator, clusterDomain string, elasticExternal bool, healthCheckClient *http.Client, elasticsearchURL string) (*ReconcileLogStorage, error) {
 	c := &ReconcileLogStorage{
-		client:          cli,
-		scheme:          schema,
-		status:          statusMgr,
-		provider:        provider,
-		esCliCreator:    esCliCreator,
-		clusterDomain:   clusterDomain,
-		elasticExternal: elasticExternal,
+		client:            cli,
+		scheme:            schema,
+		status:            statusMgr,
+		provider:          provider,
+		esCliCreator:      esCliCreator,
+		clusterDomain:     clusterDomain,
+		elasticExternal:   elasticExternal,
+		elasticsearchURL:  elasticsearchURL,
+		healthCheckClient: healthCheckClient,
 	}
 
 	c.status.Run()
@@ -199,13 +203,15 @@ var _ reconcile.Reconciler = &ReconcileLogStorage{}
 type ReconcileLogStorage struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client          client.Client
-	scheme          *runtime.Scheme
-	status          status.StatusManager
-	provider        operatorv1.Provider
-	esCliCreator    utils.ElasticsearchClientCreator
-	clusterDomain   string
-	elasticExternal bool
+	client            client.Client
+	scheme            *runtime.Scheme
+	status            status.StatusManager
+	provider          operatorv1.Provider
+	esCliCreator      utils.ElasticsearchClientCreator
+	clusterDomain     string
+	elasticExternal   bool
+	elasticsearchURL  string
+	healthCheckClient *http.Client
 }
 
 func GetLogStorage(ctx context.Context, cli client.Client) (*operatorv1.LogStorage, error) {
@@ -511,6 +517,11 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			reqLogger,
 			ctx,
 		)
+		if err != nil || !proceed {
+			return result, err
+		}
+
+		result, proceed, err = r.performHealthChecks(reqLogger, ctx)
 		if err != nil || !proceed {
 			return result, err
 		}

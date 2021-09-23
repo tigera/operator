@@ -2,7 +2,9 @@ package logstorage
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
+	"net/http"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -104,6 +106,77 @@ func (r *ReconcileLogStorage) createExternalElasticsearch(
 	}
 
 	return reconcile.Result{}, true, nil
+}
+
+// performHealthChecks hits the /es-health and /kb-health endpoints in es-gateway which in turn perform health checks on the
+// external Elasticsearch and Kibana clusters. A failed health check to either of these clusters will result in the
+// LogStorage Tigerastatus entry being degraded.
+func (r *ReconcileLogStorage) performHealthChecks(reqLogger logr.Logger, ctx context.Context) (reconcile.Result, bool, error) {
+	user, password, root, err := utils.GetClientCredentials(r.client, ctx)
+	if err != nil {
+		reqLogger.Error(err, err.Error())
+		r.status.SetDegraded("Error getting Operator Elasticsearch credentials", err.Error())
+		return reconcile.Result{}, false, err
+	}
+
+	if r.healthCheckClient == nil {
+		r.healthCheckClient = &http.Client{
+			Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: root}},
+		}
+	}
+
+	req, err := r.buildHealthCheckRequest("/es-health", user, password)
+	if err != nil {
+		reqLogger.Error(err, err.Error())
+		r.status.SetDegraded("Error building Elasticsearch health check request", err.Error())
+		return reconcile.Result{}, false, err
+	}
+
+	res, err := r.healthCheckClient.Do(req)
+	if err != nil {
+		reqLogger.Error(err, err.Error())
+		r.status.SetDegraded("Error performing Elasticsearch health check request", err.Error())
+		return reconcile.Result{}, false, err
+	}
+
+	if res.StatusCode != http.StatusOK {
+		reqLogger.Info("Elasticsearch health check returned unexpected status code", "status code:", res.StatusCode)
+		r.status.SetDegraded("Elasticsearch health check failed", "")
+		return reconcile.Result{}, false, nil
+	}
+
+	req, err = r.buildHealthCheckRequest("/kb-health", user, password)
+	if err != nil {
+		reqLogger.Error(err, err.Error())
+		r.status.SetDegraded("Error building Kibana health check request", err.Error())
+		return reconcile.Result{}, false, err
+	}
+
+	res, err = r.healthCheckClient.Do(req)
+	if err != nil {
+		reqLogger.Error(err, err.Error())
+		r.status.SetDegraded("Error performing Kibana health check request", err.Error())
+		return reconcile.Result{}, false, err
+	}
+
+	if res.StatusCode != http.StatusOK {
+		reqLogger.Info("Kibana health check returned unexpected status code", "status code:", res.StatusCode)
+		r.status.SetDegraded("Kibana health check failed", "")
+		return reconcile.Result{}, false, nil
+	}
+
+	return reconcile.Result{}, true, nil
+}
+
+func (r *ReconcileLogStorage) buildHealthCheckRequest(endpoint, user, password string) (*http.Request, error) {
+	url := r.elasticsearchURL + endpoint
+	req, err := http.NewRequest(http.MethodGet, url, http.NoBody)
+	if err != nil {
+		return nil, err
+	}
+
+	req.SetBasicAuth(user, password)
+	return req, nil
 }
 
 func (r *ReconcileLogStorage) getCloudConfig(reqLogger logr.Logger, ctx context.Context) (*cloudconfig.CloudConfig, error) {

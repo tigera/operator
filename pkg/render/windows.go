@@ -29,19 +29,19 @@ import (
 func Windows(
 	installation *operatorv1.Installation,
 	pullSecrets []*corev1.Secret,
-	hasMonitoredNodes bool,
+	hasSupportedNodes bool,
 ) (Component, error) {
 	return &windowsComponent{
 		installation:      installation,
 		pullSecrets:       pullSecrets,
-		hasMonitoredNodes: hasMonitoredNodes,
+		hasSupportedNodes: hasSupportedNodes,
 	}, nil
 }
 
 type windowsComponent struct {
 	installation        *operatorv1.Installation
 	pullSecrets         []*corev1.Secret
-	hasMonitoredNodes   bool
+	hasSupportedNodes   bool
 	windowsUpgradeImage string
 }
 
@@ -69,7 +69,9 @@ func (c *windowsComponent) Objects() ([]client.Object, []client.Object) {
 		c.windowsUpgradeDaemonset(),
 	}
 
-	if !c.hasMonitoredNodes {
+	// When there are no longer supported Windows nodes, remove the upgrade
+	// resources.
+	if !c.hasSupportedNodes {
 		return nil, objs
 	}
 
@@ -134,11 +136,12 @@ func (c *windowsComponent) windowsUpgradeDaemonset() *appsv1.DaemonSet {
 
 	return ds
 }
+
 func (c *windowsComponent) windowsUpgradeContainer() corev1.Container {
 	mounts := []corev1.VolumeMount{
 		{
-			Name:      "calico-windows-upgrade",
-			MountPath: `c:\CalicoUpdateExec`,
+			Name:      common.CalicoWindowsUpgradeResourceName,
+			MountPath: common.CalicoWindowsUpgradeVolumePath,
 		},
 	}
 
@@ -153,10 +156,10 @@ func (c *windowsComponent) calicoWindowsVolume() []corev1.Volume {
 	dirOrCreate := corev1.HostPathDirectoryOrCreate
 	volumes := []corev1.Volume{
 		{
-			Name: "calico-windows-upgrade",
+			Name: common.CalicoWindowsUpgradeResourceName,
 			VolumeSource: corev1.VolumeSource{
 				HostPath: &corev1.HostPathVolumeSource{
-					Path: `c:\CalicoUpdateExec`,
+					Path: common.CalicoWindowsUpgradeVolumePath,
 					Type: &dirOrCreate,
 				},
 			},

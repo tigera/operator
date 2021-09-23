@@ -220,7 +220,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-
+{{ with index .Components "windows" }}
+	ComponentWindows = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 	EnterpriseComponents = []component{
 		ComponentAPIServer,
 		ComponentComplianceBenchmarker,
@@ -256,5 +261,6 @@ var (
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
+		ComponentWindows,
 	}
 )

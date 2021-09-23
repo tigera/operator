@@ -26,31 +26,31 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
-func WindowsUpgrade(
+func Windows(
 	installation *operatorv1.Installation,
 	pullSecrets []*corev1.Secret,
 	hasMonitoredNodes bool,
 ) (Component, error) {
-	return &windowsUpgradeComponent{
+	return &windowsComponent{
 		installation:      installation,
 		pullSecrets:       pullSecrets,
 		hasMonitoredNodes: hasMonitoredNodes,
 	}, nil
 }
 
-type windowsUpgradeComponent struct {
+type windowsComponent struct {
 	installation        *operatorv1.Installation
 	pullSecrets         []*corev1.Secret
 	hasMonitoredNodes   bool
 	windowsUpgradeImage string
 }
 
-func (c *windowsUpgradeComponent) ResolveImages(is *operatorv1.ImageSet) error {
+func (c *windowsComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.installation.Spec.Registry
 	path := c.installation.Spec.ImagePath
 	prefix := c.installation.Spec.ImagePrefix
 
-	image, err := components.GetReference(components.ComponentCalicoWindowsUpgrade, reg, path, prefix, is)
+	image, err := components.GetReference(components.ComponentWindows, reg, path, prefix, is)
 	if err != nil {
 		return err
 	}
@@ -60,11 +60,11 @@ func (c *windowsUpgradeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	return nil
 }
 
-func (c *windowsUpgradeComponent) SupportedOSType() rmeta.OSType {
+func (c *windowsComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeWindows
 }
 
-func (c *windowsUpgradeComponent) Objects() ([]client.Object, []client.Object) {
+func (c *windowsComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
 		c.windowsUpgradeDaemonset(),
 	}
@@ -76,11 +76,11 @@ func (c *windowsUpgradeComponent) Objects() ([]client.Object, []client.Object) {
 	return objs, nil
 }
 
-func (c *windowsUpgradeComponent) Ready() bool {
+func (c *windowsComponent) Ready() bool {
 	return true
 }
 
-func (c *windowsUpgradeComponent) windowsUpgradeDaemonset() *appsv1.DaemonSet {
+func (c *windowsComponent) windowsUpgradeDaemonset() *appsv1.DaemonSet {
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      common.CalicoWindowsUpgradeResourceName,
@@ -134,7 +134,7 @@ func (c *windowsUpgradeComponent) windowsUpgradeDaemonset() *appsv1.DaemonSet {
 
 	return ds
 }
-func (c *windowsUpgradeComponent) windowsUpgradeContainer() corev1.Container {
+func (c *windowsComponent) windowsUpgradeContainer() corev1.Container {
 	mounts := []corev1.VolumeMount{
 		{
 			Name:      "calico-windows-upgrade",
@@ -149,7 +149,7 @@ func (c *windowsUpgradeComponent) windowsUpgradeContainer() corev1.Container {
 	}
 }
 
-func (c *windowsUpgradeComponent) calicoWindowsVolume() []corev1.Volume {
+func (c *windowsComponent) calicoWindowsVolume() []corev1.Volume {
 	dirOrCreate := corev1.HostPathDirectoryOrCreate
 	volumes := []corev1.Volume{
 		{

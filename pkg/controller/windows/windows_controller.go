@@ -239,7 +239,7 @@ func (r *reconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 
 	// Render the desired objects from the CRD and create or update them.
 	hasSupportedNodes := len(nodes) > 0
-	component, err := render.WindowsUpgrade(install, pullSecrets, hasSupportedNodes)
+	component, err := render.Windows(install, pullSecrets, hasSupportedNodes)
 	if err != nil {
 		log.Error(err, "error rendering windows upgrade")
 		r.status.SetDegraded("Error rendering windows upgrade", err.Error())

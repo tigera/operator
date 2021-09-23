@@ -102,10 +102,6 @@ var (
 		Image:   "tigera/fluentd-windows",
 	}
 
-	ComponentCalicoWindowsUpgrade = component{
-		Version: "master",
-		Image:   "tigera/calico-windows-upgrade",
-	}
 	ComponentGuardian = component{
 		Version: "master",
 		Image:   "tigera/guardian",
@@ -191,6 +187,10 @@ var (
 		Image:   "tigera/elasticsearch-metrics",
 	}
 
+	ComponentWindows = component{
+		Version: "master",
+		Image:   "tigera/calico-windows-upgrade",
+	}
 	EnterpriseComponents = []component{
 		ComponentAPIServer,
 		ComponentComplianceBenchmarker,
@@ -226,5 +226,6 @@ var (
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
+		ComponentWindows,
 	}
 )

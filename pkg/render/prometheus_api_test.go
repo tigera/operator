@@ -23,7 +23,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -74,7 +73,7 @@ var _ = Describe("Prometheus Service rendering tests", func() {
 			kind    string
 		}{
 			{tigeraPullSecret, common.TigeraPrometheusNamespace, "", "", ""},
-			{tigeraPrometheusServiceName, rmeta.OperatorNamespace(), "", "v1", "ConfigMap"},
+			{tigeraPrometheusServiceName, common.OperatorNamespace(), "", "v1", "ConfigMap"},
 			{tigeraPrometheusServiceName, "", "policy", "v1beta1", "PodSecurityPolicy"},
 			{tigeraPrometheusServiceName, common.TigeraPrometheusNamespace, "apps", "v1", "Deployment"},
 			{calicoNodePrometheusServiceName, common.TigeraPrometheusNamespace, "", "v1", "Service"},
@@ -284,7 +283,7 @@ func createMonitorDefaultConfigMap() *corev1.ConfigMap {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      tigeraPrometheusServiceName,
-			Namespace: rmeta.OperatorNamespace(),
+			Namespace: common.OperatorNamespace(),
 		},
 		Data: map[string]string{
 			tigeraPrometheusAPIListenPortFieldName: strconv.Itoa(render.PrometheusDefaultPort),

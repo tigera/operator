@@ -373,7 +373,7 @@ func (mc *monitorComponent) roleBinding() *rbacv1.RoleBinding {
 			{
 				Kind:      "ServiceAccount",
 				Name:      "tigera-operator",
-				Namespace: rmeta.OperatorNamespace(),
+				Namespace: common.OperatorNamespace(),
 			},
 		},
 	}

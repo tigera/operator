@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package installation
+package active
 
 import (
 	"testing"
@@ -21,14 +21,10 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/onsi/ginkgo/reporters"
-	uzap "go.uber.org/zap"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 func TestStatus(t *testing.T) {
-	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true), zap.Level(uzap.NewAtomicLevelAt(uzap.DebugLevel))))
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../report/installation_controller_suite.xml")
-	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/installation Suite", []Reporter{junitReporter})
+	junitReporter := reporters.NewJUnitReporter("../../report/active_suite.xml")
+	RunSpecsWithDefaultAndCustomReporters(t, "pkg/active Suite", []Reporter{junitReporter})
 }

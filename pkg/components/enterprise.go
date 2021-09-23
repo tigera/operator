@@ -102,6 +102,10 @@ var (
 		Image:   "tigera/fluentd-windows",
 	}
 
+	ComponentCalicoWindowsUpgrade = component{
+		Version: "master",
+		Image:   "tigera/calico-windows-upgrade",
+	}
 	ComponentGuardian = component{
 		Version: "master",
 		Image:   "tigera/guardian",

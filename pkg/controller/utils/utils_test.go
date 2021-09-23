@@ -20,10 +20,12 @@ import (
 	"github.com/go-logr/logr"
 
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
 	"github.com/stretchr/testify/mock"
 
+	opv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/render"
 
@@ -124,6 +126,59 @@ var _ = Describe("Tigera License polling test", func() {
 		Expect(isLicenseKeyReady(client)).To(BeFalse())
 		discovery.AssertExpectations(GinkgoT())
 	})
+})
+
+var _ = Describe("Utils APIServer type tests", func() {
+	var (
+		c      client.Client
+		ctx    context.Context
+		scheme *runtime.Scheme
+		log    logr.Logger
+	)
+
+	BeforeEach(func() {
+		// Create a Kubernetes client.
+		scheme = runtime.NewScheme()
+		err := apis.AddToScheme(scheme)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(v1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(apps.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(batchv1beta.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+
+		c = fake.NewFakeClientWithScheme(scheme)
+		ctx = context.Background()
+		log = logf.Log.WithName("utils-test-logger")
+	})
+
+	DescribeTable("GetAPIServer variant", func(resourceName string) {
+		inst := &opv1.APIServer{
+			ObjectMeta: metav1.ObjectMeta{Name: resourceName},
+		}
+		Expect(c.Create(ctx, inst)).ShouldNot(HaveOccurred())
+
+		get, msg, err := GetAPIServer(ctx, c)
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(msg).Should(BeEmpty())
+		Expect(get).ShouldNot(BeNil())
+	},
+		Entry("with tigera-secure name", "tigera-secure"),
+		Entry("wth default name", "default"),
+	)
+
+	DescribeTable("IsAPIServerReady variant", func(resourceName string) {
+		inst := &opv1.APIServer{
+			ObjectMeta: metav1.ObjectMeta{Name: resourceName},
+			Status:     opv1.APIServerStatus{State: "Ready"},
+		}
+		Expect(c.Create(ctx, inst)).ShouldNot(HaveOccurred())
+
+		Expect(IsAPIServerReady(c, log)).Should(BeTrue())
+	},
+		Entry("with tigera-secure name", "tigera-secure"),
+		Entry("wth default name", "default"),
+	)
 })
 
 type fakeClient struct {

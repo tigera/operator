@@ -566,6 +566,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	}
 
 	initContainers := []corev1.Container{initOSSettingsContainer}
+
 	annotations := map[string]string{
 		ElasticsearchTLSHashAnnotation: rmeta.SecretsAnnotationHash(es.elasticsearchSecrets...),
 	}
@@ -708,6 +709,33 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			corev1.VolumeMount{MountPath: "/usr/share/elasticsearch/config/node-transport-cert", Name: csrVolumeNameTransport, ReadOnly: false},
 		)
 	}
+
+	// Init container that logs the SELinux context of the `/usr/share/elasticsearch` folder.
+	// This init container is added as a workround for a bug in Kubernetes where in some scenarios
+	// the main container is started before all the init containers have completed running.
+	// When this happens on a SELinux enabled node, the main Elasticsearch container fails to start
+	// successfully as the volume mounts lack the right SELinux label. This is because when containers
+	// are managed by the docker runtime, the privileged init container (and associated volume mounts)
+	// get a different set of SELinux labels. When the main container is not started before the init
+	// containers complete, it gets blocked from accessing the shared volume mounts as the labels on
+	// the volume are different. Adding this additional init container ensures that the volume mounts
+	// get the correct SELinux labels. Because of this, this additional init container should always
+	// be added after the privileged "elastic-internal-init-os-settings" init container.
+	initLogContextContainer := corev1.Container{
+		Name: "elastic-internal-init-log-selinux-context",
+		SecurityContext: &corev1.SecurityContext{
+			Privileged: ptr.BoolToPtr(false),
+		},
+		Image: es.esImage,
+		Command: []string{
+			"/bin/sh",
+		},
+		Args: []string{
+			"-c",
+			"ls -ldZ /usr/share/elasticsearch",
+		},
+	}
+	initContainers = append(initContainers, initLogContextContainer)
 
 	// default to controlPlaneNodeSelector unless DataNodeSelector is set
 	nodeSels := es.installation.ControlPlaneNodeSelector

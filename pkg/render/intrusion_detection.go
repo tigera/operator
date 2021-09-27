@@ -309,6 +309,23 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 				"get", "watch",
 			},
 		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"podtemplates"},
+			Verbs:     []string{"get"},
+		},
+		{
+			APIGroups: []string{
+				"batch",
+			},
+			Resources: []string{
+				"cronjobs",
+				"jobs",
+			},
+			Verbs: []string{
+				"get", "list", "watch", "create", "update", "patch", "delete",
+			},
+		},
 	}
 	if !c.managedCluster {
 		managementRule := []rbacv1.PolicyRule{

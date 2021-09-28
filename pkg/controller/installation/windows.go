@@ -38,17 +38,19 @@ var (
 // calicoWindowsUpgrader helps manage the upgrade of Calico Windows nodes.
 // It works in conjunction with the CalicoUpdate service running on each node.
 type calicoWindowsUpgrader struct {
-	clientset       kubernetes.Interface
-	client          client.Client
-	statusManager   status.StatusManager
-	version         string
-	nodeInformer    cache.Controller
-	nodeIndexer     cache.Indexer
-	pendingUpgrades bool
+	clientset            kubernetes.Interface
+	client               client.Client
+	statusManager        status.StatusManager
+	version              string
+	nodeInformer         cache.Controller
+	nodeIndexer          cache.Indexer
+	nodesToUpgrade       []*corev1.Node
+	nodesUpgrading       []*corev1.Node
+	nodesFinishedUpgrade []*corev1.Node
 }
 
 func (w *calicoWindowsUpgrader) hasPendingUpgrades() bool {
-	return w.pendingUpgrades
+	return len(w.nodesToUpgrade)+len(w.nodesUpgrading) > 0
 }
 
 // newCalicoWindowsUpgrader creates a Calico Windows upgrader.
@@ -75,14 +77,14 @@ func newCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, statusMa
 func (w *calicoWindowsUpgrader) upgradeWindowsNodes(expectedProduct operatorv1.ProductVariant) error {
 	expectedVersion := common.WindowsLatestVersionString(expectedProduct)
 	windowsLog.V(1).Info(fmt.Sprintf("Expected version: %v", expectedVersion))
-	nodesToUpgrade, nodesUpgrading, nodesUpgraded, err := w.getNodesToUpgrade(expectedVersion)
+	err := w.getNodesToUpgrade(expectedVersion)
 	if err != nil {
-		return fmt.Errorf("Could not get windows nodes: %w", err)
+		return fmt.Errorf("Error getting windows nodes: %w", err)
 	}
 
-	err = w.processUpgrades(context.Background(), expectedVersion, nodesToUpgrade, nodesUpgrading, nodesUpgraded)
+	err = w.processUpgrades(context.Background(), expectedVersion)
 	if err != nil {
-		return fmt.Errorf("Could not process windows nodes: %w", err)
+		return fmt.Errorf("Error processing windows nodes: %w", err)
 	}
 
 	return nil
@@ -91,15 +93,15 @@ func (w *calicoWindowsUpgrader) upgradeWindowsNodes(expectedProduct operatorv1.P
 // getNodesToUpgrade checks the given nodes one by one and determines whether
 // it an upgrade should be triggered or whether an upgrade has been detected as
 // completed.
-func (w *calicoWindowsUpgrader) getNodesToUpgrade(expectedVersion string) ([]*corev1.Node, []*corev1.Node, []*corev1.Node, error) {
+func (w *calicoWindowsUpgrader) getNodesToUpgrade(expectedVersion string) error {
 	nodesToUpgrade := []*corev1.Node{}
-	nodesUpgraded := []*corev1.Node{}
+	nodesFinishedUpgraded := []*corev1.Node{}
 	nodesUpgrading := []*corev1.Node{}
 
 	for _, obj := range w.nodeIndexer.List() {
 		node, ok := obj.(*corev1.Node)
 		if !ok {
-			return nil, nil, nil, fmt.Errorf("Never expected index to have anything other than a Node object: %v", obj)
+			return fmt.Errorf("Never expected index to have anything other than a Node object: %v", obj)
 		}
 
 		windowsLog.V(1).Info(fmt.Sprintf("Processing node %v", node.Name))
@@ -132,21 +134,23 @@ func (w *calicoWindowsUpgrader) getNodesToUpgrade(expectedVersion string) ([]*co
 			// nothing needs to be done.
 			if _, exists := node.Labels[common.CalicoWindowsUpgradeScriptLabel]; exists {
 				windowsLog.V(1).Info(fmt.Sprintf("Node %v still has the upgrade label, removing it", node.Name))
-				nodesUpgraded = append(nodesUpgraded, node)
+				nodesFinishedUpgraded = append(nodesFinishedUpgraded, node)
 			}
 		}
 	}
 
-	windowsLog.V(1).Info(fmt.Sprintf("nodesUpgraded=%v, nodesUpgrading=%v, nodesToUpgrade=%v", len(nodesUpgraded), len(nodesUpgrading), len(nodesToUpgrade)))
-	w.pendingUpgrades = len(nodesToUpgrade)+len(nodesUpgrading) > 0
+	w.nodesToUpgrade = nodesToUpgrade
+	w.nodesUpgrading = nodesUpgrading
+	w.nodesFinishedUpgrade = nodesFinishedUpgraded
 
-	return nodesToUpgrade, nodesUpgrading, nodesUpgraded, nil
+	windowsLog.V(1).Info(fmt.Sprintf("nodesToUpgrade=%v, nodesUpgrading=%v, nodesFinishedUpgrade=%v", len(w.nodesToUpgrade), len(w.nodesUpgrading), len(w.nodesFinishedUpgrade)))
+	return nil
 }
 
-func (w *calicoWindowsUpgrader) processUpgrades(ctx context.Context, expectedVersion string, nodesToUpgrade []*corev1.Node, nodesUpgrading []*corev1.Node, nodesUpgraded []*corev1.Node) error {
+func (w *calicoWindowsUpgrader) processUpgrades(ctx context.Context, expectedVersion string) error {
 	// Add upgrade label to nodes that need to be upgraded.
-	for _, n := range nodesToUpgrade {
-		log.Info(fmt.Sprintf("Triggering upgrade on node %v", n.Name))
+	for _, n := range w.nodesToUpgrade {
+		windowsLog.V(1).Info(fmt.Sprintf("Triggering upgrade on node %v", n.Name))
 
 		if err := common.AddNodeLabel(ctx, w.clientset, n.Name, common.CalicoWindowsUpgradeScriptLabel, common.CalicoWindowsUpgradeScript); err != nil {
 			return fmt.Errorf("Unable to patch node: %w", err)
@@ -156,15 +160,15 @@ func (w *calicoWindowsUpgrader) processUpgrades(ctx context.Context, expectedVer
 	}
 
 	// For nodes already upgrading, ensure the status is correct
-	for _, n := range nodesUpgrading {
-		log.Info(fmt.Sprintf("Reconciling node upgrades in progress %v", n.Name))
+	for _, n := range w.nodesUpgrading {
+		windowsLog.V(1).Info(fmt.Sprintf("Reconciling node upgrades in progress %v", n.Name))
 
 		w.statusManager.AddWindowsNodeUpgrade(n.Name, expectedVersion)
 	}
 
 	// Remove upgrade label from nodes that are already upgraded.
-	for _, n := range nodesUpgraded {
-		log.Info(fmt.Sprintf("Removing upgrade label from upgraded node %v", n.Name))
+	for _, n := range w.nodesFinishedUpgrade {
+		windowsLog.V(1).Info(fmt.Sprintf("Removing upgrade label from upgraded node %v", n.Name))
 
 		if err := common.RemoveNodeLabel(ctx, w.clientset, n.Name, common.CalicoWindowsUpgradeScriptLabel); err != nil {
 			return fmt.Errorf("Unable to patch node: %w", err)

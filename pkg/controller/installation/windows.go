@@ -22,10 +22,8 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/controller/utils"
 
 	corev1 "k8s.io/api/core/v1"
-	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
@@ -64,25 +62,12 @@ func newCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, statusMa
 	windowsNodeListWatch := cache.NewFilteredListWatchFromClient(cs.CoreV1().RESTClient(), "nodes", "", func(options *metav1.ListOptions) {
 		options.LabelSelector = fmt.Sprintf("%s=%s", corev1.LabelOSStable, "windows")
 	})
-	nodeHandlers := cache.ResourceEventHandlerFuncs{
-		UpdateFunc: func(oldObj, newObj interface{}) {
-			variant, _, err := utils.GetInstallation(context.TODO(), w.client)
-			if err != nil {
-				if apierrs.IsNotFound(err) {
-					w.statusManager.SetDegraded("Installation not found", err.Error())
-					return
-				}
-				w.statusManager.SetDegraded("Error querying installation", err.Error())
-				return
-			}
-
-			err = w.upgradeWindowsNodes(variant)
-			if err != nil {
-				w.statusManager.SetDegraded("Error processing windows upgrade", err.Error())
-			}
-		},
+	handlers := cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) {},
+		UpdateFunc: func(oldObj, newObj interface{}) {},
+		DeleteFunc: func(obj interface{}) {},
 	}
-	w.nodeIndexer, w.nodeInformer = cache.NewIndexerInformer(windowsNodeListWatch, &corev1.Node{}, 0, nodeHandlers, cache.Indexers{})
+	w.nodeIndexer, w.nodeInformer = cache.NewIndexerInformer(windowsNodeListWatch, &corev1.Node{}, 0, handlers, cache.Indexers{})
 
 	return w
 }
@@ -90,12 +75,12 @@ func newCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, statusMa
 func (w *calicoWindowsUpgrader) upgradeWindowsNodes(expectedProduct operatorv1.ProductVariant) error {
 	expectedVersion := common.WindowsLatestVersionString(expectedProduct)
 	windowsLog.V(1).Info(fmt.Sprintf("Expected version: %v", expectedVersion))
-	nodesToUpgrade, nodesUpgraded, err := w.getNodesToUpgrade(expectedVersion)
+	nodesToUpgrade, nodesUpgrading, nodesUpgraded, err := w.getNodesToUpgrade(expectedVersion)
 	if err != nil {
 		return fmt.Errorf("Could not get windows nodes: %w", err)
 	}
 
-	err = w.processUpgrades(context.Background(), expectedVersion, nodesToUpgrade, nodesUpgraded)
+	err = w.processUpgrades(context.Background(), expectedVersion, nodesToUpgrade, nodesUpgrading, nodesUpgraded)
 	if err != nil {
 		return fmt.Errorf("Could not process windows nodes: %w", err)
 	}
@@ -106,15 +91,15 @@ func (w *calicoWindowsUpgrader) upgradeWindowsNodes(expectedProduct operatorv1.P
 // getNodesToUpgrade checks the given nodes one by one and determines whether
 // it an upgrade should be triggered or whether an upgrade has been detected as
 // completed.
-func (w *calicoWindowsUpgrader) getNodesToUpgrade(expectedVersion string) ([]*corev1.Node, []*corev1.Node, error) {
+func (w *calicoWindowsUpgrader) getNodesToUpgrade(expectedVersion string) ([]*corev1.Node, []*corev1.Node, []*corev1.Node, error) {
 	nodesToUpgrade := []*corev1.Node{}
 	nodesUpgraded := []*corev1.Node{}
-	nodesUpgrading := 0
+	nodesUpgrading := []*corev1.Node{}
 
 	for _, obj := range w.nodeIndexer.List() {
 		node, ok := obj.(*corev1.Node)
 		if !ok {
-			return nil, nil, fmt.Errorf("Never expected index to have anything other than a Node object: %v", obj)
+			return nil, nil, nil, fmt.Errorf("Never expected index to have anything other than a Node object: %v", obj)
 		}
 
 		windowsLog.V(1).Info(fmt.Sprintf("Processing node %v", node.Name))
@@ -137,7 +122,7 @@ func (w *calicoWindowsUpgrader) getNodesToUpgrade(expectedVersion string) ([]*co
 				// If the version is outdated but it already has the upgrade label
 				// we do nothing since we're waiting for the node service to finish
 				// working.
-				nodesUpgrading++
+				nodesUpgrading = append(nodesUpgrading, node)
 			}
 		} else {
 			windowsLog.V(1).Info(fmt.Sprintf("Node %v has the latest version", node.Name))
@@ -152,13 +137,13 @@ func (w *calicoWindowsUpgrader) getNodesToUpgrade(expectedVersion string) ([]*co
 		}
 	}
 
-	windowsLog.V(1).Info(fmt.Sprintf("nodesUpgraded=%v, nodesUpgrading=%v, nodesToUpgrade=%v", len(nodesUpgraded), nodesUpgrading, len(nodesToUpgrade)))
-	w.pendingUpgrades = len(nodesToUpgrade)+nodesUpgrading > 0
+	windowsLog.V(1).Info(fmt.Sprintf("nodesUpgraded=%v, nodesUpgrading=%v, nodesToUpgrade=%v", len(nodesUpgraded), len(nodesUpgrading), len(nodesToUpgrade)))
+	w.pendingUpgrades = len(nodesToUpgrade)+len(nodesUpgrading) > 0
 
-	return nodesToUpgrade, nodesUpgraded, nil
+	return nodesToUpgrade, nodesUpgrading, nodesUpgraded, nil
 }
 
-func (w *calicoWindowsUpgrader) processUpgrades(ctx context.Context, expectedVersion string, nodesToUpgrade []*corev1.Node, nodesUpgraded []*corev1.Node) error {
+func (w *calicoWindowsUpgrader) processUpgrades(ctx context.Context, expectedVersion string, nodesToUpgrade []*corev1.Node, nodesUpgrading []*corev1.Node, nodesUpgraded []*corev1.Node) error {
 	// Add upgrade label to nodes that need to be upgraded.
 	for _, n := range nodesToUpgrade {
 		log.Info(fmt.Sprintf("Triggering upgrade on node %v", n.Name))
@@ -166,6 +151,13 @@ func (w *calicoWindowsUpgrader) processUpgrades(ctx context.Context, expectedVer
 		if err := common.AddNodeLabel(ctx, w.clientset, n.Name, common.CalicoWindowsUpgradeScriptLabel, common.CalicoWindowsUpgradeScript); err != nil {
 			return fmt.Errorf("Unable to patch node: %w", err)
 		}
+
+		w.statusManager.AddWindowsNodeUpgrade(n.Name, expectedVersion)
+	}
+
+	// For nodes already upgrading, ensure the status is correct
+	for _, n := range nodesUpgrading {
+		log.Info(fmt.Sprintf("Reconciling node upgrades in progress %v", n.Name))
 
 		w.statusManager.AddWindowsNodeUpgrade(n.Name, expectedVersion)
 	}

@@ -187,8 +187,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 				// Verify that an initContainer is added
 				initContainers := resultES.Spec.NodeSets[0].PodTemplate.Spec.InitContainers
-				Expect(len(initContainers)).To(Equal(1))
+				Expect(len(initContainers)).To(Equal(2))
 				Expect(initContainers[0].Name).To(Equal("elastic-internal-init-os-settings"))
+				Expect(initContainers[1].Name).To(Equal("elastic-internal-init-log-selinux-context"))
 
 				// Verify that the default container limits/requests are set.
 				esContainer := resultES.Spec.NodeSets[0].PodTemplate.Spec.Containers[0]
@@ -354,7 +355,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					"elasticsearch.k8s.elastic.co", "v1", "Elasticsearch").(*esv1.Elasticsearch)
 
 				initContainers := resultES.Spec.NodeSets[0].PodTemplate.Spec.InitContainers
-				Expect(initContainers).To(HaveLen(4))
+				Expect(initContainers).To(HaveLen(5))
 				compareInitContainer := func(ic corev1.Container, expectedName string, expectedVolumes []corev1.VolumeMount) {
 					Expect(ic.Name).To(Equal(expectedName))
 					Expect(ic.VolumeMounts).To(HaveLen(len(expectedVolumes)))
@@ -376,6 +377,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				compareInitContainer(initContainers[3], "key-cert-elastic-transport", []corev1.VolumeMount{
 					{Name: "elastic-internal-transport-certificates", MountPath: render.CSRCMountPath},
 				})
+				compareInitContainer(initContainers[4], "elastic-internal-init-log-selinux-context", []corev1.VolumeMount{})
 			})
 
 		})
@@ -634,9 +636,10 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 			// Verify that there are 2 init containers for OIDC
 			initContainers := elasticsearch.Spec.NodeSets[0].PodTemplate.Spec.InitContainers
-			Expect(len(initContainers)).To(Equal(2))
+			Expect(len(initContainers)).To(Equal(3))
 			Expect(initContainers[0].Name).To(Equal("elastic-internal-init-os-settings"))
 			Expect(initContainers[1].Name).To(Equal("elastic-internal-init-keystore"))
+			Expect(initContainers[2].Name).To(Equal("elastic-internal-init-log-selinux-context"))
 		})
 
 		It("should not configures OIDC for Kibana when elasticsearch basic license is used", func() {
@@ -681,8 +684,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			}))
 
 			initContainers := elasticsearch.Spec.NodeSets[0].PodTemplate.Spec.InitContainers
-			Expect(len(initContainers)).To(Equal(1))
+			Expect(len(initContainers)).To(Equal(2))
 			Expect(initContainers[0].Name).To(Equal("elastic-internal-init-os-settings"))
+			Expect(initContainers[1].Name).To(Equal("elastic-internal-init-log-selinux-context"))
 		})
 
 		Context("ECKOperator memory requests/limits", func() {

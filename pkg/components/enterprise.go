@@ -187,7 +187,7 @@ var (
 		Image:   "tigera/elasticsearch-metrics",
 	}
 
-	ComponentWindows = component{
+	ComponentTigeraWindows = component{
 		Version: "master",
 		Image:   "tigera/calico-windows-upgrade",
 	}

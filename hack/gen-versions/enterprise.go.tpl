@@ -221,7 +221,7 @@ var (
 	}
 {{- end }}
 {{ with index .Components "windows" }}
-	ComponentWindows = component{
+	ComponentTigeraWindows = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}

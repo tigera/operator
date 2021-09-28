@@ -17,10 +17,11 @@
 package common
 
 import (
-	"context"
+	"fmt"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
 	corev1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -31,37 +32,20 @@ const (
 	CalicoWindowsVersionAnnotation   = "projectcalico.org/CalicoWindowsVersion"
 )
 
-func GetWindowsNodes(ctx context.Context, cli client.Client, filters ...func(node *corev1.Node) bool) ([]corev1.Node, error) {
-	nodes := corev1.NodeList{}
-	err := cli.List(context.Background(), &nodes, client.MatchingLabels{"kubernetes.io/os": "windows"})
-	if err != nil {
-		return nil, err
+func WindowsLatestVersionString(product operatorv1.ProductVariant) string {
+	if product == operatorv1.Calico {
+		return fmt.Sprintf("Calico-%v", components.CalicoRelease)
+	} else {
+		return fmt.Sprintf("Enterprise-%v", components.EnterpriseRelease)
 	}
-
-	filteredNodes := []corev1.Node{}
-
-	// Apply node filters, if any, and return only the nodes that match all
-	// filters.
-	// TODO: once we've upgraded to sigs.k8s.io/controller-runtime v0.9.0 we can
-	// do this filtering server-side. See: https://github.com/kubernetes-sigs/controller-runtime/pull/1435
-	for _, n := range nodes.Items {
-		matchesAll := true
-
-		for _, filter := range filters {
-			if !filter(&n) {
-				matchesAll = false
-			}
-		}
-
-		if matchesAll {
-			filteredNodes = append(filteredNodes, n)
-		}
-	}
-
-	return filteredNodes, nil
 }
 
-// GetWindowsNodeVersion returns the node's Calico Windows version
-func GetWindowsNodeVersion(n *corev1.Node) string {
-	return n.Annotations[CalicoWindowsVersionAnnotation]
+// GetWindowsNodeVersion gets the Windows node's version annotation and returns
+// whether the annotation exists and its value.
+func GetWindowsNodeVersion(n *corev1.Node) (bool, string) {
+	ann, ok := n.Annotations[CalicoWindowsVersionAnnotation]
+	if !ok {
+		return false, ""
+	}
+	return true, ann
 }

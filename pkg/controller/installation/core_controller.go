@@ -231,6 +231,12 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		return fmt.Errorf("tigera-installation-controller failed to watch FelixConfiguration resource: %w", err)
 	}
 
+	// Watch for changes to Windows nodes.
+	err = utils.AddWindowsNodeWatch(c)
+	if err != nil {
+		return fmt.Errorf("tigera-installation-controller failed to watch windows nodes: %w", err)
+	}
+
 	if r.enterpriseCRDsExist {
 		// Watch for changes to primary resource ManagementCluster
 		err = c.Watch(&source.Kind{Type: &operator.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
@@ -1019,6 +1025,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	objs := []client.Object{
 		typhaNodeTLS.CAConfigMap,
 	}
+
 	if typhaNodeTLS.NodeSecret != nil {
 		objs = append(objs, typhaNodeTLS.NodeSecret)
 	}
@@ -1099,7 +1106,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 
-	// TODO: we don't need to do this, the informer can call this for us
 	if err = r.calicoWindowsUpgrader.upgradeWindowsNodes(instance.Spec.Variant); err != nil {
 		r.SetDegraded("Failed to process Windows node upgrades", err, reqLogger)
 	}

@@ -16,6 +16,7 @@ package render
 
 import (
 	appsv1 "k8s.io/api/apps/v1"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -27,28 +28,25 @@ import (
 )
 
 func Windows(
-	installation *operatorv1.Installation,
-	pullSecrets []*corev1.Secret,
+	cr *operatorv1.InstallationSpec,
 	hasSupportedNodes bool,
-) (Component, error) {
+) Component {
 	return &windowsComponent{
-		installation:      installation,
-		pullSecrets:       pullSecrets,
+		cr:                cr,
 		hasSupportedNodes: hasSupportedNodes,
-	}, nil
+	}
 }
 
 type windowsComponent struct {
-	installation        *operatorv1.Installation
-	pullSecrets         []*corev1.Secret
+	cr                  *operatorv1.InstallationSpec
 	hasSupportedNodes   bool
 	windowsUpgradeImage string
 }
 
 func (c *windowsComponent) ResolveImages(is *operatorv1.ImageSet) error {
-	reg := c.installation.Spec.Registry
-	path := c.installation.Spec.ImagePath
-	prefix := c.installation.Spec.ImagePrefix
+	reg := c.cr.Registry
+	path := c.cr.ImagePath
+	prefix := c.cr.ImagePrefix
 
 	image, err := components.GetReference(components.ComponentWindows, reg, path, prefix, is)
 	if err != nil {
@@ -116,7 +114,7 @@ func (c *windowsComponent) windowsUpgradeDaemonset() *appsv1.DaemonSet {
 				},
 			},
 			Tolerations:      rmeta.TolerateAll,
-			ImagePullSecrets: c.installation.Spec.ImagePullSecrets,
+			ImagePullSecrets: c.cr.ImagePullSecrets,
 			Containers:       []corev1.Container{c.windowsUpgradeContainer()},
 			Volumes:          c.calicoWindowsVolume(),
 		},

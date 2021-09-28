@@ -64,7 +64,7 @@ type StatusManager interface {
 	AddStatefulSets(sss []types.NamespacedName)
 	AddCronJobs(cjs []types.NamespacedName)
 	AddCertificateSigningRequests(name string, labels map[string]string)
-	AddWindowsNodeUpgrade(nodeName, expectedVersion string)
+	AddWindowsNodeUpgrade(nodeName string, expectedVersion string)
 	RemoveDaemonsets(dss ...types.NamespacedName)
 	RemoveDeployments(dps ...types.NamespacedName)
 	RemoveStatefulSets(sss ...types.NamespacedName)
@@ -281,9 +281,24 @@ type windowsNodeUpgrade struct {
 	expectedVersion string
 }
 
+func (w *windowsNodeUpgrade) isPending(ctx context.Context, c client.Client) (bool, error) {
+	node := &corev1.Node{}
+	err := c.Get(ctx, client.ObjectKey{Name: w.nodeName}, node)
+	if err != nil {
+		return false, err
+	}
+
+	ok, version := common.GetWindowsNodeVersion(node)
+	if !ok {
+		// TODO: something is wrong. The upgrade was pending but now there is no
+		// version annotation. We must handle this.
+	}
+	return version != w.expectedVersion, nil
+}
+
 // AddWindowsNodeUpgrade tells the status manager to monitor the health of the given
 // Windows node upgrade.
-func (m *statusManager) AddWindowsNodeUpgrade(nodeName, expectedVersion string) {
+func (m *statusManager) AddWindowsNodeUpgrade(nodeName string, expectedVersion string) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.windowsnodeupgrades[nodeName] = windowsNodeUpgrade{
@@ -522,7 +537,7 @@ func (m *statusManager) syncState() {
 	}
 
 	for _, w := range m.windowsnodeupgrades {
-		pending, err := hasPendingWindowsNodeUpgrade(context.TODO(), m.client, w.nodeName, w.expectedVersion)
+		pending, err := w.isPending(context.TODO(), m.client)
 		if err != nil {
 			log.WithValues("error", err).Error(err, fmt.Sprintf("Unable to check node %v upgrade status", w.nodeName))
 		} else if pending {
@@ -813,17 +828,4 @@ func hasPendingCSRUsingCertV1beta1(ctx context.Context, cli client.Client, label
 		}
 	}
 	return false, nil
-}
-
-func hasPendingWindowsNodeUpgrade(ctx context.Context, cli client.Client, nodename, expectedVersion string) (bool, error) {
-	node := &corev1.Node{}
-	err := cli.Get(ctx, client.ObjectKey{Name: nodename}, node)
-	if err != nil {
-		return false, err
-	}
-	if common.GetWindowsNodeVersion(node) == expectedVersion {
-		return false, nil
-	}
-
-	return true, nil
 }

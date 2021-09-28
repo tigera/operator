@@ -48,7 +48,12 @@ func (c *windowsComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cr.ImagePath
 	prefix := c.cr.ImagePrefix
 
-	image, err := components.GetReference(components.ComponentWindows, reg, path, prefix, is)
+	component := components.ComponentWindows
+	if c.cr.Variant == operatorv1.TigeraSecureEnterprise {
+		component = components.ComponentTigeraWindows
+	}
+
+	image, err := components.GetReference(component, reg, path, prefix, is)
 	if err != nil {
 		return err
 	}

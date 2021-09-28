@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 
@@ -781,7 +782,6 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 		name = "calico-apiserver"
 	}
 
-	var replicas int32 = 1
 	hostNetwork := c.hostNetwork()
 	dnsPolicy := corev1.DNSClusterFirst
 	if hostNetwork {
@@ -812,7 +812,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: c.installation.ControlPlaneReplicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
@@ -842,6 +842,10 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 				},
 			},
 		},
+	}
+
+	if *c.installation.ControlPlaneReplicas > 1 {
+		d.Spec.Template.Spec.Affinity = podaffinity.NewPodAntiAffinity(name, rmeta.APIServerNamespace(c.installation.Variant))
 	}
 
 	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {

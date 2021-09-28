@@ -72,6 +72,7 @@ var _ = Describe("apiserver controller tests", func() {
 		mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 		mockStatus.On("ReadyToMonitor")
 
+		var replicas int32 = 2
 		Expect(cli.Create(ctx, &operatorv1.Installation{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "default",
@@ -81,6 +82,7 @@ var _ = Describe("apiserver controller tests", func() {
 				Computed: &operatorv1.InstallationSpec{},
 			},
 			Spec: operatorv1.InstallationSpec{
+				ControlPlaneReplicas:  &replicas,
 				Variant:               operatorv1.TigeraSecureEnterprise,
 				Registry:              "some.registry.org/",
 				CertificateManagement: &operatorv1.CertificateManagement{},

@@ -20,18 +20,6 @@ import (
 
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
-	operatorv1 "github.com/tigera/operator/api/v1"
-	logstoragecommon "github.com/tigera/operator/pkg/controller/logstorage/common"
-	"github.com/tigera/operator/pkg/controller/options"
-	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/controller/utils/imageset"
-	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	rsecret "github.com/tigera/operator/pkg/render/common/secret"
-	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -46,6 +34,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
+	logstoragecommon "github.com/tigera/operator/pkg/controller/logstorage/common"
+	"github.com/tigera/operator/pkg/controller/options"
+	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/render"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	rsecret "github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 )
 
 var log = logf.Log.WithName("controller_logstorage")
@@ -210,6 +211,7 @@ func GetLogStorage(ctx context.Context, cli client.Client) (*operatorv1.LogStora
 	return instance, nil
 }
 
+// fillDefaults populates the default values onto an LogStorage object.
 func fillDefaults(opr *operatorv1.LogStorage) {
 	if opr.Spec.Retention == nil {
 		opr.Spec.Retention = &operatorv1.Retention{}

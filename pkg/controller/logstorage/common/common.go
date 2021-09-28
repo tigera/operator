@@ -13,6 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/crypto"
 	"github.com/tigera/operator/pkg/dns"
@@ -38,7 +39,7 @@ const (
 // the gateway credentials, and a secret containing real admin level credentials is created and stored in the tigera-elasticsearch namespace to be swapped in once
 // ES Gateway has confirmed that the gateway credentials match.
 func CreateKubeControllersSecrets(ctx context.Context, esAdminUserSecret *corev1.Secret, esAdminUserName string, cli client.Client) (*corev1.Secret, *corev1.Secret, *corev1.Secret, error) {
-	kubeControllersGatewaySecret, err := utils.GetSecret(ctx, cli, kubecontrollers.ElasticsearchKubeControllersUserSecret, rmeta.OperatorNamespace())
+	kubeControllersGatewaySecret, err := utils.GetSecret(ctx, cli, kubecontrollers.ElasticsearchKubeControllersUserSecret, common.OperatorNamespace())
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -47,7 +48,7 @@ func CreateKubeControllersSecrets(ctx context.Context, esAdminUserSecret *corev1
 		kubeControllersGatewaySecret = &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      kubecontrollers.ElasticsearchKubeControllersUserSecret,
-				Namespace: rmeta.OperatorNamespace(),
+				Namespace: common.OperatorNamespace(),
 			},
 			Data: map[string][]byte{
 				"username": []byte(kubecontrollers.ElasticsearchKubeControllersUserName),
@@ -117,7 +118,7 @@ func GetESGatewayCertificateSecrets(ctx context.Context, instl *operatorv1.Insta
 	svcDNSNames = append(svcDNSNames, dns.GetServiceDNSNames(esgateway.ServiceName, render.ElasticsearchNamespace, clusterDomain)...)
 
 	// Get the secret - might be nil
-	oprKeyCert, err := utils.GetSecret(ctx, cli, render.TigeraElasticsearchCertSecret, rmeta.OperatorNamespace())
+	oprKeyCert, err := utils.GetSecret(ctx, cli, render.TigeraElasticsearchCertSecret, common.OperatorNamespace())
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -154,9 +155,9 @@ func GetESGatewayCertificateSecrets(ctx context.Context, instl *operatorv1.Insta
 		}
 
 		oprKeyCert.Data[corev1.TLSCertKey] = instl.CertificateManagement.CACert
-		publicCertSecret = render.CreateCertificateSecret(instl.CertificateManagement.CACert, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
+		publicCertSecret = render.CreateCertificateSecret(instl.CertificateManagement.CACert, relasticsearch.PublicCertSecret, common.OperatorNamespace())
 	} else {
-		publicCertSecret = render.CreateCertificateSecret(oprKeyCert.Data[corev1.TLSCertKey], relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
+		publicCertSecret = render.CreateCertificateSecret(oprKeyCert.Data[corev1.TLSCertKey], relasticsearch.PublicCertSecret, common.OperatorNamespace())
 	}
 
 	return oprKeyCert, publicCertSecret, customerProvidedCert, nil

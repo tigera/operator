@@ -541,7 +541,7 @@ func (m *statusManager) syncState() {
 		if err != nil {
 			log.WithValues("error", err).Error(err, fmt.Sprintf("Unable to check node %v upgrade status", w.nodeName))
 		} else if pending {
-			progressing = append(progressing, fmt.Sprintf("Waiting for node %v to finish upgrade to %v", w.nodeName, w.expectedVersion))
+			progressing = append(progressing, fmt.Sprintf("Node %q is upgrading Calico for Windows to %q", w.nodeName, w.expectedVersion))
 		}
 	}
 	m.progressing = progressing

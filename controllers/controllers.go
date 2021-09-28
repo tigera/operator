@@ -101,13 +101,6 @@ func AddToManager(mgr ctrl.Manager, options options.AddOptions) error {
 	}).SetupWithManager(mgr, options); err != nil {
 		return fmt.Errorf("failed to create controller %s: %v", "Authentication", err)
 	}
-	if err := (&WindowsReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("Windows"),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr, options); err != nil {
-		return fmt.Errorf("failed to create controller %s: %v", "Windows", err)
-	}
 	// +kubebuilder:scaffold:builder
 	return nil
 }

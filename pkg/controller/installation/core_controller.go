@@ -107,7 +107,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 
 	statusManager := status.New(mgr.GetClient(), "calico", opts.KubernetesVersion)
 
-	// The typhaAutoscaler needs a clientset.
+	// The typhaAutoscaler and calicoWindowsUpgrader need a clientset.
 	cs, err := kubernetes.NewForConfig(mgr.GetConfig())
 	if err != nil {
 		return nil, err
@@ -118,21 +118,25 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 	typhaListWatch := cache.NewListWatchFromClient(cs.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"))
 	typhaScaler := newTyphaAutoscaler(cs, nodeListWatch, typhaListWatch, statusManager)
 
+	calicoWindowsUpgrader := newCalicoWindowsUpgrader(cs, mgr.GetClient(), statusManager)
+
 	r := &ReconcileInstallation{
-		config:               mgr.GetConfig(),
-		client:               mgr.GetClient(),
-		scheme:               mgr.GetScheme(),
-		watches:              make(map[runtime.Object]struct{}),
-		autoDetectedProvider: opts.DetectedProvider,
-		status:               statusManager,
-		typhaAutoscaler:      typhaScaler,
-		namespaceMigration:   nm,
-		amazonCRDExists:      opts.AmazonCRDExists,
-		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
-		clusterDomain:        opts.ClusterDomain,
+		config:                mgr.GetConfig(),
+		client:                mgr.GetClient(),
+		scheme:                mgr.GetScheme(),
+		watches:               make(map[runtime.Object]struct{}),
+		autoDetectedProvider:  opts.DetectedProvider,
+		status:                statusManager,
+		typhaAutoscaler:       typhaScaler,
+		calicoWindowsUpgrader: calicoWindowsUpgrader,
+		namespaceMigration:    nm,
+		amazonCRDExists:       opts.AmazonCRDExists,
+		enterpriseCRDsExist:   opts.EnterpriseCRDExists,
+		clusterDomain:         opts.ClusterDomain,
 	}
 	r.status.Run()
 	r.typhaAutoscaler.start()
+	r.calicoWindowsUpgrader.start()
 	return r, nil
 }
 
@@ -275,19 +279,20 @@ var _ reconcile.Reconciler = &ReconcileInstallation{}
 type ReconcileInstallation struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	config               *rest.Config
-	client               client.Client
-	scheme               *runtime.Scheme
-	controller           controller.Controller
-	watches              map[runtime.Object]struct{}
-	autoDetectedProvider operator.Provider
-	status               status.StatusManager
-	typhaAutoscaler      *typhaAutoscaler
-	namespaceMigration   migration.NamespaceMigration
-	enterpriseCRDsExist  bool
-	amazonCRDExists      bool
-	migrationChecked     bool
-	clusterDomain        string
+	config                *rest.Config
+	client                client.Client
+	scheme                *runtime.Scheme
+	controller            controller.Controller
+	watches               map[runtime.Object]struct{}
+	autoDetectedProvider  operator.Provider
+	status                status.StatusManager
+	typhaAutoscaler       *typhaAutoscaler
+	calicoWindowsUpgrader *calicoWindowsUpgrader
+	namespaceMigration    migration.NamespaceMigration
+	enterpriseCRDsExist   bool
+	amazonCRDExists       bool
+	migrationChecked      bool
+	clusterDomain         string
 }
 
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
@@ -1093,6 +1098,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		ManagerInternalSecret:       managerInternalTLSSecret,
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
+
+	// TODO: we don't need to do this, the informer can call this for us
+	if err = r.calicoWindowsUpgrader.upgradeWindowsNodes(instance.Spec.Variant); err != nil {
+		r.SetDegraded("Failed to process Windows node upgrades", err, reqLogger)
+	}
+	components = append(components, render.Windows(&instance.Spec, r.calicoWindowsUpgrader.hasPendingUpgrades()))
 
 	imageSet, err := imageset.GetImageSet(ctx, r.client, instance.Spec.Variant)
 	if err != nil {

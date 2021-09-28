@@ -47,6 +47,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.CalicoNetwork.LinuxDataplane).ToNot(BeNil())
 		Expect(*instance.Spec.CalicoNetwork.LinuxDataplane).To(Equal(operator.LinuxDataplaneIptables))
 		Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPEnabled))
+		Expect(*instance.Spec.ControlPlaneReplicas).To(Equal(int32(2)))
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 	})
 
@@ -68,6 +69,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.CalicoNetwork.LinuxDataplane).ToNot(BeNil())
 		Expect(*instance.Spec.CalicoNetwork.LinuxDataplane).To(Equal(operator.LinuxDataplaneIptables))
 		Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPEnabled))
+		Expect(*instance.Spec.ControlPlaneReplicas).To(Equal(int32(2)))
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 	})
 
@@ -78,6 +80,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		var twentySeven int32 = 27
 		var oneTwoThree int32 = 123
 		var one intstr.IntOrString = intstr.FromInt(1)
+		var replicas int32 = 3
 
 		hpEnabled := operator.HostPortsEnabled
 		disabled := operator.BGPDisabled
@@ -128,8 +131,9 @@ var _ = Describe("Defaulting logic tests", func() {
 					HostPorts:          &hpEnabled,
 					MultiInterfaceMode: &miMode,
 				},
-				NodeMetricsPort: &nodeMetricsPort,
-				FlexVolumePath:  "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
+				ControlPlaneReplicas: &replicas,
+				NodeMetricsPort:      &nodeMetricsPort,
+				FlexVolumePath:       "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
 				NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
 					Type: appsv1.RollingUpdateDaemonSetStrategyType,
 					RollingUpdate: &appsv1.RollingUpdateDaemonSet{
@@ -151,6 +155,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		var false_ = false
 		var twentySeven int32 = 27
 		var one intstr.IntOrString = intstr.FromInt(1)
+		var replicas int32 = 3
 
 		disabled := operator.BGPDisabled
 		miMode := operator.MultiInterfaceModeNone
@@ -191,8 +196,9 @@ var _ = Describe("Defaulting logic tests", func() {
 					MultiInterfaceMode: &miMode,
 					HostPorts:          &hpDisabled, // Only one valid value in BPF mode.
 				},
-				NodeMetricsPort: &nodeMetricsPort,
-				FlexVolumePath:  "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
+				ControlPlaneReplicas: &replicas,
+				NodeMetricsPort:      &nodeMetricsPort,
+				FlexVolumePath:       "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
 				NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
 					Type: appsv1.RollingUpdateDaemonSetStrategyType,
 					RollingUpdate: &appsv1.RollingUpdateDaemonSet{

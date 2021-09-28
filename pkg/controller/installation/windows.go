@@ -16,9 +16,7 @@ package installation
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -29,8 +27,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -162,107 +158,12 @@ func (w *calicoWindowsUpgrader) getNodesToUpgrade(expectedVersion string) ([]*co
 	return nodesToUpgrade, nodesUpgraded, nil
 }
 
-type StringPatch struct {
-	Op    string `json:"op"`
-	Path  string `json:"path"`
-	Value string `json:"value"`
-}
-
-func addNodeLabel(ctx context.Context, client kubernetes.Interface, nodeName, key, value string) error {
-	return wait.PollImmediate(1*time.Second, 1*time.Minute, func() (bool, error) {
-		node, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
-		if err != nil {
-			return false, err
-		}
-
-		needUpdate := true
-		if curr, ok := node.Labels[key]; ok && curr == value {
-			needUpdate = false
-		}
-
-		k := strings.Replace(key, "/", "~1", -1)
-
-		lp := []StringPatch{{
-			Op:    "add",
-			Path:  fmt.Sprintf("/metadata/labels/%s", k),
-			Value: value,
-		}}
-
-		patchBytes, err := json.Marshal(lp)
-		if err != nil {
-			return false, err
-		}
-
-		if needUpdate {
-			_, err := client.CoreV1().Nodes().Patch(ctx, node.Name, types.JSONPatchType, patchBytes, metav1.PatchOptions{})
-			if err == nil {
-				return true, nil
-			}
-			if !apierrs.IsConflict(err) {
-				return false, err
-			}
-
-			// Retry on update conflicts.
-			return false, nil
-		}
-
-		// no update needed
-		return true, nil
-	})
-}
-
-func removeNodeLabel(ctx context.Context, client kubernetes.Interface, nodeName, key string) error {
-	return wait.PollImmediate(1*time.Second, 1*time.Minute, func() (bool, error) {
-		node, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
-		if err != nil {
-			return false, err
-		}
-
-		needUpdate := false
-		if _, ok := node.Labels[key]; ok {
-			needUpdate = true
-		}
-
-		// With JSONPatch '/' must be escaped as '~1' http://jsonpatch.com/
-		k := strings.Replace(key, "/", "~1", -1)
-		lp := []StringPatch{{
-			Op:   "remove",
-			Path: fmt.Sprintf("/metadata/labels/%s", k),
-		}}
-
-		patchBytes, err := json.Marshal(lp)
-		if err != nil {
-			return false, err
-		}
-
-		if err != nil {
-			return false, fmt.Errorf("patch to remove labels failed: %v", err)
-		}
-
-		if needUpdate {
-			_, err = client.CoreV1().Nodes().Patch(ctx, node.Name, types.JSONPatchType, patchBytes, metav1.PatchOptions{})
-			if err == nil {
-				return true, nil
-			}
-			if !apierrs.IsConflict(err) {
-				return false, err
-			}
-
-			// Retry on update conflicts.
-			return false, nil
-		}
-
-		// no update needed
-		return true, nil
-	})
-}
-
 func (w *calicoWindowsUpgrader) processUpgrades(ctx context.Context, expectedVersion string, nodesToUpgrade []*corev1.Node, nodesUpgraded []*corev1.Node) error {
 	// Add upgrade label to nodes that need to be upgraded.
 	for _, n := range nodesToUpgrade {
 		log.Info(fmt.Sprintf("Triggering upgrade on node %v", n.Name))
 
-		if err := addNodeLabel(ctx, w.clientset, n.Name, common.CalicoWindowsUpgradeScriptLabel, common.CalicoWindowsUpgradeScript); err != nil {
+		if err := common.AddNodeLabel(ctx, w.clientset, n.Name, common.CalicoWindowsUpgradeScriptLabel, common.CalicoWindowsUpgradeScript); err != nil {
 			return fmt.Errorf("Unable to patch node: %w", err)
 		}
 
@@ -273,7 +174,7 @@ func (w *calicoWindowsUpgrader) processUpgrades(ctx context.Context, expectedVer
 	for _, n := range nodesUpgraded {
 		log.Info(fmt.Sprintf("Removing upgrade label from upgraded node %v", n.Name))
 
-		if err := removeNodeLabel(ctx, w.clientset, n.Name, common.CalicoWindowsUpgradeScriptLabel); err != nil {
+		if err := common.RemoveNodeLabel(ctx, w.clientset, n.Name, common.CalicoWindowsUpgradeScriptLabel); err != nil {
 			return fmt.Errorf("Unable to patch node: %w", err)
 		}
 		w.statusManager.RemoveWindowsNodeUpgrade(n.Name)

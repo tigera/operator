@@ -141,6 +141,10 @@ type InstallationSpec struct {
 	// pods will be stuck during initialization.
 	// +optional
 	CertificateManagement *CertificateManagement `json:"certificateManagement,omitempty"`
+
+	// NonPrivileged configures Calico to be run in non privileged containers as non root users where possible.
+	// +optional
+	NonPrivileged *NonPrivilegedType `json:"nonPrivileged,omitempty"`
 }
 
 // TyphaAffinity allows configuration of node affinitiy characteristics for Typha pods.
@@ -215,6 +219,16 @@ type ProductVariant string
 var (
 	Calico                 ProductVariant = "Calico"
 	TigeraSecureEnterprise ProductVariant = "TigeraSecureEnterprise"
+)
+
+// NonPrivilegedType specifies whether Calico runs as permissioned or not
+//
+// One of: Enabled, Disabled
+type NonPrivilegedType string
+
+const (
+	NonPrivilegedEnabled  NonPrivilegedType = "Enabled"
+	NonPrivilegedDisabled NonPrivilegedType = "Disabled"
 )
 
 // ContainerIPForwardingType specifies whether the CNI config for container ip forwarding is enabled.

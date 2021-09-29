@@ -11,6 +11,7 @@ build/_test
 hack/bin
 operator-sdk*
 *-release-notes.md
+.crds
 # Created by https://www.gitignore.io/api/go,vim,emacs,visualstudiocode
 ### Emacs ###
 # -*- mode: gitignore; -*-
@@ -90,18 +91,5 @@ tags
 report/*
 cscope.*
 .idea/
-# Test tools
-k3d
-kubectl
-kubeconfig.yaml
-# Vendor
-vendor/
-.vendor-new/
-# Temporary Build Files
-build/_output
-build/_test
-hack/bin
-operator-sdk*
-*-release-notes.md
 # Test reports
 pkg/report

@@ -256,6 +256,7 @@ clean:
 	rm -rf build/init/bin
 	rm -rf hack/bin
 	rm -rf .go-pkg-cache
+	rm -rf .crds
 	rm -f *-release-notes.md
 	docker rmi -f $(BUILD_IMAGE):latest $(BUILD_IMAGE):latest-$(ARCH)
 
@@ -296,9 +297,9 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 ## Deploy CRDs needed for UTs.  CRDs needed by ECK that we don't use are not deployed.
 deploy-crds: kubectl
 	@export KUBECONFIG=$(KUBECONFIG) && \
-		$(BINDIR)/kubectl apply -f config/crd/bases/ && \
-		$(BINDIR)/kubectl apply -f deploy/crds/calico/ && \
-		$(BINDIR)/kubectl apply -f deploy/crds/enterprise/ && \
+		$(BINDIR)/kubectl apply -f pkg/crds/operator/ && \
+		$(BINDIR)/kubectl apply -f pkg/crds/calico/ && \
+		$(BINDIR)/kubectl apply -f pkg/crds/enterprise/ && \
 		$(BINDIR)/kubectl apply -f deploy/crds/elastic/elasticsearch-crd.yaml && \
 		$(BINDIR)/kubectl apply -f deploy/crds/elastic/kibana-crd.yaml && \
 		$(BINDIR)/kubectl apply -f deploy/crds/prometheus
@@ -341,8 +342,11 @@ format-check:
 
 .PHONY: dirty-check
 dirty-check:
-	@if [ "$$(git diff --stat)" = "" ]; then exit 0; fi; \
-	echo "The following files are dirty"; git diff --stat; exit 1
+	@if [ "$$(git diff --stat)" != "" ]; then \
+	echo "The following files are dirty"; git diff --stat; exit 1; fi
+	@# Check that no new CRDs needed to be committed
+	@if [ "$$(git status --porcelain pkg/crds)" != "" ]; then \
+	echo "The following CRD files need to be added"; git status --porcelain pkg/crds; exit 1; fi
 
 foss-checks:
 	@echo Running $@...
@@ -472,9 +476,18 @@ gen-files: manifests generate
 OS_VERSIONS?=config/calico_versions.yml
 EE_VERSIONS?=config/enterprise_versions.yml
 COMMON_VERSIONS?=config/common_versions.yml
-gen-versions: $(BINDIR)/gen-versions
+
+.PHONY: gen-versions gen-versions-calico gen-versions-enterprise gen-versions-common
+
+gen-versions: gen-versions-calico gen-versions-enterprise gen-versions-common
+
+gen-versions-calico: $(BINDIR)/gen-versions update-calico-crds
 	$(BINDIR)/gen-versions -os-versions=$(OS_VERSIONS) > pkg/components/calico.go
+
+gen-versions-enterprise: $(BINDIR)/gen-versions update-enterprise-crds
 	$(BINDIR)/gen-versions -ee-versions=$(EE_VERSIONS) > pkg/components/enterprise.go
+
+gen-versions-common: $(BINDIR)/gen-versions
 	$(BINDIR)/gen-versions -common-versions=$(COMMON_VERSIONS) > pkg/components/common.go
 
 $(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
@@ -482,6 +495,73 @@ $(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
 	$(CONTAINERIZED) \
 	sh -c '$(GIT_CONFIG_SSH) \
 	go build -o $(BINDIR)/gen-versions ./hack/gen-versions'
+
+# Overwrite with https://github.com/ to use http access
+GITHUB_ACCESS_METHOD?=git@github.com:
+
+# $(1) is the github project
+# $(2) is the branch or tag to fetch
+# $(3) is the directory name to use
+define prep_local_crds
+    $(eval dir := $(1))
+	rm -rf pkg/crds/$(dir)
+	rm -rf .crds/$(dir)
+	mkdir -p pkg/crds/$(dir)
+	mkdir -p .crds/$(dir)
+endef
+define fetch_crds 
+    $(eval project := $(1))
+    $(eval branch := $(2))
+    $(eval dir := $(3))
+	@echo "Fetching $(dir) CRDs from $(project) branch $(branch)"
+	@$(CONTAINERIZED) \
+	bash -c '$(GIT_CONFIG_SSH) \
+	cd .crds/$(dir); \
+	git init .;  \
+	git remote add -f --tags origin $(GITHUB_ACCESS_METHOD)$(project) 2>&1 | grep -v -e "new branch" -e "new tag"; \
+	git config --local core.sparseCheckout true; \
+	echo "config/crd" >> .git/info/sparse-checkout; \
+	git checkout -q tags/$(branch) &>/dev/null ||  git checkout -q origin/$(branch) --;' || echo "Failed to fetch $(dir) CRDs"
+endef
+define copy_crds
+    $(eval dir := $(1))
+	@cp .crds/$(dir)/config/crd/* pkg/crds/$(dir)/ && echo "Copied $(dir) CRDs"
+endef
+
+.PHONY: read-libcalico-version read-libcalico-enterprise-version
+.PHONY: update-calico-crds update-enterprise-crds
+.PHONY: fetch-calico-crds fetch-enterprise-crds
+.PHONY: prepare-for-calico-crds prepare-for-enterprise-crds
+
+LIBCALICO?=projectcalico/libcalico-go
+read-libcalico-calico-version:
+	$(eval LIBCALICO_BRANCH := $(shell $(CONTAINERIZED) \
+	bash -c '$(GIT_CONFIG_SSH) \
+	yq r config/calico_versions.yml components.libcalico-go.version'))
+
+update-calico-crds: fetch-calico-crds
+	$(call copy_crds,"calico")
+
+prepare-for-calico-crds:
+	$(call prep_local_crds,"calico")
+
+fetch-calico-crds: prepare-for-calico-crds read-libcalico-calico-version
+	$(call fetch_crds,$(LIBCALICO),$(LIBCALICO_BRANCH),"calico")
+
+LIBCALICO_ENTERPRISE?=tigera/libcalico-go-private
+read-libcalico-enterprise-version:
+	$(eval LIBCALICO_ENTERPRISE_BRANCH := $(shell $(CONTAINERIZED) \
+	bash -c '$(GIT_CONFIG_SSH) \
+	yq r config/enterprise_versions.yml components.libcalico-go.version'))
+
+update-enterprise-crds: fetch-enterprise-crds
+	$(call copy_crds,"enterprise")
+
+prepare-for-enterprise-crds:
+	$(call prep_local_crds,"enterprise")
+
+fetch-enterprise-crds: prepare-for-enterprise-crds  read-libcalico-enterprise-version
+	$(call fetch_crds,$(LIBCALICO_ENTERPRISE),$(LIBCALICO_ENTERPRISE_BRANCH),"enterprise")
 
 .PHONY: prepull-image
 prepull-image:

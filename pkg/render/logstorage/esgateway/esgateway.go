@@ -31,6 +31,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
@@ -66,6 +67,7 @@ func EsGateway(c *Config) render.Component {
 	tlsAnnotations[render.KibanaTLSAnnotationHash] = rmeta.SecretsAnnotationHash(c.KibanaInternalCertSecret)
 
 	secrets = append(secrets, c.KubeControllersUserSecrets...)
+
 	return &esGateway{
 		installation:    c.Installation,
 		pullSecrets:     c.PullSecrets,
@@ -183,8 +185,6 @@ func (e esGateway) esGatewayRoleBinding() *rbacv1.RoleBinding {
 }
 
 func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
-	replicas := int32(2)
-
 	envVars := []corev1.EnvVar{
 		{Name: "ES_GATEWAY_LOG_LEVEL", Value: "INFO"},
 		{Name: "ES_GATEWAY_ELASTIC_ENDPOINT", Value: ElasticsearchHTTPSEndpoint},
@@ -290,6 +290,11 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 			},
 		},
 	}
+
+	if e.installation.ControlPlaneReplicas != nil && *e.installation.ControlPlaneReplicas > 1 {
+		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity(DeploymentName, render.ElasticsearchNamespace)
+	}
+
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -305,7 +310,7 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 			},
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": DeploymentName}},
 			Template: *podTemplate,
-			Replicas: &replicas,
+			Replicas: e.installation.ControlPlaneReplicas,
 		},
 	}
 }

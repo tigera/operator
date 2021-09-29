@@ -290,8 +290,9 @@ func (w *windowsNodeUpgrade) isPending(ctx context.Context, c client.Client) (bo
 
 	ok, version := common.GetWindowsNodeVersion(node)
 	if !ok {
-		// TODO: something is wrong. The upgrade was pending but now there is no
-		// version annotation. We must handle this.
+		// The upgrade was pending but now there is no
+		// version.
+		return false, fmt.Errorf("Node %v had upgrade triggered but is missing version annotation", node.Name)
 	}
 	return version != w.expectedVersion, nil
 }

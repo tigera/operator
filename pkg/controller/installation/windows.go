@@ -24,7 +24,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -41,7 +40,6 @@ type calicoWindowsUpgrader struct {
 	clientset            kubernetes.Interface
 	client               client.Client
 	statusManager        status.StatusManager
-	version              string
 	nodeInformer         cache.Controller
 	nodeIndexer          cache.Indexer
 	nodesToUpgrade       []*corev1.Node
@@ -54,16 +52,13 @@ func (w *calicoWindowsUpgrader) hasPendingUpgrades() bool {
 }
 
 // newCalicoWindowsUpgrader creates a Calico Windows upgrader.
-func newCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, statusManager status.StatusManager) *calicoWindowsUpgrader {
+func newCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, windowsNodeListWatch cache.ListerWatcher, statusManager status.StatusManager) *calicoWindowsUpgrader {
 	w := &calicoWindowsUpgrader{
 		clientset:     cs,
 		client:        c,
 		statusManager: statusManager,
 	}
 
-	windowsNodeListWatch := cache.NewFilteredListWatchFromClient(cs.CoreV1().RESTClient(), "nodes", "", func(options *metav1.ListOptions) {
-		options.LabelSelector = fmt.Sprintf("%s=%s", corev1.LabelOSStable, "windows")
-	})
 	handlers := cache.ResourceEventHandlerFuncs{
 		AddFunc:    func(obj interface{}) {},
 		UpdateFunc: func(oldObj, newObj interface{}) {},

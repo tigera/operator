@@ -226,6 +226,6 @@ var (
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
-		ComponentWindows,
+		ComponentTigeraWindows,
 	}
 )

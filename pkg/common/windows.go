@@ -30,6 +30,7 @@ const (
 	CalicoWindowsUpgradeVolumePath   = `c:\CalicoUpdate`
 	CalicoWindowsUpgradeScriptLabel  = "projectcalico.org/CalicoWindowsUpgradeScript"
 	CalicoWindowsVersionAnnotation   = "projectcalico.org/CalicoWindowsVersion"
+	CalicoWindowsUpgradeTaintKey     = "projectcalico.org/CalicoWindowsUpgrading"
 )
 
 func WindowsLatestVersionString(product operatorv1.ProductVariant) string {

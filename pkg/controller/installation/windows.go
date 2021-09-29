@@ -16,6 +16,7 @@ package installation
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -24,6 +25,11 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -32,6 +38,12 @@ import (
 
 var (
 	windowsLog = logf.Log.WithName("windows_upgrader")
+
+	// This taint is applied to nodes upgrading Calico Windows.
+	calicoWindowsUpgradingTaint = &v1.Taint{
+		Key:    common.CalicoWindowsUpgradeTaintKey,
+		Effect: v1.TaintEffectNoSchedule,
+	}
 )
 
 // calicoWindowsUpgrader helps manage the upgrade of Calico Windows nodes.
@@ -72,6 +84,7 @@ func newCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, windowsN
 func (w *calicoWindowsUpgrader) upgradeWindowsNodes(expectedProduct operatorv1.ProductVariant) error {
 	expectedVersion := common.WindowsLatestVersionString(expectedProduct)
 	windowsLog.V(1).Info(fmt.Sprintf("Expected version: %v", expectedVersion))
+
 	err := w.getNodesToUpgrade(expectedVersion)
 	if err != nil {
 		return fmt.Errorf("Error getting windows nodes: %w", err)
@@ -142,16 +155,28 @@ func (w *calicoWindowsUpgrader) getNodesToUpgrade(expectedVersion string) error 
 	return nil
 }
 
+func (w *calicoWindowsUpgrader) triggerUpgrade(ctx context.Context, node *corev1.Node, expectedVersion string) error {
+	if err := addTaint(ctx, w.clientset, node.Name, calicoWindowsUpgradingTaint); err != nil {
+		return fmt.Errorf("Unable to add taint to node %v: %w", node.Name, err)
+	}
+
+	if err := common.AddNodeLabel(ctx, w.clientset, node.Name, common.CalicoWindowsUpgradeScriptLabel, common.CalicoWindowsUpgradeScript); err != nil {
+		return fmt.Errorf("Unable to patch node: %w", err)
+	}
+
+	w.statusManager.AddWindowsNodeUpgrade(node.Name, expectedVersion)
+
+	return nil
+}
+
 func (w *calicoWindowsUpgrader) processUpgrades(ctx context.Context, expectedVersion string) error {
 	// Add upgrade label to nodes that need to be upgraded.
 	for _, n := range w.nodesToUpgrade {
 		windowsLog.V(1).Info(fmt.Sprintf("Triggering upgrade on node %v", n.Name))
 
-		if err := common.AddNodeLabel(ctx, w.clientset, n.Name, common.CalicoWindowsUpgradeScriptLabel, common.CalicoWindowsUpgradeScript); err != nil {
-			return fmt.Errorf("Unable to patch node: %w", err)
+		if err := w.triggerUpgrade(ctx, n, expectedVersion); err != nil {
+			return fmt.Errorf("Unable to trigger upgrade: %w", err)
 		}
-
-		w.statusManager.AddWindowsNodeUpgrade(n.Name, expectedVersion)
 	}
 
 	// For nodes already upgrading, ensure the status is correct
@@ -168,6 +193,9 @@ func (w *calicoWindowsUpgrader) processUpgrades(ctx context.Context, expectedVer
 		if err := common.RemoveNodeLabel(ctx, w.clientset, n.Name, common.CalicoWindowsUpgradeScriptLabel); err != nil {
 			return fmt.Errorf("Unable to patch node: %w", err)
 		}
+		if err := removeTaint(ctx, w.clientset, n.Name, calicoWindowsUpgradingTaint); err != nil {
+			return fmt.Errorf("Unable to clear taint from node %v: %w", n.Name, err)
+		}
 		w.statusManager.RemoveWindowsNodeUpgrade(n.Name)
 	}
 
@@ -180,4 +208,126 @@ func (w *calicoWindowsUpgrader) start() {
 	for !w.nodeInformer.HasSynced() {
 		time.Sleep(100 * time.Millisecond)
 	}
+}
+
+type objPatch struct {
+	Op    string      `json:"op"`
+	Path  string      `json:"path"`
+	Value interface{} `json:"value,omitempty"`
+}
+
+// addTaint applies a taint to a node.
+func addTaint(ctx context.Context, client kubernetes.Interface, nodeName string, taint *corev1.Taint) error {
+	return wait.PollImmediate(1*time.Second, 1*time.Minute, func() (bool, error) {
+		node, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+		if err != nil {
+			return false, err
+		}
+
+		needUpdate := true
+
+		for _, t := range node.Spec.Taints {
+			if t.MatchTaint(taint) {
+				needUpdate = false
+				break
+			}
+		}
+
+		if needUpdate {
+			newTaints := node.DeepCopy().Spec.Taints
+			newTaints = append(newTaints, *taint)
+
+			p := []objPatch{
+				// Test that the taints didn't change. If this test fails the entire
+				// patch fails.
+				{
+					Op:    "test",
+					Path:  "/spec/taints",
+					Value: node.Spec.Taints,
+				},
+				// Add the new taints.
+				{
+					Op:    "add",
+					Path:  "/spec/taints",
+					Value: newTaints,
+				},
+			}
+
+			patchBytes, err := json.Marshal(p)
+			if err != nil {
+				return false, err
+			}
+
+			_, err = client.CoreV1().Nodes().Patch(ctx, node.Name, types.JSONPatchType, patchBytes, metav1.PatchOptions{})
+			if err == nil {
+				return true, nil
+			}
+			if !apierrors.IsConflict(err) {
+				return false, err
+			}
+
+			// Retry on update conflicts.
+			return false, nil
+		}
+
+		// no update needed
+		return true, nil
+	})
+}
+
+// removeTaint clears a taint from a node.
+func removeTaint(ctx context.Context, client kubernetes.Interface, nodeName string, taint *corev1.Taint) error {
+	return wait.PollImmediate(1*time.Second, 1*time.Minute, func() (bool, error) {
+		node, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+		if err != nil {
+			return false, err
+		}
+
+		var needUpdate bool
+		var taintIndex int
+
+		for i, t := range node.Spec.Taints {
+			if t.MatchTaint(taint) {
+				taintIndex = i
+				needUpdate = true
+				break
+			}
+		}
+
+		if needUpdate {
+			p := []objPatch{
+				// Test that the taint to remove didn't change. If this test fails the entire
+				// patch fails.
+				{
+					Op:    "test",
+					Path:  fmt.Sprintf("/spec/taints/%d", taintIndex),
+					Value: node.Spec.Taints[taintIndex],
+				},
+				// Remove the taint.
+				{
+					Op:   "remove",
+					Path: fmt.Sprintf("/spec/taints/%d", taintIndex),
+				},
+			}
+
+			patchBytes, err := json.Marshal(p)
+			if err != nil {
+				return false, err
+			}
+
+			_, err = client.CoreV1().Nodes().Patch(ctx, node.Name, types.JSONPatchType, patchBytes, metav1.PatchOptions{})
+			if err == nil {
+				return true, nil
+			}
+			if !apierrors.IsConflict(err) {
+				return false, err
+			}
+
+			// Retry on update conflicts.
+			return false, nil
+		}
+
+		// no update needed
+		return true, nil
+	})
 }

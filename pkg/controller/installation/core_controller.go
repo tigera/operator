@@ -1111,7 +1111,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 
 	if err = r.calicoWindowsUpgrader.upgradeWindowsNodes(instance.Spec.Variant); err != nil {
+		log.Error(err, "Failed to process Calico Windows upgrades")
 		r.SetDegraded("Failed to process Windows node upgrades", err, reqLogger)
+		return reconcile.Result{}, err
 	}
 	components = append(components, render.Windows(&instance.Spec, r.calicoWindowsUpgrader.hasPendingUpgrades()))
 

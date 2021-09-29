@@ -17,6 +17,7 @@ package utils
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -466,4 +467,45 @@ func isResourceReady(client kubernetes.Interface, resourceKind string) bool {
 		}
 	}
 	return false
+}
+
+// AddWindowsNodeWatch adds a watch to the specified controller that queues
+// reoncile requests for Windows nodes events that we care about.
+func AddWindowsNodeWatch(c controller.Controller) error {
+	// Watch for annotation/label changes to Windows nodes
+	// TODO: do server-side filtering on labels once we've upgraded to a newer
+	// version of controller-runtime that supports it.
+	windowsNodeChangedPred := predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			// Ignore non-windows nodes or nodes without an os label.
+			if os, ok := e.Object.GetLabels()[corev1.LabelOSStable]; !ok || os != "windows" {
+				return false
+			}
+			return true
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			// Ignore non-windows nodes or nodes without an os label.
+			if os, ok := e.ObjectNew.GetLabels()[corev1.LabelOSStable]; !ok || os != "windows" {
+				return false
+			}
+
+			// We only care about windows nodes that had their annotations or
+			// labels changed.
+			if !reflect.DeepEqual(e.ObjectNew.GetLabels(), e.ObjectOld.GetLabels()) {
+				return true
+			}
+			if !reflect.DeepEqual(e.ObjectNew.GetAnnotations(), e.ObjectOld.GetAnnotations()) {
+				return true
+			}
+			return false
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			// Ignore non-windows nodes or nodes without an os label.
+			if os, ok := e.Object.GetLabels()[corev1.LabelOSStable]; !ok || os != "windows" {
+				return false
+			}
+			return true
+		},
+	}
+	return c.Watch(&source.Kind{Type: &corev1.Node{}}, &handler.EnqueueRequestForObject{}, windowsNodeChangedPred)
 }

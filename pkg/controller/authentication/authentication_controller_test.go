@@ -52,6 +52,7 @@ var _ = Describe("authentication controller tests", func() {
 		mockStatus *status.MockStatus
 		idpSecret  *corev1.Secret
 		auth       *operatorv1.Authentication
+		replicas   int32
 	)
 
 	BeforeEach(func() {
@@ -92,6 +93,8 @@ var _ = Describe("authentication controller tests", func() {
 				ManagerDomain: "https://example.com",
 			},
 		}
+
+		replicas = 2
 	})
 
 	Context("OIDC connector config options", func() {
@@ -106,7 +109,8 @@ var _ = Describe("authentication controller tests", func() {
 					Computed: &operatorv1.InstallationSpec{},
 				},
 				Spec: operatorv1.InstallationSpec{
-					Variant: operatorv1.TigeraSecureEnterprise,
+					ControlPlaneReplicas: &replicas,
+					Variant:              operatorv1.TigeraSecureEnterprise,
 				},
 			})).ToNot(HaveOccurred())
 
@@ -147,8 +151,9 @@ var _ = Describe("authentication controller tests", func() {
 					Computed: &operatorv1.InstallationSpec{},
 				},
 				Spec: operatorv1.InstallationSpec{
-					Variant:  operatorv1.TigeraSecureEnterprise,
-					Registry: "some.registry.org/",
+					ControlPlaneReplicas: &replicas,
+					Variant:              operatorv1.TigeraSecureEnterprise,
+					Registry:             "some.registry.org/",
 				},
 			})).To(BeNil())
 			Expect(cli.Create(ctx, &operatorv1.Authentication{
@@ -252,7 +257,8 @@ var _ = Describe("authentication controller tests", func() {
 				Computed: &operatorv1.InstallationSpec{},
 			},
 			Spec: operatorv1.InstallationSpec{
-				Variant: operatorv1.TigeraSecureEnterprise,
+				ControlPlaneReplicas: &replicas,
+				Variant:              operatorv1.TigeraSecureEnterprise,
 			},
 		})).ToNot(HaveOccurred())
 

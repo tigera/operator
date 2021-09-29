@@ -3,20 +3,20 @@ package render_test
 import (
 	"fmt"
 
-	rtest "github.com/tigera/operator/pkg/render/common/test"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/tigera/operator/pkg/render/common/podaffinity"
+	rtest "github.com/tigera/operator/pkg/render/common/test"
 )
 
 var _ = Describe("dex rendering tests", func() {
@@ -36,13 +36,14 @@ var _ = Describe("dex rendering tests", func() {
 			dexSecret      *corev1.Secret
 			idpSecret      *corev1.Secret
 			pullSecrets    []*corev1.Secret
+			replicas       int32
 		)
 
 		BeforeEach(func() {
-
 			installation = &operatorv1.InstallationSpec{
-				KubernetesProvider: operatorv1.ProviderNone,
-				Registry:           "testregistry.com/",
+				ControlPlaneReplicas: &replicas,
+				KubernetesProvider:   operatorv1.ProviderNone,
+				Registry:             "testregistry.com/",
 			}
 
 			authentication = &operatorv1.Authentication{
@@ -80,6 +81,8 @@ var _ = Describe("dex rendering tests", func() {
 					},
 					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				}}
+
+			replicas = 2
 		})
 
 		It("should render all resources for a OIDC setup", func() {
@@ -144,6 +147,7 @@ var _ = Describe("dex rendering tests", func() {
 
 			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName)
 			component := render.Dex(pullSecrets, false, &operatorv1.InstallationSpec{
+				ControlPlaneReplicas:    installation.ControlPlaneReplicas,
 				ControlPlaneTolerations: []corev1.Toleration{t},
 			}, dexCfg, clusterName, false)
 			resources, _ := component.Objects()
@@ -186,6 +190,31 @@ var _ = Describe("dex rendering tests", func() {
 				rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 			Expect(len(resources)).To(Equal(len(expectedResources)))
+		})
+
+		It("should not render PodAffinity when ControlPlaneReplicas is 1", func() {
+			var replicas int32 = 1
+			installation.ControlPlaneReplicas = &replicas
+
+			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName)
+			component := render.Dex(pullSecrets, false, installation, dexCfg, clusterName, false)
+			resources, _ := component.Objects()
+			deploy, ok := rtest.GetResource(resources, render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue())
+			Expect(deploy.Spec.Template.Spec.Affinity).To(BeNil())
+		})
+
+		It("should render PodAffinity when ControlPlaneReplicas is greater than 1", func() {
+			var replicas int32 = 2
+			installation.ControlPlaneReplicas = &replicas
+
+			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName)
+			component := render.Dex(pullSecrets, false, installation, dexCfg, clusterName, false)
+			resources, _ := component.Objects()
+			deploy, ok := rtest.GetResource(resources, render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue())
+			Expect(deploy.Spec.Template.Spec.Affinity).NotTo(BeNil())
+			Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("tigera-dex", "tigera-dex")))
 		})
 	})
 })

@@ -314,6 +314,10 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		}
 	}
 
+	if instance.Spec.ControlPlaneReplicas != nil && *instance.Spec.ControlPlaneReplicas <= 0 {
+		return fmt.Errorf("Installation spec.ControlPlaneReplicas should be greater than 0")
+	}
+
 	validComponentNames := map[operatorv1.ComponentName]struct{}{
 		operatorv1.ComponentNameKubeControllers: {},
 		operatorv1.ComponentNameNode:            {},

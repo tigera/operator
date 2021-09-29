@@ -15,6 +15,7 @@ package components
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	operator "github.com/tigera/operator/api/v1"
@@ -30,6 +31,13 @@ const UseDefault = "UseDefault"
 
 // GetReference returns the fully qualified image to use, including registry and version.
 func GetReference(c component, registry, imagePath, imagePrefix string, is *operator.ImageSet) (string, error) {
+	// Calico Cloud special case: use custom manager image if special env var is set
+	if c == ComponentManager {
+		if managerImage := os.Getenv("MANAGER_IMAGE"); managerImage != "" {
+			return managerImage, nil
+		}
+	}
+
 	// If a user did not supply a registry, use the default registry
 	// based on component
 	if registry == "" || registry == UseDefault {

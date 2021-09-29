@@ -256,6 +256,7 @@ clean:
 	rm -rf build/init/bin
 	rm -rf hack/bin
 	rm -rf .go-pkg-cache
+	rm -rf .crds
 	rm -f *-release-notes.md
 	docker rmi -f $(BUILD_IMAGE):latest $(BUILD_IMAGE):latest-$(ARCH)
 
@@ -472,9 +473,18 @@ gen-files: manifests generate
 OS_VERSIONS?=config/calico_versions.yml
 EE_VERSIONS?=config/enterprise_versions.yml
 COMMON_VERSIONS?=config/common_versions.yml
-gen-versions: $(BINDIR)/gen-versions
+
+.PHONY: gen-versions gen-versions-calico gen-versions-enterprise gen-versions-common
+
+gen-versions: gen-versions-calico gen-versions-enterprise gen-versions-common
+
+gen-versions-calico: $(BINDIR)/gen-versions fetch-calico-crds
 	$(BINDIR)/gen-versions -os-versions=$(OS_VERSIONS) > pkg/components/calico.go
+
+gen-versions-enterprise: $(BINDIR)/gen-versions fetch-enterprise-crds
 	$(BINDIR)/gen-versions -ee-versions=$(EE_VERSIONS) > pkg/components/enterprise.go
+
+gen-versions-common: $(BINDIR)/gen-versions
 	$(BINDIR)/gen-versions -common-versions=$(COMMON_VERSIONS) > pkg/components/common.go
 
 $(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
@@ -482,6 +492,53 @@ $(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
 	$(CONTAINERIZED) \
 	sh -c '$(GIT_CONFIG_SSH) \
 	go build -o $(BINDIR)/gen-versions ./hack/gen-versions'
+
+# Overwrite with https://github.com/ to use http access
+GITHUB_ACCESS_METHOD?=git@github.com:
+
+# $(1) is the github project
+# $(2) is the branch or tag to fetch
+# $(3) is the directory name to use
+define fetch_crds 
+    $(eval project := $(1))
+    $(eval branch := $(2))
+    $(eval dir := $(3))
+	@echo "Fetching $(dir) CRDs from $(project) branch $(branch)"
+	rm -rf deploy/crds/$(dir)
+	rm -rf .crds/$(dir)
+	mkdir -p deploy/crds/$(dir)
+	mkdir -p .crds/$(dir)
+	@$(CONTAINERIZED) \
+	bash -c '$(GIT_CONFIG_SSH) \
+	cd .crds/$(dir); \
+	git init .;  \
+	git remote add -f --tags origin $(GITHUB_ACCESS_METHOD)$(project) 2>&1 | grep -v -e "new branch" -e "new tag"; \
+	git config --local core.sparseCheckout true; \
+	echo "config/crd" >> .git/info/sparse-checkout; \
+	git checkout -q tags/$(branch) &>/dev/null ||  git checkout -q origin/$(branch) --;' || echo "Failed to fetch $(dir) CRDs"
+	@cp .crds/$(dir)/config/crd/* deploy/crds/$(dir)/ && echo "Copied $(dir) CRDs"
+	git add deploy/crds/$(dir)
+endef
+
+.PHONY: read-libcalico-version fetch-calico-crds read-libcalico-enterprise-version fetch-enterprise-crds
+
+LIBCALICO?=projectcalico/libcalico-go
+read-libcalico-calico-version:
+	$(eval LIBCALICO_BRANCH := $(shell $(CONTAINERIZED) \
+	bash -c '$(GIT_CONFIG_SSH) \
+	yq r config/calico_versions.yml components.libcalico-go.version'))
+
+fetch-calico-crds: read-libcalico-calico-version
+	$(call fetch_crds,$(LIBCALICO),$(LIBCALICO_BRANCH),"calico")
+
+LIBCALICO_ENTERPRISE?=tigera/libcalico-go-private
+read-libcalico-enterprise-version:
+	$(eval LIBCALICO_ENTERPRISE_BRANCH := $(shell $(CONTAINERIZED) \
+	bash -c '$(GIT_CONFIG_SSH) \
+	yq r config/enterprise_versions.yml components.libcalico-go.version'))
+
+fetch-enterprise-crds: read-libcalico-enterprise-version
+	$(call fetch_crds,$(LIBCALICO_ENTERPRISE),$(LIBCALICO_ENTERPRISE_BRANCH),"enterprise")
 
 .PHONY: prepull-image
 prepull-image:

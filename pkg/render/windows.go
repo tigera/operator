@@ -118,7 +118,12 @@ func (c *windowsComponent) windowsUpgradeDaemonset() *appsv1.DaemonSet {
 					},
 				},
 			},
-			Tolerations:      rmeta.TolerateAll,
+			Tolerations: []corev1.Toleration{
+				{
+					Key:    common.CalicoWindowsUpgradeTaintKey,
+					Effect: corev1.TaintEffectNoSchedule,
+				},
+			},
 			ImagePullSecrets: c.cr.ImagePullSecrets,
 			Containers:       []corev1.Container{c.windowsUpgradeContainer()},
 			Volumes:          c.calicoWindowsVolume(),

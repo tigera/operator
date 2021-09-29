@@ -355,18 +355,20 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
-				config:               nil, // there is no fake for config
-				client:               c,
-				scheme:               scheme,
-				autoDetectedProvider: operator.ProviderNone,
-				status:               mockStatus,
-				typhaAutoscaler:      newTyphaAutoscaler(cs, nodeListWatch{cs}, typhaListWatch{cs}, mockStatus),
-				namespaceMigration:   &fakeNamespaceMigration{},
-				amazonCRDExists:      true,
-				enterpriseCRDsExist:  true,
-				migrationChecked:     true,
+				config:                nil, // there is no fake for config
+				client:                c,
+				scheme:                scheme,
+				autoDetectedProvider:  operator.ProviderNone,
+				status:                mockStatus,
+				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeListWatch{cs}, typhaListWatch{cs}, mockStatus),
+				calicoWindowsUpgrader: newCalicoWindowsUpgrader(cs, c, nodeListWatch{cs}, mockStatus),
+				namespaceMigration:    &fakeNamespaceMigration{},
+				amazonCRDExists:       true,
+				enterpriseCRDsExist:   true,
+				migrationChecked:      true,
 			}
 			r.typhaAutoscaler.start()
+			r.calicoWindowsUpgrader.start()
 
 			// We start off with a 'standard' installation, with nothing special
 			Expect(c.Create(
@@ -478,6 +480,7 @@ var _ = Describe("Testing core-controller installation", func() {
 						{Image: "tigera/cni", Digest: "sha256:tigeracnihash"},
 						{Image: "calico/pod2daemon-flexvol", Digest: "sha256:calicoflexvolhash"},
 						{Image: "tigera/key-cert-provisioner", Digest: "sha256:calicocsrinithash"},
+						{Image: "tigera/calico-windows-upgrade", Digest: "sha256:calicowindowshash"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -803,7 +806,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			}
 			cs = kfake.NewSimpleClientset(objs...)
 
-			// Create an object we can use throughout the test to do the compliance reconcile loops.
+			// Create an object we can use throughout the test to do the core reconcile loops.
 			mockStatus = &status.MockStatus{}
 			mockStatus.On("AddDaemonsets", mock.Anything).Return()
 			mockStatus.On("AddDeployments", mock.Anything).Return()
@@ -818,18 +821,20 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
-				config:               nil, // there is no fake for config
-				client:               c,
-				scheme:               scheme,
-				autoDetectedProvider: operator.ProviderNone,
-				status:               mockStatus,
-				typhaAutoscaler:      newTyphaAutoscaler(cs, nodeListWatch{cs}, typhaListWatch{cs}, mockStatus),
-				namespaceMigration:   &fakeNamespaceMigration{},
-				amazonCRDExists:      true,
-				enterpriseCRDsExist:  true,
-				migrationChecked:     true,
+				config:                nil, // there is no fake for config
+				client:                c,
+				scheme:                scheme,
+				autoDetectedProvider:  operator.ProviderNone,
+				status:                mockStatus,
+				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeListWatch{cs}, typhaListWatch{cs}, mockStatus),
+				calicoWindowsUpgrader: newCalicoWindowsUpgrader(cs, c, nodeListWatch{cs}, mockStatus),
+				namespaceMigration:    &fakeNamespaceMigration{},
+				amazonCRDExists:       true,
+				enterpriseCRDsExist:   true,
+				migrationChecked:      true,
 			}
 			r.typhaAutoscaler.start()
+			r.calicoWindowsUpgrader.start()
 
 			// We start off with a 'standard' installation, with nothing special
 			cr = &operator.Installation{

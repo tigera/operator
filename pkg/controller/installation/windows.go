@@ -155,48 +155,51 @@ func (w *calicoWindowsUpgrader) getNodesToUpgrade(expectedVersion string) error 
 	return nil
 }
 
-func (w *calicoWindowsUpgrader) triggerUpgrade(ctx context.Context, node *corev1.Node, expectedVersion string) error {
+func (w *calicoWindowsUpgrader) startUpgrade(ctx context.Context, node *corev1.Node, expectedVersion string) error {
+	windowsLog.V(1).Info(fmt.Sprintf("Start upgrade on node %v", node.Name))
 	if err := addTaint(ctx, w.clientset, node.Name, calicoWindowsUpgradingTaint); err != nil {
 		return fmt.Errorf("Unable to add taint to node %v: %w", node.Name, err)
 	}
 
 	if err := common.AddNodeLabel(ctx, w.clientset, node.Name, common.CalicoWindowsUpgradeScriptLabel, common.CalicoWindowsUpgradeScript); err != nil {
-		return fmt.Errorf("Unable to patch node: %w", err)
+		return fmt.Errorf("Unable to remove label from node %v: %w", node.Name, err)
 	}
 
 	w.statusManager.AddWindowsNodeUpgrade(node.Name, expectedVersion)
+	return nil
+}
 
+func (w *calicoWindowsUpgrader) finishUpgrade(ctx context.Context, node *corev1.Node) error {
+	windowsLog.V(1).Info(fmt.Sprintf("Finishing upgrade on upgraded node %v", node.Name))
+	if err := common.RemoveNodeLabel(ctx, w.clientset, node.Name, common.CalicoWindowsUpgradeScriptLabel); err != nil {
+		return fmt.Errorf("Unable to remove label from node: %w", err)
+	}
+
+	if err := removeTaint(ctx, w.clientset, node.Name, calicoWindowsUpgradingTaint); err != nil {
+		return fmt.Errorf("Unable to clear taint from node %v: %w", node.Name, err)
+	}
+
+	w.statusManager.RemoveWindowsNodeUpgrade(node.Name)
 	return nil
 }
 
 func (w *calicoWindowsUpgrader) processUpgrades(ctx context.Context, expectedVersion string) error {
-	// Add upgrade label to nodes that need to be upgraded.
 	for _, n := range w.nodesToUpgrade {
-		windowsLog.V(1).Info(fmt.Sprintf("Triggering upgrade on node %v", n.Name))
-
-		if err := w.triggerUpgrade(ctx, n, expectedVersion); err != nil {
-			return fmt.Errorf("Unable to trigger upgrade: %w", err)
+		if err := w.startUpgrade(ctx, n, expectedVersion); err != nil {
+			return fmt.Errorf("Unable to start upgrade on node %v: %w", n.Name, err)
 		}
 	}
 
 	// For nodes already upgrading, ensure the status is correct
 	for _, n := range w.nodesUpgrading {
 		windowsLog.V(1).Info(fmt.Sprintf("Reconciling node upgrades in progress %v", n.Name))
-
 		w.statusManager.AddWindowsNodeUpgrade(n.Name, expectedVersion)
 	}
 
-	// Remove upgrade label from nodes that are already upgraded.
 	for _, n := range w.nodesFinishedUpgrade {
-		windowsLog.V(1).Info(fmt.Sprintf("Removing upgrade label from upgraded node %v", n.Name))
-
-		if err := common.RemoveNodeLabel(ctx, w.clientset, n.Name, common.CalicoWindowsUpgradeScriptLabel); err != nil {
-			return fmt.Errorf("Unable to patch node: %w", err)
+		if err := w.finishUpgrade(ctx, n); err != nil {
+			return fmt.Errorf("Unable to finish upgrade on node %v: %w", n.Name, err)
 		}
-		if err := removeTaint(ctx, w.clientset, n.Name, calicoWindowsUpgradingTaint); err != nil {
-			return fmt.Errorf("Unable to clear taint from node %v: %w", n.Name, err)
-		}
-		w.statusManager.RemoveWindowsNodeUpgrade(n.Name)
 	}
 
 	return nil

@@ -233,6 +233,23 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
+	It("should not allow Calico to run in non-privileged mode if BPF is enabled", func() {
+		np := operator.NonPrivilegedEnabled
+		bpf := operator.LinuxDataplaneBPF
+		instance.Spec.NonPrivileged = &np
+		instance.Spec.CalicoNetwork.LinuxDataplane = &bpf
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should not allow Calico to run in non-privileged mode with Tigera Secure Enterprise", func() {
+		np := operator.NonPrivilegedEnabled
+		instance.Spec.NonPrivileged = &np
+		instance.Spec.Variant = operator.TigeraSecureEnterprise
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
+
 	Describe("validate Calico CNI plugin Type", func() {
 		DescribeTable("test invalid IPAM",
 			func(ipam operator.IPAMPluginType) {

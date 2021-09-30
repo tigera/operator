@@ -12,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -59,12 +60,12 @@ var _ = Describe("dex rendering tests", func() {
 			}
 
 			tlsSecret = render.CreateDexTLSSecret("tigera-dex.tigera-dex.svc.cluster.local")
-			certSecret = render.CreateCertificateSecret(tlsSecret.Data[corev1.TLSCertKey], render.DexCertSecretName, rmeta.OperatorNamespace())
+			certSecret = render.CreateCertificateSecret(tlsSecret.Data[corev1.TLSCertKey], render.DexCertSecretName, common.OperatorNamespace())
 			dexSecret = render.CreateDexClientSecret()
 			idpSecret = &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.OIDCSecretName,
-					Namespace: rmeta.OperatorNamespace(),
+					Namespace: common.OperatorNamespace(),
 				},
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				Data: map[string][]byte{
@@ -77,7 +78,7 @@ var _ = Describe("dex rendering tests", func() {
 				{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      pullSecretName,
-						Namespace: rmeta.OperatorNamespace(),
+						Namespace: common.OperatorNamespace(),
 					},
 					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				}}
@@ -105,10 +106,10 @@ var _ = Describe("dex rendering tests", func() {
 				{render.DexObjectName, "", rbac, "v1", "ClusterRole"},
 				{render.DexObjectName, "", rbac, "v1", "ClusterRoleBinding"},
 				{render.DexObjectName, render.DexNamespace, "", "v1", "ConfigMap"},
-				{render.DexTLSSecretName, rmeta.OperatorNamespace(), "", "v1", "Secret"},
-				{render.DexObjectName, rmeta.OperatorNamespace(), "", "v1", "Secret"},
-				{render.OIDCSecretName, rmeta.OperatorNamespace(), "", "v1", "Secret"},
-				{render.DexCertSecretName, rmeta.OperatorNamespace(), "", "v1", "Secret"},
+				{render.DexTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
+				{render.DexObjectName, common.OperatorNamespace(), "", "v1", "Secret"},
+				{render.OIDCSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
+				{render.DexCertSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
 				{render.DexTLSSecretName, render.DexNamespace, "", "v1", "Secret"},
 				{render.DexObjectName, render.DexNamespace, "", "v1", "Secret"},
 				{render.OIDCSecretName, render.DexNamespace, "", "v1", "Secret"},
@@ -175,10 +176,10 @@ var _ = Describe("dex rendering tests", func() {
 				{render.DexObjectName, "", rbac, "v1", "ClusterRole"},
 				{render.DexObjectName, "", rbac, "v1", "ClusterRoleBinding"},
 				{render.DexObjectName, render.DexNamespace, "", "v1", "ConfigMap"},
-				{render.DexTLSSecretName, rmeta.OperatorNamespace(), "", "v1", "Secret"},
-				{render.DexObjectName, rmeta.OperatorNamespace(), "", "v1", "Secret"},
-				{render.OIDCSecretName, rmeta.OperatorNamespace(), "", "v1", "Secret"},
-				{render.DexCertSecretName, rmeta.OperatorNamespace(), "", "v1", "Secret"},
+				{render.DexTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
+				{render.DexObjectName, common.OperatorNamespace(), "", "v1", "Secret"},
+				{render.OIDCSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
+				{render.DexCertSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
 				{render.DexTLSSecretName, render.DexNamespace, "", "v1", "Secret"},
 				{render.DexObjectName, render.DexNamespace, "", "v1", "Secret"},
 				{render.OIDCSecretName, render.DexNamespace, "", "v1", "Secret"},

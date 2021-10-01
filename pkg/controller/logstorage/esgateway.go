@@ -35,15 +35,23 @@ func (r *ReconcileLogStorage) createEsGateway(
 
 	kibanaInternalCertSecret, err := utils.GetSecret(ctx, r.client, render.KibanaInternalCertSecret, common.OperatorNamespace())
 	if err != nil {
+		reqLogger.Error(err, "failed to get Kibana tls certificate secret")
+		r.status.SetDegraded("Failed to get Kibana tls certificate secret", err.Error())
+		return reconcile.Result{}, false, err
+	} else if kibanaInternalCertSecret == nil {
 		reqLogger.Error(err, err.Error())
 		r.status.SetDegraded("Waiting for internal Kibana tls certificate secret to be available", "")
 		return reconcile.Result{}, false, nil
 	}
 
-	esInternalCertSecret, err := utils.GetSecret(ctx, r.client, relasticsearch.InternalCertSecret, common.OperatorNamespace())
+	esInternalCertSecret, err := utils.GetSecret(ctx, r.client, relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
 	if err != nil {
+		reqLogger.Error(err, "failed to get Elasticsearch tls certificate secret")
+		r.status.SetDegraded("Failed to get Elasticsearch tls certificate secret", err.Error())
+		return reconcile.Result{}, false, err
+	} else if esInternalCertSecret == nil {
 		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Waiting for internal Kibana tls certificate secret to be available", "")
+		r.status.SetDegraded("Waiting for internal Elasticsearch tls certificate secret to be available", "")
 		return reconcile.Result{}, false, nil
 	}
 

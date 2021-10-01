@@ -15,8 +15,8 @@
 package testutils
 
 import (
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,7 +29,7 @@ var InternalManagerTLSSecret = corev1.Secret{
 	},
 	ObjectMeta: metav1.ObjectMeta{
 		Name:      render.ManagerInternalTLSSecretName,
-		Namespace: rmeta.OperatorNamespace(),
+		Namespace: common.OperatorNamespace(),
 	},
 	Data: map[string][]byte{
 		"cert": []byte("cert"),
@@ -44,7 +44,7 @@ var ElasticsearchSecret = corev1.Secret{
 	},
 	ObjectMeta: metav1.ObjectMeta{
 		Name:      render.TigeraElasticsearchCertSecret,
-		Namespace: rmeta.OperatorNamespace(),
+		Namespace: common.OperatorNamespace(),
 	},
 	Data: map[string][]byte{
 		"cert": []byte("cert"),
@@ -59,7 +59,7 @@ var KubeControllersUserSecret = corev1.Secret{
 	},
 	ObjectMeta: metav1.ObjectMeta{
 		Name:      kubecontrollers.ElasticsearchKubeControllersUserSecret,
-		Namespace: rmeta.OperatorNamespace(),
+		Namespace: common.OperatorNamespace(),
 	},
 	Data: map[string][]byte{
 		"username": []byte("password"),
@@ -74,7 +74,7 @@ var KibanaSecret = corev1.Secret{
 	},
 	ObjectMeta: metav1.ObjectMeta{
 		Name:      render.TigeraKibanaCertSecret,
-		Namespace: rmeta.OperatorNamespace(),
+		Namespace: common.OperatorNamespace(),
 	},
 	Data: map[string][]byte{
 		"cert": []byte("cert"),
@@ -88,7 +88,7 @@ var VoltronTunnelSecret = corev1.Secret{
 	},
 	ObjectMeta: metav1.ObjectMeta{
 		Name:      render.VoltronTunnelSecretName,
-		Namespace: rmeta.OperatorNamespace(),
+		Namespace: common.OperatorNamespace(),
 	},
 	Data: map[string][]byte{
 		render.VoltronTunnelSecretCertName: []byte("cert"),

@@ -36,6 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	logstoragecommon "github.com/tigera/operator/pkg/controller/logstorage/common"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -116,15 +117,15 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	err = c.Watch(&source.Kind{Type: &corev1.Secret{}}, &handler.EnqueueRequestForObject{}, &predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
 			_, hasLabel := e.Object.GetLabels()[logstoragecommon.TigeraElasticsearchUserSecretLabel]
-			return e.Object.GetNamespace() == rmeta.OperatorNamespace() && hasLabel
+			return e.Object.GetNamespace() == common.OperatorNamespace() && hasLabel
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			_, hasLabel := e.ObjectNew.GetLabels()[logstoragecommon.TigeraElasticsearchUserSecretLabel]
-			return e.ObjectNew.GetNamespace() == rmeta.OperatorNamespace() && hasLabel
+			return e.ObjectNew.GetNamespace() == common.OperatorNamespace() && hasLabel
 		},
 		DeleteFunc: func(e event.DeleteEvent) bool {
 			_, hasLabel := e.Object.GetLabels()[logstoragecommon.TigeraElasticsearchUserSecretLabel]
-			return e.Object.GetNamespace() == rmeta.OperatorNamespace() && hasLabel
+			return e.Object.GetNamespace() == common.OperatorNamespace() && hasLabel
 		},
 	})
 	if err != nil {
@@ -135,13 +136,13 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	for _, secretName := range []string{
 		render.TigeraElasticsearchCertSecret, render.TigeraKibanaCertSecret,
 		render.OIDCSecretName, render.DexObjectName} {
-		if err = utils.AddSecretsWatch(c, secretName, rmeta.OperatorNamespace()); err != nil {
+		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 		}
 	}
 
 	// Catch if something modifies the certs that this controller creates.
-	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace()); err != nil {
+	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, common.OperatorNamespace()); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 	}
 
@@ -149,11 +150,11 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 	}
 
-	if err = utils.AddSecretsWatch(c, render.ElasticsearchAdminUserSecret, rmeta.OperatorNamespace()); err != nil {
+	if err = utils.AddSecretsWatch(c, render.ElasticsearchAdminUserSecret, common.OperatorNamespace()); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 	}
 
-	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, rmeta.OperatorNamespace()); err != nil {
+	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace()); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
@@ -390,7 +391,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, err
 		}
 		if esAdminUserSecret != nil {
-			esAdminUserSecret = rsecret.CopyToNamespace(rmeta.OperatorNamespace(), esAdminUserSecret)[0]
+			esAdminUserSecret = rsecret.CopyToNamespace(common.OperatorNamespace(), esAdminUserSecret)[0]
 		}
 
 		curatorSecrets, err = utils.ElasticsearchSecrets(context.Background(), []string{render.ElasticsearchCuratorUserSecret}, r.client)
@@ -575,7 +576,7 @@ func (r *ReconcileLogStorage) kibanaInternalSecrets(ctx context.Context, instl *
 	svcDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
 
 	// Get the secret - might be nil
-	secret, err := utils.GetSecret(ctx, r.client, render.TigeraKibanaCertSecret, rmeta.OperatorNamespace())
+	secret, err := utils.GetSecret(ctx, r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace())
 	if err != nil {
 		return nil, err
 	}
@@ -591,7 +592,7 @@ func (r *ReconcileLogStorage) kibanaInternalSecrets(ctx context.Context, instl *
 			secret,
 			rsecret.CopyToNamespace(render.KibanaNamespace, secret)[0],
 			render.CreateCertificateSecret(instl.CertificateManagement.CACert, relasticsearch.InternalCertSecret, render.KibanaNamespace),
-			render.CreateCertificateSecret(instl.CertificateManagement.CACert, render.KibanaInternalCertSecret, rmeta.OperatorNamespace()),
+			render.CreateCertificateSecret(instl.CertificateManagement.CACert, render.KibanaInternalCertSecret, common.OperatorNamespace()),
 		}, nil
 	}
 
@@ -622,7 +623,7 @@ func (r *ReconcileLogStorage) kibanaInternalSecrets(ctx context.Context, instl *
 		}
 	}
 	// If the cert was not deleted, copy the valid cert to operator namespace.
-	secrets = append(secrets, rsecret.CopyToNamespace(rmeta.OperatorNamespace(), internalSecret)...)
+	secrets = append(secrets, rsecret.CopyToNamespace(common.OperatorNamespace(), internalSecret)...)
 
 	return secrets, nil
 }

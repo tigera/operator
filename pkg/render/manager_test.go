@@ -24,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
@@ -393,10 +394,10 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	// panicing. It accepts variations on the installspec for testing purposes.
 	renderManager := func(i *operatorv1.InstallationSpec) *appsv1.Deployment {
 		component, err := render.Manager(nil, nil, nil,
-			rtest.CreateCertSecret(render.ComplianceServerCertSecret, rmeta.OperatorNamespace()),
-			rtest.CreateCertSecret(render.PacketCaptureCertSecret, rmeta.OperatorNamespace()),
+			rtest.CreateCertSecret(render.ComplianceServerCertSecret, common.OperatorNamespace()),
+			rtest.CreateCertSecret(render.PacketCaptureCertSecret, common.OperatorNamespace()),
 			&relasticsearch.ClusterConfig{},
-			rtest.CreateCertSecret(render.ManagerTLSSecretName, rmeta.OperatorNamespace()),
+			rtest.CreateCertSecret(render.ManagerTLSSecretName, common.OperatorNamespace()),
 			nil, false,
 			i,
 			nil, nil, nil, "", render.ElasticsearchLicenseTypeUnknown,
@@ -520,15 +521,15 @@ func renderObjects(oidc bool, managementCluster *operatorv1.ManagementCluster, i
 	}
 	var managerTLS *corev1.Secret
 	if includeManagerTLSSecret {
-		managerTLS = rtest.CreateCertSecret(render.ManagerTLSSecretName, rmeta.OperatorNamespace())
+		managerTLS = rtest.CreateCertSecret(render.ManagerTLSSecretName, common.OperatorNamespace())
 	}
 
 	esConfigMap := relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 	component, err := render.Manager(dexCfg,
 		nil,
 		nil,
-		rtest.CreateCertSecret(render.ComplianceServerCertSecret, rmeta.OperatorNamespace()),
-		rtest.CreateCertSecret(render.PacketCaptureCertSecret, rmeta.OperatorNamespace()),
+		rtest.CreateCertSecret(render.ComplianceServerCertSecret, common.OperatorNamespace()),
+		rtest.CreateCertSecret(render.PacketCaptureCertSecret, common.OperatorNamespace()),
 		esConfigMap,
 		managerTLS,
 		nil,

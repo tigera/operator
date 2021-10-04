@@ -109,6 +109,7 @@ func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 		commonObjs = append(commonObjs, configmap.ToRuntimeObjects(configmap.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.TyphaCAConfigMap)...)...)
 	}
 
+	commonObjs = append(commonObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.PullSecrets...)...)...)
 	commonObjs = append(commonObjs,
 		d.dpiServiceAccount(),
 		d.dpiClusterRole(),

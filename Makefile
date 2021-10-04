@@ -216,9 +216,6 @@ $(BINDIR)/operator-$(ARCH): $(SRC_FILES)
 
 .PHONY: image
 image: build $(BUILD_IMAGE)
-image-all: $(addprefix sub-image-,$(VALIDARCHES))
-sub-image-%:
-	$(MAKE) image ARCH=$*
 
 $(BUILD_IMAGE): $(BUILD_IMAGE)-$(ARCH)
 $(BUILD_IMAGE)-$(ARCH): register $(BINDIR)/operator-$(ARCH)
@@ -227,9 +224,14 @@ ifeq ($(ARCH),amd64)
 	docker tag $(BUILD_IMAGE):latest-$(ARCH) $(BUILD_IMAGE):latest
 endif
 
-build/init/bin/kubectl:
-	mkdir -p build/init/bin
-	curl -o build/init/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/v1.14.0/bin/linux/amd64/kubectl
+.PHONY: images
+images: register image
+
+# Build the images for the target architecture
+.PHONY: image-all
+image-all: $(addprefix sub-image-,$(VALIDARCHES))
+sub-image-%:
+	$(MAKE) images ARCH=$*
 
 .PHONY: image-init
 image-init: image
@@ -237,14 +239,9 @@ ifeq ($(ARCH),amd64)
 	docker tag $(BUILD_IMAGE):latest-$(ARCH) $(BUILD_INIT_IMAGE):latest
 endif
 
-.PHONY: images
-images: register image
-
-# Build the images for the target architecture
-.PHONY: images-all
-images-all: $(addprefix sub-image-,$(VALIDARCHES))
-sub-image-%:
-	$(MAKE) images ARCH=$*
+build/init/bin/kubectl:
+	mkdir -p build/init/bin
+	curl -o build/init/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/v1.14.0/bin/linux/amd64/kubectl
 
 clean:
 	rm -rf build/_output
@@ -346,7 +343,7 @@ foss-checks:
 ###############################################################################
 .PHONY: ci
 ## Run what CI runs
-ci: clean format-check images-all test dirty-check validate-gen-versions
+ci: clean format-check image-all test dirty-check validate-gen-versions
 
 validate-gen-versions:
 	make gen-versions

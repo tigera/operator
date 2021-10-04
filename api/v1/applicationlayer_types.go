@@ -22,22 +22,22 @@ import (
 
 // ApplicationLayerSpec defines the desired state of ApplicationLayer
 type ApplicationLayerSpec struct {
-	// specification for L7 log collection
-	L7LogCollection *L7LogCollectionSpec `json:"l7LogCollection,omitempty"`
+	// specification for application layer (L7) log collection
+	LogCollection *LogCollectionSpec `json:"logCollection,omitempty"`
 }
 
-type L7LogCollectionStatusType string
+type LogCollectionStatusType string
 
 const (
-	L7LogCollectionDisabled L7LogCollectionStatusType = "Disabled"
-	L7LogCollectionEnabled  L7LogCollectionStatusType = "Enabled"
+	L7LogCollectionDisabled LogCollectionStatusType = "Disabled"
+	L7LogCollectionEnabled  LogCollectionStatusType = "Enabled"
 )
 
-type L7LogCollectionSpec struct {
+type LogCollectionSpec struct {
 
 	// Setting this option to Enabled will enable l7 log collection
 	// +optional
-	CollectL7Logs *L7LogCollectionStatusType `json:"collectL7Logs,omitempty"`
+	CollectLogs *LogCollectionStatusType `json:"collectLogs,omitempty"`
 
 	// Interval in seconds for sending L7 log information for processing.
 	// adjust this to limit the frequency at which logs are sent from l7-collector

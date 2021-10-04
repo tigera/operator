@@ -17,6 +17,7 @@ package applicationlayer
 import (
 	"context"
 	"fmt"
+	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
@@ -104,9 +105,6 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("applicationlayer-controller failed to watch ImageSet: %w", err)
 	}
 
-	if err = utils.AddAPIServerWatch(c); err != nil {
-		return fmt.Errorf("applicationlayer-controller failed to watch APIServer resource: %w", err)
-	}
 	return nil
 }
 
@@ -131,7 +129,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling ApplicationLayer")
 
-	instance, err := GetApplicationLayer(ctx, r.client)
+	applicationLayer, err := GetApplicationLayer(ctx, r.client)
 
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -163,26 +161,33 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		return reconcile.Result{}, err
 	}
 
-	l7Spec := instance.Spec.L7LogCollection
+	lcSpec := applicationLayer.Spec.LogCollection
 
-	err = r.patchFelixTproxyMode(ctx, l7Spec)
+	// if ApplicationLayer spec exists then LogCollection should be set
+	// TODO: when we will have multiple features in future this should change to at least one feature being set
+	if lcSpec == nil {
+		r.status.SetDegraded("Error retrieving LogCollection Spec", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	err = r.patchFelixTproxyMode(ctx, lcSpec)
 
 	if err != nil {
 		r.status.SetDegraded("Error patching felix configuration", err.Error())
 		return reconcile.Result{}, err
 	}
 
-	if r.enableL7LogsCollection(l7Spec) {
+	if r.enableL7LogsCollection(lcSpec) {
 
 		l7 := &render.L7LogCollectionSpec{
 			Enabled:                true,
-			LogIntervalSeconds:     l7Spec.LogIntervalSeconds,
-			LogRequestsPerInterval: l7Spec.LogRequestsPerInterval,
+			LogIntervalSeconds:     lcSpec.LogIntervalSeconds,
+			LogRequestsPerInterval: lcSpec.LogRequestsPerInterval,
 		}
 
-		l7component := render.ApplicationLayer(pullSecrets, installation, rmeta.OSTypeLinux, instance, l7)
+		l7component := render.ApplicationLayer(pullSecrets, installation, rmeta.OSTypeLinux, applicationLayer, l7)
 
-		ch := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+		ch := utils.NewComponentHandler(log, r.client, r.scheme, applicationLayer)
 
 		if err = imageset.ApplyImageSet(ctx, r.client, variant, l7component); err != nil {
 			reqLogger.Error(err, "Error with images from ImageSet")
@@ -190,11 +195,28 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 			return reconcile.Result{}, err
 		}
 
+		// TODO: when there are more ApplicationLayer options then it will need to be restructured.
+		// because each of the different features will not have their own CreateOrUpdateOrDelete
 		if err := ch.CreateOrUpdateOrDelete(ctx, l7component, r.status); err != nil {
 			r.status.SetDegraded("Error creating / updating resource", err.Error())
 			return reconcile.Result{}, err
 		}
 
+	}
+
+	// Clear the degraded bit if we've reached this far.
+	r.status.ClearDegraded()
+
+	if !r.status.IsAvailable() {
+		// Schedule a kick to check again in the near future. Hopefully by then
+		// things will be available.
+		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+
+	// Everything is available - update the CRD status.
+	applicationLayer.Status.State = operatorv1.TigeraStatusReady
+	if err = r.client.Status().Update(ctx, applicationLayer); err != nil {
+		return reconcile.Result{}, err
 	}
 
 	return reconcile.Result{}, nil
@@ -212,13 +234,13 @@ func GetApplicationLayer(ctx context.Context, cli client.Client) (*operatorv1.Ap
 	return instance, nil
 }
 
-func (r *ReconcileApplicationLayer) enableL7LogsCollection(l7Spec *operatorv1.L7LogCollectionSpec) bool {
-	return l7Spec != nil && l7Spec.CollectL7Logs != nil && *l7Spec.CollectL7Logs == operatorv1.L7LogCollectionEnabled
+func (r *ReconcileApplicationLayer) enableL7LogsCollection(l7Spec *operatorv1.LogCollectionSpec) bool {
+	return l7Spec != nil && l7Spec.CollectLogs != nil && *l7Spec.CollectLogs == operatorv1.L7LogCollectionEnabled
 }
 
 // patchFelixTproxyMode takes all application layer specs as arguments and patches felix config.
 // If at least one of the specs requires TPROXYMode as enabled it'll be pacthed as Enabled else disabled
-func (r *ReconcileApplicationLayer) patchFelixTproxyMode(ctx context.Context, l7Spec *operatorv1.L7LogCollectionSpec) error {
+func (r *ReconcileApplicationLayer) patchFelixTproxyMode(ctx context.Context, l7Spec *operatorv1.LogCollectionSpec) error {
 	// Fetch any existing default FelixConfiguration object.
 	fc := &crdv1.FelixConfiguration{}
 	err := r.client.Get(ctx, types.NamespacedName{Name: "default"}, fc)
@@ -238,7 +260,7 @@ func (r *ReconcileApplicationLayer) patchFelixTproxyMode(ctx context.Context, l7
 		fc.Spec.TPROXYMode = &disabled
 	}
 
-	//log.Info("Patch default FelixConfiguration with %s", *fc.Spec.TPROXYMode)
+	log.Info("Patch default FelixConfiguration with %s", *fc.Spec.TPROXYMode)
 
 	if err := r.client.Patch(ctx, fc, patchFrom); err != nil {
 		r.status.SetDegraded("Unable to Patch default FelixConfiguration", err.Error())

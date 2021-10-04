@@ -35,10 +35,10 @@ spec:
           spec:
             description: ApplicationLayerSpec defines the desired state of ApplicationLayer
             properties:
-              l7LogCollection:
-                description: specification for L7 log collection
+              logCollection:
+                description: specification for application layer (L7) log collection
                 properties:
-                  collectL7Logs:
+                  collectLogs:
                     description: Setting this option to Enabled will enable l7 log
                       collection
                     type: string

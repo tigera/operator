@@ -119,8 +119,8 @@ var _ = Describe("Application layer controller tests", func() {
 			Expect(c.Create(ctx, &operatorv1.ApplicationLayer{
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Spec: operatorv1.ApplicationLayerSpec{
-					L7LogCollection: &operatorv1.L7LogCollectionSpec{
-						CollectL7Logs: &enabled,
+					LogCollection: &operatorv1.LogCollectionSpec{
+						CollectLogs: &enabled,
 					},
 				},
 			})).NotTo(HaveOccurred())

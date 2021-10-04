@@ -18,6 +18,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -147,6 +148,10 @@ var (
 	nodeTLSSecret = &corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: render.NodeTLSSecretName}}
 
 	esConfigMap = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
+
+	pullSecrets = []*corev1.Secret{{
+		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "pull-secret", Namespace: common.OperatorNamespace()}}}
 )
 
 type resourceTestObj struct {
@@ -166,7 +171,7 @@ var _ = Describe("DPI rendering tests", func() {
 			NodeTLSSecret:      nodeTLSSecret,
 			TyphaTLSSecret:     typhaTLSSecret,
 			TyphaCAConfigMap:   typhaCAConfigMap,
-			PullSecrets:        nil,
+			PullSecrets:        pullSecrets,
 			Openshift:          false,
 			HasNoLicense:       false,
 			HasNoDPIResource:   false,
@@ -182,6 +187,7 @@ var _ = Describe("DPI rendering tests", func() {
 			{name: render.NodeTLSSecretName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: render.TyphaTLSSecretName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: render.TyphaCAConfigMapName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: "pull-secret", ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -225,7 +231,7 @@ var _ = Describe("DPI rendering tests", func() {
 			NodeTLSSecret:      nodeTLSSecret,
 			TyphaTLSSecret:     typhaTLSSecret,
 			TyphaCAConfigMap:   typhaCAConfigMap,
-			PullSecrets:        nil,
+			PullSecrets:        pullSecrets,
 			Openshift:          true,
 			HasNoLicense:       false,
 			HasNoDPIResource:   false,
@@ -241,6 +247,7 @@ var _ = Describe("DPI rendering tests", func() {
 			{name: render.NodeTLSSecretName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: render.TyphaTLSSecretName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: render.TyphaCAConfigMapName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: "pull-secret", ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -270,7 +277,7 @@ var _ = Describe("DPI rendering tests", func() {
 			NodeTLSSecret:      nodeTLSSecret,
 			TyphaTLSSecret:     typhaTLSSecret,
 			TyphaCAConfigMap:   typhaCAConfigMap,
-			PullSecrets:        nil,
+			PullSecrets:        pullSecrets,
 			Openshift:          false,
 			HasNoLicense:       true,
 			HasNoDPIResource:   false,
@@ -286,6 +293,7 @@ var _ = Describe("DPI rendering tests", func() {
 			{name: render.TyphaTLSSecretName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: relasticsearch.PublicCertSecret, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: render.TyphaCAConfigMapName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: "pull-secret", ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -307,7 +315,7 @@ var _ = Describe("DPI rendering tests", func() {
 			NodeTLSSecret:      nil,
 			TyphaTLSSecret:     nil,
 			TyphaCAConfigMap:   nil,
-			PullSecrets:        nil,
+			PullSecrets:        pullSecrets,
 			Openshift:          false,
 			HasNoLicense:       false,
 			HasNoDPIResource:   true,
@@ -321,6 +329,7 @@ var _ = Describe("DPI rendering tests", func() {
 			{name: render.TyphaTLSSecretName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: relasticsearch.PublicCertSecret, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: render.TyphaCAConfigMapName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: "pull-secret", ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},

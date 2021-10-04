@@ -18,10 +18,10 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
 	appsv1 "k8s.io/api/apps/v1"
@@ -151,7 +151,7 @@ var (
 
 	pullSecrets = []*corev1.Secret{{
 		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "pull-secret", Namespace: common.OperatorNamespace()}}}
+		ObjectMeta: metav1.ObjectMeta{Name: "pull-secret", Namespace: rmeta.OperatorNamespace()}}}
 )
 
 type resourceTestObj struct {

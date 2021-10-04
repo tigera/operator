@@ -216,25 +216,12 @@ $(BINDIR)/operator-$(ARCH): $(SRC_FILES)
 
 .PHONY: image
 image: build $(BUILD_IMAGE)
-image-all: $(addprefix sub-image-,$(VALIDARCHES))
-sub-image-%:
-	$(MAKE) image ARCH=$*
 
 $(BUILD_IMAGE): $(BUILD_IMAGE)-$(ARCH)
 $(BUILD_IMAGE)-$(ARCH): register $(BINDIR)/operator-$(ARCH)
 	docker build --pull -t $(BUILD_IMAGE):latest-$(ARCH) --platform=linux/$(TARGET_PLATFORM) --build-arg GIT_VERSION=$(GIT_VERSION) -f ./build/Dockerfile.$(ARCH) .
 ifeq ($(ARCH),amd64)
 	docker tag $(BUILD_IMAGE):latest-$(ARCH) $(BUILD_IMAGE):latest
-endif
-
-build/init/bin/kubectl:
-	mkdir -p build/init/bin
-	curl -o build/init/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/v1.14.0/bin/linux/amd64/kubectl
-
-.PHONY: image-init
-image-init: image
-ifeq ($(ARCH),amd64)
-	docker tag $(BUILD_IMAGE):latest-$(ARCH) $(BUILD_INIT_IMAGE):latest
 endif
 
 .PHONY: images
@@ -245,6 +232,16 @@ images: register image
 images-all: $(addprefix sub-image-,$(VALIDARCHES))
 sub-image-%:
 	$(MAKE) images ARCH=$*
+
+.PHONY: image-init
+image-init: image
+ifeq ($(ARCH),amd64)
+	docker tag $(BUILD_IMAGE):latest-$(ARCH) $(BUILD_INIT_IMAGE):latest
+endif
+
+build/init/bin/kubectl:
+	mkdir -p build/init/bin
+	curl -o build/init/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/v1.14.0/bin/linux/amd64/kubectl
 
 clean:
 	rm -rf build/_output
@@ -390,7 +387,7 @@ release-build: release-prereqs clean
 ifneq ($(VERSION), $(GIT_VERSION))
 	$(error Attempt to build $(VERSION) from $(GIT_VERSION))
 endif
-	$(MAKE) image-all
+	$(MAKE) images-all
 	$(MAKE) tag-images-all RELEASE=true IMAGETAG=$(VERSION)
 	# Generate the `latest` images.
 	$(MAKE) tag-images-all RELEASE=true IMAGETAG=latest

@@ -809,6 +809,14 @@ var _ = Describe("Testing core-controller installation", func() {
 					},
 					Spec: corev1.NodeSpec{},
 				},
+				&corev1.Node{
+					TypeMeta: metav1.TypeMeta{},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:   "node3",
+						Labels: map[string]string{"kubernetes.io/os": "linux"},
+					},
+					Spec: corev1.NodeSpec{},
+				},
 				&appsv1.Deployment{
 					TypeMeta:   metav1.TypeMeta{},
 					ObjectMeta: metav1.ObjectMeta{Name: "calico-typha", Namespace: "calico-system"},

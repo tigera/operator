@@ -92,8 +92,8 @@ var _ = Describe("Test typha autoscaler ", func() {
 	})
 
 	It("should get the correct number of nodes", func() {
-		n1 := createNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"})
-		_ = createNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"})
+		n1 := createNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
+		_ = createNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"}, nil)
 
 		ta := newTyphaAutoscaler(c, nlw, tlw, statusManager)
 		ta.start()
@@ -149,8 +149,8 @@ var _ = Describe("Test typha autoscaler ", func() {
 		Expect(err).To(BeNil())
 
 		// Create a few nodes
-		_ = createNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"})
-		_ = createNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"})
+		_ = createNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
+		_ = createNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"}, nil)
 
 		// Create the autoscaler and run it
 		ta := newTyphaAutoscaler(c, nlw, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
@@ -158,7 +158,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 
 		verifyTyphaReplicas(c, 2)
 
-		n3 := createNode(c, "node3", map[string]string{"kubernetes.io/os": "linux"})
+		n3 := createNode(c, "node3", map[string]string{"kubernetes.io/os": "linux"}, nil)
 		verifyTyphaReplicas(c, 3)
 
 		// Verify that making a node unschedulable updates replicas.
@@ -187,9 +187,9 @@ var _ = Describe("Test typha autoscaler ", func() {
 		Expect(err).To(BeNil())
 
 		// Create three nodes, one of which is not yet migrated
-		createNode(c, "node1", map[string]string{"kubernetes.io/os": "linux", "projectcalico.org/operator-node-migration": "migrated"})
-		createNode(c, "node2", map[string]string{"kubernetes.io/os": "linux", "projectcalico.org/operator-node-migration": "migrated"})
-		createNode(c, "node3", map[string]string{"kubernetes.io/os": "linux", "projectcalico.org/operator-node-migration": "pre-operator"})
+		createNode(c, "node1", map[string]string{"kubernetes.io/os": "linux", "projectcalico.org/operator-node-migration": "migrated"}, nil)
+		createNode(c, "node2", map[string]string{"kubernetes.io/os": "linux", "projectcalico.org/operator-node-migration": "migrated"}, nil)
+		createNode(c, "node3", map[string]string{"kubernetes.io/os": "linux", "projectcalico.org/operator-node-migration": "pre-operator"}, nil)
 
 		// Create the autoscaler and run it
 		ta := newTyphaAutoscaler(c, nlw, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
@@ -218,9 +218,9 @@ var _ = Describe("Test typha autoscaler ", func() {
 		Expect(err).To(BeNil())
 
 		// Create two nodes, one of which is a virtual-kubelet
-		createNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"})
-		createNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"})
-		createNode(c, "node3", map[string]string{"kubernetes.io/os": "linux", "kubernetes.azure.com/cluster": "foo", "type": "virtual-kubelet"})
+		createNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
+		createNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"}, nil)
+		createNode(c, "node3", map[string]string{"kubernetes.io/os": "linux", "kubernetes.azure.com/cluster": "foo", "type": "virtual-kubelet"}, nil)
 
 		// Create the autoscaler and run it
 		ta := newTyphaAutoscaler(c, nlw, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
@@ -251,10 +251,10 @@ var _ = Describe("Test typha autoscaler ", func() {
 		statusManager.On("SetDegraded", "Failed to autoscale typha", "not enough linux nodes to schedule typha pods on, require 3 and have 2")
 
 		// Create a few nodes
-		_ = createNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"})
-		_ = createNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"})
-		_ = createNode(c, "node3", map[string]string{"kubernetes.io/os": "window"})
-		_ = createNode(c, "node4", map[string]string{"kubernetes.io/os": "window"})
+		_ = createNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
+		_ = createNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"}, nil)
+		_ = createNode(c, "node3", map[string]string{"kubernetes.io/os": "window"}, nil)
+		_ = createNode(c, "node4", map[string]string{"kubernetes.io/os": "window"}, nil)
 
 		// Create the autoscaler and run it
 		ta := newTyphaAutoscaler(c, nlw, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
@@ -267,14 +267,20 @@ var _ = Describe("Test typha autoscaler ", func() {
 	})
 })
 
-func createNode(c kubernetes.Interface, name string, labels map[string]string) *corev1.Node {
+func createNode(c kubernetes.Interface, name string, labels map[string]string, annotations map[string]string) *corev1.Node {
 	node := &corev1.Node{
 		TypeMeta: metav1.TypeMeta{Kind: "Node", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   name,
-			Labels: labels,
+			Name: name,
 		},
 	}
+	if labels != nil {
+		node.ObjectMeta.Labels = labels
+	}
+	if annotations != nil {
+		node.ObjectMeta.Annotations = annotations
+	}
+
 	var err error
 	node, err = c.CoreV1().Nodes().Create(context.Background(), node, metav1.CreateOptions{})
 	Expect(err).To(BeNil())

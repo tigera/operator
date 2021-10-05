@@ -19,6 +19,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tigera/operator/pkg/common"
+
+	"github.com/tigera/operator/pkg/render/applicationlayer"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -27,8 +31,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
-	"github.com/tigera/operator/pkg/render"
-
 	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -66,6 +68,12 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err != nil {
 		log.Error(err, "Failed to establish a connection to k8s")
 		return err
+	}
+
+	for _, configMapName := range []string{applicationlayer.EnvoyConfigMapName} {
+		if err = utils.AddConfigMapWatch(c, configMapName, common.CalicoNamespace); err != nil {
+			return fmt.Errorf("applicationlayer-controller failed to watch ConfigMap %s: %v", configMapName, err)
+		}
 	}
 
 	go utils.WaitToAddLicenseKeyWatch(c, k8sClient, log, licenseAPIReady)
@@ -166,7 +174,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	// if ApplicationLayer spec exists then LogCollection should be set
 	// TODO: when we will have multiple features in future this should change to at least one feature being set
 	if lcSpec == nil {
-		r.status.SetDegraded("Error retrieving LogCollection Spec", err.Error())
+		r.status.SetDegraded(fmt.Sprintf("Error retrieving LogCollection Spec"), "")
 		return reconcile.Result{}, err
 	}
 
@@ -179,13 +187,8 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 
 	if r.enableL7LogsCollection(lcSpec) {
 
-		l7 := &render.L7LogCollectionSpec{
-			Enabled:                true,
-			LogIntervalSeconds:     lcSpec.LogIntervalSeconds,
-			LogRequestsPerInterval: lcSpec.LogRequestsPerInterval,
-		}
-
-		l7component := render.ApplicationLayer(pullSecrets, installation, rmeta.OSTypeLinux, applicationLayer, l7)
+		l7component := applicationlayer.ApplicationLayer(pullSecrets, installation, rmeta.OSTypeLinux,
+			true, lcSpec.LogIntervalSeconds, lcSpec.LogRequestsPerInterval)
 
 		ch := utils.NewComponentHandler(log, r.client, r.scheme, applicationLayer)
 
@@ -252,15 +255,17 @@ func (r *ReconcileApplicationLayer) patchFelixTproxyMode(ctx context.Context, l7
 
 	patchFrom := client.MergeFrom(fc.DeepCopy())
 
+	var tproxyMode crdv1.TPROXYModeOption
+
 	if r.enableL7LogsCollection(l7Spec) {
-		enabled := crdv1.TPROXYModeOptionEnabled
-		fc.Spec.TPROXYMode = &enabled
+		tproxyMode = crdv1.TPROXYModeOptionEnabled
 	} else {
-		disabled := crdv1.TPROXYModeOptionDisabled
-		fc.Spec.TPROXYMode = &disabled
+		tproxyMode = crdv1.TPROXYModeOptionDisabled
 	}
 
-	log.Info("Patch default FelixConfiguration with %s", *fc.Spec.TPROXYMode)
+	fc.Spec.TPROXYMode = &tproxyMode
+
+	log.Info("Patching TPROXYMode FelixConfiguration with mode", "mode", string(tproxyMode))
 
 	if err := r.client.Patch(ctx, fc, patchFrom); err != nil {
 		r.status.SetDegraded("Unable to Patch default FelixConfiguration", err.Error())

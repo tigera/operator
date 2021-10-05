@@ -18,6 +18,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/tigera/operator/pkg/common"
+
+	"github.com/tigera/operator/pkg/render/applicationlayer"
+
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 
 	"github.com/stretchr/testify/mock"
@@ -33,7 +37,6 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -131,8 +134,8 @@ var _ = Describe("Application layer controller tests", func() {
 			ds := appsv1.DaemonSet{
 				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.L7LogCollectorDeamonsetName,
-					Namespace: render.CalicoSystemNamespace,
+					Name:      applicationlayer.L7LogCollectorDeamonsetName,
+					Namespace: common.CalicoNamespace,
 				},
 			}
 

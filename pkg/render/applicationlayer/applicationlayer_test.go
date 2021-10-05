@@ -12,16 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package render_test
+package applicationlayer_test
 
 import (
 	. "github.com/onsi/ginkgo"
-
 	. "github.com/onsi/gomega"
+	"github.com/tigera/operator/pkg/common"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/render"
-
+	"github.com/tigera/operator/pkg/render/applicationlayer"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	appsv1 "k8s.io/api/apps/v1"
@@ -29,13 +28,11 @@ import (
 )
 
 var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
-	var instance *operatorv1.ApplicationLayer
+	//var instance *operatorv1.ApplicationLayer
 	var installation *operatorv1.InstallationSpec
 
 	BeforeEach(func() {
-		// Initialize a default instance to use. Each test can override this to its
-		// desired configuration.
-		instance = &operatorv1.ApplicationLayer{}
+		// Initialize a default installation spec
 		installation = &operatorv1.InstallationSpec{
 			KubernetesProvider: operatorv1.ProviderNone,
 		}
@@ -50,13 +47,13 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{name: render.EnvoyConfigKey, ns: render.CalicoSystemNamespace, group: "", version: "v1", kind: "ConfigMap"},
-			{name: render.L7LogCollectorDeamonsetName, ns: render.CalicoSystemNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: applicationlayer.EnvoyConfigMapName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: applicationlayer.L7LogCollectorDeamonsetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
 		// Should render the correct resources.
-		l7 := &render.L7LogCollectionSpec{Enabled: true}
-		component := render.ApplicationLayer(nil, installation, rmeta.OSTypeLinux, instance, l7)
+		component := applicationlayer.ApplicationLayer(nil, installation, rmeta.OSTypeLinux,
+			true, nil, nil)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -66,7 +63,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			i++
 		}
 
-		ds := rtest.GetResource(resources, render.L7LogCollectorDeamonsetName, render.CalicoSystemNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		ds := rtest.GetResource(resources, applicationlayer.L7LogCollectorDeamonsetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 
 		// check rendering of daemonset
 		Expect(ds.Spec.Template.Spec.HostNetwork).To(BeTrue())
@@ -79,17 +76,17 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		// check each volume
 		dsVols := ds.Spec.Template.Spec.Volumes
 		expectedVolumes := []corev1.Volume{
-			corev1.Volume{
-				Name: render.EnvoyLogsKey,
+			{
+				Name: applicationlayer.EnvoyLogsVolumeName,
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
 			},
-			corev1.Volume{
-				Name: render.EnvoyConfigKey,
+			{
+				Name: applicationlayer.EnvoyConfigMapName,
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{Name: render.EnvoyConfigKey},
+						LocalObjectReference: corev1.LocalObjectReference{Name: applicationlayer.EnvoyConfigMapName},
 					},
 				},
 			},
@@ -122,8 +119,8 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 
 		proxyVolMounts := proxyContainer.VolumeMounts
 		expectedProxyVolMounts := []corev1.VolumeMount{
-			{Name: render.EnvoyConfigKey, MountPath: "/etc/envoy"},
-			{Name: render.EnvoyLogsKey, MountPath: "/tmp/"},
+			{Name: applicationlayer.EnvoyConfigMapName, MountPath: "/etc/envoy"},
+			{Name: applicationlayer.EnvoyLogsVolumeName, MountPath: "/tmp/"},
 		}
 		for _, expected := range expectedProxyVolMounts {
 			Expect(proxyVolMounts).To(ContainElement(expected))
@@ -142,7 +139,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 
 		collectorVolMounts := proxyContainer.VolumeMounts
 		expectedCollectorVolMounts := []corev1.VolumeMount{
-			{Name: render.EnvoyLogsKey, MountPath: "/tmp/"},
+			{Name: applicationlayer.EnvoyLogsVolumeName, MountPath: "/tmp/"},
 		}
 		for _, expected := range expectedCollectorVolMounts {
 			Expect(collectorVolMounts).To(ContainElement(expected))

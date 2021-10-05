@@ -80,7 +80,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		product = operator.TigeraSecureEnterprise
 	})
 
-	It("should ignore unsupported nodes", func() {
+	It("should ignore linux nodes", func() {
 		c := newCalicoWindowsUpgrader(cs, client, nlw, mockStatus, requestChan)
 		r := newTestReconciler(requestChan, func() error {
 			return c.upgradeWindowsNodes(product)
@@ -89,16 +89,38 @@ var _ = Describe("Calico windows upgrader", func() {
 		defer r.stop()
 		c.start()
 
-		// Linux nodes are ignored.
 		n1 := createNode(cs, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
 		n2 := createNode(cs, "node2", map[string]string{"kubernetes.io/os": "linux"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Enterprise-v2.0.0"})
-		// Windows nodes without the version annotation are ignored.
-		n3 := createNode(cs, "node3", map[string]string{"kubernetes.io/os": "windows"}, nil)
 
 		Consistently(func() error {
-			return assertNodesUnchanged(cs, n1, n2, n3)
+			return assertNodesUnchanged(cs, n1, n2)
 		}, 10*time.Second, 100*time.Millisecond).Should(BeNil())
 
+		mockStatus.AssertExpectations(GinkgoT())
+	})
+
+	It("should return an error if Windows nodes are missing the version annotation ", func() {
+		n1 := createNode(cs, "unsupported-node", map[string]string{"kubernetes.io/os": "windows"}, nil)
+
+		c := newCalicoWindowsUpgrader(cs, client, nlw, mockStatus, requestChan)
+		var err error
+		r := newTestReconciler(requestChan, func() error {
+			// Check that the upgrade fails.
+			err = c.upgradeWindowsNodes(product)
+			// Don't return the error, we want the test to continue.
+			return nil
+		})
+		r.run()
+		defer r.stop()
+		c.start()
+
+		Consistently(func() error {
+			return assertNodesUnchanged(cs, n1)
+		}, 10*time.Second, 100*time.Millisecond).Should(BeNil())
+
+		Expect(err).To(HaveOccurred())
+		errString := "Error getting windows nodes: Node unsupported-node does not have the version annotation, it might be unhealthy or it might be running an unsupported Calico version."
+		Expect(err.Error()).To(Equal(errString))
 		mockStatus.AssertExpectations(GinkgoT())
 	})
 
@@ -108,8 +130,7 @@ var _ = Describe("Calico windows upgrader", func() {
 
 		n1 := createNode(cs, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
 		n2 := createNode(cs, "node2", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Enterprise-v2.0.0"})
-		n3 := createNode(cs, "node3", map[string]string{"kubernetes.io/os": "windows"}, nil)
-		n4 := createNode(cs, "node4", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: currentEnterpriseVersion})
+		n3 := createNode(cs, "node4", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: currentEnterpriseVersion})
 
 		// Create the upgrader and start it.
 		c := newCalicoWindowsUpgrader(cs, client, nlw, mockStatus, requestChan)
@@ -122,7 +143,7 @@ var _ = Describe("Calico windows upgrader", func() {
 
 		// Only node n2 should have changed.
 		Consistently(func() error {
-			return assertNodesUnchanged(cs, n1, n3, n4)
+			return assertNodesUnchanged(cs, n1, n3)
 		}, 10*time.Second, 100*time.Millisecond).Should(BeNil())
 
 		// Ensure that node n2 has the new label and taint.
@@ -181,7 +202,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		// Ensure that the node has the new label and taint.
 		Eventually(func() error {
 			return assertNodesHadUpgradeTriggered(cs, n1)
-		}, 10*time.Second).Should(BeNil())
+		}, 20*time.Second).Should(BeNil())
 
 		mockStatus.AssertExpectations(GinkgoT())
 

@@ -74,9 +74,6 @@ func (w *calicoWindowsUpgrader) triggerReconcileRequest(obj interface{}) {
 	if os, ok := node.GetLabels()[corev1.LabelOSStable]; !ok || os != "windows" {
 		return
 	}
-	if _, ok := node.GetAnnotations()[common.CalicoWindowsVersionAnnotation]; !ok {
-		return
-	}
 
 	req := utils.ReconcileRequest{
 		Context:    context.Background(),
@@ -149,11 +146,11 @@ func (w *calicoWindowsUpgrader) getNodesToUpgrade(expectedVersion string) error 
 
 		windowsLog.V(1).Info(fmt.Sprintf("Processing node %v", node.Name))
 		exists, version := common.GetWindowsNodeVersion(node)
-		// If the version annotation doesn't exist, the node does not support
-		// upgrades.
+		// If the version annotation doesn't exist, something is wrong with the
+		// Calico Windows node or it needs to be upgraded manually to
+		// a version supported by the calicoWindowsUpgrader.
 		if !exists {
-			windowsLog.V(1).Info(fmt.Sprintf("Node %v doesn't have the version annotation, ignoring it", node.Name))
-			continue
+			return fmt.Errorf("Node %v does not have the version annotation, it might be unhealthy or it might be running an unsupported Calico version.", node.Name)
 		}
 
 		if version != expectedVersion {

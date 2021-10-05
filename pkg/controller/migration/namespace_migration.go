@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -36,6 +36,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/tigera/operator/pkg/common"
+	nodeutils "github.com/tigera/operator/pkg/controller/node"
 )
 
 // This package provides the utilities to migrate from a Calico manifest installation
@@ -413,7 +414,7 @@ func (m *CoreNamespaceMigration) labelUnmigratedNodes(ctx context.Context) error
 			return fmt.Errorf("never expected index to have anything other than a Node object: %v", obj)
 		}
 		if val, ok := node.Labels[nodeSelectorKey]; !ok || val != nodeSelectorValuePost {
-			if err := common.AddNodeLabel(ctx, m.client, node.Name, nodeSelectorKey, nodeSelectorValuePre); err != nil {
+			if err := nodeutils.AddNodeLabel(ctx, m.client, node.Name, nodeSelectorKey, nodeSelectorValuePre); err != nil {
 				return err
 			}
 		}
@@ -430,7 +431,7 @@ func (m *CoreNamespaceMigration) removeNodeMigrationLabelFromNodes(ctx context.C
 		if !ok {
 			return fmt.Errorf("never expected index to have anything other than a Node object: %v", obj)
 		}
-		if err := common.RemoveNodeLabel(ctx, m.client, node.Name, nodeSelectorKey); err != nil {
+		if err := nodeutils.RemoveNodeLabel(ctx, m.client, node.Name, nodeSelectorKey); err != nil {
 			return err
 		}
 	}
@@ -538,7 +539,7 @@ func (m *CoreNamespaceMigration) migrateEachNode(ctx context.Context, log logr.L
 			err := m.waitUntilNodeCanBeMigrated(ctx)
 			if err == nil {
 				log.WithValues("node.Name", node.Name).V(1).Info("Adding label to node")
-				err = common.AddNodeLabel(ctx, m.client, node.Name, nodeSelectorKey, nodeSelectorValuePost)
+				err = nodeutils.AddNodeLabel(ctx, m.client, node.Name, nodeSelectorKey, nodeSelectorValuePost)
 				if err != nil {
 					return fmt.Errorf("setting label on node %s failed; %s", node.Name, err)
 				}

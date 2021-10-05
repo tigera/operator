@@ -14,7 +14,7 @@
 
 // GetWindowsNodes returns Windows nodes, optionally filtering the list of nodes
 // with the given filter functions.
-package common
+package node
 
 import (
 	"context"

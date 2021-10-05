@@ -118,8 +118,11 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 	// Create a Typha autoscaler.
 	typhaListWatch := cache.NewListWatchFromClient(cs.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"))
 	typhaScaler := newTyphaAutoscaler(cs, nodeListWatch, typhaListWatch, statusManager)
+
+	requestChan := make(chan utils.ReconcileRequest)
+
 	// Create a Calico Windows upgrader.
-	calicoWindowsUpgrader := newCalicoWindowsUpgrader(cs, mgr.GetClient(), nodeListWatch, statusManager)
+	calicoWindowsUpgrader := newCalicoWindowsUpgrader(cs, mgr.GetClient(), nodeListWatch, statusManager, requestChan)
 
 	r := &ReconcileInstallation{
 		config:                mgr.GetConfig(),
@@ -134,8 +137,9 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		amazonCRDExists:       opts.AmazonCRDExists,
 		enterpriseCRDsExist:   opts.EnterpriseCRDExists,
 		clusterDomain:         opts.ClusterDomain,
-		requestChan:           make(chan utils.ReconcileRequest),
+		requestChan:           requestChan,
 	}
+
 	r.status.Run()
 	r.typhaAutoscaler.start()
 	r.calicoWindowsUpgrader.start()
@@ -232,12 +236,6 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 	err = c.Watch(&source.Kind{Type: &crdv1.FelixConfiguration{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch FelixConfiguration resource: %w", err)
-	}
-
-	// Watch for changes to Windows nodes.
-	err = utils.AddWindowsNodeWatch(c)
-	if err != nil {
-		return fmt.Errorf("tigera-installation-controller failed to watch windows nodes: %w", err)
 	}
 
 	if r.enterpriseCRDsExist {

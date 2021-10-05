@@ -24,6 +24,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	nodeutils "github.com/tigera/operator/pkg/controller/node"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
 
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -35,6 +36,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 var (
@@ -53,6 +55,7 @@ type calicoWindowsUpgrader struct {
 	clientset            kubernetes.Interface
 	client               client.Client
 	statusManager        status.StatusManager
+	requestChan          chan<- utils.ReconcileRequest
 	nodeInformer         cache.Controller
 	nodeIndexer          cache.Indexer
 	nodesToUpgrade       []*corev1.Node
@@ -64,18 +67,45 @@ func (w *calicoWindowsUpgrader) hasPendingUpgrades() bool {
 	return len(w.nodesToUpgrade)+len(w.nodesUpgrading) > 0
 }
 
+func (w *calicoWindowsUpgrader) triggerReconcileRequest(obj interface{}) {
+	node := obj.(*corev1.Node)
+
+	// Ignore non-windows nodes or nodes without an os label.
+	if os, ok := node.GetLabels()[corev1.LabelOSStable]; !ok || os != "windows" {
+		return
+	}
+	if _, ok := node.GetAnnotations()[common.CalicoWindowsVersionAnnotation]; !ok {
+		return
+	}
+
+	req := utils.ReconcileRequest{
+		Context:    context.Background(),
+		Request:    reconcile.Request{NamespacedName: types.NamespacedName{Name: node.Name}},
+		ResultChan: make(chan utils.ReconcileResult),
+	}
+
+	w.requestChan <- req
+}
+
 // newCalicoWindowsUpgrader creates a Calico Windows upgrader.
-func newCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, nodeListWatch cache.ListerWatcher, statusManager status.StatusManager) *calicoWindowsUpgrader {
+func newCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, nodeListWatch cache.ListerWatcher, statusManager status.StatusManager, requestChan chan<- utils.ReconcileRequest) *calicoWindowsUpgrader {
 	w := &calicoWindowsUpgrader{
 		clientset:     cs,
 		client:        c,
 		statusManager: statusManager,
+		requestChan:   requestChan,
 	}
 
 	handlers := cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) {},
-		UpdateFunc: func(oldObj, newObj interface{}) {},
-		DeleteFunc: func(obj interface{}) {},
+		AddFunc: func(obj interface{}) {
+			w.triggerReconcileRequest(obj)
+		},
+		UpdateFunc: func(oldObj, newObj interface{}) {
+			w.triggerReconcileRequest(newObj)
+		},
+		DeleteFunc: func(obj interface{}) {
+			w.triggerReconcileRequest(obj)
+		},
 	}
 	w.nodeIndexer, w.nodeInformer = cache.NewIndexerInformer(nodeListWatch, &corev1.Node{}, 0, handlers, cache.Indexers{})
 

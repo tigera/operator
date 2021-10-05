@@ -566,6 +566,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	}
 
 	initContainers := []corev1.Container{initOSSettingsContainer}
+
 	annotations := map[string]string{
 		ElasticsearchTLSHashAnnotation: rmeta.SecretsAnnotationHash(es.elasticsearchSecrets...),
 	}
@@ -708,6 +709,47 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			corev1.VolumeMount{MountPath: "/usr/share/elasticsearch/config/node-transport-cert", Name: csrVolumeNameTransport, ReadOnly: false},
 		)
 	}
+
+	// Init container that logs the SELinux context of the `/usr/share/elasticsearch` folder.
+	// This init container is added as a workaround for a bug where Elasticsearch fails to starts when
+	// under some scenarios Kuberentes starts the main container before all the init containers have
+	// completed, SELinux is also enabled on the node, and Kubernetes/kubelet is using the Docker runtime.
+	//
+	// When SELinux is enabled, SELinux policy only allows a container to read a file/folder when their
+	// SELinux labels match or when the mounts are configured to be shared among mutliple containers (the
+	// latter isn't used by Kubernetes). These SELinux labels are managed by the container runtime.
+	// This assignement of SELinux labels and relabelling of files/folders happen when the container is started.
+	// The container runtime also assigns the same SELinux labels to containers created within the same sandbox.
+	// The exception to this SELinux label assignement being when a container is privileged, the Docker runtime
+	// mounts the container's files/folders with a different SELinux label than the one used for the sandbox.
+	//
+	// In Kubernetes, pods are created within the same sandbox. This ensures that files/folders can be shared by
+	// containers running in the same pod. Kubernetes also explicitly requests relabelling of SELinux labels so
+	// that any mounted file/folder gets the right SELinux labels.
+	//
+	// The bug manifests on a SELinux enabled node, when the main container starts before the privileged container
+	// is complete. The main Elasticsearch container fails to read/write files on the shared volume mounts because
+	// the privileged container is the last init container to start and it uses different SELinux labels
+	// than the rest of the containers in the shared (pod) sandbox.
+	//
+	// Adding this additional init container after the privileged init container ensures that the volume mounts
+	// always get the correct SELinux labels and guarantees the labels will be correct for the main container.
+
+	initLogContextContainer := corev1.Container{
+		Name: "elastic-internal-init-log-selinux-context",
+		SecurityContext: &corev1.SecurityContext{
+			Privileged: ptr.BoolToPtr(false),
+		},
+		Image: es.esImage,
+		Command: []string{
+			"/bin/sh",
+		},
+		Args: []string{
+			"-c",
+			"ls -ldZ /usr/share/elasticsearch",
+		},
+	}
+	initContainers = append(initContainers, initLogContextContainer)
 
 	// default to controlPlaneNodeSelector unless DataNodeSelector is set
 	nodeSels := es.installation.ControlPlaneNodeSelector

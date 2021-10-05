@@ -296,7 +296,7 @@ func (p *tigeraPrometheusAPIComponent) getDefaultConfigMap() *corev1.ConfigMap {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      TigeraPrometheusAPIName,
-			Namespace: rmeta.OperatorNamespace(),
+			Namespace: common.OperatorNamespace(),
 		},
 		Data: map[string]string{
 			tigeraPrometheusAPIListenPortFieldName: strconv.Itoa(PrometheusDefaultPort),

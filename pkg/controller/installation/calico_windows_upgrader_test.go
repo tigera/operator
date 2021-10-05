@@ -23,6 +23,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -34,11 +35,13 @@ import (
 	schedv1 "k8s.io/api/scheduling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	kfake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 var _ = Describe("Calico windows upgrader", func() {
@@ -50,6 +53,9 @@ var _ = Describe("Calico windows upgrader", func() {
 
 	var currentEnterpriseVersion string
 	var currentCalicoVersion string
+	var product operator.ProductVariant
+
+	var requestChan chan utils.ReconcileRequest
 
 	BeforeEach(func() {
 		// The schema contains all objects that should be known to the fake client when the test runs.
@@ -70,10 +76,17 @@ var _ = Describe("Calico windows upgrader", func() {
 
 		currentEnterpriseVersion = fmt.Sprintf("Enterprise-%v", components.EnterpriseRelease)
 		currentCalicoVersion = fmt.Sprintf("Calico-%v", components.EnterpriseRelease)
+		requestChan = make(chan utils.ReconcileRequest)
+		product = operator.TigeraSecureEnterprise
 	})
 
 	It("should ignore unsupported nodes", func() {
-		c := newCalicoWindowsUpgrader(cs, client, nlw, mockStatus)
+		c := newCalicoWindowsUpgrader(cs, client, nlw, mockStatus, requestChan)
+		r := newTestReconciler(requestChan, func() error {
+			return c.upgradeWindowsNodes(product)
+		})
+		r.run()
+		defer r.stop()
 		c.start()
 
 		// Linux nodes are ignored.
@@ -81,9 +94,6 @@ var _ = Describe("Calico windows upgrader", func() {
 		n2 := createNode(cs, "node2", map[string]string{"kubernetes.io/os": "linux"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Enterprise-v2.0.0"})
 		// Windows nodes without the version annotation are ignored.
 		n3 := createNode(cs, "node3", map[string]string{"kubernetes.io/os": "windows"}, nil)
-
-		err := c.upgradeWindowsNodes(operator.TigeraSecureEnterprise)
-		Expect(err).NotTo(HaveOccurred())
 
 		Consistently(func() error {
 			return assertNodesUnchanged(cs, n1, n2, n3)
@@ -101,12 +111,14 @@ var _ = Describe("Calico windows upgrader", func() {
 		n3 := createNode(cs, "node3", map[string]string{"kubernetes.io/os": "windows"}, nil)
 		n4 := createNode(cs, "node4", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: currentEnterpriseVersion})
 
-		c := newCalicoWindowsUpgrader(cs, client, nlw, mockStatus)
-		c.start()
-
 		// Create the upgrader and start it.
-		err := c.upgradeWindowsNodes(operator.TigeraSecureEnterprise)
-		Expect(err).NotTo(HaveOccurred())
+		c := newCalicoWindowsUpgrader(cs, client, nlw, mockStatus, requestChan)
+		r := newTestReconciler(requestChan, func() error {
+			return c.upgradeWindowsNodes(product)
+		})
+		r.run()
+		defer r.stop()
+		c.start()
 
 		// Only node n2 should have changed.
 		Consistently(func() error {
@@ -118,17 +130,15 @@ var _ = Describe("Calico windows upgrader", func() {
 			return assertNodesHadUpgradeTriggered(cs, n2)
 		}, 10*time.Second).Should(BeNil())
 
+		// At this point, we should only have a call to AddWindowsNodeUpgrade.
 		mockStatus.AssertExpectations(GinkgoT())
 
 		// Set the latest Calico Windows version like the node service would.
+		mockStatus.On("RemoveWindowsNodeUpgrade", "node2")
 		setNodeVersion(cs, c.nodeIndexer, n2, currentEnterpriseVersion)
 
 		// Ensure that when calicoWindowsUpgrader runs again, the node taint and
 		// label are removed.
-		mockStatus.On("RemoveWindowsNodeUpgrade", "node2")
-		err = c.upgradeWindowsNodes(operator.TigeraSecureEnterprise)
-		Expect(err).NotTo(HaveOccurred())
-
 		Eventually(func() error {
 			return assertNodesFinishedUpgrade(cs, n2)
 		}, 20*time.Second).Should(BeNil())
@@ -139,40 +149,47 @@ var _ = Describe("Calico windows upgrader", func() {
 	It("should upgrade outdated nodes based on the installation variant", func() {
 		n1 := createNode(cs, "node1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: currentEnterpriseVersion})
 
-		c := newCalicoWindowsUpgrader(cs, client, nlw, mockStatus)
+		c := newCalicoWindowsUpgrader(cs, client, nlw, mockStatus, requestChan)
+		r := newTestReconciler(requestChan, func() error {
+			return c.upgradeWindowsNodes(product)
+		})
+		r.run()
+		defer r.stop()
 		c.start()
-
-		// Create the upgrader and start it.
-		err := c.upgradeWindowsNodes(operator.TigeraSecureEnterprise)
-		Expect(err).NotTo(HaveOccurred())
 
 		// None of the nodes have changed.
 		Consistently(func() error {
 			return assertNodesUnchanged(cs, n1)
 		}, 10*time.Second, 100*time.Millisecond).Should(BeNil())
 
+		// Nothing was called.
 		mockStatus.AssertExpectations(GinkgoT())
 
-		// Run upgrade again but with Calico variant. Node should be upgraded.
+		// Trigger calicoWindowsUpgrader to run again but with Calico variant. Node should be upgraded.
+		product = operator.Calico
 		mockStatus.On("AddWindowsNodeUpgrade", "node1", currentCalicoVersion)
-		err = c.upgradeWindowsNodes(operator.Calico)
-		Expect(err).NotTo(HaveOccurred())
 
-		// Ensure that node has the new label and taint.
+		// Trigger a reconcile (this would normally happen in the core
+		// controller when the Installation cr changed).
+		req := utils.ReconcileRequest{
+			Context:    context.Background(),
+			Request:    reconcile.Request{NamespacedName: types.NamespacedName{Name: n1.Name}},
+			ResultChan: make(chan utils.ReconcileResult),
+		}
+		requestChan <- req
+
+		// Ensure that the node has the new label and taint.
 		Eventually(func() error {
 			return assertNodesHadUpgradeTriggered(cs, n1)
 		}, 10*time.Second).Should(BeNil())
 
 		mockStatus.AssertExpectations(GinkgoT())
 
-		// Set the latest Calico Windows version like the node service would.
-		setNodeVersion(cs, c.nodeIndexer, n1, currentCalicoVersion)
-
+		// Set the latest Calico Windows version like the node service would. This will trigger a reconcile.
 		// Ensure that when calicoWindowsUpgrader runs again, the node taint and
 		// label are removed.
 		mockStatus.On("RemoveWindowsNodeUpgrade", "node1")
-		err = c.upgradeWindowsNodes(operator.Calico)
-		Expect(err).NotTo(HaveOccurred())
+		setNodeVersion(cs, c.nodeIndexer, n1, currentCalicoVersion)
 
 		Eventually(func() error {
 			return assertNodesFinishedUpgrade(cs, n1)
@@ -263,4 +280,43 @@ func setNodeVersion(c kubernetes.Interface, indexer cache.Indexer, node *corev1.
 
 		return fmt.Errorf("node does not have expected version yet: %v", version)
 	}, 20*time.Second).Should(BeNil())
+}
+
+// testReconciler processes ReconcileRequests from a request chan and runs
+// a handler for each request.
+type testReconciler struct {
+	requestChan <-chan utils.ReconcileRequest
+	doneChan    chan interface{}
+	handler     func() error
+}
+
+func newTestReconciler(requestChan <-chan utils.ReconcileRequest, handler func() error) *testReconciler {
+	return &testReconciler{
+		requestChan: requestChan,
+		doneChan:    make(chan interface{}),
+		handler:     handler,
+	}
+}
+
+// run processes reconcile requests.
+func (r *testReconciler) run() {
+	go func() {
+	out:
+		for {
+			select {
+			case <-r.requestChan:
+				err := r.handler()
+				Expect(err).NotTo(HaveOccurred())
+			case <-r.doneChan:
+				break out
+			default:
+				time.Sleep(500 * time.Millisecond)
+			}
+		}
+	}()
+
+}
+
+func (r *testReconciler) stop() {
+	close(r.doneChan)
 }

@@ -308,6 +308,7 @@ var _ = Describe("Testing core-controller installation", func() {
 		var r ReconcileInstallation
 		var scheme *runtime.Scheme
 		var mockStatus *status.MockStatus
+		var requestChan chan utils.ReconcileRequest
 
 		BeforeEach(func() {
 			// The schema contains all objects that should be known to the fake client when the test runs.
@@ -354,6 +355,8 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
 
+			requestChan = make(chan utils.ReconcileRequest)
+
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
 				config:                nil, // there is no fake for config
@@ -362,11 +365,12 @@ var _ = Describe("Testing core-controller installation", func() {
 				autoDetectedProvider:  operator.ProviderNone,
 				status:                mockStatus,
 				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeListWatch{cs}, typhaListWatch{cs}, mockStatus),
-				calicoWindowsUpgrader: newCalicoWindowsUpgrader(cs, c, nodeListWatch{cs}, mockStatus),
+				calicoWindowsUpgrader: newCalicoWindowsUpgrader(cs, c, nodeListWatch{cs}, mockStatus, requestChan),
 				namespaceMigration:    &fakeNamespaceMigration{},
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,
 				migrationChecked:      true,
+				requestChan:           requestChan,
 			}
 			r.typhaAutoscaler.start()
 			r.calicoWindowsUpgrader.start()
@@ -636,6 +640,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 		var internalManagerTLSSecret *corev1.Secret
 		var expectedDNSNames []string
+		var requestChan chan utils.ReconcileRequest
 
 		BeforeEach(func() {
 			// The schema contains all objects that should be known to the fake client when the test runs.
@@ -684,6 +689,8 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
 
+			requestChan = make(chan utils.ReconcileRequest)
+
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
 				config:                nil, // there is no fake for config
@@ -692,12 +699,13 @@ var _ = Describe("Testing core-controller installation", func() {
 				autoDetectedProvider:  operator.ProviderNone,
 				status:                mockStatus,
 				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeListWatch{cs}, typhaListWatch{cs}, mockStatus),
-				calicoWindowsUpgrader: newCalicoWindowsUpgrader(cs, c, nodeListWatch{cs}, mockStatus),
+				calicoWindowsUpgrader: newCalicoWindowsUpgrader(cs, c, nodeListWatch{cs}, mockStatus, requestChan),
 				namespaceMigration:    &fakeNamespaceMigration{},
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,
 				migrationChecked:      true,
 				clusterDomain:         dns.DefaultClusterDomain,
+				requestChan:           requestChan,
 			}
 			r.typhaAutoscaler.start()
 			r.calicoWindowsUpgrader.start()
@@ -774,6 +782,7 @@ var _ = Describe("Testing core-controller installation", func() {
 		var r ReconcileInstallation
 		var scheme *runtime.Scheme
 		var mockStatus *status.MockStatus
+		var requestChan chan utils.ReconcileRequest
 
 		var cr *operator.Installation
 
@@ -835,6 +844,8 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("AddCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
 
+			requestChan = make(chan utils.ReconcileRequest)
+
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
 				config:                nil, // there is no fake for config
@@ -843,11 +854,12 @@ var _ = Describe("Testing core-controller installation", func() {
 				autoDetectedProvider:  operator.ProviderNone,
 				status:                mockStatus,
 				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeListWatch{cs}, typhaListWatch{cs}, mockStatus),
-				calicoWindowsUpgrader: newCalicoWindowsUpgrader(cs, c, nodeListWatch{cs}, mockStatus),
+				calicoWindowsUpgrader: newCalicoWindowsUpgrader(cs, c, nodeListWatch{cs}, mockStatus, requestChan),
 				namespaceMigration:    &fakeNamespaceMigration{},
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,
 				migrationChecked:      true,
+				requestChan:           requestChan,
 			}
 			r.typhaAutoscaler.start()
 			r.calicoWindowsUpgrader.start()

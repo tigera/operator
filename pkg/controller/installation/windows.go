@@ -206,12 +206,12 @@ func (w *calicoWindowsUpgrader) startUpgrade(ctx context.Context, node *corev1.N
 
 func (w *calicoWindowsUpgrader) finishUpgrade(ctx context.Context, node *corev1.Node) error {
 	windowsLog.Info(fmt.Sprintf("Finishing upgrade on upgraded node %v", node.Name))
-	if err := nodeutils.RemoveNodeLabel(ctx, w.clientset, node.Name, common.CalicoWindowsUpgradeScriptLabel); err != nil {
-		return fmt.Errorf("Unable to remove label from node: %w", err)
-	}
-
 	if err := removeTaint(ctx, w.clientset, node.Name, calicoWindowsUpgradingTaint); err != nil {
 		return fmt.Errorf("Unable to clear taint from node %v: %w", node.Name, err)
+	}
+
+	if err := nodeutils.RemoveNodeLabel(ctx, w.clientset, node.Name, common.CalicoWindowsUpgradeScriptLabel); err != nil {
+		return fmt.Errorf("Unable to remove label from node: %w", err)
 	}
 
 	w.statusManager.RemoveWindowsNodeUpgrade(node.Name)

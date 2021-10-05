@@ -65,7 +65,7 @@ func (w *calicoWindowsUpgrader) hasPendingUpgrades() bool {
 }
 
 // newCalicoWindowsUpgrader creates a Calico Windows upgrader.
-func newCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, windowsNodeListWatch cache.ListerWatcher, statusManager status.StatusManager) *calicoWindowsUpgrader {
+func newCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, nodeListWatch cache.ListerWatcher, statusManager status.StatusManager) *calicoWindowsUpgrader {
 	w := &calicoWindowsUpgrader{
 		clientset:     cs,
 		client:        c,
@@ -77,7 +77,7 @@ func newCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, windowsN
 		UpdateFunc: func(oldObj, newObj interface{}) {},
 		DeleteFunc: func(obj interface{}) {},
 	}
-	w.nodeIndexer, w.nodeInformer = cache.NewIndexerInformer(windowsNodeListWatch, &corev1.Node{}, 0, handlers, cache.Indexers{})
+	w.nodeIndexer, w.nodeInformer = cache.NewIndexerInformer(nodeListWatch, &corev1.Node{}, 0, handlers, cache.Indexers{})
 
 	return w
 }

@@ -113,16 +113,13 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		return nil, err
 	}
 
-	// Create a Typha autoscaler.
 	nodeListWatch := cache.NewListWatchFromClient(cs.CoreV1().RESTClient(), "nodes", "", fields.Everything())
+
+	// Create a Typha autoscaler.
 	typhaListWatch := cache.NewListWatchFromClient(cs.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"))
 	typhaScaler := newTyphaAutoscaler(cs, nodeListWatch, typhaListWatch, statusManager)
-
 	// Create a Calico Windows upgrader.
-	windowsNodeListWatch := cache.NewFilteredListWatchFromClient(cs.CoreV1().RESTClient(), "nodes", "", func(options *metav1.ListOptions) {
-		options.LabelSelector = fmt.Sprintf("%s=%s", corev1.LabelOSStable, "windows")
-	})
-	calicoWindowsUpgrader := newCalicoWindowsUpgrader(cs, mgr.GetClient(), windowsNodeListWatch, statusManager)
+	calicoWindowsUpgrader := newCalicoWindowsUpgrader(cs, mgr.GetClient(), nodeListWatch, statusManager)
 
 	r := &ReconcileInstallation{
 		config:                mgr.GetConfig(),

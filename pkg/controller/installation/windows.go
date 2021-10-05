@@ -112,6 +112,10 @@ func (w *calicoWindowsUpgrader) getNodesToUpgrade(expectedVersion string) error 
 			return fmt.Errorf("Never expected index to have anything other than a Node object: %v", obj)
 		}
 
+		if node.Labels[corev1.LabelOSStable] != "windows" {
+			continue
+		}
+
 		windowsLog.V(1).Info(fmt.Sprintf("Processing node %v", node.Name))
 		exists, version := common.GetWindowsNodeVersion(node)
 		// If the version annotation doesn't exist, the node does not support

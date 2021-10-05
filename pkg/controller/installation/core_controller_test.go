@@ -17,6 +17,7 @@ package installation
 import (
 	"context"
 	"fmt"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -685,19 +686,21 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
-				config:               nil, // there is no fake for config
-				client:               c,
-				scheme:               scheme,
-				autoDetectedProvider: operator.ProviderNone,
-				status:               mockStatus,
-				typhaAutoscaler:      newTyphaAutoscaler(cs, nodeListWatch{cs}, typhaListWatch{cs}, mockStatus),
-				namespaceMigration:   &fakeNamespaceMigration{},
-				amazonCRDExists:      true,
-				enterpriseCRDsExist:  true,
-				migrationChecked:     true,
-				clusterDomain:        dns.DefaultClusterDomain,
+				config:                nil, // there is no fake for config
+				client:                c,
+				scheme:                scheme,
+				autoDetectedProvider:  operator.ProviderNone,
+				status:                mockStatus,
+				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeListWatch{cs}, typhaListWatch{cs}, mockStatus),
+				calicoWindowsUpgrader: newCalicoWindowsUpgrader(cs, c, nodeListWatch{cs}, mockStatus),
+				namespaceMigration:    &fakeNamespaceMigration{},
+				amazonCRDExists:       true,
+				enterpriseCRDsExist:   true,
+				migrationChecked:      true,
+				clusterDomain:         dns.DefaultClusterDomain,
 			}
 			r.typhaAutoscaler.start()
+			r.calicoWindowsUpgrader.start()
 
 			cr = &operator.Installation{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
@@ -798,6 +801,14 @@ var _ = Describe("Testing core-controller installation", func() {
 					},
 					Spec: corev1.NodeSpec{},
 				},
+				&corev1.Node{
+					TypeMeta: metav1.TypeMeta{},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:   "node2",
+						Labels: map[string]string{"kubernetes.io/os": "linux"},
+					},
+					Spec: corev1.NodeSpec{},
+				},
 				&appsv1.Deployment{
 					TypeMeta:   metav1.TypeMeta{},
 					ObjectMeta: metav1.ObjectMeta{Name: "calico-typha", Namespace: "calico-system"},
@@ -810,13 +821,10 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus = &status.MockStatus{}
 			mockStatus.On("AddDaemonsets", mock.Anything).Return()
 			mockStatus.On("AddDeployments", mock.Anything).Return()
-			mockStatus.On("AddStatefulSets", mock.Anything).Return()
-			mockStatus.On("AddCronJobs", mock.Anything)
 			mockStatus.On("IsAvailable").Return(true)
 			mockStatus.On("OnCRFound").Return()
 			mockStatus.On("ClearDegraded")
 			mockStatus.On("AddCertificateSigningRequests", mock.Anything)
-			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
 
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
@@ -949,5 +957,48 @@ var _ = Describe("Testing core-controller installation", func() {
 			}
 			Expect(test.GetResource(c, &rq)).To(BeNil())
 		})
+
+		Context("calicoWindowsUpgrader", func() {
+			currentEnterpriseVersion := fmt.Sprintf("Enterprise-%v", components.EnterpriseRelease)
+
+			It("should do nothing for up-to-date Calico Windows nodes", func() {
+				Expect(c.Create(ctx, &corev1.Node{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "windows-node",
+						Labels: map[string]string{
+							"kubernetes.io/os": "windows",
+						},
+						Annotations: map[string]string{
+							common.CalicoWindowsVersionAnnotation: currentEnterpriseVersion,
+						},
+					},
+				})).ToNot(HaveOccurred())
+
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				// No calls to AddWindowsNodeUpgrade expected.
+				mockStatus.AssertExpectations(GinkgoT())
+			})
+
+			It("should trigger upgrade of out-of-date Calico Windows nodes", func() {
+				n1 := createNode(cs, "windows1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-master"})
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+				mockStatus.On("AddWindowsNodeUpgrade", "windows1", currentEnterpriseVersion)
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				// Ensure that the windows node has the new label and taint.
+				Eventually(func() error {
+					return assertNodesHadUpgradeTriggered(cs, n1)
+				}, 10*time.Second).Should(BeNil())
+
+				mockStatus.AssertExpectations(GinkgoT())
+			})
+		})
+
 	})
 })

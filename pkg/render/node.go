@@ -1490,13 +1490,16 @@ func (c *nodeComponent) hostPathInitContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:         "hostpath-init",
-		Image:        "busybox:latest",
+		Name:  "hostpath-init",
+		Image: c.nodeImage,
+		Env: []corev1.EnvVar{
+			{Name: "NODE_USER_ID", Value: "1000"},
+		},
 		VolumeMounts: mounts,
 		SecurityContext: &corev1.SecurityContext{
 			RunAsUser: &rootUID,
 		},
-		Command: []string{"sh", "-c", "mkdir -p /var/lib/calico/ && chown -R 1000 /var/lib/calico/ && mkdir -p /var/run/calico/ && chown -R 1000 /var/run/calico/"},
+		Command: []string{"sh", "-c", "calico-node -hostpath-init"},
 	}
 }
 

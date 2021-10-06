@@ -504,9 +504,9 @@ define fetch_crds
     $(eval branch := $(2))
     $(eval dir := $(3))
 	@echo "Fetching $(dir) CRDs from $(project) branch $(branch)"
-	rm -rf deploy/crds/$(dir)
+	rm -rf pkg/crds/$(dir)
 	rm -rf .crds/$(dir)
-	mkdir -p deploy/crds/$(dir)
+	mkdir -p pkg/crds/$(dir)
 	mkdir -p .crds/$(dir)
 	@$(CONTAINERIZED) \
 	bash -c '$(GIT_CONFIG_SSH) \
@@ -516,8 +516,8 @@ define fetch_crds
 	git config --local core.sparseCheckout true; \
 	echo "config/crd" >> .git/info/sparse-checkout; \
 	git checkout -q tags/$(branch) &>/dev/null ||  git checkout -q origin/$(branch) --;' || echo "Failed to fetch $(dir) CRDs"
-	@cp .crds/$(dir)/config/crd/* deploy/crds/$(dir)/ && echo "Copied $(dir) CRDs"
-	git add deploy/crds/$(dir)
+	@cp .crds/$(dir)/config/crd/* pkg/crds/$(dir)/ && echo "Copied $(dir) CRDs"
+	git add pkg/crds/$(dir)
 endef
 
 .PHONY: read-libcalico-version fetch-calico-crds read-libcalico-enterprise-version fetch-enterprise-crds

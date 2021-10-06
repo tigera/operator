@@ -42,6 +42,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
+	rsecret "github.com/tigera/operator/pkg/render/common/secret"
 )
 
 var log = logf.Log.WithName("controller_monitor")
@@ -68,7 +69,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	go waitToAddWatch(controller, k8sClient, log, prometheusReady)
+	go waitToAddPrometheusWatch(controller, k8sClient, log, prometheusReady)
 
 	return add(mgr, controller)
 }
@@ -190,7 +191,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	hdler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	// render prometheus components
-	component := render.Monitor(install, pullSecrets)
+	component := render.Monitor(install, pullSecrets, r.getAlertmanagerConfigSecret(ctx))
 
 	// renders tigera prometheus api
 	tigeraPrometheusApi, err := render.TigeraPrometheusAPI(install, pullSecrets, tigeraPrometheusAPIConfigMap)
@@ -233,7 +234,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	return reconcile.Result{}, nil
 }
 
-// getTigeraPrometheusAPIConfigMap attemps to retrieve an existing ConfigMap for tigera-prometheus-api
+// getTigeraPrometheusAPIConfigMap attempts to retrieve an existing ConfigMap for tigera-prometheus-api
 func (r *ReconcileMonitor) getTigeraPrometheusAPIConfigMap() (*corev1.ConfigMap, error) {
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{
@@ -245,4 +246,35 @@ func (r *ReconcileMonitor) getTigeraPrometheusAPIConfigMap() (*corev1.ConfigMap,
 		return nil, err
 	}
 	return cm, nil
+}
+
+// getAlertmanagerConfigSecret attempts to retrieve Alertmanager configuration secret from either the Tigera Operator
+// namespace or the Tigera Prometheus namespace.
+func (r *ReconcileMonitor) getAlertmanagerConfigSecret(ctx context.Context) *corev1.Secret {
+	// Alertmanager configuration secret will be mounted to the Alertmanager pod by the Prometheus Operator.
+	// Before this secret is managed by the Tigera Operator, it is shipped with the operator yaml
+	// and is created in the tigera-prometheus namespace.
+	//
+	// 1. After the secret is managed by the Tigera Operator, the source secret is in the tigera-operator
+	//    namespace. Operator will watch for changes and copy it to the tigera-prometheus namespace.
+	// 2. For new installation: A new secret will be created in the tigera-operator namespace and then copied to
+	//    the tigera-prometheus namespace.
+	// 3. Upgrading from previous versions: The tigera-prometheus secret will be copied back to the tigera-operator
+	//    namespace in case of any changes from the user.
+	//
+	// TODO Add logic for future Alertmanager manager configuration upgrades.
+
+	secret, err := utils.GetSecret(ctx, r.client, render.AlertmanagerConfigSecret, common.OperatorNamespace())
+	if err == nil && secret != nil {
+		return secret
+	}
+
+	if errors.IsNotFound(err) {
+		secret, err = utils.GetSecret(ctx, r.client, render.AlertmanagerConfigSecret, common.TigeraPrometheusNamespace)
+		if err == nil && secret != nil {
+			return rsecret.CopyToNamespace(common.OperatorNamespace(), secret)[0]
+		}
+	}
+
+	return nil
 }

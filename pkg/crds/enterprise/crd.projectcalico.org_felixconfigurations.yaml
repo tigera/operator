@@ -43,6 +43,21 @@ spec:
                   will add a rule to drop VXLAN encapsulated traffic from workloads
                   [Default: false]'
                 type: boolean
+              awsRequestTimeout:
+                description: 'AWSRequestTimeout is the timeout on AWS API requests.
+                  [Default: 30s]'
+                type: string
+              awsSecondaryIPRoutingRulePriority:
+                description: 'AWSSecondaryIPRoutingRulePriority controls the priority
+                  that Felix will use for routing rules when programming them for
+                  AWS Secondary IP support. [Default: 101]'
+                type: integer
+              awsSecondaryIPSupport:
+                description: 'AWSSecondaryIPSupport controls whether Felix will try
+                  to provision AWS secondary ENIs and secondary IPs for workloads
+                  that have IPs from IP pools that are configured with an AWS subnet
+                  ID. [Default: Disabled]'
+                type: string
               awsSrcDstCheck:
                 description: 'Set source-destination-check on AWS EC2 instances. Accepted
                   value must be one of "DoNothing", "Enable" or "Disable". [Default:

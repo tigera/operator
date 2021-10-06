@@ -70,12 +70,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	for _, configMapName := range []string{applicationlayer.EnvoyConfigMapName} {
-		if err = utils.AddConfigMapWatch(c, configMapName, common.CalicoNamespace); err != nil {
-			return fmt.Errorf("applicationlayer-controller failed to watch ConfigMap %s: %v", configMapName, err)
-		}
-	}
-
 	go utils.WaitToAddLicenseKeyWatch(c, k8sClient, log, licenseAPIReady)
 
 	return add(mgr, c)
@@ -105,12 +99,20 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return err
 	}
 
-	if err = utils.AddNetworkWatch(c); err != nil {
-		return fmt.Errorf("applicationlayer-controller failed to watch Network resource: %w", err)
-	}
-
 	if err = imageset.AddImageSetWatch(c); err != nil {
 		return fmt.Errorf("applicationlayer-controller failed to watch ImageSet: %w", err)
+	}
+
+	// watch configmaps created for envoy
+	for _, configMapName := range []string{applicationlayer.EnvoyConfigMapName} {
+		if err = utils.AddConfigMapWatch(c, configMapName, common.CalicoNamespace); err != nil {
+			return fmt.Errorf("applicationlayer-controller failed to watch ConfigMap %s: %v", configMapName, err)
+		}
+	}
+	// Watch for changes to FelixConfiguration.
+	err = c.Watch(&source.Kind{Type: &crdv1.FelixConfiguration{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("applicationlayer-controller failed to watch FelixConfiguration resource: %w", err)
 	}
 
 	return nil
@@ -137,7 +139,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling ApplicationLayer")
 
-	applicationLayer, err := GetApplicationLayer(ctx, r.client)
+	applicationLayer, err := getApplicationLayer(ctx, r.client)
 
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -148,6 +150,23 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 			return reconcile.Result{}, nil
 		}
 		r.status.SetDegraded("Error querying for Application Layer", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	preDefaultPatchFrom := client.MergeFrom(applicationLayer.DeepCopy())
+	// Set defaults
+	updateApplicationLayerWithDefaults(applicationLayer)
+
+	// Validate the configuration
+	if err := validateApplicationLayer(applicationLayer); err != nil {
+		r.status.SetDegraded("Invalid applicationLayer provided", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	// Write the application layer back to the datastore, so the controllers depending on this can reconcile.
+	if err = r.client.Patch(ctx, applicationLayer, preDefaultPatchFrom); err != nil {
+		log.Error(err, "Failed to write defaults")
+		r.status.SetDegraded("Failed to write defaults", err.Error())
 		return reconcile.Result{}, err
 	}
 
@@ -225,8 +244,34 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	return reconcile.Result{}, nil
 }
 
-// GetApplicationLayer returns the default ApplicationLayer instance with defaults populated.
-func GetApplicationLayer(ctx context.Context, cli client.Client) (*operatorv1.ApplicationLayer, error) {
+func validateApplicationLayer(al *operatorv1.ApplicationLayer) error {
+	lcSpec := al.Spec.LogCollection
+	if lcSpec != nil {
+		if *lcSpec.LogIntervalSeconds < 1 {
+			return fmt.Errorf("log interval seconds can not be less than 1 sec")
+		}
+	}
+
+	return nil
+}
+
+// updateApplicationLayerWithDefaults populates the applicationlayer with defaults
+func updateApplicationLayerWithDefaults(al *operatorv1.ApplicationLayer) {
+	defaultLogIntervalSeconds := int64(5)
+	defaultLogRequestsPerInterval := int64(-1)
+
+	if al.Spec.LogCollection != nil {
+		if al.Spec.LogCollection.LogRequestsPerInterval == nil {
+			al.Spec.LogCollection.LogRequestsPerInterval = &defaultLogRequestsPerInterval
+		}
+		if al.Spec.LogCollection.LogIntervalSeconds == nil {
+			al.Spec.LogCollection.LogIntervalSeconds = &defaultLogIntervalSeconds
+		}
+	}
+}
+
+// getApplicationLayer returns the default ApplicationLayer instance with defaults populated.
+func getApplicationLayer(ctx context.Context, cli client.Client) (*operatorv1.ApplicationLayer, error) {
 
 	instance := &operatorv1.ApplicationLayer{}
 	err := cli.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
@@ -259,8 +304,6 @@ func (r *ReconcileApplicationLayer) patchFelixTproxyMode(ctx context.Context, l7
 
 	if r.enableL7LogsCollection(l7Spec) {
 		tproxyMode = crdv1.TPROXYModeOptionEnabled
-	} else {
-		tproxyMode = crdv1.TPROXYModeOptionDisabled
 	}
 
 	fc.Spec.TPROXYMode = &tproxyMode

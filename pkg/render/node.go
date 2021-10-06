@@ -958,7 +958,9 @@ func (c *nodeComponent) nodeContainer() corev1.Container {
 		uid := int64(1000)
 		guid := int64(0)
 		sc = &corev1.SecurityContext{
-			RunAsUser:  &uid,
+			// Set the user as our chosen user (1000)
+			RunAsUser: &uid,
+			// Set the group to be the root user group since all container users shoudl be a member
 			RunAsGroup: &guid,
 			Capabilities: &corev1.Capabilities{
 				Add: []corev1.Capability{
@@ -1506,9 +1508,16 @@ func (c *nodeComponent) hostPathInitContainer() corev1.Container {
 // runAsNonPrivileged checks to ensure that all of the proper installation values are set for running
 // Calico as non privileged.
 func (c *nodeComponent) runAsNonPrivileged() bool {
-	return (c.cfg.Installation.NonPrivileged != nil && *c.cfg.Installation.NonPrivileged == operatorv1.NonPrivilegedEnabled) &&
-		!(c.cfg.Installation.CalicoNetwork != nil && *c.cfg.Installation.CalicoNetwork.BGP == operatorv1.BGPEnabled) &&
-		c.cfg.Installation.Variant == operatorv1.Calico
+	// Check that the NonPrivileged flag is set
+	nonPrivileged := c.cfg.Installation.NonPrivileged != nil && *c.cfg.Installation.NonPrivileged == operatorv1.NonPrivilegedEnabled
+
+	// Check that BGP is not enabled
+	noBGP := !bgpEnabled(c.cfg.Installation)
+
+	// Only allowed to run as non privileged for OS Calico
+	variantCalico := c.cfg.Installation.Variant != operatorv1.TigeraSecureEnterprise
+
+	return nonPrivileged && noBGP && variantCalico
 }
 
 // getAutodetectionMethod returns the IP auto detection method in a form understandable by the calico/node

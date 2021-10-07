@@ -19,6 +19,8 @@ import (
 	"strconv"
 	"strings"
 
+	_ "embed"
+
 	ocsv1 "github.com/openshift/api/security/v1"
 
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -39,7 +41,6 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
-	"github.com/tigera/operator/pkg/render/common/statik"
 )
 
 const (
@@ -63,7 +64,7 @@ func ApplicationLayer(
 	logRequestsPerInterval *int64,
 ) render.Component {
 
-	return &applicationLayerComponent{
+	return &component{
 		pullSecrets:            pullSecrets,
 		installation:           installation,
 		osType:                 osType,
@@ -73,7 +74,7 @@ func ApplicationLayer(
 	}
 }
 
-type applicationLayerComponent struct {
+type component struct {
 	pullSecrets            []*corev1.Secret
 	installation           *operatorv1.InstallationSpec
 	osType                 rmeta.OSType
@@ -85,7 +86,7 @@ type applicationLayerComponent struct {
 	logIntervalSeconds     *int64
 }
 
-func (c *applicationLayerComponent) ResolveImages(is *operatorv1.ImageSet) error {
+func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.installation.Registry
 	path := c.installation.ImagePath
 	prefix := c.installation.ImagePrefix
@@ -115,11 +116,11 @@ func (c *applicationLayerComponent) ResolveImages(is *operatorv1.ImageSet) error
 	return nil
 }
 
-func (c *applicationLayerComponent) SupportedOSType() rmeta.OSType {
+func (c *component) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
 
-func (c *applicationLayerComponent) Objects() ([]client.Object, []client.Object) {
+func (c *component) Objects() ([]client.Object, []client.Object) {
 	var objs []client.Object
 	// TODO: ensure that namespace exists before proceeding
 
@@ -143,12 +144,12 @@ func (c *applicationLayerComponent) Objects() ([]client.Object, []client.Object)
 	return objs, nil
 }
 
-func (c *applicationLayerComponent) Ready() bool {
+func (c *component) Ready() bool {
 	return true
 }
 
 // daemonset creates a daemonset for the L7 log collector component.
-func (c *applicationLayerComponent) daemonset() *appsv1.DaemonSet {
+func (c *component) daemonset() *appsv1.DaemonSet {
 	maxUnavailable := intstr.FromInt(1)
 
 	annots := map[string]string{}
@@ -197,7 +198,7 @@ func (c *applicationLayerComponent) daemonset() *appsv1.DaemonSet {
 	return ds
 }
 
-func (c *applicationLayerComponent) containers() []corev1.Container {
+func (c *component) containers() []corev1.Container {
 
 	var containers []corev1.Container
 
@@ -231,7 +232,7 @@ func (c *applicationLayerComponent) containers() []corev1.Container {
 	return containers
 }
 
-func (c *applicationLayerComponent) proxyEnv() []corev1.EnvVar {
+func (c *component) proxyEnv() []corev1.EnvVar {
 	envs := []corev1.EnvVar{
 		{Name: "ENVOY_UID", Value: "0"},
 		{Name: "ENVOY_GID", Value: "0"},
@@ -240,7 +241,7 @@ func (c *applicationLayerComponent) proxyEnv() []corev1.EnvVar {
 	return envs
 }
 
-func (c *applicationLayerComponent) collectorEnv() []corev1.EnvVar {
+func (c *component) collectorEnv() []corev1.EnvVar {
 	envs := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "Info"},
 		{Name: "FELIX_DIAL_TARGET", Value: "/var/run/felix/nodeagent/socket"},
@@ -265,7 +266,7 @@ func (c *applicationLayerComponent) collectorEnv() []corev1.EnvVar {
 }
 
 // tolerations creates the node's toleration.
-func (c *applicationLayerComponent) tolerations() []corev1.Toleration {
+func (c *component) tolerations() []corev1.Toleration {
 	// ensures that l7 log collector pods are scheduled on master node as well
 	toleration := []corev1.Toleration{
 		{Key: "node-role.kubernetes.io/master", Operator: corev1.TolerationOpExists, Effect: corev1.TaintEffectNoSchedule},
@@ -274,7 +275,7 @@ func (c *applicationLayerComponent) tolerations() []corev1.Toleration {
 	return toleration
 }
 
-func (c *applicationLayerComponent) volumes() []corev1.Volume {
+func (c *component) volumes() []corev1.Volume {
 
 	var volumes []corev1.Volume
 
@@ -298,7 +299,7 @@ func (c *applicationLayerComponent) volumes() []corev1.Volume {
 	return volumes
 }
 
-func (c *applicationLayerComponent) proxyVolMounts() []corev1.VolumeMount {
+func (c *component) proxyVolMounts() []corev1.VolumeMount {
 
 	volumes := []corev1.VolumeMount{
 		{Name: EnvoyConfigMapName, MountPath: "/etc/envoy"},
@@ -308,7 +309,7 @@ func (c *applicationLayerComponent) proxyVolMounts() []corev1.VolumeMount {
 	return volumes
 }
 
-func (c *applicationLayerComponent) collectorVolMounts() []corev1.VolumeMount {
+func (c *component) collectorVolMounts() []corev1.VolumeMount {
 
 	volumes := []corev1.VolumeMount{
 		{Name: EnvoyLogsVolumeName, MountPath: "/tmp/"},
@@ -317,14 +318,10 @@ func (c *applicationLayerComponent) collectorVolMounts() []corev1.VolumeMount {
 	return volumes
 }
 
-func (c *applicationLayerComponent) envoyL7ConfigMap() *corev1.ConfigMap {
-	config, err := statik.GetStatikFile("/envoy-config.yaml")
+//go:embed envoy-config.yaml
+var config string
 
-	if err != nil || config == "" {
-		log.Error(err, "Failed to get envoy-config.yaml file")
-
-		return nil
-	}
+func (c *component) envoyL7ConfigMap() *corev1.ConfigMap {
 
 	return &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
@@ -340,7 +337,7 @@ func (c *applicationLayerComponent) envoyL7ConfigMap() *corev1.ConfigMap {
 }
 
 // aplServiceAccount creates application layer service account.
-func (c *applicationLayerComponent) serviceAccount() *corev1.ServiceAccount {
+func (c *component) serviceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: APLName, Namespace: common.CalicoNamespace},
@@ -348,7 +345,7 @@ func (c *applicationLayerComponent) serviceAccount() *corev1.ServiceAccount {
 }
 
 // in DockerEE (Mirantis) cluster-admin role is needed for envoy proxy to be able to use hostNetwork
-func (c *applicationLayerComponent) clusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+func (c *component) clusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	crb := &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -371,7 +368,7 @@ func (c *applicationLayerComponent) clusterAdminClusterRoleBinding() *rbacv1.Clu
 	return crb
 }
 
-func (c *applicationLayerComponent) securityContextConstraints() *ocsv1.SecurityContextConstraints {
+func (c *component) securityContextConstraints() *ocsv1.SecurityContextConstraints {
 	privilegeEscalation := false
 	return &ocsv1.SecurityContextConstraints{
 		TypeMeta:                 metav1.TypeMeta{Kind: "SecurityContextConstraints", APIVersion: "security.openshift.io/v1"},

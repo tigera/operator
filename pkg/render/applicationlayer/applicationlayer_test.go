@@ -47,6 +47,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			version string
 			kind    string
 		}{
+			{name: applicationlayer.APLName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: applicationlayer.EnvoyConfigMapName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: applicationlayer.L7LogCollectorDeamonsetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}

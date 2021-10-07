@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -126,7 +127,7 @@ var _ = Describe("Monitor controller tests", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).NotTo(HaveOccurred())
 
-			// Prometheus related objects should be rendered after reconcilation.
+			// Prometheus related objects should be rendered after reconciliation.
 			Expect(cli.Get(ctx, client.ObjectKey{Name: render.CalicoNodeAlertmanager, Namespace: common.TigeraPrometheusNamespace}, am)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: render.CalicoNodePrometheus, Namespace: common.TigeraPrometheusNamespace}, p)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: render.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}, pm)).NotTo(HaveOccurred())
@@ -134,5 +135,82 @@ var _ = Describe("Monitor controller tests", func() {
 			Expect(cli.Get(ctx, client.ObjectKey{Name: render.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: render.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 		})
+	})
+
+	Context("Alertmanager Configuration secrets", func() {
+
+		It("should return nil when Alertmanager secrets don't exist in either the Operator or Prometheus namespace", func() {
+			// Make sure Alertmanager secrets don't exist in either Operator or Prometheus namespace.
+			var s = &corev1.Secret{}
+			Expect(cli.Get(ctx, client.ObjectKey{Name: render.AlertmanagerConfigSecret, Namespace: common.OperatorNamespace()}, s)).To(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: render.AlertmanagerConfigSecret, Namespace: common.TigeraPrometheusNamespace}, s)).To(HaveOccurred())
+
+			s, err := r.getAlertmanagerConfigSecret(ctx)
+			Expect(err).To(BeNil())
+			Expect(s).To(BeNil())
+		})
+
+		It("should read Alertmanager secret from the Operator namespace if exists", func() {
+			secretOperator := &corev1.Secret{
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.AlertmanagerConfigSecret,
+					Namespace: common.OperatorNamespace(),
+				},
+				Data: map[string][]byte{
+					"alertmanager.yaml": []byte("Alertmanager secret in tigera-operator"),
+				},
+			}
+			secretPrometheus := &corev1.Secret{
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.AlertmanagerConfigSecret,
+					Namespace: common.TigeraPrometheusNamespace,
+				},
+				Data: map[string][]byte{
+					"alertmanager.yaml": []byte("Alertmanager secret in tigera-prometheus"),
+				},
+			}
+
+			Expect(cli.Create(ctx, secretOperator)).To(BeNil())
+			Expect(cli.Create(ctx, secretPrometheus)).To(BeNil())
+
+			s, err := r.getAlertmanagerConfigSecret(ctx)
+			Expect(err).To(BeNil())
+			Expect(s).NotTo(BeNil())
+
+			Expect(s.GetName()).To(Equal(render.AlertmanagerConfigSecret))
+			Expect(s.GetNamespace()).To(Equal(common.OperatorNamespace()))
+			Expect(s.Data).To(HaveKeyWithValue("alertmanager.yaml", []byte("Alertmanager secret in tigera-operator")))
+
+			Expect(cli.Delete(ctx, secretOperator)).To(BeNil())
+			Expect(cli.Delete(ctx, secretPrometheus)).To(BeNil())
+		})
+
+		It("should read Alertmanager secret from the Prometheus namespace when the one in Operator namespace doesn't exist", func() {
+			secretPrometheus := &corev1.Secret{
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.AlertmanagerConfigSecret,
+					Namespace: common.TigeraPrometheusNamespace,
+				},
+				Data: map[string][]byte{
+					"alertmanager.yaml": []byte("Alertmanager secret in tigera-prometheus"),
+				},
+			}
+
+			Expect(cli.Create(ctx, secretPrometheus)).To(BeNil())
+
+			s, err := r.getAlertmanagerConfigSecret(ctx)
+			Expect(err).To(BeNil())
+			Expect(s).NotTo(BeNil())
+
+			Expect(s.GetName()).To(Equal(render.AlertmanagerConfigSecret))
+			Expect(s.GetNamespace()).To(Equal(common.OperatorNamespace()))
+			Expect(s.Data).To(HaveKeyWithValue("alertmanager.yaml", []byte("Alertmanager secret in tigera-prometheus")))
+
+			Expect(cli.Delete(ctx, secretPrometheus)).To(BeNil())
+		})
+
 	})
 })

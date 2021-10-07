@@ -1,6 +1,6 @@
 module github.com/tigera/operator
 
-go 1.14
+go 1.16
 
 require (
 	github.com/aws/aws-sdk-go v1.19.6
@@ -22,7 +22,6 @@ require (
 	github.com/tigera/api v0.0.0-20210805201339-a9f52be9823d
 	go.uber.org/zap v1.15.0
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
-	google.golang.org/protobuf v1.25.0 // indirect
 	gopkg.in/inf.v0 v0.9.1
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.21.0-rc.0

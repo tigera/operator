@@ -137,6 +137,16 @@ var (
 		Image:   "tigera/packetcapture-api",
 	}
 
+	ComponentL7Collector = component{
+		Version: "master",
+		Image:   "tigera/l7-collector",
+	}
+
+	ComponentEnvoyProxy = component{
+		Version: "master",
+		Image:   "tigera/envoy",
+	}
+
 	ComponentPrometheus = component{
 		Version: "v2.17.2",
 		Image:   "tigera/prometheus",
@@ -211,6 +221,8 @@ var (
 		ComponentDex,
 		ComponentManagerProxy,
 		ComponentPacketCapture,
+		ComponentL7Collector,
+		ComponentEnvoyProxy,
 		ComponentPrometheus,
 		ComponentTigeraPrometheusService,
 		ComponentPrometheusAlertmanager,

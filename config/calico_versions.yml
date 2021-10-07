@@ -12,3 +12,8 @@ components:
     version: master
   calico/apiserver:
     version: master
+  calicovpp/vpp:
+    version: latest
+  calicovpp/agent:
+    version: latest
+

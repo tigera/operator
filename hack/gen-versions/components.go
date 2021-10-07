@@ -38,6 +38,8 @@ var defaultImages = map[string]string{
 	"tigera-cni":              "tigera/cni",
 	"key-cert-provisioner":    "tigera/key-cert-provisioner",
 	"calico/apiserver":        "calico/apiserver",
+	"calicovpp/vpp":           "calicovpp/vpp",
+	"calicovpp/agent":         "calicovpp/agent",
 }
 
 var ignoredImages = map[string]struct{}{

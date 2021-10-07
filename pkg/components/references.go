@@ -38,6 +38,8 @@ func GetReference(c component, registry, imagePath, imagePrefix string, is *oper
 			ComponentCalicoCNI,
 			ComponentCalicoTypha,
 			ComponentCalicoKubeControllers,
+			ComponentCalicoVppAgent,
+			ComponentCalicoVpp,
 			ComponentFlexVolume,
 			ComponentCalicoAPIServer:
 

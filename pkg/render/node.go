@@ -27,6 +27,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -56,6 +57,7 @@ const (
 	BGPLayoutPath                     = "/etc/calico/early-networking.yaml"
 	K8sSvcEndpointConfigMapName       = "kubernetes-services-endpoint"
 	nodeTerminationGracePeriodSeconds = 5
+	VppDaemonSetName                  = "calico-vpp-node"
 )
 
 var (
@@ -112,6 +114,8 @@ type nodeComponent struct {
 	flexvolImage     string
 	nodeImage        string
 	certSignReqImage string
+	vppImage         string
+	vppAgentImage    string
 }
 
 func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -143,6 +147,20 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
+	if vppDataplaneEnabled(c.cfg.Installation) {
+		c.vppImage, err = components.GetReference(components.ComponentCalicoVpp, reg, path, prefix, is)
+	}
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	if vppDataplaneEnabled(c.cfg.Installation) {
+		c.vppAgentImage, err = components.GetReference(components.ComponentCalicoVppAgent, reg, path, prefix, is)
+	}
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
 	if c.cfg.Installation.CertificateManagement != nil {
 		c.certSignReqImage, err = ResolveCSRInitImage(c.cfg.Installation, is)
 		if err != nil {
@@ -163,7 +181,7 @@ func (c *nodeComponent) SupportedOSType() rmeta.OSType {
 func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 	objsToCreate := []client.Object{
 		c.nodeServiceAccount(),
-		c.nodeRole(),
+		c.nodeRole(false),
 		c.nodeRoleBinding(),
 	}
 
@@ -204,7 +222,12 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	objsToCreate = append(objsToCreate, c.nodeDaemonset(cniConfig))
-
+	if vppDataplaneEnabled(c.cfg.Installation) {
+		objsToCreate = append(objsToCreate, c.vppServiceAccount())
+		objsToCreate = append(objsToCreate, c.vppRole())
+		objsToCreate = append(objsToCreate, c.vppRoleBinding())
+		objsToCreate = append(objsToCreate, c.vppDaemonset())
+	}
 	if c.cfg.Installation.CertificateManagement != nil {
 		objsToCreate = append(objsToCreate, csrClusterRole())
 		objsToCreate = append(objsToCreate, CSRClusterRoleBinding("calico-node", common.CalicoNamespace))
@@ -224,6 +247,17 @@ func (c *nodeComponent) nodeServiceAccount() *corev1.ServiceAccount {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "calico-node",
 			Namespace: common.CalicoNamespace,
+		},
+	}
+}
+
+// vppServiceAccount creates the vpp's service account.
+func (c *nodeComponent) vppServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "calico-vpp-node-sa",
+			Namespace: common.VppNamespace,
 		},
 	}
 }
@@ -255,137 +289,180 @@ func (c *nodeComponent) nodeRoleBinding() *rbacv1.ClusterRoleBinding {
 	return crb
 }
 
-// nodeRole creates the clusterrole containing policy rules that allow the node daemonset to operate normally.
-func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
-	role := &rbacv1.ClusterRole{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+// vppRoleBinding creates a clusterrolebinding giving the vpp service account the required permissions to operate.
+func (c *nodeComponent) vppRoleBinding() *rbacv1.ClusterRoleBinding {
+	crb := &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   "calico-node",
+			Name:   "calico-vpp-node",
 			Labels: map[string]string{},
 		},
-
-		Rules: []rbacv1.PolicyRule{
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "calico-vpp-node-role",
+		},
+		Subjects: []rbacv1.Subject{
 			{
-				// Calico uses endpoint slices for service-based network policy rules.
-				APIGroups: []string{"discovery.k8s.io"},
-				Resources: []string{"endpointslices"},
-				Verbs:     []string{"list", "watch"},
-			},
-			{
-				// The CNI plugin needs to get pods, nodes, namespaces.
-				APIGroups: []string{""},
-				Resources: []string{"pods", "nodes", "namespaces"},
-				Verbs:     []string{"get"},
-			},
-			{
-				// Used to discover Typha endpoints and service IPs for advertisement.
-				APIGroups: []string{""},
-				Resources: []string{"endpoints", "services"},
-				Verbs:     []string{"watch", "list", "get"},
-			},
-			{
-				// Some information is stored on the node status.
-				APIGroups: []string{""},
-				Resources: []string{"nodes/status"},
-				Verbs:     []string{"patch", "update"},
-			},
-			{
-				// For enforcing network policies.
-				APIGroups: []string{"networking.k8s.io"},
-				Resources: []string{"networkpolicies"},
-				Verbs:     []string{"watch", "list"},
-			},
-			{
-				// Metadata from these are used in conjunction with network policy.
-				APIGroups: []string{""},
-				Resources: []string{"pods", "namespaces", "serviceaccounts"},
-				Verbs:     []string{"watch", "list"},
-			},
-			{
-				// Calico patches the allocated IP onto the pod.
-				APIGroups: []string{""},
-				Resources: []string{"pods/status"},
-				Verbs:     []string{"patch"},
-			},
-			{
-				// Calico needs to query configmaps for pool auto-detection on kubeadm.
-				APIGroups: []string{""},
-				Resources: []string{"configmaps"},
-				Verbs:     []string{"get"},
-			},
-			{
-				// For monitoring Calico-specific configuration.
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{
-					"bgpconfigurations",
-					"bgppeers",
-					"blockaffinities",
-					"clusterinformations",
-					"felixconfigurations",
-					"globalnetworkpolicies",
-					"stagedglobalnetworkpolicies",
-					"globalnetworksets",
-					"hostendpoints",
-					"ipamblocks",
-					"ippools",
-					"networkpolicies",
-					"stagedkubernetesnetworkpolicies",
-					"stagednetworkpolicies",
-					"networksets",
-				},
-				Verbs: []string{"get", "list", "watch"},
-			},
-			{
-				// For migration code in calico/node startup only. Remove when the migration
-				// code is removed from node.
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{
-					"globalbgpconfigs",
-					"globalfelixconfigs",
-				},
-				Verbs: []string{"get", "list", "watch"},
-			},
-			{
-				// Calico creates some configuration on startup.
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{
-					"clusterinformations",
-					"felixconfigurations",
-					"ippools",
-				},
-				Verbs: []string{"create", "update"},
-			},
-			{
-				// Calico monitors nodes for some networking configuration.
-				APIGroups: []string{""},
-				Resources: []string{"nodes"},
-				Verbs:     []string{"get", "list", "watch"},
-			},
-			{
-				// Most IPAM resources need full CRUD permissions so we can allocate and
-				// release IP addresses for pods.
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{
-					"blockaffinities",
-					"ipamblocks",
-					"ipamhandles",
-				},
-				Verbs: []string{"get", "list", "create", "update", "delete"},
-			},
-			{
-				// But, we only need to be able to query for IPAM config.
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{"ipamconfigs"},
-				Verbs:     []string{"get"},
-			},
-			{
-				// confd (and in some cases, felix) watches block affinities for route aggregation.
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{"blockaffinities"},
-				Verbs:     []string{"watch"},
+				Kind:      "ServiceAccount",
+				Name:      "calico-vpp-node-sa",
+				Namespace: common.VppNamespace,
 			},
 		},
 	}
+	return crb
+}
+
+// nodeRole creates the clusterrole containing policy rules that allow the node daemonset to operate normally.
+func (c *nodeComponent) nodeRole(forVpp bool) *rbacv1.ClusterRole {
+	var role *rbacv1.ClusterRole
+	if !forVpp {
+		role = &rbacv1.ClusterRole{
+			TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "calico-node",
+				Labels: map[string]string{},
+			},
+			Rules: []rbacv1.PolicyRule{},
+		}
+	} else {
+		role = &rbacv1.ClusterRole{
+			TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "calico-vpp-node-role",
+				Labels: map[string]string{},
+			},
+			Rules: []rbacv1.PolicyRule{},
+		}
+	}
+
+	role.Rules = []rbacv1.PolicyRule{
+		{
+			// Calico uses endpoint slices for service-based network policy rules.
+			APIGroups: []string{"discovery.k8s.io"},
+			Resources: []string{"endpointslices"},
+			Verbs:     []string{"list", "watch"},
+		},
+		{
+			// The CNI plugin needs to get pods, nodes, namespaces.
+			APIGroups: []string{""},
+			Resources: []string{"pods", "nodes", "namespaces"},
+			Verbs:     []string{"get"},
+		},
+		{
+			// Used to discover Typha endpoints and service IPs for advertisement.
+			APIGroups: []string{""},
+			Resources: []string{"endpoints", "services"},
+			Verbs:     []string{"watch", "list", "get"},
+		},
+		{
+			// Some information is stored on the node status.
+			APIGroups: []string{""},
+			Resources: []string{"nodes/status"},
+			Verbs:     []string{"patch", "update"},
+		},
+		{
+			// For enforcing network policies.
+			APIGroups: []string{"networking.k8s.io"},
+			Resources: []string{"networkpolicies"},
+			Verbs:     []string{"watch", "list"},
+		},
+		{
+			// Metadata from these are used in conjunction with network policy.
+			APIGroups: []string{""},
+			Resources: []string{"pods", "namespaces", "serviceaccounts"},
+			Verbs:     []string{"watch", "list"},
+		},
+		{
+			// Calico patches the allocated IP onto the pod.
+			APIGroups: []string{""},
+			Resources: []string{"pods/status"},
+			Verbs:     []string{"patch"},
+		},
+		{
+			// Calico needs to query configmaps for pool auto-detection on kubeadm.
+			APIGroups: []string{""},
+			Resources: []string{"configmaps"},
+			Verbs:     []string{"get"},
+		},
+		{
+			// For monitoring Calico-specific configuration.
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{
+				"bgpconfigurations",
+				"bgppeers",
+				"blockaffinities",
+				"clusterinformations",
+				"felixconfigurations",
+				"globalnetworkpolicies",
+				"stagedglobalnetworkpolicies",
+				"globalnetworksets",
+				"hostendpoints",
+				"ipamblocks",
+				"ippools",
+				"networkpolicies",
+				"stagedkubernetesnetworkpolicies",
+				"stagednetworkpolicies",
+				"networksets",
+			},
+			Verbs: []string{"get", "list", "watch"},
+		},
+		{
+			// For migration code in calico/node startup only. Remove when the migration
+			// code is removed from node.
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{
+				"globalbgpconfigs",
+				"globalfelixconfigs",
+			},
+			Verbs: []string{"get", "list", "watch"},
+		},
+		{
+			// Calico monitors nodes for some networking configuration.
+			APIGroups: []string{""},
+			Resources: []string{"nodes"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+		{
+			// Most IPAM resources need full CRUD permissions so we can allocate and
+			// release IP addresses for pods.
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{
+				"blockaffinities",
+				"ipamblocks",
+				"ipamhandles",
+			},
+			Verbs: []string{"get", "list", "create", "update", "delete"},
+		},
+		{
+			// But, we only need to be able to query for IPAM config.
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{"ipamconfigs"},
+			Verbs:     []string{"get"},
+		},
+		{
+			// confd (and in some cases, felix) watches block affinities for route aggregation.
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{"blockaffinities"},
+			Verbs:     []string{"watch"},
+		},
+	}
+
+	if forVpp {
+		return role
+	}
+
+	role.Rules = append(role.Rules, rbacv1.PolicyRule{
+		// Calico creates some configuration on startup.
+		APIGroups: []string{"crd.projectcalico.org"},
+		Resources: []string{
+			"clusterinformations",
+			"felixconfigurations",
+			"ippools",
+		},
+		Verbs: []string{"create", "update"},
+	})
+
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		extraRules := []rbacv1.PolicyRule{
 			{
@@ -433,6 +510,11 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 	return role
 }
 
+// vppRole creates the clusterrole containing policy rules that allow the vpp daemonset to operate normally.
+func (c *nodeComponent) vppRole() *rbacv1.ClusterRole {
+	return c.nodeRole(true)
+}
+
 // nodeCNIConfigMap returns a config map containing the CNI network config to be installed on each node.
 // Returns nil if no configmap is needed.
 func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
@@ -468,6 +550,15 @@ func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
     {"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}`
 	}
 
+	var externalDataplane string = ""
+	if vppDataplaneEnabled(c.cfg.Installation) {
+		externalDataplane = `,
+		"dataplane_options": {
+			"type": "grpc",
+			"socket": "unix:///var/run/calico/cni-server.sock"
+		}`
+	}
+
 	ipam := c.getCalicoIPAM()
 	if c.cfg.Installation.CNI.IPAM.Type == operatorv1.IPAMPluginHostLocal {
 		ipam = buildHostLocalIPAM(c.cfg.Installation.CalicoNetwork)
@@ -500,14 +591,14 @@ func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
       },
       "kubernetes": {%s
           "kubeconfig": "__KUBECONFIG_FILEPATH__"
-      }
+      }%s
     },
     {
       "type": "bandwidth",
       "capabilities": {"bandwidth": true}
     }%s
   ]
-}`, mtu, nodenameFileOptional, ipam, ipForward, k8sAPIRoot, portmap)
+}`, mtu, nodenameFileOptional, ipam, ipForward, k8sAPIRoot, externalDataplane, portmap)
 
 	return &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
@@ -682,6 +773,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 					ServiceAccountName:            "calico-node",
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					HostNetwork:                   true,
+					HostPID:                       vppDataplaneEnabled(c.cfg.Installation),
 					InitContainers:                initContainers,
 					Containers:                    []corev1.Container{c.nodeContainer()},
 					Volumes:                       c.nodeVolumes(),
@@ -702,6 +794,46 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 	setNodeCriticalPod(&(ds.Spec.Template))
 	if c.cfg.MigrateNamespaces {
 		migration.LimitDaemonSetToMigratedNodes(&ds)
+	}
+	return &ds
+}
+
+// vppDaemonset creates the vpp daemonset.
+func (c *nodeComponent) vppDaemonset() *appsv1.DaemonSet {
+	var terminationGracePeriod int64 = 10
+	annotations := make(map[string]string)
+	annotations["scheduler.alpha.kubernetes.io/critical-pod"] = ""
+	ds := appsv1.DaemonSet{
+		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      VppDaemonSetName,
+			Namespace: common.VppNamespace,
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "calico-vpp-node"}},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"k8s-app": "calico-vpp-node",
+					},
+					Annotations: annotations,
+				},
+				Spec: corev1.PodSpec{
+					NodeSelector: map[string]string{
+						"kubernetes.io/os": "linux",
+					},
+					Tolerations:                   rmeta.TolerateAll,
+					ServiceAccountName:            "calico-vpp-node-sa",
+					TerminationGracePeriodSeconds: &terminationGracePeriod,
+					PriorityClassName:             "system-node-critical",
+					HostNetwork:                   true,
+					HostPID:                       true,
+					Containers:                    c.vppContainers(),
+					Volumes:                       c.vppVolumes(),
+				},
+			},
+			UpdateStrategy: c.cfg.Installation.NodeUpdateStrategy,
+		},
 	}
 	return &ds
 }
@@ -819,6 +951,12 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 			})
 	}
 
+	if vppDataplaneEnabled(c.cfg.Installation) {
+		extraVolumes := []corev1.Volume{
+			{Name: "felix-plugins", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/calico/felix-plugins"}}},
+		}
+		volumes = append(volumes, extraVolumes...)
+	}
 	return volumes
 }
 
@@ -832,6 +970,27 @@ func (c *nodeComponent) collectProcessPathEnabled() bool {
 	return c.cfg.LogCollector != nil &&
 		c.cfg.LogCollector.Spec.CollectProcessPath != nil &&
 		*c.cfg.LogCollector.Spec.CollectProcessPath == operatorv1.CollectProcessPathEnable
+}
+
+// vppVolumes creates the volumes for vpp
+func (c *nodeComponent) vppVolumes() []corev1.Volume {
+	dirOrCreate := corev1.HostPathDirectoryOrCreate
+	vppVolumes := []corev1.Volume{
+		{Name: "vpp-rundir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/vpp"}}},
+		{Name: "vpp-data", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/vpp", Type: &dirOrCreate}}},
+		{Name: "vpp-config", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/etc/vpp"}}},
+		{Name: "devices", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/dev"}}},
+		{Name: "hostsys", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys"}}},
+		{Name: "netns", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/run/netns"}}},
+		{Name: "lib-firmware", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/lib/firmware"}}},
+		{Name: "var-run-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/calico"}}},
+		{Name: "felix-plugins", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/calico/felix-plugins"}}},
+	}
+	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderEKS {
+		vppVolumes = append(vppVolumes, corev1.Volume{
+			Name: "host-root", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/"}}})
+	}
+	return vppVolumes
 }
 
 // cniContainer creates the node's init container that installs CNI.
@@ -952,9 +1111,63 @@ func (c *nodeComponent) nodeContainer() corev1.Container {
 	}
 }
 
+// vppContainer creates the vpp containers
+func (c *nodeComponent) vppContainers() []corev1.Container {
+	containers := []corev1.Container{corev1.Container{
+		Name:            "vpp",
+		Image:           c.vppImage,
+		ImagePullPolicy: corev1.PullPolicy("IfNotPresent"),
+		Resources:       c.vppResources(false),
+		SecurityContext: &corev1.SecurityContext{Privileged: ptr.BoolToPtr(true)},
+		Env:             c.vppEnvVars(false),
+		VolumeMounts:    c.vppVolumeMounts(false),
+	}}
+	containers = append(containers, corev1.Container{
+		Name:            "agent",
+		Image:           c.vppAgentImage,
+		ImagePullPolicy: corev1.PullPolicy("IfNotPresent"),
+		Resources:       c.vppResources(true),
+		SecurityContext: &corev1.SecurityContext{Privileged: ptr.BoolToPtr(true)},
+		Env:             c.vppEnvVars(true),
+		VolumeMounts:    c.vppVolumeMounts(true),
+	})
+	return containers
+}
+
 // nodeResources creates the node's resource requirements.
 func (c *nodeComponent) nodeResources() corev1.ResourceRequirements {
 	return rmeta.GetResourceRequirements(c.cfg.Installation, operatorv1.ComponentNameNode)
+}
+
+// vppResources creates the vpp container's resource requirements.
+func (c *nodeComponent) vppResources(isAgent bool) corev1.ResourceRequirements {
+	req := corev1.ResourceRequirements{}
+	if isAgent {
+		req = corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU: *resource.NewMilliQuantity(250, resource.DecimalSI),
+			},
+			Limits: corev1.ResourceList{},
+		}
+	} else {
+		req = corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    *resource.NewMilliQuantity(500, resource.DecimalSI),
+				corev1.ResourceMemory: *resource.NewQuantity(128<<20, resource.BinarySI),
+			},
+			Limits: corev1.ResourceList{},
+		}
+
+		if strings.HasPrefix(strings.ToLower(c.cfg.Installation.CalicoNetwork.VPP.Hugepages), "enable") {
+			req.Requests["hugepages-2Mi"] = *resource.NewQuantity(256<<20, resource.BinarySI)
+			req.Limits["hugepages-2Mi"] = *resource.NewQuantity(256<<20, resource.BinarySI)
+		}
+
+		if c.cfg.Installation.CalicoNetwork.VPP.UplinkDriver == "dpdk" && c.cfg.Installation.KubernetesProvider == operatorv1.ProviderEKS {
+			req.Limits["hugepages-2Mi"] = *resource.NewQuantity(512<<20, resource.BinarySI)
+		}
+	}
+	return req
 }
 
 // nodeVolumeMounts creates the node's volume mounts.
@@ -970,6 +1183,12 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 	}
 	if c.bpfDataplaneEnabled() {
 		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/sys/fs/bpf", Name: "bpffs"})
+	}
+	if vppDataplaneEnabled(c.cfg.Installation) {
+		extraNodeMounts := []corev1.VolumeMount{
+			{MountPath: "/usr/local/bin/felix-plugins", Name: "felix-plugins", ReadOnly: true},
+		}
+		nodeVolumeMounts = append(nodeVolumeMounts, extraNodeMounts...)
 	}
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		extraNodeMounts := []corev1.VolumeMount{
@@ -1017,6 +1236,34 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 	}
 
 	return nodeVolumeMounts
+}
+
+func (c *nodeComponent) vppVolumeMounts(isAgent bool) []corev1.VolumeMount {
+	bidirectional := corev1.MountPropagationBidirectional
+	var vppVolumeMounts []corev1.VolumeMount
+	if isAgent {
+		vppVolumeMounts = []corev1.VolumeMount{
+			{MountPath: "/var/run/vpp", Name: "vpp-rundir"},
+			{MountPath: "/var/lib/calico/felix-plugins", Name: "felix-plugins", ReadOnly: false},
+			{MountPath: "/run/netns/", Name: "netns", MountPropagation: &bidirectional},
+			{MountPath: "/var/run/calico", Name: "var-run-calico", ReadOnly: false},
+		}
+	} else {
+		vppVolumeMounts = []corev1.VolumeMount{
+			{MountPath: "/var/run/vpp", Name: "vpp-rundir"},
+			{MountPath: "/var/lib/vpp", Name: "vpp-data"},
+			{MountPath: "/etc/vpp", Name: "vpp-config"},
+			{MountPath: "/dev", Name: "devices"},
+			{MountPath: "/sys", Name: "hostsys"},
+			{MountPath: "/run/netns/", Name: "netns", MountPropagation: &bidirectional},
+			{MountPath: "/lib/firmware", Name: "lib-firmware"},
+		}
+		if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderEKS {
+			vppVolumeMounts = append(vppVolumeMounts, corev1.VolumeMount{MountPath: "/host", Name: "host-root"})
+		}
+	}
+
+	return vppVolumeMounts
 }
 
 // nodeEnvVars creates the node's envvars.
@@ -1185,10 +1432,11 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 	// Configure whether or not BGP should be enabled.
 	if !bgpEnabled(c.cfg.Installation) {
 		if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
-			if c.cfg.Installation.CNI.IPAM.Type == operatorv1.IPAMPluginHostLocal {
+			if c.cfg.Installation.CNI.IPAM.Type == operatorv1.IPAMPluginHostLocal || vppDataplaneEnabled(c.cfg.Installation) {
 				// If BGP is disabled and using HostLocal, then that means routing is done
 				// by Cloud routing, so networking backend is none. (because we don't support
 				// vxlan with HostLocal.)
+				// VPP also requires the "none" networking backend
 				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "none"})
 			} else {
 				// If BGP is disabled, then set the networking backend to "vxlan". This means that BIRD will be
@@ -1330,6 +1578,35 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		})
 	}
 
+	if vppDataplaneEnabled(c.cfg.Installation) {
+		nodeEnv = append(nodeEnv, corev1.EnvVar{
+			Name:  "FELIX_USEINTERNALDATAPLANEDRIVER",
+			Value: "false",
+		})
+		nodeEnv = append(nodeEnv, corev1.EnvVar{
+			Name:  "FELIX_DATAPLANEDRIVER",
+			Value: "/usr/local/bin/felix-plugins/felix-api-proxy",
+		})
+		nodeEnv = append(nodeEnv, corev1.EnvVar{
+			Name:  "FELIX_XDPENABLED",
+			Value: "false",
+		})
+		if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderEKS {
+			nodeEnv = append(nodeEnv, corev1.EnvVar{
+				Name:  "FELIX_AWSSRCDSTCHECK",
+				Value: "Disable",
+			})
+			nodeEnv = append(nodeEnv, corev1.EnvVar{
+				Name:  "IP_AUTODETECTION_METHOD",
+				Value: "interface=eth0",
+			})
+			nodeEnv = append(nodeEnv, corev1.EnvVar{
+				Name:  "CALICO_IPV4POOL_CIDR",
+				Value: "10.10.0.0/16",
+			})
+		}
+	}
+
 	return nodeEnv
 }
 
@@ -1340,6 +1617,138 @@ func (c *nodeComponent) nodeLifecycle() *corev1.Lifecycle {
 		PreStop: &corev1.Handler{Exec: &corev1.ExecAction{Command: preStopCmd}},
 	}
 	return lc
+}
+
+func (c *nodeComponent) vppEnvVars(isAgent bool) []corev1.EnvVar {
+	vppConf := fmt.Sprintf(`
+unix {
+	nodaemon
+	full-coredump
+	cli-listen /var/run/vpp/cli.sock
+	pidfile /run/vpp/vpp.pid
+	exec /etc/vpp/startup.exec
+}
+api-trace { on }
+cpu {
+	workers %d
+}
+socksvr {
+	socket-name /var/run/vpp/vpp-api.sock
+}
+plugins {
+	plugin default { enable }
+	plugin dpdk_plugin.so { disable }
+	plugin calico_plugin.so { enable }
+}  
+`, c.cfg.Installation.CalicoNetwork.VPP.Workers)
+
+	var vppEnv []corev1.EnvVar
+
+	if isAgent {
+		vppEnv = []corev1.EnvVar{
+			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
+			{
+				Name: "NODENAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
+				},
+			},
+			{Name: "SERVICE_PREFIX", Value: c.cfg.Installation.CalicoNetwork.VPP.ServicePrefix},
+		}
+	} else {
+		vppEnv = []corev1.EnvVar{
+			{Name: "CALICOVPP_NATIVE_DRIVER", Value: c.cfg.Installation.CalicoNetwork.VPP.UplinkDriver},
+			{Name: "CALICOVPP_IP_CONFIG", Value: "linux"},
+			{Name: "CALICOVPP_INTERFACE", Value: c.cfg.Installation.CalicoNetwork.VPP.UplinkInterface},
+			{Name: "CALICOVPP_CONFIG_TEMPLATE", Value: vppConf},
+			{Name: "SERVICE_PREFIX", Value: c.cfg.Installation.CalicoNetwork.VPP.ServicePrefix},
+			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
+			{
+				Name: "NODENAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
+				},
+			},
+			{Name: "CALICOVPP_CORE_PATTERN", Value: "/var/lib/vpp/vppcore.%e.%p"},
+		}
+		if c.cfg.Installation.CalicoNetwork.VPP.HookType == "systemctl" {
+			vppEnv = append(vppEnv, corev1.EnvVar{
+				Name:  "CALICOVPP_HOOK_BEFORE_VPP_RUN",
+				Value: "echo 'sudo systemctl stop network ; sudo systemctl kill network' | chroot /host",
+			})
+			vppEnv = append(vppEnv, corev1.EnvVar{
+				Name:  "CALICOVPP_HOOK_VPP_RUNNING",
+				Value: "echo 'sudo systemctl start network' | chroot /host",
+			})
+			vppEnv = append(vppEnv, corev1.EnvVar{
+				Name:  "CALICOVPP_HOOK_VPP_DONE_OK",
+				Value: "echo 'sudo systemctl stop network ; sudo systemctl kill network ; sudo systemctl start network' | chroot /host",
+			})
+			vppEnv = append(vppEnv, corev1.EnvVar{
+				Name:  "CALICOVPP_HOOK_VPP_ERRORED",
+				Value: "echo 'sudo systemctl stop network ; sudo systemctl kill network ; sudo systemctl start network' | chroot /host",
+			})
+		}
+	}
+
+	if c.cfg.Installation.CalicoNetwork.VPP.DefaultGateway != "" && !isAgent {
+		vppEnv = append(vppEnv, corev1.EnvVar{
+			Name:  "CALICOVPP_DEFAULT_GW",
+			Value: c.cfg.Installation.CalicoNetwork.VPP.DefaultGateway,
+		})
+	}
+
+	if c.cfg.Installation.CalicoNetwork.VPP.RxMode != "" && !isAgent {
+		vppEnv = append(vppEnv, corev1.EnvVar{
+			Name:  "CALICOVPP_RX_MODE",
+			Value: c.cfg.Installation.CalicoNetwork.VPP.RxMode,
+		})
+	}
+	if c.cfg.Installation.CalicoNetwork.VPP.RxMode != "" {
+		vppEnv = append(vppEnv, corev1.EnvVar{
+			Name:  "CALICOVPP_TAP_RX_MODE",
+			Value: c.cfg.Installation.CalicoNetwork.VPP.RxMode,
+		})
+	}
+
+	if c.cfg.Installation.CalicoNetwork.VPP.TunRxQueues != 0 && isAgent {
+		vppEnv = append(vppEnv, corev1.EnvVar{
+			Name:  "CALICOVPP_TAP_RX_QUEUES",
+			Value: strconv.Itoa(c.cfg.Installation.CalicoNetwork.VPP.TunRxQueues),
+		})
+	}
+
+	if c.cfg.Installation.CalicoNetwork.VPP.TunTxQueues != 0 && isAgent {
+		vppEnv = append(vppEnv, corev1.EnvVar{
+			Name:  "CALICOVPP_TAP_TX_QUEUES",
+			Value: strconv.Itoa(c.cfg.Installation.CalicoNetwork.VPP.TunTxQueues),
+		})
+	}
+
+	if c.cfg.Installation.CalicoNetwork.VPP.UplinkRxQueues != 0 {
+		vppEnv = append(vppEnv, corev1.EnvVar{
+			Name:  "CALICOVPP_RX_QUEUES",
+			Value: strconv.Itoa(c.cfg.Installation.CalicoNetwork.VPP.UplinkRxQueues),
+		})
+	}
+
+	if c.cfg.Installation.CalicoNetwork.VPP.UplinkQueueSize != 0 {
+		vppEnv = append(vppEnv, corev1.EnvVar{
+			Name:  "CALICOVPP_RING_SIZE",
+			Value: strconv.Itoa(c.cfg.Installation.CalicoNetwork.VPP.UplinkQueueSize),
+		})
+	}
+
+	if c.cfg.Installation.CalicoNetwork.VPP.TunQueueSize != 0 {
+		vppEnv = append(vppEnv, corev1.EnvVar{
+			Name:  "CALICOVPP_TAP_RING_SIZE",
+			Value: strconv.Itoa(c.cfg.Installation.CalicoNetwork.VPP.TunQueueSize),
+		})
+	}
+
+	return vppEnv
 }
 
 // nodeLivenessReadinessProbes creates the node's liveness and readiness probes.
@@ -1484,11 +1893,20 @@ func GetIPv6Pool(pools []operatorv1.IPPool) *operatorv1.IPPool {
 	return nil
 }
 
+// vppDataplaneEnabled returns true if the given Installation enables VPP
+func vppDataplaneEnabled(cr *operatorv1.InstallationSpec) bool {
+	return cr.CalicoNetwork != nil &&
+		cr.CalicoNetwork.LinuxDataplane != nil &&
+		*cr.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneVPP &&
+		cr.CalicoNetwork.VPP != nil
+}
+
 // bgpEnabled returns true if the given Installation enables BGP, false otherwise.
 func bgpEnabled(instance *operatorv1.InstallationSpec) bool {
 	return instance.CalicoNetwork != nil &&
 		instance.CalicoNetwork.BGP != nil &&
-		*instance.CalicoNetwork.BGP == operatorv1.BGPEnabled
+		*instance.CalicoNetwork.BGP == operatorv1.BGPEnabled &&
+		!vppDataplaneEnabled(instance) // VPP bundles it's own BGP daemon
 }
 
 // getMTU returns the MTU configured in the Installation if there is one, nil otherwise.

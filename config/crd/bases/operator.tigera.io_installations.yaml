@@ -116,6 +116,7 @@ spec:
                     enum:
                     - Iptables
                     - BPF
+                    - VPP
                     type: string
                   mtu:
                     description: MTU specifies the maximum transmission unit to use
@@ -191,6 +192,77 @@ spec:
                         description: SkipInterface enables IP auto-detection based
                           on interfaces that do not match the given regex.
                         type: string
+                    type: object
+                  vpp:
+                    description: VPP enables and configures the VPP dataplane when
+                      present
+                    properties:
+                      defaultGateway:
+                        description: DefaultGateway can be set to configure a default
+                          route in VPP. Accepted formats are "ipv4", "ipv6" or "ipv4,ipv6"
+                        type: string
+                      hookType:
+                        description: HookType is set to specify node distribution,
+                          only "systemctl" is supported for now
+                        type: string
+                      hugepages:
+                        description: Hugepages can be set to "Enabled" if hugepages
+                          are available on all nodes to allow more efficient drivers
+                          to be used
+                        type: string
+                      ipsec:
+                        description: 'IPsec can be used to enable IPsec encryption
+                          of IPIP tunnels Accepted values: "Disabled" (default), "Enabled"'
+                        type: string
+                      rxMode:
+                        description: 'RxMode can be used to configure the VPP Rx mode
+                          Accepted values: "default" (default), "interrupt", "polling",
+                          "adaptive"'
+                        type: string
+                      servicePrefix:
+                        description: ServicePrefix must be set to the cluster service
+                          CIDR
+                        type: string
+                      tunQueueSize:
+                        description: 'TunQueueSize can be used to configure the queue
+                          size of the uplink interface Default: 1024'
+                        type: integer
+                      tunRxQueues:
+                        description: 'TunRxQueues can be used to configure the number
+                          of Rx queues on the container tun interfaces Default: 1024'
+                        type: integer
+                      tunTxQueues:
+                        description: 'TunTxQueues can be used to configure the number
+                          of Tx queues on the container tun interfaces Default: 1024'
+                        type: integer
+                      uplinkDriver:
+                        description: 'UplinkDriver is the driver to use for the uplink
+                          interface. Examples: af_xdp, af_packet, dpdk, avf, virtio'
+                        type: string
+                      uplinkInterface:
+                        description: UplinkInterface is the interface VPP will take
+                          to communicate with the outside
+                        type: string
+                      uplinkQueueSize:
+                        description: 'UplinkQueueSize can be used to configure the
+                          queue size of the uplink interface Default: 1024'
+                        type: integer
+                      uplinkRxQueues:
+                        description: 'UplinkRxQueues can be used to configure the
+                          number of rx queues on the uplink interface, when supported
+                          by the driver. Default: 1'
+                        type: integer
+                      workers:
+                        description: 'Workers can be set to configure the number of
+                          VPP workers. With 0 workers, VPP will run with a single
+                          main thread processing API requests and network traffic.
+                          With 1+ workers, VPP will run with one main thread processing
+                          API requests, and the configured number of workers processing
+                          container traffic. Default: 0'
+                        type: integer
+                    required:
+                    - servicePrefix
+                    - uplinkInterface
                     type: object
                 type: object
               certificateManagement:
@@ -812,6 +884,7 @@ spec:
                         enum:
                         - Iptables
                         - BPF
+                        - VPP
                         type: string
                       mtu:
                         description: MTU specifies the maximum transmission unit to
@@ -889,6 +962,82 @@ spec:
                             description: SkipInterface enables IP auto-detection based
                               on interfaces that do not match the given regex.
                             type: string
+                        type: object
+                      vpp:
+                        description: VPP enables and configures the VPP dataplane
+                          when present
+                        properties:
+                          defaultGateway:
+                            description: DefaultGateway can be set to configure a
+                              default route in VPP. Accepted formats are "ipv4", "ipv6"
+                              or "ipv4,ipv6"
+                            type: string
+                          hookType:
+                            description: HookType is set to specify node distribution,
+                              only "systemctl" is supported for now
+                            type: string
+                          hugepages:
+                            description: Hugepages can be set to "Enabled" if hugepages
+                              are available on all nodes to allow more efficient drivers
+                              to be used
+                            type: string
+                          ipsec:
+                            description: 'IPsec can be used to enable IPsec encryption
+                              of IPIP tunnels Accepted values: "Disabled" (default),
+                              "Enabled"'
+                            type: string
+                          rxMode:
+                            description: 'RxMode can be used to configure the VPP
+                              Rx mode Accepted values: "default" (default), "interrupt",
+                              "polling", "adaptive"'
+                            type: string
+                          servicePrefix:
+                            description: ServicePrefix must be set to the cluster
+                              service CIDR
+                            type: string
+                          tunQueueSize:
+                            description: 'TunQueueSize can be used to configure the
+                              queue size of the uplink interface Default: 1024'
+                            type: integer
+                          tunRxQueues:
+                            description: 'TunRxQueues can be used to configure the
+                              number of Rx queues on the container tun interfaces
+                              Default: 1024'
+                            type: integer
+                          tunTxQueues:
+                            description: 'TunTxQueues can be used to configure the
+                              number of Tx queues on the container tun interfaces
+                              Default: 1024'
+                            type: integer
+                          uplinkDriver:
+                            description: 'UplinkDriver is the driver to use for the
+                              uplink interface. Examples: af_xdp, af_packet, dpdk,
+                              avf, virtio'
+                            type: string
+                          uplinkInterface:
+                            description: UplinkInterface is the interface VPP will
+                              take to communicate with the outside
+                            type: string
+                          uplinkQueueSize:
+                            description: 'UplinkQueueSize can be used to configure
+                              the queue size of the uplink interface Default: 1024'
+                            type: integer
+                          uplinkRxQueues:
+                            description: 'UplinkRxQueues can be used to configure
+                              the number of rx queues on the uplink interface, when
+                              supported by the driver. Default: 1'
+                            type: integer
+                          workers:
+                            description: 'Workers can be set to configure the number
+                              of VPP workers. With 0 workers, VPP will run with a
+                              single main thread processing API requests and network
+                              traffic. With 1+ workers, VPP will run with one main
+                              thread processing API requests, and the configured number
+                              of workers processing container traffic. Default: 0'
+                            type: integer
+                        required:
+                        - servicePrefix
+                        - uplinkInterface
                         type: object
                     type: object
                   certificateManagement:

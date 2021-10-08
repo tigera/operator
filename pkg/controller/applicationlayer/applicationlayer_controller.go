@@ -290,7 +290,7 @@ func (r *ReconcileApplicationLayer) patchFelixTproxyMode(ctx context.Context, l7
 		tproxyMode = crdv1.TPROXYModeOptionDisabled
 	}
 	// If tproxy mode is already set to desired state return nil.
-	if *fc.Spec.TPROXYMode == tproxyMode {
+	if fc.Spec.TPROXYMode != nil && *fc.Spec.TPROXYMode == tproxyMode {
 		return nil
 	}
 	fc.Spec.TPROXYMode = &tproxyMode

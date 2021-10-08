@@ -15,4 +15,5 @@ type AddOptions struct {
 	AmazonCRDExists     bool
 	ClusterDomain       string
 	KubernetesVersion   *common.VersionInfo
+	ManageCRDs          bool
 }

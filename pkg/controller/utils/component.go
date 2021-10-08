@@ -29,6 +29,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta "k8s.io/api/batch/v1beta1"
 	v1 "k8s.io/api/core/v1"
+	apiextenv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -47,6 +48,8 @@ type ComponentHandler interface {
 	CreateOrUpdateOrDelete(context.Context, render.Component, status.StatusManager) error
 }
 
+// cr is allowed to be nil in the case we don't want to put ownership on a resource,
+// this is useful for CRD management so that they are not removed automatically.
 func NewComponentHandler(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) ComponentHandler {
 	return &componentHandler{
 		client: client,
@@ -89,8 +92,10 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 		if !ok {
 			return fmt.Errorf("Object is not ObjectMetaAccessor")
 		}
-		if err := controllerutil.SetControllerReference(c.cr, om.GetObjectMeta(), c.scheme); err != nil {
-			return err
+		if c.cr != nil {
+			if err := controllerutil.SetControllerReference(c.cr, om.GetObjectMeta(), c.scheme); err != nil {
+				return err
+			}
 		}
 
 		logCtx := ContextLoggerForResource(c.log, obj)
@@ -297,6 +302,11 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 		dsa.Spec.ElasticsearchRef = csa.Spec.ElasticsearchRef
 		dsa.Status = csa.Status
 		return dsa
+	case *apiextenv1.CustomResourceDefinition:
+		c := current.(*apiextenv1.CustomResourceDefinition)
+		d := desired.(*apiextenv1.CustomResourceDefinition)
+		d.SetResourceVersion(c.GetResourceVersion())
+		return d
 	default:
 		// Default to just using the desired state, with an updated RV.
 		return desired

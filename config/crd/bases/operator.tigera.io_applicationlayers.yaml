@@ -36,23 +36,22 @@ spec:
             description: ApplicationLayerSpec defines the desired state of ApplicationLayer
             properties:
               logCollection:
-                description: specification for application layer (L7) log collection
+                description: Specification for application layer (L7) log collection.
                 properties:
                   collectLogs:
-                    description: Setting this option to Enabled will enable l7 log
-                      collection
+                    description: This setting enables or disable log collection. Allowed
+                      values are Enabled or Disabled.
                     type: string
                   logIntervalSeconds:
                     description: 'Interval in seconds for sending L7 log information
-                      for processing. adjust this to limit the frequency at which
-                      logs are sent from l7-collector Default: 5 sec'
+                      for processing. Default: 5 sec'
                     format: int64
                     type: integer
                   logRequestsPerInterval:
-                    description: 'Maximum number of unique L7 logs that are sent LogIntervalSeconds
-                      adjust this to limit the number of L7 logs sent per LogIntervalSeconds
+                    description: 'Maximum number of unique L7 logs that are sent LogIntervalSeconds.
+                      Adjust this to limit the number of L7 logs sent per LogIntervalSeconds
                       to felix for further processing, use negative number to ignore
-                      limits Default: -1'
+                      limits. Default: -1'
                     format: int64
                     type: integer
                 type: object

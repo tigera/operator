@@ -17,10 +17,11 @@ limitations under the License.
 package controllers
 
 import (
+	"github.com/go-logr/logr"
+
 	"github.com/tigera/operator/pkg/controller/applicationlayer"
 	"github.com/tigera/operator/pkg/controller/options"
 
-	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,16 +37,6 @@ type ApplicationLayerReconciler struct {
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=applicationlayers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=applicationlayers/status,verbs=get;update;patch
 
-//func (r *ApplicationLayerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-//	_ = context.Background()
-//	_ = r.Log.WithValues("applicationlayer", req.NamespacedName)
-//
-//	return ctrl.Result{}, nil
-//}
-
 func (r *ApplicationLayerReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
 	return applicationlayer.Add(mgr, opts)
-	//return ctrl.NewControllerManagedBy(mgr).
-	//	For(&operatorv1.LogCollector{}).
-	//	Complete(r)
 }

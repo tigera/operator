@@ -22,7 +22,7 @@ import (
 
 // ApplicationLayerSpec defines the desired state of ApplicationLayer
 type ApplicationLayerSpec struct {
-	// specification for application layer (L7) log collection
+	// Specification for application layer (L7) log collection.
 	LogCollection *LogCollectionSpec `json:"logCollection,omitempty"`
 }
 
@@ -35,19 +35,19 @@ const (
 
 type LogCollectionSpec struct {
 
-	// Setting this option to Enabled will enable l7 log collection
+	// This setting enables or disable log collection.
+	// Allowed values are Enabled or Disabled.
 	// +optional
 	CollectLogs *LogCollectionStatusType `json:"collectLogs,omitempty"`
 
 	// Interval in seconds for sending L7 log information for processing.
-	// adjust this to limit the frequency at which logs are sent from l7-collector
 	// +optional
 	// Default: 5 sec
 	LogIntervalSeconds *int64 `json:"logIntervalSeconds,omitempty"`
 
-	// Maximum number of unique L7 logs that are sent LogIntervalSeconds
-	// adjust this to limit the number of L7 logs sent per LogIntervalSeconds
-	// to felix for further processing, use negative number to ignore limits
+	// Maximum number of unique L7 logs that are sent LogIntervalSeconds.
+	// Adjust this to limit the number of L7 logs sent per LogIntervalSeconds
+	// to felix for further processing, use negative number to ignore limits.
 	// +optional
 	// Default: -1
 	LogRequestsPerInterval *int64 `json:"logRequestsPerInterval,omitempty"`

@@ -125,12 +125,10 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	// TODO: ensure that namespace exists before proceeding
 
 	// if l7spec is provided render the required objects
-	if c.logsEnabled {
-		c.envoyConfigMap = c.envoyL7ConfigMap()
-		objs = append(objs, c.serviceAccount())
-		objs = append(objs, c.envoyConfigMap)
-		objs = append(objs, c.daemonset())
-	}
+	c.envoyConfigMap = c.envoyL7ConfigMap()
+	objs = append(objs, c.serviceAccount())
+	objs = append(objs, c.envoyConfigMap)
+	objs = append(objs, c.daemonset())
 
 	if c.installation.KubernetesProvider == operatorv1.ProviderDockerEE {
 		objs = append(objs, c.clusterAdminClusterRoleBinding())
@@ -139,6 +137,11 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	// If we're running on openshift, we need to add in an SCC.
 	if c.installation.KubernetesProvider == operatorv1.ProviderOpenShift {
 		objs = append(objs, c.securityContextConstraints())
+	}
+
+	// delete all the objects if logs are not enabled
+	if !c.logsEnabled {
+		return nil, objs
 	}
 
 	return objs, nil

@@ -18,32 +18,27 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tigera/operator/pkg/common"
-
-	"github.com/tigera/operator/pkg/render/applicationlayer"
-
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
-
-	"github.com/stretchr/testify/mock"
-
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/test"
+	"github.com/stretchr/testify/mock"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/render/applicationlayer"
+	"github.com/tigera/operator/test"
+
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -111,7 +106,7 @@ var _ = Describe("Application layer controller tests", func() {
 				},
 			})).NotTo(HaveOccurred())
 
-			// mark that the watch for license key was successful
+			// Mark that the watch for license key was successful.
 			r.licenseAPIReady.MarkAsReady()
 		})
 

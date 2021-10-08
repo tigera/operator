@@ -49,7 +49,7 @@ type ComponentHandler interface {
 
 // cr is allowed to be nil in the case we don't want to put ownership on a resource,
 // this is useful for CRD management so that they are not removed automatically.
-func NewComponentHandler(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.ObjectMetaAccessor) ComponentHandler {
+func NewComponentHandler(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) ComponentHandler {
 	return &componentHandler{
 		client: client,
 		scheme: scheme,
@@ -61,7 +61,7 @@ func NewComponentHandler(log logr.Logger, client client.Client, scheme *runtime.
 type componentHandler struct {
 	client client.Client
 	scheme *runtime.Scheme
-	cr     metav1.ObjectMetaAccessor
+	cr     metav1.Object
 	log    logr.Logger
 }
 
@@ -92,7 +92,7 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 			return fmt.Errorf("Object is not ObjectMetaAccessor")
 		}
 		if c.cr != nil {
-			if err := controllerutil.SetControllerReference(c.cr.GetObjectMeta(), om.GetObjectMeta(), c.scheme); err != nil {
+			if err := controllerutil.SetControllerReference(c.cr, om.GetObjectMeta(), c.scheme); err != nil {
 				return err
 			}
 		}

@@ -201,6 +201,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		return reconcile.Result{}, nil
 	}
 
+	// Patch felix configuration if necessary.
 	err = r.patchFelixTproxyMode(ctx, lcSpec)
 
 	if err != nil {

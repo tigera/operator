@@ -43,6 +43,7 @@ type LogCollectionSpec struct {
 	// Interval in seconds for sending L7 log information for processing.
 	// +optional
 	// Default: 5 sec
+	// kubebuilder:validation:Minimum:=1
 	LogIntervalSeconds *int64 `json:"logIntervalSeconds,omitempty"`
 
 	// Maximum number of unique L7 logs that are sent LogIntervalSeconds.

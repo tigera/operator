@@ -257,6 +257,13 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		if err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
 		}
+		if err = addCRDWatches(c, operator.TigeraSecureEnterprise); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch CRD resource: %v", err)
+		}
+	} else {
+		if err = addCRDWatches(c, operator.Calico); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch CRD resource: %v", err)
+		}
 	}
 
 	return nil
@@ -1713,4 +1720,29 @@ func cidrWithinCidr(cidr, pool string) bool {
 		return true
 	}
 	return false
+}
+
+func addCRDWatches(c controller.Controller, v operator.ProductVariant) error {
+	pred := predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			// Create occurs because we've created it, so we can safely ignore it.
+			return false
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			if utils.IgnoreObject(e.ObjectOld) && !utils.IgnoreObject(e.ObjectNew) {
+				// Don't skip the removal of the "ignore" annotation. We want to
+				// reconcile when that happens.
+				return true
+			}
+			// Otherwise, ignore updates to objects when metadata.Generation does not change.
+			return e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration()
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool { return true },
+	}
+	for _, x := range crds.GetCRDs(v) {
+		if err := c.Watch(&source.Kind{Type: x}, &handler.EnqueueRequestForObject{}, pred); err != nil {
+			return err
+		}
+	}
+	return nil
 }

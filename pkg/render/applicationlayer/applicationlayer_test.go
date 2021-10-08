@@ -17,29 +17,28 @@ package applicationlayer_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/tigera/operator/pkg/common"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render/applicationlayer"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 )
 
 var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
-	//var instance *operatorv1.ApplicationLayer
 	var installation *operatorv1.InstallationSpec
 
 	BeforeEach(func() {
-		// Initialize a default installation spec
+		// Initialize a default installation spec.
 		installation = &operatorv1.InstallationSpec{
 			KubernetesProvider: operatorv1.ProviderNone,
 		}
 	})
 
 	It("should render with l7 collector configuration", func() {
-
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -51,7 +50,6 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			{name: applicationlayer.EnvoyConfigMapName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: applicationlayer.L7LogCollectorDeamonsetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
-
 		// Should render the correct resources.
 		component := applicationlayer.ApplicationLayer(nil, installation, rmeta.OSTypeLinux,
 			true, nil, nil)
@@ -66,7 +64,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 
 		ds := rtest.GetResource(resources, applicationlayer.L7LogCollectorDeamonsetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 
-		// check rendering of daemonset
+		// Check rendering of daemonset.
 		Expect(ds.Spec.Template.Spec.HostNetwork).To(BeTrue())
 		Expect(ds.Spec.Template.Spec.HostIPC).To(BeTrue())
 		Expect(ds.Spec.Template.Spec.DNSPolicy).To(Equal(corev1.DNSClusterFirstWithHostNet))
@@ -74,7 +72,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		Expect(len(ds.Spec.Template.Spec.Containers)).To(Equal(2))
 		Expect(len(ds.Spec.Template.Spec.Tolerations)).To(Equal(1))
 
-		// check each volume
+		// Ensure each volume rendered correctly.
 		dsVols := ds.Spec.Template.Spec.Volumes
 		expectedVolumes := []corev1.Volume{
 			{
@@ -97,7 +95,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			Expect(dsVols).To(ContainElement(expected))
 		}
 
-		// check each toleration
+		// Ensure that tolerations rendered correctly.
 		dsTolerations := ds.Spec.Template.Spec.Tolerations
 		expectedToleration := []corev1.Toleration{
 			{Key: "node-role.kubernetes.io/master", Operator: corev1.TolerationOpExists, Effect: corev1.TaintEffectNoSchedule},
@@ -106,7 +104,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			Expect(dsTolerations).To(ContainElement(expected))
 		}
 
-		// check proxy container redering in details
+		// Check proxy container rendering.
 		proxyContainer := ds.Spec.Template.Spec.Containers[0]
 
 		proxyEnvs := proxyContainer.Env

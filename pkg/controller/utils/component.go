@@ -47,7 +47,9 @@ type ComponentHandler interface {
 	CreateOrUpdateOrDelete(context.Context, render.Component, status.StatusManager) error
 }
 
-func NewComponentHandler(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) ComponentHandler {
+// cr is allowed to be nil in the case we don't want to put ownership on a resource,
+// this is useful for CRD management so that they are not removed automatically.
+func NewComponentHandler(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.ObjectMetaAccessor) ComponentHandler {
 	return &componentHandler{
 		client: client,
 		scheme: scheme,
@@ -59,7 +61,7 @@ func NewComponentHandler(log logr.Logger, client client.Client, scheme *runtime.
 type componentHandler struct {
 	client client.Client
 	scheme *runtime.Scheme
-	cr     metav1.Object
+	cr     metav1.ObjectMetaAccessor
 	log    logr.Logger
 }
 
@@ -89,8 +91,10 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 		if !ok {
 			return fmt.Errorf("Object is not ObjectMetaAccessor")
 		}
-		if err := controllerutil.SetControllerReference(c.cr, om.GetObjectMeta(), c.scheme); err != nil {
-			return err
+		if c.cr != nil {
+			if err := controllerutil.SetControllerReference(c.cr.GetObjectMeta(), om.GetObjectMeta(), c.scheme); err != nil {
+				return err
+			}
 		}
 
 		logCtx := ContextLoggerForResource(c.log, obj)

@@ -45,6 +45,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/crds"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -131,6 +132,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		amazonCRDExists:      opts.AmazonCRDExists,
 		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
 		clusterDomain:        opts.ClusterDomain,
+		manageCRDs:           true,
 	}
 	r.status.Run()
 	r.typhaAutoscaler.start()
@@ -293,6 +295,7 @@ type ReconcileInstallation struct {
 	amazonCRDExists      bool
 	migrationChecked     bool
 	clusterDomain        string
+	manageCRDs           bool
 }
 
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
@@ -741,6 +744,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.SetDegraded("Invalid computed config", err, reqLogger)
 			return reconcile.Result{}, err
 		}
+	}
+
+	if err = r.updateCRDs(ctx, instance.Spec.Variant, reqLogger); err != nil {
+		return reconcile.Result{}, err
 	}
 
 	// now that migrated config is stored in the installation resource, we no longer need
@@ -1458,6 +1465,21 @@ func (r *ReconcileInstallation) checkActive(log logr.Logger) (*corev1.ConfigMap,
 	} else {
 		return nil, nil
 	}
+}
+
+func (r *ReconcileInstallation) updateCRDs(ctx context.Context, variant operator.ProductVariant, log logr.Logger) error {
+	if !r.manageCRDs {
+		return nil
+	}
+	crdComponent := render.NewPassthrough(crds.ToRuntimeObjects(crds.GetCRDs(variant)...))
+	// Create a component handler to create or update the rendered components.
+	// Specify nil for the CR so no ownership is put on the CRDs.
+	handler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
+	if err := handler.CreateOrUpdateOrDelete(ctx, crdComponent, nil); err != nil {
+		r.SetDegraded("Error creating / updating resource", err, log)
+		return err
+	}
+	return nil
 }
 
 func CreateNewTyphaNodeTLS() (*render.TyphaNodeTLS, error) {

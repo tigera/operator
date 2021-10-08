@@ -344,7 +344,7 @@ foss-checks:
 ###############################################################################
 .PHONY: ci
 ## Run what CI runs
-ci: clean format-check image-all test dirty-check validate-gen-versions
+ci: clean format-check image-all test dirty-check validate-gen-versions test-crds
 
 validate-gen-versions:
 	make gen-versions
@@ -715,3 +715,19 @@ ifndef VERSION
 	$(error VERSION is undefined - run using make $@ VERSION=X.Y.Z)
 endif
 	docker build -f bundle/bundle-v$(VERSION).Dockerfile -t tigera-operator-bundle:$(VERSION) bundle/
+
+
+.PHONY: test-crds
+test-crds: test-enterprise-crds test-calico-crds
+
+# TODO: Improve this testing by comparing the individual source files
+# with the yaml printed out, this will need to be a yaml diff since the
+# fields won't necessarily be in the same order or indentation.
+test-calico-crds: $(BINDIR)/operator-$(ARCH)
+	$(BINDIR)/operator-$(ARCH) --print-calico-crds all >/dev/null 2>&1
+
+# TODO: Improve this testing by comparing the individual source files
+# with the yaml printed out, this will need to be a yaml diff since the
+# fields won't necessarily be in the same order or indentation.
+test-enterprise-crds: $(BINDIR)/operator-$(ARCH)
+	$(BINDIR)/operator-$(ARCH) --print-enterprise-crds all >/dev/null 2>&1

@@ -40,9 +40,12 @@ var (
 
 	yamlDelimRe       *regexp.Regexp
 	calicoOprtrCRDsRe *regexp.Regexp
-	lock              sync.Mutex
-	calicoCRDs        []*apiextenv1.CustomResourceDefinition
-	enterpriseCRDs    []*apiextenv1.CustomResourceDefinition
+
+	// We cache these CRDs because to generate the calico and enterprise takes
+	// approximately 40ms, with the caching 1ms.
+	lock           sync.Mutex
+	calicoCRDs     []*apiextenv1.CustomResourceDefinition
+	enterpriseCRDs []*apiextenv1.CustomResourceDefinition
 )
 
 func init() {
@@ -52,7 +55,7 @@ func init() {
 	calicoOprtrCRDsRe = regexp.MustCompile(fmt.Sprintf("(%s)", strings.Join(calicoCRDNames, "|")))
 }
 
-func GetCalicoCRDSource() map[string][]byte {
+func getCalicoCRDSource() map[string][]byte {
 	ret := map[string][]byte{}
 	entries, err := calicoCRDFiles.ReadDir("calico")
 	if err != nil {
@@ -75,7 +78,7 @@ func GetCalicoCRDSource() map[string][]byte {
 	return ret
 }
 
-func GetEnterpriseCRDSource() map[string][]byte {
+func getEnterpriseCRDSource() map[string][]byte {
 	ret := map[string][]byte{}
 	entries, err := enterpriseCRDFiles.ReadDir("enterprise")
 	if err != nil {
@@ -98,7 +101,7 @@ func GetEnterpriseCRDSource() map[string][]byte {
 	return ret
 }
 
-func GetOperatorCRDSource(variant opv1.ProductVariant) map[string][]byte {
+func getOperatorCRDSource(variant opv1.ProductVariant) map[string][]byte {
 	ret := map[string][]byte{}
 	entries, err := operatorCRDFiles.ReadDir("operator")
 	if err != nil {
@@ -133,7 +136,7 @@ func GetCRDs(variant opv1.ProductVariant) []*apiextenv1.CustomResourceDefinition
 
 	if variant == opv1.Calico {
 		if len(calicoCRDs) == 0 {
-			crdyamls := GetCalicoCRDSource()
+			crdyamls := getCalicoCRDSource()
 			for _, yml := range crdyamls {
 
 				crd := &apiextenv1.CustomResourceDefinition{}
@@ -146,7 +149,7 @@ func GetCRDs(variant opv1.ProductVariant) []*apiextenv1.CustomResourceDefinition
 				crd.Name = fmt.Sprintf("%s.%s", crd.Spec.Names.Plural, crd.Spec.Group)
 				calicoCRDs = append(calicoCRDs, crd)
 			}
-			crdyamls = GetOperatorCRDSource(variant)
+			crdyamls = getOperatorCRDSource(variant)
 			for _, yml := range crdyamls {
 				crd := &apiextenv1.CustomResourceDefinition{}
 				yaml.Unmarshal(yml, crd)
@@ -157,14 +160,14 @@ func GetCRDs(variant opv1.ProductVariant) []*apiextenv1.CustomResourceDefinition
 		return calicoCRDs
 	} else {
 		if len(enterpriseCRDs) == 0 {
-			crdyamls := GetEnterpriseCRDSource()
+			crdyamls := getEnterpriseCRDSource()
 			for _, yml := range crdyamls {
 				crd := &apiextenv1.CustomResourceDefinition{}
 				yaml.Unmarshal(yml, crd)
 				crd.Name = fmt.Sprintf("%s.%s", crd.Spec.Names.Plural, crd.Spec.Group)
 				enterpriseCRDs = append(enterpriseCRDs, crd)
 			}
-			crdyamls = GetOperatorCRDSource(variant)
+			crdyamls = getOperatorCRDSource(variant)
 			for _, yml := range crdyamls {
 				crd := &apiextenv1.CustomResourceDefinition{}
 				yaml.Unmarshal(yml, crd)

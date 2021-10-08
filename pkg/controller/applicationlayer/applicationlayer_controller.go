@@ -156,13 +156,6 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 
 	updateApplicationLayerWithDefaults(applicationLayer)
 
-	// Validate the configuration.
-	if err := validateApplicationLayer(applicationLayer); err != nil {
-		reqLogger.Error(err, "Invalid applicationLayer provided")
-		r.status.SetDegraded("Invalid applicationLayer provided", err.Error())
-		return reconcile.Result{}, err
-	}
-
 	// Write the application layer back to the datastore, so the controllers depending on this can reconcile.
 	if err = r.client.Patch(ctx, applicationLayer, preDefaultPatchFrom); err != nil {
 		reqLogger.Error(err, "Failed to write defaults to applicationLayer")
@@ -244,17 +237,6 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	}
 
 	return reconcile.Result{}, nil
-}
-
-func validateApplicationLayer(al *operatorv1.ApplicationLayer) error {
-	lcSpec := al.Spec.LogCollection
-	if lcSpec != nil {
-		if *lcSpec.LogIntervalSeconds < 1 {
-			return fmt.Errorf("log interval seconds can not be less than 1 sec")
-		}
-	}
-
-	return nil
 }
 
 // updateApplicationLayerWithDefaults populates the applicationlayer with defaults.

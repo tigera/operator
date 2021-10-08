@@ -87,6 +87,7 @@ func main() {
 	var printCalicoCRDs string
 	var printEnterpriseCRDs string
 	var sgSetup bool
+	var manageCRDs bool
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", true,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -102,6 +103,8 @@ func main() {
 		"Print the Enterprise CRDs the operator has bundled then exit. Possible values: all, <crd prefix>. If a value other than 'all' is specified, the first CRD with a prefix of the specified value will be printed.")
 	flag.BoolVar(&sgSetup, "aws-sg-setup", false,
 		"Setup Security Groups in AWS (should only be used on OpenShift).")
+	flag.BoolVar(&manageCRDs, "manage-crds", false,
+		"Operator should manage the projectcalico.org and operator.tigera.io CRDs.")
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
@@ -258,6 +261,7 @@ func main() {
 		AmazonCRDExists:     amazonCRDExists,
 		ClusterDomain:       clusterDomain,
 		KubernetesVersion:   kubernetesVersion,
+		ManageCRDs:          manageCRDs,
 	}
 
 	err = controllers.AddToManager(mgr, options)

@@ -1,12 +1,13 @@
 module github.com/tigera/operator
 
-go 1.14
+go 1.16
 
 require (
 	github.com/aws/aws-sdk-go v1.19.6
 	github.com/cloudflare/cfssl v1.4.1
 	github.com/containernetworking/cni v0.8.0
 	github.com/elastic/cloud-on-k8s v0.0.0-20200811130517-b53162318c20
+	github.com/ghodss/yaml v1.0.0
 	github.com/go-ldap/ldap v3.0.3+incompatible
 	github.com/go-logr/logr v0.3.0
 	github.com/hashicorp/go-version v1.2.1

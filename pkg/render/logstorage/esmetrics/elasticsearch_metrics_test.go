@@ -29,6 +29,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rtest "github.com/tigera/operator/pkg/render/common/test"
 )
 
 var _ = Describe("Elasticsearch metrics", func() {
@@ -181,6 +182,43 @@ var _ = Describe("Elasticsearch metrics", func() {
 
 			createdResources, _ := component.Objects()
 			Expect(createdResources).Should(Equal(expectedResources))
+		})
+
+		It("should apply controlPlaneNodeSelector correctly", func() {
+			installation.ControlPlaneNodeSelector = map[string]string{"foo": "bar"}
+
+			component := ElasticsearchMetrics(installation,
+				[]*corev1.Secret{{ObjectMeta: metav1.ObjectMeta{Name: "pullsecret", Namespace: render.ElasticsearchNamespace}}},
+				esConfig,
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
+				"cluster.local")
+
+			resources, _ := component.Objects()
+			d, ok := rtest.GetResource(resources, "tigera-elasticsearch-metrics", render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue())
+			Expect(d.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{"foo": "bar"}))
+		})
+
+		It("should apply controlPlaneTolerations correctly", func() {
+			t := corev1.Toleration{
+				Key:      "foo",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "bar",
+			}
+
+			installation.ControlPlaneTolerations = []corev1.Toleration{t}
+			component := ElasticsearchMetrics(installation,
+				[]*corev1.Secret{{ObjectMeta: metav1.ObjectMeta{Name: "pullsecret", Namespace: render.ElasticsearchNamespace}}},
+				esConfig,
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
+				"cluster.local")
+
+			resources, _ := component.Objects()
+			d, ok := rtest.GetResource(resources, "tigera-elasticsearch-metrics", render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue())
+			Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(t))
 		})
 	})
 })

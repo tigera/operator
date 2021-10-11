@@ -132,7 +132,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		amazonCRDExists:      opts.AmazonCRDExists,
 		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
 		clusterDomain:        opts.ClusterDomain,
-		manageCRDs:           true,
+		manageCRDs:           opts.ManageCRDs,
 	}
 	r.status.Run()
 	r.typhaAutoscaler.start()
@@ -1479,8 +1479,8 @@ func (r *ReconcileInstallation) updateCRDs(ctx context.Context, variant operator
 		return nil
 	}
 	crdComponent := render.NewPassthrough(crds.ToRuntimeObjects(crds.GetCRDs(variant)...))
-	// Create a component handler to create or update the rendered components.
-	// Specify nil for the CR so no ownership is put on the CRDs.
+	// Specify nil for the CR so no ownership is put on the CRDs. We do this so removing the
+	// Installation CR will not remove the CRDs.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
 	if err := handler.CreateOrUpdateOrDelete(ctx, crdComponent, nil); err != nil {
 		r.SetDegraded("Error creating / updating resource", err, log)

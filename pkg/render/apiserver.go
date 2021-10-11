@@ -476,6 +476,7 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 			Resources: []string{
 				"globalnetworkpolicies",
 				"networkpolicies",
+				"caliconodestatuses",
 				"clusterinformations",
 				"hostendpoints",
 				"globalnetworksets",
@@ -485,6 +486,7 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 				"felixconfigurations",
 				"kubecontrollersconfigurations",
 				"ippools",
+				"ipreservations",
 				"ipamblocks",
 				"blockaffinities",
 			},

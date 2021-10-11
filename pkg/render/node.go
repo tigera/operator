@@ -328,6 +328,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 					"hostendpoints",
 					"ipamblocks",
 					"ippools",
+					"ipreservations",
 					"networkpolicies",
 					"stagedkubernetesnetworkpolicies",
 					"stagednetworkpolicies",

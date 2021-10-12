@@ -100,6 +100,11 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("applicationlayer-controller failed to watch ImageSet: %w", err)
 	}
 
+	if err = utils.AddNetworkWatch(c); err != nil {
+		log.V(5).Info("Failed to create network watch", "err", err)
+		return fmt.Errorf("applicationlayer-controller failed to watch Tigera network resource: %v", err)
+	}
+
 	// Watch configmaps created for envoy.
 	for _, configMapName := range []string{applicationlayer.EnvoyConfigMapName} {
 		if err = utils.AddConfigMapWatch(c, configMapName, common.CalicoNamespace); err != nil {

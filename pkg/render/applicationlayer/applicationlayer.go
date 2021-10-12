@@ -165,11 +165,11 @@ func (c *component) daemonset() *appsv1.DaemonSet {
 			HostNetwork:        true,
 			ServiceAccountName: APLName,
 			DNSPolicy:          corev1.DNSClusterFirstWithHostNet,
-			NodeSelector:       map[string]string{},
-			Tolerations:        c.tolerations(),
-			ImagePullSecrets:   secret.GetReferenceList(c.pullSecrets),
-			Containers:         c.containers(),
-			Volumes:            c.volumes(),
+			// Absence of l7 daemonset pod on a node will break the annotated services connectivity, so we tolerate all.
+			Tolerations:      rmeta.TolerateAll,
+			ImagePullSecrets: secret.GetReferenceList(c.pullSecrets),
+			Containers:       c.containers(),
+			Volumes:          c.volumes(),
 		},
 	}
 
@@ -258,16 +258,6 @@ func (c *component) collectorEnv() []corev1.EnvVar {
 	}
 
 	return envs
-}
-
-// tolerations creates the node's toleration.
-func (c *component) tolerations() []corev1.Toleration {
-	// This toleration ensures that l7 log collector pods are scheduled on master node as well.
-	toleration := []corev1.Toleration{
-		{Key: "node-role.kubernetes.io/master", Operator: corev1.TolerationOpExists, Effect: corev1.TaintEffectNoSchedule},
-	}
-
-	return toleration
 }
 
 func (c *component) volumes() []corev1.Volume {

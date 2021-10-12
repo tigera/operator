@@ -70,7 +70,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.DNSPolicy).To(Equal(corev1.DNSClusterFirstWithHostNet))
 		Expect(len(ds.Spec.Template.Spec.Volumes)).To(Equal(2))
 		Expect(len(ds.Spec.Template.Spec.Containers)).To(Equal(2))
-		Expect(len(ds.Spec.Template.Spec.Tolerations)).To(Equal(1))
+		Expect(len(ds.Spec.Template.Spec.Tolerations)).To(Equal(3))
 
 		// Ensure each volume rendered correctly.
 		dsVols := ds.Spec.Template.Spec.Volumes
@@ -97,9 +97,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 
 		// Ensure that tolerations rendered correctly.
 		dsTolerations := ds.Spec.Template.Spec.Tolerations
-		expectedToleration := []corev1.Toleration{
-			{Key: "node-role.kubernetes.io/master", Operator: corev1.TolerationOpExists, Effect: corev1.TaintEffectNoSchedule},
-		}
+		expectedToleration := rmeta.TolerateAll
 		for _, expected := range expectedToleration {
 			Expect(dsTolerations).To(ContainElement(expected))
 		}

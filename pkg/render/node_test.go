@@ -796,7 +796,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(nodeContainer).ToNot(BeNil())
 		Expect(nodeContainer.SecurityContext).ToNot(BeNil())
 		Expect(nodeContainer.SecurityContext.RunAsUser).ToNot(BeNil())
-		Expect(*nodeContainer.SecurityContext.RunAsUser).To(Equal(int64(1000)))
+		Expect(*nodeContainer.SecurityContext.RunAsUser).To(Equal(int64(999)))
 		Expect(nodeContainer.SecurityContext.RunAsGroup).ToNot(BeNil())
 		Expect(*nodeContainer.SecurityContext.RunAsGroup).To(Equal(int64(0)))
 		Expect(*nodeContainer.SecurityContext.Privileged).To(BeFalse())
@@ -807,7 +807,7 @@ var _ = Describe("Node rendering tests", func() {
 
 		// hostpath init container should have the correct env and security context.
 		hostPathContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "hostpath-init")
-		rtest.ExpectEnv(hostPathContainer.Env, "NODE_USER_ID", "1000")
+		rtest.ExpectEnv(hostPathContainer.Env, "NODE_USER_ID", "999")
 		Expect(*hostPathContainer.SecurityContext.RunAsUser).To(Equal(int64(0)))
 
 		// Verify hostpath init container volume mounts.

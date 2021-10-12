@@ -955,7 +955,7 @@ func (c *nodeComponent) nodeContainer() corev1.Container {
 	lp, rp := c.nodeLivenessReadinessProbes()
 	sc := &corev1.SecurityContext{Privileged: ptr.BoolToPtr(true)}
 	if c.runAsNonPrivileged() {
-		uid := int64(1000)
+		uid := int64(999)
 		guid := int64(0)
 		sc = &corev1.SecurityContext{
 			// Set the user as our chosen user (1000)
@@ -1496,7 +1496,7 @@ func (c *nodeComponent) hostPathInitContainer() corev1.Container {
 		Name:  "hostpath-init",
 		Image: c.nodeImage,
 		Env: []corev1.EnvVar{
-			{Name: "NODE_USER_ID", Value: "1000"},
+			{Name: "NODE_USER_ID", Value: "999"},
 		},
 		VolumeMounts: mounts,
 		SecurityContext: &corev1.SecurityContext{

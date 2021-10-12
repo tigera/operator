@@ -285,6 +285,7 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	        --kubeconfig $(KUBECONFIG) \
 	        --image kindest/node:$(K8S_VERSION)
 	
+	./deploy/scripts/ipv6_kind_cluster_update.sh
 	# Deploy resources needed in test env.
 	$(MAKE) deploy-crds
 	

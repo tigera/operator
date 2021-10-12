@@ -18,7 +18,7 @@ fi
 
 # Skip releasing if the image already exists. No guarantee that a tagged build will only be run once. We want the build to
 # pass in the case where the image exists.
-if ! make release-check-image-exists; then
+if ! make release-check-image-exists VERSION=${tag}; then
 	echo "Image tag already exists, no need to release"
 	exit 0
 fi

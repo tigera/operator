@@ -492,8 +492,8 @@ spec:
                     type: string
                 type: object
               nonPrivileged:
-                description: NonPrivileged configures Calico to be run in non privileged
-                  containers as non root users where possible.
+                description: NonPrivileged configures Calico to be run in non-privileged
+                  containers as non-root users where possible.
                 type: string
               registry:
                 description: "Registry is the default Docker registry used for component
@@ -1200,8 +1200,8 @@ spec:
                         type: string
                     type: object
                   nonPrivileged:
-                    description: NonPrivileged configures Calico to be run in non
-                      privileged containers as non root users where possible.
+                    description: NonPrivileged configures Calico to be run in non-privileged
+                      containers as non-root users where possible.
                     type: string
                   registry:
                     description: "Registry is the default Docker registry used for

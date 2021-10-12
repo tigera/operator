@@ -330,16 +330,16 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		}
 	}
 
-	// Verify that we are running in non privileged mode only with the appropriate feature set
+	// Verify that we are running in non-privileged mode only with the appropriate feature set
 	if instance.Spec.NonPrivileged != nil && *instance.Spec.NonPrivileged == operatorv1.NonPrivilegedEnabled {
 		// BGP must be disabled
 		if instance.Spec.CalicoNetwork != nil && instance.Spec.CalicoNetwork.BGP != nil && *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPEnabled {
-			return fmt.Errorf("Installation non privileged Calico is not supported when BGP is enabled")
+			return fmt.Errorf("Non-privileged Calico is not supported when BGP is enabled")
 		}
 
-		// Only allowed to run as non privileged for OS Calico
+		// Only allowed to run as non-privileged for OS Calico
 		if instance.Spec.Variant == operatorv1.TigeraSecureEnterprise {
-			return fmt.Errorf("Installation non privileged Calico is not supported for spec.Variant=%s", operatorv1.TigeraSecureEnterprise)
+			return fmt.Errorf("Non-privileged Calico is not supported for spec.Variant=%s", operatorv1.TigeraSecureEnterprise)
 		}
 	}
 

@@ -142,7 +142,7 @@ type InstallationSpec struct {
 	// +optional
 	CertificateManagement *CertificateManagement `json:"certificateManagement,omitempty"`
 
-	// NonPrivileged configures Calico to be run in non privileged containers as non root users where possible.
+	// NonPrivileged configures Calico to be run in non-privileged containers as non-root users where possible.
 	// +optional
 	NonPrivileged *NonPrivilegedType `json:"nonPrivileged,omitempty"`
 }

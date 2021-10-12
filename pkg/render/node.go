@@ -960,7 +960,7 @@ func (c *nodeComponent) nodeContainer() corev1.Container {
 		sc = &corev1.SecurityContext{
 			// Set the user as our chosen user (1000)
 			RunAsUser: &uid,
-			// Set the group to be the root user group since all container users shoudl be a member
+			// Set the group to be the root user group since all container users should be a member
 			RunAsGroup: &guid,
 			Privileged: ptr.BoolToPtr(false),
 			Capabilities: &corev1.Capabilities{
@@ -1507,7 +1507,7 @@ func (c *nodeComponent) hostPathInitContainer() corev1.Container {
 }
 
 // runAsNonPrivileged checks to ensure that all of the proper installation values are set for running
-// Calico as non privileged.
+// Calico as non-privileged.
 func (c *nodeComponent) runAsNonPrivileged() bool {
 	// Check that the NonPrivileged flag is set
 	return c.cfg.Installation.NonPrivileged != nil && *c.cfg.Installation.NonPrivileged == operatorv1.NonPrivilegedEnabled

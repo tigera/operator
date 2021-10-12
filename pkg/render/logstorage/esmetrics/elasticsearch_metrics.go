@@ -118,6 +118,7 @@ func (e *elasticsearchMetrics) metricsService() *corev1.Service {
 
 func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 	return &appsv1.Deployment{
+		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tigera-elasticsearch-metrics",
 			Namespace: render.ElasticsearchNamespace,
@@ -136,6 +137,8 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 					},
 				},
 				Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
+					Tolerations:      e.installation.ControlPlaneTolerations,
+					NodeSelector:     e.installation.ControlPlaneNodeSelector,
 					ImagePullSecrets: secret.GetReferenceList(e.pullSecrets),
 					Containers: []corev1.Container{
 						relasticsearch.ContainerDecorate(

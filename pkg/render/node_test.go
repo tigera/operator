@@ -787,59 +787,11 @@ var _ = Describe("Node rendering tests", func() {
 			i++
 		}
 
-		cniCmResource := rtest.GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
-		Expect(cniCmResource).ToNot(BeNil())
-		cniCm := cniCmResource.(*corev1.ConfigMap)
-		Expect(cniCm.Data["config"]).To(MatchJSON(`{
-  "name": "k8s-pod-network",
-  "cniVersion": "0.3.1",
-  "plugins": [
-    {
-      "type": "calico",
-      "datastore_type": "kubernetes",
-      "mtu": 0,
-      "nodename_file_optional": false,
-      "log_level": "Info",
-      "log_file_path": "/var/log/calico/cni/cni.log",
-      "ipam": {
-        "type": "calico-ipam",
-        "assign_ipv4": "true",
-        "assign_ipv6": "false"
-      },
-      "container_settings": {
-        "allow_ip_forwarding": false
-      },
-      "policy": {
-        "type": "k8s"
-      },
-      "kubernetes": {
-        "kubeconfig": "__KUBECONFIG_FILEPATH__"
-      }
-    },
-    {
-      "type": "bandwidth",
-      "capabilities": {
-        "bandwidth": true
-      }
-    },
-    {
-      "type": "portmap",
-      "snat": true,
-      "capabilities": {
-        "portMappings": true
-      }
-    }
-  ]
-}`))
-
 		dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
 
-		// The DaemonSet should have the correct configuration.
+		// The DaemonSet should have the correct security context.
 		ds := dsResource.(*appsv1.DaemonSet)
-		rtest.ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
-
-		// The Daemonset should have the correct security context
 		nodeContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "calico-node")
 		Expect(nodeContainer).ToNot(BeNil())
 		Expect(nodeContainer.SecurityContext).ToNot(BeNil())
@@ -847,13 +799,23 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(*nodeContainer.SecurityContext.RunAsUser).To(Equal(int64(1000)))
 		Expect(nodeContainer.SecurityContext.RunAsGroup).ToNot(BeNil())
 		Expect(*nodeContainer.SecurityContext.RunAsGroup).To(Equal(int64(0)))
+		Expect(*nodeContainer.SecurityContext.Privileged).To(BeFalse())
 		Expect(nodeContainer.SecurityContext.Capabilities.Add).To(HaveLen(3))
 		Expect(nodeContainer.SecurityContext.Capabilities.Add[0]).To(Equal(corev1.Capability("NET_RAW")))
 		Expect(nodeContainer.SecurityContext.Capabilities.Add[1]).To(Equal(corev1.Capability("NET_ADMIN")))
 		Expect(nodeContainer.SecurityContext.Capabilities.Add[2]).To(Equal(corev1.Capability("NET_BIND_SERVICE")))
 
-		cniContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
-		rtest.ExpectEnv(cniContainer.Env, "CNI_NET_DIR", "/etc/cni/net.d")
+		// hostpath init container should have the correct env and security context.
+		hostPathContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "hostpath-init")
+		rtest.ExpectEnv(hostPathContainer.Env, "NODE_USER_ID", "1000")
+		Expect(*hostPathContainer.SecurityContext.RunAsUser).To(Equal(int64(0)))
+
+		// Verify hostpath init container volume mounts.
+		expectedHostPathInitVolumeMounts := []corev1.VolumeMount{
+			{MountPath: "/var/run", Name: "var-run"},
+			{MountPath: "/var/lib", Name: "var-lib"},
+		}
+		Expect(hostPathContainer.VolumeMounts).To(ConsistOf(expectedHostPathInitVolumeMounts))
 
 		// Node image override results in correct image.
 		calicoNodeImage := fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)
@@ -871,82 +833,6 @@ var _ = Describe("Node rendering tests", func() {
 		// Verify the mount-bpffs image and command.
 		mountBpffs := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "mount-bpffs")
 		Expect(mountBpffs).To(BeNil())
-
-		optional := true
-		// Verify env
-		expectedNodeEnv := []corev1.EnvVar{
-			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
-			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
-			{Name: "CALICO_NETWORKING_BACKEND", Value: "vxlan"},
-			{Name: "CALICO_MANAGE_CNI", Value: "true"},
-			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
-			{Name: "CLUSTER_TYPE", Value: "k8s,operator"},
-			{Name: "IP", Value: "autodetect"},
-			{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
-			{Name: "IP6", Value: "none"},
-			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
-			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
-			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
-			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
-			{Name: "FELIX_HEALTHENABLED", Value: "true"},
-			{
-				Name: "NODENAME",
-				ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
-				},
-			},
-			{
-				Name: "NAMESPACE",
-				ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
-				},
-			},
-			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
-			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
-			{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
-			{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretCertName)},
-			{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretKeyName)},
-			{Name: "FELIX_TYPHACN", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.CommonName,
-					Optional: &optional,
-				},
-			}},
-			{Name: "FELIX_TYPHAURISAN", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.URISAN,
-					Optional: &optional,
-				},
-			}},
-		}
-		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
-		// Expect the SECURITY_GROUP env variables to not be set
-		Expect(ds.Spec.Template.Spec.Containers[0].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_DEFAULT_SECURITY_GROUPS")})))
-		Expect(ds.Spec.Template.Spec.Containers[0].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_POD_SECURITY_GROUP")})))
-
-		expectedCNIEnv := []corev1.EnvVar{
-			{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
-			{Name: "SLEEP", Value: "false"},
-			{Name: "CNI_NET_DIR", Value: "/etc/cni/net.d"},
-			{
-				Name: "CNI_NETWORK_CONFIG",
-				ValueFrom: &corev1.EnvVarSource{
-					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-						Key: "config",
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: "cni-config",
-						},
-					},
-				},
-			},
-		}
-		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env).To(ConsistOf(expectedCNIEnv))
 
 		// Verify volumes.
 		var fileOrCreate = corev1.HostPathFileOrCreate
@@ -1002,11 +888,6 @@ var _ = Describe("Node rendering tests", func() {
 			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 		}
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
-
-		// Verify tolerations.
-		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateAll))
-
-		verifyProbesAndLifecycle(ds, false, false)
 	})
 
 	It("should render all resources when using Calico CNI on EKS", func() {

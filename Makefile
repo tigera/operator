@@ -239,9 +239,16 @@ ifeq ($(ARCH),amd64)
 	docker tag $(BUILD_IMAGE):latest-$(ARCH) $(BUILD_INIT_IMAGE):latest
 endif
 
-build/init/bin/kubectl:
-	mkdir -p build/init/bin
-	curl -o build/init/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/v1.14.0/bin/linux/amd64/kubectl
+BINDIR?=build/init/bin
+$(BINDIR)/kubectl:
+	mkdir -p $(BINDIR)
+	curl -L https://storage.googleapis.com/kubernetes-release/release/v1.22.0/bin/linux/$(ARCH)/kubectl -o $@
+	chmod +x $@
+
+kubectl: $(BINDIR)/kubectl
+
+$(BINDIR)/kind:
+	$(CONTAINERIZED) sh -c "GOBIN=/go/src/$(PACKAGE_NAME)/$(BINDIR) go install sigs.k8s.io/kind"
 
 clean:
 	rm -rf build/_output
@@ -267,35 +274,42 @@ run-uts:
 
 ## Create a local kind dual stack cluster.
 KUBECONFIG?=./kubeconfig.yaml
-cluster-create: kubectl
+K8S_VERSION?=v1.18.6
+cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	# First make sure any previous cluster is deleted
 	make cluster-destroy
-	./deploy/scripts/create_kind_cluster.sh
-	cp ~/.kube/kind-config-kind $(KUBECONFIG)
+	
+	# Create a kind cluster.
+	$(BINDIR)/kind create cluster \
+	        --config ./deploy/kind-config.yaml \
+	        --kubeconfig $(KUBECONFIG) \
+	        --image kindest/node:$(K8S_VERSION)
+	
+	./deploy/scripts/ipv6_kind_cluster_update.sh
+	# Deploy resources needed in test env.
 	$(MAKE) deploy-crds
-	$(MAKE) create-tigera-operator-namespace
+	
+	# Wait for controller manager to be running and healthy.
+	while ! KUBECONFIG=$(KUBECONFIG) $(BINDIR)/kubectl get serviceaccount default; do echo "Waiting for default serviceaccount to be created..."; sleep 2; done
 
 ## Deploy CRDs needed for UTs.  CRDs needed by ECK that we don't use are not deployed.
 deploy-crds: kubectl
 	@export KUBECONFIG=$(KUBECONFIG) && \
-		./kubectl apply -f config/crd/bases/ && \
-		./kubectl apply -f deploy/crds/calico/ && \
-		./kubectl apply -f deploy/crds/enterprise/ && \
-		./kubectl apply -f deploy/crds/elastic/elasticsearch-crd.yaml && \
-		./kubectl apply -f deploy/crds/elastic/kibana-crd.yaml && \
-		./kubectl apply -f deploy/crds/prometheus
+		$(BINDIR)/kubectl apply -f config/crd/bases/ && \
+		$(BINDIR)/kubectl apply -f deploy/crds/calico/ && \
+		$(BINDIR)/kubectl apply -f deploy/crds/enterprise/ && \
+		$(BINDIR)/kubectl apply -f deploy/crds/elastic/elasticsearch-crd.yaml && \
+		$(BINDIR)/kubectl apply -f deploy/crds/elastic/kibana-crd.yaml && \
+		$(BINDIR)/kubectl apply -f deploy/crds/prometheus
 
 create-tigera-operator-namespace: kubectl
-	KUBECONFIG=$(KUBECONFIG) ./kubectl create ns tigera-operator
+	KUBECONFIG=$(KUBECONFIG) $(BINDIR)/kubectl create ns tigera-operator
 
 ## Destroy local kind cluster
-cluster-destroy:
-	./deploy/scripts/delete_kind_cluster.sh
+cluster-destroy: $(BINDIR)/kubectl $(BINDIR)/kind
+	-$(BINDIR)/kind delete cluster
 	rm -f $(KUBECONFIG)
 
-kubectl:
-	curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.17.0/bin/linux/amd64/kubectl
-	chmod +x ./kubectl
 
 
 ###############################################################################

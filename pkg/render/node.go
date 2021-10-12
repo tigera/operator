@@ -1509,15 +1509,7 @@ func (c *nodeComponent) hostPathInitContainer() corev1.Container {
 // Calico as non privileged.
 func (c *nodeComponent) runAsNonPrivileged() bool {
 	// Check that the NonPrivileged flag is set
-	nonPrivileged := c.cfg.Installation.NonPrivileged != nil && *c.cfg.Installation.NonPrivileged == operatorv1.NonPrivilegedEnabled
-
-	// Check that BGP is not enabled
-	noBGP := !bgpEnabled(c.cfg.Installation)
-
-	// Only allowed to run as non privileged for OS Calico
-	variantCalico := c.cfg.Installation.Variant != operatorv1.TigeraSecureEnterprise
-
-	return nonPrivileged && noBGP && variantCalico
+	return c.cfg.Installation.NonPrivileged != nil && *c.cfg.Installation.NonPrivileged == operatorv1.NonPrivilegedEnabled
 }
 
 // getAutodetectionMethod returns the IP auto detection method in a form understandable by the calico/node

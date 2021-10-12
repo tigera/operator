@@ -274,6 +274,7 @@ run-uts:
 
 ## Create a local kind dual stack cluster.
 KUBECONFIG?=./kubeconfig.yaml
+K8S_VERSION?=v1.18.6
 cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	# First make sure any previous cluster is deleted
 	make cluster-destroy
@@ -305,7 +306,6 @@ create-tigera-operator-namespace: kubectl
 
 ## Destroy local kind cluster
 cluster-destroy: $(BINDIR)/kubectl $(BINDIR)/kind
-	-$(BINDIR)/kubectl --kubeconfig=$(KUBECONFIG) drain kind-control-plane kind-worker kind-worker2 kind-worker3 --ignore-daemonsets --force
 	-$(BINDIR)/kind delete cluster
 	rm -f $(KUBECONFIG)
 

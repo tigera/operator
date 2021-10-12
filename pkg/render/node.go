@@ -641,6 +641,10 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 		initContainers = append(initContainers, c.bpffsInitContainer())
 	}
 
+	if c.runAsNonPrivileged() {
+		initContainers = append(initContainers, c.hostPathInitContainer())
+	}
+
 	var affinity *corev1.Affinity
 	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderAKS {
 		affinity = &corev1.Affinity{
@@ -734,8 +738,6 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 
 	volumes := []corev1.Volume{
 		{Name: "lib-modules", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/lib/modules"}}},
-		{Name: "var-run-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/calico"}}},
-		{Name: "var-lib-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
 		{Name: "xtables-lock", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
 		{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 		{
@@ -752,6 +754,18 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 			Name:         "felix-certs",
 			VolumeSource: certificateVolumeSource(c.cfg.Installation.CertificateManagement, NodeTLSSecretName),
 		},
+	}
+
+	if c.runAsNonPrivileged() {
+		volumes = append(volumes,
+			corev1.Volume{Name: "var-run", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run"}}},
+			corev1.Volume{Name: "var-lib", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib"}}},
+		)
+	} else {
+		volumes = append(volumes,
+			corev1.Volume{Name: "var-run-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/calico"}}},
+			corev1.Volume{Name: "var-lib-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
+		)
 	}
 
 	if c.bpfDataplaneEnabled() {
@@ -939,11 +953,29 @@ func (c *nodeComponent) cniEnvvars() []corev1.EnvVar {
 // nodeContainer creates the main node container.
 func (c *nodeComponent) nodeContainer() corev1.Container {
 	lp, rp := c.nodeLivenessReadinessProbes()
+	sc := &corev1.SecurityContext{Privileged: ptr.BoolToPtr(true)}
+	if c.runAsNonPrivileged() {
+		uid := int64(1000)
+		guid := int64(0)
+		sc = &corev1.SecurityContext{
+			// Set the user as our chosen user (1000)
+			RunAsUser: &uid,
+			// Set the group to be the root user group since all container users shoudl be a member
+			RunAsGroup: &guid,
+			Capabilities: &corev1.Capabilities{
+				Add: []corev1.Capability{
+					corev1.Capability("NET_RAW"),
+					corev1.Capability("NET_ADMIN"),
+					corev1.Capability("NET_BIND_SERVICE"),
+				},
+			},
+		}
+	}
 	return corev1.Container{
 		Name:            "calico-node",
 		Image:           c.nodeImage,
 		Resources:       c.nodeResources(),
-		SecurityContext: &corev1.SecurityContext{Privileged: ptr.BoolToPtr(true)},
+		SecurityContext: sc,
 		Env:             c.nodeEnvVars(),
 		VolumeMounts:    c.nodeVolumeMounts(),
 		LivenessProbe:   lp,
@@ -962,11 +994,20 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 	nodeVolumeMounts := []corev1.VolumeMount{
 		{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
 		{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
-		{MountPath: "/var/run/calico", Name: "var-run-calico"},
-		{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 		{MountPath: "/var/run/nodeagent", Name: "policysync"},
 		{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
 		{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
+	}
+	if c.runAsNonPrivileged() {
+		nodeVolumeMounts = append(nodeVolumeMounts,
+			corev1.VolumeMount{MountPath: "/var/run", Name: "var-run"},
+			corev1.VolumeMount{MountPath: "/var/lib", Name: "var-lib"},
+		)
+	} else {
+		nodeVolumeMounts = append(nodeVolumeMounts,
+			corev1.VolumeMount{MountPath: "/var/run/calico", Name: "var-run-calico"},
+			corev1.VolumeMount{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
+		)
 	}
 	if c.bpfDataplaneEnabled() {
 		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/sys/fs/bpf", Name: "bpffs"})
@@ -1431,6 +1472,44 @@ func (c *nodeComponent) nodePodSecurityPolicy() *policyv1beta1.PodSecurityPolicy
 	}
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
 	return psp
+}
+
+// hostPathInitContainer creates an init container that changes the permissions on hostPath volumes
+// so that they can be written to by a non-root container.
+func (c *nodeComponent) hostPathInitContainer() corev1.Container {
+	rootUID := int64(0)
+	mounts := []corev1.VolumeMount{
+		{
+			MountPath: "/var/run",
+			Name:      "var-run",
+			ReadOnly:  false,
+		},
+		{
+			MountPath: "/var/lib",
+			Name:      "var-lib",
+			ReadOnly:  false,
+		},
+	}
+
+	return corev1.Container{
+		Name:  "hostpath-init",
+		Image: c.nodeImage,
+		Env: []corev1.EnvVar{
+			{Name: "NODE_USER_ID", Value: "1000"},
+		},
+		VolumeMounts: mounts,
+		SecurityContext: &corev1.SecurityContext{
+			RunAsUser: &rootUID,
+		},
+		Command: []string{"sh", "-c", "calico-node -hostpath-init"},
+	}
+}
+
+// runAsNonPrivileged checks to ensure that all of the proper installation values are set for running
+// Calico as non privileged.
+func (c *nodeComponent) runAsNonPrivileged() bool {
+	// Check that the NonPrivileged flag is set
+	return c.cfg.Installation.NonPrivileged != nil && *c.cfg.Installation.NonPrivileged == operatorv1.NonPrivilegedEnabled
 }
 
 // getAutodetectionMethod returns the IP auto detection method in a form understandable by the calico/node

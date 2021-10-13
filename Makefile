@@ -53,6 +53,7 @@ ifeq ($(ARCH),arm64)
 else
 	TARGET_PLATFORM=amd64
 endif
+EXTRA_DOCKER_ARGS += --platform=linux/$(TARGET_PLATFORM)
 
 # we want to be able to run the same recipe on multiple targets keyed on the image name
 # to do that, we would use the entire image name, e.g. calico/node:abcdefg, as the stem, or '%', in the target

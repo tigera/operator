@@ -49,6 +49,8 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPEnabled))
 		Expect(*instance.Spec.ControlPlaneReplicas).To(Equal(int32(2)))
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+		Expect(instance.Spec.NonPrivileged).NotTo(BeNil())
+		Expect(*instance.Spec.NonPrivileged).To(Equal(operator.NonPrivilegedDisabled))
 	})
 
 	It("should properly fill defaults on an empty TigeraSecureEnterprise instance", func() {
@@ -71,6 +73,8 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPEnabled))
 		Expect(*instance.Spec.ControlPlaneReplicas).To(Equal(int32(2)))
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+		Expect(instance.Spec.NonPrivileged).NotTo(BeNil())
+		Expect(*instance.Spec.NonPrivileged).To(Equal(operator.NonPrivilegedDisabled))
 	})
 
 	It("should not override custom configuration", func() {
@@ -86,10 +90,12 @@ var _ = Describe("Defaulting logic tests", func() {
 		disabled := operator.BGPDisabled
 		miMode := operator.MultiInterfaceModeNone
 		dpIptables := operator.LinuxDataplaneIptables
+		nonPrivileged := operator.NonPrivilegedEnabled
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{
-				Variant:  operator.TigeraSecureEnterprise,
-				Registry: "test-reg/",
+				Variant:       operator.Calico,
+				NonPrivileged: &nonPrivileged,
+				Registry:      "test-reg/",
 				ImagePullSecrets: []v1.LocalObjectReference{
 					{
 						Name: "pullSecret1",
@@ -161,10 +167,12 @@ var _ = Describe("Defaulting logic tests", func() {
 		miMode := operator.MultiInterfaceModeNone
 		dpBPF := operator.LinuxDataplaneBPF
 		hpDisabled := operator.HostPortsDisabled
+		npDisabled := operator.NonPrivilegedDisabled
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{
-				Variant:  operator.TigeraSecureEnterprise,
-				Registry: "test-reg/",
+				Variant:       operator.TigeraSecureEnterprise,
+				NonPrivileged: &npDisabled,
+				Registry:      "test-reg/",
 				ImagePullSecrets: []v1.LocalObjectReference{
 					{
 						Name: "pullSecret1",

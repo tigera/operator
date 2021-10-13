@@ -29,7 +29,6 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta "k8s.io/api/batch/v1beta1"
 	v1 "k8s.io/api/core/v1"
-	apiextenv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -302,11 +301,6 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 		dsa.Spec.ElasticsearchRef = csa.Spec.ElasticsearchRef
 		dsa.Status = csa.Status
 		return dsa
-	case *apiextenv1.CustomResourceDefinition:
-		c := current.(*apiextenv1.CustomResourceDefinition)
-		d := desired.(*apiextenv1.CustomResourceDefinition)
-		d.SetResourceVersion(c.GetResourceVersion())
-		return d
 	default:
 		// Default to just using the desired state, with an updated RV.
 		return desired

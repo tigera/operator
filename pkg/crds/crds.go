@@ -130,53 +130,48 @@ func getOperatorCRDSource(variant opv1.ProductVariant) map[string][]byte {
 	return ret
 }
 
+func convertYamlsToCRDs(yamls ...map[string][]byte) []*apiextenv1.CustomResourceDefinition {
+	crds := []*apiextenv1.CustomResourceDefinition{}
+	for _, yamlmap := range yamls {
+		for name, yml := range yamlmap {
+			crd := &apiextenv1.CustomResourceDefinition{}
+			err := yaml.Unmarshal(yml, crd)
+			if err != nil {
+				panic(fmt.Sprintf("unable to convert %s to CRD: %v", name, err))
+			}
+			crd.Name = fmt.Sprintf("%s.%s", crd.Spec.Names.Plural, crd.Spec.Group)
+			crds = append(crds, crd)
+		}
+	}
+
+	return crds
+}
+
 func GetCRDs(variant opv1.ProductVariant) []*apiextenv1.CustomResourceDefinition {
 	lock.Lock()
 	defer lock.Unlock()
 
+	var crds []*apiextenv1.CustomResourceDefinition
 	if variant == opv1.Calico {
 		if len(calicoCRDs) == 0 {
-			crdyamls := getCalicoCRDSource()
-			for _, yml := range crdyamls {
-
-				crd := &apiextenv1.CustomResourceDefinition{}
-				err := yaml.Unmarshal(yml, crd)
-				if err != nil {
-					fmt.Println(fmt.Sprintf("%s.%s", crd.Spec.Names.Plural, crd.Spec.Group))
-					fmt.Println(err)
-					return calicoCRDs
-				}
-				crd.Name = fmt.Sprintf("%s.%s", crd.Spec.Names.Plural, crd.Spec.Group)
-				calicoCRDs = append(calicoCRDs, crd)
-			}
-			crdyamls = getOperatorCRDSource(variant)
-			for _, yml := range crdyamls {
-				crd := &apiextenv1.CustomResourceDefinition{}
-				yaml.Unmarshal(yml, crd)
-				crd.Name = fmt.Sprintf("%s.%s", crd.Spec.Names.Plural, crd.Spec.Group)
-				calicoCRDs = append(calicoCRDs, crd)
-			}
+			calicoCRDs = convertYamlsToCRDs(getCalicoCRDSource(), getOperatorCRDSource(variant))
 		}
-		return calicoCRDs
+		crds = calicoCRDs
 	} else {
 		if len(enterpriseCRDs) == 0 {
-			crdyamls := getEnterpriseCRDSource()
-			for _, yml := range crdyamls {
-				crd := &apiextenv1.CustomResourceDefinition{}
-				yaml.Unmarshal(yml, crd)
-				crd.Name = fmt.Sprintf("%s.%s", crd.Spec.Names.Plural, crd.Spec.Group)
-				enterpriseCRDs = append(enterpriseCRDs, crd)
-			}
-			crdyamls = getOperatorCRDSource(variant)
-			for _, yml := range crdyamls {
-				crd := &apiextenv1.CustomResourceDefinition{}
-				yaml.Unmarshal(yml, crd)
-				crd.Name = fmt.Sprintf("%s.%s", crd.Spec.Names.Plural, crd.Spec.Group)
-				enterpriseCRDs = append(enterpriseCRDs, crd)
-			}
+			enterpriseCRDs = convertYamlsToCRDs(getEnterpriseCRDSource(), getOperatorCRDSource(variant))
 		}
-		return enterpriseCRDs
+		crds = enterpriseCRDs
 	}
+
+	// Make a copy of the slice so that when we use the resource to Create or Update
+	// our original copy of the definitions are not tainted with a ResourceVersion
+	copy := []*apiextenv1.CustomResourceDefinition{}
+	for _, crd := range crds {
+		copy = append(copy, crd.DeepCopy())
+	}
+
+	return copy
 }
 
 // ToRuntimeObjects converts the given list of CRDs to a list of client.Objects

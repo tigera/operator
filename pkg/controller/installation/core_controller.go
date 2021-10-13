@@ -257,12 +257,17 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		if err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
 		}
-		if err = addCRDWatches(c, operator.TigeraSecureEnterprise); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch CRD resource: %v", err)
+
+		if r.manageCRDs {
+			if err = addCRDWatches(c, operator.TigeraSecureEnterprise); err != nil {
+				return fmt.Errorf("tigera-installation-controller failed to watch CRD resource: %v", err)
+			}
 		}
 	} else {
-		if err = addCRDWatches(c, operator.Calico); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch CRD resource: %v", err)
+		if r.manageCRDs {
+			if err = addCRDWatches(c, operator.Calico); err != nil {
+				return fmt.Errorf("tigera-installation-controller failed to watch CRD resource: %v", err)
+			}
 		}
 	}
 

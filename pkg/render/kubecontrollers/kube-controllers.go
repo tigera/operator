@@ -266,7 +266,7 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration, kubeContr
 		{
 			// IPAM resources are manipulated when nodes are deleted.
 			APIGroups: []string{"crd.projectcalico.org"},
-			Resources: []string{"ippools"},
+			Resources: []string{"ippools", "ipreservations"},
 			Verbs:     []string{"list"},
 		},
 		{

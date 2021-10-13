@@ -485,6 +485,7 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 				"felixconfigurations",
 				"kubecontrollersconfigurations",
 				"ippools",
+				"ipreservations",
 				"ipamblocks",
 				"blockaffinities",
 			},

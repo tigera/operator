@@ -332,9 +332,11 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 
 	// Verify that we are running in non-privileged mode only with the appropriate feature set
 	if instance.Spec.NonPrivileged != nil && *instance.Spec.NonPrivileged == operatorv1.NonPrivilegedEnabled {
-		// BGP must be disabled
-		if instance.Spec.CalicoNetwork != nil && instance.Spec.CalicoNetwork.BGP != nil && *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPEnabled {
-			return fmt.Errorf("Non-privileged Calico is not supported when BGP is enabled")
+		// BPF must be disabled
+		if instance.Spec.CalicoNetwork != nil &&
+			instance.Spec.CalicoNetwork.LinuxDataplane != nil &&
+			*instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF {
+			return fmt.Errorf("Non-privileged Calico is not supported when BPF dataplane is enabled")
 		}
 
 		// Only allowed to run as non-privileged for OS Calico

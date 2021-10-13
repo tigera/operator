@@ -958,7 +958,7 @@ func (c *nodeComponent) nodeContainer() corev1.Container {
 		uid := int64(999)
 		guid := int64(0)
 		sc = &corev1.SecurityContext{
-			// Set the user as our chosen user (1000)
+			// Set the user as our chosen user (999)
 			RunAsUser: &uid,
 			// Set the group to be the root user group since all container users should be a member
 			RunAsGroup: &guid,

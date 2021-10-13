@@ -773,7 +773,6 @@ var _ = Describe("Node rendering tests", func() {
 		}
 
 		defaultInstance.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
-		defaultInstance.CalicoNetwork.BGP = &bgpDisabled
 		defaultInstance.NonPrivileged = &nonPrivilegedEnabled
 		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())

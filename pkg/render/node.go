@@ -328,12 +328,21 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 					"hostendpoints",
 					"ipamblocks",
 					"ippools",
+					"ipreservations",
 					"networkpolicies",
 					"stagedkubernetesnetworkpolicies",
 					"stagednetworkpolicies",
 					"networksets",
 				},
 				Verbs: []string{"get", "list", "watch"},
+			},
+			{
+				// calico/node monitors for caliconodestatus objects and writes its status back into the object.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{
+					"caliconodestatuses",
+				},
+				Verbs: []string{"get", "list", "watch", "update"},
 			},
 			{
 				// For migration code in calico/node startup only. Remove when the migration

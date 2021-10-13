@@ -373,6 +373,12 @@ func fillDefaults(instance *operator.Installation) error {
 		instance.Spec.Variant = operator.Calico
 	}
 
+	// Default to running Calico as privileged.
+	if instance.Spec.NonPrivileged == nil {
+		npd := operator.NonPrivilegedDisabled
+		instance.Spec.NonPrivileged = &npd
+	}
+
 	// Default the CNI plugin based on the Kubernetes provider.
 	if instance.Spec.CNI == nil {
 		instance.Spec.CNI = &operator.CNISpec{}

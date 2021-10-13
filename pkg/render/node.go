@@ -320,6 +320,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 					"bgpconfigurations",
 					"bgppeers",
 					"blockaffinities",
+					"caliconodestatuses",
 					"clusterinformations",
 					"felixconfigurations",
 					"globalnetworkpolicies",

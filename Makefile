@@ -481,10 +481,10 @@ COMMON_VERSIONS?=config/common_versions.yml
 
 gen-versions: gen-versions-calico gen-versions-enterprise gen-versions-common
 
-gen-versions-calico: $(BINDIR)/gen-versions fetch-calico-crds
+gen-versions-calico: $(BINDIR)/gen-versions update-calico-crds
 	$(BINDIR)/gen-versions -os-versions=$(OS_VERSIONS) > pkg/components/calico.go
 
-gen-versions-enterprise: $(BINDIR)/gen-versions fetch-enterprise-crds
+gen-versions-enterprise: $(BINDIR)/gen-versions update-enterprise-crds
 	$(BINDIR)/gen-versions -ee-versions=$(EE_VERSIONS) > pkg/components/enterprise.go
 
 gen-versions-common: $(BINDIR)/gen-versions
@@ -502,15 +502,18 @@ GITHUB_ACCESS_METHOD?=git@github.com:
 # $(1) is the github project
 # $(2) is the branch or tag to fetch
 # $(3) is the directory name to use
+define prep_local_crds
+    $(eval dir := $(1))
+	rm -rf pkg/crds/$(dir)
+	rm -rf .crds/$(dir)
+	mkdir -p pkg/crds/$(dir)
+	mkdir -p .crds/$(dir)
+endef
 define fetch_crds 
     $(eval project := $(1))
     $(eval branch := $(2))
     $(eval dir := $(3))
 	@echo "Fetching $(dir) CRDs from $(project) branch $(branch)"
-	rm -rf pkg/crds/$(dir)
-	rm -rf .crds/$(dir)
-	mkdir -p pkg/crds/$(dir)
-	mkdir -p .crds/$(dir)
 	@$(CONTAINERIZED) \
 	bash -c '$(GIT_CONFIG_SSH) \
 	cd .crds/$(dir); \
@@ -519,11 +522,16 @@ define fetch_crds
 	git config --local core.sparseCheckout true; \
 	echo "config/crd" >> .git/info/sparse-checkout; \
 	git checkout -q tags/$(branch) &>/dev/null ||  git checkout -q origin/$(branch) --;' || echo "Failed to fetch $(dir) CRDs"
+endef
+define copy_crds
+    $(eval dir := $(1))
 	@cp .crds/$(dir)/config/crd/* pkg/crds/$(dir)/ && echo "Copied $(dir) CRDs"
-	git add pkg/crds/$(dir)
 endef
 
-.PHONY: read-libcalico-version fetch-calico-crds read-libcalico-enterprise-version fetch-enterprise-crds
+.PHONY: read-libcalico-version read-libcalico-enterprise-version
+.PHONY: update-calico-crds update-enterprise-crds
+.PHONY: fetch-calico-crds fetch-enterprise-crds
+.PHONY: prepare-for-calico-crds prepare-for-enterprise-crds
 
 LIBCALICO?=projectcalico/libcalico-go
 read-libcalico-calico-version:
@@ -531,7 +539,13 @@ read-libcalico-calico-version:
 	bash -c '$(GIT_CONFIG_SSH) \
 	yq r config/calico_versions.yml components.libcalico-go.version'))
 
-fetch-calico-crds: read-libcalico-calico-version
+update-calico-crds: fetch-calico-crds
+	$(call copy_crds,"calico")
+
+prepare-for-calico-crds:
+	$(call prep_local_crds,"calico")
+
+fetch-calico-crds: prepare-for-calico-crds read-libcalico-calico-version
 	$(call fetch_crds,$(LIBCALICO),$(LIBCALICO_BRANCH),"calico")
 
 LIBCALICO_ENTERPRISE?=tigera/libcalico-go-private
@@ -540,7 +554,13 @@ read-libcalico-enterprise-version:
 	bash -c '$(GIT_CONFIG_SSH) \
 	yq r config/enterprise_versions.yml components.libcalico-go.version'))
 
-fetch-enterprise-crds: read-libcalico-enterprise-version
+update-enterprise-crds: fetch-enterprise-crds
+	$(call copy_crds,"enterprise")
+
+prepare-for-enterprise-crds:
+	$(call prep_local_crds,"enterprise")
+
+fetch-enterprise-crds: prepare-for-enterprise-crds  read-libcalico-enterprise-version
 	$(call fetch_crds,$(LIBCALICO_ENTERPRISE),$(LIBCALICO_ENTERPRISE_BRANCH),"enterprise")
 
 .PHONY: prepull-image

@@ -342,8 +342,11 @@ format-check:
 
 .PHONY: dirty-check
 dirty-check:
-	@if [ "$$(git diff --stat)" = "" ]; then exit 0; fi; \
-	echo "The following files are dirty"; git diff --stat; exit 1
+	@if [ "$$(git diff --stat)" != "" ]; then \
+	echo "The following files are dirty"; git diff --stat; exit 1; fi
+	@# Check that no new CRDs needed to be committed
+	@if [ "$$(git status --porcelain pkg/crds)" != "" ]; then \
+	echo "The following CRD files need to be added"; git status --porcelain pkg/crds; exit 1; fi
 
 foss-checks:
 	@echo Running $@...

@@ -51,7 +51,7 @@ var (
 )
 
 // calicoWindowsUpgrader helps manage the upgrade of Calico Windows nodes.
-// It works in conjunction with the CalicoUpdate service running on each node.
+// It works in conjunction with the CalicoUpgrade service running on each node.
 type calicoWindowsUpgrader struct {
 	clientset            kubernetes.Interface
 	client               client.Client

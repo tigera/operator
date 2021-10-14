@@ -27,7 +27,7 @@ import (
 const (
 	CalicoWindowsUpgradeResourceName = "calico-windows-upgrade"
 	CalicoWindowsUpgradeScript       = "calico-upgrade.ps1"
-	CalicoWindowsUpgradeVolumePath   = `c:\CalicoUpdate`
+	CalicoWindowsUpgradeVolumePath   = `c:\CalicoUpgrade`
 	CalicoWindowsUpgradeScriptLabel  = "projectcalico.org/CalicoWindowsUpgradeScript"
 	CalicoWindowsVersionAnnotation   = "projectcalico.org/CalicoWindowsVersion"
 	CalicoWindowsUpgradeTaintKey     = "projectcalico.org/CalicoWindowsUpgrading"

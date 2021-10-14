@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -111,9 +110,6 @@ func newCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, nodeList
 }
 
 func (w *calicoWindowsUpgrader) upgradeWindowsNodes(expectedProduct operatorv1.ProductVariant) error {
-	expectedVersion := common.WindowsLatestVersionString(expectedProduct)
-	windowsLog.V(1).Info(fmt.Sprintf("Expected version: %v", expectedVersion))
-
 	// For now, do nothing if the upgrade version is Enterprise since current
 	// Enterprise versions do not support the upgrade.
 	// This prevents a user from accidentally triggering an
@@ -122,8 +118,12 @@ func (w *calicoWindowsUpgrader) upgradeWindowsNodes(expectedProduct operatorv1.P
 	// Enterprise v3.11+
 	// TODO: remove this once Enterprise v3.11.0 is released.
 	if expectedProduct == operatorv1.TigeraSecureEnterprise {
+		windowsLog.V(1).Info("Enterprise upgrades for Windows are not currently supported")
 		return nil
 	}
+
+	expectedVersion := common.WindowsLatestVersionString(expectedProduct)
+	windowsLog.V(1).Info(fmt.Sprintf("Expected version: %v", expectedVersion))
 
 	err := w.getNodesToUpgrade(expectedVersion)
 	if err != nil {

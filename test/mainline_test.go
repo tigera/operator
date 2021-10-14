@@ -151,7 +151,7 @@ var _ = Describe("Mainline component function tests", func() {
 					return err
 				}
 				if reflect.DeepEqual(instance.Status, operator.InstallationStatus{}) {
-					return fmt.Errorf("installation status is empty")
+					return fmt.Errorf("installation status is empty: %v", instance)
 				}
 				if instance.Status.Variant != operator.Calico {
 					return fmt.Errorf("installation status was %v, expected: %v", instance.Status, operator.Calico)

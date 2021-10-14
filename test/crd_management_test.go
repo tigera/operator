@@ -151,11 +151,11 @@ var _ = Describe("CRD management tests", func() {
 				if err == nil {
 					return fmt.Errorf("networkpolicies CRD still exists")
 				}
-				if kerror.IsAlreadyExists(err) {
+				if kerror.IsNotFound(err) {
 					return nil
 				}
 				return err
-			}, 10*time.Second, 1*time.Second).ShouldNot(BeNil())
+			}, 10*time.Second, 1*time.Second).Should(BeNil())
 		})
 		AfterEach(func() {
 			// Delete any CR that might have been created by the test.
@@ -167,7 +167,7 @@ var _ = Describe("CRD management tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("Should install resources for a CRD", func() {
+		It("Should create CRD if it doesn't exist", func() {
 			c, mgr = setupManager(ManageCRDsEnable)
 			ctx, cancel := context.WithCancel(context.TODO())
 			defer cancel()
@@ -212,7 +212,7 @@ var _ = Describe("CRD management tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("Should add tier to CRD", func() {
+		It("Should add tier to networkpolicy CRD", func() {
 			c, mgr = setupManager(ManageCRDsEnable)
 			ctx, cancel := context.WithCancel(context.TODO())
 			defer cancel()

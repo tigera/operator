@@ -114,13 +114,14 @@ func (w *calicoWindowsUpgrader) upgradeWindowsNodes(expectedProduct operatorv1.P
 	expectedVersion := common.WindowsLatestVersionString(expectedProduct)
 	windowsLog.V(1).Info(fmt.Sprintf("Expected version: %v", expectedVersion))
 
-	// For now, do nothing if the upgrade version is not the upcoming
-	// Enterprise v3.11.0. This prevents a user from accidentally triggering an
+	// For now, do nothing if the upgrade version is Enterprise since current
+	// Enterprise versions do not support the upgrade.
+	// This prevents a user from accidentally triggering an
 	// in-place upgrade from Calico v3.21.0 to Enterprise v3.10.x. That upgrade
-	// would fail since the calico windows upgrade is only supported in
-	// Enterprise v3.11.x and newer.
+	// would fail since the calico windows upgrade is will only be supported in
+	// Enterprise v3.11+
 	// TODO: remove this once Enterprise v3.11.0 is released.
-	if expectedProduct == operatorv1.TigeraSecureEnterprise && !strings.HasPrefix(expectedVersion, "Enterprise-v3.11.0") {
+	if expectedProduct == operatorv1.TigeraSecureEnterprise {
 		return nil
 	}
 

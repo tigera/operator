@@ -1091,43 +1091,54 @@ var _ = Describe("Testing core-controller installation", func() {
 		})
 
 		Context("calicoWindowsUpgrader", func() {
-			currentEnterpriseVersion := fmt.Sprintf("Enterprise-%v", components.EnterpriseRelease)
+			currentCalicoVersion := fmt.Sprintf("Calico-%v", components.CalicoRelease)
 
-			It("should do nothing for up-to-date Calico Windows nodes", func() {
-				Expect(c.Create(ctx, &corev1.Node{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "windows-node",
-						Labels: map[string]string{
-							"kubernetes.io/os": "windows",
-						},
-						Annotations: map[string]string{
-							common.CalicoWindowsVersionAnnotation: currentEnterpriseVersion,
-						},
-					},
-				})).ToNot(HaveOccurred())
-
+			It("should do nothing if variant is Enterprise", func() {
 				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
+
+				// Create a Windows node running a future supported Enterprise version
+				// Note: currently Calico windows upgrades are not supported for
+				// Enterprise.
+				n1 := createNode(cs, "windows1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Enterprise-v3.11.0"})
+
+				// Node should not have changed.
+				Consistently(func() error {
+					return assertNodesUnchanged(cs, n1)
+				}, 10*time.Second, 100*time.Millisecond).Should(BeNil())
 
 				// No calls to AddWindowsNodeUpgrade expected.
 				mockStatus.AssertExpectations(GinkgoT())
 			})
 
 			It("should trigger upgrade of out-of-date Calico Windows nodes", func() {
-				n1 := createNode(cs, "windows1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-master"})
+				cr.Spec.Variant = operator.Calico
 				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
-
-				mockStatus.On("AddWindowsNodeUpgrade", "windows1", currentEnterpriseVersion)
-
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 
-				// Ensure that the windows node has the new label and taint.
+				n1 := createNode(cs, "windows1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.0"})
+				n2 := createNode(cs, "windows2", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: currentCalicoVersion})
+				// Create a Windows node running a future supported Enterprise version
+				// Note: currently Calico windows upgrades are not supported for
+				// Enterprise.
+				n3 := createNode(cs, "windows3", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Enterprise-v3.11.0"})
+
+				mockStatus.On("AddWindowsNodeUpgrade", "windows1", currentCalicoVersion)
+				mockStatus.On("AddWindowsNodeUpgrade", "windows3", currentCalicoVersion)
+
+				// Up-to-date node should not have changed.
+				Consistently(func() error {
+					return assertNodesUnchanged(cs, n2)
+				}, 10*time.Second, 100*time.Millisecond).Should(BeNil())
+
+				// Ensure that outdated nodes have the new label and taint.
 				Eventually(func() error {
-					return assertNodesHadUpgradeTriggered(cs, n1)
+					return assertNodesHadUpgradeTriggered(cs, n1, n3)
 				}, 10*time.Second).Should(BeNil())
 
+				// No calls to AddWindowsNodeUpgrade expected.
 				mockStatus.AssertExpectations(GinkgoT())
 			})
 		})

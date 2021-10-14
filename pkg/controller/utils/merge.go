@@ -136,6 +136,11 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		override.CertificateManagement.DeepCopyInto(inst.CertificateManagement)
 	}
 
+	switch compareFields(inst.NonPrivileged, override.NonPrivileged) {
+	case BOnlySet, Different:
+		inst.NonPrivileged = override.NonPrivileged
+	}
+
 	return inst
 }
 

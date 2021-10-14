@@ -362,7 +362,7 @@ foss-checks:
 ###############################################################################
 .PHONY: ci
 ## Run what CI runs
-ci: clean format-check image-all test dirty-check validate-gen-versions test-crds
+ci: clean format-check validate-gen-versions image-all test dirty-check test-crds
 
 validate-gen-versions:
 	make gen-versions
@@ -496,9 +496,6 @@ $(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
 	sh -c '$(GIT_CONFIG_SSH) \
 	go build -o $(BINDIR)/gen-versions ./hack/gen-versions'
 
-# Overwrite with https://github.com/ to use http access
-GITHUB_ACCESS_METHOD?=git@github.com:
-
 # $(1) is the github project
 # $(2) is the branch or tag to fetch
 # $(3) is the directory name to use
@@ -514,14 +511,10 @@ define fetch_crds
     $(eval branch := $(2))
     $(eval dir := $(3))
 	@echo "Fetching $(dir) CRDs from $(project) branch $(branch)"
-	@$(CONTAINERIZED) \
-	bash -c '$(GIT_CONFIG_SSH) \
-	cd .crds/$(dir); \
-	git init .;  \
-	git remote add -f --tags origin $(GITHUB_ACCESS_METHOD)$(project) 2>&1 | grep -v -e "new branch" -e "new tag"; \
-	git config --local core.sparseCheckout true; \
-	echo "config/crd" >> .git/info/sparse-checkout; \
-	git checkout -q tags/$(branch) &>/dev/null ||  git checkout -q origin/$(branch) --;' || echo "Failed to fetch $(dir) CRDs"
+	cd .crds/$(dir) && \
+	git clone git@github.com:$(project).git ./ 2>&1 && \
+	git fetch --all origin 2>&1 | grep -v -e "new branch" -e "new tag" && \
+	git checkout -q $(branch)
 endef
 define copy_crds
     $(eval dir := $(1))

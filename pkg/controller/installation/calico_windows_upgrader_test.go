@@ -94,7 +94,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		components.EnterpriseRelease = savedVersion
 
 		n1 := createNode(cs, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
-		n2 := createNode(cs, "node2", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Enterprise-v3.10.0"})
+		n2 := createNode(cs, "node2", map[string]string{"kubernetes.io/os": "windows"}, nil)
 
 		// Create the upgrader and start it.
 		c := newCalicoWindowsUpgrader(cs, client, nlw, mockStatus, requestChan)

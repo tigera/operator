@@ -7,6 +7,8 @@ agent:
 global_job_config:
   secrets:
   - name: docker-hub
+  # Mount the github SSH secret for pulling private repositories.
+  - name: private-repo
   prologue:
     commands:
     - echo $DOCKERHUB_PASSWORD | docker login --username "$DOCKERHUB_USERNAME" --password-stdin

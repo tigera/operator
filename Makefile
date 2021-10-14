@@ -297,9 +297,9 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 ## Deploy CRDs needed for UTs.  CRDs needed by ECK that we don't use are not deployed.
 deploy-crds: kubectl
 	@export KUBECONFIG=$(KUBECONFIG) && \
-		$(BINDIR)/kubectl apply -f config/crd/bases/ && \
-		$(BINDIR)/kubectl apply -f deploy/crds/calico/ && \
-		$(BINDIR)/kubectl apply -f deploy/crds/enterprise/ && \
+		$(BINDIR)/kubectl apply -f pkg/crds/operator/ && \
+		$(BINDIR)/kubectl apply -f pkg/crds/calico/ && \
+		$(BINDIR)/kubectl apply -f pkg/crds/enterprise/ && \
 		$(BINDIR)/kubectl apply -f deploy/crds/elastic/elasticsearch-crd.yaml && \
 		$(BINDIR)/kubectl apply -f deploy/crds/elastic/kibana-crd.yaml && \
 		$(BINDIR)/kubectl apply -f deploy/crds/prometheus

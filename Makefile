@@ -362,7 +362,7 @@ foss-checks:
 ###############################################################################
 .PHONY: ci
 ## Run what CI runs
-ci: clean format-check image-all test dirty-check validate-gen-versions test-crds
+ci: clean format-check validate-gen-versions image-all test dirty-check test-crds
 
 validate-gen-versions:
 	make gen-versions

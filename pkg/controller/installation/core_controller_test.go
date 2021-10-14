@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -355,7 +355,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
 
-			requestChan = make(chan utils.ReconcileRequest)
+			requestChan = make(chan utils.ReconcileRequest, 1)
 
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
@@ -371,9 +371,13 @@ var _ = Describe("Testing core-controller installation", func() {
 				enterpriseCRDsExist:   true,
 				migrationChecked:      true,
 				requestChan:           requestChan,
+				doneChan:              make(chan interface{}),
 			}
 			r.typhaAutoscaler.start()
 			r.calicoWindowsUpgrader.start()
+			go func() {
+				r.processRequests()
+			}()
 
 			// We start off with a 'standard' installation, with nothing special
 			Expect(c.Create(
@@ -394,6 +398,10 @@ var _ = Describe("Testing core-controller installation", func() {
 						},
 					},
 				})).NotTo(HaveOccurred())
+		})
+
+		AfterEach(func() {
+			r.stop()
 		})
 
 		It("should use builtin images", func() {
@@ -689,7 +697,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
 
-			requestChan = make(chan utils.ReconcileRequest)
+			requestChan = make(chan utils.ReconcileRequest, 1)
 
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
@@ -706,9 +714,13 @@ var _ = Describe("Testing core-controller installation", func() {
 				migrationChecked:      true,
 				clusterDomain:         dns.DefaultClusterDomain,
 				requestChan:           requestChan,
+				doneChan:              make(chan interface{}),
 			}
 			r.typhaAutoscaler.start()
 			r.calicoWindowsUpgrader.start()
+			go func() {
+				r.processRequests()
+			}()
 
 			cr = &operator.Installation{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
@@ -745,6 +757,10 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			expectedDNSNames = dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
 			expectedDNSNames = append(expectedDNSNames, "localhost")
+		})
+
+		AfterEach(func() {
+			r.stop()
 		})
 
 		It("should create an internal manager TLS cert secret", func() {
@@ -844,7 +860,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("AddCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
 
-			requestChan = make(chan utils.ReconcileRequest)
+			requestChan = make(chan utils.ReconcileRequest, 1)
 
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
@@ -860,9 +876,13 @@ var _ = Describe("Testing core-controller installation", func() {
 				enterpriseCRDsExist:   true,
 				migrationChecked:      true,
 				requestChan:           requestChan,
+				doneChan:              make(chan interface{}),
 			}
 			r.typhaAutoscaler.start()
 			r.calicoWindowsUpgrader.start()
+			go func() {
+				r.processRequests()
+			}()
 
 			// We start off with a 'standard' installation, with nothing special
 			cr = &operator.Installation{
@@ -873,6 +893,9 @@ var _ = Describe("Testing core-controller installation", func() {
 					CertificateManagement: &operator.CertificateManagement{},
 				},
 			}
+		})
+		AfterEach(func() {
+			r.stop()
 		})
 
 		It("should Reconcile with default config", func() {

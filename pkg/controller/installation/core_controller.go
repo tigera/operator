@@ -120,7 +120,8 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 	typhaListWatch := cache.NewListWatchFromClient(cs.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"))
 	typhaScaler := newTyphaAutoscaler(cs, nodeListWatch, typhaListWatch, statusManager)
 
-	requestChan := make(chan utils.ReconcileRequest)
+	// Create buffered channel for incoming reconcile requests.
+	requestChan := make(chan utils.ReconcileRequest, 1)
 
 	// Create a Calico Windows upgrader.
 	calicoWindowsUpgrader := newCalicoWindowsUpgrader(cs, mgr.GetClient(), nodeListWatch, statusManager, requestChan)
@@ -306,6 +307,7 @@ type ReconcileInstallation struct {
 	migrationChecked      bool
 	clusterDomain         string
 	requestChan           chan utils.ReconcileRequest
+	doneChan              chan interface{}
 }
 
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
@@ -680,13 +682,21 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 func (r *ReconcileInstallation) processRequests() {
 	for {
-		req := <-r.requestChan
-		result, err := r.reconcile(req.Context, req.Request)
-		req.ResultChan <- utils.ReconcileResult{Error: err, Result: result}
+		select {
+		case req := <-r.requestChan:
+			result, err := r.reconcile(req.Context, req.Request)
+			req.ResultChan <- utils.ReconcileResult{Error: err, Result: result}
+			// Rate-limit to prevent tight looping.
+			time.Sleep(1 * time.Second)
 
-		// Rate-limit to prevent tight looping.
-		time.Sleep(1 * time.Second)
+		case <-r.doneChan:
+			return
+		}
 	}
+}
+
+func (r *ReconcileInstallation) stop() {
+	close(r.doneChan)
 }
 
 // reconcile reads that state of the cluster for a Installation object and makes changes based on the state read

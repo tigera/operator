@@ -51,9 +51,7 @@ var _ = Describe("Calico windows upgrader", func() {
 
 	var mockStatus *status.MockStatus
 
-	var currentEnterpriseVersion string
 	var currentCalicoVersion string
-	var savedVersion string
 	var product operator.ProductVariant
 
 	var requestChan chan utils.ReconcileRequest
@@ -75,26 +73,19 @@ var _ = Describe("Calico windows upgrader", func() {
 		nlw = nodeListWatch{cs}
 		mockStatus = &status.MockStatus{}
 
-		// Override the release version to the minimum Enterprise version that
-		// supports upgrades.
-		savedVersion = components.EnterpriseRelease
-		components.EnterpriseRelease = "v3.11.0"
-		currentEnterpriseVersion = "Enterprise-v3.11.0"
-
 		currentCalicoVersion = fmt.Sprintf("Calico-%v", components.CalicoRelease)
 		requestChan = make(chan utils.ReconcileRequest)
+
+		// TODO: for now, use Calico variant since Enterprise is not supported.
+		product = operator.Calico
+	})
+
+	It("should do nothing if the product is Enterprise", func() {
 		product = operator.TigeraSecureEnterprise
-	})
-
-	AfterEach(func() {
-		components.EnterpriseRelease = savedVersion
-	})
-
-	It("should do nothing if the product is Enterprise and version does not support Calico Windows upgrades", func() {
-		components.EnterpriseRelease = savedVersion
 
 		n1 := createNode(cs, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
 		n2 := createNode(cs, "node2", map[string]string{"kubernetes.io/os": "windows"}, nil)
+		n3 := createNode(cs, "node3", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Enterprise-v2.0.0"})
 
 		// Create the upgrader and start it.
 		c := newCalicoWindowsUpgrader(cs, client, nlw, mockStatus, requestChan)
@@ -107,7 +98,7 @@ var _ = Describe("Calico windows upgrader", func() {
 
 		// Nodes should not have changed.
 		Consistently(func() error {
-			return assertNodesUnchanged(cs, n1, n2)
+			return assertNodesUnchanged(cs, n1, n2, n3)
 		}, 10*time.Second, 100*time.Millisecond).Should(BeNil())
 
 		mockStatus.AssertExpectations(GinkgoT())
@@ -159,11 +150,11 @@ var _ = Describe("Calico windows upgrader", func() {
 
 	It("should upgrade outdated nodes", func() {
 		// Only node n2 should be upgraded.
-		mockStatus.On("AddWindowsNodeUpgrade", "node2", currentEnterpriseVersion)
+		mockStatus.On("AddWindowsNodeUpgrade", "node2", currentCalicoVersion)
 
 		n1 := createNode(cs, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
-		n2 := createNode(cs, "node2", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Enterprise-v2.0.0"})
-		n3 := createNode(cs, "node3", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: currentEnterpriseVersion})
+		n2 := createNode(cs, "node2", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.0"})
+		n3 := createNode(cs, "node3", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: currentCalicoVersion})
 
 		// Create the upgrader and start it.
 		c := newCalicoWindowsUpgrader(cs, client, nlw, mockStatus, requestChan)
@@ -189,7 +180,7 @@ var _ = Describe("Calico windows upgrader", func() {
 
 		// Set the latest Calico Windows version like the node service would.
 		mockStatus.On("RemoveWindowsNodeUpgrade", "node2")
-		setNodeVersion(cs, c.nodeIndexer, n2, currentEnterpriseVersion)
+		setNodeVersion(cs, c.nodeIndexer, n2, currentCalicoVersion)
 
 		// Ensure that when calicoWindowsUpgrader runs again, the node taint and
 		// label are removed.
@@ -201,7 +192,7 @@ var _ = Describe("Calico windows upgrader", func() {
 	})
 
 	It("should upgrade outdated nodes based on the installation variant", func() {
-		n1 := createNode(cs, "node1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: currentEnterpriseVersion})
+		n1 := createNode(cs, "node1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.0"})
 
 		c := newCalicoWindowsUpgrader(cs, client, nlw, mockStatus, requestChan)
 		r := newTestReconciler(requestChan, func() error {
@@ -360,6 +351,9 @@ func (r *testReconciler) run() {
 			select {
 			case <-r.requestChan:
 				err := r.handler()
+				if err != nil {
+					fmt.Printf("\n\nHandler returned error: %v\n\n", err)
+				}
 				Expect(err).NotTo(HaveOccurred())
 			case <-r.doneChan:
 				break out

@@ -43,7 +43,12 @@ func (r *ReconcileLogStorage) createEsGateway(
 		return reconcile.Result{}, false, nil
 	}
 
-	esInternalCertSecret, err := utils.GetSecret(ctx, r.client, relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
+	var esInternalCertSecret *corev1.Secret
+	if r.elasticExternal {
+		esInternalCertSecret, err = utils.GetSecret(ctx, r.client, relasticsearch.InternalCertSecret, rmeta.OperatorNamespace())
+	} else {
+		esInternalCertSecret, err = utils.GetSecret(ctx, r.client, relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
+	}
 	if err != nil {
 		reqLogger.Error(err, "failed to get Elasticsearch tls certificate secret")
 		r.status.SetDegraded("Failed to get Elasticsearch tls certificate secret", err.Error())

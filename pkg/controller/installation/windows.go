@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -26,11 +27,13 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
@@ -61,6 +64,7 @@ type calicoWindowsUpgrader struct {
 	nodesToUpgrade       []*corev1.Node
 	nodesUpgrading       []*corev1.Node
 	nodesFinishedUpgrade []*corev1.Node
+	maxUnavailable       *intstr.IntOrString
 }
 
 func (w *calicoWindowsUpgrader) hasPendingUpgrades() bool {
@@ -86,11 +90,13 @@ func (w *calicoWindowsUpgrader) triggerReconcileRequest(obj interface{}) {
 
 // newCalicoWindowsUpgrader creates a Calico Windows upgrader.
 func newCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, nodeListWatch cache.ListerWatcher, statusManager status.StatusManager, requestChan chan<- utils.ReconcileRequest) *calicoWindowsUpgrader {
+	mu := intstr.FromInt(1)
 	w := &calicoWindowsUpgrader{
-		clientset:     cs,
-		client:        c,
-		statusManager: statusManager,
-		requestChan:   requestChan,
+		clientset:      cs,
+		client:         c,
+		statusManager:  statusManager,
+		requestChan:    requestChan,
+		maxUnavailable: &mu,
 	}
 
 	handlers := cache.ResourceEventHandlerFuncs{
@@ -109,7 +115,10 @@ func newCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, nodeList
 	return w
 }
 
-func (w *calicoWindowsUpgrader) upgradeWindowsNodes(expectedProduct operatorv1.ProductVariant) error {
+// upgradeWindowsNodes takes the product for which the nodes are expected to be
+// running, and an update strategy that helps determine how many nodes can be
+// upgraded at any time.
+func (w *calicoWindowsUpgrader) upgradeWindowsNodes(expectedProduct operatorv1.ProductVariant, nodeUpdateStrategy appsv1.DaemonSetUpdateStrategy) error {
 	// For now, do nothing if the upgrade version is Enterprise since current
 	// Enterprise versions do not support the upgrade.
 	// This prevents a user from accidentally triggering an
@@ -125,6 +134,12 @@ func (w *calicoWindowsUpgrader) upgradeWindowsNodes(expectedProduct operatorv1.P
 	expectedVersion := common.WindowsLatestVersionString(expectedProduct)
 	windowsLog.V(1).Info(fmt.Sprintf("Expected version: %v", expectedVersion))
 
+	mu := intstr.FromInt(1)
+	w.maxUnavailable = &mu
+	if nodeUpdateStrategy.RollingUpdate != nil {
+		w.maxUnavailable = nodeUpdateStrategy.RollingUpdate.MaxUnavailable
+	}
+
 	err := w.getNodesToUpgrade(expectedVersion)
 	if err != nil {
 		return fmt.Errorf("Error getting windows nodes: %w", err)
@@ -138,13 +153,71 @@ func (w *calicoWindowsUpgrader) upgradeWindowsNodes(expectedProduct operatorv1.P
 	return nil
 }
 
+// getMaxNodesToUpgrade returns a list of nodes to upgrade, which is a subset of
+// the input list of nodes to upgrade. The list of nodes to upgrade is filtered
+// depending on the upgrade type and the value of
+// installation.spec.nodeUpdateStrategy.rollingUpdate.maxUnavailable.
+func (w *calicoWindowsUpgrader) getMaxNodesToUpgrade(newVersion string, nodesToUpgrade []*corev1.Node, nodesUpgrading []*corev1.Node, maxUnavailable int) []*corev1.Node {
+	// Figure out how many of the nodes already upgrading count towards
+	// maxUnavailable. We do not apply maxUnavailable to OS - Enterprise
+	// upgrades so discount those.
+	nodesAlreadyUpgrading := 0
+	for _, node := range nodesUpgrading {
+		// Version should exist on the node but skip it if it doesn't.
+		exists, currentVersion := common.GetWindowsNodeVersion(node)
+		if !exists {
+			windowsLog.V(1).Info(fmt.Sprintf("Node %v is missing version annotation, skipping", node.Name))
+			continue
+		}
+
+		// If the upgrade is from OS -> Enterprise, we trigger the upgrade
+		// immediately.
+		if strings.HasPrefix(currentVersion, "Calico") && strings.HasPrefix(newVersion, "Enterprise") {
+			windowsLog.V(1).Info(fmt.Sprintf("Node %v is upgrading from OS -> Enterprise so do not count towards upgrading count", node.Name))
+			continue
+		}
+		windowsLog.V(1).Info(fmt.Sprintf("Node %v is already upgrading and counts towards limit", node.Name))
+		nodesAlreadyUpgrading++
+	}
+
+	upgradeOStoEnt := []*corev1.Node{}
+	upgradeRest := []*corev1.Node{}
+	for _, node := range nodesToUpgrade {
+		// Version should exist on the node but skip it if it doesn't.
+		exists, currentVersion := common.GetWindowsNodeVersion(node)
+		if !exists {
+			windowsLog.V(1).Info(fmt.Sprintf("Node %v is missing version annotation, skipping", node.Name))
+			continue
+		}
+
+		// If the upgrade is from OS -> Enterprise, we trigger the upgrade
+		// immediately.
+		if strings.HasPrefix(currentVersion, "Calico") && strings.HasPrefix(newVersion, "Enterprise") {
+			windowsLog.V(1).Info(fmt.Sprintf("Node %v needs to be upgraded from OS -> Enterprise, adding to toUpgrade", node.Name))
+			upgradeOStoEnt = append(upgradeOStoEnt, node)
+			continue
+		}
+
+		// If the number of upgrading nodes (subject to maxUnavailable) is less
+		// than maxUnavailable, then add it to the list.
+		if nodesAlreadyUpgrading < maxUnavailable {
+			windowsLog.V(1).Info(fmt.Sprintf("nodesAlreadyUpgrading < maxUnavailable, adding node %v", node.Name))
+			upgradeRest = append(upgradeRest, node)
+			nodesAlreadyUpgrading++
+		}
+	}
+
+	return append(upgradeOStoEnt, upgradeRest...)
+}
+
 // getNodesToUpgrade checks the given nodes one by one and determines whether
 // it an upgrade should be triggered or whether an upgrade has been detected as
 // completed.
 func (w *calicoWindowsUpgrader) getNodesToUpgrade(expectedVersion string) error {
 	nodesToUpgrade := []*corev1.Node{}
-	nodesFinishedUpgraded := []*corev1.Node{}
+	nodesFinishedUpgrade := []*corev1.Node{}
 	nodesUpgrading := []*corev1.Node{}
+	numWindowsNodes := 0
 
 	for _, obj := range w.nodeIndexer.List() {
 		node, ok := obj.(*corev1.Node)
@@ -155,6 +228,7 @@ func (w *calicoWindowsUpgrader) getNodesToUpgrade(expectedVersion string) error 
 		if node.Labels[corev1.LabelOSStable] != "windows" {
 			continue
 		}
+		numWindowsNodes++
 
 		windowsLog.V(1).Info(fmt.Sprintf("Processing node %v", node.Name))
 		exists, version := common.GetWindowsNodeVersion(node)
@@ -170,7 +244,7 @@ func (w *calicoWindowsUpgrader) getNodesToUpgrade(expectedVersion string) error 
 			// If the version is outdated and the node does not yet have the upgrade
 			// label, we need to add the label to trigger the upgrade.
 			if _, exists := node.Labels[common.CalicoWindowsUpgradeScriptLabel]; !exists {
-				windowsLog.V(1).Info(fmt.Sprintf("Node %v doesn't have the upgrade label, going to add it", node.Name))
+				windowsLog.V(1).Info(fmt.Sprintf("Node %v doesn't have the upgrade label", node.Name))
 				nodesToUpgrade = append(nodesToUpgrade, node)
 			} else {
 				// If the version is outdated but it already has the upgrade label
@@ -185,15 +259,22 @@ func (w *calicoWindowsUpgrader) getNodesToUpgrade(expectedVersion string) error 
 			// removed. If it does not have the label, it's already upgraded and
 			// nothing needs to be done.
 			if _, exists := node.Labels[common.CalicoWindowsUpgradeScriptLabel]; exists {
-				windowsLog.V(1).Info(fmt.Sprintf("Node %v still has the upgrade label, removing it", node.Name))
-				nodesFinishedUpgraded = append(nodesFinishedUpgraded, node)
+				windowsLog.V(1).Info(fmt.Sprintf("Node %v has finished the upgrade", node.Name))
+				nodesFinishedUpgrade = append(nodesFinishedUpgrade, node)
 			}
 		}
 	}
 
-	w.nodesToUpgrade = nodesToUpgrade
+	windowsLog.V(1).Info(fmt.Sprintf("Total Windows nodes=%v, maxUnavailable=%v", numWindowsNodes, w.maxUnavailable.String()))
+	maxUpgradeNodes, err := intstr.GetValueFromIntOrPercent(w.maxUnavailable, numWindowsNodes, false)
+	if err != nil {
+		return fmt.Errorf("Invalid maxUnavailable value: %w", err)
+	}
+	windowsLog.V(1).Info(fmt.Sprintf("Max upgrading nodes = %v", maxUpgradeNodes))
+
+	w.nodesToUpgrade = w.getMaxNodesToUpgrade(expectedVersion, nodesToUpgrade, nodesUpgrading, maxUpgradeNodes)
 	w.nodesUpgrading = nodesUpgrading
-	w.nodesFinishedUpgrade = nodesFinishedUpgraded
+	w.nodesFinishedUpgrade = nodesFinishedUpgrade
 
 	windowsLog.V(1).Info(fmt.Sprintf("nodesToUpgrade=%v, nodesUpgrading=%v, nodesFinishedUpgrade=%v", len(w.nodesToUpgrade), len(w.nodesUpgrading), len(w.nodesFinishedUpgrade)))
 	return nil

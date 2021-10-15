@@ -55,6 +55,7 @@ var _ = Describe("CRD management tests", func() {
 			Scheme: scheme,
 		})
 		Expect(err).NotTo(HaveOccurred())
+		verifyCRDsExist(c)
 		// Save the networkpolicies CRD so we can restore it when finished
 		npCRD = &apiextenv1.CustomResourceDefinition{
 			TypeMeta:   metav1.TypeMeta{Kind: "CustomResourceDefinition", APIVersion: "apiextensions.k8s.io/v1"},

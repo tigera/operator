@@ -1098,10 +1098,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 
-				// Create a Windows node running a future supported Enterprise version
-				// Note: currently Calico windows upgrades are not supported for
-				// Enterprise.
-				n1 := createNode(cs, "windows1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Enterprise-v3.11.0"})
+				n1 := createNode(cs, "windows1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
 
 				// Node should not have changed.
 				Consistently(func() error {
@@ -1118,15 +1115,10 @@ var _ = Describe("Testing core-controller installation", func() {
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 
-				n1 := createNode(cs, "windows1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.0"})
+				n1 := createNode(cs, "windows1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
 				n2 := createNode(cs, "windows2", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: currentCalicoVersion})
-				// Create a Windows node running a future supported Enterprise version
-				// Note: currently Calico windows upgrades are not supported for
-				// Enterprise.
-				n3 := createNode(cs, "windows3", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Enterprise-v3.11.0"})
 
 				mockStatus.On("AddWindowsNodeUpgrade", "windows1", currentCalicoVersion)
-				mockStatus.On("AddWindowsNodeUpgrade", "windows3", currentCalicoVersion)
 
 				// Up-to-date node should not have changed.
 				Consistently(func() error {
@@ -1135,7 +1127,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 				// Ensure that outdated nodes have the new label and taint.
 				Eventually(func() error {
-					return assertNodesHadUpgradeTriggered(cs, n1, n3)
+					return assertNodesHadUpgradeTriggered(cs, n1)
 				}, 10*time.Second).Should(BeNil())
 
 				// No calls to AddWindowsNodeUpgrade expected.

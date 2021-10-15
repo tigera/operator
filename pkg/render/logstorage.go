@@ -64,6 +64,7 @@ const (
 	ElasticsearchName                     = "tigera-secure"
 	ElasticsearchServiceName              = "tigera-secure-es-http"
 	ESGatewayServiceName                  = "tigera-secure-es-gateway-http"
+	ESGatewayDefaultPort                  = 9200
 	ElasticsearchSecureSettingsSecretName = "tigera-elasticsearch-secure-settings"
 	ElasticsearchOperatorUserSecret       = "tigera-ee-operator-elasticsearch-access"
 	ElasticsearchAdminUserSecret          = "tigera-secure-es-elastic-user"

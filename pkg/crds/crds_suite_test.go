@@ -12,22 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package test
+package crds
 
 import (
 	"testing"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/onsi/ginkgo/reporters"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-func TestComponent(t *testing.T) {
-	logf.SetLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(GinkgoWriter)))
+func TestStatus(t *testing.T) {
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../report/component_suite.xml")
-	RunSpecsWithDefaultAndCustomReporters(t, "FV test Suite", []Reporter{junitReporter})
+	junitReporter := reporters.NewJUnitReporter("../../report/crds_suite.xml")
+	RunSpecsWithDefaultAndCustomReporters(t, "pkg/crds Suite", []Reporter{junitReporter})
 }

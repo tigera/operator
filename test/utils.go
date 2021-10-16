@@ -37,7 +37,7 @@ import (
 // and populates the provided client.Object with the current state of the object
 // in the cluster.
 func ExpectResourceCreated(c client.Client, obj client.Object) {
-	Eventually(func() error {
+	EventuallyWithOffset(1, func() error {
 		return GetResource(c, obj)
 	}, 10*time.Second).Should(BeNil())
 }
@@ -45,14 +45,14 @@ func ExpectResourceCreated(c client.Client, obj client.Object) {
 // ExpectResourceDestroyed asserts that the given object no longer exists.
 func ExpectResourceDestroyed(c client.Client, obj client.Object) {
 	var err error
-	Eventually(func() error {
+	EventuallyWithOffset(1, func() error {
 		err = GetResource(c, obj)
 		return err
-	}, 10*time.Second).ShouldNot(BeNil())
+	}, 10*time.Second).ShouldNot(BeNil(), fmt.Sprintf("GetResource %s should return error", obj.GetName()))
 
 	serr, ok := err.(*errors.StatusError)
-	Expect(ok).To(BeTrue(), fmt.Sprintf("error was not StatusError: %v", err))
-	Expect(serr.ErrStatus.Code).To(Equal(int32(404)))
+	ExpectWithOffset(1, ok).To(BeTrue(), fmt.Sprintf("error was not StatusError: %v", err))
+	ExpectWithOffset(1, serr.ErrStatus.Code).To(Equal(int32(404)))
 }
 
 // GetResource gets the requested object, populating obj with its contents.

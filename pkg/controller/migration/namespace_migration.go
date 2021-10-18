@@ -539,7 +539,7 @@ func (m *CoreNamespaceMigration) migrateEachNode(ctx context.Context, log logr.L
 				// Pause for a little bit to give a chance for the label changes to propagate.
 				time.Sleep(1 * time.Second)
 			} else {
-				log.WithValues("error", err).V(1).Info("Error checking for new healthy pods")
+				log.WithValues("reason", err).V(1).Info("Failed to check for new healthy pods")
 				time.Sleep(10 * time.Second)
 			}
 

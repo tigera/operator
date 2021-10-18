@@ -100,6 +100,14 @@ func addWatch(c controller.Controller) error {
 		return fmt.Errorf("failed to watch PodMonitor resource: %w", err)
 	}
 
+	if err = utils.AddSecretsWatch(c, render.AlertmanagerConfigSecret, common.OperatorNamespace()); err != nil {
+		return fmt.Errorf("failed to watch Alertmanager configuration secret in Operator namespace: %w", err)
+	}
+
+	if err = utils.AddSecretsWatch(c, render.AlertmanagerConfigSecret, common.TigeraPrometheusNamespace); err != nil {
+		return fmt.Errorf("failed to watch Alertmanager configuration secret in Prometheus namespace: %w", err)
+	}
+
 	return err
 }
 
@@ -135,7 +143,7 @@ func requiresPrometheusResources(client kubernetes.Interface) error {
 	return nil
 }
 
-func waitToAddWatch(c controller.Controller, client kubernetes.Interface, log logr.Logger, readyFlag *utils.ReadyFlag) error {
+func waitToAddPrometheusWatch(c controller.Controller, client kubernetes.Interface, log logr.Logger, readyFlag *utils.ReadyFlag) error {
 	const (
 		initBackoff   = 30 * time.Second
 		maxBackoff    = 8 * time.Minute

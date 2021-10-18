@@ -318,7 +318,7 @@ var _ = Describe("Node rendering tests", func() {
 			{MountPath: "/var/run/nodeagent", Name: "policysync"},
 			{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
 			{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
-			{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: true},
+			{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
 
@@ -565,7 +565,7 @@ var _ = Describe("Node rendering tests", func() {
 			{MountPath: "/var/run/nodeagent", Name: "policysync"},
 			{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
 			{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
-			{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: true},
+			{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 			{MountPath: "/sys/fs/bpf", Name: "bpffs"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
@@ -840,6 +840,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "lib-modules", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/lib/modules"}}},
 			{Name: "var-run", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run"}}},
 			{Name: "var-lib", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib"}}},
+			{name: "var-log", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log"}}},
 			{Name: "xtables-lock", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
 			{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/opt/cni/bin"}}},
 			{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/etc/cni/net.d"}}},
@@ -875,10 +876,11 @@ var _ = Describe("Node rendering tests", func() {
 			{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
 			{MountPath: "/var/run", Name: "var-run"},
 			{MountPath: "/var/lib", Name: "var-lib"},
+			{MountPath: "/var/log", Name: "var-log"},
 			{MountPath: "/var/run/nodeagent", Name: "policysync"},
 			{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
 			{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
-			{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: true},
+			{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
 
@@ -1104,7 +1106,7 @@ var _ = Describe("Node rendering tests", func() {
 			{MountPath: "/var/run/nodeagent", Name: "policysync"},
 			{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
 			{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
-			{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: true},
+			{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
 
@@ -1552,7 +1554,7 @@ var _ = Describe("Node rendering tests", func() {
 			{MountPath: "/var/run/nodeagent", Name: "policysync"},
 			{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
 			{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
-			{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: true},
+			{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
 

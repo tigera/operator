@@ -1,6 +1,8 @@
 package options
 
 import (
+	"context"
+
 	v1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 )
@@ -16,4 +18,5 @@ type AddOptions struct {
 	ClusterDomain       string
 	KubernetesVersion   *common.VersionInfo
 	ManageCRDs          bool
+	ShutdownContext     context.Context
 }

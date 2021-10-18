@@ -56,8 +56,10 @@ const (
 var _ = Describe("Mainline component function tests", func() {
 	var c client.Client
 	var mgr manager.Manager
+	var shutdownContext context.Context
+	var cancel context.CancelFunc
 	BeforeEach(func() {
-		c, mgr = setupManager(ManageCRDsDisable)
+		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable)
 		verifyCRDsExist(c)
 		ns := &corev1.Namespace{
 			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
@@ -68,6 +70,19 @@ var _ = Describe("Mainline component function tests", func() {
 		if err != nil && !kerror.IsAlreadyExists(err) {
 			Expect(err).NotTo(HaveOccurred())
 		}
+		//
+		Eventually(func() error {
+			u := &unstructured.Unstructured{}
+			u.SetGroupVersionKind(schema.GroupVersionKind{
+				Group:   "operator.tigera.io",
+				Version: "v1",
+				Kind:    "Installation",
+			})
+
+			k := client.ObjectKey{Name: "default"}
+			err := c.Get(context.Background(), k, u)
+			return err
+		}, 20*time.Second).ShouldNot(BeNil())
 	})
 
 	AfterEach(func() {
@@ -126,9 +141,18 @@ var _ = Describe("Mainline component function tests", func() {
 		})
 
 		It("Should install resources for a CRD", func() {
-			ctx, cancel := context.WithCancel(context.TODO())
-			defer cancel()
-			installResourceCRD(c, mgr, ctx, nil)
+			done := installResourceCRD(c, mgr, shutdownContext, nil)
+			defer func() {
+				cancel()
+				Eventually(func() error {
+					select {
+					case <-done:
+						return nil
+					default:
+						return fmt.Errorf("operator did not shutdown")
+					}
+				}, 60*time.Second).Should(BeNil())
+			}()
 			verifyCalicoHasDeployed(c)
 
 			instance := &operator.Installation{
@@ -154,13 +178,13 @@ var _ = Describe("Mainline component function tests", func() {
 					return err
 				}
 				if reflect.DeepEqual(instance.Status, operator.InstallationStatus{}) {
-					return fmt.Errorf("installation status is empty: %v", instance)
+					return fmt.Errorf("installation status is empty: %+v", instance)
 				}
 				if instance.Status.Variant != operator.Calico {
-					return fmt.Errorf("installation status was %v, expected: %v", instance.Status, operator.Calico)
+					return fmt.Errorf("installation status was %+v, expected: %v", instance.Status, operator.Calico)
 				}
 				return nil
-			}, 30*time.Second, 50*time.Millisecond).Should(BeNil())
+			}, 30*time.Second, 500*time.Millisecond).Should(BeNil())
 
 		})
 	})
@@ -172,9 +196,18 @@ var _ = Describe("Mainline component function tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 			}
 
-			ctx, cancel := context.WithCancel(context.TODO())
-			defer cancel()
-			installResourceCRD(c, mgr, ctx, nil)
+			done := installResourceCRD(c, mgr, shutdownContext, nil)
+			defer func() {
+				cancel()
+				Eventually(func() error {
+					select {
+					case <-done:
+						return nil
+					default:
+						return fmt.Errorf("operator did not shutdown")
+					}
+				}, 60*time.Second).Should(BeNil())
+			}()
 			verifyCalicoHasDeployed(c)
 
 			By("Deleting CR after its tigera status becomes available")
@@ -193,8 +226,10 @@ var _ = Describe("Mainline component function tests", func() {
 var _ = Describe("Mainline component function tests with ignored resource", func() {
 	var c client.Client
 	var mgr manager.Manager
+	var shutdownContext context.Context
+	var cancel context.CancelFunc
 	BeforeEach(func() {
-		c, mgr = setupManager(ManageCRDsDisable)
+		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable)
 		verifyCRDsExist(c)
 	})
 	AfterEach(func() {
@@ -218,9 +253,18 @@ var _ = Describe("Mainline component function tests with ignored resource", func
 		Expect(err).NotTo(HaveOccurred())
 
 		By("Running the operator")
-		ctx, cancel := context.WithCancel(context.TODO())
-		defer cancel()
-		RunOperator(mgr, ctx)
+		done := RunOperator(mgr, shutdownContext)
+		defer func() {
+			cancel()
+			Eventually(func() error {
+				select {
+				case <-done:
+					return nil
+				default:
+					return fmt.Errorf("operator did not shutdown")
+				}
+			}, 60*time.Second).Should(BeNil())
+		}()
 
 		By("Verifying resources were not created")
 		ds := &apps.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-node", Namespace: "calico-system"}}
@@ -258,7 +302,7 @@ func assertAvailable(ts *operator.TigeraStatus) error {
 	return nil
 }
 
-func setupManager(manageCRDs bool) (client.Client, manager.Manager) {
+func setupManager(manageCRDs bool) (client.Client, context.Context, context.CancelFunc, manager.Manager) {
 	// Create a Kubernetes client.
 	cfg, err := config.GetConfig()
 	Expect(err).NotTo(HaveOccurred())
@@ -274,18 +318,21 @@ func setupManager(manageCRDs bool) (client.Client, manager.Manager) {
 	// Setup Scheme for all resources
 	err = apis.AddToScheme(mgr.GetScheme())
 	Expect(err).NotTo(HaveOccurred())
+
+	ctx, cancel := context.WithCancel(context.TODO())
 	// Setup all Controllers
 	err = controllers.AddToManager(mgr, options.AddOptions{
 		DetectedProvider:    operator.ProviderNone,
 		EnterpriseCRDExists: true,
 		AmazonCRDExists:     true,
 		ManageCRDs:          manageCRDs,
+		ShutdownContext:     ctx,
 	})
 	Expect(err).NotTo(HaveOccurred())
-	return mgr.GetClient(), mgr
+	return mgr.GetClient(), ctx, cancel, mgr
 }
 
-func installResourceCRD(c client.Client, mgr manager.Manager, ctx context.Context, spec *operator.InstallationSpec) {
+func installResourceCRD(c client.Client, mgr manager.Manager, ctx context.Context, spec *operator.InstallationSpec) (doneChan chan struct{}) {
 	s := operator.InstallationSpec{}
 	if spec != nil {
 		s = *spec
@@ -300,7 +347,7 @@ func installResourceCRD(c client.Client, mgr manager.Manager, ctx context.Contex
 	Expect(err).NotTo(HaveOccurred())
 
 	By("Running the operator")
-	RunOperator(mgr, ctx)
+	return RunOperator(mgr, ctx)
 }
 
 func verifyCalicoHasDeployed(c client.Client) {

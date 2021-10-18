@@ -134,8 +134,8 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		clusterDomain:        opts.ClusterDomain,
 		manageCRDs:           opts.ManageCRDs,
 	}
-	r.status.Run()
-	r.typhaAutoscaler.start()
+	r.status.Run(opts.ShutdownContext)
+	r.typhaAutoscaler.start(opts.ShutdownContext)
 	return r, nil
 }
 
@@ -1494,7 +1494,7 @@ func (r *ReconcileInstallation) updateCRDs(ctx context.Context, variant operator
 	// Installation CR will not remove the CRDs.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
 	if err := handler.CreateOrUpdateOrDelete(ctx, crdComponent, nil); err != nil {
-		r.SetDegraded("Error creating / updating resource", err, log)
+		r.SetDegraded("Error creating / updating CRD resource", err, log)
 		return err
 	}
 	return nil

@@ -56,7 +56,7 @@ var log = logf.Log.WithName("status_manager")
 // degraded if it is running successfully but a configuration change has resulted in a configuration that cannot
 // be actioned.
 type StatusManager interface {
-	Run()
+	Run(ctx context.Context)
 	OnCRFound()
 	OnCRNotFound()
 	AddDaemonsets(dss []types.NamespacedName)
@@ -173,7 +173,7 @@ func (m *statusManager) isExplicitlyDegraded() bool {
 }
 
 // Run starts the status manager state monitoring routine.
-func (m *statusManager) Run() {
+func (m *statusManager) Run(ctx context.Context) {
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
@@ -184,6 +184,9 @@ func (m *statusManager) Run() {
 			select {
 			case <-ticker.C:
 				continue
+			case <-ctx.Done():
+				log.WithName(m.component).Info("Status manager is stopping")
+				return
 			}
 		}
 	}()
@@ -564,7 +567,7 @@ func (m *statusManager) containerErrorMessage(p corev1.Pod, c corev1.ContainerSt
 	return ""
 }
 
-func (m *statusManager) set(conditions ...operator.TigeraStatusCondition) {
+func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondition) {
 	if m.enabled == nil || !*m.enabled {
 		// Never set any conditions unless the status manager is enabled.
 		return
@@ -617,8 +620,16 @@ func (m *statusManager) set(conditions ...operator.TigeraStatusCondition) {
 		if err = m.client.Create(context.TODO(), &ts); err != nil {
 			log.WithValues("error", err).Info("Failed to create tigera status")
 		}
-	} else if err = m.client.Status().Update(context.TODO(), &ts); err != nil {
-		log.WithValues("error", err).Info("Failed to update tigera status")
+	} else {
+		err = m.client.Status().Update(context.TODO(), &ts)
+		if err != nil {
+			if retry && errors.IsConflict(err) {
+				log.WithValues("reason", err).Info("update to tigera status conflicted, retrying")
+				m.set(false, conditions...)
+			} else {
+				log.WithValues("error", err).Info("Failed to update tigera status")
+			}
+		}
 	}
 }
 
@@ -629,7 +640,7 @@ func (m *statusManager) setAvailable(reason, msg string) {
 	conditions := []operator.TigeraStatusCondition{
 		{Type: operator.ComponentAvailable, Status: operator.ConditionTrue, Reason: reason, Message: msg},
 	}
-	m.set(conditions...)
+	m.set(true, conditions...)
 }
 
 func (m *statusManager) setDegraded(reason, msg string) {
@@ -639,7 +650,7 @@ func (m *statusManager) setDegraded(reason, msg string) {
 	conditions := []operator.TigeraStatusCondition{
 		{Type: operator.ComponentDegraded, Status: operator.ConditionTrue, Reason: reason, Message: msg},
 	}
-	m.set(conditions...)
+	m.set(true, conditions...)
 }
 
 func (m *statusManager) setProgressing(reason, msg string) {
@@ -649,7 +660,7 @@ func (m *statusManager) setProgressing(reason, msg string) {
 	conditions := []operator.TigeraStatusCondition{
 		{Type: operator.ComponentProgressing, Status: operator.ConditionTrue, Reason: reason, Message: msg},
 	}
-	m.set(conditions...)
+	m.set(true, conditions...)
 }
 
 func (m *statusManager) clearDegraded() {
@@ -659,7 +670,7 @@ func (m *statusManager) clearDegraded() {
 	conditions := []operator.TigeraStatusCondition{
 		{Type: operator.ComponentDegraded, Status: operator.ConditionFalse},
 	}
-	m.set(conditions...)
+	m.set(true, conditions...)
 }
 
 func (m *statusManager) clearProgressing() {
@@ -669,7 +680,7 @@ func (m *statusManager) clearProgressing() {
 	conditions := []operator.TigeraStatusCondition{
 		{Type: operator.ComponentProgressing, Status: operator.ConditionFalse},
 	}
-	m.set(conditions...)
+	m.set(true, conditions...)
 }
 
 func (m *statusManager) clearAvailable() {
@@ -679,7 +690,7 @@ func (m *statusManager) clearAvailable() {
 	conditions := []operator.TigeraStatusCondition{
 		{Type: operator.ComponentAvailable, Status: operator.ConditionFalse},
 	}
-	m.set(conditions...)
+	m.set(true, conditions...)
 }
 
 func (m *statusManager) progressingMessage() string {

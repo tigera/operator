@@ -262,6 +262,7 @@ func main() {
 		ClusterDomain:       clusterDomain,
 		KubernetesVersion:   kubernetesVersion,
 		ManageCRDs:          manageCRDs,
+		ShutdownContext:     sigHandler,
 	}
 
 	err = controllers.AddToManager(mgr, options)

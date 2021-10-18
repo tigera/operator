@@ -51,18 +51,18 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 	statusManager := status.New(mgr.GetClient(), "management-cluster-connection", opts.KubernetesVersion)
-	return add(mgr, newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider))
+	return add(mgr, newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider, opts))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, p operatorv1.Provider) reconcile.Reconciler {
+func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, p operatorv1.Provider, opts options.AddOptions) reconcile.Reconciler {
 	c := &ReconcileConnection{
 		Client:   cli,
 		Scheme:   schema,
 		Provider: p,
 		status:   statusMgr,
 	}
-	c.status.Run()
+	c.status.Run(opts.ShutdownContext)
 	return c
 }
 

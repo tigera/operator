@@ -516,7 +516,7 @@ func (m *statusManager) removeTigeraStatus() bool {
 		ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: m.component}}
 		err := m.client.Delete(context.TODO(), ts)
 		if err != nil && !errors.IsNotFound(err) {
-			log.WithValues("error", err).Info("Failed to remove TigeraStatus", m.component)
+			log.WithValues("error", err).Info("Failed to remove TigeraStatus", "component", m.component)
 		}
 		return true
 	}
@@ -577,7 +577,7 @@ func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondi
 	err := m.client.Get(context.TODO(), types.NamespacedName{Name: m.component}, &ts)
 	isNotFound := errors.IsNotFound(err)
 	if err != nil && !isNotFound {
-		log.WithValues("error", err).Info("Failed to get TigeraStatus %q: %v", m.component, err)
+		log.WithValues("error", err).Info("Failed to get TigeraStatus", "component", m.component)
 		return
 	}
 

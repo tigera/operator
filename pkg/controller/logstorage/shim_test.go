@@ -17,7 +17,10 @@
 package logstorage
 
 import (
+	"context"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -32,5 +35,11 @@ func NewReconcilerWithShims(
 	esCliCreator utils.ElasticsearchClientCreator,
 	clusterDomain string) (*ReconcileLogStorage, error) {
 
-	return newReconciler(cli, schema, status, provider, esCliCreator, clusterDomain)
+	opts := options.AddOptions{
+		DetectedProvider: provider,
+		ClusterDomain:    clusterDomain,
+		ShutdownContext:  context.TODO(),
+	}
+
+	return newReconciler(cli, schema, status, opts, esCliCreator)
 }

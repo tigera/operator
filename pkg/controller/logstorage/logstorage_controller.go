@@ -64,7 +64,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 
-	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage", opts.KubernetesVersion), opts.DetectedProvider, utils.NewElasticClient, opts.ClusterDomain)
+	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage", opts.KubernetesVersion), opts, utils.NewElasticClient)
 	if err != nil {
 		return err
 	}
@@ -73,17 +73,17 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, provider operatorv1.Provider, esCliCreator utils.ElasticsearchClientCreator, clusterDomain string) (*ReconcileLogStorage, error) {
+func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, opts options.AddOptions, esCliCreator utils.ElasticsearchClientCreator) (*ReconcileLogStorage, error) {
 	c := &ReconcileLogStorage{
 		client:        cli,
 		scheme:        schema,
 		status:        statusMgr,
-		provider:      provider,
+		provider:      opts.DetectedProvider,
 		esCliCreator:  esCliCreator,
-		clusterDomain: clusterDomain,
+		clusterDomain: opts.ClusterDomain,
 	}
 
-	c.status.Run()
+	c.status.Run(opts.ShutdownContext)
 	return c, nil
 }
 

@@ -18,7 +18,10 @@
 package clusterconnection
 
 import (
+	"context"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -26,6 +29,9 @@ import (
 )
 
 func NewReconcilerWithShims(cli client.Client, schema *runtime.Scheme, status status.StatusManager, provider operatorv1.Provider) reconcile.Reconciler {
+	opts := options.AddOptions{
+		ShutdownContext: context.Background(),
+	}
 
-	return newReconciler(cli, schema, status, provider)
+	return newReconciler(cli, schema, status, provider, opts)
 }

@@ -61,7 +61,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) reconcile.Recon
 		provider: opts.DetectedProvider,
 		status:   status.New(mgr.GetClient(), "amazon-cloud-integration", opts.KubernetesVersion),
 	}
-	r.status.Run()
+	r.status.Run(opts.ShutdownContext)
 	return r
 }
 

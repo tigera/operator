@@ -69,7 +69,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileAuthe
 		status:        status.New(mgr.GetClient(), "authentication", opts.KubernetesVersion),
 		clusterDomain: opts.ClusterDomain,
 	}
-	r.status.Run()
+	r.status.Run(opts.ShutdownContext)
 	return r
 }
 

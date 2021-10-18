@@ -43,6 +43,8 @@ import (
 var _ = Describe("CRD management tests", func() {
 	var c client.Client
 	var mgr manager.Manager
+	var shutdownContext context.Context
+	var cancel context.CancelFunc
 	var npCRD *apiextenv1.CustomResourceDefinition
 	var scheme *runtime.Scheme
 	BeforeEach(func() {
@@ -132,6 +134,18 @@ var _ = Describe("CRD management tests", func() {
 		npCRD.SetResourceVersion("")
 		err := c.Create(context.Background(), npCRD)
 		Expect(err).NotTo(HaveOccurred())
+		Eventually(func() error {
+			u := &unstructured.Unstructured{}
+			u.SetGroupVersionKind(schema.GroupVersionKind{
+				Group:   "apiextensions.k8s.io",
+				Version: "v1",
+				Kind:    "CustomResourceDefinition",
+			})
+
+			k := client.ObjectKey{Name: npCRD.Name}
+			err := c.Get(context.Background(), k, u)
+			return err
+		}, 20*time.Second).Should(BeNil())
 	})
 
 	Describe("Installing CRD", func() {
@@ -169,7 +183,7 @@ var _ = Describe("CRD management tests", func() {
 		})
 
 		It("Should create CRD if it doesn't exist", func() {
-			c, mgr = setupManager(ManageCRDsEnable)
+			c, shutdownContext, cancel, mgr = setupManager(ManageCRDsEnable)
 			ctx, cancel := context.WithCancel(context.TODO())
 			defer cancel()
 			installResourceCRD(c, mgr, ctx, nil)
@@ -204,6 +218,7 @@ var _ = Describe("CRD management tests", func() {
 			}, 60*time.Second, 1*time.Second).Should(BeNil())
 		})
 		AfterEach(func() {
+			cancel()
 			// Delete any CR that might have been created by the test.
 			instance := &operator.Installation{
 				TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
@@ -214,10 +229,8 @@ var _ = Describe("CRD management tests", func() {
 		})
 
 		It("Should add tier to networkpolicy CRD", func() {
-			c, mgr = setupManager(ManageCRDsEnable)
-			ctx, cancel := context.WithCancel(context.TODO())
-			defer cancel()
-			installResourceCRD(c, mgr, ctx, &operator.InstallationSpec{Variant: operator.TigeraSecureEnterprise})
+			c, shutdownContext, cancel, mgr = setupManager(ManageCRDsEnable)
+			installResourceCRD(c, mgr, shutdownContext, &operator.InstallationSpec{Variant: operator.TigeraSecureEnterprise})
 
 			By("Checking that the networkpolicies CRD is updated with tier")
 			Eventually(func() error {

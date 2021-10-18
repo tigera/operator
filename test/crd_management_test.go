@@ -185,8 +185,18 @@ var _ = Describe("CRD management tests", func() {
 		It("Should create CRD if it doesn't exist", func() {
 			c, shutdownContext, cancel, mgr = setupManager(ManageCRDsEnable)
 			ctx, cancel := context.WithCancel(context.TODO())
-			defer cancel()
-			installResourceCRD(c, mgr, ctx, nil)
+			done := installResourceCRD(c, mgr, ctx, nil)
+			defer func() {
+				cancel()
+				Eventually(func() error {
+					select {
+					case <-done:
+						return nil
+					default:
+						return fmt.Errorf("operator did not shutdown")
+					}
+				}, 60*time.Second).Should(BeNil())
+			}()
 
 			np := npCRD.DeepCopy()
 			By("Checking that the networkpolicies CRD is created")
@@ -230,7 +240,18 @@ var _ = Describe("CRD management tests", func() {
 
 		It("Should add tier to networkpolicy CRD", func() {
 			c, shutdownContext, cancel, mgr = setupManager(ManageCRDsEnable)
-			installResourceCRD(c, mgr, shutdownContext, &operator.InstallationSpec{Variant: operator.TigeraSecureEnterprise})
+			done := installResourceCRD(c, mgr, shutdownContext, &operator.InstallationSpec{Variant: operator.TigeraSecureEnterprise})
+			defer func() {
+				cancel()
+				Eventually(func() error {
+					select {
+					case <-done:
+						return nil
+					default:
+						return fmt.Errorf("operator did not shutdown")
+					}
+				}, 60*time.Second).Should(BeNil())
+			}()
 
 			By("Checking that the networkpolicies CRD is updated with tier")
 			Eventually(func() error {

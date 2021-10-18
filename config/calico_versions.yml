@@ -1,5 +1,7 @@
 title: master
 components:
+  libcalico-go:
+    version: master
   typha:
     version: master
   calico/node:

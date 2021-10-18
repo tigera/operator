@@ -87,7 +87,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
 	}
-	c.status.Run()
+	c.status.Run(opts.ShutdownContext)
 	return c
 
 }

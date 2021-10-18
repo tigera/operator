@@ -16,6 +16,8 @@ global_job_config:
     - chmod 0600 ~/.keys/*
     # Add the key to the ssh agent:
     - ssh-add ~/.keys/*
+    # Free up some space
+    - sudo rm -rf ~/.kiex ~/.phpbrew ~/.rbenv ~/.nvm ~/.kerl
 
 blocks:
   - name: Build

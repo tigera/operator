@@ -33,6 +33,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	rtest "github.com/tigera/operator/pkg/render/common/test"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -182,6 +183,72 @@ var _ = Describe("ES Gateway rendering tests", func() {
 			compareResources(createResources, expectedResources)
 		})
 
+		It("should apply controlPlaneNodeSelector correctly", func() {
+			installation.ControlPlaneNodeSelector = map[string]string{"foo": "bar"}
+
+			component := EsGateway(&Config{
+				installation,
+				[]*corev1.Secret{
+					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+				},
+				[]*corev1.Secret{
+					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: rmeta.OperatorNamespace()}},
+					{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: rmeta.OperatorNamespace()}},
+				},
+				[]*corev1.Secret{
+					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersUserSecret, Namespace: rmeta.OperatorNamespace()}},
+					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersVerificationUserSecret, Namespace: render.ElasticsearchNamespace}},
+					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersSecureUserSecret, Namespace: render.ElasticsearchNamespace}},
+				},
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: rmeta.OperatorNamespace()}},
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.InternalCertSecret, Namespace: render.ElasticsearchNamespace}},
+				clusterDomain, "tigera-mgmt",
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchAdminUserSecret, Namespace: rmeta.OperatorNamespace()}},
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: ExternalCertsSecret, Namespace: rmeta.OperatorNamespace()}},
+				"tenantId", true, true, "externalEs.com", "externalKb.com",
+			})
+
+			resources, _ := component.Objects()
+			d, ok := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue())
+			Expect(d.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{"foo": "bar"}))
+		})
+
+		It("should apply controlPlaneTolerations correctly", func() {
+			t := corev1.Toleration{
+				Key:      "foo",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "bar",
+			}
+
+			installation.ControlPlaneTolerations = []corev1.Toleration{t}
+			component := EsGateway(&Config{
+				installation,
+				[]*corev1.Secret{
+					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+				},
+				[]*corev1.Secret{
+					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: rmeta.OperatorNamespace()}},
+					{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: rmeta.OperatorNamespace()}},
+				},
+				[]*corev1.Secret{
+					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersUserSecret, Namespace: rmeta.OperatorNamespace()}},
+					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersVerificationUserSecret, Namespace: render.ElasticsearchNamespace}},
+					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersSecureUserSecret, Namespace: render.ElasticsearchNamespace}},
+				},
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: rmeta.OperatorNamespace()}},
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.InternalCertSecret, Namespace: render.ElasticsearchNamespace}},
+				clusterDomain, "tigera-mgmt",
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchAdminUserSecret, Namespace: rmeta.OperatorNamespace()}},
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: ExternalCertsSecret, Namespace: rmeta.OperatorNamespace()}},
+				"tenantId", true, true, "externalEs.com", "externalKb.com",
+			})
+
+			resources, _ := component.Objects()
+			d, ok := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue())
+			Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(t))
+		})
 	})
 })
 

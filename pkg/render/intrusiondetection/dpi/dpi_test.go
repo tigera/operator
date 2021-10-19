@@ -21,6 +21,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
 	appsv1 "k8s.io/api/apps/v1"
@@ -147,6 +148,10 @@ var (
 	nodeTLSSecret = &corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: render.NodeTLSSecretName}}
 
 	esConfigMap = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
+
+	pullSecrets = []*corev1.Secret{{
+		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "pull-secret", Namespace: rmeta.OperatorNamespace()}}}
 )
 
 type resourceTestObj struct {
@@ -166,7 +171,7 @@ var _ = Describe("DPI rendering tests", func() {
 			NodeTLSSecret:      nodeTLSSecret,
 			TyphaTLSSecret:     typhaTLSSecret,
 			TyphaCAConfigMap:   typhaCAConfigMap,
-			PullSecrets:        nil,
+			PullSecrets:        pullSecrets,
 			Openshift:          false,
 			HasNoLicense:       false,
 			HasNoDPIResource:   false,
@@ -182,6 +187,7 @@ var _ = Describe("DPI rendering tests", func() {
 			{name: render.NodeTLSSecretName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: render.TyphaTLSSecretName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: render.TyphaCAConfigMapName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: "pull-secret", ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -225,7 +231,7 @@ var _ = Describe("DPI rendering tests", func() {
 			NodeTLSSecret:      nodeTLSSecret,
 			TyphaTLSSecret:     typhaTLSSecret,
 			TyphaCAConfigMap:   typhaCAConfigMap,
-			PullSecrets:        nil,
+			PullSecrets:        pullSecrets,
 			Openshift:          true,
 			HasNoLicense:       false,
 			HasNoDPIResource:   false,
@@ -241,6 +247,7 @@ var _ = Describe("DPI rendering tests", func() {
 			{name: render.NodeTLSSecretName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: render.TyphaTLSSecretName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: render.TyphaCAConfigMapName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: "pull-secret", ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -263,14 +270,14 @@ var _ = Describe("DPI rendering tests", func() {
 		validateDPIComponents(resources, true)
 	})
 
-	It("Should delete resources for deep packet inspection if there is no valid product license", func() {
+	It("should delete resources for deep packet inspection if there is no valid product license", func() {
 		component := dpi.DPI(&dpi.DPIConfig{
 			IntrusionDetection: ids,
 			Installation:       &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
 			NodeTLSSecret:      nodeTLSSecret,
 			TyphaTLSSecret:     typhaTLSSecret,
 			TyphaCAConfigMap:   typhaCAConfigMap,
-			PullSecrets:        nil,
+			PullSecrets:        pullSecrets,
 			Openshift:          false,
 			HasNoLicense:       true,
 			HasNoDPIResource:   false,
@@ -282,6 +289,15 @@ var _ = Describe("DPI rendering tests", func() {
 		createResources, deleteResource := component.Objects()
 		expectedResources := []resourceTestObj{
 			{name: dpi.DeepPacketInspectionNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.NodeTLSSecretName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: render.TyphaTLSSecretName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: relasticsearch.PublicCertSecret, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: render.TyphaCAConfigMapName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: "pull-secret", ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
 		Expect(len(deleteResource)).To(Equal(len(expectedResources)))
@@ -292,14 +308,14 @@ var _ = Describe("DPI rendering tests", func() {
 		}
 	})
 
-	It("Should delete resources for deep packet inspection if TLS configs are not set", func() {
+	It("should delete resources for deep packet inspection if there is no DPI resource", func() {
 		component := dpi.DPI(&dpi.DPIConfig{
 			IntrusionDetection: ids,
 			Installation:       &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
 			NodeTLSSecret:      nil,
 			TyphaTLSSecret:     nil,
 			TyphaCAConfigMap:   nil,
-			PullSecrets:        nil,
+			PullSecrets:        pullSecrets,
 			Openshift:          false,
 			HasNoLicense:       false,
 			HasNoDPIResource:   true,
@@ -309,14 +325,27 @@ var _ = Describe("DPI rendering tests", func() {
 		})
 		createResources, deleteResource := component.Objects()
 		expectedResources := []resourceTestObj{
+			{name: render.NodeTLSSecretName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: render.TyphaTLSSecretName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: relasticsearch.PublicCertSecret, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: render.TyphaCAConfigMapName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: "pull-secret", ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
+		}
+		expectedCreateResources := []resourceTestObj{
 			{name: dpi.DeepPacketInspectionNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
 		}
-
 		Expect(len(deleteResource)).To(Equal(len(expectedResources)))
-		Expect(len(createResources)).To(Equal(0))
+		Expect(len(createResources)).To(Equal(len(expectedCreateResources)))
 
 		for i, expectedRes := range expectedResources {
 			rtest.ExpectResource(deleteResource[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+		}
+		for i, expectedRes := range expectedCreateResources {
+			rtest.ExpectResource(createResources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 	})
 })

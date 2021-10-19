@@ -20,7 +20,7 @@ test: fmt vet ut
 # The target architecture is select by setting the ARCH variable.
 # When ARCH is undefined it is set to the detected host architecture.
 # When ARCH differs from the host architecture a crossbuild will be performed.
-ARCHES=$(patsubst build/Dockerfile.%,%,$(wildcard build/Dockerfile.*))
+ARCHES ?= $(patsubst build/Dockerfile.%,%,$(wildcard build/Dockerfile.*))
 
 # BUILDARCH is the host architecture
 # ARCH is the target architecture
@@ -53,6 +53,7 @@ ifeq ($(ARCH),arm64)
 else
 	TARGET_PLATFORM=amd64
 endif
+EXTRA_DOCKER_ARGS += --platform=linux/$(TARGET_PLATFORM)
 
 # we want to be able to run the same recipe on multiple targets keyed on the image name
 # to do that, we would use the entire image name, e.g. calico/node:abcdefg, as the stem, or '%', in the target
@@ -216,9 +217,6 @@ $(BINDIR)/operator-$(ARCH): $(SRC_FILES)
 
 .PHONY: image
 image: build $(BUILD_IMAGE)
-image-all: $(addprefix sub-image-,$(VALIDARCHES))
-sub-image-%:
-	$(MAKE) image ARCH=$*
 
 $(BUILD_IMAGE): $(BUILD_IMAGE)-$(ARCH)
 $(BUILD_IMAGE)-$(ARCH): register $(BINDIR)/operator-$(ARCH)
@@ -227,9 +225,14 @@ ifeq ($(ARCH),amd64)
 	docker tag $(BUILD_IMAGE):latest-$(ARCH) $(BUILD_IMAGE):latest
 endif
 
-build/init/bin/kubectl:
-	mkdir -p build/init/bin
-	curl -o build/init/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/v1.14.0/bin/linux/amd64/kubectl
+.PHONY: images
+images: register image
+
+# Build the images for the target architecture
+.PHONY: image-all
+image-all: $(addprefix sub-image-,$(VALIDARCHES))
+sub-image-%:
+	$(MAKE) images ARCH=$*
 
 .PHONY: image-init
 image-init: image
@@ -237,14 +240,9 @@ ifeq ($(ARCH),amd64)
 	docker tag $(BUILD_IMAGE):latest-$(ARCH) $(BUILD_INIT_IMAGE):latest
 endif
 
-.PHONY: images
-images: register image
-
-# Build the images for the target architecture
-.PHONY: images-all
-images-all: $(addprefix sub-image-,$(VALIDARCHES))
-sub-image-%:
-	$(MAKE) images ARCH=$*
+build/init/bin/kubectl:
+	mkdir -p build/init/bin
+	curl -o build/init/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/v1.14.0/bin/linux/amd64/kubectl
 
 clean:
 	rm -rf build/_output
@@ -346,7 +344,7 @@ foss-checks:
 ###############################################################################
 .PHONY: ci
 ## Run what CI runs
-ci: clean format-check images-all test dirty-check validate-gen-versions
+ci: clean format-check image-all test dirty-check validate-gen-versions
 
 validate-gen-versions:
 	make gen-versions

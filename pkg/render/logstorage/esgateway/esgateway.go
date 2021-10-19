@@ -339,6 +339,8 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 			Annotations: e.tlsAnnotations,
 		},
 		Spec: corev1.PodSpec{
+			Tolerations:        e.installation.ControlPlaneTolerations,
+			NodeSelector:       e.installation.ControlPlaneNodeSelector,
 			ServiceAccountName: ServiceAccountName,
 			ImagePullSecrets:   secret.GetReferenceList(e.pullSecrets),
 			Volumes:            volumes,

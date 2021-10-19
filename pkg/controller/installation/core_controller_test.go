@@ -306,6 +306,7 @@ var _ = Describe("Testing core-controller installation", func() {
 		var c client.Client
 		var cs *kfake.Clientset
 		var ctx context.Context
+		var cancel context.CancelFunc
 		var r ReconcileInstallation
 		var scheme *runtime.Scheme
 		var mockStatus *status.MockStatus
@@ -322,7 +323,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// Create a client that will have a crud interface of k8s objects.
 			c = fake.NewFakeClientWithScheme(scheme)
-			ctx = context.Background()
+			ctx, cancel = context.WithCancel(context.Background())
 
 			// Create a fake clientset for the autoscaler.
 			var replicas int32 = 1
@@ -360,7 +361,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// Create the indexer and informer shared by the typhaAutoscaler and
 			// calicoWindowsUpgrader.
-			nlw := nodeListWatch{}
+			nlw := nodeListWatch{cs}
 			nodeIndexer, nodeInformer := node.CreateNodeIndexerInformer(cs, nlw)
 
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
@@ -379,7 +380,8 @@ var _ = Describe("Testing core-controller installation", func() {
 				requestChan:           requestChan,
 				doneChan:              make(chan interface{}),
 			}
-			r.typhaAutoscaler.start()
+
+			r.typhaAutoscaler.start(ctx)
 			r.calicoWindowsUpgrader.start()
 			go func() {
 				r.processRequests()
@@ -405,8 +407,8 @@ var _ = Describe("Testing core-controller installation", func() {
 					},
 				})).NotTo(HaveOccurred())
 		})
-
 		AfterEach(func() {
+			cancel()
 			r.stop()
 		})
 
@@ -646,6 +648,7 @@ var _ = Describe("Testing core-controller installation", func() {
 		var c client.Client
 		var cs *kfake.Clientset
 		var ctx context.Context
+		var cancel context.CancelFunc
 		var r ReconcileInstallation
 		var cr *operator.Installation
 
@@ -667,7 +670,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// Create a client that will have a crud interface of k8s objects.
 			c = fake.NewFakeClientWithScheme(scheme)
-			ctx = context.Background()
+			ctx, cancel = context.WithCancel(context.Background())
 
 			// Create a fake clientset for the autoscaler.
 			var replicas int32 = 1
@@ -707,7 +710,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// Create the indexer and informer shared by the typhaAutoscaler and
 			// calicoWindowsUpgrader.
-			nlw := nodeListWatch{}
+			nlw := nodeListWatch{cs}
 			nodeIndexer, nodeInformer := node.CreateNodeIndexerInformer(cs, nlw)
 
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
@@ -727,7 +730,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				requestChan:           requestChan,
 				doneChan:              make(chan interface{}),
 			}
-			r.typhaAutoscaler.start()
+			r.typhaAutoscaler.start(ctx)
 			r.calicoWindowsUpgrader.start()
 			go func() {
 				r.processRequests()
@@ -769,8 +772,8 @@ var _ = Describe("Testing core-controller installation", func() {
 			expectedDNSNames = dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
 			expectedDNSNames = append(expectedDNSNames, "localhost")
 		})
-
 		AfterEach(func() {
+			cancel()
 			r.stop()
 		})
 
@@ -806,6 +809,7 @@ var _ = Describe("Testing core-controller installation", func() {
 		var c client.Client
 		var cs *kfake.Clientset
 		var ctx context.Context
+		var cancel context.CancelFunc
 		var r ReconcileInstallation
 		var scheme *runtime.Scheme
 		var mockStatus *status.MockStatus
@@ -824,7 +828,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// Create a client that will have a crud interface of k8s objects.
 			c = fake.NewFakeClientWithScheme(scheme)
-			ctx = context.Background()
+			ctx, cancel = context.WithCancel(context.Background())
 
 			// Create a fake clientset for the autoscaler.
 			var replicas int32 = 1
@@ -894,7 +898,8 @@ var _ = Describe("Testing core-controller installation", func() {
 				requestChan:           requestChan,
 				doneChan:              make(chan interface{}),
 			}
-			r.typhaAutoscaler.start()
+
+			r.typhaAutoscaler.start(ctx)
 			r.calicoWindowsUpgrader.start()
 			go func() {
 				r.processRequests()
@@ -911,6 +916,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			}
 		})
 		AfterEach(func() {
+			cancel()
 			r.stop()
 		})
 

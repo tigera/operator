@@ -87,7 +87,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady
 		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("prometheus-%s", render.CalicoNodePrometheus)},
 	})
 
-	r.status.Run()
+	r.status.Run(opts.ShutdownContext)
 	return r
 }
 

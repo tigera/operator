@@ -1,12 +1,13 @@
 module github.com/tigera/operator
 
-go 1.14
+go 1.16
 
 require (
 	github.com/aws/aws-sdk-go v1.19.6
 	github.com/cloudflare/cfssl v1.4.1
 	github.com/containernetworking/cni v0.8.0
 	github.com/elastic/cloud-on-k8s v0.0.0-20200811130517-b53162318c20
+	github.com/ghodss/yaml v1.0.0
 	github.com/go-ldap/ldap v3.0.3+incompatible
 	github.com/go-logr/logr v0.3.0
 	github.com/hashicorp/go-version v1.2.1
@@ -19,7 +20,7 @@ require (
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.48.1
 	github.com/r3labs/diff/v2 v2.8.0
 	github.com/stretchr/testify v1.6.1
-	github.com/tigera/api v0.0.0-20210805201339-a9f52be9823d
+	github.com/tigera/api v0.0.0-20211011084451-556d977afc02
 	go.uber.org/zap v1.15.0
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
 	golang.org/x/mod v0.3.1-0.20200828183125-ce943fd02449
@@ -32,6 +33,7 @@ require (
 	k8s.io/client-go v0.21.0-rc.0
 	k8s.io/kube-aggregator v0.19.2
 	sigs.k8s.io/controller-runtime v0.7.0
+	sigs.k8s.io/kind v0.11.1 // indirect
 )
 
 replace (

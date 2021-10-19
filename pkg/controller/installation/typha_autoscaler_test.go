@@ -68,6 +68,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 	var statusManager *status.MockStatus
 	var c *kfake.Clientset
 	var ctx context.Context
+	var cancel context.CancelFunc
 	var nlw, tlw cache.ListerWatcher
 	var nodeIndexer cache.Indexer
 	var nodeInformer cache.Controller
@@ -91,12 +92,16 @@ var _ = Describe("Test typha autoscaler ", func() {
 		// calicoWindowsUpgrader.
 		nodeIndexer, nodeInformer = node.CreateNodeIndexerInformer(c, nlw)
 
-		ctx = context.Background()
+		ctx, cancel = context.WithCancel(context.Background())
+	})
+
+	AfterEach(func() {
+		cancel()
 	})
 
 	It("should initialize an autoscaler", func() {
 		ta := newTyphaAutoscaler(c, nodeIndexer, nodeInformer, tlw, statusManager)
-		ta.start()
+		ta.start(ctx)
 	})
 
 	It("should get the correct number of nodes", func() {
@@ -104,7 +109,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		_ = createNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"}, nil)
 
 		ta := newTyphaAutoscaler(c, nodeIndexer, nodeInformer, tlw, statusManager)
-		ta.start()
+		ta.start(ctx)
 
 		Eventually(func() error {
 			schedulableNodes, linuxNodes, err := ta.getNodeCounts()
@@ -162,7 +167,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 
 		// Create the autoscaler and run it
 		ta := newTyphaAutoscaler(c, nodeIndexer, nodeInformer, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
-		ta.start()
+		ta.start(ctx)
 
 		verifyTyphaReplicas(c, 2)
 
@@ -201,7 +206,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 
 		// Create the autoscaler and run it
 		ta := newTyphaAutoscaler(c, nodeIndexer, nodeInformer, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
-		ta.start()
+		ta.start(ctx)
 
 		// normally we'd expect to see three replicas for three nodes, but since one node is not migrated,
 		// we should still only expect two
@@ -232,7 +237,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 
 		// Create the autoscaler and run it
 		ta := newTyphaAutoscaler(c, nodeIndexer, nodeInformer, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
-		ta.start()
+		ta.start(ctx)
 
 		// normally we'd expect to see three replicas for three nodes, but since one node is a virtual-kubelet,
 		// we should still only expect two
@@ -266,7 +271,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 
 		// Create the autoscaler and run it
 		ta := newTyphaAutoscaler(c, nodeIndexer, nodeInformer, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
-		ta.start()
+		ta.start(ctx)
 
 		// This blocks until the first run is done.
 		ta.isDegraded()

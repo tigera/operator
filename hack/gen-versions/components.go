@@ -48,6 +48,7 @@ var ignoredImages = map[string]struct{}{
 	"cnx-manager-proxy": {},
 	"busybox":           {},
 	"calico/api":        {},
+	"libcalico-go":      {},
 }
 
 type Release struct {

@@ -46,6 +46,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/crds"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -143,11 +144,11 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		amazonCRDExists:       opts.AmazonCRDExists,
 		enterpriseCRDsExist:   opts.EnterpriseCRDExists,
 		clusterDomain:         opts.ClusterDomain,
+		manageCRDs:            opts.ManageCRDs,
 		requestChan:           requestChan,
 	}
-
-	r.status.Run()
-	r.typhaAutoscaler.start()
+	r.status.Run(opts.ShutdownContext)
+	r.typhaAutoscaler.start(opts.ShutdownContext)
 	r.calicoWindowsUpgrader.start()
 	go r.processRequests()
 	return r, nil
@@ -271,6 +272,18 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		if err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
 		}
+
+		if r.manageCRDs {
+			if err = addCRDWatches(c, operator.TigeraSecureEnterprise); err != nil {
+				return fmt.Errorf("tigera-installation-controller failed to watch CRD resource: %v", err)
+			}
+		}
+	} else {
+		if r.manageCRDs {
+			if err = addCRDWatches(c, operator.Calico); err != nil {
+				return fmt.Errorf("tigera-installation-controller failed to watch CRD resource: %v", err)
+			}
+		}
 	}
 
 	return nil
@@ -310,6 +323,7 @@ type ReconcileInstallation struct {
 	amazonCRDExists       bool
 	migrationChecked      bool
 	clusterDomain         string
+	manageCRDs            bool
 	requestChan           chan utils.ReconcileRequest
 	doneChan              chan interface{}
 }
@@ -395,6 +409,12 @@ func fillDefaults(instance *operator.Installation) error {
 	if len(instance.Spec.Variant) == 0 {
 		// Default to installing Calico.
 		instance.Spec.Variant = operator.Calico
+	}
+
+	// Default to running Calico as privileged.
+	if instance.Spec.NonPrivileged == nil {
+		npd := operator.NonPrivilegedDisabled
+		instance.Spec.NonPrivileged = &npd
 	}
 
 	// Default the CNI plugin based on the Kubernetes provider.
@@ -796,6 +816,10 @@ func (r *ReconcileInstallation) reconcile(ctx context.Context, request reconcile
 			r.SetDegraded("Invalid computed config", err, reqLogger)
 			return reconcile.Result{}, err
 		}
+	}
+
+	if err = r.updateCRDs(ctx, instance.Spec.Variant, reqLogger); err != nil {
+		return reconcile.Result{}, err
 	}
 
 	// now that migrated config is stored in the installation resource, we no longer need
@@ -1523,6 +1547,21 @@ func (r *ReconcileInstallation) checkActive(log logr.Logger) (*corev1.ConfigMap,
 	}
 }
 
+func (r *ReconcileInstallation) updateCRDs(ctx context.Context, variant operator.ProductVariant, log logr.Logger) error {
+	if !r.manageCRDs {
+		return nil
+	}
+	crdComponent := render.NewPassthrough(crds.ToRuntimeObjects(crds.GetCRDs(variant)...))
+	// Specify nil for the CR so no ownership is put on the CRDs. We do this so removing the
+	// Installation CR will not remove the CRDs.
+	handler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
+	if err := handler.CreateOrUpdateOrDelete(ctx, crdComponent, nil); err != nil {
+		r.SetDegraded("Error creating / updating CRD resource", err, log)
+		return err
+	}
+	return nil
+}
+
 func CreateNewTyphaNodeTLS() (*render.TyphaNodeTLS, error) {
 	// Make CA
 	ca, err := tls.MakeCA(fmt.Sprintf("%s@%d", rmeta.TigeraOperatorCAIssuerPrefix, time.Now().Unix()))
@@ -1754,4 +1793,29 @@ func cidrWithinCidr(cidr, pool string) bool {
 		return true
 	}
 	return false
+}
+
+func addCRDWatches(c controller.Controller, v operator.ProductVariant) error {
+	pred := predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			// Create occurs because we've created it, so we can safely ignore it.
+			return false
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			if utils.IgnoreObject(e.ObjectOld) && !utils.IgnoreObject(e.ObjectNew) {
+				// Don't skip the removal of the "ignore" annotation. We want to
+				// reconcile when that happens.
+				return true
+			}
+			// Otherwise, ignore updates to objects when metadata.Generation does not change.
+			return e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration()
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool { return true },
+	}
+	for _, x := range crds.GetCRDs(v) {
+		if err := c.Watch(&source.Kind{Type: x}, &handler.EnqueueRequestForObject{}, pred); err != nil {
+			return err
+		}
+	}
+	return nil
 }

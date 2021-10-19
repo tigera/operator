@@ -1,6 +1,8 @@
 package status
 
 import (
+	"context"
+
 	"github.com/stretchr/testify/mock"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -10,7 +12,7 @@ type MockStatus struct {
 	mock.Mock
 }
 
-func (m *MockStatus) Run() {
+func (m *MockStatus) Run(context.Context) {
 	m.Called()
 }
 

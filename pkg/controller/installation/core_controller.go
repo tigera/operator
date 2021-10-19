@@ -41,6 +41,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/controller/migration/convert"
+	"github.com/tigera/operator/pkg/controller/node"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -114,17 +115,20 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		return nil, err
 	}
 
-	nodeListWatch := cache.NewListWatchFromClient(cs.CoreV1().RESTClient(), "nodes", "", fields.Everything())
-
-	// Create a Typha autoscaler.
-	typhaListWatch := cache.NewListWatchFromClient(cs.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"))
-	typhaScaler := newTyphaAutoscaler(cs, nodeListWatch, typhaListWatch, statusManager)
-
 	// Create buffered channel for incoming reconcile requests.
 	requestChan := make(chan utils.ReconcileRequest, 1)
 
+	// Create the indexer and informer shared by the typhaAutoscaler and
+	// calicoWindowsUpgrader.
+	nodeListWatch := cache.NewListWatchFromClient(cs.CoreV1().RESTClient(), "nodes", "", fields.Everything())
+	nodeIndexer, nodeInformer := node.CreateNodeIndexerInformer(cs, nodeListWatch)
+
+	// Create a Typha autoscaler.
+	typhaListWatch := cache.NewListWatchFromClient(cs.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"))
+	typhaScaler := newTyphaAutoscaler(cs, nodeIndexer, nodeInformer, typhaListWatch, statusManager)
+
 	// Create a Calico Windows upgrader.
-	calicoWindowsUpgrader := newCalicoWindowsUpgrader(cs, mgr.GetClient(), nodeListWatch, statusManager, requestChan)
+	calicoWindowsUpgrader := newCalicoWindowsUpgrader(cs, mgr.GetClient(), nodeIndexer, nodeInformer, statusManager)
 
 	r := &ReconcileInstallation{
 		config:                mgr.GetConfig(),
@@ -1167,7 +1171,7 @@ func (r *ReconcileInstallation) reconcile(ctx context.Context, request reconcile
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 
-	if err = r.calicoWindowsUpgrader.upgradeWindowsNodes(instance.Spec.Variant, instance.Spec.NodeUpdateStrategy); err != nil {
+	if err = r.calicoWindowsUpgrader.upgradeWindowsNodes(); err != nil {
 		log.Error(err, "Failed to process Calico Windows upgrades")
 		r.SetDegraded("Failed to process Windows node upgrades", err, reqLogger)
 		return reconcile.Result{}, err

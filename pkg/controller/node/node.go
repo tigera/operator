@@ -23,11 +23,13 @@ import (
 	"strings"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/cache"
 )
 
 type stringPatch struct {
@@ -129,4 +131,16 @@ func RemoveNodeLabel(ctx context.Context, client kubernetes.Interface, nodeName,
 		// no update needed
 		return true, nil
 	})
+}
+
+// CreateNodeIndexerInformer returns a Node indexer and informer. This indexer
+// and informer is used by the typhaAutoscaler and the calicoWindowsUpgrader.
+func CreateNodeIndexerInformer(cs kubernetes.Interface, nodeListWatch cache.ListerWatcher) (cache.Indexer, cache.Controller) {
+	handlers := cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) {},
+		UpdateFunc: func(oldObj, newObj interface{}) {},
+		DeleteFunc: func(obj interface{}) {},
+	}
+
+	return cache.NewIndexerInformer(nodeListWatch, &corev1.Node{}, 0, handlers, cache.Indexers{})
 }

@@ -78,18 +78,16 @@ func typhaAutoscalerPeriod(syncPeriod time.Duration) typhaAutoscalerOption {
 
 // newTyphaAutoscaler creates a new Typha autoscaler, optionally applying any options to the default autoscaler instance.
 // The default sync period is 10 seconds.
-func newTyphaAutoscaler(cs kubernetes.Interface, nodeListWatch, typhaListWatch cache.ListerWatcher, statusManager status.StatusManager, options ...typhaAutoscalerOption) *typhaAutoscaler {
+func newTyphaAutoscaler(cs kubernetes.Interface, nodeIndexer cache.Indexer, nodeInformer cache.Controller, typhaListWatch cache.ListerWatcher, statusManager status.StatusManager, options ...typhaAutoscalerOption) *typhaAutoscaler {
 	ta := &typhaAutoscaler{
 		client:         cs,
 		statusManager:  statusManager,
 		syncPeriod:     defaultTyphaAutoscalerSyncPeriod,
 		triggerRunChan: make(chan chan error),
 		isDegradedChan: make(chan chan bool),
+		nodeInformer:   nodeInformer,
+		nodeIndexer:    nodeIndexer,
 	}
-
-	// Create an informer to signal us when nodes are updated.
-	nodeHandlers := cache.ResourceEventHandlerFuncs{AddFunc: func(obj interface{}) {}}
-	ta.nodeIndexer, ta.nodeInformer = cache.NewIndexerInformer(nodeListWatch, &v1.Node{}, 0, nodeHandlers, cache.Indexers{})
 
 	// Configure an informer to monitor the active replicas.
 	typhaHandlers := cache.ResourceEventHandlerFuncs{

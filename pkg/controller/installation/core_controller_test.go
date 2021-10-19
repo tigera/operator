@@ -44,6 +44,7 @@ import (
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/node"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
@@ -357,6 +358,11 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			requestChan = make(chan utils.ReconcileRequest, 1)
 
+			// Create the indexer and informer shared by the typhaAutoscaler and
+			// calicoWindowsUpgrader.
+			nlw := nodeListWatch{}
+			nodeIndexer, nodeInformer := node.CreateNodeIndexerInformer(cs, nlw)
+
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
 				config:                nil, // there is no fake for config
@@ -364,8 +370,8 @@ var _ = Describe("Testing core-controller installation", func() {
 				scheme:                scheme,
 				autoDetectedProvider:  operator.ProviderNone,
 				status:                mockStatus,
-				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeListWatch{cs}, typhaListWatch{cs}, mockStatus),
-				calicoWindowsUpgrader: newCalicoWindowsUpgrader(cs, c, nodeListWatch{cs}, mockStatus, requestChan),
+				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexer, nodeInformer, typhaListWatch{cs}, mockStatus),
+				calicoWindowsUpgrader: newCalicoWindowsUpgrader(cs, c, nodeIndexer, nodeInformer, mockStatus),
 				namespaceMigration:    &fakeNamespaceMigration{},
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,
@@ -699,6 +705,11 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			requestChan = make(chan utils.ReconcileRequest, 1)
 
+			// Create the indexer and informer shared by the typhaAutoscaler and
+			// calicoWindowsUpgrader.
+			nlw := nodeListWatch{}
+			nodeIndexer, nodeInformer := node.CreateNodeIndexerInformer(cs, nlw)
+
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
 				config:                nil, // there is no fake for config
@@ -706,8 +717,8 @@ var _ = Describe("Testing core-controller installation", func() {
 				scheme:                scheme,
 				autoDetectedProvider:  operator.ProviderNone,
 				status:                mockStatus,
-				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeListWatch{cs}, typhaListWatch{cs}, mockStatus),
-				calicoWindowsUpgrader: newCalicoWindowsUpgrader(cs, c, nodeListWatch{cs}, mockStatus, requestChan),
+				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexer, nodeInformer, typhaListWatch{cs}, mockStatus),
+				calicoWindowsUpgrader: newCalicoWindowsUpgrader(cs, c, nodeIndexer, nodeInformer, mockStatus),
 				namespaceMigration:    &fakeNamespaceMigration{},
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,
@@ -862,6 +873,11 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			requestChan = make(chan utils.ReconcileRequest, 1)
 
+			// Create the indexer and informer shared by the typhaAutoscaler and
+			// calicoWindowsUpgrader.
+			nlw := nodeListWatch{cs}
+			nodeIndexer, nodeInformer := node.CreateNodeIndexerInformer(cs, nlw)
+
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
 				config:                nil, // there is no fake for config
@@ -869,8 +885,8 @@ var _ = Describe("Testing core-controller installation", func() {
 				scheme:                scheme,
 				autoDetectedProvider:  operator.ProviderNone,
 				status:                mockStatus,
-				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeListWatch{cs}, typhaListWatch{cs}, mockStatus),
-				calicoWindowsUpgrader: newCalicoWindowsUpgrader(cs, c, nodeListWatch{cs}, mockStatus, requestChan),
+				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexer, nodeInformer, typhaListWatch{cs}, mockStatus),
+				calicoWindowsUpgrader: newCalicoWindowsUpgrader(cs, c, nodeIndexer, nodeInformer, mockStatus),
 				namespaceMigration:    &fakeNamespaceMigration{},
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,

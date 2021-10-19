@@ -364,6 +364,11 @@ var _ = Describe("Testing core-controller installation", func() {
 			nlw := nodeListWatch{cs}
 			nodeIndexer, nodeInformer := node.CreateNodeIndexerInformer(nlw)
 
+			go nodeInformer.Run(ctx.Done())
+			for nodeInformer.HasSynced() {
+				time.Sleep(100 * time.Millisecond)
+			}
+
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
 				config:                nil, // there is no fake for config
@@ -371,8 +376,8 @@ var _ = Describe("Testing core-controller installation", func() {
 				scheme:                scheme,
 				autoDetectedProvider:  operator.ProviderNone,
 				status:                mockStatus,
-				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexer, nodeInformer, typhaListWatch{cs}, mockStatus),
-				calicoWindowsUpgrader: newCalicoWindowsUpgrader(cs, c, nodeIndexer, nodeInformer, mockStatus),
+				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexer, typhaListWatch{cs}, mockStatus),
+				calicoWindowsUpgrader: newCalicoWindowsUpgrader(cs, c, nodeIndexer, mockStatus),
 				namespaceMigration:    &fakeNamespaceMigration{},
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,
@@ -711,6 +716,11 @@ var _ = Describe("Testing core-controller installation", func() {
 			nlw := nodeListWatch{cs}
 			nodeIndexer, nodeInformer := node.CreateNodeIndexerInformer(nlw)
 
+			go nodeInformer.Run(ctx.Done())
+			for nodeInformer.HasSynced() {
+				time.Sleep(100 * time.Millisecond)
+			}
+
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
 				config:                nil, // there is no fake for config
@@ -718,8 +728,8 @@ var _ = Describe("Testing core-controller installation", func() {
 				scheme:                scheme,
 				autoDetectedProvider:  operator.ProviderNone,
 				status:                mockStatus,
-				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexer, nodeInformer, typhaListWatch{cs}, mockStatus),
-				calicoWindowsUpgrader: newCalicoWindowsUpgrader(cs, c, nodeIndexer, nodeInformer, mockStatus),
+				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexer, typhaListWatch{cs}, mockStatus),
+				calicoWindowsUpgrader: newCalicoWindowsUpgrader(cs, c, nodeIndexer, mockStatus),
 				namespaceMigration:    &fakeNamespaceMigration{},
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,
@@ -878,6 +888,11 @@ var _ = Describe("Testing core-controller installation", func() {
 			nlw := nodeListWatch{cs}
 			nodeIndexer, nodeInformer := node.CreateNodeIndexerInformer(nlw)
 
+			go nodeInformer.Run(ctx.Done())
+			for nodeInformer.HasSynced() {
+				time.Sleep(100 * time.Millisecond)
+			}
+
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
 				config:                nil, // there is no fake for config
@@ -885,8 +900,8 @@ var _ = Describe("Testing core-controller installation", func() {
 				scheme:                scheme,
 				autoDetectedProvider:  operator.ProviderNone,
 				status:                mockStatus,
-				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexer, nodeInformer, typhaListWatch{cs}, mockStatus),
-				calicoWindowsUpgrader: newCalicoWindowsUpgrader(cs, c, nodeIndexer, nodeInformer, mockStatus),
+				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexer, typhaListWatch{cs}, mockStatus),
+				calicoWindowsUpgrader: newCalicoWindowsUpgrader(cs, c, nodeIndexer, mockStatus),
 				namespaceMigration:    &fakeNamespaceMigration{},
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,

@@ -58,7 +58,6 @@ type typhaAutoscaler struct {
 	statusManager  status.StatusManager
 	triggerRunChan chan chan error
 	isDegradedChan chan chan bool
-	nodeInformer   cache.Controller
 	nodeIndexer    cache.Indexer
 	typhaInformer  cache.Controller
 	typhaIndexer   cache.Indexer
@@ -78,14 +77,13 @@ func typhaAutoscalerPeriod(syncPeriod time.Duration) typhaAutoscalerOption {
 
 // newTyphaAutoscaler creates a new Typha autoscaler, optionally applying any options to the default autoscaler instance.
 // The default sync period is 10 seconds.
-func newTyphaAutoscaler(cs kubernetes.Interface, nodeIndexer cache.Indexer, nodeInformer cache.Controller, typhaListWatch cache.ListerWatcher, statusManager status.StatusManager, options ...typhaAutoscalerOption) *typhaAutoscaler {
+func newTyphaAutoscaler(cs kubernetes.Interface, nodeIndexer cache.Indexer, typhaListWatch cache.ListerWatcher, statusManager status.StatusManager, options ...typhaAutoscalerOption) *typhaAutoscaler {
 	ta := &typhaAutoscaler{
 		client:         cs,
 		statusManager:  statusManager,
 		syncPeriod:     defaultTyphaAutoscalerSyncPeriod,
 		triggerRunChan: make(chan chan error),
 		isDegradedChan: make(chan chan bool),
-		nodeInformer:   nodeInformer,
 		nodeIndexer:    nodeIndexer,
 	}
 
@@ -124,10 +122,9 @@ func (t *typhaAutoscaler) start(ctx context.Context) {
 		defer ticker.Stop()
 		typhaLog.Info("Starting typha autoscaler", "syncPeriod", t.syncPeriod)
 
-		// Start the informers and wait for them to sync.
-		go t.nodeInformer.Run(ctx.Done())
+		// Start the informer and wait for it to sync.
 		go t.typhaInformer.Run(ctx.Done())
-		for !t.nodeInformer.HasSynced() && !t.typhaInformer.HasSynced() {
+		for !t.typhaInformer.HasSynced() {
 			time.Sleep(100 * time.Millisecond)
 		}
 

@@ -93,6 +93,10 @@ var _ = Describe("Calico windows upgrader", func() {
 		}
 
 		ctx, cancel = context.WithCancel(context.TODO())
+		go nodeInformer.Run(ctx.Done())
+		for !nodeInformer.HasSynced() {
+			time.Sleep(100 * time.Millisecond)
+		}
 	})
 
 	It("should do nothing if the product is Enterprise", func() {
@@ -106,7 +110,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		n3 := createNode(cs, "node3", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Enterprise-v2.0.0"})
 
 		// Create the upgrader and start it.
-		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, nodeInformer, mockStatus, syncPeriodOption)
+		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, mockStatus, syncPeriodOption)
 		defer cancel()
 		c.start(ctx)
 
@@ -121,7 +125,7 @@ var _ = Describe("Calico windows upgrader", func() {
 	It("should ignore linux nodes", func() {
 		Expect(client.Create(context.Background(), cr)).NotTo(HaveOccurred())
 
-		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, nodeInformer, mockStatus, syncPeriodOption)
+		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, mockStatus, syncPeriodOption)
 		defer cancel()
 		c.start(ctx)
 
@@ -141,7 +145,7 @@ var _ = Describe("Calico windows upgrader", func() {
 
 		mockStatus.On("SetDegraded", "Failed to sync Windows nodes", "Node unsupported-node does not have the version annotation, it might be unhealthy or it might be running an unsupported Calico version.").Return()
 
-		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, nodeInformer, mockStatus, syncPeriodOption)
+		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, mockStatus, syncPeriodOption)
 		defer cancel()
 		c.start(ctx)
 
@@ -162,7 +166,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		n2 := createNode(cs, "node2", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
 		n3 := createNode(cs, "node3", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: currentCalicoVersion})
 
-		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, nodeInformer, mockStatus, syncPeriodOption)
+		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, mockStatus, syncPeriodOption)
 		defer cancel()
 		c.start(ctx)
 
@@ -204,7 +208,7 @@ var _ = Describe("Calico windows upgrader", func() {
 
 		mockStatus.On("AddWindowsNodeUpgrade", "node1", currentCalicoVersion)
 
-		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, nodeInformer, mockStatus, syncPeriodOption)
+		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, mockStatus, syncPeriodOption)
 		defer cancel()
 		c.start(ctx)
 
@@ -233,7 +237,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		Expect(client.Create(context.Background(), cr)).NotTo(HaveOccurred())
 
 		// Create the upgrader and start it.
-		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, nodeInformer, mockStatus, syncPeriodOption)
+		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, mockStatus, syncPeriodOption)
 		defer cancel()
 		c.start(ctx)
 
@@ -252,7 +256,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		Expect(client.Create(context.Background(), cr)).NotTo(HaveOccurred())
 
 		// Create the upgrader and start it.
-		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, nodeInformer, mockStatus, syncPeriodOption)
+		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, mockStatus, syncPeriodOption)
 		defer cancel()
 		c.start(ctx)
 
@@ -287,7 +291,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		mockStatus.On("AddWindowsNodeUpgrade", mock.Anything, currentCalicoVersion)
 
 		// Create the upgrader and start it.
-		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, nodeInformer, mockStatus, syncPeriodOption)
+		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, mockStatus, syncPeriodOption)
 		defer cancel()
 		c.start(ctx)
 
@@ -350,7 +354,7 @@ var _ = Describe("Calico windows upgrader", func() {
 
 		var c *calicoWindowsUpgrader
 		BeforeEach(func() {
-			c = newCalicoWindowsUpgrader(cs, client, nodeIndexer, nodeInformer, mockStatus)
+			c = newCalicoWindowsUpgrader(cs, client, nodeIndexer, mockStatus)
 		})
 
 		It("should count already upgrading nodes against maxUnavailable, for Calico to Calico upgrades", func() {

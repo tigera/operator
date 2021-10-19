@@ -59,7 +59,6 @@ type calicoWindowsUpgrader struct {
 	client               client.Client
 	statusManager        status.StatusManager
 	triggerRunChan       chan chan error
-	nodeInformer         cache.Controller
 	nodeIndexer          cache.Indexer
 	nodesToUpgrade       map[string]*corev1.Node
 	nodesUpgrading       map[string]*corev1.Node
@@ -86,13 +85,12 @@ func calicoWindowsUpgraderSyncPeriod(syncPeriod time.Duration) calicoWindowsUpgr
 }
 
 // newCalicoWindowsUpgrader creates a Calico Windows upgrader.
-func newCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, indexer cache.Indexer, informer cache.Controller, statusManager status.StatusManager, options ...calicoWindowsUpgraderOption) *calicoWindowsUpgrader {
+func newCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, indexer cache.Indexer, statusManager status.StatusManager, options ...calicoWindowsUpgraderOption) *calicoWindowsUpgrader {
 	w := &calicoWindowsUpgrader{
 		clientset:      cs,
 		client:         c,
 		statusManager:  statusManager,
 		triggerRunChan: make(chan chan error, 1),
-		nodeInformer:   informer,
 		nodeIndexer:    indexer,
 		maxUnavailable: &defaultMaxUnavailable,
 		syncPeriod:     10 * time.Second,
@@ -457,11 +455,6 @@ func (w *calicoWindowsUpgrader) finishUpgrade(ctx context.Context, node *corev1.
 }
 
 func (w *calicoWindowsUpgrader) start(ctx context.Context) {
-	go w.nodeInformer.Run(ctx.Done())
-	for !w.nodeInformer.HasSynced() {
-		time.Sleep(100 * time.Millisecond)
-	}
-
 	go func() {
 		ticker := time.NewTicker(w.syncPeriod)
 		defer ticker.Stop()

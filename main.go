@@ -23,6 +23,7 @@ import (
 	"os"
 	goruntime "runtime"
 	"strings"
+	"time"
 
 	"github.com/cloudflare/cfssl/log"
 	"github.com/ghodss/yaml"
@@ -50,6 +51,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/crds"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/version"
 	// +kubebuilder:scaffold:imports
 )
@@ -209,6 +211,11 @@ func main() {
 		ClientDisableCacheFor: []client.Object{
 			&v3.LicenseKey{},
 		},
+		// Increase timeout to 4x the defaults. In a cluster with an overloaded apiserver,
+		// Operator may crash loops on startup failing to renew or update the lease lock.
+		LeaseDuration: ptr.DurationToPtr(60 * time.Second),
+		RenewDeadline: ptr.DurationToPtr(40 * time.Second),
+		RetryPeriod:   ptr.DurationToPtr(8 * time.Second),
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")

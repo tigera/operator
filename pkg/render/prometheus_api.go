@@ -225,7 +225,7 @@ func (p *tigeraPrometheusAPIComponent) deployment(prometheusServiceListenPort in
 					HostNetwork:      podHostNetworked,
 					ImagePullSecrets: secret.GetReferenceList(p.pullSecrets),
 					NodeSelector:     p.installation.ControlPlaneNodeSelector,
-					Tolerations:      []corev1.Toleration{rmeta.TolerateMaster},
+					Tolerations:      append(p.installation.ControlPlaneTolerations, rmeta.TolerateMaster),
 					Containers: []corev1.Container{
 						p.tigeraPrometheusAPIContainers(prometheusServiceListenPort),
 					},

@@ -135,7 +135,7 @@ func RemoveNodeLabel(ctx context.Context, client kubernetes.Interface, nodeName,
 
 // CreateNodeIndexerInformer returns a Node indexer and informer. This indexer
 // and informer is used by the typhaAutoscaler and the calicoWindowsUpgrader.
-func CreateNodeIndexerInformer(cs kubernetes.Interface, nodeListWatch cache.ListerWatcher) (cache.Indexer, cache.Controller) {
+func CreateNodeIndexerInformer(nodeListWatch cache.ListerWatcher) (cache.Indexer, cache.Controller) {
 	handlers := cache.ResourceEventHandlerFuncs{
 		AddFunc:    func(obj interface{}) {},
 		UpdateFunc: func(oldObj, newObj interface{}) {},

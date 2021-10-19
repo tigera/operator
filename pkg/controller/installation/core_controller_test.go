@@ -362,7 +362,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			// Create the indexer and informer shared by the typhaAutoscaler and
 			// calicoWindowsUpgrader.
 			nlw := nodeListWatch{cs}
-			nodeIndexer, nodeInformer := node.CreateNodeIndexerInformer(cs, nlw)
+			nodeIndexer, nodeInformer := node.CreateNodeIndexerInformer(nlw)
 
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
@@ -378,7 +378,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				enterpriseCRDsExist:   true,
 				migrationChecked:      true,
 				requestChan:           requestChan,
-				doneChan:              make(chan interface{}),
+				doneChan:              make(chan struct{}),
 			}
 
 			r.typhaAutoscaler.start(ctx)
@@ -711,7 +711,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			// Create the indexer and informer shared by the typhaAutoscaler and
 			// calicoWindowsUpgrader.
 			nlw := nodeListWatch{cs}
-			nodeIndexer, nodeInformer := node.CreateNodeIndexerInformer(cs, nlw)
+			nodeIndexer, nodeInformer := node.CreateNodeIndexerInformer(nlw)
 
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
@@ -728,7 +728,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				migrationChecked:      true,
 				clusterDomain:         dns.DefaultClusterDomain,
 				requestChan:           requestChan,
-				doneChan:              make(chan interface{}),
+				doneChan:              make(chan struct{}),
 			}
 			r.typhaAutoscaler.start(ctx)
 			r.calicoWindowsUpgrader.start()
@@ -880,7 +880,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			// Create the indexer and informer shared by the typhaAutoscaler and
 			// calicoWindowsUpgrader.
 			nlw := nodeListWatch{cs}
-			nodeIndexer, nodeInformer := node.CreateNodeIndexerInformer(cs, nlw)
+			nodeIndexer, nodeInformer := node.CreateNodeIndexerInformer(nlw)
 
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
@@ -896,7 +896,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				enterpriseCRDsExist:   true,
 				migrationChecked:      true,
 				requestChan:           requestChan,
-				doneChan:              make(chan interface{}),
+				doneChan:              make(chan struct{}),
 			}
 
 			r.typhaAutoscaler.start(ctx)

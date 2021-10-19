@@ -122,7 +122,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 	// Create the indexer and informer shared by the typhaAutoscaler and
 	// calicoWindowsUpgrader.
 	nodeListWatch := cache.NewListWatchFromClient(cs.CoreV1().RESTClient(), "nodes", "", fields.Everything())
-	nodeIndexer, nodeInformer := node.CreateNodeIndexerInformer(cs, nodeListWatch)
+	nodeIndexer, nodeInformer := node.CreateNodeIndexerInformer(nodeListWatch)
 
 	// Create a Typha autoscaler.
 	typhaListWatch := cache.NewListWatchFromClient(cs.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"))
@@ -146,6 +146,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		clusterDomain:         opts.ClusterDomain,
 		manageCRDs:            opts.ManageCRDs,
 		requestChan:           requestChan,
+		doneChan:              make(chan struct{}),
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
@@ -325,7 +326,7 @@ type ReconcileInstallation struct {
 	clusterDomain         string
 	manageCRDs            bool
 	requestChan           chan utils.ReconcileRequest
-	doneChan              chan interface{}
+	doneChan              chan struct{}
 }
 
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
@@ -720,7 +721,7 @@ func (r *ReconcileInstallation) processRequests() {
 }
 
 func (r *ReconcileInstallation) stop() {
-	close(r.doneChan)
+	r.doneChan <- struct{}{}
 }
 
 // reconcile reads that state of the cluster for a Installation object and makes changes based on the state read

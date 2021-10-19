@@ -90,7 +90,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 
 		// Create the indexer and informer shared by the typhaAutoscaler and
 		// calicoWindowsUpgrader.
-		nodeIndexer, nodeInformer = node.CreateNodeIndexerInformer(c, nlw)
+		nodeIndexer, nodeInformer = node.CreateNodeIndexerInformer(nlw)
 
 		ctx, cancel = context.WithCancel(context.Background())
 	})

@@ -76,7 +76,7 @@ var _ = Describe("Calico windows upgrader", func() {
 
 		currentCalicoVersion = fmt.Sprintf("Calico-%v", components.CalicoRelease)
 		nlw := nodeListWatch{cs}
-		nodeIndexer, nodeInformer = node.CreateNodeIndexerInformer(cs, nlw)
+		nodeIndexer, nodeInformer = node.CreateNodeIndexerInformer(nlw)
 
 		cr = &operator.Installation{
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},

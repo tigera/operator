@@ -172,6 +172,16 @@ var _ = Describe("Test typha autoscaler ", func() {
 		verifyTyphaReplicas(c, 2)
 	})
 
+	It("should return error if there's no schedulable nodes", func() {
+		ta := newTyphaAutoscaler(c, nlw, tlw, statusManager)
+		ta.start(ctx)
+
+		Eventually(func() error {
+			_, _, err := ta.getNodeCounts()
+			return err
+		}, 5*time.Second).Should(HaveOccurred(), "number of schedulable nodes is zero")
+	})
+
 	It("should ignore non-migrated nodes in its count", func() {
 		typhaMeta := metav1.ObjectMeta{
 			Name:      "calico-typha",

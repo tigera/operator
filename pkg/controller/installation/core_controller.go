@@ -146,12 +146,11 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		clusterDomain:         opts.ClusterDomain,
 		manageCRDs:            opts.ManageCRDs,
 		requestChan:           requestChan,
-		doneChan:              make(chan struct{}),
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
-	r.calicoWindowsUpgrader.start()
-	go r.processRequests()
+	r.calicoWindowsUpgrader.start(opts.ShutdownContext)
+	go r.processRequests(opts.ShutdownContext)
 	return r, nil
 }
 
@@ -326,7 +325,6 @@ type ReconcileInstallation struct {
 	clusterDomain         string
 	manageCRDs            bool
 	requestChan           chan utils.ReconcileRequest
-	doneChan              chan struct{}
 }
 
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
@@ -705,7 +703,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 }
 
-func (r *ReconcileInstallation) processRequests() {
+func (r *ReconcileInstallation) processRequests(ctx context.Context) {
 	for {
 		select {
 		case req := <-r.requestChan:
@@ -714,14 +712,10 @@ func (r *ReconcileInstallation) processRequests() {
 			// Rate-limit to prevent tight looping.
 			time.Sleep(1 * time.Second)
 
-		case <-r.doneChan:
+		case <-ctx.Done():
 			return
 		}
 	}
-}
-
-func (r *ReconcileInstallation) stop() {
-	r.doneChan <- struct{}{}
 }
 
 // reconcile reads that state of the cluster for a Installation object and makes changes based on the state read

@@ -378,13 +378,12 @@ var _ = Describe("Testing core-controller installation", func() {
 				enterpriseCRDsExist:   true,
 				migrationChecked:      true,
 				requestChan:           requestChan,
-				doneChan:              make(chan struct{}),
 			}
 
 			r.typhaAutoscaler.start(ctx)
-			r.calicoWindowsUpgrader.start()
+			r.calicoWindowsUpgrader.start(ctx)
 			go func() {
-				r.processRequests()
+				r.processRequests(ctx)
 			}()
 
 			// We start off with a 'standard' installation, with nothing special
@@ -409,7 +408,6 @@ var _ = Describe("Testing core-controller installation", func() {
 		})
 		AfterEach(func() {
 			cancel()
-			r.stop()
 		})
 
 		It("should use builtin images", func() {
@@ -728,12 +726,11 @@ var _ = Describe("Testing core-controller installation", func() {
 				migrationChecked:      true,
 				clusterDomain:         dns.DefaultClusterDomain,
 				requestChan:           requestChan,
-				doneChan:              make(chan struct{}),
 			}
 			r.typhaAutoscaler.start(ctx)
-			r.calicoWindowsUpgrader.start()
+			r.calicoWindowsUpgrader.start(ctx)
 			go func() {
-				r.processRequests()
+				r.processRequests(ctx)
 			}()
 
 			cr = &operator.Installation{
@@ -774,7 +771,6 @@ var _ = Describe("Testing core-controller installation", func() {
 		})
 		AfterEach(func() {
 			cancel()
-			r.stop()
 		})
 
 		It("should create an internal manager TLS cert secret", func() {
@@ -896,13 +892,12 @@ var _ = Describe("Testing core-controller installation", func() {
 				enterpriseCRDsExist:   true,
 				migrationChecked:      true,
 				requestChan:           requestChan,
-				doneChan:              make(chan struct{}),
 			}
 
 			r.typhaAutoscaler.start(ctx)
-			r.calicoWindowsUpgrader.start()
+			r.calicoWindowsUpgrader.start(ctx)
 			go func() {
-				r.processRequests()
+				r.processRequests(ctx)
 			}()
 
 			// We start off with a 'standard' installation, with nothing special
@@ -917,7 +912,6 @@ var _ = Describe("Testing core-controller installation", func() {
 		})
 		AfterEach(func() {
 			cancel()
-			r.stop()
 		})
 
 		It("should Reconcile with default config", func() {

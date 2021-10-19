@@ -68,9 +68,6 @@ type calicoWindowsUpgrader struct {
 	expectedVersion      string
 	expectedVariant      operatorv1.ProductVariant
 	needsReconcile       bool
-	stopInformerChan     chan struct{}
-	stopSyncLoopChan     chan struct{}
-	stopTriggerLoopChan  chan struct{}
 	syncPeriod           time.Duration
 }
 
@@ -91,17 +88,14 @@ func calicoWindowsUpgraderSyncPeriod(syncPeriod time.Duration) calicoWindowsUpgr
 // newCalicoWindowsUpgrader creates a Calico Windows upgrader.
 func newCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, indexer cache.Indexer, informer cache.Controller, statusManager status.StatusManager, options ...calicoWindowsUpgraderOption) *calicoWindowsUpgrader {
 	w := &calicoWindowsUpgrader{
-		clientset:           cs,
-		client:              c,
-		statusManager:       statusManager,
-		triggerRunChan:      make(chan chan error, 1),
-		nodeInformer:        informer,
-		nodeIndexer:         indexer,
-		maxUnavailable:      &defaultMaxUnavailable,
-		stopInformerChan:    make(chan struct{}),
-		stopSyncLoopChan:    make(chan struct{}),
-		stopTriggerLoopChan: make(chan struct{}),
-		syncPeriod:          10 * time.Second,
+		clientset:      cs,
+		client:         c,
+		statusManager:  statusManager,
+		triggerRunChan: make(chan chan error, 1),
+		nodeInformer:   informer,
+		nodeIndexer:    indexer,
+		maxUnavailable: &defaultMaxUnavailable,
+		syncPeriod:     10 * time.Second,
 	}
 
 	for _, o := range options {
@@ -462,14 +456,8 @@ func (w *calicoWindowsUpgrader) finishUpgrade(ctx context.Context, node *corev1.
 	return nil
 }
 
-func (w *calicoWindowsUpgrader) stop() {
-	w.stopTriggerLoopChan <- struct{}{}
-	w.stopSyncLoopChan <- struct{}{}
-	close(w.stopInformerChan)
-}
-
-func (w *calicoWindowsUpgrader) start() {
-	go w.nodeInformer.Run(w.stopInformerChan)
+func (w *calicoWindowsUpgrader) start(ctx context.Context) {
+	go w.nodeInformer.Run(ctx.Done())
 	for !w.nodeInformer.HasSynced() {
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -498,7 +486,7 @@ func (w *calicoWindowsUpgrader) start() {
 
 			select {
 			case <-ticker.C:
-			case <-w.stopSyncLoopChan:
+			case <-ctx.Done():
 				windowsLog.Info("Stopping sync loop")
 				return
 			}
@@ -517,7 +505,7 @@ func (w *calicoWindowsUpgrader) start() {
 				}
 				close(errCh)
 
-			case <-w.stopTriggerLoopChan:
+			case <-ctx.Done():
 				windowsLog.Info("Stopping trigger run loop")
 				return
 			}

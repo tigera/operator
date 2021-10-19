@@ -55,6 +55,8 @@ var _ = Describe("Calico windows upgrader", func() {
 	var nodeInformer cache.Controller
 
 	var syncPeriodOption calicoWindowsUpgraderOption
+	var ctx context.Context
+	var cancel context.CancelFunc
 
 	BeforeEach(func() {
 		// The schema contains all objects that should be known to the fake client when the test runs.
@@ -89,6 +91,8 @@ var _ = Describe("Calico windows upgrader", func() {
 				Variant: operator.Calico,
 			},
 		}
+
+		ctx, cancel = context.WithCancel(context.TODO())
 	})
 
 	It("should do nothing if the product is Enterprise", func() {
@@ -103,8 +107,8 @@ var _ = Describe("Calico windows upgrader", func() {
 
 		// Create the upgrader and start it.
 		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, nodeInformer, mockStatus, syncPeriodOption)
-		defer c.stop()
-		c.start()
+		defer cancel()
+		c.start(ctx)
 
 		// Nodes should not have changed.
 		Consistently(func() error {
@@ -118,8 +122,8 @@ var _ = Describe("Calico windows upgrader", func() {
 		Expect(client.Create(context.Background(), cr)).NotTo(HaveOccurred())
 
 		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, nodeInformer, mockStatus, syncPeriodOption)
-		defer c.stop()
-		c.start()
+		defer cancel()
+		c.start(ctx)
 
 		n1 := createNode(cs, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
 		n2 := createNode(cs, "node2", map[string]string{"kubernetes.io/os": "linux"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Enterprise-v2.0.0"})
@@ -138,8 +142,8 @@ var _ = Describe("Calico windows upgrader", func() {
 		mockStatus.On("SetDegraded", "Failed to sync Windows nodes", "Node unsupported-node does not have the version annotation, it might be unhealthy or it might be running an unsupported Calico version.").Return()
 
 		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, nodeInformer, mockStatus, syncPeriodOption)
-		defer c.stop()
-		c.start()
+		defer cancel()
+		c.start(ctx)
 
 		Consistently(func() error {
 			return assertNodesUnchanged(cs, n1)
@@ -159,8 +163,8 @@ var _ = Describe("Calico windows upgrader", func() {
 		n3 := createNode(cs, "node3", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: currentCalicoVersion})
 
 		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, nodeInformer, mockStatus, syncPeriodOption)
-		defer c.stop()
-		c.start()
+		defer cancel()
+		c.start(ctx)
 
 		// Only node n2 should have changed.
 		Consistently(func() error {
@@ -201,8 +205,8 @@ var _ = Describe("Calico windows upgrader", func() {
 		mockStatus.On("AddWindowsNodeUpgrade", "node1", currentCalicoVersion)
 
 		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, nodeInformer, mockStatus, syncPeriodOption)
-		defer c.stop()
-		c.start()
+		defer cancel()
+		c.start(ctx)
 
 		// Ensure the node has the new label and taint.
 		Eventually(func() error {
@@ -230,8 +234,8 @@ var _ = Describe("Calico windows upgrader", func() {
 
 		// Create the upgrader and start it.
 		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, nodeInformer, mockStatus, syncPeriodOption)
-		defer c.stop()
-		c.start()
+		defer cancel()
+		c.start(ctx)
 
 		Consistently(func() error {
 			if c.maxUnavailable.String() != "1" {
@@ -249,8 +253,8 @@ var _ = Describe("Calico windows upgrader", func() {
 
 		// Create the upgrader and start it.
 		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, nodeInformer, mockStatus, syncPeriodOption)
-		defer c.stop()
-		c.start()
+		defer cancel()
+		c.start(ctx)
 
 		Consistently(func() error {
 			if c.maxUnavailable.String() != "1" {
@@ -284,8 +288,8 @@ var _ = Describe("Calico windows upgrader", func() {
 
 		// Create the upgrader and start it.
 		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, nodeInformer, mockStatus, syncPeriodOption)
-		defer c.stop()
-		c.start()
+		defer cancel()
+		c.start(ctx)
 
 		Eventually(func() error {
 			if c.maxUnavailable.String() != "20%" {

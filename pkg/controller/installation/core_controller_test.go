@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package installation
 import (
 	"context"
 	"fmt"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -43,6 +44,7 @@ import (
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/node"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
@@ -308,6 +310,7 @@ var _ = Describe("Testing core-controller installation", func() {
 		var r ReconcileInstallation
 		var scheme *runtime.Scheme
 		var mockStatus *status.MockStatus
+		var requestChan chan utils.ReconcileRequest
 
 		BeforeEach(func() {
 			// The schema contains all objects that should be known to the fake client when the test runs.
@@ -354,20 +357,35 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
 
+			requestChan = make(chan utils.ReconcileRequest, 1)
+
+			// Create the indexer and informer shared by the typhaAutoscaler and
+			// calicoWindowsUpgrader.
+			nlw := nodeListWatch{cs}
+			nodeIndexer, nodeInformer := node.CreateNodeIndexerInformer(nlw)
+
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
-				config:               nil, // there is no fake for config
-				client:               c,
-				scheme:               scheme,
-				autoDetectedProvider: operator.ProviderNone,
-				status:               mockStatus,
-				typhaAutoscaler:      newTyphaAutoscaler(cs, nodeListWatch{cs}, typhaListWatch{cs}, mockStatus),
-				namespaceMigration:   &fakeNamespaceMigration{},
-				amazonCRDExists:      true,
-				enterpriseCRDsExist:  true,
-				migrationChecked:     true,
+				config:                nil, // there is no fake for config
+				client:                c,
+				scheme:                scheme,
+				autoDetectedProvider:  operator.ProviderNone,
+				status:                mockStatus,
+				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexer, nodeInformer, typhaListWatch{cs}, mockStatus),
+				calicoWindowsUpgrader: newCalicoWindowsUpgrader(cs, c, nodeIndexer, nodeInformer, mockStatus),
+				namespaceMigration:    &fakeNamespaceMigration{},
+				amazonCRDExists:       true,
+				enterpriseCRDsExist:   true,
+				migrationChecked:      true,
+				requestChan:           requestChan,
+				doneChan:              make(chan struct{}),
 			}
+
 			r.typhaAutoscaler.start(ctx)
+			r.calicoWindowsUpgrader.start()
+			go func() {
+				r.processRequests()
+			}()
 
 			// We start off with a 'standard' installation, with nothing special
 			Expect(c.Create(
@@ -391,6 +409,7 @@ var _ = Describe("Testing core-controller installation", func() {
 		})
 		AfterEach(func() {
 			cancel()
+			r.stop()
 		})
 
 		It("should use builtin images", func() {
@@ -482,6 +501,7 @@ var _ = Describe("Testing core-controller installation", func() {
 						{Image: "tigera/cni", Digest: "sha256:tigeracnihash"},
 						{Image: "calico/pod2daemon-flexvol", Digest: "sha256:calicoflexvolhash"},
 						{Image: "tigera/key-cert-provisioner", Digest: "sha256:calicocsrinithash"},
+						{Image: "tigera/calico-windows-upgrade", Digest: "sha256:calicowindowshash"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -637,6 +657,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 		var internalManagerTLSSecret *corev1.Secret
 		var expectedDNSNames []string
+		var requestChan chan utils.ReconcileRequest
 
 		BeforeEach(func() {
 			// The schema contains all objects that should be known to the fake client when the test runs.
@@ -685,21 +706,35 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
 
+			requestChan = make(chan utils.ReconcileRequest, 1)
+
+			// Create the indexer and informer shared by the typhaAutoscaler and
+			// calicoWindowsUpgrader.
+			nlw := nodeListWatch{cs}
+			nodeIndexer, nodeInformer := node.CreateNodeIndexerInformer(nlw)
+
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
-				config:               nil, // there is no fake for config
-				client:               c,
-				scheme:               scheme,
-				autoDetectedProvider: operator.ProviderNone,
-				status:               mockStatus,
-				typhaAutoscaler:      newTyphaAutoscaler(cs, nodeListWatch{cs}, typhaListWatch{cs}, mockStatus),
-				namespaceMigration:   &fakeNamespaceMigration{},
-				amazonCRDExists:      true,
-				enterpriseCRDsExist:  true,
-				migrationChecked:     true,
-				clusterDomain:        dns.DefaultClusterDomain,
+				config:                nil, // there is no fake for config
+				client:                c,
+				scheme:                scheme,
+				autoDetectedProvider:  operator.ProviderNone,
+				status:                mockStatus,
+				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexer, nodeInformer, typhaListWatch{cs}, mockStatus),
+				calicoWindowsUpgrader: newCalicoWindowsUpgrader(cs, c, nodeIndexer, nodeInformer, mockStatus),
+				namespaceMigration:    &fakeNamespaceMigration{},
+				amazonCRDExists:       true,
+				enterpriseCRDsExist:   true,
+				migrationChecked:      true,
+				clusterDomain:         dns.DefaultClusterDomain,
+				requestChan:           requestChan,
+				doneChan:              make(chan struct{}),
 			}
 			r.typhaAutoscaler.start(ctx)
+			r.calicoWindowsUpgrader.start()
+			go func() {
+				r.processRequests()
+			}()
 
 			cr = &operator.Installation{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
@@ -739,6 +774,7 @@ var _ = Describe("Testing core-controller installation", func() {
 		})
 		AfterEach(func() {
 			cancel()
+			r.stop()
 		})
 
 		It("should create an internal manager TLS cert secret", func() {
@@ -777,6 +813,7 @@ var _ = Describe("Testing core-controller installation", func() {
 		var r ReconcileInstallation
 		var scheme *runtime.Scheme
 		var mockStatus *status.MockStatus
+		var requestChan chan utils.ReconcileRequest
 
 		var cr *operator.Installation
 
@@ -804,6 +841,22 @@ var _ = Describe("Testing core-controller installation", func() {
 					},
 					Spec: corev1.NodeSpec{},
 				},
+				&corev1.Node{
+					TypeMeta: metav1.TypeMeta{},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:   "node2",
+						Labels: map[string]string{"kubernetes.io/os": "linux"},
+					},
+					Spec: corev1.NodeSpec{},
+				},
+				&corev1.Node{
+					TypeMeta: metav1.TypeMeta{},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:   "node3",
+						Labels: map[string]string{"kubernetes.io/os": "linux"},
+					},
+					Spec: corev1.NodeSpec{},
+				},
 				&appsv1.Deployment{
 					TypeMeta:   metav1.TypeMeta{},
 					ObjectMeta: metav1.ObjectMeta{Name: "calico-typha", Namespace: "calico-system"},
@@ -812,33 +865,45 @@ var _ = Describe("Testing core-controller installation", func() {
 			}
 			cs = kfake.NewSimpleClientset(objs...)
 
-			// Create an object we can use throughout the test to do the compliance reconcile loops.
+			// Create an object we can use throughout the test to do the core reconcile loops.
 			mockStatus = &status.MockStatus{}
 			mockStatus.On("AddDaemonsets", mock.Anything).Return()
 			mockStatus.On("AddDeployments", mock.Anything).Return()
-			mockStatus.On("AddStatefulSets", mock.Anything).Return()
-			mockStatus.On("AddCronJobs", mock.Anything)
 			mockStatus.On("IsAvailable").Return(true)
 			mockStatus.On("OnCRFound").Return()
 			mockStatus.On("ClearDegraded")
 			mockStatus.On("AddCertificateSigningRequests", mock.Anything)
-			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
+
+			requestChan = make(chan utils.ReconcileRequest, 1)
+
+			// Create the indexer and informer shared by the typhaAutoscaler and
+			// calicoWindowsUpgrader.
+			nlw := nodeListWatch{cs}
+			nodeIndexer, nodeInformer := node.CreateNodeIndexerInformer(nlw)
 
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
-				config:               nil, // there is no fake for config
-				client:               c,
-				scheme:               scheme,
-				autoDetectedProvider: operator.ProviderNone,
-				status:               mockStatus,
-				typhaAutoscaler:      newTyphaAutoscaler(cs, nodeListWatch{cs}, typhaListWatch{cs}, mockStatus),
-				namespaceMigration:   &fakeNamespaceMigration{},
-				amazonCRDExists:      true,
-				enterpriseCRDsExist:  true,
-				migrationChecked:     true,
+				config:                nil, // there is no fake for config
+				client:                c,
+				scheme:                scheme,
+				autoDetectedProvider:  operator.ProviderNone,
+				status:                mockStatus,
+				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexer, nodeInformer, typhaListWatch{cs}, mockStatus),
+				calicoWindowsUpgrader: newCalicoWindowsUpgrader(cs, c, nodeIndexer, nodeInformer, mockStatus),
+				namespaceMigration:    &fakeNamespaceMigration{},
+				amazonCRDExists:       true,
+				enterpriseCRDsExist:   true,
+				migrationChecked:      true,
+				requestChan:           requestChan,
+				doneChan:              make(chan struct{}),
 			}
+
 			r.typhaAutoscaler.start(ctx)
+			r.calicoWindowsUpgrader.start()
+			go func() {
+				r.processRequests()
+			}()
 
 			// We start off with a 'standard' installation, with nothing special
 			cr = &operator.Installation{
@@ -852,6 +917,7 @@ var _ = Describe("Testing core-controller installation", func() {
 		})
 		AfterEach(func() {
 			cancel()
+			r.stop()
 		})
 
 		It("should Reconcile with default config", func() {
@@ -956,6 +1022,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			}
 			Expect(test.GetResource(c, &rq)).To(BeNil())
 		})
+
 		It("should Reconcile with no active operator ConfigMap", func() {
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -1043,6 +1110,51 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(test.GetResource(c, &cm)).To(BeNil())
 			Expect(cm.Data["active-namespace"]).To(Equal("tigera-operator"))
 			Expect(cm.Data).To(HaveKey("extra-dummy"))
+		})
+
+		Context("calicoWindowsUpgrader", func() {
+			currentCalicoVersion := fmt.Sprintf("Calico-%v", components.CalicoRelease)
+
+			It("should do nothing if variant is Enterprise", func() {
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				n1 := createNode(cs, "windows1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
+
+				// Node should not have changed.
+				Consistently(func() error {
+					return assertNodesUnchanged(cs, n1)
+				}, 10*time.Second, 100*time.Millisecond).Should(BeNil())
+
+				// No calls to AddWindowsNodeUpgrade expected.
+				mockStatus.AssertExpectations(GinkgoT())
+			})
+
+			It("should trigger upgrade of out-of-date Calico Windows nodes", func() {
+				cr.Spec.Variant = operator.Calico
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				n1 := createNode(cs, "windows1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
+				n2 := createNode(cs, "windows2", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: currentCalicoVersion})
+
+				mockStatus.On("AddWindowsNodeUpgrade", "windows1", currentCalicoVersion)
+
+				// Up-to-date node should not have changed.
+				Consistently(func() error {
+					return assertNodesUnchanged(cs, n2)
+				}, 10*time.Second, 100*time.Millisecond).Should(BeNil())
+
+				// Ensure that outdated nodes have the new label and taint.
+				Eventually(func() error {
+					return assertNodesHadUpgradeTriggered(cs, n1)
+				}, 10*time.Second).Should(BeNil())
+
+				// No calls to AddWindowsNodeUpgrade expected.
+				mockStatus.AssertExpectations(GinkgoT())
+			})
 		})
 	})
 })

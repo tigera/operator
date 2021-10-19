@@ -21,9 +21,16 @@ func GetExpectedTyphaScale(nodes int) int {
 	typhas := (nodes / maxNodesPerTypha) + 1
 	// We add one more to ensure there is always 1 extra for high availability purposes.
 	typhas += 1
-	// If we don't have enough nodes to have 3 typhs then make sure there is one typha for each node.
 	if nodes <= 3 {
-		typhas = nodes
+		if nodes > 0 {
+			// If we don't have enough nodes to have 3 typhas then make sure there is one typha for each node.
+			typhas = nodes
+		} else {
+			// If we get zero schedulable nodes, e.g., due to an overloaded kube apiserver,
+			// Typha autoscaler getNodeCounts() may return 0 nodes.
+			// Make sure we have at least 1 replicas but not 0.
+			typhas = 1
+		}
 	} else if typhas < 3 { // If typhas is less than 3 always make sure we have 3
 		typhas = 3
 	}

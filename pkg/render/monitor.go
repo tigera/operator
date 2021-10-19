@@ -138,6 +138,7 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 			ImagePullSecrets: secret.GetReferenceList(mc.pullSecrets),
 			Replicas:         ptr.Int32ToPtr(3),
 			Version:          components.ComponentPrometheusAlertmanager.Version,
+			Tolerations:      mc.installation.ControlPlaneTolerations,
 		},
 	}
 }
@@ -162,6 +163,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 				"prometheus": CalicoNodePrometheus,
 				"role":       "tigera-prometheus-rules",
 			}},
+			Tolerations: mc.installation.ControlPlaneTolerations,
 			Alerting: &monitoringv1.AlertingSpec{
 				Alertmanagers: []monitoringv1.AlertmanagerEndpoints{
 					{

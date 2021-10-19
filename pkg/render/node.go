@@ -769,6 +769,7 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 		volumes = append(volumes,
 			corev1.Volume{Name: "var-run", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run"}}},
 			corev1.Volume{Name: "var-lib", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib"}}},
+			corev1.Volume{Name: "var-log", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log"}}},
 		)
 	} else {
 		volumes = append(volumes,
@@ -1012,6 +1013,7 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 		nodeVolumeMounts = append(nodeVolumeMounts,
 			corev1.VolumeMount{MountPath: "/var/run", Name: "var-run"},
 			corev1.VolumeMount{MountPath: "/var/lib", Name: "var-lib"},
+			corev1.VolumeMount{MountPath: "/var/log", Name: "var-log"},
 		)
 	} else {
 		nodeVolumeMounts = append(nodeVolumeMounts,
@@ -1028,7 +1030,7 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 		}
 		nodeVolumeMounts = append(nodeVolumeMounts, extraNodeMounts...)
 	} else if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
-		cniLogMount := corev1.VolumeMount{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: true}
+		cniLogMount := corev1.VolumeMount{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false}
 		nodeVolumeMounts = append(nodeVolumeMounts, cniLogMount)
 	}
 
@@ -1497,6 +1499,11 @@ func (c *nodeComponent) hostPathInitContainer() corev1.Container {
 		{
 			MountPath: "/var/lib",
 			Name:      "var-lib",
+			ReadOnly:  false,
+		},
+		{
+			MountPath: "/var/log",
+			Name:      "var-log",
 			ReadOnly:  false,
 		},
 	}

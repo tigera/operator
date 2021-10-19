@@ -403,7 +403,7 @@ func (m *statusManager) syncState() {
 		ds := &appsv1.DaemonSet{}
 		err := m.client.Get(context.TODO(), dsnn, ds)
 		if err != nil {
-			log.WithValues("error", err).Info("Error querying daemonset")
+			log.WithValues("reason", err).Info("Failed to query daemonset")
 			continue
 		}
 		if ds.Status.UpdatedNumberScheduled < ds.Status.DesiredNumberScheduled {
@@ -426,7 +426,7 @@ func (m *statusManager) syncState() {
 		dep := &appsv1.Deployment{}
 		err := m.client.Get(context.TODO(), depnn, dep)
 		if err != nil {
-			log.WithValues("error", err).Info("Error querying deployment")
+			log.WithValues("reason", err).Info("Failed to query deployment")
 			continue
 		}
 		if dep.Status.UnavailableReplicas > 0 {
@@ -447,7 +447,7 @@ func (m *statusManager) syncState() {
 		ss := &appsv1.StatefulSet{}
 		err := m.client.Get(context.TODO(), depnn, ss)
 		if err != nil {
-			log.WithValues("error", err).Info("Error querying statefulset")
+			log.WithValues("reason", err).Info("Failed to query statefulset")
 			continue
 		}
 		if *ss.Spec.Replicas != ss.Status.CurrentReplicas {
@@ -465,7 +465,7 @@ func (m *statusManager) syncState() {
 	for _, depnn := range m.cronjobs {
 		cj := &batch.CronJob{}
 		if err := m.client.Get(context.TODO(), depnn, cj); err != nil {
-			log.WithValues("error", err).Info("Error querying cronjobs")
+			log.WithValues("reason", err).Info("Failed to query cronjobs")
 			continue
 		}
 
@@ -473,7 +473,7 @@ func (m *statusManager) syncState() {
 		for _, jref := range cj.Status.Active {
 			j := &batchv1.Job{}
 			if err := m.client.Get(context.TODO(), types.NamespacedName{Namespace: jref.Namespace, Name: jref.Name}, j); err != nil {
-				log.WithValues("error", err).Info("couldn't query cronjob job")
+				log.WithValues("reason", err).Info("couldn't query cronjob job")
 				continue
 			}
 
@@ -516,7 +516,7 @@ func (m *statusManager) removeTigeraStatus() bool {
 		ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: m.component}}
 		err := m.client.Delete(context.TODO(), ts)
 		if err != nil && !errors.IsNotFound(err) {
-			log.WithValues("error", err).Info("Failed to remove TigeraStatus", "component", m.component)
+			log.WithValues("reason", err).Info("Failed to remove TigeraStatus", "component", m.component)
 		}
 		return true
 	}
@@ -577,7 +577,7 @@ func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondi
 	err := m.client.Get(context.TODO(), types.NamespacedName{Name: m.component}, &ts)
 	isNotFound := errors.IsNotFound(err)
 	if err != nil && !isNotFound {
-		log.WithValues("error", err).Info("Failed to get TigeraStatus", "component", m.component)
+		log.WithValues("reason", err).Info("Failed to get TigeraStatus", "component", m.component)
 		return
 	}
 
@@ -618,7 +618,7 @@ func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondi
 	// Update the object in the API, creating it if necessary.
 	if isNotFound {
 		if err = m.client.Create(context.TODO(), &ts); err != nil {
-			log.WithValues("error", err).Info("Failed to create tigera status")
+			log.WithValues("reason", err).Info("Failed to create tigera status")
 		}
 	} else {
 		err = m.client.Status().Update(context.TODO(), &ts)
@@ -627,7 +627,7 @@ func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondi
 				log.WithValues("reason", err).Info("update to tigera status conflicted, retrying")
 				m.set(false, conditions...)
 			} else {
-				log.WithValues("error", err).Info("Failed to update tigera status")
+				log.WithValues("reason", err).Info("Failed to update tigera status")
 			}
 		}
 	}

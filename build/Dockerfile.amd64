@@ -25,6 +25,8 @@ FROM scratch
 COPY --from=ubi /licenses /licenses
 COPY --from=ubi /etc/pki /etc/pki
 COPY --from=ubi /usr/share/pki /usr/share/pki
+COPY --from=ubi /lib /lib
+COPY --from=ubi /lib64 /lib64
 
 ARG GIT_VERSION=unknown
 LABEL name="Calico Operator" \

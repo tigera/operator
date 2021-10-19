@@ -23,6 +23,7 @@ require (
 	github.com/tigera/api v0.0.0-20211011084451-556d977afc02
 	go.uber.org/zap v1.15.0
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
+	golang.org/x/mod v0.3.1-0.20200828183125-ce943fd02449
 	google.golang.org/protobuf v1.25.0 // indirect
 	gopkg.in/inf.v0 v0.9.1
 	gopkg.in/yaml.v2 v2.4.0

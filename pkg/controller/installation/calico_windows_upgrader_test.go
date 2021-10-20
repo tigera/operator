@@ -47,9 +47,11 @@ import (
 )
 
 var _ = Describe("Calico windows upgrader", func() {
+	var c *calicoWindowsUpgrader
 	var cs *kfake.Clientset
 	var client kclient.Client
 	var cr *operator.Installation
+	var r *testReconciler
 
 	var mockStatus *status.MockStatus
 	var currentCalicoVersion string
@@ -107,25 +109,27 @@ var _ = Describe("Calico windows upgrader", func() {
 			time.Sleep(100 * time.Millisecond)
 		}
 		requestChan = make(chan utils.ReconcileRequest, 1)
+
+		c = newCalicoWindowsUpgrader(cs, client, nodeIndexer, mockStatus, requestChan, syncPeriodOption)
+		r = newTestReconciler(requestChan, cr.Spec.Variant, &one, func() error {
+			c.SetInstallationParams(r.variant, r.maxUnavailable)
+			return c.upgradeWindowsNodes()
+		})
 	})
 
-	It("should do nothing if the product is Enterprise", func() {
+	AfterEach(func() {
+		cancel()
+	})
+
+	It("xxx should do nothing if the product is Enterprise", func() {
 		// We start off Enterprise install
-		cr.Spec.Variant = operator.TigeraSecureEnterprise
-		cr.Status.Variant = operator.TigeraSecureEnterprise
-		Expect(client.Create(context.Background(), cr)).NotTo(HaveOccurred())
+		r.variant = operator.TigeraSecureEnterprise
 
 		n1 := createNode(cs, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
 		n2 := createNode(cs, "node2", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.0.0"})
 		n3 := createNode(cs, "node3", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Enterprise-v2.0.0"})
 
 		// Create the upgrader and start it.
-		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, mockStatus, requestChan, syncPeriodOption)
-		r := newTestReconciler(requestChan, func() error {
-			c.SetInstallationParams(cr.Spec.Variant, cr.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable)
-			return c.upgradeWindowsNodes()
-		})
-		defer cancel()
 		r.run(ctx)
 		c.start(ctx)
 		r.reconcile()
@@ -141,12 +145,6 @@ var _ = Describe("Calico windows upgrader", func() {
 	It("should ignore linux nodes", func() {
 		Expect(client.Create(context.Background(), cr)).NotTo(HaveOccurred())
 
-		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, mockStatus, requestChan, syncPeriodOption)
-		r := newTestReconciler(requestChan, func() error {
-			c.SetInstallationParams(cr.Spec.Variant, cr.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable)
-			return c.upgradeWindowsNodes()
-		})
-		defer cancel()
 		r.run(ctx)
 		c.start(ctx)
 		r.reconcile()
@@ -167,12 +165,6 @@ var _ = Describe("Calico windows upgrader", func() {
 
 		mockStatus.On("SetDegraded", "Failed to sync Windows nodes", "Node unsupported-node does not have the version annotation, it might be unhealthy or it might be running an unsupported Calico version.").Return()
 
-		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, mockStatus, requestChan, syncPeriodOption)
-		r := newTestReconciler(requestChan, func() error {
-			c.SetInstallationParams(cr.Spec.Variant, cr.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable)
-			return c.upgradeWindowsNodes()
-		})
-		defer cancel()
 		r.run(ctx)
 		c.start(ctx)
 		r.reconcile()
@@ -194,15 +186,13 @@ var _ = Describe("Calico windows upgrader", func() {
 		n2 := createNode(cs, "node2", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
 		n3 := createNode(cs, "node3", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: currentCalicoVersion})
 
-		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, mockStatus, requestChan, syncPeriodOption)
-		r := newTestReconciler(requestChan, func() error {
-			c.SetInstallationParams(cr.Spec.Variant, cr.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable)
-			return c.upgradeWindowsNodes()
-		})
-		defer cancel()
 		r.run(ctx)
 		c.start(ctx)
 		r.reconcile()
+
+		Eventually(func() error {
+			return assertNodesUnchanged(cs, n1, n3)
+		}, 5*time.Second, 100*time.Millisecond).Should(BeNil())
 
 		// Only node n2 should have changed.
 		Consistently(func() error {
@@ -242,12 +232,6 @@ var _ = Describe("Calico windows upgrader", func() {
 
 		mockStatus.On("AddWindowsNodeUpgrade", "node1", currentCalicoVersion)
 
-		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, mockStatus, requestChan, syncPeriodOption)
-		r := newTestReconciler(requestChan, func() error {
-			c.SetInstallationParams(cr.Spec.Variant, cr.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable)
-			return c.upgradeWindowsNodes()
-		})
-		defer cancel()
 		r.run(ctx)
 		c.start(ctx)
 		r.reconcile()
@@ -273,17 +257,11 @@ var _ = Describe("Calico windows upgrader", func() {
 		mockStatus.AssertExpectations(GinkgoT())
 	})
 
-	It("should use maxUnavailable correctly", func() {
+	It("xxx should use maxUnavailable correctly", func() {
 		// Create installation with rolling update strategy with 20%
 		// maxUnavailable.
 		mu := intstr.FromString("20%")
-		pctStrategy := appsv1.DaemonSetUpdateStrategy{
-			RollingUpdate: &appsv1.RollingUpdateDaemonSet{
-				MaxUnavailable: &mu,
-			},
-		}
-		cr.Spec.NodeUpdateStrategy = pctStrategy
-		Expect(client.Create(context.Background(), cr)).NotTo(HaveOccurred())
+		r.maxUnavailable = &mu
 
 		// Create 5 nodes, all ready to be upgraded.
 		createNode(cs, "node1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
@@ -295,13 +273,6 @@ var _ = Describe("Calico windows upgrader", func() {
 		// We won't know which nodes will end up being added for upgrade.
 		mockStatus.On("AddWindowsNodeUpgrade", mock.Anything, currentCalicoVersion)
 
-		// Create the upgrader and start it.
-		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, mockStatus, requestChan, syncPeriodOption)
-		r := newTestReconciler(requestChan, func() error {
-			c.SetInstallationParams(cr.Spec.Variant, cr.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable)
-			return c.upgradeWindowsNodes()
-		})
-		defer cancel()
 		r.run(ctx)
 		c.start(ctx)
 		r.reconcile()
@@ -325,9 +296,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		// Now change to 60% which should result in 3 nodes that should be
 		// upgradable.
 		mu = intstr.FromString("60%")
-		cr.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &mu
-		err := client.Update(context.Background(), cr)
-		Expect(err).To(BeNil())
+		r.maxUnavailable = &mu
 
 		Eventually(func() error {
 			mu := c.maxUnavailable.String()
@@ -340,7 +309,6 @@ var _ = Describe("Calico windows upgrader", func() {
 		// Trigger a reconcile (normally this would be done by the core
 		// controller).
 		r.reconcile()
-		Expect(err).To(BeNil())
 
 		f = func() error {
 			if len(c.nodesToUpgrade) != 2 || len(c.nodesUpgrading) != 3 || len(c.nodesFinishedUpgrade) != 0 {
@@ -348,7 +316,7 @@ var _ = Describe("Calico windows upgrader", func() {
 			}
 			return nil
 		}
-		Eventually(f, 10*time.Second).Should(BeNil())
+		Eventually(f, 5*time.Second).Should(BeNil())
 		Consistently(f, 10*time.Second).Should(BeNil())
 	})
 
@@ -552,14 +520,18 @@ func setNodeVersion(c kubernetes.Interface, indexer cache.Indexer, node *corev1.
 // testReconciler processes ReconcileRequests from a request chan and runs
 // a handler for each request.
 type testReconciler struct {
-	requestChan chan utils.ReconcileRequest
-	handler     func() error
+	requestChan    chan utils.ReconcileRequest
+	variant        operator.ProductVariant
+	maxUnavailable *intstr.IntOrString
+	handler        func() error
 }
 
-func newTestReconciler(requestChan chan utils.ReconcileRequest, handler func() error) *testReconciler {
+func newTestReconciler(requestChan chan utils.ReconcileRequest, variant operator.ProductVariant, maxUnavailable *intstr.IntOrString, handler func() error) *testReconciler {
 	return &testReconciler{
-		requestChan: requestChan,
-		handler:     handler,
+		requestChan:    requestChan,
+		variant:        variant,
+		maxUnavailable: maxUnavailable,
+		handler:        handler,
 	}
 }
 
@@ -574,7 +546,6 @@ func (r *testReconciler) reconcile() {
 // run processes reconcile requests.
 func (r *testReconciler) run(ctx context.Context) {
 	go func() {
-	out:
 		for {
 			select {
 			case <-r.requestChan:
@@ -584,11 +555,8 @@ func (r *testReconciler) run(ctx context.Context) {
 				}
 				Expect(err).NotTo(HaveOccurred())
 			case <-ctx.Done():
-				break out
-			default:
-				time.Sleep(500 * time.Millisecond)
+				return
 			}
 		}
 	}()
-
 }

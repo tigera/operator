@@ -134,7 +134,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 	typhaScaler := newTyphaAutoscaler(cs, nodeIndexer, typhaListWatch, statusManager)
 
 	// Create a Calico Windows upgrader.
-	calicoWindowsUpgrader := newCalicoWindowsUpgrader(cs, mgr.GetClient(), nodeIndexer, statusManager)
+	calicoWindowsUpgrader := newCalicoWindowsUpgrader(cs, mgr.GetClient(), nodeIndexer, statusManager, requestChan)
 
 	r := &ReconcileInstallation{
 		config:                mgr.GetConfig(),
@@ -822,6 +822,10 @@ func (r *ReconcileInstallation) reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	// Update calicoWindowsUpgrader with the installation values it needs to
+	// process Calico Windows upgrades.
+	r.calicoWindowsUpgrader.SetInstallationParams(instance.Spec.Variant, instance.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable)
+
 	// now that migrated config is stored in the installation resource, we no longer need
 	// to check if a migration is needed for the lifetime of the operator.
 	r.migrationChecked = true
@@ -1196,7 +1200,6 @@ func (r *ReconcileInstallation) reconcile(ctx context.Context, request reconcile
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 
 	if err = r.calicoWindowsUpgrader.upgradeWindowsNodes(); err != nil {
-		log.Error(err, "Failed to process Calico Windows upgrades")
 		r.SetDegraded("Failed to process Windows node upgrades", err, reqLogger)
 		return reconcile.Result{}, err
 	}

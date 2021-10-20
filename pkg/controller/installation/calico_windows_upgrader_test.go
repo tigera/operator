@@ -180,7 +180,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		Expect(client.Create(context.Background(), cr)).NotTo(HaveOccurred())
 
 		// Only node n2 should be upgraded.
-		mockStatus.On("AddWindowsNodeUpgrade", "node2", currentCalicoVersion)
+		mockStatus.On("AddWindowsNodeUpgrade", "node2", "Calico-v3.21.999", currentCalicoVersion)
 
 		n1 := createNode(cs, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
 		n2 := createNode(cs, "node2", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
@@ -230,7 +230,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		// variant.
 		n1 := createNode(cs, "node1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Enterprise-v3.11.0"})
 
-		mockStatus.On("AddWindowsNodeUpgrade", "node1", currentCalicoVersion)
+		mockStatus.On("AddWindowsNodeUpgrade", "node1", "Enterprise-v3.11.0", currentCalicoVersion)
 
 		r.run(ctx)
 		c.start(ctx)
@@ -271,7 +271,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		createNode(cs, "node5", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
 
 		// We won't know which nodes will end up being added for upgrade.
-		mockStatus.On("AddWindowsNodeUpgrade", mock.Anything, currentCalicoVersion)
+		mockStatus.On("AddWindowsNodeUpgrade", mock.Anything, "Calico-v3.21.999", currentCalicoVersion)
 
 		r.run(ctx)
 		c.start(ctx)

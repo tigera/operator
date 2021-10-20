@@ -48,8 +48,8 @@ func (m *MockStatus) AddCertificateSigningRequests(name string, labels map[strin
 	m.Called(name)
 }
 
-func (m *MockStatus) AddWindowsNodeUpgrade(nodeName, expectedVersion string) {
-	m.Called(nodeName, expectedVersion)
+func (m *MockStatus) AddWindowsNodeUpgrade(nodeName, currentVersion, expectedVersion string) {
+	m.Called(nodeName, currentVersion, expectedVersion)
 }
 
 func (m *MockStatus) RemoveDaemonsets(dss ...types.NamespacedName) {

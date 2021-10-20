@@ -216,7 +216,8 @@ func (w *calicoWindowsUpgrader) upgradeWindowsNodes() error {
 	// For nodes already upgrading, ensure the status is correct
 	for _, n := range w.nodesUpgrading {
 		windowsLog.V(1).Info(fmt.Sprintf("Reconciling node upgrades in progress %v", n.Name))
-		w.statusManager.AddWindowsNodeUpgrade(n.Name, w.expectedVersion)
+		_, currentVersion := common.GetWindowsNodeVersion(n)
+		w.statusManager.AddWindowsNodeUpgrade(n.Name, currentVersion, w.expectedVersion)
 	}
 
 	for _, n := range w.nodesFinishedUpgrade {
@@ -440,7 +441,8 @@ func (w *calicoWindowsUpgrader) startUpgrade(ctx context.Context, node *corev1.N
 		return fmt.Errorf("Unable to remove label from node %v: %w", node.Name, err)
 	}
 
-	w.statusManager.AddWindowsNodeUpgrade(node.Name, w.expectedVersion)
+	_, currentVersion := common.GetWindowsNodeVersion(node)
+	w.statusManager.AddWindowsNodeUpgrade(node.Name, currentVersion, w.expectedVersion)
 	return nil
 }
 

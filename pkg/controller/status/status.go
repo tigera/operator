@@ -64,7 +64,7 @@ type StatusManager interface {
 	AddStatefulSets(sss []types.NamespacedName)
 	AddCronJobs(cjs []types.NamespacedName)
 	AddCertificateSigningRequests(name string, labels map[string]string)
-	AddWindowsNodeUpgrade(nodeName string, expectedVersion string)
+	AddWindowsNodeUpgrade(nodeName, currentVersion, expectedVersion string)
 	RemoveDaemonsets(dss ...types.NamespacedName)
 	RemoveDeployments(dps ...types.NamespacedName)
 	RemoveStatefulSets(sss ...types.NamespacedName)
@@ -281,6 +281,7 @@ func (m *statusManager) AddCertificateSigningRequests(name string, labels map[st
 
 type windowsNodeUpgrade struct {
 	nodeName        string
+	currentVersion  string
 	expectedVersion string
 }
 
@@ -302,11 +303,12 @@ func (w *windowsNodeUpgrade) isPending(ctx context.Context, c client.Client) (bo
 
 // AddWindowsNodeUpgrade tells the status manager to monitor the health of the given
 // Windows node upgrade.
-func (m *statusManager) AddWindowsNodeUpgrade(nodeName string, expectedVersion string) {
+func (m *statusManager) AddWindowsNodeUpgrade(nodeName, currentVersion, expectedVersion string) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.windowsnodeupgrades[nodeName] = windowsNodeUpgrade{
 		nodeName:        nodeName,
+		currentVersion:  currentVersion,
 		expectedVersion: expectedVersion,
 	}
 }
@@ -541,10 +543,7 @@ func (m *statusManager) syncState() {
 	}
 
 	for _, w := range m.windowsnodeupgrades {
-		pending, err := w.isPending(context.TODO(), m.client)
-		if err != nil {
-			log.WithValues("error", err).Error(err, fmt.Sprintf("Unable to check node %v upgrade status", w.nodeName))
-		} else if pending {
+		if w.currentVersion != w.expectedVersion {
 			progressing = append(progressing, fmt.Sprintf("Node %q is upgrading Calico for Windows to %q", w.nodeName, w.expectedVersion))
 		}
 	}

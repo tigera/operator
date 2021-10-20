@@ -38,6 +38,14 @@ const (
 	AWSSrcDstCheckOptionDisable                        = "Disable"
 )
 
+// +kubebuilder:validation:Enum=DoNothing;Enable;Disable
+type TPROXYModeOption string
+
+const (
+	TPROXYModeOptionEnabled  TPROXYModeOption = "Enabled"
+	TPROXYModeOptionDisabled TPROXYModeOption = "Disabled"
+)
+
 // +genclient
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
@@ -349,6 +357,10 @@ type FelixConfigurationSpec struct {
 	// Set source-destination-check on AWS EC2 instances. Accepted value must be one of "DoNothing", "Enabled" or "Disabled".
 	// [Default: DoNothing]
 	AWSSrcDstCheck *AWSSrcDstCheckOption `json:"awsSrcDstCheck,omitempty" validate:"omitempty,oneof=DoNothing Enable Disable"`
+
+	// TPROXYMode sets whether traffic is directed through a transparent proxy for further processing or not
+	// [Default: Disabled]
+	TPROXYMode *TPROXYModeOption `json:"tproxyMode,omitempty"`
 }
 
 type RouteTableRange struct {

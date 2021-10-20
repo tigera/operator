@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -69,6 +70,8 @@ type calicoWindowsUpgrader struct {
 	expectedVersion      string
 	expectedVariant      operatorv1.ProductVariant
 	syncPeriod           time.Duration
+	mutex                *sync.Mutex
+	needSync             bool
 }
 
 func (w *calicoWindowsUpgrader) hasPendingUpgrades() bool {
@@ -96,6 +99,8 @@ func newCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, indexer 
 		nodeIndexer:          indexer,
 		maxUnavailable:       &defaultMaxUnavailable,
 		syncPeriod:           10 * time.Second,
+		mutex:                &sync.Mutex{},
+		needSync:             true,
 	}
 
 	for _, o := range options {
@@ -105,10 +110,15 @@ func newCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, indexer 
 }
 
 func (w *calicoWindowsUpgrader) SetInstallationParams(variant operatorv1.ProductVariant, maxUnavailable *intstr.IntOrString) {
-	var changed bool
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+
+	// Check whether the variant or maxUnavailable has changed. If so, we should
+	// require a sync before an upgrade.
 	if w.expectedVariant != variant || maxUnavailable.Type != w.maxUnavailable.Type || maxUnavailable.IntVal != w.maxUnavailable.IntVal || maxUnavailable.StrVal != w.maxUnavailable.StrVal {
-		changed = true
+		w.needSync = true
 	}
+
 	newMaxUnavailable := &defaultMaxUnavailable
 	if maxUnavailable != nil {
 		newMaxUnavailable = maxUnavailable
@@ -119,19 +129,16 @@ func (w *calicoWindowsUpgrader) SetInstallationParams(variant operatorv1.Product
 	w.expectedVariant = variant
 	w.maxUnavailable = maxUnavailable
 	w.expectedVersion = common.WindowsLatestVersionString(w.expectedVariant)
-
-	if changed {
-		windowsLog.V(1).Info("Installation variant or maxUnavailable changed, triggering sync")
-		w.triggerSyncChan <- struct{}{}
-	}
 }
 
 func (w *calicoWindowsUpgrader) sync() (bool, error) {
-	windowsLog.V(1).Info("Syncing nodes upgrade status")
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
 
-	// Only sync if we've set the installation.
+	// Only do the sync if we've set the installation .variant and version.
 	if w.expectedVersion == "" {
 		windowsLog.V(1).Info("Skipping sync since installation params not set yet")
+		w.needSync = true
 		return false, nil
 	}
 
@@ -144,14 +151,22 @@ func (w *calicoWindowsUpgrader) sync() (bool, error) {
 	// TODO: remove this once Enterprise v3.11.0 is released.
 	if w.expectedVariant == operatorv1.TigeraSecureEnterprise {
 		windowsLog.V(1).Info("Enterprise upgrades for Windows are not currently supported, skipping remainder of sync")
+		w.needSync = false
 		return false, nil
 	}
 
+	// Sync the Windows nodes' upgrade status.
 	nodesChanged, err := w.syncNodesToUpgrade()
 	if err != nil {
 		w.statusManager.SetDegraded("Failed to sync Windows nodes", err.Error())
+		// If the sync failed, we should require the sync happens again before
+		// the upgrade runs.
+		w.needSync = true
 		return false, err
 	}
+
+	// The sync completed, the upgrade can now run.
+	w.needSync = false
 	return nodesChanged, nil
 }
 
@@ -160,6 +175,15 @@ func (w *calicoWindowsUpgrader) sync() (bool, error) {
 // immediately. For other upgrades, the installation's
 // NodeUpdateStrategy.RollingUpdate.MaxUnavailable value is respected.
 func (w *calicoWindowsUpgrader) upgradeWindowsNodes() error {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+
+	// Skip the upgrade processing if we need a sync first.
+	if w.needSync {
+		windowsLog.V(1).Info("Sync needed before upgrade, returning")
+		return nil
+	}
+
 	// For now, do nothing if the upgrade version is Enterprise since current
 	// Enterprise versions do not support the upgrade.
 	// This prevents a user from accidentally triggering an
@@ -184,7 +208,6 @@ func (w *calicoWindowsUpgrader) upgradeWindowsNodes() error {
 	nodesToUpgrade := w.getMaxNodesToUpgrade(maxUnavailable)
 	windowsLog.V(1).Info(fmt.Sprintf("Total Windows nodes=%v, maxUnavailable=%v, nodesToUpgrade=%v", numWindowsNodes, maxUnavailable, len(nodesToUpgrade)))
 	for _, n := range nodesToUpgrade {
-		windowsLog.V(1).Info(fmt.Sprintf("Starting upgrade on node %v", n.Name))
 		if err := w.startUpgrade(context.Background(), n); err != nil {
 			return fmt.Errorf("Unable to start upgrade on node %v: %w", n.Name, err)
 		}
@@ -197,12 +220,14 @@ func (w *calicoWindowsUpgrader) upgradeWindowsNodes() error {
 	}
 
 	for _, n := range w.nodesFinishedUpgrade {
-		windowsLog.V(1).Info(fmt.Sprintf("Finishing upgrade on node %v", n.Name))
 		if err := w.finishUpgrade(context.Background(), n); err != nil {
 			return fmt.Errorf("Unable to finish upgrade on node %v: %w", n.Name, err)
 		}
 	}
 
+	// After an upgrade has run, a sync must occur before the upgrade is run
+	// again.
+	w.needSync = true
 	return nil
 }
 
@@ -318,8 +343,6 @@ func (w *calicoWindowsUpgrader) syncNodesToUpgrade() (bool, error) {
 			}
 		}
 	}
-
-	windowsLog.V(1).Info(fmt.Sprintf("new nodesToUpgrade=%v, nodesUpgrading=%v, nodesFinishedUpgrade=%v", len(currNodesToUpgrade), len(currNodesUpgrading), len(currNodesFinishedUpgrade)))
 
 	// Save copy of previous node upgrade status values.
 	prevNodesToUpgrade := make(map[string]*corev1.Node)
@@ -468,6 +491,7 @@ func (w *calicoWindowsUpgrader) start(ctx context.Context) {
 			select {
 			case <-ticker.C:
 			case <-w.triggerSyncChan:
+				windowsLog.V(1).Info("Triggering sync")
 			case <-ctx.Done():
 				windowsLog.Info("Stopping sync loop")
 				return

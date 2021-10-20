@@ -273,54 +273,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		mockStatus.AssertExpectations(GinkgoT())
 	})
 
-	It("should default to maxUnavailable 1", func() {
-		Expect(client.Create(context.Background(), cr)).NotTo(HaveOccurred())
-
-		// Create the upgrader and start it.
-		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, mockStatus, requestChan, syncPeriodOption)
-		r := newTestReconciler(requestChan, func() error {
-			c.SetInstallationParams(cr.Spec.Variant, cr.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable)
-			return c.upgradeWindowsNodes()
-		})
-		defer cancel()
-		r.run(ctx)
-		c.start(ctx)
-		r.reconcile()
-
-		Consistently(func() error {
-			if c.maxUnavailable.String() != "1" {
-				return fmt.Errorf("c.maxUnavailable is %v, expecting 1", c.maxUnavailable.String())
-			}
-			return nil
-		}, 5*time.Second).Should(BeNil())
-	})
-
-	It("should default to maxUnavailable 1 for unsupported daemonset update strategy", func() {
-		cr.Spec.NodeUpdateStrategy = appsv1.DaemonSetUpdateStrategy{
-			Type: appsv1.OnDeleteDaemonSetStrategyType,
-		}
-		Expect(client.Create(context.Background(), cr)).NotTo(HaveOccurred())
-
-		// Create the upgrader and start it.
-		c := newCalicoWindowsUpgrader(cs, client, nodeIndexer, mockStatus, requestChan, syncPeriodOption)
-		r := newTestReconciler(requestChan, func() error {
-			c.SetInstallationParams(cr.Spec.Variant, cr.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable)
-			return c.upgradeWindowsNodes()
-		})
-		defer cancel()
-		r.run(ctx)
-		c.start(ctx)
-		r.reconcile()
-
-		Consistently(func() error {
-			if c.maxUnavailable.String() != "1" {
-				return fmt.Errorf("c.maxUnavailable is %v, expecting 1", c.maxUnavailable.String())
-			}
-			return nil
-		}, 5*time.Second).Should(BeNil())
-	})
-
-	It("should set maxUnavailable correctly", func() {
+	It("should use maxUnavailable correctly", func() {
 		// Create installation with rolling update strategy with 20%
 		// maxUnavailable.
 		mu := intstr.FromString("20%")

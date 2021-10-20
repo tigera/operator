@@ -68,7 +68,6 @@ type calicoWindowsUpgrader struct {
 	maxUnavailable       *intstr.IntOrString
 	expectedVersion      string
 	expectedVariant      operatorv1.ProductVariant
-	needsReconcile       bool
 	syncPeriod           time.Duration
 }
 
@@ -127,13 +126,13 @@ func (w *calicoWindowsUpgrader) SetInstallationParams(variant operatorv1.Product
 	}
 }
 
-func (w *calicoWindowsUpgrader) sync() error {
+func (w *calicoWindowsUpgrader) sync() (bool, error) {
 	windowsLog.V(1).Info("Syncing nodes upgrade status")
 
 	// Only sync if we've set the installation.
 	if w.expectedVersion == "" {
 		windowsLog.V(1).Info("Skipping sync since installation params not set yet")
-		return nil
+		return false, nil
 	}
 
 	// For now, do nothing if the upgrade version is Enterprise since current
@@ -145,16 +144,15 @@ func (w *calicoWindowsUpgrader) sync() error {
 	// TODO: remove this once Enterprise v3.11.0 is released.
 	if w.expectedVariant == operatorv1.TigeraSecureEnterprise {
 		windowsLog.V(1).Info("Enterprise upgrades for Windows are not currently supported, skipping remainder of sync")
-		return nil
+		return false, nil
 	}
 
 	nodesChanged, err := w.syncNodesToUpgrade()
 	if err != nil {
 		w.statusManager.SetDegraded("Failed to sync Windows nodes", err.Error())
-		return err
+		return false, err
 	}
-	w.needsReconcile = nodesChanged
-	return nil
+	return nodesChanged, nil
 }
 
 // upgradeWindowsNodes upgrades the Calico for Windows installation on outdated
@@ -343,19 +341,15 @@ func (w *calicoWindowsUpgrader) syncNodesToUpgrade() (bool, error) {
 	w.nodesUpgrading = currNodesUpgrading
 	w.nodesFinishedUpgrade = currNodesFinishedUpgrade
 
-	// Now compare the upgrade status of current nodes with previous run
-	// What constitutes a need to reconcile the windows nodes?
-	// - if the # of nodes to upgrade is diff
-	// - if the # of nodes upgrading is diff
-	// - if the # of nodes finished upgrading is diff
-	// - if the nodes to upgrade
 	windowsLog.V(1).Info(
 		fmt.Sprintf(
 			"toUpgrade: old=%v, new=%v. upgrading: old=%v, new=%v. finished: old=%v, new=%v",
 			len(prevNodesToUpgrade), len(currNodesToUpgrade), len(prevNodesUpgrading), len(currNodesUpgrading), len(prevNodesFinishedUpgrade), len(currNodesFinishedUpgrade)))
 
+	// Check if the length of the node upgrade status values differ. If so,
+	// a sync is needed.
 	if len(prevNodesToUpgrade) != len(currNodesToUpgrade) || len(prevNodesUpgrading) != len(currNodesUpgrading) || len(prevNodesFinishedUpgrade) != len(currNodesFinishedUpgrade) {
-		windowsLog.V(1).Info(fmt.Sprintf("node len changed: nodesToUpgrade=%v, nodesUpgrading=%v, nodesFinishedUpgrade=%v", len(w.nodesToUpgrade), len(w.nodesUpgrading), len(w.nodesFinishedUpgrade)))
+		windowsLog.V(1).Info("Node upgrade status has changed, slice len differs")
 		return true, nil
 	}
 
@@ -446,11 +440,11 @@ func (w *calicoWindowsUpgrader) start(ctx context.Context) {
 		ticker := time.NewTicker(w.syncPeriod)
 		defer ticker.Stop()
 		for {
-			err := w.sync()
+			needsReconcile, err := w.sync()
 			if err == nil {
 				// If the upgrade status of the nodes has changed since the last
 				// sync, then try to queue up a reconcile.
-				if w.needsReconcile {
+				if needsReconcile {
 					windowsLog.V(1).Info("Node upgrade status has changed, triggering reconcile")
 					request := utils.ReconcileRequest{
 						Context:    context.Background(),

@@ -24,6 +24,14 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
+var (
+	// This taint is applied to nodes upgrading Calico Windows.
+	CalicoWindowsUpgradingTaint = &corev1.Taint{
+		Key:    CalicoWindowsUpgradeTaintKey,
+		Effect: corev1.TaintEffectNoSchedule,
+	}
+)
+
 const (
 	CalicoWindowsUpgradeResourceName = "calico-windows-upgrade"
 	CalicoWindowsUpgradeScript       = "calico-upgrade.ps1"

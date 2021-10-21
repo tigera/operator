@@ -29,7 +29,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -45,14 +44,15 @@ import (
 var (
 	windowsLog = logf.Log.WithName("windows_upgrader")
 
-	// This taint is applied to nodes upgrading Calico Windows.
-	calicoWindowsUpgradingTaint = &v1.Taint{
-		Key:    common.CalicoWindowsUpgradeTaintKey,
-		Effect: v1.TaintEffectNoSchedule,
-	}
-
 	defaultMaxUnavailable = intstr.FromInt(1)
 )
+
+type CalicoWindowsUpgrader interface {
+	SetInstallationParams(variant operatorv1.ProductVariant, maxUnavailable *intstr.IntOrString)
+	HasPendingUpgrades() bool
+	UpgradeWindowsNodes() error
+	Start(ctx context.Context)
+}
 
 // calicoWindowsUpgrader helps manage the upgrade of Calico Windows nodes.
 // It works in conjunction with the CalicoUpgrade service running on each node.
@@ -72,9 +72,10 @@ type calicoWindowsUpgrader struct {
 	syncPeriod           time.Duration
 	mutex                *sync.Mutex
 	needSync             bool
+	installChanged       bool
 }
 
-func (w *calicoWindowsUpgrader) hasPendingUpgrades() bool {
+func (w *calicoWindowsUpgrader) HasPendingUpgrades() bool {
 	return len(w.nodesToUpgrade)+len(w.nodesUpgrading) > 0
 }
 
@@ -88,8 +89,8 @@ func calicoWindowsUpgraderSyncPeriod(syncPeriod time.Duration) calicoWindowsUpgr
 	}
 }
 
-// newCalicoWindowsUpgrader creates a Calico Windows upgrader.
-func newCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, indexer cache.Indexer, statusManager status.StatusManager, requestChan chan utils.ReconcileRequest, options ...calicoWindowsUpgraderOption) *calicoWindowsUpgrader {
+// NewCalicoWindowsUpgrader creates a Calico Windows upgrader.
+func NewCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, indexer cache.Indexer, statusManager status.StatusManager, requestChan chan utils.ReconcileRequest, options ...calicoWindowsUpgraderOption) CalicoWindowsUpgrader {
 	w := &calicoWindowsUpgrader{
 		clientset:            cs,
 		client:               c,
@@ -109,33 +110,40 @@ func newCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, indexer 
 	return w
 }
 
-func (w *calicoWindowsUpgrader) SetInstallationParams(variant operatorv1.ProductVariant, maxUnavailable *intstr.IntOrString) {
+func (w *calicoWindowsUpgrader) SetInstallationParams(newVariant operatorv1.ProductVariant, newMaxUnavailable *intstr.IntOrString) {
 	w.mutex.Lock()
-	defer w.mutex.Unlock()
+	defer func() {
+		w.mutex.Unlock()
+		w.triggerSyncChan <- struct{}{}
+	}()
+
+	if newMaxUnavailable == nil {
+		newMaxUnavailable = &defaultMaxUnavailable
+	}
 
 	// Check whether the variant or maxUnavailable has changed. If so, we should
 	// require a sync before an upgrade.
-	if w.expectedVariant != variant || maxUnavailable.Type != w.maxUnavailable.Type || maxUnavailable.IntVal != w.maxUnavailable.IntVal || maxUnavailable.StrVal != w.maxUnavailable.StrVal {
+	w.installChanged = false
+	if w.expectedVariant != newVariant || newMaxUnavailable.Type != w.maxUnavailable.Type || newMaxUnavailable.IntVal != w.maxUnavailable.IntVal || newMaxUnavailable.StrVal != w.maxUnavailable.StrVal {
 		w.needSync = true
+		w.installChanged = true
 	}
 
-	newMaxUnavailable := &defaultMaxUnavailable
-	if maxUnavailable != nil {
-		newMaxUnavailable = maxUnavailable
-	}
+	newVersion := common.WindowsLatestVersionString(newVariant)
+	windowsLog.V(1).Info(fmt.Sprintf("Setting installation params. Variant: old=%v, new=%v. Version: old=%v, new=%v. MaxUnavailable: old=%v, new=%v",
+		w.expectedVariant, newVariant, w.expectedVersion, newVersion, w.maxUnavailable.String(), newMaxUnavailable.String()))
 
-	windowsLog.V(1).Info(fmt.Sprintf("Setting installation params. Variant: old=%v, new=%v. MaxUnavailable: old=%v, new=%v", w.expectedVariant, variant, w.maxUnavailable.String(), newMaxUnavailable.String()))
 	w.maxUnavailable = newMaxUnavailable
-	w.expectedVariant = variant
-	w.maxUnavailable = maxUnavailable
-	w.expectedVersion = common.WindowsLatestVersionString(w.expectedVariant)
+	w.expectedVariant = newVariant
+	w.expectedVersion = newVersion
 }
 
 func (w *calicoWindowsUpgrader) sync() (bool, error) {
 	w.mutex.Lock()
+	windowsLog.V(1).Info("Syncing")
 	defer w.mutex.Unlock()
 
-	// Only do the sync if we've set the installation .variant and version.
+	// Only do the sync if we've set the installation variant and version.
 	if w.expectedVersion == "" {
 		windowsLog.V(1).Info("Skipping sync since installation params not set yet")
 		w.needSync = true
@@ -149,11 +157,11 @@ func (w *calicoWindowsUpgrader) sync() (bool, error) {
 	// would fail since the calico windows upgrade is will only be supported in
 	// Enterprise v3.11+
 	// TODO: remove this once Enterprise v3.11.0 is released.
-	if w.expectedVariant == operatorv1.TigeraSecureEnterprise {
-		windowsLog.V(1).Info("Enterprise upgrades for Windows are not currently supported, skipping remainder of sync")
-		w.needSync = false
-		return false, nil
-	}
+	//if w.expectedVariant == operatorv1.TigeraSecureEnterprise {
+	//	windowsLog.V(1).Info("Enterprise upgrades for Windows are not currently supported, skipping remainder of sync")
+	//	w.needSync = false
+	//	return false, nil
+	//}
 
 	// Sync the Windows nodes' upgrade status.
 	nodesChanged, err := w.syncNodesToUpgrade()
@@ -167,16 +175,20 @@ func (w *calicoWindowsUpgrader) sync() (bool, error) {
 
 	// The sync completed, the upgrade can now run.
 	w.needSync = false
-	return nodesChanged, nil
+	return nodesChanged || w.installChanged, nil
 }
 
-// upgradeWindowsNodes upgrades the Calico for Windows installation on outdated
+// UpgradeWindowsNodes upgrades the Calico for Windows installation on outdated
 // nodes. For upgrades from Calico -> Calico Enterprise, upgrades happen
 // immediately. For other upgrades, the installation's
 // NodeUpdateStrategy.RollingUpdate.MaxUnavailable value is respected.
-func (w *calicoWindowsUpgrader) upgradeWindowsNodes() error {
+func (w *calicoWindowsUpgrader) UpgradeWindowsNodes() error {
 	w.mutex.Lock()
-	defer w.mutex.Unlock()
+	windowsLog.V(1).Info("Upgrading windows nodes")
+	defer func() {
+		w.mutex.Unlock()
+		w.triggerSyncChan <- struct{}{}
+	}()
 
 	// Skip the upgrade processing if we need a sync first.
 	if w.needSync {
@@ -191,10 +203,10 @@ func (w *calicoWindowsUpgrader) upgradeWindowsNodes() error {
 	// would fail since the calico windows upgrade is will only be supported in
 	// Enterprise v3.11+
 	// TODO: remove this once Enterprise v3.11.0 is released.
-	if w.expectedVariant == operatorv1.TigeraSecureEnterprise {
-		windowsLog.V(1).Info("Enterprise upgrades for Windows are not currently supported")
-		return nil
-	}
+	//if w.expectedVariant == operatorv1.TigeraSecureEnterprise {
+	//	windowsLog.V(1).Info("Enterprise upgrades for Windows are not currently supported")
+	//	return nil
+	//}
 
 	// Get the total # of windows nodes we can have upgrading using the
 	// maxUnavailable value, if the node upgrade strategy was respected.
@@ -229,6 +241,7 @@ func (w *calicoWindowsUpgrader) upgradeWindowsNodes() error {
 	// After an upgrade has run, a sync must occur before the upgrade is run
 	// again.
 	w.needSync = true
+	//w.triggerSyncChan <- struct{}{}
 	return nil
 }
 
@@ -433,7 +446,7 @@ func (w *calicoWindowsUpgrader) hasNodeUpgradeStateChanged(old *corev1.Node, new
 
 func (w *calicoWindowsUpgrader) startUpgrade(ctx context.Context, node *corev1.Node) error {
 	windowsLog.Info(fmt.Sprintf("Starting Calico Windows upgrade on node %v", node.Name))
-	if err := addTaint(ctx, w.clientset, node.Name, calicoWindowsUpgradingTaint); err != nil {
+	if err := addTaint(ctx, w.clientset, node.Name, common.CalicoWindowsUpgradingTaint); err != nil {
 		return fmt.Errorf("Unable to add taint to node %v: %w", node.Name, err)
 	}
 
@@ -448,7 +461,7 @@ func (w *calicoWindowsUpgrader) startUpgrade(ctx context.Context, node *corev1.N
 
 func (w *calicoWindowsUpgrader) finishUpgrade(ctx context.Context, node *corev1.Node) error {
 	windowsLog.Info(fmt.Sprintf("Finishing upgrade on upgraded node %v", node.Name))
-	if err := removeTaint(ctx, w.clientset, node.Name, calicoWindowsUpgradingTaint); err != nil {
+	if err := removeTaint(ctx, w.clientset, node.Name, common.CalicoWindowsUpgradingTaint); err != nil {
 		return fmt.Errorf("Unable to clear taint from node %v: %w", node.Name, err)
 	}
 
@@ -460,7 +473,7 @@ func (w *calicoWindowsUpgrader) finishUpgrade(ctx context.Context, node *corev1.
 	return nil
 }
 
-func (w *calicoWindowsUpgrader) start(ctx context.Context) {
+func (w *calicoWindowsUpgrader) Start(ctx context.Context) {
 	go func() {
 		ticker := time.NewTicker(w.syncPeriod)
 		defer ticker.Stop()

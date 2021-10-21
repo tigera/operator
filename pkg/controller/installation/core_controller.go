@@ -38,6 +38,7 @@ import (
 	"github.com/tigera/operator/pkg/active"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/installation/windows"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/controller/migration/convert"
@@ -134,7 +135,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 	typhaScaler := newTyphaAutoscaler(cs, nodeIndexer, typhaListWatch, statusManager)
 
 	// Create a Calico Windows upgrader.
-	calicoWindowsUpgrader := newCalicoWindowsUpgrader(cs, mgr.GetClient(), nodeIndexer, statusManager, requestChan)
+	calicoWindowsUpgrader := windows.NewCalicoWindowsUpgrader(cs, mgr.GetClient(), nodeIndexer, statusManager, requestChan)
 
 	r := &ReconcileInstallation{
 		config:                mgr.GetConfig(),
@@ -154,7 +155,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
-	r.calicoWindowsUpgrader.start(opts.ShutdownContext)
+	r.calicoWindowsUpgrader.Start(opts.ShutdownContext)
 	go r.processRequests(opts.ShutdownContext)
 	return r, nil
 }
@@ -322,7 +323,7 @@ type ReconcileInstallation struct {
 	autoDetectedProvider  operator.Provider
 	status                status.StatusManager
 	typhaAutoscaler       *typhaAutoscaler
-	calicoWindowsUpgrader *calicoWindowsUpgrader
+	calicoWindowsUpgrader windows.CalicoWindowsUpgrader
 	namespaceMigration    migration.NamespaceMigration
 	enterpriseCRDsExist   bool
 	amazonCRDExists       bool
@@ -1199,11 +1200,11 @@ func (r *ReconcileInstallation) reconcile(ctx context.Context, request reconcile
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 
-	if err = r.calicoWindowsUpgrader.upgradeWindowsNodes(); err != nil {
+	if err = r.calicoWindowsUpgrader.UpgradeWindowsNodes(); err != nil {
 		r.SetDegraded("Failed to process Windows node upgrades", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	components = append(components, render.Windows(&instance.Spec, r.calicoWindowsUpgrader.hasPendingUpgrades()))
+	components = append(components, render.Windows(&instance.Spec, r.calicoWindowsUpgrader.HasPendingUpgrades()))
 
 	imageSet, err := imageset.GetImageSet(ctx, r.client, instance.Spec.Variant)
 	if err != nil {

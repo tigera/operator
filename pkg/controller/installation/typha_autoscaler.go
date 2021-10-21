@@ -194,10 +194,7 @@ func (t *typhaAutoscaler) isDegraded() bool {
 
 // autoscaleReplicas calculates the number of typha pods that should be running and scales the typha deployment accordingly
 func (t *typhaAutoscaler) autoscaleReplicas() error {
-	allSchedulableNodes, linuxNodes, err := t.getNodeCounts()
-	if err != nil {
-		return fmt.Errorf("could not get number of nodes: %w", err)
-	}
+	allSchedulableNodes, linuxNodes := t.waitToGetNodeCounts()
 	typhaLog.V(5).Info("Number of nodes to consider for typha autoscaling", "all", allSchedulableNodes, "linux", linuxNodes)
 	expectedReplicas := common.GetExpectedTyphaScale(allSchedulableNodes)
 	if linuxNodes < expectedReplicas {
@@ -206,7 +203,7 @@ func (t *typhaAutoscaler) autoscaleReplicas() error {
 
 	typhaLog.V(5).Info("Checking if we need to scale typha", "expectedReplicas", expectedReplicas, "currentReplicas", t.activeReplicas)
 	if int32(expectedReplicas) != t.activeReplicas {
-		err = t.updateReplicas(int32(expectedReplicas))
+		err := t.updateReplicas(int32(expectedReplicas))
 		if err != nil && !apierrors.IsNotFound(err) {
 			return fmt.Errorf("could not scale Typha deployment: %w", err)
 		}
@@ -239,6 +236,33 @@ func (t *typhaAutoscaler) updateReplicas(expectedReplicas int32) error {
 	return err
 }
 
+// waitToGetNodeCounts returns the number of all schedulable nodes and the number of schedulable linux nodes.
+// It will retry when we failed to getschedulable nodes.
+func (t *typhaAutoscaler) waitToGetNodeCounts() (int, int) {
+	maxDuration := 30 * time.Second
+	duration := 1 * time.Second
+
+	ticker := time.NewTicker(duration)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			duration = duration * 2
+			if duration >= maxDuration {
+				duration = maxDuration
+			}
+			ticker.Reset(duration)
+
+			if allSchedulableNodes, linuxNodes, err := t.getNodeCounts(); err != nil {
+				typhaLog.Info("could not get number of nodes: %s", err)
+			} else {
+				return allSchedulableNodes, linuxNodes
+			}
+		}
+	}
+}
+
 // getNodeCounts returns the number of all the schedulable nodes and the number of the schedulable linux nodes. The linux
 // node count is needed because typha pods can only be scheduled on linux nodes, however, nodes of other os types (i.e. windows)
 // still need to use typha.
@@ -269,6 +293,10 @@ func (t *typhaAutoscaler) getNodeCounts() (int, int, error) {
 		if n.Labels["kubernetes.io/os"] == "linux" {
 			linuxNodes++
 		}
+	}
+
+	if schedulable == 0 {
+		return 0, 0, fmt.Errorf("number of schedulable nodes is zero")
 	}
 	return schedulable, linuxNodes, nil
 }

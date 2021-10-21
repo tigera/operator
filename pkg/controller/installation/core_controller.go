@@ -38,9 +38,11 @@ import (
 	"github.com/tigera/operator/pkg/active"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/installation/windows"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/controller/migration/convert"
+	"github.com/tigera/operator/pkg/controller/node"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -109,33 +111,52 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 
 	statusManager := status.New(mgr.GetClient(), "calico", opts.KubernetesVersion)
 
-	// The typhaAutoscaler needs a clientset.
+	// The typhaAutoscaler and calicoWindowsUpgrader need a clientset.
 	cs, err := kubernetes.NewForConfig(mgr.GetConfig())
 	if err != nil {
 		return nil, err
 	}
 
-	// Create a Typha autoscaler.
+	// Create buffered channel for incoming reconcile requests.
+	requestChan := make(chan utils.ReconcileRequest, 1)
+
+	// Create the indexer and informer shared by the typhaAutoscaler and
+	// calicoWindowsUpgrader.
 	nodeListWatch := cache.NewListWatchFromClient(cs.CoreV1().RESTClient(), "nodes", "", fields.Everything())
+	nodeIndexer, nodeInformer := node.CreateNodeIndexerInformer(nodeListWatch)
+
+	go nodeInformer.Run(opts.ShutdownContext.Done())
+	for nodeInformer.HasSynced() {
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	// Create a Typha autoscaler.
 	typhaListWatch := cache.NewListWatchFromClient(cs.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"))
-	typhaScaler := newTyphaAutoscaler(cs, nodeListWatch, typhaListWatch, statusManager)
+	typhaScaler := newTyphaAutoscaler(cs, nodeIndexer, typhaListWatch, statusManager)
+
+	// Create a Calico Windows upgrader.
+	calicoWindowsUpgrader := windows.NewCalicoWindowsUpgrader(cs, mgr.GetClient(), nodeIndexer, statusManager, requestChan)
 
 	r := &ReconcileInstallation{
-		config:               mgr.GetConfig(),
-		client:               mgr.GetClient(),
-		scheme:               mgr.GetScheme(),
-		watches:              make(map[runtime.Object]struct{}),
-		autoDetectedProvider: opts.DetectedProvider,
-		status:               statusManager,
-		typhaAutoscaler:      typhaScaler,
-		namespaceMigration:   nm,
-		amazonCRDExists:      opts.AmazonCRDExists,
-		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
-		clusterDomain:        opts.ClusterDomain,
-		manageCRDs:           opts.ManageCRDs,
+		config:                mgr.GetConfig(),
+		client:                mgr.GetClient(),
+		scheme:                mgr.GetScheme(),
+		watches:               make(map[runtime.Object]struct{}),
+		autoDetectedProvider:  opts.DetectedProvider,
+		status:                statusManager,
+		typhaAutoscaler:       typhaScaler,
+		calicoWindowsUpgrader: calicoWindowsUpgrader,
+		namespaceMigration:    nm,
+		amazonCRDExists:       opts.AmazonCRDExists,
+		enterpriseCRDsExist:   opts.EnterpriseCRDExists,
+		clusterDomain:         opts.ClusterDomain,
+		manageCRDs:            opts.ManageCRDs,
+		requestChan:           requestChan,
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
+	r.calicoWindowsUpgrader.Start(opts.ShutdownContext)
+	go r.processRequests(opts.ShutdownContext)
 	return r, nil
 }
 
@@ -294,20 +315,22 @@ var _ reconcile.Reconciler = &ReconcileInstallation{}
 type ReconcileInstallation struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	config               *rest.Config
-	client               client.Client
-	scheme               *runtime.Scheme
-	controller           controller.Controller
-	watches              map[runtime.Object]struct{}
-	autoDetectedProvider operator.Provider
-	status               status.StatusManager
-	typhaAutoscaler      *typhaAutoscaler
-	namespaceMigration   migration.NamespaceMigration
-	enterpriseCRDsExist  bool
-	amazonCRDExists      bool
-	migrationChecked     bool
-	clusterDomain        string
-	manageCRDs           bool
+	config                *rest.Config
+	client                client.Client
+	scheme                *runtime.Scheme
+	controller            controller.Controller
+	watches               map[runtime.Object]struct{}
+	autoDetectedProvider  operator.Provider
+	status                status.StatusManager
+	typhaAutoscaler       *typhaAutoscaler
+	calicoWindowsUpgrader windows.CalicoWindowsUpgrader
+	namespaceMigration    migration.NamespaceMigration
+	enterpriseCRDsExist   bool
+	amazonCRDExists       bool
+	migrationChecked      bool
+	clusterDomain         string
+	manageCRDs            bool
+	requestChan           chan utils.ReconcileRequest
 }
 
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
@@ -669,10 +692,42 @@ func mergeProvider(cr *operator.Installation, provider operator.Provider) error 
 	return nil
 }
 
-// Reconcile reads that state of the cluster for a Installation object and makes changes based on the state read
+// Reconcile is called by the main controller manager when controlled resources are updated. It dedupes
+// requests to limit the amount of unnecessary work performed.
+func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+	resultChan := make(chan utils.ReconcileResult)
+	defer close(resultChan)
+	select {
+	case r.requestChan <- utils.ReconcileRequest{Context: ctx, Request: request, ResultChan: resultChan}:
+		// Wait for a response.
+		res := <-resultChan
+		return res.Result, res.Error
+	default:
+		// There is already a reconcile request queued. We reconcile everything on every
+		// request, so we don't need to queue another.
+		return reconcile.Result{}, nil
+	}
+}
+
+func (r *ReconcileInstallation) processRequests(ctx context.Context) {
+	for {
+		select {
+		case req := <-r.requestChan:
+			result, err := r.reconcile(req.Context, req.Request)
+			req.ResultChan <- utils.ReconcileResult{Error: err, Result: result}
+			// Rate-limit to prevent tight looping.
+			time.Sleep(1 * time.Second)
+
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// reconcile reads that state of the cluster for a Installation object and makes changes based on the state read
 // and what is in the Installation.Spec. The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileInstallation) reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.V(1).Info("Reconciling Installation.operator.tigera.io")
 
@@ -767,6 +822,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if err = r.updateCRDs(ctx, instance.Spec.Variant, reqLogger); err != nil {
 		return reconcile.Result{}, err
 	}
+
+	// Update calicoWindowsUpgrader with the installation values it needs to
+	// process Calico Windows upgrades.
+	r.calicoWindowsUpgrader.SetInstallationParams(instance.Spec.Variant, instance.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable)
 
 	// now that migrated config is stored in the installation resource, we no longer need
 	// to check if a migration is needed for the lifetime of the operator.
@@ -1055,6 +1114,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	objs := []client.Object{
 		typhaNodeTLS.CAConfigMap,
 	}
+
 	if typhaNodeTLS.NodeSecret != nil {
 		objs = append(objs, typhaNodeTLS.NodeSecret)
 	}
@@ -1139,6 +1199,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		ManagerInternalSecret:       managerInternalTLSSecret,
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
+
+	if err = r.calicoWindowsUpgrader.UpgradeWindowsNodes(); err != nil {
+		r.SetDegraded("Failed to process Windows node upgrades", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	components = append(components, render.Windows(&instance.Spec, r.calicoWindowsUpgrader.HasPendingUpgrades()))
 
 	imageSet, err := imageset.GetImageSet(ctx, r.client, instance.Spec.Variant)
 	if err != nil {

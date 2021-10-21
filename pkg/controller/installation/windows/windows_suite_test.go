@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package installation
+package windows
 
 import (
 	"testing"
@@ -26,9 +26,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
-func TestInstallation(t *testing.T) {
+func TestWindowsUpgrade(t *testing.T) {
 	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true), zap.Level(uzap.NewAtomicLevelAt(uzap.DebugLevel))))
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../report/installation_controller_suite.xml")
-	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/installation Suite", []Reporter{junitReporter})
+	junitReporter := reporters.NewJUnitReporter("../../../../report/windows_upgrade_suite.xml")
+	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/installation/windows Suite", []Reporter{junitReporter})
 }

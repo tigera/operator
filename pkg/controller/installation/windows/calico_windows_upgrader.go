@@ -241,7 +241,6 @@ func (w *calicoWindowsUpgrader) UpgradeWindowsNodes() error {
 	// After an upgrade has run, a sync must occur before the upgrade is run
 	// again.
 	w.needSync = true
-	//w.triggerSyncChan <- struct{}{}
 	return nil
 }
 

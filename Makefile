@@ -84,11 +84,18 @@ endif
 EXCLUDEARCH ?= s390x
 VALIDARCHES = $(filter-out $(EXCLUDEARCH),$(ARCHES))
 
+# We need CGO to leverage Boring SSL.  However, the cross-compile doesn't support CGO yet.
+ifeq ($(ARCH), $(filter $(ARCH),amd64))
+CGO_ENABLED=1
+else
+CGO_ENABLED=0
+endif
+
 ###############################################################################
 
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=v0.56
+GO_BUILD_VER?=v0.59
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(ARCH)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./api -name '*.go')
@@ -125,8 +132,7 @@ CONTAINERIZED= mkdir -p .go-pkg-cache $(GOMOD_CACHE) && \
 		-e KUBECONFIG=/go/src/$(PACKAGE_NAME)/kubeconfig.yaml \
 		-w /go/src/$(PACKAGE_NAME) \
 		--net=host \
-		$(EXTRA_DOCKER_ARGS) \
-		$(CALICO_BUILD)
+		$(EXTRA_DOCKER_ARGS)
 
 BUILD_IMAGE?=tigera/operator
 BUILD_INIT_IMAGE?=tigera/operator-init
@@ -211,9 +217,9 @@ endif
 build: fmt vet $(BINDIR)/operator-$(ARCH)
 $(BINDIR)/operator-$(ARCH): $(SRC_FILES)
 	mkdir -p $(BINDIR)
-	$(CONTAINERIZED) \
+	$(CONTAINERIZED) -e CGO_ENABLED=$(CGO_ENABLED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
-	go build -v -i -o $(BINDIR)/operator-$(ARCH) -ldflags "-X $(PACKAGE_NAME)/version.VERSION=$(GIT_VERSION) -s -w" ./main.go'
+	go build -v -i -o $(BINDIR)/operator-$(ARCH) -ldflags "-X $(PACKAGE_NAME)/version.VERSION=$(GIT_VERSION) -w" ./main.go'
 
 .PHONY: image
 image: build $(BUILD_IMAGE)
@@ -249,7 +255,7 @@ $(BINDIR)/kubectl:
 kubectl: $(BINDIR)/kubectl
 
 $(BINDIR)/kind:
-	$(CONTAINERIZED) sh -c "GOBIN=/go/src/$(PACKAGE_NAME)/$(BINDIR) go install sigs.k8s.io/kind"
+	$(CONTAINERIZED) $(CALICO_BUILD) sh -c "GOBIN=/go/src/$(PACKAGE_NAME)/$(BINDIR) go install sigs.k8s.io/kind"
 
 clean:
 	rm -rf build/_output
@@ -271,7 +277,7 @@ GINKGO_FOCUS?=.*
 ut: cluster-create run-uts cluster-destroy
 run-uts:
 	-mkdir -p .go-pkg-cache report
-	$(CONTAINERIZED) sh -c '$(GIT_CONFIG_SSH) \
+	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
 	ginkgo -r --skipPackage ./vendor -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(WHAT)"'
 
 ## Create a local kind dual stack cluster.
@@ -319,19 +325,24 @@ cluster-destroy: $(BINDIR)/kubectl $(BINDIR)/kind
 ###############################################################################
 .PHONY: static-checks
 ## Perform static checks on the code.
-static-checks:
-	$(CONTAINERIZED) golangci-lint run --deadline 5m
+static-checks: check-boring-ssl
+	$(CONTAINERIZED) $(CALICO_BUILD) golangci-lint run --deadline 5m
+
+check-boring-ssl: $(BINDIR)/operator-amd64
+	$(CONTAINERIZED) -e CGO_ENABLED=$(CGO_ENABLED) $(CALICO_BUILD) \
+		go tool nm $(BINDIR)/operator-amd64 > $(BINDIR)/tags.txt && grep '_Cfunc__goboringcrypto_' $(BINDIR)/tags.txt 1> /dev/null
+	-rm -f $(BINDIR)/tags.txt
 
 .PHONY: fix
 ## Fix static checks
 fix:
-	$(CONTAINERIZED) \
+	$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
 	goimports -w $(SRC_FILES)'
 
 .PHONY: format-check
 format-check:
-	@$(CONTAINERIZED) \
+	@$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
 	files=$$(gofmt -l ./pkg ./controllers ./api ./test); \
 	[ "$$files" = "" ] && exit 0; \
@@ -492,7 +503,7 @@ gen-versions-common: $(BINDIR)/gen-versions
 
 $(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
 	mkdir -p $(BINDIR)
-	$(CONTAINERIZED) \
+	$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
 	go build -o $(BINDIR)/gen-versions ./hack/gen-versions'
 
@@ -630,13 +641,13 @@ manifests: controller-gen
 
 # Run go fmt against code
 fmt:
-	$(CONTAINERIZED) \
+	$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
 	go fmt ./...'
 
 # Run go vet against code
 vet:
-	$(CONTAINERIZED) \
+	$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
 	go vet -composites=false ./...'
 
@@ -719,7 +730,7 @@ ifndef PREV_VERSION
 	$(error PREV_VERSION is undefined - run using make $@ VERSION=X.Y.Z PREV_VERSION=D.E.F)
 endif
 	$(eval EXTRA_DOCKER_ARGS += -e BUNDLE_CRD_DIR=$(BUNDLE_CRD_DIR) -e BUNDLE_DEPLOY_DIR=$(BUNDLE_DEPLOY_DIR))
-	$(CONTAINERIZED) "hack/gen-bundle/get-manifests.sh"
+	$(CONTAINERIZED) $(CALICO_BUILD) "hack/gen-bundle/get-manifests.sh"
 
 .PHONY: bundle-generate
 bundle-generate: bundle-crd-options manifests $(KUSTOMIZE) $(OPERATOR_SDK_BARE) bundle-manifests
@@ -736,7 +747,7 @@ bundle-generate: bundle-crd-options manifests $(KUSTOMIZE) $(OPERATOR_SDK_BARE) 
 .PHONY: update-bundle
 update-bundle: $(OPERATOR_SDK_BARE) get-digest
 	$(eval EXTRA_DOCKER_ARGS += -e OPERATOR_IMAGE_INSPECT="$(OPERATOR_IMAGE_INSPECT)" -e VERSION=$(VERSION) -e PREV_VERSION=$(PREV_VERSION))
-	$(CONTAINERIZED) hack/gen-bundle/update-bundle.sh
+	$(CONTAINERIZED) $(CALICO_BUILD) hack/gen-bundle/update-bundle.sh
 
 # Build the bundle image.
 .PHONY: bundle-build

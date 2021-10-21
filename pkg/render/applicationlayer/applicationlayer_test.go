@@ -72,7 +72,6 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.HostNetwork).To(BeTrue())
 		Expect(ds.Spec.Template.Spec.HostIPC).To(BeTrue())
 		Expect(ds.Spec.Template.Spec.DNSPolicy).To(Equal(corev1.DNSClusterFirstWithHostNet))
-		Expect(len(ds.Spec.Template.Spec.Volumes)).To(Equal(2))
 		Expect(len(ds.Spec.Template.Spec.Containers)).To(Equal(2))
 		Expect(len(ds.Spec.Template.Spec.Tolerations)).To(Equal(3))
 
@@ -93,7 +92,16 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 					},
 				},
 			},
+			{
+				Name: applicationlayer.FelixSync,
+				VolumeSource: corev1.VolumeSource{
+					FlexVolume: &corev1.FlexVolumeSource{
+						Driver: "nodeagent/uds",
+					},
+				},
+			},
 		}
+		Expect(len(ds.Spec.Template.Spec.Volumes)).To(Equal(len(expectedVolumes)))
 
 		for _, expected := range expectedVolumes {
 			Expect(dsVols).To(ContainElement(expected))
@@ -147,6 +155,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		collectorVolMounts := collectorContainer.VolumeMounts
 		expectedCollectorVolMounts := []corev1.VolumeMount{
 			{Name: applicationlayer.EnvoyLogsVolumeName, MountPath: "/tmp/"},
+			{Name: applicationlayer.FelixSync, MountPath: "/var/run/felix"},
 		}
 		Expect(len(collectorVolMounts)).To(Equal(len(expectedCollectorVolMounts)))
 		for _, expected := range expectedCollectorVolMounts {

@@ -44,6 +44,7 @@ import (
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/installation/windows"
 	"github.com/tigera/operator/pkg/controller/node"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -361,7 +362,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// Create the indexer and informer shared by the typhaAutoscaler and
 			// calicoWindowsUpgrader.
-			nlw := nodeListWatch{cs}
+			nlw := test.NodeListWatch{cs}
 			nodeIndexer, nodeInformer := node.CreateNodeIndexerInformer(nlw)
 
 			go nodeInformer.Run(ctx.Done())
@@ -376,8 +377,8 @@ var _ = Describe("Testing core-controller installation", func() {
 				scheme:                scheme,
 				autoDetectedProvider:  operator.ProviderNone,
 				status:                mockStatus,
-				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexer, typhaListWatch{cs}, mockStatus),
-				calicoWindowsUpgrader: newCalicoWindowsUpgrader(cs, c, nodeIndexer, mockStatus, requestChan),
+				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexer, test.TyphaListWatch{cs}, mockStatus),
+				calicoWindowsUpgrader: windows.NewCalicoWindowsUpgrader(cs, c, nodeIndexer, mockStatus, requestChan),
 				namespaceMigration:    &fakeNamespaceMigration{},
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,
@@ -386,7 +387,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			}
 
 			r.typhaAutoscaler.start(ctx)
-			r.calicoWindowsUpgrader.start(ctx)
+			r.calicoWindowsUpgrader.Start(ctx)
 			go func() {
 				r.processRequests(ctx)
 			}()
@@ -713,7 +714,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// Create the indexer and informer shared by the typhaAutoscaler and
 			// calicoWindowsUpgrader.
-			nlw := nodeListWatch{cs}
+			nlw := test.NodeListWatch{cs}
 			nodeIndexer, nodeInformer := node.CreateNodeIndexerInformer(nlw)
 
 			go nodeInformer.Run(ctx.Done())
@@ -728,8 +729,8 @@ var _ = Describe("Testing core-controller installation", func() {
 				scheme:                scheme,
 				autoDetectedProvider:  operator.ProviderNone,
 				status:                mockStatus,
-				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexer, typhaListWatch{cs}, mockStatus),
-				calicoWindowsUpgrader: newCalicoWindowsUpgrader(cs, c, nodeIndexer, mockStatus, requestChan),
+				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexer, test.TyphaListWatch{cs}, mockStatus),
+				calicoWindowsUpgrader: windows.NewCalicoWindowsUpgrader(cs, c, nodeIndexer, mockStatus, requestChan),
 				namespaceMigration:    &fakeNamespaceMigration{},
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,
@@ -738,7 +739,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				requestChan:           requestChan,
 			}
 			r.typhaAutoscaler.start(ctx)
-			r.calicoWindowsUpgrader.start(ctx)
+			r.calicoWindowsUpgrader.Start(ctx)
 			go func() {
 				r.processRequests(ctx)
 			}()
@@ -885,7 +886,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// Create the indexer and informer shared by the typhaAutoscaler and
 			// calicoWindowsUpgrader.
-			nlw := nodeListWatch{cs}
+			nlw := test.NodeListWatch{cs}
 			nodeIndexer, nodeInformer := node.CreateNodeIndexerInformer(nlw)
 
 			go nodeInformer.Run(ctx.Done())
@@ -900,8 +901,8 @@ var _ = Describe("Testing core-controller installation", func() {
 				scheme:                scheme,
 				autoDetectedProvider:  operator.ProviderNone,
 				status:                mockStatus,
-				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexer, typhaListWatch{cs}, mockStatus),
-				calicoWindowsUpgrader: newCalicoWindowsUpgrader(cs, c, nodeIndexer, mockStatus, requestChan),
+				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexer, test.TyphaListWatch{cs}, mockStatus),
+				calicoWindowsUpgrader: windows.NewCalicoWindowsUpgrader(cs, c, nodeIndexer, mockStatus, requestChan),
 				namespaceMigration:    &fakeNamespaceMigration{},
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,
@@ -910,7 +911,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			}
 
 			r.typhaAutoscaler.start(ctx)
-			r.calicoWindowsUpgrader.start(ctx)
+			r.calicoWindowsUpgrader.Start(ctx)
 			go func() {
 				r.processRequests(ctx)
 			}()
@@ -1129,11 +1130,11 @@ var _ = Describe("Testing core-controller installation", func() {
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 
-				n1 := createNode(cs, "windows1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
+				n1 := test.CreateNode(cs, "windows1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
 
 				// Node should not have changed.
 				Consistently(func() error {
-					return assertNodesUnchanged(cs, n1)
+					return test.AssertNodesUnchanged(cs, n1)
 				}, 10*time.Second, 100*time.Millisecond).Should(BeNil())
 
 				// No calls to AddWindowsNodeUpgrade expected.
@@ -1146,19 +1147,19 @@ var _ = Describe("Testing core-controller installation", func() {
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 
-				n1 := createNode(cs, "windows1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
-				n2 := createNode(cs, "windows2", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: currentCalicoVersion})
+				n1 := test.CreateNode(cs, "windows1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
+				n2 := test.CreateNode(cs, "windows2", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: currentCalicoVersion})
 
 				mockStatus.On("AddWindowsNodeUpgrade", "windows1", currentCalicoVersion)
 
 				// Up-to-date node should not have changed.
 				Consistently(func() error {
-					return assertNodesUnchanged(cs, n2)
+					return test.AssertNodesUnchanged(cs, n2)
 				}, 10*time.Second, 100*time.Millisecond).Should(BeNil())
 
 				// Ensure that outdated nodes have the new label and taint.
 				Eventually(func() error {
-					return assertNodesHadUpgradeTriggered(cs, n1)
+					return test.AssertNodesHadUpgradeTriggered(cs, n1)
 				}, 10*time.Second).Should(BeNil())
 
 				// No calls to AddWindowsNodeUpgrade expected.

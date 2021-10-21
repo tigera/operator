@@ -17,7 +17,6 @@ package windows
 import (
 	"context"
 	"fmt"
-	"reflect"
 	"time"
 
 	"github.com/stretchr/testify/mock"
@@ -31,6 +30,7 @@ import (
 	. "github.com/onsi/gomega"
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
+	test "github.com/tigera/operator/test"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -47,10 +47,9 @@ import (
 )
 
 var _ = Describe("Calico windows upgrader", func() {
-	var c *calicoWindowsUpgrader
+	var c CalicoWindowsUpgrader
 	var cs *kfake.Clientset
 	var client kclient.Client
-	var cr *operator.Installation
 	var r *testReconciler
 
 	var mockStatus *status.MockStatus
@@ -82,26 +81,8 @@ var _ = Describe("Calico windows upgrader", func() {
 		syncPeriodOption = calicoWindowsUpgraderSyncPeriod(2 * time.Second)
 
 		currentCalicoVersion = fmt.Sprintf("Calico-%v", components.CalicoRelease)
-		nlw := nodeListWatch{cs}
+		nlw := test.NodeListWatch{cs}
 		nodeIndexer, nodeInformer = node.CreateNodeIndexerInformer(nlw)
-
-		one := intstr.FromInt(1)
-		cr = &operator.Installation{
-			ObjectMeta: metav1.ObjectMeta{Name: "default"},
-			Spec: operator.InstallationSpec{
-				Variant: operator.Calico,
-				NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
-					RollingUpdate: &appsv1.RollingUpdateDaemonSet{
-						MaxUnavailable: &one,
-					},
-				},
-				Registry:              "some.registry.org/",
-				CertificateManagement: &operator.CertificateManagement{},
-			},
-			Status: operator.InstallationStatus{
-				Variant: operator.Calico,
-			},
-		}
 
 		ctx, cancel = context.WithCancel(context.TODO())
 		go nodeInformer.Run(ctx.Done())
@@ -110,98 +91,97 @@ var _ = Describe("Calico windows upgrader", func() {
 		}
 		requestChan = make(chan utils.ReconcileRequest, 1)
 
-		c = newCalicoWindowsUpgrader(cs, client, nodeIndexer, mockStatus, requestChan, syncPeriodOption)
-		r = newTestReconciler(requestChan, cr.Spec.Variant, &one, func() error {
+		c = NewCalicoWindowsUpgrader(cs, client, nodeIndexer, mockStatus, requestChan, syncPeriodOption)
+		one := intstr.FromInt(1)
+		r = newTestReconciler(requestChan, operator.Calico, &one)
+		r.handler = func() error {
 			c.SetInstallationParams(r.variant, r.maxUnavailable)
-			return c.upgradeWindowsNodes()
-		})
+			return c.UpgradeWindowsNodes()
+		}
 	})
 
 	AfterEach(func() {
 		cancel()
 	})
 
-	It("xxx should do nothing if the product is Enterprise", func() {
+	It("should do nothing if the product is Enterprise", func() {
 		// We start off Enterprise install
 		r.variant = operator.TigeraSecureEnterprise
 
-		n1 := createNode(cs, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
-		n2 := createNode(cs, "node2", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.0.0"})
-		n3 := createNode(cs, "node3", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Enterprise-v2.0.0"})
+		n1 := test.CreateNode(cs, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
+		n2 := test.CreateNode(cs, "node2", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.0.0"})
+		n3 := test.CreateNode(cs, "node3", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Enterprise-v2.0.0"})
 
 		// Create the upgrader and start it.
 		r.run(ctx)
-		c.start(ctx)
+		c.Start(ctx)
 		r.reconcile()
 
 		// Nodes should not have changed.
 		Consistently(func() error {
-			return assertNodesUnchanged(cs, n1, n2, n3)
+			return test.AssertNodesUnchanged(cs, n1, n2, n3)
 		}, 5*time.Second, 100*time.Millisecond).Should(BeNil())
 
 		mockStatus.AssertExpectations(GinkgoT())
 	})
 
 	It("should ignore linux nodes", func() {
-		Expect(client.Create(context.Background(), cr)).NotTo(HaveOccurred())
-
 		r.run(ctx)
-		c.start(ctx)
+		c.Start(ctx)
 		r.reconcile()
 
-		n1 := createNode(cs, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
-		n2 := createNode(cs, "node2", map[string]string{"kubernetes.io/os": "linux"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Enterprise-v2.0.0"})
+		n1 := test.CreateNode(cs, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
+		n2 := test.CreateNode(cs, "node2", map[string]string{"kubernetes.io/os": "linux"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Enterprise-v2.0.0"})
+
+		r.reconcile()
 
 		Consistently(func() error {
-			return assertNodesUnchanged(cs, n1, n2)
-		}, 5*time.Second, 100*time.Millisecond).Should(BeNil())
+			return test.AssertNodesUnchanged(cs, n1, n2)
+		}, 10*time.Second, 100*time.Millisecond).Should(BeNil())
 
 		mockStatus.AssertExpectations(GinkgoT())
 	})
 
 	It("should set degraded if Windows nodes are missing the version annotation", func() {
-		Expect(client.Create(context.Background(), cr)).NotTo(HaveOccurred())
-		n1 := createNode(cs, "unsupported-node", map[string]string{"kubernetes.io/os": "windows"}, nil)
+		n1 := test.CreateNode(cs, "unsupported-node", map[string]string{"kubernetes.io/os": "windows"}, nil)
 
 		mockStatus.On("SetDegraded", "Failed to sync Windows nodes", "Node unsupported-node does not have the version annotation, it might be unhealthy or it might be running an unsupported Calico version.").Return()
 
 		r.run(ctx)
-		c.start(ctx)
+		c.Start(ctx)
 		r.reconcile()
 
 		Consistently(func() error {
-			return assertNodesUnchanged(cs, n1)
+			return test.AssertNodesUnchanged(cs, n1)
 		}, 5*time.Second, 100*time.Millisecond).Should(BeNil())
 
 		mockStatus.AssertExpectations(GinkgoT())
 	})
 
 	It("should upgrade outdated nodes", func() {
-		Expect(client.Create(context.Background(), cr)).NotTo(HaveOccurred())
-
 		// Only node n2 should be upgraded.
 		mockStatus.On("AddWindowsNodeUpgrade", "node2", "Calico-v3.21.999", currentCalicoVersion)
 
-		n1 := createNode(cs, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
-		n2 := createNode(cs, "node2", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
-		n3 := createNode(cs, "node3", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: currentCalicoVersion})
+		n1 := test.CreateNode(cs, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
+		n2 := test.CreateNode(cs, "node2", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
+		n3 := test.CreateNode(cs, "node3", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: currentCalicoVersion})
 
 		r.run(ctx)
-		c.start(ctx)
+		c.Start(ctx)
 		r.reconcile()
 
 		Eventually(func() error {
-			return assertNodesUnchanged(cs, n1, n3)
+			return test.AssertNodesUnchanged(cs, n1, n3)
 		}, 5*time.Second, 100*time.Millisecond).Should(BeNil())
 
 		// Only node n2 should have changed.
 		Consistently(func() error {
-			return assertNodesUnchanged(cs, n1, n3)
+			return test.AssertNodesUnchanged(cs, n1, n3)
 		}, 5*time.Second, 100*time.Millisecond).Should(BeNil())
 
 		// Ensure that node n2 has the new label and taint.
 		Eventually(func() error {
-			return assertNodesHadUpgradeTriggered(cs, n2)
+			return test.AssertNodesHadUpgradeTriggered(cs, n2)
 		}, 5*time.Second).Should(BeNil())
 
 		// At this point, we should only have a call to AddWindowsNodeUpgrade.
@@ -209,7 +189,7 @@ var _ = Describe("Calico windows upgrader", func() {
 
 		// Set the latest Calico Windows version like the node service would.
 		mockStatus.On("RemoveWindowsNodeUpgrade", "node2")
-		setNodeVersion(cs, c.nodeIndexer, n2, currentCalicoVersion)
+		setNodeVersion(cs, nodeIndexer, n2, currentCalicoVersion)
 
 		// Ensure that when calicoWindowsUpgrader runs again, the node taint and
 		// label are removed.
@@ -221,24 +201,22 @@ var _ = Describe("Calico windows upgrader", func() {
 	})
 
 	It("should upgrade outdated nodes if the installation variant differs", func() {
-		Expect(client.Create(context.Background(), cr)).NotTo(HaveOccurred())
-
 		// Create a Windows node running Enterprise with the Calico Windows
 		// version annotation. This can't actually exist
 		// yet since Calico Windows upgrades on Enterprise are not supported yet. However, this is a way to test
 		// that the upgrade is triggered when going to a different product
 		// variant.
-		n1 := createNode(cs, "node1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Enterprise-v3.11.0"})
+		n1 := test.CreateNode(cs, "node1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Enterprise-v3.11.0"})
 
 		mockStatus.On("AddWindowsNodeUpgrade", "node1", "Enterprise-v3.11.0", currentCalicoVersion)
 
 		r.run(ctx)
-		c.start(ctx)
+		c.Start(ctx)
 		r.reconcile()
 
 		// Ensure the node has the new label and taint.
 		Eventually(func() error {
-			return assertNodesHadUpgradeTriggered(cs, n1)
+			return test.AssertNodesHadUpgradeTriggered(cs, n1)
 		}, 5*time.Second).Should(BeNil())
 
 		// At this point, we should only have a call to AddWindowsNodeUpgrade.
@@ -248,7 +226,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		// Ensure that when calicoWindowsUpgrader runs again, the node taint and
 		// label are removed.
 		mockStatus.On("RemoveWindowsNodeUpgrade", "node1")
-		setNodeVersion(cs, c.nodeIndexer, n1, currentCalicoVersion)
+		setNodeVersion(cs, nodeIndexer, n1, currentCalicoVersion)
 
 		Eventually(func() error {
 			return assertNodesFinishedUpgrade(cs, n1)
@@ -257,213 +235,207 @@ var _ = Describe("Calico windows upgrader", func() {
 		mockStatus.AssertExpectations(GinkgoT())
 	})
 
-	It("xxx should use maxUnavailable correctly", func() {
+	It("should use maxUnavailable correctly", func() {
 		// Create installation with rolling update strategy with 20%
 		// maxUnavailable.
 		mu := intstr.FromString("20%")
 		r.maxUnavailable = &mu
 
 		// Create 5 nodes, all ready to be upgraded.
-		createNode(cs, "node1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
-		createNode(cs, "node2", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
-		createNode(cs, "node3", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
-		createNode(cs, "node4", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
-		createNode(cs, "node5", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
+		test.CreateNode(cs, "node1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
+		test.CreateNode(cs, "node2", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
+		test.CreateNode(cs, "node3", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
+		test.CreateNode(cs, "node4", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
+		test.CreateNode(cs, "node5", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
 
 		// We won't know which nodes will end up being added for upgrade.
 		mockStatus.On("AddWindowsNodeUpgrade", mock.Anything, "Calico-v3.21.999", currentCalicoVersion)
 
 		r.run(ctx)
-		c.start(ctx)
+		c.Start(ctx)
 		r.reconcile()
 
-		Eventually(func() error {
-			if c.maxUnavailable.String() != "20%" {
-				return fmt.Errorf("c.maxUnavailable is %v, expecting 20%%", c.maxUnavailable.String())
-			}
-			return nil
-		}, 5*time.Second).Should(BeNil())
-
-		f := func() error {
-			if len(c.nodesToUpgrade) != 4 || len(c.nodesUpgrading) != 1 || len(c.nodesFinishedUpgrade) != 0 {
-				return fmt.Errorf("expecting 4 to upgrade, 1 upgrading, 0 finished: %+v", c)
-			}
-			return nil
+		count := func() int {
+			return countNodesUpgrading(nodeIndexer)
 		}
-		Eventually(f, 5*time.Second).Should(BeNil())
-		Consistently(f, 10*time.Second).Should(BeNil())
+		Eventually(count, 10*time.Second).Should(Equal(1))
+		Consistently(count, 10*time.Second).Should(Equal(1))
 
 		// Now change to 60% which should result in 3 nodes that should be
 		// upgradable.
 		mu = intstr.FromString("60%")
 		r.maxUnavailable = &mu
 
-		Eventually(func() error {
-			mu := c.maxUnavailable.String()
-			if mu != "60%" {
-				return fmt.Errorf("c.maxUnavailable is %v not 60%%", mu)
-			}
-			return nil
-		}, 10*time.Second).Should(BeNil())
-
-		// Trigger a reconcile (normally this would be done by the core
-		// controller).
+		// Reconcile the installation (normally this would be triggered by the
+		// watch by the core controller)
 		r.reconcile()
 
-		f = func() error {
-			if len(c.nodesToUpgrade) != 2 || len(c.nodesUpgrading) != 3 || len(c.nodesFinishedUpgrade) != 0 {
-				return fmt.Errorf("expecting 2 to upgrade, 3 upgrading, 0 finished: %+v", c)
-			}
-			return nil
-		}
-		Eventually(f, 5*time.Second).Should(BeNil())
-		Consistently(f, 10*time.Second).Should(BeNil())
+		Eventually(count, 5*time.Second).Should(Equal(3))
+		Consistently(count, 10*time.Second).Should(Equal(3))
 	})
 
-	Context("getMaxNodesToUpgrade", func() {
-		node := func(name, version string) *corev1.Node {
-			return &corev1.Node{
-				TypeMeta: metav1.TypeMeta{Kind: "Node", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:        "pending1",
-					Annotations: map[string]string{common.CalicoWindowsVersionAnnotation: version},
-				},
-			}
-		}
-
-		var c *calicoWindowsUpgrader
-		BeforeEach(func() {
-			c = newCalicoWindowsUpgrader(cs, client, nodeIndexer, mockStatus, requestChan, syncPeriodOption)
-		})
-
+	Context("Test max upgrading nodes depending on upgrade type", func() {
 		It("should count already upgrading nodes against maxUnavailable, for Calico to Calico upgrades", func() {
-			p1 := node("pending1", "Calico-v3.21.999")
-			p2 := node("pending2", "Calico-v3.21.999")
-			u1 := node("upgrading1", "Calico-v3.21.999")
+			test.CreateNode(cs, "node1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
+			test.CreateNode(cs, "node2", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
+			test.CreateNode(cs, "node3", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
 
-			c.expectedVersion = "Calico-master"
-			c.nodesToUpgrade = map[string]*corev1.Node{"pending1": p1, "pending2": p2}
-			c.nodesUpgrading = map[string]*corev1.Node{"upgrading": u1}
+			mockStatus.On("AddWindowsNodeUpgrade", mock.Anything, "Calico-v3.21.999", currentCalicoVersion)
 
-			// 2 maxUnavailable, 1 already upgrading
-			toUpgrade := c.getMaxNodesToUpgrade(2)
-			Expect(len(toUpgrade)).To(Equal(1))
-			Expect(toUpgrade).To(ContainElements(p1))
+			r.run(ctx)
+			c.Start(ctx)
+			r.reconcile()
 
-			// 1 maxUnavailable, 1 already upgrading
-			toUpgrade = c.getMaxNodesToUpgrade(1)
-			Expect(len(toUpgrade)).To(Equal(0))
+			count := func() int {
+				return countNodesUpgrading(nodeIndexer)
+			}
+			Eventually(count, 5*time.Second).Should(Equal(1))
+			Consistently(count, 5*time.Second).Should(Equal(1))
 
-			// 0 maxUnavailable, 1 already upgrading
-			toUpgrade = c.getMaxNodesToUpgrade(0)
-			Expect(len(toUpgrade)).To(Equal(0))
+			mu := intstr.FromInt(0)
+			r.maxUnavailable = &mu
+			r.reconcile()
+
+			Eventually(count, 5*time.Second).Should(Equal(1))
+			Consistently(count, 5*time.Second).Should(Equal(1))
+
+			mu = intstr.FromInt(2)
+			r.maxUnavailable = &mu
+			r.reconcile()
+
+			Eventually(count, 5*time.Second).Should(Equal(2))
+			Consistently(count, 5*time.Second).Should(Equal(2))
 		})
 
 		It("should count already upgrading nodes against maxUnavailable, for Enterprise to Calico upgrades", func() {
-			p1 := node("pending1", "Enterprise-v3.11.0")
-			p2 := node("pending2", "Enterprise-v3.11.0")
-			u1 := node("upgrading1", "Enterprise-v3.11.0")
+			test.CreateNode(cs, "node1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Enterprise-v3.11.0"})
+			test.CreateNode(cs, "node2", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Enterprise-v3.11.0"})
+			test.CreateNode(cs, "node3", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Enterprise-v3.11.0"})
 
-			c.expectedVersion = "Calico-master"
-			c.nodesToUpgrade = map[string]*corev1.Node{"pending1": p1, "pending2": p2}
-			c.nodesUpgrading = map[string]*corev1.Node{"upgrading": u1}
+			mockStatus.On("AddWindowsNodeUpgrade", mock.Anything, "Enterprise-v3.11.0", currentCalicoVersion)
 
-			// 2 maxUnavailable, 1 already upgrading
-			toUpgrade := c.getMaxNodesToUpgrade(2)
-			Expect(len(toUpgrade)).To(Equal(1))
-			Expect(toUpgrade).To(ContainElements(p1))
+			r.run(ctx)
+			c.Start(ctx)
+			r.reconcile()
 
-			// 1 maxUnavailable, 1 already upgrading
-			toUpgrade = c.getMaxNodesToUpgrade(1)
-			Expect(len(toUpgrade)).To(Equal(0))
+			count := func() int {
+				return countNodesUpgrading(nodeIndexer)
+			}
+			Eventually(count, 5*time.Second).Should(Equal(1))
+			Consistently(count, 5*time.Second).Should(Equal(1))
 
-			// 0 maxUnavailable, 1 already upgrading
-			toUpgrade = c.getMaxNodesToUpgrade(0)
-			Expect(len(toUpgrade)).To(Equal(0))
+			mu := intstr.FromInt(0)
+			r.maxUnavailable = &mu
+			r.reconcile()
+
+			Eventually(count, 5*time.Second).Should(Equal(1))
+			Consistently(count, 5*time.Second).Should(Equal(1))
+
+			mu = intstr.FromInt(2)
+			r.maxUnavailable = &mu
+			r.reconcile()
+
+			Eventually(count, 5*time.Second).Should(Equal(2))
+			Consistently(count, 5*time.Second).Should(Equal(2))
 		})
 
 		It("should count already upgrading nodes against maxUnavailable, for Enterprise to Enterprise upgrades", func() {
-			p1 := node("pending1", "Enterprise-v3.11.0")
-			p2 := node("pending2", "Enterprise-v3.11.0")
-			u1 := node("upgrading1", "Enterprise-v3.11.0")
+			Skip("This test does not yet work since upgrades to Enterprise are not supported yet")
 
-			c.expectedVersion = "Enterprise-master"
-			c.nodesToUpgrade = map[string]*corev1.Node{"pending1": p1, "pending2": p2}
-			c.nodesUpgrading = map[string]*corev1.Node{"upgrading": u1}
+			test.CreateNode(cs, "node1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Enterprise-old"})
+			test.CreateNode(cs, "node2", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Enterprise-old"})
+			test.CreateNode(cs, "node3", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Enterprise-old"})
 
-			// 2 maxUnavailable, 1 already upgrading
-			toUpgrade := c.getMaxNodesToUpgrade(2)
-			Expect(len(toUpgrade)).To(Equal(1))
-			Expect(toUpgrade).To(ContainElements(p1))
+			mockStatus.On("AddWindowsNodeUpgrade", mock.Anything, "Enterprise-v3.11.0", currentCalicoVersion)
 
-			// 1 maxUnavailable, 1 already upgrading
-			toUpgrade = c.getMaxNodesToUpgrade(1)
-			Expect(len(toUpgrade)).To(Equal(0))
+			r.variant = operator.TigeraSecureEnterprise
+			r.run(ctx)
+			c.Start(ctx)
+			r.reconcile()
 
-			// 0 maxUnavailable, 1 already upgrading
-			toUpgrade = c.getMaxNodesToUpgrade(0)
-			Expect(len(toUpgrade)).To(Equal(0))
+			count := func() int {
+				return countNodesUpgrading(nodeIndexer)
+			}
+			Eventually(count, 5*time.Second).Should(Equal(1))
+			Consistently(count, 5*time.Second).Should(Equal(1))
+
+			mu := intstr.FromInt(0)
+			r.maxUnavailable = &mu
+			r.reconcile()
+
+			Eventually(count, 5*time.Second).Should(Equal(1))
+			Consistently(count, 5*time.Second).Should(Equal(1))
+
+			mu = intstr.FromInt(2)
+			r.maxUnavailable = &mu
+			r.reconcile()
+
+			Eventually(count, 5*time.Second).Should(Equal(2))
+			Consistently(count, 5*time.Second).Should(Equal(2))
 		})
 
 		It("should upgrade nodes going from Calico to Enterprise right away, even if max available slots is 0", func() {
-			p1 := node("pending1", "Calico-v3.21.999")
-			p2 := node("pending2", "Calico-v3.21.999")
-			u1 := node("upgrading1", "Calico-v3.21.999")
+			Skip("This test does not yet work since upgrades to Enterprise are not supported yet")
 
-			c.expectedVersion = "Enterprise-master"
-			c.nodesToUpgrade = map[string]*corev1.Node{"pending1": p1, "pending2": p2}
-			c.nodesUpgrading = map[string]*corev1.Node{"upgrading1": u1}
+			test.CreateNode(cs, "node1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
+			test.CreateNode(cs, "node2", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
+			test.CreateNode(cs, "node3", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
 
-			// maxUnavailable = 0. The pending nodes should still be upgraded
-			// despite 0 availability.
-			toUpgrade := c.getMaxNodesToUpgrade(0)
-			Expect(len(toUpgrade)).To(Equal(2))
-			Expect(toUpgrade).To(ContainElements(p1, p2))
+			mockStatus.On("AddWindowsNodeUpgrade", mock.Anything, "Calico-v3.21.999", "Enterprise-master")
 
-			// Have an upgrade from Ent -> Ent and maxUnavailable = 1. Same
-			// 2 pending nodes should be upgraded.
-			u2 := node("upgrading1", "Enterprise-old")
-			c.nodesUpgrading = map[string]*corev1.Node{"upgrading1": u1, "upgrading2": u2}
-			toUpgrade = c.getMaxNodesToUpgrade(1)
-			Expect(len(toUpgrade)).To(Equal(2))
-			Expect(toUpgrade).To(ContainElements(p1, p2))
+			r.variant = operator.TigeraSecureEnterprise
+			r.run(ctx)
+			c.Start(ctx)
+			r.reconcile()
+
+			count := func() int {
+				return countNodesUpgrading(nodeIndexer)
+			}
+			// The pending nodes should still be upgraded despite max unavailability
+			// value.
+			Eventually(count, 5*time.Second).Should(Equal(3))
+			Consistently(count, 5*time.Second).Should(Equal(3))
+
+			mu := intstr.FromInt(0)
+			r.maxUnavailable = &mu
+			r.reconcile()
+
+			// The pending nodes should still be upgraded despite max unavailability
+			// value.
+			Eventually(count, 5*time.Second).Should(Equal(3))
+			Consistently(count, 5*time.Second).Should(Equal(3))
+
+			mu = intstr.FromInt(2)
+			r.maxUnavailable = &mu
+			r.reconcile()
+
+			// The pending nodes should still be upgraded despite max unavailability
+			// value.
+			Eventually(count, 5*time.Second).Should(Equal(3))
+			Consistently(count, 5*time.Second).Should(Equal(3))
 		})
 	})
 })
 
-func assertNodesUnchanged(c kubernetes.Interface, nodes ...*corev1.Node) error {
-	for _, node := range nodes {
-		newNode, err := c.CoreV1().Nodes().Get(context.Background(), node.Name, metav1.GetOptions{})
-		Expect(err).To(BeNil())
-		if !reflect.DeepEqual(node, newNode) {
-			return fmt.Errorf("expected node %q to be unchanged", node.Name)
+func countNodesUpgrading(nodeIndexer cache.Indexer) int {
+	count := 0
+	for _, obj := range nodeIndexer.List() {
+		node := obj.(*corev1.Node)
+		if _, ok := node.Labels[common.CalicoWindowsUpgradeScriptLabel]; !ok {
+			continue
 		}
-	}
-	return nil
-}
-
-func assertNodesHadUpgradeTriggered(c kubernetes.Interface, nodes ...*corev1.Node) error {
-	for _, node := range nodes {
-		newNode, err := c.CoreV1().Nodes().Get(context.Background(), node.Name, metav1.GetOptions{})
-		Expect(err).To(BeNil())
-
-		label := newNode.Labels[common.CalicoWindowsUpgradeScriptLabel]
-		if label != common.CalicoWindowsUpgradeScript {
-			return fmt.Errorf("expected node %q to have upgrade label but it had: %q", node.Name, label)
-		}
-
-		var found bool
-		for _, taint := range newNode.Spec.Taints {
-			if taint.MatchTaint(calicoWindowsUpgradingTaint) {
+		found := false
+		for _, taint := range node.Spec.Taints {
+			if taint.MatchTaint(common.CalicoWindowsUpgradingTaint) {
 				found = true
 			}
 		}
-
 		if !found {
-			return fmt.Errorf("expected node %q to have upgrade taint", node.Name)
+			continue
 		}
+		count++
 	}
-	return nil
+	return count
 }
 
 func assertNodesFinishedUpgrade(c kubernetes.Interface, nodes ...*corev1.Node) error {
@@ -477,7 +449,7 @@ func assertNodesFinishedUpgrade(c kubernetes.Interface, nodes ...*corev1.Node) e
 
 		var found bool
 		for _, taint := range newNode.Spec.Taints {
-			if taint.MatchTaint(calicoWindowsUpgradingTaint) {
+			if taint.MatchTaint(common.CalicoWindowsUpgradingTaint) {
 				found = true
 			}
 		}
@@ -526,12 +498,11 @@ type testReconciler struct {
 	handler        func() error
 }
 
-func newTestReconciler(requestChan chan utils.ReconcileRequest, variant operator.ProductVariant, maxUnavailable *intstr.IntOrString, handler func() error) *testReconciler {
+func newTestReconciler(requestChan chan utils.ReconcileRequest, variant operator.ProductVariant, maxUnavailable *intstr.IntOrString) *testReconciler {
 	return &testReconciler{
 		requestChan:    requestChan,
 		variant:        variant,
 		maxUnavailable: maxUnavailable,
-		handler:        handler,
 	}
 }
 

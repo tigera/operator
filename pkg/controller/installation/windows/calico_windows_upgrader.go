@@ -157,11 +157,11 @@ func (w *calicoWindowsUpgrader) sync() (bool, error) {
 	// would fail since the calico windows upgrade is will only be supported in
 	// Enterprise v3.11+
 	// TODO: remove this once Enterprise v3.11.0 is released.
-	//if w.expectedVariant == operatorv1.TigeraSecureEnterprise {
-	//	windowsLog.V(1).Info("Enterprise upgrades for Windows are not currently supported, skipping remainder of sync")
-	//	w.needSync = false
-	//	return false, nil
-	//}
+	if w.expectedVariant == operatorv1.TigeraSecureEnterprise {
+		windowsLog.V(1).Info("Enterprise upgrades for Windows are not currently supported, skipping remainder of sync")
+		w.needSync = false
+		return false, nil
+	}
 
 	// Sync the Windows nodes' upgrade status.
 	nodesChanged, err := w.syncNodesToUpgrade()
@@ -203,10 +203,10 @@ func (w *calicoWindowsUpgrader) UpgradeWindowsNodes() error {
 	// would fail since the calico windows upgrade is will only be supported in
 	// Enterprise v3.11+
 	// TODO: remove this once Enterprise v3.11.0 is released.
-	//if w.expectedVariant == operatorv1.TigeraSecureEnterprise {
-	//	windowsLog.V(1).Info("Enterprise upgrades for Windows are not currently supported")
-	//	return nil
-	//}
+	if w.expectedVariant == operatorv1.TigeraSecureEnterprise {
+		windowsLog.V(1).Info("Enterprise upgrades for Windows are not currently supported")
+		return nil
+	}
 
 	// Get the total # of windows nodes we can have upgrading using the
 	// maxUnavailable value, if the node upgrade strategy was respected.

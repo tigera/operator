@@ -638,7 +638,7 @@ fmt:
 vet:
 	$(CONTAINERIZED) \
 	sh -c '$(GIT_CONFIG_SSH) \
-	go vet ./...'
+	go vet -composites=false ./...'
 
 # Generate code
 generate: $(BINDIR)/controller-gen

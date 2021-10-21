@@ -43,6 +43,7 @@ const (
 	L7CollectorContainerName    = "l7-collector"
 	ProxyContainerName          = "envoy-proxy"
 	EnvoyLogsVolumeName         = "envoy-logs"
+	FelixSync                   = "felix-sync"
 	EnvoyConfigMapName          = "envoy-config"
 	EnvoyConfigMapKey           = "envoy-config.yaml"
 	APLName                     = "application-layer"
@@ -276,6 +277,15 @@ func (c *component) volumes() []corev1.Volume {
 		},
 	})
 
+	volumes = append(volumes, corev1.Volume{
+		Name: FelixSync,
+		VolumeSource: corev1.VolumeSource{
+			FlexVolume: &corev1.FlexVolumeSource{
+				Driver: "nodeagent/uds",
+			},
+		},
+	})
+
 	return volumes
 }
 
@@ -291,6 +301,7 @@ func (c *component) proxyVolMounts() []corev1.VolumeMount {
 func (c *component) collectorVolMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
 		{Name: EnvoyLogsVolumeName, MountPath: "/tmp/"},
+		{Name: FelixSync, MountPath: "/var/run/felix"},
 	}
 }
 

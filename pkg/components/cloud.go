@@ -15,7 +15,7 @@ package components
 
 // Default registries for Calico and Tigera.
 const (
-	CloudRegistry = "gcr.io/tigera-tesla"
+	CloudRegistry = "gcr.io/tigera-tesla/"
 )
 
 func cloudRegistry(c component, registry string) string {

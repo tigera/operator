@@ -518,8 +518,8 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			},
 		},
 		Env: []corev1.EnvVar{
-			// Set to 30% of the default memory, such that resources can be divided over ES, Lucene and ML.
-			{Name: "ES_JAVA_OPTS", Value: "-Xms1398101K -Xmx1398101K"},
+			// Set to 50% of the default memory, such that resources can be divided over ES, Lucene and ML.
+			{Name: "ES_JAVA_OPTS", Value: "-Xms2147483K -Xmx2147483K"},
 		},
 		VolumeMounts: volumeMounts,
 	}
@@ -786,9 +786,6 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 // to half the size of RAM allocated to the Pod:
 // https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-managing-compute-resources.html#k8s-compute-resources-elasticsearch
 //
-// This recommendation does not consider space for machine learning however - we're using the
-// default limit of 30% of node memory there, so we adjust accordingly.
-//
 // Finally limit the value to 26GiB to encourage zero-based compressed oops:
 // https://www.elastic.co/blog/a-heap-of-trouble
 func memoryQuantityToJVMHeapSize(q *resource.Quantity) string {
@@ -799,8 +796,8 @@ func memoryQuantityToJVMHeapSize(q *resource.Quantity) string {
 	// "1000" is parsed as a Quantity with value 1000, scale factor 0, and returns 1000
 	rawMemQuantity := q.AsDec()
 
-	// Use one third of that for the JVM heap.
-	divisor := inf.NewDec(3, 0)
+	// Use half of that for the JVM heap.
+	divisor := inf.NewDec(2, 0)
 	halvedQuantity := new(inf.Dec).QuoRound(rawMemQuantity, divisor, 0, inf.RoundFloor)
 
 	// The remaining operations below perform validation and possible modification of the

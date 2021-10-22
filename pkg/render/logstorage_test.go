@@ -198,7 +198,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				Expect(limits.Memory().String()).To(Equal("4Gi"))
 				Expect(resources.Cpu().String()).To(Equal("250m"))
 				Expect(resources.Memory().String()).To(Equal("4Gi"))
-				Expect(esContainer.Env[0].Value).To(Equal("-Xms1398101K -Xmx1398101K"))
+				Expect(esContainer.Env[0].Value).To(Equal("-Xms2147483K -Xmx2147483K"))
 
 				//Check that the expected config made it's way to the Elastic CR
 				Expect(nodeSet.Config.Data).Should(Equal(map[string]interface{}{

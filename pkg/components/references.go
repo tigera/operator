@@ -30,6 +30,7 @@ const UseDefault = "UseDefault"
 
 // GetReference returns the fully qualified image to use, including registry and version.
 func GetReference(c component, registry, imagePath, imagePrefix string, is *operator.ImageSet) (string, error) {
+	registry = cloudRegistry(c, registry)
 	// If a user did not supply a registry, use the default registry
 	// based on component
 	if registry == "" || registry == UseDefault {

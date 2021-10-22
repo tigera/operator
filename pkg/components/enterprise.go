@@ -83,7 +83,7 @@ var (
 	}
 
 	ComponentEsProxy = component{
-		Version: "tesla-v3.10.0",
+		Version: "v3.10.0",
 		Image:   "tigera/es-proxy",
 	}
 
@@ -108,7 +108,7 @@ var (
 	}
 
 	ComponentIntrusionDetectionController = component{
-		Version: "tesla-v3.10.0",
+		Version: "v3.10.0",
 		Image:   "tigera/intrusion-detection-controller",
 	}
 
@@ -158,7 +158,7 @@ var (
 	}
 
 	ComponentTigeraKubeControllers = component{
-		Version: "tesla-v3.10.0",
+		Version: "v3.10.0",
 		Image:   "tigera/kube-controllers",
 	}
 

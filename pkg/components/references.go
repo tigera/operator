@@ -30,7 +30,8 @@ const UseDefault = "UseDefault"
 
 // GetReference returns the fully qualified image to use, including registry and version.
 func GetReference(c component, registry, imagePath, imagePrefix string, is *operator.ImageSet) (string, error) {
-	registry = cloudRegistry(c, registry)
+	version := c.Version
+	registry, version = cloudRegistry(c, registry, version)
 	// If a user did not supply a registry, use the default registry
 	// based on component
 	if registry == "" || registry == UseDefault {
@@ -65,7 +66,7 @@ func GetReference(c component, registry, imagePath, imagePrefix string, is *oper
 	}
 
 	if is == nil {
-		return fmt.Sprintf("%s%s:%s", registry, image, c.Version), nil
+		return fmt.Sprintf("%s%s:%s", registry, image, version), nil
 	}
 
 	for _, img := range is.Spec.Images {

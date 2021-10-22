@@ -13,17 +13,29 @@
 // limitations under the License.
 package components
 
+import "fmt"
+
 // Default registries for Calico and Tigera.
 const (
 	CloudRegistry = "gcr.io/tigera-tesla/"
 )
 
-func cloudRegistry(c component, registry string) string {
+var ElasticExternal bool = false
+
+func cloudRegistry(c component, registry, version string) (string, string) {
+	// If not external ES then use regular images
+	if !ElasticExternal {
+		return registry, version
+	}
 	if registry == "" || registry == UseDefault {
 		switch c {
 		case ComponentEsProxy, ComponentIntrusionDetectionController, ComponentTigeraKubeControllers:
 			registry = CloudRegistry
 		}
 	}
-	return registry
+	switch c {
+	case ComponentEsProxy, ComponentIntrusionDetectionController, ComponentTigeraKubeControllers:
+		version = fmt.Sprintf("tesla-%s", version)
+	}
+	return registry, version
 }

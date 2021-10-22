@@ -236,6 +236,7 @@ func main() {
 		log.Error(err, fmt.Sprintf("Unable to resolve ELASTIC_EXTERNAL, defaulting to false"))
 		elasticExternal = false
 	}
+	components.ElasticExternal = elasticExternal
 
 	options := options.AddOptions{
 		DetectedProvider:    provider,

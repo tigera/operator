@@ -23,6 +23,7 @@ import (
 	"os"
 	goruntime "runtime"
 	"strings"
+	"time"
 
 	"github.com/cloudflare/cfssl/log"
 	"github.com/ghodss/yaml"
@@ -54,6 +55,14 @@ import (
 	// +kubebuilder:scaffold:imports
 )
 
+const (
+	defaultLeaseDuration = 60 * time.Second
+	// controller-runtime Manager defaults
+	minimumLeaseDuration = 15 * time.Second
+	minimumRenewDeadline = 10 * time.Second
+	minimumRetryPeriod   = 2 * time.Second
+)
+
 var (
 	defaultMetricsPort int32 = 8484
 	scheme                   = runtime.NewScheme()
@@ -79,6 +88,7 @@ func printVersion() {
 
 func main() {
 	var enableLeaderElection bool
+	var leaseDurationString string
 	// urlOnlyKubeconfig is a slight hack; we need to get the apiserver from the
 	// kubeconfig but should use the in-cluster service account
 	var urlOnlyKubeconfig string
@@ -91,6 +101,9 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", true,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	flag.StringVar(&leaseDurationString, "lease-duration", "",
+		"Set the wait duration for non-leader candidates to force acquire leadership. "+
+			"RenewDeadline and RetryPeriod will scale accordingly to LeaseDuration. Default is 60 seconds.")
 	flag.StringVar(&urlOnlyKubeconfig, "url-only-kubeconfig", "",
 		"Path to a kubeconfig, but only for the apiserver url.")
 	flag.BoolVar(&showVersion, "version", false,
@@ -193,6 +206,9 @@ func main() {
 		os.Exit(0)
 	}
 
+	leaseDuration, renewDeadline, retryPeriod := getLeaderElectionDurations(leaseDurationString)
+	log.Info(fmt.Sprintf("Set leader election LeaseDuration to %s, RenewDeadline to %s, RetryPeriod to %s", leaseDuration, renewDeadline, retryPeriod))
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
 		MetricsBindAddress: metricsAddr(),
@@ -209,6 +225,9 @@ func main() {
 		ClientDisableCacheFor: []client.Object{
 			&v3.LicenseKey{},
 		},
+		LeaseDuration: &leaseDuration,
+		RenewDeadline: &renewDeadline,
+		RetryPeriod:   &retryPeriod,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -353,4 +372,29 @@ func showCRDs(variant operatorv1.ProductVariant, outputType string) error {
 	}
 
 	return nil
+}
+
+// getLeaderElectionDurations parses LeaseDuration from the command line and scale RenewDeadline and RetryPeriod accordingly.
+func getLeaderElectionDurations(leaseDurationString string) (time.Duration, time.Duration, time.Duration) {
+	leaseDuration, err := time.ParseDuration(leaseDurationString)
+	if err != nil {
+		leaseDuration = defaultLeaseDuration
+	}
+	if leaseDuration < minimumLeaseDuration {
+		leaseDuration = minimumLeaseDuration
+	}
+
+	// Scale renew deadline to 2/3 of lease duration.
+	renewDeadline := leaseDuration * 2 / 3
+	if renewDeadline < minimumRenewDeadline {
+		renewDeadline = minimumRenewDeadline
+	}
+
+	// Scale retry period to 1/6 of lease duration.
+	retryPeriod := leaseDuration / 6
+	if retryPeriod < minimumRetryPeriod {
+		retryPeriod = minimumRetryPeriod
+	}
+
+	return leaseDuration, renewDeadline, retryPeriod
 }

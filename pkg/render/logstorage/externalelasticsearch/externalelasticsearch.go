@@ -3,6 +3,7 @@
 package externalelasticsearch
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -11,20 +12,23 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
 // ExternalElasticsearch is used when Elasticsearch doesn't exist in this cluster, but we still need to set up resources
 // related to Elasticsearch in the cluster.
-func ExternalElasticsearch(install *operatorv1.InstallationSpec, clusterConfig *relasticsearch.ClusterConfig) render.Component {
+func ExternalElasticsearch(install *operatorv1.InstallationSpec, clusterConfig *relasticsearch.ClusterConfig, pullSecrets []*corev1.Secret) render.Component {
 	return &externalElasticsearch{
 		installation:  install,
 		clusterConfig: clusterConfig,
+		pullSecrets:   pullSecrets,
 	}
 }
 
 type externalElasticsearch struct {
 	installation  *operatorv1.InstallationSpec
 	clusterConfig *relasticsearch.ClusterConfig
+	pullSecrets   []*corev1.Secret
 }
 
 func (e externalElasticsearch) ResolveImages(is *operatorv1.ImageSet) error {
@@ -36,6 +40,9 @@ func (e externalElasticsearch) Objects() (toCreate, toDelete []client.Object) {
 	toCreate = append(toCreate, e.clusterConfig.ConfigMap())
 	toCreate = append(toCreate, e.oidcUserRole())
 	toCreate = append(toCreate, e.oidcUserRoleBinding())
+	if len(e.pullSecrets) > 0 {
+		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(render.ElasticsearchNamespace, e.pullSecrets...)...)...)
+	}
 	return toCreate, toDelete
 }
 

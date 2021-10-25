@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -25,6 +26,7 @@ var _ = Describe("External Elasticsearch rendering tests", func() {
 	Context("External Elasticsearch components", func() {
 		var installation *operatorv1.InstallationSpec
 		var clusterConfig *relasticsearch.ClusterConfig
+		var pullSecrets []*corev1.Secret
 
 		BeforeEach(func() {
 			installation = &operatorv1.InstallationSpec{
@@ -33,6 +35,7 @@ var _ = Describe("External Elasticsearch rendering tests", func() {
 			}
 
 			clusterConfig = relasticsearch.NewClusterConfig("cluster", 1, 1, 1)
+			pullSecrets = []*corev1.Secret{{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}}}
 		})
 
 		It("should render all resources needed for External Elasticsearch", func() {
@@ -41,9 +44,10 @@ var _ = Describe("External Elasticsearch rendering tests", func() {
 				{relasticsearch.ClusterConfigConfigMapName, rmeta.OperatorNamespace(), &corev1.ConfigMap{}},
 				{render.EsManagerRole, render.ElasticsearchNamespace, &rbacv1.Role{}},
 				{render.EsManagerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}},
+				{"tigera-pull-secret", render.ElasticsearchNamespace, &corev1.Secret{}},
 			}
 
-			component := ExternalElasticsearch(installation, clusterConfig)
+			component := ExternalElasticsearch(installation, clusterConfig, pullSecrets)
 			createResources, _ := component.Objects()
 
 			Expect(len(createResources)).To(Equal(len(expectedResources)))

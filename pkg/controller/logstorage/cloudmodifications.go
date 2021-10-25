@@ -84,6 +84,7 @@ func (r *ReconcileLogStorage) esKubeControllersAddCloudModificationsToConfig(
 func (r *ReconcileLogStorage) createExternalElasticsearch(
 	install *operatorv1.InstallationSpec,
 	clusterConfig *relasticsearch.ClusterConfig,
+	pullSecrets []*corev1.Secret,
 	hdler utils.ComponentHandler,
 	reqLogger logr.Logger,
 	ctx context.Context,
@@ -97,7 +98,7 @@ func (r *ReconcileLogStorage) createExternalElasticsearch(
 		clusterConfig.AddTenantId(cloudConfig.TenantId())
 	}
 
-	externalElasticsearch := externalelasticsearch.ExternalElasticsearch(install, clusterConfig)
+	externalElasticsearch := externalelasticsearch.ExternalElasticsearch(install, clusterConfig, pullSecrets)
 
 	if err := hdler.CreateOrUpdateOrDelete(ctx, externalElasticsearch, r.status); err != nil {
 		reqLogger.Error(err, err.Error())

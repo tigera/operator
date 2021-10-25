@@ -33,12 +33,12 @@ var (
 )
 
 const (
-	CalicoWindowsUpgradeResourceName = "calico-windows-upgrade"
-	CalicoWindowsUpgradeScript       = "calico-upgrade.ps1"
-	CalicoWindowsUpgradeVolumePath   = `c:\CalicoUpgrade`
-	CalicoWindowsUpgradeScriptLabel  = "projectcalico.org/CalicoWindowsUpgradeScript"
-	CalicoWindowsVersionAnnotation   = "projectcalico.org/CalicoWindowsVersion"
-	CalicoWindowsUpgradeTaintKey     = "projectcalico.org/CalicoWindowsUpgrading"
+	CalicoWindowsUpgradeResourceName    = "calico-windows-upgrade"
+	CalicoWindowsUpgradeVolumePath      = `c:\CalicoUpgrade`
+	CalicoWindowsUpgradeLabel           = "projectcalico.org/windows-upgrade"
+	CalicoWindowsUpgradeLabelInProgress = "in-progress"
+	CalicoWindowsVersionAnnotation      = "projectcalico.org/windows-version"
+	CalicoWindowsUpgradeTaintKey        = "projectcalico.org/windows-upgrade"
 )
 
 func WindowsLatestVersionString(product operatorv1.ProductVariant) string {

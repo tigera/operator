@@ -421,7 +421,7 @@ func countNodesUpgrading(nodeIndexer cache.Indexer) int {
 	count := 0
 	for _, obj := range nodeIndexer.List() {
 		node := obj.(*corev1.Node)
-		if _, ok := node.Labels[common.CalicoWindowsUpgradeScriptLabel]; !ok {
+		if _, ok := node.Labels[common.CalicoWindowsUpgradeLabel]; !ok {
 			continue
 		}
 		found := false
@@ -443,7 +443,7 @@ func assertNodesFinishedUpgrade(c kubernetes.Interface, nodes ...*corev1.Node) e
 		newNode, err := c.CoreV1().Nodes().Get(context.Background(), node.Name, metav1.GetOptions{})
 		Expect(err).To(BeNil())
 
-		if _, ok := newNode.Labels[common.CalicoWindowsUpgradeScriptLabel]; ok {
+		if _, ok := newNode.Labels[common.CalicoWindowsUpgradeLabel]; ok {
 			return fmt.Errorf("expected node %q to have upgrade label removed", newNode.Name)
 		}
 

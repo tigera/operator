@@ -105,7 +105,7 @@ func (c *windowsComponent) windowsUpgradeDaemonset() *appsv1.DaemonSet {
 							// - on Windows nodes
 							MatchExpressions: []corev1.NodeSelectorRequirement{
 								{
-									Key:      common.CalicoWindowsUpgradeScriptLabel,
+									Key:      common.CalicoWindowsUpgradeLabel,
 									Operator: corev1.NodeSelectorOpExists,
 								},
 								{

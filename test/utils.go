@@ -199,9 +199,8 @@ func AssertNodesHadUpgradeTriggered(c kubernetes.Interface, nodes ...*v1.Node) e
 		newNode, err := c.CoreV1().Nodes().Get(context.Background(), node.Name, metav1.GetOptions{})
 		Expect(err).To(BeNil())
 
-		label := newNode.Labels[common.CalicoWindowsUpgradeScriptLabel]
-		if label != common.CalicoWindowsUpgradeScript {
-			return fmt.Errorf("expected node %q to have upgrade label but it had: %q", node.Name, label)
+		if _, ok := newNode.Labels[common.CalicoWindowsUpgradeLabel]; !ok {
+			return fmt.Errorf("expected node %q to have upgrade label", node.Name)
 		}
 
 		var found bool

@@ -323,7 +323,7 @@ func (w *calicoWindowsUpgrader) syncNodesToUpgrade() (bool, error) {
 			windowsLog.V(1).Info(fmt.Sprintf("Node %v doesn't have the latest version. version=%v, expectedVersion=%v", node.Name, version, w.expectedVersion))
 			// If the version is outdated and the node does not yet have the upgrade
 			// label, we need to add the label to trigger the upgrade.
-			if _, exists := node.Labels[common.CalicoWindowsUpgradeScriptLabel]; !exists {
+			if _, exists := node.Labels[common.CalicoWindowsUpgradeLabel]; !exists {
 				windowsLog.V(1).Info(fmt.Sprintf("Node %v doesn't have the upgrade label", node.Name))
 				currNodesToUpgrade[node.Name] = node
 			} else {
@@ -338,7 +338,7 @@ func (w *calicoWindowsUpgrader) syncNodesToUpgrade() (bool, error) {
 			// script label, then it has just finished upgrading and needs the label
 			// removed. If it does not have the label, it's already upgraded and
 			// nothing needs to be done.
-			if _, exists := node.Labels[common.CalicoWindowsUpgradeScriptLabel]; exists {
+			if _, exists := node.Labels[common.CalicoWindowsUpgradeLabel]; exists {
 				windowsLog.V(1).Info(fmt.Sprintf("Node %v has finished the upgrade", node.Name))
 				currNodesFinishedUpgrade[node.Name] = node
 			}
@@ -420,8 +420,8 @@ func (w *calicoWindowsUpgrader) hasNodeUpgradeStateChanged(old *corev1.Node, new
 	_, oldVersion := common.GetWindowsNodeVersion(old)
 	_, newVersion := common.GetWindowsNodeVersion(new)
 
-	oldUpgradeLabel := old.Labels[common.CalicoWindowsUpgradeScriptLabel]
-	newUpgradeLabel := new.Labels[common.CalicoWindowsUpgradeScriptLabel]
+	oldUpgradeLabel := old.Labels[common.CalicoWindowsUpgradeLabel]
+	newUpgradeLabel := new.Labels[common.CalicoWindowsUpgradeLabel]
 
 	windowsLog.V(1).Info(fmt.Sprintf("node=%v. version: old=%v, new=%v. label: old=%v, new=%v", old.Name, oldVersion, newVersion, oldUpgradeLabel, newUpgradeLabel))
 
@@ -437,7 +437,7 @@ func (w *calicoWindowsUpgrader) startUpgrade(ctx context.Context, node *corev1.N
 		return fmt.Errorf("Unable to add taint to node %v: %w", node.Name, err)
 	}
 
-	if err := nodeutils.AddNodeLabel(ctx, w.clientset, node.Name, common.CalicoWindowsUpgradeScriptLabel, common.CalicoWindowsUpgradeScript); err != nil {
+	if err := nodeutils.AddNodeLabel(ctx, w.clientset, node.Name, common.CalicoWindowsUpgradeLabel, common.CalicoWindowsUpgradeLabelInProgress); err != nil {
 		return fmt.Errorf("Unable to remove label from node %v: %w", node.Name, err)
 	}
 
@@ -452,7 +452,7 @@ func (w *calicoWindowsUpgrader) finishUpgrade(ctx context.Context, node *corev1.
 		return fmt.Errorf("Unable to clear taint from node %v: %w", node.Name, err)
 	}
 
-	if err := nodeutils.RemoveNodeLabel(ctx, w.clientset, node.Name, common.CalicoWindowsUpgradeScriptLabel); err != nil {
+	if err := nodeutils.RemoveNodeLabel(ctx, w.clientset, node.Name, common.CalicoWindowsUpgradeLabel); err != nil {
 		return fmt.Errorf("Unable to remove label from node: %w", err)
 	}
 

@@ -46,6 +46,10 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 		log.Error(err, err.Error())
 		r.status.SetDegraded("Failed to get Elasticsearch pub cert secret used by kube controllers", err.Error())
 		return reconcile.Result{}, false, err
+	} else if kubeControllerEsPublicCertSecret == nil {
+		reqLogger.Info("Waiting for Elasticsearch pub cert secret to be available")
+		r.status.SetDegraded("Waiting for Elasticsearch pub cert secret to be available", "")
+		return reconcile.Result{}, false, nil
 	}
 
 	kubeControllersUserSecret, err := utils.GetSecret(ctx, r.client, kubecontrollers.ElasticsearchKubeControllersUserSecret, common.OperatorNamespace())

@@ -1027,6 +1027,10 @@ func (c *intrusionDetectionComponent) getBaseIntrusionDetectionADJobPodTemplate(
 						},
 					},
 				},
+				// ensures the AD pods are all deployed on the same node before a model storage cache is deployed (todo)
+				//  - without a model storage, models created by training jobs are stored on disk suceeeding detection jobs
+				//    need to read the models such that all pods running the AD containers need to run on the same node
+				NodeSelector: c.installation.ControlPlaneNodeSelector,
 			},
 		},
 	}

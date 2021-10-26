@@ -486,6 +486,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			result, proceed, err := r.createExternalElasticsearch(
 				install,
 				clusterConfig,
+				pullSecrets,
 				hdler,
 				reqLogger,
 				ctx,

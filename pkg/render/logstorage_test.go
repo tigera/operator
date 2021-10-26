@@ -198,7 +198,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				Expect(limits.Memory().String()).To(Equal("4Gi"))
 				Expect(resources.Cpu().String()).To(Equal("250m"))
 				Expect(resources.Memory().String()).To(Equal("4Gi"))
-				Expect(esContainer.Env[0].Value).To(Equal("-Xms1398101K -Xmx1398101K"))
+				Expect(esContainer.Env[0].Value).To(Equal("-Xms2147483K -Xmx2147483K"))
 
 				//Check that the expected config made it's way to the Elastic CR
 				Expect(nodeSet.Config.Data).Should(Equal(map[string]interface{}{
@@ -372,6 +372,47 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{Name: "elastic-internal-transport-certificates", MountPath: render.CSRCMountPath},
 				})
 				compareInitContainer(initContainers[4], "elastic-internal-init-log-selinux-context", []corev1.VolumeMount{})
+			})
+
+			It("should adhere to the requests and limits that you provide", func() {
+				logStorage.Spec.Nodes.ResourceRequirements = &corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{
+						corev1.ResourceMemory: *resource.NewQuantity(10*1024*1024*1024, resource.BinarySI),
+					},
+					Requests: corev1.ResourceList{
+						corev1.ResourceMemory: *resource.NewQuantity(5*1024*1024*1024, resource.BinarySI),
+					},
+				}
+				component := render.LogStorage(
+					logStorage,
+					installation, nil, nil, nil, nil,
+					esConfig,
+					[]*corev1.Secret{
+						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
+						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
+					},
+					[]*corev1.Secret{
+						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: common.OperatorNamespace()}},
+						{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
+					},
+					[]*corev1.Secret{
+						{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+					}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", nil, render.ElasticsearchLicenseTypeEnterpriseTrial)
+
+				createResources, deleteResources := component.Objects()
+				compareResources(deleteResources, []resourceTestObj{})
+
+				resultES := rtest.GetResource(createResources, render.ElasticsearchName, render.ElasticsearchNamespace,
+					"elasticsearch.k8s.elastic.co", "v1", "Elasticsearch").(*esv1.Elasticsearch)
+
+				// Verify that the default container limits/requests are set.
+				esContainer := resultES.Spec.NodeSets[0].PodTemplate.Spec.Containers[0]
+				limits := esContainer.Resources.Limits
+				resources := esContainer.Resources.Requests
+
+				Expect(limits.Memory().String()).To(Equal("10Gi"))
+				Expect(resources.Memory().String()).To(Equal("5Gi"))
+				Expect(esContainer.Env[0].Value).To(Equal("-Xms2560M -Xmx2560M"))
 			})
 
 		})

@@ -450,19 +450,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	if managementClusterConnection == nil {
-		result, proceed, err = r.createEsKubeControllers(
-			install,
-			hdler,
-			reqLogger,
-			managementCluster,
-			authentication,
-			esLicenseType,
-			ctx,
-		)
-		if err != nil || !proceed {
-			return result, err
-		}
-
 		result, proceed, err = r.createEsGateway(
 			install,
 			variant,
@@ -470,6 +457,19 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			esAdminUserSecret,
 			hdler,
 			reqLogger,
+			ctx,
+		)
+		if err != nil || !proceed {
+			return result, err
+		}
+
+		result, proceed, err = r.createEsKubeControllers(
+			install,
+			hdler,
+			reqLogger,
+			managementCluster,
+			authentication,
+			esLicenseType,
 			ctx,
 		)
 		if err != nil || !proceed {

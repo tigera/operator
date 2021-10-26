@@ -8,12 +8,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/controller/logstorage/common"
+	"github.com/tigera/operator/pkg/common"
+	lscommon "github.com/tigera/operator/pkg/controller/logstorage/common"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 )
 
@@ -26,24 +26,32 @@ func (r *ReconcileLogStorage) createEsGateway(
 	reqLogger logr.Logger,
 	ctx context.Context,
 ) (reconcile.Result, bool, error) {
-	gatewayCertSecret, publicCertSecret, customerProvidedCert, err := common.GetESGatewayCertificateSecrets(ctx, install, r.client, r.clusterDomain, log)
+	gatewayCertSecret, publicCertSecret, customerProvidedCert, err := lscommon.GetESGatewayCertificateSecrets(ctx, install, r.client, r.clusterDomain, log)
 	if err != nil {
 		reqLogger.Error(err, "failed to create Elasticsearch Gateway secrets")
 		r.status.SetDegraded("Failed to create Elasticsearch Gateway secrets", err.Error())
 		return reconcile.Result{}, false, err
 	}
 
-	kibanaInternalCertSecret, err := utils.GetSecret(ctx, r.client, render.KibanaInternalCertSecret, rmeta.OperatorNamespace())
+	kibanaInternalCertSecret, err := utils.GetSecret(ctx, r.client, render.KibanaInternalCertSecret, common.OperatorNamespace())
 	if err != nil {
-		reqLogger.Error(err, err.Error())
+		reqLogger.Error(err, "failed to get Kibana tls certificate secret")
+		r.status.SetDegraded("Failed to get Kibana tls certificate secret", err.Error())
+		return reconcile.Result{}, false, err
+	} else if kibanaInternalCertSecret == nil {
+		reqLogger.Info("Waiting for internal Kibana tls certificate secret to be available")
 		r.status.SetDegraded("Waiting for internal Kibana tls certificate secret to be available", "")
 		return reconcile.Result{}, false, nil
 	}
 
-	esInternalCertSecret, err := utils.GetSecret(ctx, r.client, relasticsearch.InternalCertSecret, rmeta.OperatorNamespace())
+	esInternalCertSecret, err := utils.GetSecret(ctx, r.client, relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
 	if err != nil {
-		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Waiting for internal Kibana tls certificate secret to be available", "")
+		reqLogger.Error(err, "failed to get Elasticsearch tls certificate secret")
+		r.status.SetDegraded("Failed to get Elasticsearch tls certificate secret", err.Error())
+		return reconcile.Result{}, false, err
+	} else if esInternalCertSecret == nil {
+		reqLogger.Info("Waiting for internal Elasticsearch tls certificate secret to be available")
+		r.status.SetDegraded("Waiting for internal Elasticsearch tls certificate secret to be available", "")
 		return reconcile.Result{}, false, nil
 	}
 
@@ -59,7 +67,7 @@ func (r *ReconcileLogStorage) createEsGateway(
 		break
 	}
 
-	kubeControllersGatewaySecret, kubeControllersVerificationSecret, kubeControllersSecureUserSecret, err := common.CreateKubeControllersSecrets(ctx, esAdminUserSecret, esAdminUserName, r.client)
+	kubeControllersGatewaySecret, kubeControllersVerificationSecret, kubeControllersSecureUserSecret, err := lscommon.CreateKubeControllersSecrets(ctx, esAdminUserSecret, esAdminUserName, r.client)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
 		r.status.SetDegraded("Failed to create kube-controllers secrets for Elasticsearch gateway", "")

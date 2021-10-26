@@ -225,7 +225,7 @@ func (p *tigeraPrometheusAPIComponent) deployment(prometheusServiceListenPort in
 					HostNetwork:      podHostNetworked,
 					ImagePullSecrets: secret.GetReferenceList(p.pullSecrets),
 					NodeSelector:     p.installation.ControlPlaneNodeSelector,
-					Tolerations:      []corev1.Toleration{rmeta.TolerateMaster},
+					Tolerations:      append(p.installation.ControlPlaneTolerations, rmeta.TolerateMaster),
 					Containers: []corev1.Container{
 						p.tigeraPrometheusAPIContainers(prometheusServiceListenPort),
 					},
@@ -296,7 +296,7 @@ func (p *tigeraPrometheusAPIComponent) getDefaultConfigMap() *corev1.ConfigMap {
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      TigeraPrometheusAPIName,
-			Namespace: rmeta.OperatorNamespace(),
+			Namespace: common.OperatorNamespace(),
 		},
 		Data: map[string]string{
 			tigeraPrometheusAPIListenPortFieldName: strconv.Itoa(PrometheusDefaultPort),

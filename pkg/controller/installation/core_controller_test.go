@@ -304,6 +304,7 @@ var _ = Describe("Testing core-controller installation", func() {
 		var c client.Client
 		var cs *kfake.Clientset
 		var ctx context.Context
+		var cancel context.CancelFunc
 		var r ReconcileInstallation
 		var scheme *runtime.Scheme
 		var mockStatus *status.MockStatus
@@ -319,7 +320,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// Create a client that will have a crud interface of k8s objects.
 			c = fake.NewFakeClientWithScheme(scheme)
-			ctx = context.Background()
+			ctx, cancel = context.WithCancel(context.Background())
 
 			// Create a fake clientset for the autoscaler.
 			var replicas int32 = 1
@@ -366,7 +367,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				enterpriseCRDsExist:  true,
 				migrationChecked:     true,
 			}
-			r.typhaAutoscaler.start()
+			r.typhaAutoscaler.start(ctx)
 
 			// We start off with a 'standard' installation, with nothing special
 			Expect(c.Create(
@@ -387,6 +388,9 @@ var _ = Describe("Testing core-controller installation", func() {
 						},
 					},
 				})).NotTo(HaveOccurred())
+		})
+		AfterEach(func() {
+			cancel()
 		})
 
 		It("should use builtin images", func() {
@@ -624,6 +628,7 @@ var _ = Describe("Testing core-controller installation", func() {
 		var c client.Client
 		var cs *kfake.Clientset
 		var ctx context.Context
+		var cancel context.CancelFunc
 		var r ReconcileInstallation
 		var cr *operator.Installation
 
@@ -644,7 +649,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// Create a client that will have a crud interface of k8s objects.
 			c = fake.NewFakeClientWithScheme(scheme)
-			ctx = context.Background()
+			ctx, cancel = context.WithCancel(context.Background())
 
 			// Create a fake clientset for the autoscaler.
 			var replicas int32 = 1
@@ -694,7 +699,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				migrationChecked:     true,
 				clusterDomain:        dns.DefaultClusterDomain,
 			}
-			r.typhaAutoscaler.start()
+			r.typhaAutoscaler.start(ctx)
 
 			cr = &operator.Installation{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
@@ -725,12 +730,15 @@ var _ = Describe("Testing core-controller installation", func() {
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ManagerInternalTLSSecretName,
-					Namespace: rmeta.OperatorNamespace(),
+					Namespace: common.OperatorNamespace(),
 				},
 			}
 
 			expectedDNSNames = dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
 			expectedDNSNames = append(expectedDNSNames, "localhost")
+		})
+		AfterEach(func() {
+			cancel()
 		})
 
 		It("should create an internal manager TLS cert secret", func() {
@@ -746,7 +754,7 @@ var _ = Describe("Testing core-controller installation", func() {
 		It("should replace the internal manager TLS cert secret if its DNS names are invalid", func() {
 			// Create a internal manager TLS secret with old DNS name.
 			oldSecret, err := secret.CreateTLSSecret(nil,
-				render.ManagerInternalTLSSecretName, rmeta.OperatorNamespace(), render.ManagerInternalSecretKeyName,
+				render.ManagerInternalTLSSecretName, common.OperatorNamespace(), render.ManagerInternalSecretKeyName,
 				render.ManagerInternalSecretCertName, rmeta.DefaultCertificateDuration, nil, "tigera-manager.tigera-manager.svc",
 			)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -765,6 +773,7 @@ var _ = Describe("Testing core-controller installation", func() {
 		var c client.Client
 		var cs *kfake.Clientset
 		var ctx context.Context
+		var cancel context.CancelFunc
 		var r ReconcileInstallation
 		var scheme *runtime.Scheme
 		var mockStatus *status.MockStatus
@@ -782,7 +791,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// Create a client that will have a crud interface of k8s objects.
 			c = fake.NewFakeClientWithScheme(scheme)
-			ctx = context.Background()
+			ctx, cancel = context.WithCancel(context.Background())
 
 			// Create a fake clientset for the autoscaler.
 			var replicas int32 = 1
@@ -829,7 +838,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				enterpriseCRDsExist:  true,
 				migrationChecked:     true,
 			}
-			r.typhaAutoscaler.start()
+			r.typhaAutoscaler.start(ctx)
 
 			// We start off with a 'standard' installation, with nothing special
 			cr = &operator.Installation{
@@ -840,6 +849,9 @@ var _ = Describe("Testing core-controller installation", func() {
 					CertificateManagement: &operator.CertificateManagement{},
 				},
 			}
+		})
+		AfterEach(func() {
+			cancel()
 		})
 
 		It("should Reconcile with default config", func() {
@@ -943,6 +955,94 @@ var _ = Describe("Testing core-controller installation", func() {
 				},
 			}
 			Expect(test.GetResource(c, &rq)).To(BeNil())
+		})
+		It("should Reconcile with no active operator ConfigMap", func() {
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			cm := corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "active-operator",
+					Namespace: common.CalicoNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &cm)).To(BeNil())
+			Expect(cm.Data["active-namespace"]).To(Equal("tigera-operator"))
+		})
+		It("should exit Reconcile when active operator is a different namespace", func() {
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "active-operator",
+					Namespace: common.CalicoNamespace,
+				},
+				Data: map[string]string{"active-namespace": "other-namespace"},
+			})).NotTo(HaveOccurred())
+
+			exited := false
+			osExitOverride = func(_ int) { exited = true }
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).Should(HaveOccurred())
+			Expect(exited).Should(BeTrue())
+		})
+		It("should not exit Reconcile when active operator is current namespace", func() {
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "active-operator",
+					Namespace: common.CalicoNamespace,
+				},
+				Data: map[string]string{"active-namespace": "tigera-operator"},
+			})).NotTo(HaveOccurred())
+
+			exited := false
+			osExitOverride = func(_ int) { exited = false }
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(exited).Should(BeFalse())
+			cm := corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "active-operator",
+					Namespace: common.CalicoNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &cm)).To(BeNil())
+			Expect(cm.Data["active-namespace"]).To(Equal("tigera-operator"))
+		})
+		It("should not overwrite active-operator CM when it already exists", func() {
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "active-operator",
+					Namespace: common.CalicoNamespace,
+				},
+				Data: map[string]string{
+					"active-namespace": "tigera-operator",
+					"extra-dummy":      "dummy-value",
+				},
+			})).NotTo(HaveOccurred())
+
+			exited := false
+			osExitOverride = func(_ int) { exited = false }
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(exited).Should(BeFalse())
+			cm := corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "active-operator",
+					Namespace: common.CalicoNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &cm)).To(BeNil())
+			Expect(cm.Data["active-namespace"]).To(Equal("tigera-operator"))
+			Expect(cm.Data).To(HaveKey("extra-dummy"))
 		})
 	})
 })

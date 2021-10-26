@@ -42,7 +42,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
 var log = logf.Log.WithName("controller_monitor")
@@ -88,7 +87,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady
 		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("prometheus-%s", render.CalicoNodePrometheus)},
 	})
 
-	r.status.Run()
+	r.status.Run(opts.ShutdownContext)
 	return r
 }
 
@@ -239,7 +238,7 @@ func (r *ReconcileMonitor) getTigeraPrometheusAPIConfigMap() (*corev1.ConfigMap,
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{
 		Name:      render.TigeraPrometheusAPIName,
-		Namespace: rmeta.OperatorNamespace(),
+		Namespace: common.OperatorNamespace(),
 	}
 
 	if err := r.client.Get(context.Background(), cmNamespacedName, cm); err != nil {

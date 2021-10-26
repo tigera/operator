@@ -119,7 +119,7 @@ func newTyphaAutoscaler(cs kubernetes.Interface, nodeListWatch, typhaListWatch c
 // start starts the Typha autoscaler, updating the Typha deployment's replica count every sync period. The triggerRunChan
 // can be used to trigger an auto scale run immediately, while the isDegradedChan can be used to get the degraded status
 // of the last run. The triggerRun and isDegraded functions should be used instead of instead of access these channels directly.
-func (t *typhaAutoscaler) start() {
+func (t *typhaAutoscaler) start(ctx context.Context) {
 	go func() {
 		degraded := false
 		ticker := time.NewTicker(t.syncPeriod)
@@ -127,10 +127,9 @@ func (t *typhaAutoscaler) start() {
 		typhaLog.Info("Starting typha autoscaler", "syncPeriod", t.syncPeriod)
 
 		// Start the informers and wait for them to sync.
-		stopCh := make(chan struct{})
-		go t.nodeInformer.Run(stopCh)
-		go t.typhaInformer.Run(stopCh)
-		for !t.nodeInformer.HasSynced() && !t.typhaInformer.HasSynced() {
+		go t.nodeInformer.Run(ctx.Done())
+		go t.typhaInformer.Run(ctx.Done())
+		for !t.nodeInformer.HasSynced() || !t.typhaInformer.HasSynced() {
 			time.Sleep(100 * time.Millisecond)
 		}
 
@@ -170,6 +169,9 @@ func (t *typhaAutoscaler) start() {
 			case boolCh := <-t.isDegradedChan:
 				boolCh <- degraded
 				close(boolCh)
+			case <-ctx.Done():
+				typhaLog.Info("typha autoscaler shutting down")
+				return
 			}
 		}
 	}()

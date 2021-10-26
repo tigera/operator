@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
+	"github.com/tigera/operator/pkg/render/common/podaffinity"
 
 	ocsv1 "github.com/openshift/api/security/v1"
 	"github.com/tigera/operator/pkg/render/common/authentication"
@@ -96,6 +97,7 @@ func Manager(
 	internalTrafficSecret *corev1.Secret,
 	clusterDomain string,
 	esLicenseType ElasticsearchLicenseType,
+	replicas *int32,
 ) (Component, error) {
 	var tlsSecrets []*corev1.Secret
 	tlsAnnotations := map[string]string{
@@ -140,6 +142,7 @@ func Manager(
 		installation:                  installation,
 		managementCluster:             managementCluster,
 		esLicenseType:                 esLicenseType,
+		replicas:                      replicas,
 	}, nil
 }
 
@@ -162,6 +165,7 @@ type managerComponent struct {
 	proxyImage                    string
 	esProxyImage                  string
 	csrInitImage                  string
+	replicas                      *int32
 }
 
 func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -246,7 +250,7 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      ManagerTLSSecretName,
-				Namespace: rmeta.OperatorNamespace(),
+				Namespace: common.OperatorNamespace(),
 			},
 		}
 		toDelete = append(toDelete, secretToDelete)
@@ -262,7 +266,6 @@ func (c *managerComponent) Ready() bool {
 
 // managerDeployment creates a deployment for the Tigera Secure manager component.
 func (c *managerComponent) managerDeployment() *appsv1.Deployment {
-	var replicas int32 = 1
 	annotations := make(map[string]string)
 
 	if c.complianceServerCertSecret != nil {
@@ -319,6 +322,10 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		}),
 	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
 
+	if c.replicas != nil && *c.replicas > 1 {
+		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity("tigera-manager", ManagerNamespace)
+	}
+
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -334,7 +341,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 					"k8s-app": "tigera-manager",
 				},
 			},
-			Replicas: &replicas,
+			Replicas: c.replicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},

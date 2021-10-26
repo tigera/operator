@@ -35,6 +35,7 @@ import (
 	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 
 	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/active"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
@@ -44,6 +45,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/crds"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -130,9 +132,10 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		amazonCRDExists:      opts.AmazonCRDExists,
 		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
 		clusterDomain:        opts.ClusterDomain,
+		manageCRDs:           opts.ManageCRDs,
 	}
-	r.status.Run()
-	r.typhaAutoscaler.start()
+	r.status.Run(opts.ShutdownContext)
+	r.typhaAutoscaler.start(opts.ShutdownContext)
 	return r, nil
 }
 
@@ -166,15 +169,19 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 	// Watch for secrets in the operator namespace. We watch for all secrets, since we care
 	// about specifically named ones - e.g., manager-tls, as well as image pull secrets that
 	// may have been provided by the user with arbitrary names.
-	err = utils.AddSecretsWatch(c, "", rmeta.OperatorNamespace())
+	err = utils.AddSecretsWatch(c, "", common.OperatorNamespace())
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch secrets: %w", err)
 	}
 
 	for _, cm := range []string{render.BirdTemplatesConfigMapName, render.BGPLayoutConfigMapName, render.K8sSvcEndpointConfigMapName} {
-		if err = utils.AddConfigMapWatch(c, cm, rmeta.OperatorNamespace()); err != nil {
+		if err = utils.AddConfigMapWatch(c, cm, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", cm, err)
 		}
+	}
+
+	if err = utils.AddConfigMapWatch(c, active.ActiveConfigMapName, common.CalicoNamespace); err != nil {
+		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", active.ActiveConfigMapName, err)
 	}
 
 	// Only watch the AmazonCloudIntegration if the CRD is available
@@ -242,13 +249,25 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 
 		// Watch the internal manager TLS secret in the calico namespace, where it's copied for kube-controllers.
 		if err = utils.AddSecretsWatch(c, render.ManagerInternalTLSSecretName, common.CalicoNamespace); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch secret '%s' in '%s' namespace: %w", render.ManagerInternalTLSSecretName, rmeta.OperatorNamespace(), err)
+			return fmt.Errorf("tigera-installation-controller failed to watch secret '%s' in '%s' namespace: %w", render.ManagerInternalTLSSecretName, common.OperatorNamespace(), err)
 		}
 
 		//watch for change to primary resource LogCollector
 		err = c.Watch(&source.Kind{Type: &operator.LogCollector{}}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
+		}
+
+		if r.manageCRDs {
+			if err = addCRDWatches(c, operator.TigeraSecureEnterprise); err != nil {
+				return fmt.Errorf("tigera-installation-controller failed to watch CRD resource: %v", err)
+			}
+		}
+	} else {
+		if r.manageCRDs {
+			if err = addCRDWatches(c, operator.Calico); err != nil {
+				return fmt.Errorf("tigera-installation-controller failed to watch CRD resource: %v", err)
+			}
 		}
 	}
 
@@ -288,6 +307,7 @@ type ReconcileInstallation struct {
 	amazonCRDExists      bool
 	migrationChecked     bool
 	clusterDomain        string
+	manageCRDs           bool
 }
 
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
@@ -371,6 +391,12 @@ func fillDefaults(instance *operator.Installation) error {
 	if len(instance.Spec.Variant) == 0 {
 		// Default to installing Calico.
 		instance.Spec.Variant = operator.Calico
+	}
+
+	// Default to running Calico as privileged.
+	if instance.Spec.NonPrivileged == nil {
+		npd := operator.NonPrivilegedDisabled
+		instance.Spec.NonPrivileged = &npd
 	}
 
 	// Default the CNI plugin based on the Kubernetes provider.
@@ -588,6 +614,12 @@ func fillDefaults(instance *operator.Installation) error {
 		}
 	}
 
+	// If not specified by the user, set the default control plane replicas to 2.
+	if instance.Spec.ControlPlaneReplicas == nil {
+		var replicas int32 = 2
+		instance.Spec.ControlPlaneReplicas = &replicas
+	}
+
 	// If not specified by the user, set the flex volume plugin location based on platform.
 	if len(instance.Spec.FlexVolumePath) == 0 {
 		if instance.Spec.KubernetesProvider == operator.ProviderOpenShift {
@@ -643,6 +675,11 @@ func mergeProvider(cr *operator.Installation, provider operator.Provider) error 
 func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.V(1).Info("Reconciling Installation.operator.tigera.io")
+
+	newActiveCM, err := r.checkActive(reqLogger)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
 
 	// Get the installation object if it exists so that we can save the original
 	// status before we merge/fill that object with other values.
@@ -725,6 +762,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.SetDegraded("Invalid computed config", err, reqLogger)
 			return reconcile.Result{}, err
 		}
+	}
+
+	if err = r.updateCRDs(ctx, instance.Spec.Variant, reqLogger); err != nil {
+		return reconcile.Result{}, err
 	}
 
 	// now that migrated config is stored in the installation resource, we no longer need
@@ -884,7 +925,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.TyphaCAConfigMapName,
-					Namespace: rmeta.OperatorNamespace(),
+					Namespace: common.OperatorNamespace(),
 				},
 				Data: map[string]string{
 					render.TyphaCABundleName: string(instance.Spec.CertificateManagement.CACert),
@@ -1028,6 +1069,11 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Render namespaces for Calico.
 	components = append(components, render.Namespaces(&instance.Spec, pullSecrets))
+
+	if newActiveCM != nil {
+		log.Info("adding active configmap")
+		components = append(components, render.NewPassthrough([]client.Object{newActiveCM}))
+	}
 
 	// If we're on OpenShift on AWS render a Job (and needed resources) to
 	// setup the security groups we need for IPIP, BGP, and Typha communication.
@@ -1267,7 +1313,7 @@ func (r *ReconcileInstallation) GetTyphaNodeTLSConfig() (*render.TyphaNodeTLS, e
 
 	node, err := utils.ValidateCertPair(
 		r.client,
-		rmeta.OperatorNamespace(),
+		common.OperatorNamespace(),
 		render.NodeTLSSecretName,
 		render.TLSSecretKeyName,
 		render.TLSSecretCertName,
@@ -1287,7 +1333,7 @@ func (r *ReconcileInstallation) GetTyphaNodeTLSConfig() (*render.TyphaNodeTLS, e
 
 	typha, err := utils.ValidateCertPair(
 		r.client,
-		rmeta.OperatorNamespace(),
+		common.OperatorNamespace(),
 		render.TyphaTLSSecretName,
 		render.TLSSecretKeyName,
 		render.TLSSecretCertName,
@@ -1330,7 +1376,7 @@ func (r *ReconcileInstallation) validateTyphaCAConfigMap() (*corev1.ConfigMap, e
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{
 		Name:      render.TyphaCAConfigMapName,
-		Namespace: rmeta.OperatorNamespace(),
+		Namespace: common.OperatorNamespace(),
 	}
 	err := r.client.Get(context.Background(), cmNamespacedName, cm)
 	if err != nil {
@@ -1404,6 +1450,56 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 	return nil
 }
 
+var osExitOverride = os.Exit
+
+// checkActive verifies the operator that calls this function is designated as the active operator.
+// If this operator is not designated as active then this function does an os.Exit(0) so the operator
+// gets restarted.
+// If this operator is the designated operator (or assumed because there is no designation) then
+// this function returns with no error.
+// If the active operator designation needs to be set then the first return field is a ConfigMap that
+// should be created to set the designation, other wise the field is nil.
+// The second returned field reports if there was an error when trying to determine active operator.
+func (r *ReconcileInstallation) checkActive(log logr.Logger) (*corev1.ConfigMap, error) {
+	cm, err := active.GetActiveConfigMap(r.client)
+	if err != nil {
+		r.SetDegraded(
+			fmt.Sprintf("Error determining if operator in %s namespace is active", common.OperatorNamespace()),
+			err,
+			log)
+		return nil, err
+	}
+	imActive, activeNs := active.IsThisOperatorActive(cm)
+	if !imActive {
+		log.Info("Exiting because this operator is not designated active",
+			"my-namespace", common.OperatorNamespace(),
+			"active-namespace", activeNs)
+		osExitOverride(0)
+		return nil, fmt.Errorf("Returning error for test purposes")
+	}
+
+	if cm == nil {
+		return active.GenerateMyActiveConfigMap(), nil
+	} else {
+		return nil, nil
+	}
+}
+
+func (r *ReconcileInstallation) updateCRDs(ctx context.Context, variant operator.ProductVariant, log logr.Logger) error {
+	if !r.manageCRDs {
+		return nil
+	}
+	crdComponent := render.NewPassthrough(crds.ToRuntimeObjects(crds.GetCRDs(variant)...))
+	// Specify nil for the CR so no ownership is put on the CRDs. We do this so removing the
+	// Installation CR will not remove the CRDs.
+	handler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
+	if err := handler.CreateOrUpdateOrDelete(ctx, crdComponent, nil); err != nil {
+		r.SetDegraded("Error creating / updating CRD resource", err, log)
+		return err
+	}
+	return nil
+}
+
 func CreateNewTyphaNodeTLS() (*render.TyphaNodeTLS, error) {
 	// Make CA
 	ca, err := tls.MakeCA(fmt.Sprintf("%s@%d", rmeta.TigeraOperatorCAIssuerPrefix, time.Now().Unix()))
@@ -1425,7 +1521,7 @@ func CreateNewTyphaNodeTLS() (*render.TyphaNodeTLS, error) {
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      render.TyphaCAConfigMapName,
-			Namespace: rmeta.OperatorNamespace(),
+			Namespace: common.OperatorNamespace(),
 		},
 		Data: data,
 	}
@@ -1433,7 +1529,7 @@ func CreateNewTyphaNodeTLS() (*render.TyphaNodeTLS, error) {
 	// Create TLS Secret for Felix using ca from above
 	tntls.NodeSecret, err = secret.CreateTLSSecret(ca,
 		render.NodeTLSSecretName,
-		rmeta.OperatorNamespace(),
+		common.OperatorNamespace(),
 		render.TLSSecretKeyName,
 		render.TLSSecretCertName,
 		rmeta.DefaultCertificateDuration,
@@ -1449,7 +1545,7 @@ func CreateNewTyphaNodeTLS() (*render.TyphaNodeTLS, error) {
 	// Create TLS Secret for Felix using ca from above
 	tntls.TyphaSecret, err = secret.CreateTLSSecret(ca,
 		render.TyphaTLSSecretName,
-		rmeta.OperatorNamespace(),
+		common.OperatorNamespace(),
 		render.TLSSecretKeyName,
 		render.TLSSecretCertName,
 		rmeta.DefaultCertificateDuration,
@@ -1469,7 +1565,7 @@ func getConfigMap(client client.Client, cmName string) (*corev1.ConfigMap, error
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{
 		Name:      cmName,
-		Namespace: rmeta.OperatorNamespace(),
+		Namespace: common.OperatorNamespace(),
 	}
 	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -1635,4 +1731,29 @@ func cidrWithinCidr(cidr, pool string) bool {
 		return true
 	}
 	return false
+}
+
+func addCRDWatches(c controller.Controller, v operator.ProductVariant) error {
+	pred := predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			// Create occurs because we've created it, so we can safely ignore it.
+			return false
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			if utils.IgnoreObject(e.ObjectOld) && !utils.IgnoreObject(e.ObjectNew) {
+				// Don't skip the removal of the "ignore" annotation. We want to
+				// reconcile when that happens.
+				return true
+			}
+			// Otherwise, ignore updates to objects when metadata.Generation does not change.
+			return e.ObjectOld.GetGeneration() != e.ObjectNew.GetGeneration()
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool { return true },
+	}
+	for _, x := range crds.GetCRDs(v) {
+		if err := c.Watch(&source.Kind{Type: x}, &handler.EnqueueRequestForObject{}, pred); err != nil {
+			return err
+		}
+	}
+	return nil
 }

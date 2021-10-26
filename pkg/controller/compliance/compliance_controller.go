@@ -84,7 +84,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
 	}
-	r.status.Run()
+	r.status.Run(opts.ShutdownContext)
 	return r
 }
 
@@ -111,7 +111,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	// Watch the given secrets in each both the compliance and operator namespaces
-	for _, namespace := range []string{rmeta.OperatorNamespace(), render.ComplianceNamespace} {
+	for _, namespace := range []string{common.OperatorNamespace(), render.ComplianceNamespace} {
 		for _, secretName := range []string{
 			relasticsearch.PublicCertSecret, render.ElasticsearchComplianceBenchmarkerUserSecret,
 			render.ElasticsearchComplianceControllerUserSecret, render.ElasticsearchComplianceReporterUserSecret,
@@ -123,7 +123,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		}
 	}
 
-	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, rmeta.OperatorNamespace()); err != nil {
+	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace()); err != nil {
 		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
@@ -292,7 +292,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	var managerInternalTLSSecret *corev1.Secret
 	if managementCluster != nil {
 		managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
-			rmeta.OperatorNamespace(),
+			common.OperatorNamespace(),
 			render.ManagerInternalTLSSecretName,
 			render.ManagerInternalSecretKeyName,
 			render.ManagerInternalSecretCertName,
@@ -307,7 +307,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	var complianceServerCertSecret *corev1.Secret
 	if network.CertificateManagement == nil {
 		complianceServerCertSecret, err = utils.ValidateCertPair(r.client,
-			rmeta.OperatorNamespace(),
+			common.OperatorNamespace(),
 			render.ComplianceServerCertSecret,
 			corev1.TLSPrivateKeyKey,
 			corev1.TLSCertKey,
@@ -331,7 +331,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, err
 		}
 	} else {
-		complianceServerCertSecret = render.CreateCertificateSecret(network.CertificateManagement.CACert, render.ComplianceServerCertSecret, rmeta.OperatorNamespace())
+		complianceServerCertSecret = render.CreateCertificateSecret(network.CertificateManagement.CACert, render.ComplianceServerCertSecret, common.OperatorNamespace())
 	}
 
 	// Fetch the Authentication spec. If present, we use to configure user authentication.

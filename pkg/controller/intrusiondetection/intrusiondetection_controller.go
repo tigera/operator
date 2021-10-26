@@ -30,7 +30,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -97,7 +96,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		licenseAPIReady: licenseAPIReady,
 		dpiAPIReady:     dpiAPIReady,
 	}
-	r.status.Run()
+	r.status.Run(opts.ShutdownContext)
 	return r
 }
 
@@ -148,7 +147,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		render.NodeTLSSecretName,
 		render.TyphaTLSSecretName,
 	} {
-		if err = utils.AddSecretsWatch(c, secretName, rmeta.OperatorNamespace()); err != nil {
+		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
 		}
 	}
@@ -162,7 +161,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
 	}
 
-	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, rmeta.OperatorNamespace()); err != nil {
+	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace()); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
 	}
 
@@ -170,7 +169,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
 	}
 
-	if err = utils.AddConfigMapWatch(c, render.TyphaCAConfigMapName, rmeta.OperatorNamespace()); err != nil {
+	if err = utils.AddConfigMapWatch(c, render.TyphaCAConfigMapName, common.OperatorNamespace()); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
 	}
 
@@ -322,7 +321,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	kibanaPublicCertSecret := &corev1.Secret{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.KibanaPublicCertSecret, Namespace: rmeta.OperatorNamespace()}, kibanaPublicCertSecret); err != nil {
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.KibanaPublicCertSecret, Namespace: common.OperatorNamespace()}, kibanaPublicCertSecret); err != nil {
 		reqLogger.Error(err, "Failed to read Kibana public cert secret")
 		r.status.SetDegraded("Failed to read Kibana public cert secret", err.Error())
 		return reconcile.Result{}, err
@@ -343,7 +342,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		}
 
 		managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
-			rmeta.OperatorNamespace(),
+			common.OperatorNamespace(),
 			render.ManagerInternalTLSSecretName,
 			render.ManagerInternalSecretCertName,
 			render.ManagerInternalSecretKeyName,
@@ -396,7 +395,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 	hasNoDPIResource := len(dpiList.Items) == 0
 	if !hasNoDPIResource {
-		nodeTLSSecret, err = utils.GetSecret(ctx, r.client, render.NodeTLSSecretName, rmeta.OperatorNamespace())
+		nodeTLSSecret, err = utils.GetSecret(ctx, r.client, render.NodeTLSSecretName, common.OperatorNamespace())
 		if err != nil {
 			reqLogger.Error(err, fmt.Sprintf("Failed to retrieve %s secret", render.NodeTLSSecretName))
 			r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s secret", render.NodeTLSSecretName), err.Error())
@@ -408,7 +407,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 			return reconcile.Result{}, err
 		}
 
-		typhaTLSSecret, err = utils.GetSecret(ctx, r.client, render.TyphaTLSSecretName, rmeta.OperatorNamespace())
+		typhaTLSSecret, err = utils.GetSecret(ctx, r.client, render.TyphaTLSSecretName, common.OperatorNamespace())
 		if err != nil {
 			reqLogger.Error(err, fmt.Sprintf("Failed to retrieve %s secret", render.TyphaTLSSecretName))
 			r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s secret", render.TyphaTLSSecretName), err.Error())
@@ -420,7 +419,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 			return reconcile.Result{}, err
 		}
 
-		err = r.client.Get(ctx, types.NamespacedName{Name: render.TyphaCAConfigMapName, Namespace: rmeta.OperatorNamespace()}, typhaCAConfigMap)
+		err = r.client.Get(ctx, types.NamespacedName{Name: render.TyphaCAConfigMapName, Namespace: common.OperatorNamespace()}, typhaCAConfigMap)
 		if err != nil {
 			reqLogger.Error(err, fmt.Sprintf("Failed to retrieve %s configmap", render.TyphaCAConfigMapName))
 			r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s configmap", render.TyphaCAConfigMapName), err.Error())

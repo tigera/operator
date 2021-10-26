@@ -93,6 +93,11 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		copy(inst.ControlPlaneTolerations, override.ControlPlaneTolerations)
 	}
 
+	switch compareFields(inst.ControlPlaneReplicas, override.ControlPlaneReplicas) {
+	case BOnlySet, Different:
+		inst.ControlPlaneReplicas = override.ControlPlaneReplicas
+	}
+
 	switch compareFields(inst.NodeMetricsPort, override.NodeMetricsPort) {
 	case BOnlySet, Different:
 		inst.NodeMetricsPort = override.NodeMetricsPort
@@ -129,6 +134,11 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		inst.CertificateManagement = override.CertificateManagement.DeepCopy()
 	case Different:
 		override.CertificateManagement.DeepCopyInto(inst.CertificateManagement)
+	}
+
+	switch compareFields(inst.NonPrivileged, override.NonPrivileged) {
+	case BOnlySet, Different:
+		inst.NonPrivileged = override.NonPrivileged
 	}
 
 	return inst

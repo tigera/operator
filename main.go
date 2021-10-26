@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	"github.com/cloudflare/cfssl/log"
+	"github.com/ghodss/yaml"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
@@ -40,12 +41,14 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	operatorv1beta1 "github.com/tigera/operator/api/v1beta1"
 	"github.com/tigera/operator/controllers"
+	"github.com/tigera/operator/pkg/active"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/awssgsetup"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/crds"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/version"
 	// +kubebuilder:scaffold:imports
@@ -81,7 +84,10 @@ func main() {
 	var urlOnlyKubeconfig string
 	var showVersion bool
 	var printImages string
+	var printCalicoCRDs string
+	var printEnterpriseCRDs string
 	var sgSetup bool
+	var manageCRDs bool
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", true,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -91,8 +97,14 @@ func main() {
 		"Show version information")
 	flag.StringVar(&printImages, "print-images", "",
 		"Print the default images the operator could deploy and exit. Possible values: list")
+	flag.StringVar(&printCalicoCRDs, "print-calico-crds", "",
+		"Print the Calico CRDs the operator has bundled then exit. Possible values: all, <crd prefix>. If a value other than 'all' is specified, the first CRD with a prefix of the specified value will be printed.")
+	flag.StringVar(&printEnterpriseCRDs, "print-enterprise-crds", "",
+		"Print the Enterprise CRDs the operator has bundled then exit. Possible values: all, <crd prefix>. If a value other than 'all' is specified, the first CRD with a prefix of the specified value will be printed.")
 	flag.BoolVar(&sgSetup, "aws-sg-setup", false,
 		"Setup Security Groups in AWS (should only be used on OpenShift).")
+	flag.BoolVar(&manageCRDs, "manage-crds", false,
+		"Operator should manage the projectcalico.org and operator.tigera.io CRDs.")
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
@@ -121,6 +133,21 @@ func main() {
 		fmt.Println("Invalid option for --print-images flag", printImages)
 		os.Exit(1)
 	}
+	if printCalicoCRDs != "" {
+		if err := showCRDs(operatorv1.Calico, printCalicoCRDs); err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
+	if printEnterpriseCRDs != "" {
+		if err := showCRDs(operatorv1.TigeraSecureEnterprise, printEnterpriseCRDs); err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
 
 	if urlOnlyKubeconfig != "" {
 		if err := setKubernetesServiceEnv(urlOnlyKubeconfig); err != nil {
@@ -133,21 +160,32 @@ func main() {
 
 	ctx := context.Background()
 
+	cfg, err := config.GetConfig()
+	if err != nil {
+		log.Error(err, "")
+		os.Exit(1)
+	}
+
+	c, err := client.New(cfg, client.Options{})
+	if err != nil {
+		log.Error(err, "")
+		os.Exit(1)
+	}
+
+	cs, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		log.Error(err, "")
+		os.Exit(1)
+	}
+
+	sigHandler := ctrl.SetupSignalHandler()
+	active.WaitUntilActive(cs, c, sigHandler, setupLog)
+	log.Info("Active operator: proceeding")
+
 	if sgSetup {
 		log.Info("Setting up AWS Security Groups")
-		cfg, err := config.GetConfig()
-		if err != nil {
-			log.Error(err, "")
-			os.Exit(1)
-		}
 
-		client, err := client.New(cfg, client.Options{})
-		if err != nil {
-			log.Error(err, "")
-			os.Exit(1)
-		}
-
-		err = awssgsetup.SetupAWSSecurityGroups(ctx, client)
+		err = awssgsetup.SetupAWSSecurityGroups(ctx, c)
 		if err != nil {
 			log.Error(err, "")
 			os.Exit(1)
@@ -223,6 +261,8 @@ func main() {
 		AmazonCRDExists:     amazonCRDExists,
 		ClusterDomain:       clusterDomain,
 		KubernetesVersion:   kubernetesVersion,
+		ManageCRDs:          manageCRDs,
+		ShutdownContext:     sigHandler,
 	}
 
 	err = controllers.AddToManager(mgr, options)
@@ -232,7 +272,7 @@ func main() {
 	}
 
 	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(sigHandler); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
@@ -285,4 +325,32 @@ func metricsAddr() string {
 	// finally, handle cases where just a port is specified or both are specified in the same case
 	// since controller-runtime correctly uses all interfaces if no host is specified.
 	return fmt.Sprintf("%s:%s", metricsHost, metricsPort)
+}
+
+func showCRDs(variant operatorv1.ProductVariant, outputType string) error {
+	first := true
+	for _, v := range crds.GetCRDs(variant) {
+		if outputType != "all" {
+			if !strings.HasPrefix(v.Name, outputType) {
+				continue
+			}
+		}
+		b, err := yaml.Marshal(v)
+		if err != nil {
+			return fmt.Errorf("Failed to Marshal %s: %v", v.Name, err)
+		}
+		if !first {
+			fmt.Println("---")
+		}
+		first = false
+
+		fmt.Println(fmt.Sprintf("# %s", v.Name))
+		fmt.Println(string(b))
+	}
+	// Indicates nothing was printed so we couldn't find the requested outputType
+	if first {
+		return fmt.Errorf("No CRD matching %s", outputType)
+	}
+
+	return nil
 }

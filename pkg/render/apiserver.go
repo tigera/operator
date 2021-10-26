@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 
@@ -32,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/dns"
@@ -96,7 +98,7 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
 			var err error
 			tlsKeyPair, err = secret.CreateTLSSecret(nil,
 				apiServerTLSSecretName(installation.Variant),
-				rmeta.OperatorNamespace(),
+				common.OperatorNamespace(),
 				APIServerSecretKeyName,
 				APIServerSecretCertName,
 				rmeta.DefaultCertificateDuration,
@@ -474,6 +476,7 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 			Resources: []string{
 				"globalnetworkpolicies",
 				"networkpolicies",
+				"caliconodestatuses",
 				"clusterinformations",
 				"hostendpoints",
 				"globalnetworksets",
@@ -483,6 +486,7 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 				"felixconfigurations",
 				"kubecontrollersconfigurations",
 				"ippools",
+				"ipreservations",
 				"ipamblocks",
 				"blockaffinities",
 			},
@@ -781,7 +785,6 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 		name = "calico-apiserver"
 	}
 
-	var replicas int32 = 1
 	hostNetwork := c.hostNetwork()
 	dnsPolicy := corev1.DNSClusterFirst
 	if hostNetwork {
@@ -812,7 +815,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
+			Replicas: c.installation.ControlPlaneReplicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
@@ -842,6 +845,10 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 				},
 			},
 		},
+	}
+
+	if c.installation.ControlPlaneReplicas != nil && *c.installation.ControlPlaneReplicas > 1 {
+		d.Spec.Template.Spec.Affinity = podaffinity.NewPodAntiAffinity(name, rmeta.APIServerNamespace(c.installation.Variant))
 	}
 
 	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {
@@ -1164,6 +1171,8 @@ func (c *apiServerComponent) tigeraCustomResourcesClusterRole() *rbacv1.ClusterR
 				"packetcaptures",
 				"deeppacketinspections",
 				"deeppacketinspections/status",
+				"uisettingsgroups",
+				"uisettings",
 			},
 			Verbs: []string{
 				"get",

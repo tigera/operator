@@ -19,8 +19,6 @@ import (
 	"fmt"
 	"time"
 
-	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/compliance"
@@ -30,8 +28,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -89,7 +87,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
 	}
-	c.status.Run()
+	c.status.Run(opts.ShutdownContext)
 	return c
 
 }
@@ -115,7 +113,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	// Watch the given secrets in each both the manager and operator namespaces
-	for _, namespace := range []string{rmeta.OperatorNamespace(), render.ManagerNamespace} {
+	for _, namespace := range []string{common.OperatorNamespace(), render.ManagerNamespace} {
 		for _, secretName := range []string{
 			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret,
 			render.ElasticsearchManagerUserSecret, render.KibanaPublicCertSecret,
@@ -129,11 +127,11 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	// This may or may not exist, it depends on what the OIDC type is in the Authentication CR.
-	if err = utils.AddConfigMapWatch(c, tigerakvc.StaticWellKnownJWKSConfigMapName, rmeta.OperatorNamespace()); err != nil {
+	if err = utils.AddConfigMapWatch(c, tigerakvc.StaticWellKnownJWKSConfigMapName, common.OperatorNamespace()); err != nil {
 		return fmt.Errorf("manager-controller failed to watch ConfigMap resource %s: %w", tigerakvc.StaticWellKnownJWKSConfigMapName, err)
 	}
 
-	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, rmeta.OperatorNamespace()); err != nil {
+	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace()); err != nil {
 		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
@@ -261,7 +259,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	// If it does not exist then this function returns a nil secret but no error and a self-signed
 	// certificate will be generated when rendering below.
 	tlsSecret, err := utils.ValidateCertPair(r.client,
-		rmeta.OperatorNamespace(),
+		common.OperatorNamespace(),
 		render.ManagerTLSSecretName,
 		render.ManagerSecretKeyName,
 		render.ManagerSecretCertName,
@@ -335,7 +333,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 
 		complianceServerCertSecret, err = utils.ValidateCertPair(r.client,
-			rmeta.OperatorNamespace(),
+			common.OperatorNamespace(),
 			render.ComplianceServerCertSecret,
 			"", // We don't need the key.
 			corev1.TLSCertKey,
@@ -393,7 +391,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	kibanaPublicCertSecret := &corev1.Secret{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.KibanaPublicCertSecret, Namespace: rmeta.OperatorNamespace()}, kibanaPublicCertSecret); err != nil {
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.KibanaPublicCertSecret, Namespace: common.OperatorNamespace()}, kibanaPublicCertSecret); err != nil {
 		reqLogger.Error(err, "Failed to read Kibana public cert secret")
 		r.status.SetDegraded("Failed to read Kibana public cert secret", err.Error())
 		return reconcile.Result{}, err
@@ -426,7 +424,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		// We expect that the secret that holds the certificates for tunnel certificate generation
 		// is already created by the Api Server
 		tunnelSecret = &corev1.Secret{}
-		err := r.client.Get(ctx, client.ObjectKey{Name: render.VoltronTunnelSecretName, Namespace: rmeta.OperatorNamespace()}, tunnelSecret)
+		err := r.client.Get(ctx, client.ObjectKey{Name: render.VoltronTunnelSecretName, Namespace: common.OperatorNamespace()}, tunnelSecret)
 		if err != nil {
 			r.status.SetDegraded("Failed to check for the existence of management-cluster-connection secret", err.Error())
 			return reconcile.Result{}, nil
@@ -437,14 +435,14 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		internalTrafficSecret = &corev1.Secret{}
 		err = r.client.Get(ctx, client.ObjectKey{
 			Name:      render.ManagerInternalTLSSecretName,
-			Namespace: rmeta.OperatorNamespace(),
+			Namespace: common.OperatorNamespace(),
 		}, internalTrafficSecret)
 		if err != nil {
 			if errors.IsNotFound(err) {
-				r.status.SetDegraded(fmt.Sprintf("Waiting for secret %s in namespace %s to be available", render.ManagerInternalTLSSecretName, rmeta.OperatorNamespace()), "")
+				r.status.SetDegraded(fmt.Sprintf("Waiting for secret %s in namespace %s to be available", render.ManagerInternalTLSSecretName, common.OperatorNamespace()), "")
 				return reconcile.Result{}, nil
 			}
-			r.status.SetDegraded(fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.ManagerInternalTLSSecretName, rmeta.OperatorNamespace()), err.Error())
+			r.status.SetDegraded(fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.ManagerInternalTLSSecretName, common.OperatorNamespace()), err.Error())
 			return reconcile.Result{}, err
 		}
 	}
@@ -477,7 +475,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	var packetCaptureServerCertSecret *corev1.Secret
 	packetCaptureServerCertSecret, err = utils.ValidateCertPair(r.client,
-		rmeta.OperatorNamespace(),
+		common.OperatorNamespace(),
 		render.PacketCaptureCertSecret,
 		"", // We don't need the key.
 		corev1.TLSCertKey,
@@ -494,6 +492,14 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+
+	// Set replicas to 1 for management or managed clusters.
+	// TODO Remove after MCM tigera-manager HA deployment is supported.
+	var replicas *int32 = installation.ControlPlaneReplicas
+	if managementCluster != nil || managementClusterConnection != nil {
+		var mcmReplicas int32 = 1
+		replicas = &mcmReplicas
+	}
 
 	// Render the desired objects from the CRD and create or update them.
 	component, err := render.Manager(
@@ -512,6 +518,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		internalTrafficSecret,
 		r.clusterDomain,
 		elasticLicenseType,
+		replicas,
 	)
 	if err != nil {
 		log.Error(err, "Error rendering Manager")

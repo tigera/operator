@@ -138,6 +138,8 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 			ImagePullSecrets: secret.GetReferenceList(mc.pullSecrets),
 			Replicas:         ptr.Int32ToPtr(3),
 			Version:          components.ComponentPrometheusAlertmanager.Version,
+			Tolerations:      mc.installation.ControlPlaneTolerations,
+			NodeSelector:     mc.installation.ControlPlaneNodeSelector,
 		},
 	}
 }
@@ -162,6 +164,8 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 				"prometheus": CalicoNodePrometheus,
 				"role":       "tigera-prometheus-rules",
 			}},
+			Tolerations:  mc.installation.ControlPlaneTolerations,
+			NodeSelector: mc.installation.ControlPlaneNodeSelector,
 			Alerting: &monitoringv1.AlertingSpec{
 				Alertmanagers: []monitoringv1.AlertmanagerEndpoints{
 					{
@@ -373,7 +377,7 @@ func (mc *monitorComponent) roleBinding() *rbacv1.RoleBinding {
 			{
 				Kind:      "ServiceAccount",
 				Name:      "tigera-operator",
-				Namespace: rmeta.OperatorNamespace(),
+				Namespace: common.OperatorNamespace(),
 			},
 		},
 	}

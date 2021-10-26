@@ -37,8 +37,6 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
-var kubeControllerReplicas int32 = 1
-
 const (
 	KubeController                  = "calico-kube-controllers"
 	KubeControllerServiceAccount    = "calico-kube-controllers"
@@ -268,7 +266,7 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration, kubeContr
 		{
 			// IPAM resources are manipulated when nodes are deleted.
 			APIGroups: []string{"crd.projectcalico.org"},
-			Resources: []string{"ippools"},
+			Resources: []string{"ippools", "ipreservations"},
 			Verbs:     []string{"list"},
 		},
 		{
@@ -477,6 +475,8 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		podSpec = relasticsearch.PodSpecDecorate(podSpec)
 	}
 
+	var replicas int32 = 1
+
 	d := appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -487,7 +487,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: &kubeControllerReplicas,
+			Replicas: &replicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},

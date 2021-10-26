@@ -64,7 +64,7 @@ type StatusManager interface {
 	AddStatefulSets(sss []types.NamespacedName)
 	AddCronJobs(cjs []types.NamespacedName)
 	AddCertificateSigningRequests(name string, labels map[string]string)
-	AddWindowsNodeUpgrade(nodeName, currentVersion, expectedVersion string)
+	AddWindowsNodeUpgrade(nodeName string, currentVariant, expectedVariant operator.ProductVariant, currentVersion, expectedVersion string)
 	RemoveDaemonsets(dss ...types.NamespacedName)
 	RemoveDeployments(dps ...types.NamespacedName)
 	RemoveStatefulSets(sss ...types.NamespacedName)
@@ -282,7 +282,9 @@ func (m *statusManager) AddCertificateSigningRequests(name string, labels map[st
 type windowsNodeUpgrade struct {
 	nodeName        string
 	currentVersion  string
+	currentVariant  operator.ProductVariant
 	expectedVersion string
+	expectedVariant operator.ProductVariant
 }
 
 func (w *windowsNodeUpgrade) isPending(ctx context.Context, c client.Client) (bool, error) {
@@ -292,24 +294,26 @@ func (w *windowsNodeUpgrade) isPending(ctx context.Context, c client.Client) (bo
 		return false, err
 	}
 
-	ok, version := common.GetWindowsNodeVersion(node)
+	ok, variant, version := common.GetNodeVariantAndVersion(node)
 	if !ok {
 		// The upgrade was pending but now there is no
 		// version.
-		return false, fmt.Errorf("Node %v had upgrade triggered but is missing version annotation", node.Name)
+		return false, fmt.Errorf("Node %v had upgrade triggered but is missing variant and/or version annotation", node.Name)
 	}
-	return version != w.expectedVersion, nil
+	return version != w.expectedVersion || variant != w.expectedVariant, nil
 }
 
 // AddWindowsNodeUpgrade tells the status manager to monitor the health of the given
 // Windows node upgrade.
-func (m *statusManager) AddWindowsNodeUpgrade(nodeName, currentVersion, expectedVersion string) {
+func (m *statusManager) AddWindowsNodeUpgrade(nodeName string, currentVariant, expectedVariant operator.ProductVariant, currentVersion, expectedVersion string) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.windowsnodeupgrades[nodeName] = windowsNodeUpgrade{
 		nodeName:        nodeName,
 		currentVersion:  currentVersion,
 		expectedVersion: expectedVersion,
+		currentVariant:  currentVariant,
+		expectedVariant: expectedVariant,
 	}
 }
 

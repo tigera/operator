@@ -37,7 +37,8 @@ const (
 	CalicoWindowsUpgradeVolumePath      = `c:\CalicoUpgrade`
 	CalicoWindowsUpgradeLabel           = "projectcalico.org/windows-upgrade"
 	CalicoWindowsUpgradeLabelInProgress = "in-progress"
-	CalicoWindowsVersionAnnotation      = "projectcalico.org/windows-version"
+	CalicoVersionAnnotation             = "projectcalico.org/version"
+	CalicoVariantAnnotation             = "projectcalico.org/variant"
 	CalicoWindowsUpgradeTaintKey        = "projectcalico.org/windows-upgrade"
 )
 
@@ -49,12 +50,17 @@ func WindowsLatestVersionString(product operatorv1.ProductVariant) string {
 	}
 }
 
-// GetWindowsNodeVersion gets the Windows node's version annotation and returns
-// whether the annotation exists and its value.
-func GetWindowsNodeVersion(n *corev1.Node) (bool, string) {
-	ann, ok := n.Annotations[CalicoWindowsVersionAnnotation]
+// GetNodeVariantAndVersion gets the node's variant and version annotation
+// values and returns whether both annotations exist.
+func GetNodeVariantAndVersion(n *corev1.Node) (bool, operatorv1.ProductVariant, string) {
+	variant, ok := n.Annotations[CalicoVariantAnnotation]
 	if !ok {
-		return false, ""
+		return false, "", ""
 	}
-	return true, ann
+	version, ok := n.Annotations[CalicoVersionAnnotation]
+	if !ok {
+		return false, "", ""
+	}
+
+	return true, operatorv1.ProductVariant(variant), version
 }

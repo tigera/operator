@@ -823,9 +823,9 @@ func (r *ReconcileInstallation) reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// Update calicoWindowsUpgrader with the installation values it needs to
+	// Update calicoWindowsUpgrader with the installation it needs to
 	// process Calico Windows upgrades.
-	r.calicoWindowsUpgrader.SetInstallationParams(instance.Spec.Variant, instance.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable)
+	r.calicoWindowsUpgrader.UpdateConfig(&instance.Spec)
 
 	// now that migrated config is stored in the installation resource, we no longer need
 	// to check if a migration is needed for the lifetime of the operator.
@@ -1199,12 +1199,6 @@ func (r *ReconcileInstallation) reconcile(ctx context.Context, request reconcile
 		ManagerInternalSecret:       managerInternalTLSSecret,
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
-
-	if err = r.calicoWindowsUpgrader.UpgradeWindowsNodes(); err != nil {
-		r.SetDegraded("Failed to process Windows node upgrades", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-	components = append(components, render.Windows(&instance.Spec, r.calicoWindowsUpgrader.HasPendingUpgrades()))
 
 	imageSet, err := imageset.GetImageSet(ctx, r.client, instance.Spec.Variant)
 	if err != nil {

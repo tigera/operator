@@ -1130,7 +1130,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 
-				n1 := test.CreateNode(cs, "windows1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
+				n1 := test.CreateNode(cs, "windows1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoVersionAnnotation: "Calico-v3.21.999"})
 
 				// Node should not have changed.
 				Consistently(func() error {
@@ -1147,8 +1147,8 @@ var _ = Describe("Testing core-controller installation", func() {
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 
-				n1 := test.CreateNode(cs, "windows1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
-				n2 := test.CreateNode(cs, "windows2", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: currentCalicoVersion})
+				n1 := test.CreateNode(cs, "windows1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoVersionAnnotation: "Calico-v3.21.999"})
+				n2 := test.CreateNode(cs, "windows2", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoVersionAnnotation: currentCalicoVersion})
 
 				mockStatus.On("AddWindowsNodeUpgrade", "windows1", "Calico-v3.21.999", currentCalicoVersion)
 

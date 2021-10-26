@@ -538,9 +538,10 @@ endef
 
 LIBCALICO?=projectcalico/libcalico-go
 read-libcalico-calico-version:
-	$(eval LIBCALICO_BRANCH := $(shell $(CONTAINERIZED) \
+	$(eval LIBCALICO_BRANCH := $(shell $(CONTAINERIZED) $(CALICO_BUILD) \
 	bash -c '$(GIT_CONFIG_SSH) \
 	yq r config/calico_versions.yml components.libcalico-go.version'))
+	if [ -z "$(LIBCALICO_BRANCH)" ]; then echo "libcalico branch not defined"; exit 1; fi
 
 update-calico-crds: fetch-calico-crds
 	$(call copy_crds,"calico")
@@ -553,9 +554,10 @@ fetch-calico-crds: prepare-for-calico-crds read-libcalico-calico-version
 
 LIBCALICO_ENTERPRISE?=tigera/libcalico-go-private
 read-libcalico-enterprise-version:
-	$(eval LIBCALICO_ENTERPRISE_BRANCH := $(shell $(CONTAINERIZED) \
+	$(eval LIBCALICO_ENTERPRISE_BRANCH := $(shell $(CONTAINERIZED) $(CALICO_BUILD) \
 	bash -c '$(GIT_CONFIG_SSH) \
 	yq r config/enterprise_versions.yml components.libcalico-go.version'))
+	if [ -z "$(LIBCALICO_ENTERPRISE_BRANCH)" ]; then echo "libcalico enterprise branch not defined"; exit 1; fi
 
 update-enterprise-crds: fetch-enterprise-crds
 	$(call copy_crds,"enterprise")

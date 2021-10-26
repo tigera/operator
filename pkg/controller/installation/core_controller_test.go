@@ -1150,7 +1150,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				n1 := test.CreateNode(cs, "windows1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: "Calico-v3.21.999"})
 				n2 := test.CreateNode(cs, "windows2", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoWindowsVersionAnnotation: currentCalicoVersion})
 
-				mockStatus.On("AddWindowsNodeUpgrade", "windows1", currentCalicoVersion)
+				mockStatus.On("AddWindowsNodeUpgrade", "windows1", "Calico-v3.21.999", currentCalicoVersion)
 
 				// Up-to-date node should not have changed.
 				Consistently(func() error {

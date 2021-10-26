@@ -120,7 +120,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 		})
 
 		Context("Initial creation", func() {
-			FIt("should render an elasticsearchComponent", func() {
+			It("should render an elasticsearchComponent", func() {
 				expectedCreateResources := []resourceTestObj{
 					{"tigera-secure", "", &operatorv1.LogStorage{}, func(resource runtime.Object) {
 						ls := resource.(*operatorv1.LogStorage)

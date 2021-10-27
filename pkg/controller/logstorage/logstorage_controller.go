@@ -309,7 +309,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		r.status.OnCRFound()
 	}
 
-	if ls != nil {
+	if ls != nil && ls.DeletionTimestamp == nil {
 		if !stringsutil.StringInSlice(LogStorageFinalizer, ls.GetFinalizers()) {
 			ls.SetFinalizers(append(ls.GetFinalizers(), LogStorageFinalizer))
 		}

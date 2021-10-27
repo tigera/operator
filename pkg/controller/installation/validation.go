@@ -360,7 +360,7 @@ func validateNodeAddressDetection(ad *operatorv1.NodeAddressAutodetection) error
 	if len(ad.CanReach) != 0 {
 		numEnabled++
 	}
-	if ad.FirstFound != nil && *ad.FirstFound {
+	if ad.FirstFound {
 		numEnabled++
 	}
 	if len(ad.CIDRS) != 0 {

@@ -57,7 +57,6 @@ var _ = Describe("Node rendering tests", func() {
 	var cfg render.NodeConfiguration
 
 	BeforeEach(func() {
-		ff := true
 		hp := operatorv1.HostPortsEnabled
 		miMode := operatorv1.MultiInterfaceModeNone
 		defaultInstance = &operatorv1.InstallationSpec{
@@ -68,7 +67,7 @@ var _ = Describe("Node rendering tests", func() {
 			CalicoNetwork: &operatorv1.CalicoNetworkSpec{
 				BGP:                        &bgpEnabled,
 				IPPools:                    []operatorv1.IPPool{{CIDR: "192.168.1.0/16"}},
-				NodeAddressAutodetectionV4: &operatorv1.NodeAddressAutodetection{FirstFound: &ff},
+				NodeAddressAutodetectionV4: &operatorv1.NodeAddressAutodetection{FirstFound: true},
 				HostPorts:                  &hp,
 				MultiInterfaceMode:         &miMode,
 			},
@@ -2057,7 +2056,7 @@ var _ = Describe("Node rendering tests", func() {
 	})
 	Describe("test IP auto detection", func() {
 		It("should support canReach", func() {
-			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
+			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = false
 			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.CanReach = "1.1.1.1"
 			component := render.Node(&cfg)
 			Expect(component.ResolveImages(nil)).To(BeNil())
@@ -2073,7 +2072,7 @@ var _ = Describe("Node rendering tests", func() {
 		})
 
 		It("should support interface regex", func() {
-			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
+			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = false
 			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.Interface = "eth*"
 			component := render.Node(&cfg)
 			Expect(component.ResolveImages(nil)).To(BeNil())
@@ -2089,7 +2088,7 @@ var _ = Describe("Node rendering tests", func() {
 		})
 
 		It("should support skip-interface regex", func() {
-			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
+			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = false
 			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.SkipInterface = "eth*"
 			component := render.Node(&cfg)
 			Expect(component.ResolveImages(nil)).To(BeNil())
@@ -2105,7 +2104,7 @@ var _ = Describe("Node rendering tests", func() {
 		})
 
 		It("should support cidr", func() {
-			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
+			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = false
 			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.CIDRS = []string{"10.0.1.0/24", "10.0.2.0/24"}
 			component := render.Node(&cfg)
 			Expect(component.ResolveImages(nil)).To(BeNil())

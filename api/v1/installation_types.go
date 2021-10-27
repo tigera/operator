@@ -366,7 +366,7 @@ type NodeAddressAutodetection struct {
 	// FirstFound uses default interface matching parameters to select an interface, performing best-effort
 	// filtering based on well-known interface names.
 	// +optional
-	FirstFound *bool `json:"firstFound,omitempty"`
+	FirstFound bool `json:"firstFound,omitempty"`
 
 	// Interface enables IP auto-detection based on interfaces that match the given regex.
 	// +optional

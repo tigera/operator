@@ -265,7 +265,6 @@ var _ = Describe("Installation merge tests", func() {
 				&opv1.CalicoNetworkSpec{MTU: intPtr(8980)}),
 		)
 
-		_true := true
 		DescribeTable("merge NodeAddressAutodetectionV4", func(main, second, expect *opv1.NodeAddressAutodetection) {
 			m := opv1.InstallationSpec{}
 			s := opv1.InstallationSpec{}
@@ -287,8 +286,8 @@ var _ = Describe("Installation merge tests", func() {
 				&opv1.NodeAddressAutodetection{Interface: "enp0s*"}, nil,
 				&opv1.NodeAddressAutodetection{Interface: "enp0s*"}),
 			Entry("Second only set", nil,
-				&opv1.NodeAddressAutodetection{FirstFound: &_true},
-				&opv1.NodeAddressAutodetection{FirstFound: &_true}),
+				&opv1.NodeAddressAutodetection{FirstFound: true},
+				&opv1.NodeAddressAutodetection{FirstFound: true}),
 			Entry("Both set equal",
 				&opv1.NodeAddressAutodetection{CIDRS: []string{"192.168.5.0/24", "192.168.10.0/24"}},
 				&opv1.NodeAddressAutodetection{CIDRS: []string{"192.168.5.0/24", "192.168.10.0/24"}},
@@ -320,8 +319,8 @@ var _ = Describe("Installation merge tests", func() {
 				&opv1.NodeAddressAutodetection{Interface: "enp0s*"}, nil,
 				&opv1.NodeAddressAutodetection{Interface: "enp0s*"}),
 			Entry("Second only set", nil,
-				&opv1.NodeAddressAutodetection{FirstFound: &_true},
-				&opv1.NodeAddressAutodetection{FirstFound: &_true}),
+				&opv1.NodeAddressAutodetection{FirstFound: true},
+				&opv1.NodeAddressAutodetection{FirstFound: true}),
 			Entry("Both set equal",
 				&opv1.NodeAddressAutodetection{CIDRS: []string{"fd00:0001::/96", "fd00:0002::/96"}},
 				&opv1.NodeAddressAutodetection{CIDRS: []string{"fd00:0001::/96", "fd00:0002::/96"}},

@@ -1542,7 +1542,7 @@ func getAutodetectionMethod(ad *operatorv1.NodeAddressAutodetection) string {
 		if len(ad.CanReach) != 0 {
 			return fmt.Sprintf("can-reach=%s", ad.CanReach)
 		}
-		if ad.FirstFound != nil && *ad.FirstFound {
+		if ad.FirstFound {
 			return "first-found"
 		}
 		if len(ad.CIDRS) != 0 {

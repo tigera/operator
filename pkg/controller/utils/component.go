@@ -33,6 +33,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -45,6 +46,7 @@ import (
 
 type ComponentHandler interface {
 	CreateOrUpdateOrDelete(context.Context, render.Component, status.StatusManager) error
+	IsOwnerOf(controlled metav1.Object) bool
 }
 
 // cr is allowed to be nil in the case we don't want to put ownership on a resource,
@@ -204,6 +206,30 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 		status.ReadyToMonitor()
 	}
 	return nil
+}
+
+func (c componentHandler) IsOwnerOf(controlled metav1.Object) bool {
+	if c.cr != nil {
+		ro, ok := c.cr.(runtime.Object)
+		if !ok {
+			return false
+		}
+
+		oGVK := ro.GetObjectKind().GroupVersionKind()
+		oName := c.cr.GetName()
+
+		for _, r := range controlled.GetOwnerReferences() {
+			cGV, err := schema.ParseGroupVersion(r.APIVersion)
+			if err != nil {
+				continue
+			}
+
+			if oGVK.Group == cGV.Group && oGVK.Kind == r.Kind && oName == r.Name {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // mergeState returns the object to pass to Update given the current and desired object states.

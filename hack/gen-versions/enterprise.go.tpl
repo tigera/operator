@@ -232,7 +232,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-
+{{ with index .Components "windows" }}
+	ComponentTigeraWindows = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 	EnterpriseComponents = []component{
 		ComponentAPIServer,
 		ComponentComplianceBenchmarker,
@@ -270,5 +275,6 @@ var (
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
+		ComponentTigeraWindows,
 	}
 )

@@ -24,7 +24,6 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/node"
 	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/controller/utils"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -43,14 +42,12 @@ import (
 	"k8s.io/client-go/tools/cache"
 	kclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 var _ = Describe("Calico windows upgrader", func() {
 	var c CalicoWindowsUpgrader
 	var cs *kfake.Clientset
 	var client kclient.Client
-	var r *testReconciler
 	var cr *operator.InstallationSpec
 
 	var mockStatus *status.MockStatus
@@ -58,7 +55,6 @@ var _ = Describe("Calico windows upgrader", func() {
 	var nodeInformer cache.Controller
 
 	var syncPeriodOption calicoWindowsUpgraderOption
-	var requestChan chan utils.ReconcileRequest
 	var ctx context.Context
 	var cancel context.CancelFunc
 
@@ -88,9 +84,8 @@ var _ = Describe("Calico windows upgrader", func() {
 		for !nodeInformer.HasSynced() {
 			time.Sleep(100 * time.Millisecond)
 		}
-		requestChan = make(chan utils.ReconcileRequest, 1)
 
-		c = NewCalicoWindowsUpgrader(cs, client, nodeIndexer, mockStatus, requestChan, syncPeriodOption)
+		c = NewCalicoWindowsUpgrader(cs, client, nodeIndexer, mockStatus, syncPeriodOption)
 		one := intstr.FromInt(1)
 		cr = &operator.InstallationSpec{
 			Variant: operator.Calico,
@@ -100,11 +95,6 @@ var _ = Describe("Calico windows upgrader", func() {
 				},
 			},
 		}
-
-		r = newTestReconciler(requestChan, cr)
-		r.handler = func() {
-			c.UpdateConfig(r.install)
-		}
 	})
 
 	AfterEach(func() {
@@ -113,16 +103,15 @@ var _ = Describe("Calico windows upgrader", func() {
 
 	It("should do nothing if the product is Enterprise", func() {
 		// We start off Enterprise install
-		r.install.Variant = operator.TigeraSecureEnterprise
+		cr.Variant = operator.TigeraSecureEnterprise
 
 		n1 := test.CreateNode(cs, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
-		n2 := createWindowsNode(cs, "node2", r.install.Variant, "v3.0.0")
-		n3 := createWindowsNode(cs, "node3", r.install.Variant, "v2.0.0")
+		n2 := createWindowsNode(cs, "node2", cr.Variant, "v3.0.0")
+		n3 := createWindowsNode(cs, "node3", cr.Variant, "v2.0.0")
 
 		// Create the upgrader and start it.
-		r.run(ctx)
 		c.Start(ctx)
-		r.reconcile()
+		c.UpdateConfig(cr)
 
 		// Nodes should not have changed.
 		Consistently(func() error {
@@ -133,15 +122,13 @@ var _ = Describe("Calico windows upgrader", func() {
 	})
 
 	It("should ignore linux nodes", func() {
-		r.run(ctx)
 		c.Start(ctx)
-		r.reconcile()
 
 		n1 := test.CreateNode(cs, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
 		n2 := test.CreateNode(cs, "node2", map[string]string{"kubernetes.io/os": "linux"},
 			map[string]string{common.CalicoVersionAnnotation: "v2.0.0", common.CalicoVariantAnnotation: string(operator.TigeraSecureEnterprise)})
 
-		r.reconcile()
+		c.UpdateConfig(cr)
 
 		Consistently(func() error {
 			return test.AssertNodesUnchanged(cs, n1, n2)
@@ -158,9 +145,8 @@ var _ = Describe("Calico windows upgrader", func() {
 		n2 := createWindowsNode(cs, "node2", operator.Calico, "v3.21.999")
 		n3 := createWindowsNode(cs, "node3", operator.Calico, components.CalicoRelease)
 
-		r.run(ctx)
 		c.Start(ctx)
-		r.reconcile()
+		c.UpdateConfig(cr)
 
 		Eventually(func() error {
 			return test.AssertNodesUnchanged(cs, n1, n3)
@@ -202,9 +188,8 @@ var _ = Describe("Calico windows upgrader", func() {
 
 		mockStatus.On("AddWindowsNodeUpgrade", "node1", operator.TigeraSecureEnterprise, operator.Calico, "v3.11.0", components.CalicoRelease)
 
-		r.run(ctx)
 		c.Start(ctx)
-		r.reconcile()
+		c.UpdateConfig(cr)
 
 		// Ensure the node has the new label and taint.
 		Eventually(func() error {
@@ -231,7 +216,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		// Create installation with rolling update strategy with 20%
 		// maxUnavailable.
 		mu := intstr.FromString("20%")
-		r.install.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &mu
+		cr.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &mu
 
 		// Create 5 nodes, all ready to be upgraded.
 		_ = createWindowsNode(cs, "node1", operator.Calico, "v3.21.999")
@@ -243,9 +228,8 @@ var _ = Describe("Calico windows upgrader", func() {
 		// We won't know which nodes will end up being added for upgrade.
 		mockStatus.On("AddWindowsNodeUpgrade", mock.Anything, operator.Calico, operator.Calico, "v3.21.999", components.CalicoRelease)
 
-		r.run(ctx)
 		c.Start(ctx)
-		r.reconcile()
+		c.UpdateConfig(cr)
 
 		count := func() int {
 			return countNodesUpgrading(nodeIndexer)
@@ -256,11 +240,10 @@ var _ = Describe("Calico windows upgrader", func() {
 		// Now change to 60% which should result in 3 nodes that should be
 		// upgradable.
 		mu = intstr.FromString("60%")
-		r.install.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &mu
+		cr.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &mu
 
-		// Reconcile the installation (normally this would be triggered by the
-		// watch by the core controller)
-		r.reconcile()
+		// Update the config (normally this would be triggered by the core controller)
+		c.UpdateConfig(cr)
 
 		Eventually(count, 5*time.Second).Should(Equal(3))
 		Consistently(count, 10*time.Second).Should(Equal(3))
@@ -273,9 +256,8 @@ var _ = Describe("Calico windows upgrader", func() {
 			_ = createWindowsNode(cs, "node3", operator.Calico, "v3.21.999")
 			mockStatus.On("AddWindowsNodeUpgrade", mock.Anything, operator.Calico, operator.Calico, "v3.21.999", components.CalicoRelease)
 
-			r.run(ctx)
 			c.Start(ctx)
-			r.reconcile()
+			c.UpdateConfig(cr)
 
 			count := func() int {
 				return countNodesUpgrading(nodeIndexer)
@@ -284,16 +266,15 @@ var _ = Describe("Calico windows upgrader", func() {
 			Consistently(count, 5*time.Second).Should(Equal(1))
 
 			mu := intstr.FromInt(0)
-			r.install.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &mu
-
-			r.reconcile()
+			cr.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &mu
+			c.UpdateConfig(cr)
 
 			Eventually(count, 5*time.Second).Should(Equal(1))
 			Consistently(count, 5*time.Second).Should(Equal(1))
 
 			mu = intstr.FromInt(2)
-			r.install.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &mu
-			r.reconcile()
+			cr.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &mu
+			c.UpdateConfig(cr)
 
 			Eventually(count, 5*time.Second).Should(Equal(2))
 			Consistently(count, 5*time.Second).Should(Equal(2))
@@ -306,9 +287,8 @@ var _ = Describe("Calico windows upgrader", func() {
 
 			mockStatus.On("AddWindowsNodeUpgrade", mock.Anything, operator.TigeraSecureEnterprise, operator.Calico, "v3.11.0", components.CalicoRelease)
 
-			r.run(ctx)
 			c.Start(ctx)
-			r.reconcile()
+			c.UpdateConfig(cr)
 
 			count := func() int {
 				return countNodesUpgrading(nodeIndexer)
@@ -317,15 +297,15 @@ var _ = Describe("Calico windows upgrader", func() {
 			Consistently(count, 5*time.Second).Should(Equal(1))
 
 			mu := intstr.FromInt(0)
-			r.install.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &mu
-			r.reconcile()
+			cr.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &mu
+			c.UpdateConfig(cr)
 
 			Eventually(count, 5*time.Second).Should(Equal(1))
 			Consistently(count, 5*time.Second).Should(Equal(1))
 
 			mu = intstr.FromInt(2)
-			r.install.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &mu
-			r.reconcile()
+			cr.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &mu
+			c.UpdateConfig(cr)
 
 			Eventually(count, 5*time.Second).Should(Equal(2))
 			Consistently(count, 5*time.Second).Should(Equal(2))
@@ -340,10 +320,9 @@ var _ = Describe("Calico windows upgrader", func() {
 
 			mockStatus.On("AddWindowsNodeUpgrade", mock.Anything, operator.TigeraSecureEnterprise, operator.TigeraSecureEnterprise, "old", components.EnterpriseRelease)
 
-			r.install.Variant = operator.TigeraSecureEnterprise
-			r.run(ctx)
+			cr.Variant = operator.TigeraSecureEnterprise
 			c.Start(ctx)
-			r.reconcile()
+			c.UpdateConfig(cr)
 
 			count := func() int {
 				return countNodesUpgrading(nodeIndexer)
@@ -352,16 +331,15 @@ var _ = Describe("Calico windows upgrader", func() {
 			Consistently(count, 5*time.Second).Should(Equal(1))
 
 			mu := intstr.FromInt(0)
-			r.install.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &mu
-
-			r.reconcile()
+			cr.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &mu
+			c.UpdateConfig(cr)
 
 			Eventually(count, 5*time.Second).Should(Equal(1))
 			Consistently(count, 5*time.Second).Should(Equal(1))
 
 			mu = intstr.FromInt(2)
-			r.install.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &mu
-			r.reconcile()
+			cr.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &mu
+			c.UpdateConfig(cr)
 
 			Eventually(count, 5*time.Second).Should(Equal(2))
 			Consistently(count, 5*time.Second).Should(Equal(2))
@@ -376,10 +354,9 @@ var _ = Describe("Calico windows upgrader", func() {
 
 			mockStatus.On("AddWindowsNodeUpgrade", mock.Anything, operator.Calico, operator.TigeraSecureEnterprise, "v3.21.999", components.EnterpriseRelease)
 
-			r.install.Variant = operator.TigeraSecureEnterprise
-			r.run(ctx)
+			cr.Variant = operator.TigeraSecureEnterprise
 			c.Start(ctx)
-			r.reconcile()
+			c.UpdateConfig(cr)
 
 			count := func() int {
 				return countNodesUpgrading(nodeIndexer)
@@ -477,41 +454,4 @@ func setNodeVariantAndVersion(c kubernetes.Interface, indexer cache.Indexer, nod
 
 		return fmt.Errorf("node does not have expected version yet: %v", version)
 	}, 20*time.Second).Should(BeNil())
-}
-
-// testReconciler processes ReconcileRequests from a request chan and runs
-// a handler for each request.
-type testReconciler struct {
-	requestChan chan utils.ReconcileRequest
-	install     *operator.InstallationSpec
-	handler     func()
-}
-
-func newTestReconciler(requestChan chan utils.ReconcileRequest, install *operator.InstallationSpec) *testReconciler {
-	return &testReconciler{
-		requestChan: requestChan,
-		install:     install,
-	}
-}
-
-func (r *testReconciler) reconcile() {
-	r.requestChan <- utils.ReconcileRequest{
-		Context:    context.TODO(),
-		Request:    reconcile.Request{},
-		ResultChan: make(chan utils.ReconcileResult),
-	}
-}
-
-// run processes reconcile requests.
-func (r *testReconciler) run(ctx context.Context) {
-	go func() {
-		for {
-			select {
-			case <-r.requestChan:
-				r.handler()
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
 }

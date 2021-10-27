@@ -311,7 +311,6 @@ var _ = Describe("Testing core-controller installation", func() {
 		var r ReconcileInstallation
 		var scheme *runtime.Scheme
 		var mockStatus *status.MockStatus
-		var requestChan chan utils.ReconcileRequest
 
 		BeforeEach(func() {
 			// The schema contains all objects that should be known to the fake client when the test runs.
@@ -358,8 +357,6 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
 
-			requestChan = make(chan utils.ReconcileRequest, 1)
-
 			// Create the indexer and informer shared by the typhaAutoscaler and
 			// calicoWindowsUpgrader.
 			nlw := test.NodeListWatch{cs}
@@ -378,19 +375,15 @@ var _ = Describe("Testing core-controller installation", func() {
 				autoDetectedProvider:  operator.ProviderNone,
 				status:                mockStatus,
 				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexer, test.TyphaListWatch{cs}, mockStatus),
-				calicoWindowsUpgrader: windows.NewCalicoWindowsUpgrader(cs, c, nodeIndexer, mockStatus, requestChan),
+				calicoWindowsUpgrader: windows.NewCalicoWindowsUpgrader(cs, c, nodeIndexer, mockStatus),
 				namespaceMigration:    &fakeNamespaceMigration{},
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,
 				migrationChecked:      true,
-				requestChan:           requestChan,
 			}
 
 			r.typhaAutoscaler.start(ctx)
 			r.calicoWindowsUpgrader.Start(ctx)
-			go func() {
-				r.processRequests(ctx)
-			}()
 
 			// We start off with a 'standard' installation, with nothing special
 			Expect(c.Create(
@@ -661,7 +654,6 @@ var _ = Describe("Testing core-controller installation", func() {
 
 		var internalManagerTLSSecret *corev1.Secret
 		var expectedDNSNames []string
-		var requestChan chan utils.ReconcileRequest
 
 		BeforeEach(func() {
 			// The schema contains all objects that should be known to the fake client when the test runs.
@@ -710,8 +702,6 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
 
-			requestChan = make(chan utils.ReconcileRequest, 1)
-
 			// Create the indexer and informer shared by the typhaAutoscaler and
 			// calicoWindowsUpgrader.
 			nlw := test.NodeListWatch{cs}
@@ -730,19 +720,15 @@ var _ = Describe("Testing core-controller installation", func() {
 				autoDetectedProvider:  operator.ProviderNone,
 				status:                mockStatus,
 				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexer, test.TyphaListWatch{cs}, mockStatus),
-				calicoWindowsUpgrader: windows.NewCalicoWindowsUpgrader(cs, c, nodeIndexer, mockStatus, requestChan),
+				calicoWindowsUpgrader: windows.NewCalicoWindowsUpgrader(cs, c, nodeIndexer, mockStatus),
 				namespaceMigration:    &fakeNamespaceMigration{},
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,
 				migrationChecked:      true,
 				clusterDomain:         dns.DefaultClusterDomain,
-				requestChan:           requestChan,
 			}
 			r.typhaAutoscaler.start(ctx)
 			r.calicoWindowsUpgrader.Start(ctx)
-			go func() {
-				r.processRequests(ctx)
-			}()
 
 			cr = &operator.Installation{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
@@ -820,7 +806,6 @@ var _ = Describe("Testing core-controller installation", func() {
 		var r ReconcileInstallation
 		var scheme *runtime.Scheme
 		var mockStatus *status.MockStatus
-		var requestChan chan utils.ReconcileRequest
 
 		var cr *operator.Installation
 
@@ -882,8 +867,6 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("AddCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
 
-			requestChan = make(chan utils.ReconcileRequest, 1)
-
 			// Create the indexer and informer shared by the typhaAutoscaler and
 			// calicoWindowsUpgrader.
 			nlw := test.NodeListWatch{cs}
@@ -902,19 +885,15 @@ var _ = Describe("Testing core-controller installation", func() {
 				autoDetectedProvider:  operator.ProviderNone,
 				status:                mockStatus,
 				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexer, test.TyphaListWatch{cs}, mockStatus),
-				calicoWindowsUpgrader: windows.NewCalicoWindowsUpgrader(cs, c, nodeIndexer, mockStatus, requestChan),
+				calicoWindowsUpgrader: windows.NewCalicoWindowsUpgrader(cs, c, nodeIndexer, mockStatus),
 				namespaceMigration:    &fakeNamespaceMigration{},
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,
 				migrationChecked:      true,
-				requestChan:           requestChan,
 			}
 
 			r.typhaAutoscaler.start(ctx)
 			r.calicoWindowsUpgrader.Start(ctx)
-			go func() {
-				r.processRequests(ctx)
-			}()
 
 			// We start off with a 'standard' installation, with nothing special
 			cr = &operator.Installation{
@@ -1123,14 +1102,13 @@ var _ = Describe("Testing core-controller installation", func() {
 		})
 
 		Context("calicoWindowsUpgrader", func() {
-			currentCalicoVersion := fmt.Sprintf("Calico-%v", components.CalicoRelease)
-
 			It("should do nothing if variant is Enterprise", func() {
 				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 
-				n1 := test.CreateNode(cs, "windows1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoVersionAnnotation: "Calico-v3.21.999"})
+				n1 := test.CreateNode(cs, "windows1", map[string]string{"kubernetes.io/os": "windows"},
+					map[string]string{common.CalicoVariantAnnotation: string(cr.Spec.Variant), common.CalicoVersionAnnotation: components.CalicoRelease})
 
 				// Node should not have changed.
 				Consistently(func() error {
@@ -1148,9 +1126,10 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 
 				n1 := test.CreateNode(cs, "windows1", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoVersionAnnotation: "Calico-v3.21.999"})
-				n2 := test.CreateNode(cs, "windows2", map[string]string{"kubernetes.io/os": "windows"}, map[string]string{common.CalicoVersionAnnotation: currentCalicoVersion})
+				n2 := test.CreateNode(cs, "windows2", map[string]string{"kubernetes.io/os": "windows"},
+					map[string]string{common.CalicoVariantAnnotation: string(cr.Spec.Variant), common.CalicoVersionAnnotation: components.CalicoRelease})
 
-				mockStatus.On("AddWindowsNodeUpgrade", "windows1", "Calico-v3.21.999", currentCalicoVersion)
+				mockStatus.On("AddWindowsNodeUpgrade", "windows1", operator.Calico, operator.Calico, "v3.21.999", components.CalicoRelease)
 
 				// Up-to-date node should not have changed.
 				Consistently(func() error {

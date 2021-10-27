@@ -34,7 +34,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -54,17 +53,6 @@ const (
 var DefaultInstanceKey = client.ObjectKey{Name: "default"}
 var DefaultTSEEInstanceKey = client.ObjectKey{Name: "tigera-secure"}
 var OverlayInstanceKey = client.ObjectKey{Name: "overlay"}
-
-type ReconcileRequest struct {
-	Context    context.Context
-	Request    reconcile.Request
-	ResultChan chan ReconcileResult
-}
-
-type ReconcileResult struct {
-	Error  error
-	Result reconcile.Result
-}
 
 // ContextLoggerForResource provides a logger instance with context set for the provided object.
 func ContextLoggerForResource(log logr.Logger, obj client.Object) logr.Logger {

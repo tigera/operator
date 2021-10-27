@@ -25,7 +25,6 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	nodeutils "github.com/tigera/operator/pkg/controller/node"
 	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/controller/utils"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -73,7 +72,7 @@ func calicoWindowsUpgraderSyncPeriod(syncPeriod time.Duration) calicoWindowsUpgr
 }
 
 // NewCalicoWindowsUpgrader creates a Calico Windows upgrader.
-func NewCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, indexer cache.Indexer, statusManager status.StatusManager, requestChan chan utils.ReconcileRequest, options ...calicoWindowsUpgraderOption) CalicoWindowsUpgrader {
+func NewCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, indexer cache.Indexer, statusManager status.StatusManager, options ...calicoWindowsUpgraderOption) CalicoWindowsUpgrader {
 	w := &calicoWindowsUpgrader{
 		clientset:     cs,
 		client:        c,

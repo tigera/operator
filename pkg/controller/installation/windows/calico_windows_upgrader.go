@@ -55,7 +55,7 @@ type calicoWindowsUpgrader struct {
 	clientset     kubernetes.Interface
 	client        client.Client
 	statusManager status.StatusManager
-	nodeIndexer   cache.Indexer
+	nodeIndexer   cache.SharedIndexInformer
 	syncPeriod    time.Duration
 	installChan   chan *operatorv1.InstallationSpec
 	install       *operatorv1.InstallationSpec
@@ -72,7 +72,7 @@ func calicoWindowsUpgraderSyncPeriod(syncPeriod time.Duration) calicoWindowsUpgr
 }
 
 // NewCalicoWindowsUpgrader creates a Calico Windows upgrader.
-func NewCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, indexer cache.Indexer, statusManager status.StatusManager, options ...calicoWindowsUpgraderOption) CalicoWindowsUpgrader {
+func NewCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, indexer cache.SharedIndexInformer, statusManager status.StatusManager, options ...calicoWindowsUpgraderOption) CalicoWindowsUpgrader {
 	w := &calicoWindowsUpgrader{
 		clientset:     cs,
 		client:        c,
@@ -106,7 +106,7 @@ func (w *calicoWindowsUpgrader) getNodeUpgradeStatus() (error, map[string]*corev
 	inprogress := make(map[string]*corev1.Node)
 	expectedVersion := w.getExpectedVersion()
 
-	for _, obj := range w.nodeIndexer.List() {
+	for _, obj := range w.nodeIndexer.GetIndexer().List() {
 		node, ok := obj.(*corev1.Node)
 		if !ok {
 			return fmt.Errorf("Never expected index to have anything other than a Node object: %v", obj), nil, nil, nil

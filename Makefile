@@ -148,7 +148,7 @@ PUSH_IMAGE_PREFIXES+=$(RELEASE_PREFIXES)
 endif
 
 # remove from the list to push to manifest any registries that do not support multi-arch
-EXCLUDE_MANIFEST_REGISTRIES?=quay.io/
+EXCLUDE_MANIFEST_REGISTRIES?=""
 PUSH_MANIFEST_IMAGE_PREFIXES=$(PUSH_IMAGE_PREFIXES:$(EXCLUDE_MANIFEST_REGISTRIES)%=)
 PUSH_NONMANIFEST_IMAGE_PREFIXES=$(filter-out $(PUSH_MANIFEST_IMAGE_PREFIXES),$(PUSH_IMAGE_PREFIXES))
 
@@ -178,7 +178,11 @@ sub-manifest-%:
 ## push default amd64 arch where multi-arch manifest is not supported
 push-non-manifests: imagetag $(addprefix sub-non-manifest-,$(call escapefs,$(PUSH_NONMANIFEST_IMAGE_PREFIXES)))
 sub-non-manifest-%:
-	docker run -t --entrypoint /bin/sh -v $(HOME)/.docker/config.json:/root/.docker/config.json $(CALICO_BUILD) -c "/usr/bin/manifest-tool push from-args --platforms $(call join_platforms,$(VALIDARCHES)) --template $(call unescapefs,$*$(BUILD_IMAGE):$(IMAGETAG))-ARCH --target $(call unescapefs,$*$(BUILD_IMAGE):$(IMAGETAG))"
+ifeq ($(ARCH),amd64)
+	docker push $(call unescapefs,$*$(BUILD_IMAGE):$(IMAGETAG))
+else
+	$(NOECHO) $(NOOP)
+endif
 
 ## tag images of one arch
 tag-images: imagetag $(addprefix sub-single-tag-images-arch-,$(call escapefs,$(PUSH_IMAGE_PREFIXES))) $(addprefix sub-single-tag-images-non-manifest-,$(call escapefs,$(PUSH_NONMANIFEST_IMAGE_PREFIXES)))

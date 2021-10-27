@@ -399,8 +399,7 @@ func handleAutoDetectionMethod(c *components, install *operatorv1.Installation) 
 
 	// first-found
 	if *method == "" || *method == AutodetectionMethodFirst {
-		var t = true
-		install.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operatorv1.NodeAddressAutodetection{FirstFound: &t}
+		install.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operatorv1.NodeAddressAutodetection{FirstFound: true}
 		return nil
 	}
 

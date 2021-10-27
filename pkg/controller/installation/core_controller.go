@@ -563,9 +563,8 @@ func fillDefaults(instance *operator.Installation) error {
 			}
 		default:
 			// Default IPv4 address detection to "first found" if not specified.
-			t := true
 			instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
-				FirstFound: &t,
+				FirstFound: true,
 			}
 		}
 	}
@@ -582,9 +581,8 @@ func fillDefaults(instance *operator.Installation) error {
 		}
 		if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 == nil {
 			// Default IPv6 address detection to "first found" if not specified.
-			t := true
 			instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 = &operator.NodeAddressAutodetection{
-				FirstFound: &t,
+				FirstFound: true,
 			}
 		}
 		if v6pool.BlockSize == nil {

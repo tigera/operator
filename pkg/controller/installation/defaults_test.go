@@ -80,7 +80,6 @@ var _ = Describe("Defaulting logic tests", func() {
 	It("should not override custom configuration", func() {
 		var mtu int32 = 1500
 		var nodeMetricsPort int32 = 9081
-		var false_ = false
 		var twentySeven int32 = 27
 		var oneTwoThree int32 = 123
 		var one intstr.IntOrString = intstr.FromInt(1)
@@ -129,10 +128,10 @@ var _ = Describe("Defaulting logic tests", func() {
 					MTU: &mtu,
 					BGP: &disabled,
 					NodeAddressAutodetectionV4: &operator.NodeAddressAutodetection{
-						FirstFound: &false_,
+						FirstFound: false,
 					},
 					NodeAddressAutodetectionV6: &operator.NodeAddressAutodetection{
-						FirstFound: &false_,
+						FirstFound: false,
 					},
 					HostPorts:          &hpEnabled,
 					MultiInterfaceMode: &miMode,
@@ -158,7 +157,6 @@ var _ = Describe("Defaulting logic tests", func() {
 	It("should not override custom configuration (BPF)", func() {
 		var mtu int32 = 1500
 		var nodeMetricsPort int32 = 9081
-		var false_ = false
 		var twentySeven int32 = 27
 		var one intstr.IntOrString = intstr.FromInt(1)
 		var replicas int32 = 3
@@ -199,7 +197,7 @@ var _ = Describe("Defaulting logic tests", func() {
 					MTU: &mtu,
 					BGP: &disabled,
 					NodeAddressAutodetectionV4: &operator.NodeAddressAutodetection{
-						FirstFound: &false_,
+						FirstFound: false,
 					},
 					MultiInterfaceMode: &miMode,
 					HostPorts:          &hpDisabled, // Only one valid value in BPF mode.

@@ -100,6 +100,26 @@ var _ = Describe("Calico windows upgrader", func() {
 		cancel()
 	})
 
+	It("should do nothing if the product is Enterprise", func() {
+		// We start off Enterprise install
+		cr.Variant = operator.TigeraSecureEnterprise
+
+		n1 := test.CreateNode(cs, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
+		n2 := test.CreateWindowsNode(cs, "node2", cr.Variant, "v3.0.0")
+		n3 := test.CreateWindowsNode(cs, "node3", cr.Variant, "v2.0.0")
+
+		// Create the upgrader and start it.
+		c.Start(ctx)
+		c.UpdateConfig(cr)
+
+		// Nodes should not have changed.
+		Consistently(func() error {
+			return test.AssertNodesUnchanged(cs, n1, n2, n3)
+		}, 5*time.Second, 100*time.Millisecond).Should(BeNil())
+
+		mockStatus.AssertExpectations(GinkgoT())
+	})
+
 	It("should ignore linux nodes", func() {
 		c.Start(ctx)
 

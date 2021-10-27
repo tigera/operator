@@ -187,6 +187,18 @@ func (w *calicoWindowsUpgrader) updateWindowsNodes() {
 		return
 	}
 
+	// For now, do nothing if the upgrade version is Enterprise since current
+	// Enterprise versions do not support the upgrade.
+	// This prevents a user from accidentally triggering an
+	// in-place upgrade from Calico v3.21.0 to Enterprise v3.10.x. That upgrade
+	// would fail since the calico windows upgrade is will only be supported in
+	// Enterprise v3.11+
+	// TODO: remove this once Enterprise v3.11.0 is released.
+	if w.install.Variant == operatorv1.TigeraSecureEnterprise {
+		windowsLog.V(1).Info("Enterprise upgrades for Windows are not currently supported, skipping remainder of sync")
+		return
+	}
+
 	err, pending, inprogress, insync := w.getNodeUpgradeStatus()
 	if err != nil {
 		windowsLog.Error(err, "Failed to get Windows nodes upgrade status")

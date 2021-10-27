@@ -306,13 +306,10 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 			es.logStorage.SetFinalizers(stringsutil.RemoveStringInSlice(LogStorageFinalizer, es.logStorage.GetFinalizers()))
 		}
 
-		toCreate = append(toCreate, es.logStorage)
 		return toCreate, toDelete
 	}
 
 	if es.managementClusterConnection == nil {
-		// Write back LogStorage CR to persist any changes
-		toCreate = append(toCreate, es.logStorage)
 
 		// ECK CRs
 		toCreate = append(toCreate,

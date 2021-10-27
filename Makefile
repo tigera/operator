@@ -595,13 +595,6 @@ BUNDLE_DEPLOY_DIR ?= build/_output/bundle/$(VERSION)/deploy
 .PHONY: bundle
 bundle: bundle-generate bundle-crd-clean update-bundle bundle-validate bundle-image
 
-# Set CRD_OPTIONS to generate v1beta1 crds. This is required for RH
-# certification. We need apiextensions.k8s.io/v1beta1 crds until we
-# stop supporting OCP 4.5 or RH Connect supports v1 crds.
-.PHONY: bundle-crd-options
-bundle-crd-options:
-	$(eval CRD_OPTIONS = crd:crdVersions=v1beta1,trivialVersions=true)
-
 .PHONY: bundle-crd-clean
 bundle-crd-clean:
 	git checkout -- config/crd/bases/
@@ -622,7 +615,7 @@ endif
 	$(CONTAINERIZED) "hack/gen-bundle/get-manifests.sh"
 
 .PHONY: bundle-generate
-bundle-generate: bundle-crd-options manifests $(KUSTOMIZE) $(OPERATOR_SDK_BARE) bundle-manifests
+bundle-generate: manifests $(KUSTOMIZE) $(OPERATOR_SDK_BARE) bundle-manifests
 	$(KUSTOMIZE) build config/manifests \
 	| $(OPERATOR_SDK_BARE) generate bundle \
 		--crds-dir $(BUNDLE_CRD_DIR) \

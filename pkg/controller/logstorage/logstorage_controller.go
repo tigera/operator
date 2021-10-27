@@ -528,8 +528,8 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 
 		// Write the logstorage back to the datastore
 		if err = r.client.Patch(ctx, ls, patchFrom); err != nil {
-			reqLogger.Error(err, fmt.Sprintf("Error patching the log-storage status %s", ls.Status.State))
-			r.status.SetDegraded(fmt.Sprintf("Error patching the log-storage status %s", ls.Status.State), err.Error())
+			reqLogger.Error(err, "Error patching the log-storage")
+			r.status.SetDegraded("Error patching the log-storage", err.Error())
 			return reconcile.Result{}, err
 		}
 	}

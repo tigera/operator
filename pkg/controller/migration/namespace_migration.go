@@ -36,7 +36,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/tigera/operator/pkg/common"
-	nodeutils "github.com/tigera/operator/pkg/controller/node"
+	nodeutils "github.com/tigera/operator/pkg/controller/utils/node"
 )
 
 // This package provides the utilities to migrate from a Calico manifest installation

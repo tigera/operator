@@ -19,8 +19,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tigera/operator/pkg/controller/node"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils/node"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"

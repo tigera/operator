@@ -22,8 +22,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/controller/node"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils/node"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"

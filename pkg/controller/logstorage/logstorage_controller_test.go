@@ -132,7 +132,7 @@ var _ = Describe("LogStorage controller", func() {
 						},
 					},
 				})).To(BeNil())
-				ls, err = GetLogStorage(ctx, cli)
+				ls, err, _ = getLogStorage(ctx, cli)
 				Expect(err).To(BeNil())
 			})
 
@@ -185,7 +185,7 @@ var _ = Describe("LogStorage controller", func() {
 				},
 				Spec: operatorv1.LogStorageSpec{},
 			})).To(BeNil())
-			ls, err := GetLogStorage(ctx, cli)
+			ls, err, _ := getLogStorage(ctx, cli)
 			Expect(err).To(BeNil())
 
 			Expect(ls.Spec.Nodes).NotTo(BeNil())

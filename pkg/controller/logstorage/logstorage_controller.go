@@ -198,20 +198,24 @@ type ReconcileLogStorage struct {
 	clusterDomain string
 }
 
-func GetLogStorage(ctx context.Context, cli client.Client) (*operatorv1.LogStorage, error) {
+func getLogStorage(ctx context.Context, cli client.Client) (*operatorv1.LogStorage, error, client.Patch) {
+
 	instance := &operatorv1.LogStorage{}
 	err := cli.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
 	if err != nil {
-		return nil, err
+		return nil, err, nil
 	}
+
+	//create predefaultpatch
+	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
 
 	fillDefaults(instance)
 
 	if err := validateComponentResources(&instance.Spec); err != nil {
-		return nil, err
+		return nil, err, nil
 	}
 
-	return instance, nil
+	return instance, nil, preDefaultPatchFrom
 }
 
 // fillDefaults populates the default values onto an LogStorage object.
@@ -296,7 +300,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling LogStorage")
 
-	ls, err := GetLogStorage(ctx, r.client)
+	ls, err, preDefaultPatchFrom := getLogStorage(ctx, r.client)
 	if err != nil {
 		// Not finding the LogStorage CR is not an error, as a Managed cluster will not have this CR available but
 		// there are still "LogStorage" related items that need to be set up
@@ -313,6 +317,13 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		if !stringsutil.StringInSlice(LogStorageFinalizer, ls.GetFinalizers()) {
 			ls.SetFinalizers(append(ls.GetFinalizers(), LogStorageFinalizer))
 		}
+	}
+
+	// Write the logstorage back to the datastore
+	if err = r.client.Patch(ctx, ls, preDefaultPatchFrom); err != nil {
+		log.Error(err, "Failed to write defaults")
+		r.status.SetDegraded("Failed to write defaults", err.Error())
+		return reconcile.Result{}, err
 	}
 
 	variant, install, err := utils.GetInstallation(context.Background(), r.client)
@@ -510,8 +521,17 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 
 	r.status.ClearDegraded()
 
-	if finalizeCleanup {
+	if ls != nil && finalizeCleanup {
+		patchFrom := client.MergeFrom(ls.DeepCopy())
+
 		ls.SetFinalizers(stringsutil.RemoveStringInSlice(LogStorageFinalizer, ls.GetFinalizers()))
+
+		// Write the logstorage back to the datastore
+		if err = r.client.Patch(ctx, ls, patchFrom); err != nil {
+			reqLogger.Error(err, fmt.Sprintf("Error patching the log-storage status %s", ls.Status.State))
+			r.status.SetDegraded(fmt.Sprintf("Error patching the log-storage status %s", ls.Status.State), err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	if ls != nil {

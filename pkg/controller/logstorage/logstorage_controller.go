@@ -435,7 +435,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	result, proceed, err := r.createLogStorage(
+	result, proceed, finalizeCleanup, err := r.createLogStorage(
 		ls,
 		install,
 		variant,
@@ -509,6 +509,10 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	r.status.ClearDegraded()
+
+	if finalizeCleanup {
+		ls.SetFinalizers(stringsutil.RemoveStringInSlice(LogStorageFinalizer, ls.GetFinalizers()))
+	}
 
 	if ls != nil {
 		ls.Status.State = operatorv1.TigeraStatusReady

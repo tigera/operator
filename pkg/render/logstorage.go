@@ -25,7 +25,6 @@ import (
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
-	"github.com/elastic/cloud-on-k8s/pkg/utils/stringsutil"
 	"gopkg.in/inf.v0"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -279,23 +278,17 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 	// Doesn't matter what the cluster type is, if LogStorage exists and the DeletionTimestamp is set finalized the
 	// deletion
 	if es.logStorage != nil && es.logStorage.DeletionTimestamp != nil {
-		finalizeCleanup := true
+
 		if es.elasticsearch != nil {
 			if es.elasticsearch.DeletionTimestamp == nil {
 				toDelete = append(toDelete, es.elasticsearch)
 			}
-			finalizeCleanup = false
 		}
 
 		if es.kibana != nil {
 			if es.kibana.DeletionTimestamp == nil {
 				toDelete = append(toDelete, es.kibana)
 			}
-			finalizeCleanup = false
-		}
-
-		if finalizeCleanup {
-			es.logStorage.SetFinalizers(stringsutil.RemoveStringInSlice(LogStorageFinalizer, es.logStorage.GetFinalizers()))
 		}
 
 		return toCreate, toDelete

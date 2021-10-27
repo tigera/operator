@@ -19,13 +19,18 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"reflect"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/kubernetes"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/openshift/library-go/pkg/crypto"
+	"github.com/tigera/operator/pkg/common"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -126,4 +131,88 @@ func MakeTestCA(signer string) *crypto.CA {
 		SerialGenerator: &crypto.RandomSerialGenerator{},
 		Config:          caConfig,
 	}
+}
+
+// Mock a cache.ListWatcher for nodes to use in the test as there is no other suitable
+// mock available in the fake packages.
+// Ref: https://github.com/kubernetes/client-go/issues/352#issuecomment-614740790
+type NodeListWatch struct {
+	kubernetes.Interface
+}
+
+func (n NodeListWatch) List(options metav1.ListOptions) (runtime.Object, error) {
+	return n.Interface.CoreV1().Nodes().List(context.Background(), options)
+}
+
+func (n NodeListWatch) Watch(options metav1.ListOptions) (watch.Interface, error) {
+	return n.Interface.CoreV1().Nodes().Watch(context.Background(), options)
+}
+
+// Mock a cache.ListWatcher for nodes to use in the test as there is no other suitable
+// mock available in the fake packages.
+// Ref: https://github.com/kubernetes/client-go/issues/352#issuecomment-614740790
+type TyphaListWatch struct {
+	kubernetes.Interface
+}
+
+func (t TyphaListWatch) List(options metav1.ListOptions) (runtime.Object, error) {
+	return t.Interface.AppsV1().Deployments("calico-system").List(context.Background(), options)
+}
+
+func (t TyphaListWatch) Watch(options metav1.ListOptions) (watch.Interface, error) {
+	return t.Interface.AppsV1().Deployments("calico-system").Watch(context.Background(), options)
+}
+
+func CreateNode(c kubernetes.Interface, name string, labels map[string]string, annotations map[string]string) *v1.Node {
+	node := &v1.Node{
+		TypeMeta: metav1.TypeMeta{Kind: "Node", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+	}
+	if labels != nil {
+		node.ObjectMeta.Labels = labels
+	}
+	if annotations != nil {
+		node.ObjectMeta.Annotations = annotations
+	}
+
+	var err error
+	node, err = c.CoreV1().Nodes().Create(context.Background(), node, metav1.CreateOptions{})
+	Expect(err).To(BeNil())
+	return node
+}
+
+func AssertNodesUnchanged(c kubernetes.Interface, nodes ...*v1.Node) error {
+	for _, node := range nodes {
+		newNode, err := c.CoreV1().Nodes().Get(context.Background(), node.Name, metav1.GetOptions{})
+		Expect(err).To(BeNil())
+		if !reflect.DeepEqual(node, newNode) {
+			return fmt.Errorf("expected node %q to be unchanged", node.Name)
+		}
+	}
+	return nil
+}
+
+func AssertNodesHadUpgradeTriggered(c kubernetes.Interface, nodes ...*v1.Node) error {
+	for _, node := range nodes {
+		newNode, err := c.CoreV1().Nodes().Get(context.Background(), node.Name, metav1.GetOptions{})
+		Expect(err).To(BeNil())
+
+		if _, ok := newNode.Labels[common.CalicoWindowsUpgradeLabel]; !ok {
+			return fmt.Errorf("expected node %q to have upgrade label", node.Name)
+		}
+
+		var found bool
+		for _, taint := range newNode.Spec.Taints {
+			if taint.MatchTaint(common.CalicoWindowsUpgradingTaint) {
+				found = true
+			}
+		}
+
+		if !found {
+			return fmt.Errorf("expected node %q to have upgrade taint", node.Name)
+		}
+	}
+	return nil
 }

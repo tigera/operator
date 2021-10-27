@@ -644,6 +644,47 @@ var _ = Describe("Component handler tests", func() {
 			},
 		},
 	)
+
+	It("should validate object ownership", func() {
+		obj := &v1.Secret{
+			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "some-secret",
+				Namespace: "some-namespace",
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion: "some.api/v1",
+						Kind:       "some-kind",
+						Name:       "some-name",
+					},
+				},
+			},
+			Data: map[string][]byte{
+				"key": []byte("val"),
+			},
+		}
+		Expect(handler.IsOwnerOf(obj)).To(BeFalse())
+
+		obj = &v1.Secret{
+			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "some-secret",
+				Namespace: "some-namespace",
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion: "operator.tigera.io/v1",
+						Kind:       "Manager",
+						Name:       "tigera-secure",
+					},
+				},
+			},
+			Data: map[string][]byte{
+				"key": []byte("val"),
+			},
+		}
+		Expect(handler.IsOwnerOf(obj)).To(BeTrue())
+	})
+
 })
 
 // A fake component that only returns ready and always creates the "test-namespace" Namespace.

@@ -16,11 +16,14 @@ package monitor
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
+	"reflect"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -42,6 +45,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
+	rsecret "github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/monitor"
 )
 
 var log = logf.Log.WithName("controller_monitor")
@@ -68,7 +73,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	go waitToAddWatch(controller, k8sClient, log, prometheusReady)
+	go waitToAddPrometheusWatch(controller, k8sClient, log, prometheusReady)
 
 	return add(mgr, controller)
 }
@@ -83,8 +88,8 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady
 	}
 
 	r.status.AddStatefulSets([]types.NamespacedName{
-		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("alertmanager-%s", render.CalicoNodeAlertmanager)},
-		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("prometheus-%s", render.CalicoNodePrometheus)},
+		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("alertmanager-%s", monitor.CalicoNodeAlertmanager)},
+		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("prometheus-%s", monitor.CalicoNodePrometheus)},
 	})
 
 	r.status.Run(opts.ShutdownContext)
@@ -189,29 +194,35 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	// Create a component handler to manage the rendered component.
 	hdler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
-	// render prometheus components
-	component := render.Monitor(install, pullSecrets)
-
-	// renders tigera prometheus api
-	tigeraPrometheusApi, err := render.TigeraPrometheusAPI(install, pullSecrets, tigeraPrometheusAPIConfigMap)
-
+	alertmanagerConfigSecret, createInOperatorNamespace, err := r.readAlertmanagerConfigSecret(ctx, hdler)
 	if err != nil {
+		r.setDegraded(reqLogger, err, "Error retrieving Alertmanager configuration secret")
 		return reconcile.Result{}, err
 	}
 
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, component, tigeraPrometheusApi); err != nil {
+	components := []render.Component{}
+	if createInOperatorNamespace {
+		components = append(components, render.NewPassthrough([]client.Object{alertmanagerConfigSecret}))
+	}
+	// Render prometheus component
+	components = append(components, monitor.Monitor(install, pullSecrets, alertmanagerConfigSecret))
+	// Render tigera prometheus api component
+	tigeraPrometheusApi, err := monitor.TigeraPrometheusAPI(install, pullSecrets, tigeraPrometheusAPIConfigMap)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	components = append(components, tigeraPrometheusApi)
+
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, components...); err != nil {
 		r.setDegraded(reqLogger, err, "Error with images from ImageSet")
 		return reconcile.Result{}, err
 	}
 
-	if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
-		r.setDegraded(reqLogger, err, "Error creating / updating resource")
-		return reconcile.Result{}, err
-	}
-
-	if err := hdler.CreateOrUpdateOrDelete(ctx, tigeraPrometheusApi, r.status); err != nil {
-		r.setDegraded(reqLogger, err, "Error creating / updating tigera-prometheus-api")
-		return reconcile.Result{}, err
+	for _, component := range components {
+		if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+			r.setDegraded(reqLogger, err, "Error creating / updating resource")
+			return reconcile.Result{}, err
+		}
 	}
 
 	// Tell the status manager that we're ready to monitor the resources we've told it about and receive statuses.
@@ -233,11 +244,11 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	return reconcile.Result{}, nil
 }
 
-// getTigeraPrometheusAPIConfigMap attemps to retrieve an existing ConfigMap for tigera-prometheus-api
+// getTigeraPrometheusAPIConfigMap attempts to retrieve an existing ConfigMap for tigera-prometheus-api
 func (r *ReconcileMonitor) getTigeraPrometheusAPIConfigMap() (*corev1.ConfigMap, error) {
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{
-		Name:      render.TigeraPrometheusAPIName,
+		Name:      monitor.TigeraPrometheusAPIName,
 		Namespace: common.OperatorNamespace(),
 	}
 
@@ -245,4 +256,77 @@ func (r *ReconcileMonitor) getTigeraPrometheusAPIConfigMap() (*corev1.ConfigMap,
 		return nil, err
 	}
 	return cm, nil
+}
+
+//go:embed alertmanager-config.yaml
+var alertmanagerConfig string
+
+// readAlertmanagerConfigSecret attempts to retrieve Alertmanager configuration secret from either the Tigera Operator
+// namespace or the Tigera Prometheus namespace. If it doesn't exist in either of the namespace, a new default configuration
+// secret will be created.
+func (r *ReconcileMonitor) readAlertmanagerConfigSecret(ctx context.Context, hdler utils.ComponentHandler) (*corev1.Secret, bool, error) {
+	// Previous to this change, a customer was expected to deploy the Alertmanager configuration secret
+	// in the tigera-prometheus namespace directly. Now that this secret is managed by the Operator,
+	// the customer must deploy this secret in the tigera-operator namespace. The Operator then copies
+	// the secret from the tigera-operator namespace to the tigera-prometheus namespace.
+	//
+	// For new installation:
+	//   A new secret will be created in the tigera-operator namespace and then copied to the tigera-prometheus namespace.
+	//   Monitor controller holds the ownership of this secret.
+	//
+	// To handle upgrades:
+	//   The tigera-prometheus secret will be copied back to the tigera-operator namespace.
+	//   If this secret is modified by the user, Monitor controller won't set the ownership. Otherwise, it is owned by the Monitor.
+	//
+	// Tigera Operator will then watch for secret changes in the tigera-operator namespace and overwrite
+	// any changes for this secret in the tigera-prometheus namespace.
+
+	defaultConfigSecret := &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      monitor.AlertmanagerConfigSecret,
+			Namespace: common.OperatorNamespace(),
+		},
+		Data: map[string][]byte{
+			"alertmanager.yaml": []byte(alertmanagerConfig),
+		},
+	}
+
+	// Read Alertmanager configuration secret as-is if it is found in the tigera-operator namespace.
+	secret, err := utils.GetSecret(ctx, r.client, monitor.AlertmanagerConfigSecret, common.OperatorNamespace())
+	if err != nil {
+		return nil, false, err
+	}
+	if secret != nil {
+		return secret, false, nil
+	}
+
+	// When Alertmanager configuration isn't found in the tigera-operator namespace, copy it from the tigera-prometheus namespace (upgrade).
+	// If it is modified by the user, Monitor controller will not set the owner reference.
+	secret, err = utils.GetSecret(ctx, r.client, monitor.AlertmanagerConfigSecret, common.TigeraPrometheusNamespace)
+	if err != nil {
+		return nil, false, err
+	}
+	if secret != nil {
+		// Monitor controller will own the secret if it is the same.
+		if reflect.DeepEqual(defaultConfigSecret.Data, secret.Data) {
+			return rsecret.CopyToNamespace(common.OperatorNamespace(), secret)[0], true, nil
+		}
+
+		// If the secret isn't the same but Monitor controller owns it, we will update it.
+		if hdler.IsOwnerOf(secret) {
+			return defaultConfigSecret, true, nil
+		}
+
+		// If the secret isn't the same and Monitor controller doesn't own it, leave it unmanaged.
+		s := rsecret.CopyToNamespace(common.OperatorNamespace(), secret)[0]
+		if err := r.client.Create(ctx, s); err != nil {
+			return nil, false, err
+		}
+		return s, false, nil
+	}
+
+	// Alertmanager configuration secret is not found in the tigera-operator or tigera-prometheus namespace (new install).
+	// Operator should create a new default secret and set the owner reference.
+	return defaultConfigSecret, true, nil
 }

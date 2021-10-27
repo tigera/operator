@@ -64,11 +64,13 @@ type StatusManager interface {
 	AddStatefulSets(sss []types.NamespacedName)
 	AddCronJobs(cjs []types.NamespacedName)
 	AddCertificateSigningRequests(name string, labels map[string]string)
+	AddWindowsNodeUpgrade(nodeName string, currentVariant, expectedVariant operator.ProductVariant, currentVersion, expectedVersion string)
 	RemoveDaemonsets(dss ...types.NamespacedName)
 	RemoveDeployments(dps ...types.NamespacedName)
 	RemoveStatefulSets(sss ...types.NamespacedName)
 	RemoveCronJobs(cjs ...types.NamespacedName)
 	RemoveCertificateSigningRequests(name string)
+	RemoveWindowsNodeUpgrade(nodeName string)
 	SetDegraded(reason, msg string)
 	ClearDegraded()
 	IsAvailable() bool
@@ -85,6 +87,7 @@ type statusManager struct {
 	statefulsets              map[string]types.NamespacedName
 	cronjobs                  map[string]types.NamespacedName
 	certificatestatusrequests map[string]map[string]string
+	windowsnodeupgrades       map[string]windowsNodeUpgrade
 	lock                      sync.Mutex
 	enabled                   *bool
 	kubernetesVersion         *common.VersionInfo
@@ -113,6 +116,7 @@ func New(client client.Client, component string, kubernetesVersion *common.Versi
 		statefulsets:              make(map[string]types.NamespacedName),
 		cronjobs:                  make(map[string]types.NamespacedName),
 		certificatestatusrequests: make(map[string]map[string]string),
+		windowsnodeupgrades:       make(map[string]windowsNodeUpgrade),
 		kubernetesVersion:         kubernetesVersion,
 	}
 }
@@ -142,7 +146,7 @@ func (m *statusManager) updateStatus() {
 		}
 
 		if m.IsProgressing() {
-			m.setProgressing("Not all pods are ready", m.progressingMessage())
+			m.setProgressing("Not all resources are ready", m.progressingMessage())
 		} else {
 			m.clearProgressing()
 		}
@@ -275,6 +279,44 @@ func (m *statusManager) AddCertificateSigningRequests(name string, labels map[st
 	m.certificatestatusrequests[name] = labels
 }
 
+type windowsNodeUpgrade struct {
+	nodeName        string
+	currentVersion  string
+	currentVariant  operator.ProductVariant
+	expectedVersion string
+	expectedVariant operator.ProductVariant
+}
+
+func (w *windowsNodeUpgrade) isPending(ctx context.Context, c client.Client) (bool, error) {
+	node := &corev1.Node{}
+	err := c.Get(ctx, client.ObjectKey{Name: w.nodeName}, node)
+	if err != nil {
+		return false, err
+	}
+
+	ok, variant, version := common.GetNodeVariantAndVersion(node)
+	if !ok {
+		// The upgrade was pending but now there is no
+		// version.
+		return false, fmt.Errorf("Node %v had upgrade triggered but is missing variant and/or version annotation", node.Name)
+	}
+	return version != w.expectedVersion || variant != w.expectedVariant, nil
+}
+
+// AddWindowsNodeUpgrade tells the status manager to monitor the health of the given
+// Windows node upgrade.
+func (m *statusManager) AddWindowsNodeUpgrade(nodeName string, currentVariant, expectedVariant operator.ProductVariant, currentVersion, expectedVersion string) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	m.windowsnodeupgrades[nodeName] = windowsNodeUpgrade{
+		nodeName:        nodeName,
+		currentVersion:  currentVersion,
+		expectedVersion: expectedVersion,
+		currentVariant:  currentVariant,
+		expectedVariant: expectedVariant,
+	}
+}
+
 // RemoveDaemonsets tells the status manager to stop monitoring the health of the given daemonsets
 func (m *statusManager) RemoveDaemonsets(dss ...types.NamespacedName) {
 	m.lock.Lock()
@@ -316,6 +358,14 @@ func (m *statusManager) RemoveCertificateSigningRequests(name string) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	delete(m.certificatestatusrequests, name)
+}
+
+// RemoveWindowsNodeUpgrade tells the status manager to stop monitoring the health of the given
+// Windows node upgrade.
+func (m *statusManager) RemoveWindowsNodeUpgrade(nodeName string) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	delete(m.windowsnodeupgrades, nodeName)
 }
 
 // SetDegraded sets degraded state with the provided reason and message.
@@ -410,7 +460,7 @@ func (m *statusManager) syncState() {
 			progressing = append(progressing, fmt.Sprintf("DaemonSet %q update is rolling out (%d out of %d updated)", dsnn.String(), ds.Status.UpdatedNumberScheduled, ds.Status.DesiredNumberScheduled))
 		} else if ds.Status.NumberUnavailable > 0 {
 			progressing = append(progressing, fmt.Sprintf("DaemonSet %q is not available (awaiting %d nodes)", dsnn.String(), ds.Status.NumberUnavailable))
-		} else if ds.Status.NumberAvailable == 0 {
+		} else if ds.Status.NumberAvailable == 0 && ds.Status.DesiredNumberScheduled != 0 {
 			progressing = append(progressing, fmt.Sprintf("DaemonSet %q is not yet scheduled on any nodes", dsnn.String()))
 		} else if ds.Generation > ds.Status.ObservedGeneration {
 			progressing = append(progressing, fmt.Sprintf("DaemonSet %q update is being processed (generation %d, observed generation %d)", dsnn.String(), ds.Generation, ds.Status.ObservedGeneration))
@@ -496,6 +546,11 @@ func (m *statusManager) syncState() {
 		}
 	}
 
+	for _, w := range m.windowsnodeupgrades {
+		if w.currentVersion != w.expectedVersion {
+			progressing = append(progressing, fmt.Sprintf("Node %q is upgrading Calico for Windows to %q", w.nodeName, w.expectedVersion))
+		}
+	}
 	m.progressing = progressing
 	m.failing = failing
 	m.hasSynced = true

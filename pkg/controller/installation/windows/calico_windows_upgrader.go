@@ -241,7 +241,7 @@ func (w *calicoWindowsUpgrader) startUpgrade(ctx context.Context, node *corev1.N
 	}
 
 	if err := nodeutils.AddNodeLabel(ctx, w.clientset, node.Name, common.CalicoWindowsUpgradeLabel, common.CalicoWindowsUpgradeLabelInProgress); err != nil {
-		return fmt.Errorf("Unable to remove label from node %v: %w", node.Name, err)
+		return fmt.Errorf("Unable to add label to node %v: %w", node.Name, err)
 	}
 
 	_, currentVariant, currentVersion := common.GetNodeVariantAndVersion(node)

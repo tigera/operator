@@ -53,14 +53,14 @@ const (
 //    .....
 // >3600             20
 type typhaAutoscaler struct {
-	client         kubernetes.Interface
-	syncPeriod     time.Duration
-	statusManager  status.StatusManager
-	triggerRunChan chan chan error
-	isDegradedChan chan chan bool
-	nodeIndexer    cache.Indexer
-	typhaInformer  cache.Controller
-	typhaIndexer   cache.Indexer
+	client            kubernetes.Interface
+	syncPeriod        time.Duration
+	statusManager     status.StatusManager
+	triggerRunChan    chan chan error
+	isDegradedChan    chan chan bool
+	nodeIndexInformer cache.SharedIndexInformer
+	typhaInformer     cache.Controller
+	typhaIndexer      cache.Indexer
 
 	// Number of currently running replicas.
 	activeReplicas int32
@@ -77,14 +77,14 @@ func typhaAutoscalerPeriod(syncPeriod time.Duration) typhaAutoscalerOption {
 
 // newTyphaAutoscaler creates a new Typha autoscaler, optionally applying any options to the default autoscaler instance.
 // The default sync period is 10 seconds.
-func newTyphaAutoscaler(cs kubernetes.Interface, nodeIndexer cache.Indexer, typhaListWatch cache.ListerWatcher, statusManager status.StatusManager, options ...typhaAutoscalerOption) *typhaAutoscaler {
+func newTyphaAutoscaler(cs kubernetes.Interface, nodeIndexInformer cache.SharedIndexInformer, typhaListWatch cache.ListerWatcher, statusManager status.StatusManager, options ...typhaAutoscalerOption) *typhaAutoscaler {
 	ta := &typhaAutoscaler{
-		client:         cs,
-		statusManager:  statusManager,
-		syncPeriod:     defaultTyphaAutoscalerSyncPeriod,
-		triggerRunChan: make(chan chan error),
-		isDegradedChan: make(chan chan bool),
-		nodeIndexer:    nodeIndexer,
+		client:            cs,
+		statusManager:     statusManager,
+		syncPeriod:        defaultTyphaAutoscalerSyncPeriod,
+		triggerRunChan:    make(chan chan error),
+		isDegradedChan:    make(chan chan bool),
+		nodeIndexInformer: nodeIndexInformer,
 	}
 
 	// Configure an informer to monitor the active replicas.
@@ -240,7 +240,7 @@ func (t *typhaAutoscaler) updateReplicas(expectedReplicas int32) error {
 func (t *typhaAutoscaler) getNodeCounts() (int, int, error) {
 	linuxNodes := 0
 	schedulable := 0
-	for _, obj := range t.nodeIndexer.List() {
+	for _, obj := range t.nodeIndexInformer.GetIndexer().List() {
 		n := obj.(*v1.Node)
 		if n.Spec.Unschedulable {
 			continue

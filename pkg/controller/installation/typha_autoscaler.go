@@ -124,7 +124,7 @@ func (t *typhaAutoscaler) start(ctx context.Context) {
 
 		// Start the informer and wait for it to sync.
 		go t.typhaInformer.Run(ctx.Done())
-		for !t.typhaInformer.HasSynced() {
+		for !t.nodeInformer.HasSynced() || !t.typhaInformer.HasSynced() {
 			time.Sleep(100 * time.Millisecond)
 		}
 

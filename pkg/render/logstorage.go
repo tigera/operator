@@ -25,7 +25,6 @@ import (
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
-	"gopkg.in/inf.v0"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta "k8s.io/api/batch/v1beta1"
@@ -499,10 +498,6 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 				"memory": resource.MustParse("4Gi"),
 			},
 		},
-		Env: []corev1.EnvVar{
-			// Set to 30% of the default memory, such that resources can be divided over ES, Lucene and ML.
-			{Name: "ES_JAVA_OPTS", Value: "-Xms1398101K -Xmx1398101K"},
-		},
 		VolumeMounts: volumeMounts,
 	}
 
@@ -518,16 +513,6 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	if es.logStorage.Spec.Nodes != nil && es.logStorage.Spec.Nodes.ResourceRequirements != nil {
 		userOverrides := *es.logStorage.Spec.Nodes.ResourceRequirements
 		esContainer.Resources = overrideResourceRequirements(esContainer.Resources, userOverrides)
-
-		// Now extract the memory request value to compute the recommended heap size for ES container
-		recommendedHeapSize := memoryQuantityToJVMHeapSize(esContainer.Resources.Requests.Memory())
-
-		esContainer.Env = []corev1.EnvVar{
-			{
-				Name:  "ES_JAVA_OPTS",
-				Value: fmt.Sprintf("-Xms%v -Xmx%v", recommendedHeapSize, recommendedHeapSize),
-			},
-		}
 	}
 
 	// https://www.elastic.co/guide/en/elasticsearch/reference/current/vm-max-map-count.html
@@ -756,78 +741,6 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	}
 
 	return podTemplate
-}
-
-// Determine the recommended JVM heap size as a string (with appropriate unit suffix) based on
-// the given resource.Quantity.
-//
-// Numeric calculations use the API of the inf.Dec type that resource.Quantity uses internally
-// to perform arithmetic with rounding,
-//
-// Important note: Following Elastic ECK docs, the recommendation is to set the Java heap size
-// to half the size of RAM allocated to the Pod:
-// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-managing-compute-resources.html#k8s-compute-resources-elasticsearch
-//
-// This recommendation does not consider space for machine learning however - we're using the
-// default limit of 30% of node memory there, so we adjust accordingly.
-//
-// Finally limit the value to 26GiB to encourage zero-based compressed oops:
-// https://www.elastic.co/blog/a-heap-of-trouble
-func memoryQuantityToJVMHeapSize(q *resource.Quantity) string {
-	// Get the Quantity's raw number with any scale factor applied (based any unit when it was parsed)
-	// e.g.
-	// "2Gi" is parsed as a Quantity with value 2147483648, scale factor 0, and returns 2147483648
-	// "2G" is parsed as a Quantity with value 2, scale factor 9, and returns 2000000000
-	// "1000" is parsed as a Quantity with value 1000, scale factor 0, and returns 1000
-	rawMemQuantity := q.AsDec()
-
-	// Use one third of that for the JVM heap.
-	divisor := inf.NewDec(3, 0)
-	halvedQuantity := new(inf.Dec).QuoRound(rawMemQuantity, divisor, 0, inf.RoundFloor)
-
-	// The remaining operations below perform validation and possible modification of the
-	// Quantity number in order to conform to Java standards for JVM arguments -Xms and -Xmx
-	// (for min and max memory limits).
-	// Source: https://docs.oracle.com/javase/8/docs/technotes/tools/windows/java.html
-
-	// As part of JVM requirements, ensure that the memory quantity is a multiple of 1024. Round down to
-	// the nearest multiple of 1024.
-	divisor = inf.NewDec(1024, 0)
-	factor := new(inf.Dec).QuoRound(halvedQuantity, divisor, 0, inf.RoundFloor)
-	roundedToNearest := new(inf.Dec).Mul(factor, divisor)
-
-	newRawMemQuantity := roundedToNearest.UnscaledBig().Int64()
-	// Edge case: Ensure a minimum value of at least 2 Mi (megabytes); this could plausibly happens if
-	// the user mistakenly uses the wrong format (e.g. using 1Mi instead of 1Gi)
-	minLimit := inf.NewDec(2097152, 0)
-	if roundedToNearest.Cmp(minLimit) < 0 {
-		newRawMemQuantity = minLimit.UnscaledBig().Int64()
-	}
-
-	// Limit the JVM heap to 26GiB.
-	maxLimit := inf.NewDec(27917287424, 0)
-	if roundedToNearest.Cmp(maxLimit) > 0 {
-		newRawMemQuantity = maxLimit.UnscaledBig().Int64()
-	}
-
-	// Note: Because we round to the nearest multiple of 1024 above and then use BinarySI format below,
-	// we will always get a binary unit (e.g. Ki, Mi, Gi). However, depending on what the raw number is
-	// the Quantity internal formatter might not use the most intuitive unit.
-	//
-	// E.g. For a raw number 1000000000, we explicitly round to 999999488 to get to the nearest 1024 multiple.
-	// We then create a new Quantity, which will format its value to "976562Ki".
-	// One might expect Quantity to use "Mi" instead of "Ki". However, doing so would result in rounding
-	// (which Quantity does not do).
-	//
-	// Whereas a raw number 2684354560 requires no explicit rounding from us (since it's already a
-	// multiple of 1024). Then the new Quantity will format it to "2560Mi".
-	recommendedQuantity := resource.NewQuantity(newRawMemQuantity, resource.BinarySI)
-
-	// Extract the string representation with correct unit suffix. In order to translate string to a
-	// format that JVM understands, we need to remove the trailing "i" (e.g. "2Gi" becomes "2G")
-	recommendedHeapSize := strings.TrimSuffix(recommendedQuantity.String(), "i")
-
-	return recommendedHeapSize
 }
 
 // render the Elasticsearch CR that the ECK operator uses to create elasticsearch cluster

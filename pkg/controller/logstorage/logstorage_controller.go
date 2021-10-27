@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	"github.com/elastic/cloud-on-k8s/pkg/utils/stringsutil"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	logstoragecommon "github.com/tigera/operator/pkg/controller/logstorage/common"
@@ -55,6 +56,7 @@ var log = logf.Log.WithName("controller_logstorage")
 const (
 	defaultEckOperatorMemorySetting  = "512Mi"
 	DefaultElasticsearchStorageClass = "tigera-elasticsearch"
+	LogStorageFinalizer              = "tigera.io/eck-cleanup"
 )
 
 // Add creates a new LogStorage Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -305,6 +307,12 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		r.status.OnCRNotFound()
 	} else {
 		r.status.OnCRFound()
+	}
+
+	if ls != nil {
+		if !stringsutil.StringInSlice(LogStorageFinalizer, ls.GetFinalizers()) {
+			ls.SetFinalizers(append(ls.GetFinalizers(), LogStorageFinalizer))
+		}
 	}
 
 	variant, install, err := utils.GetInstallation(context.Background(), r.client)

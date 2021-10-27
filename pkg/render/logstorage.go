@@ -82,8 +82,6 @@ const (
 	DefaultElasticsearchReplicas    = 0
 	DefaultElasticStorageGi         = 10
 
-	LogStorageFinalizer = "tigera.io/eck-cleanup"
-
 	EsCuratorName           = "elastic-curator"
 	EsCuratorServiceAccount = "tigera-elastic-curator"
 
@@ -277,12 +275,6 @@ func (es *elasticsearchComponent) SupportedOSType() rmeta.OSType {
 
 func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 	var toCreate, toDelete []client.Object
-
-	if es.logStorage != nil {
-		if !stringsutil.StringInSlice(LogStorageFinalizer, es.logStorage.GetFinalizers()) {
-			es.logStorage.SetFinalizers(append(es.logStorage.GetFinalizers(), LogStorageFinalizer))
-		}
-	}
 
 	// Doesn't matter what the cluster type is, if LogStorage exists and the DeletionTimestamp is set finalized the
 	// deletion

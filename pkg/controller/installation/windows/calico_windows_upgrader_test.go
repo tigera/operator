@@ -105,8 +105,8 @@ var _ = Describe("Calico windows upgrader", func() {
 		cr.Variant = operator.TigeraSecureEnterprise
 
 		n1 := test.CreateNode(cs, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
-		n2 := createWindowsNode(cs, "node2", cr.Variant, "v3.0.0")
-		n3 := createWindowsNode(cs, "node3", cr.Variant, "v2.0.0")
+		n2 := test.CreateWindowsNode(cs, "node2", cr.Variant, "v3.0.0")
+		n3 := test.CreateWindowsNode(cs, "node3", cr.Variant, "v2.0.0")
 
 		// Create the upgrader and start it.
 		c.Start(ctx)
@@ -141,8 +141,8 @@ var _ = Describe("Calico windows upgrader", func() {
 		mockStatus.On("AddWindowsNodeUpgrade", "node2", operator.Calico, operator.Calico, "v3.21.999", components.CalicoRelease)
 
 		n1 := test.CreateNode(cs, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
-		n2 := createWindowsNode(cs, "node2", operator.Calico, "v3.21.999")
-		n3 := createWindowsNode(cs, "node3", operator.Calico, components.CalicoRelease)
+		n2 := test.CreateWindowsNode(cs, "node2", operator.Calico, "v3.21.999")
+		n3 := test.CreateWindowsNode(cs, "node3", operator.Calico, components.CalicoRelease)
 
 		c.Start(ctx)
 		c.UpdateConfig(cr)
@@ -183,7 +183,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		// yet since Calico Windows upgrades on Enterprise are not supported yet. However, this is a way to test
 		// that the upgrade is triggered when going to a different product
 		// variant.
-		n1 := createWindowsNode(cs, "node1", operator.TigeraSecureEnterprise, "v3.11.0")
+		n1 := test.CreateWindowsNode(cs, "node1", operator.TigeraSecureEnterprise, "v3.11.0")
 
 		mockStatus.On("AddWindowsNodeUpgrade", "node1", operator.TigeraSecureEnterprise, operator.Calico, "v3.11.0", components.CalicoRelease)
 
@@ -218,11 +218,11 @@ var _ = Describe("Calico windows upgrader", func() {
 		cr.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &mu
 
 		// Create 5 nodes, all ready to be upgraded.
-		_ = createWindowsNode(cs, "node1", operator.Calico, "v3.21.999")
-		_ = createWindowsNode(cs, "node2", operator.Calico, "v3.21.999")
-		_ = createWindowsNode(cs, "node3", operator.Calico, "v3.21.999")
-		_ = createWindowsNode(cs, "node4", operator.Calico, "v3.21.999")
-		_ = createWindowsNode(cs, "node5", operator.Calico, "v3.21.999")
+		_ = test.CreateWindowsNode(cs, "node1", operator.Calico, "v3.21.999")
+		_ = test.CreateWindowsNode(cs, "node2", operator.Calico, "v3.21.999")
+		_ = test.CreateWindowsNode(cs, "node3", operator.Calico, "v3.21.999")
+		_ = test.CreateWindowsNode(cs, "node4", operator.Calico, "v3.21.999")
+		_ = test.CreateWindowsNode(cs, "node5", operator.Calico, "v3.21.999")
 
 		// We won't know which nodes will end up being added for upgrade.
 		mockStatus.On("AddWindowsNodeUpgrade", mock.Anything, operator.Calico, operator.Calico, "v3.21.999", components.CalicoRelease)
@@ -250,9 +250,9 @@ var _ = Describe("Calico windows upgrader", func() {
 
 	Context("Test max upgrading nodes depending on upgrade type", func() {
 		It("should count already upgrading nodes against maxUnavailable, for Calico to Calico upgrades", func() {
-			_ = createWindowsNode(cs, "node1", operator.Calico, "v3.21.999")
-			_ = createWindowsNode(cs, "node2", operator.Calico, "v3.21.999")
-			_ = createWindowsNode(cs, "node3", operator.Calico, "v3.21.999")
+			_ = test.CreateWindowsNode(cs, "node1", operator.Calico, "v3.21.999")
+			_ = test.CreateWindowsNode(cs, "node2", operator.Calico, "v3.21.999")
+			_ = test.CreateWindowsNode(cs, "node3", operator.Calico, "v3.21.999")
 			mockStatus.On("AddWindowsNodeUpgrade", mock.Anything, operator.Calico, operator.Calico, "v3.21.999", components.CalicoRelease)
 
 			c.Start(ctx)
@@ -280,9 +280,9 @@ var _ = Describe("Calico windows upgrader", func() {
 		})
 
 		It("should count already upgrading nodes against maxUnavailable, for Enterprise to Calico upgrades", func() {
-			_ = createWindowsNode(cs, "node1", operator.TigeraSecureEnterprise, "v3.11.0")
-			_ = createWindowsNode(cs, "node2", operator.TigeraSecureEnterprise, "v3.11.0")
-			_ = createWindowsNode(cs, "node3", operator.TigeraSecureEnterprise, "v3.11.0")
+			_ = test.CreateWindowsNode(cs, "node1", operator.TigeraSecureEnterprise, "v3.11.0")
+			_ = test.CreateWindowsNode(cs, "node2", operator.TigeraSecureEnterprise, "v3.11.0")
+			_ = test.CreateWindowsNode(cs, "node3", operator.TigeraSecureEnterprise, "v3.11.0")
 
 			mockStatus.On("AddWindowsNodeUpgrade", mock.Anything, operator.TigeraSecureEnterprise, operator.Calico, "v3.11.0", components.CalicoRelease)
 
@@ -313,9 +313,9 @@ var _ = Describe("Calico windows upgrader", func() {
 		It("should count already upgrading nodes against maxUnavailable, for Enterprise to Enterprise upgrades", func() {
 			Skip("This test does not yet work since upgrades to Enterprise are not supported yet")
 
-			_ = createWindowsNode(cs, "node1", operator.TigeraSecureEnterprise, "old")
-			_ = createWindowsNode(cs, "node2", operator.TigeraSecureEnterprise, "old")
-			_ = createWindowsNode(cs, "node3", operator.TigeraSecureEnterprise, "old")
+			_ = test.CreateWindowsNode(cs, "node1", operator.TigeraSecureEnterprise, "old")
+			_ = test.CreateWindowsNode(cs, "node2", operator.TigeraSecureEnterprise, "old")
+			_ = test.CreateWindowsNode(cs, "node3", operator.TigeraSecureEnterprise, "old")
 
 			mockStatus.On("AddWindowsNodeUpgrade", mock.Anything, operator.TigeraSecureEnterprise, operator.TigeraSecureEnterprise, "old", components.EnterpriseRelease)
 
@@ -347,9 +347,9 @@ var _ = Describe("Calico windows upgrader", func() {
 		It("should upgrade nodes going from Calico to Enterprise right away, even if max available slots is 0", func() {
 			Skip("This test does not yet work since upgrades to Enterprise are not supported yet")
 
-			_ = createWindowsNode(cs, "node1", operator.Calico, "v3.21.999")
-			_ = createWindowsNode(cs, "node2", operator.Calico, "v3.21.999")
-			_ = createWindowsNode(cs, "node3", operator.Calico, "v3.21.999")
+			_ = test.CreateWindowsNode(cs, "node1", operator.Calico, "v3.21.999")
+			_ = test.CreateWindowsNode(cs, "node2", operator.Calico, "v3.21.999")
+			_ = test.CreateWindowsNode(cs, "node3", operator.Calico, "v3.21.999")
 
 			mockStatus.On("AddWindowsNodeUpgrade", mock.Anything, operator.Calico, operator.TigeraSecureEnterprise, "v3.21.999", components.EnterpriseRelease)
 
@@ -368,15 +368,6 @@ var _ = Describe("Calico windows upgrader", func() {
 		})
 	})
 })
-
-func createWindowsNode(cs kubernetes.Interface, name string, variant operator.ProductVariant, version string) *corev1.Node {
-	return test.CreateNode(cs, name,
-		map[string]string{"kubernetes.io/os": "windows"},
-		map[string]string{
-			common.CalicoVersionAnnotation: version,
-			common.CalicoVariantAnnotation: string(variant),
-		})
-}
 
 func countNodesUpgrading(nodeIndexInformer cache.SharedIndexInformer) int {
 	count := 0

@@ -30,6 +30,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/openshift/library-go/pkg/crypto"
+	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 
 	v1 "k8s.io/api/core/v1"
@@ -181,6 +182,15 @@ func CreateNode(c kubernetes.Interface, name string, labels map[string]string, a
 	node, err = c.CoreV1().Nodes().Create(context.Background(), node, metav1.CreateOptions{})
 	Expect(err).To(BeNil())
 	return node
+}
+
+func CreateWindowsNode(cs kubernetes.Interface, name string, variant operator.ProductVariant, version string) *v1.Node {
+	return CreateNode(cs, name,
+		map[string]string{"kubernetes.io/os": "windows"},
+		map[string]string{
+			common.CalicoVersionAnnotation: version,
+			common.CalicoVariantAnnotation: string(variant),
+		})
 }
 
 func AssertNodesUnchanged(c kubernetes.Interface, nodes ...*v1.Node) error {

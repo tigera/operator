@@ -360,10 +360,10 @@ var _ = Describe("Testing core-controller installation", func() {
 			// Create the indexer and informer shared by the typhaAutoscaler and
 			// calicoWindowsUpgrader.
 			nlw := test.NodeListWatch{cs}
-			nodeIndexer, nodeInformer := node.CreateNodeIndexerInformer(nlw)
+			nodeIndexInformer := node.CreateNodeSharedIndexInformer(nlw)
 
-			go nodeInformer.Run(ctx.Done())
-			for nodeInformer.HasSynced() {
+			go nodeIndexInformer.Run(ctx.Done())
+			for nodeIndexInformer.HasSynced() {
 				time.Sleep(100 * time.Millisecond)
 			}
 
@@ -374,8 +374,8 @@ var _ = Describe("Testing core-controller installation", func() {
 				scheme:                scheme,
 				autoDetectedProvider:  operator.ProviderNone,
 				status:                mockStatus,
-				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexer, test.TyphaListWatch{cs}, mockStatus),
-				calicoWindowsUpgrader: windows.NewCalicoWindowsUpgrader(cs, c, nodeIndexer, mockStatus),
+				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexInformer, test.TyphaListWatch{cs}, mockStatus),
+				calicoWindowsUpgrader: windows.NewCalicoWindowsUpgrader(cs, c, nodeIndexInformer, mockStatus),
 				namespaceMigration:    &fakeNamespaceMigration{},
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,
@@ -705,10 +705,10 @@ var _ = Describe("Testing core-controller installation", func() {
 			// Create the indexer and informer shared by the typhaAutoscaler and
 			// calicoWindowsUpgrader.
 			nlw := test.NodeListWatch{cs}
-			nodeIndexer, nodeInformer := node.CreateNodeIndexerInformer(nlw)
+			nodeIndexInformer := node.CreateNodeSharedIndexInformer(nlw)
 
-			go nodeInformer.Run(ctx.Done())
-			for nodeInformer.HasSynced() {
+			go nodeIndexInformer.Run(ctx.Done())
+			for nodeIndexInformer.HasSynced() {
 				time.Sleep(100 * time.Millisecond)
 			}
 
@@ -719,8 +719,8 @@ var _ = Describe("Testing core-controller installation", func() {
 				scheme:                scheme,
 				autoDetectedProvider:  operator.ProviderNone,
 				status:                mockStatus,
-				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexer, test.TyphaListWatch{cs}, mockStatus),
-				calicoWindowsUpgrader: windows.NewCalicoWindowsUpgrader(cs, c, nodeIndexer, mockStatus),
+				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexInformer, test.TyphaListWatch{cs}, mockStatus),
+				calicoWindowsUpgrader: windows.NewCalicoWindowsUpgrader(cs, c, nodeIndexInformer, mockStatus),
 				namespaceMigration:    &fakeNamespaceMigration{},
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,
@@ -870,10 +870,10 @@ var _ = Describe("Testing core-controller installation", func() {
 			// Create the indexer and informer shared by the typhaAutoscaler and
 			// calicoWindowsUpgrader.
 			nlw := test.NodeListWatch{cs}
-			nodeIndexer, nodeInformer := node.CreateNodeIndexerInformer(nlw)
+			nodeIndexInformer := node.CreateNodeSharedIndexInformer(nlw)
 
-			go nodeInformer.Run(ctx.Done())
-			for nodeInformer.HasSynced() {
+			go nodeIndexInformer.Run(ctx.Done())
+			for nodeIndexInformer.HasSynced() {
 				time.Sleep(100 * time.Millisecond)
 			}
 
@@ -884,8 +884,8 @@ var _ = Describe("Testing core-controller installation", func() {
 				scheme:                scheme,
 				autoDetectedProvider:  operator.ProviderNone,
 				status:                mockStatus,
-				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexer, test.TyphaListWatch{cs}, mockStatus),
-				calicoWindowsUpgrader: windows.NewCalicoWindowsUpgrader(cs, c, nodeIndexer, mockStatus),
+				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexInformer, test.TyphaListWatch{cs}, mockStatus),
+				calicoWindowsUpgrader: windows.NewCalicoWindowsUpgrader(cs, c, nodeIndexInformer, mockStatus),
 				namespaceMigration:    &fakeNamespaceMigration{},
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,

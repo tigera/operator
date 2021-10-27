@@ -51,8 +51,7 @@ var _ = Describe("Calico windows upgrader", func() {
 	var cr *operator.InstallationSpec
 
 	var mockStatus *status.MockStatus
-	var nodeIndexer cache.Indexer
-	var nodeInformer cache.Controller
+	var nodeIndexInformer cache.SharedIndexInformer
 
 	var syncPeriodOption calicoWindowsUpgraderOption
 	var ctx context.Context
@@ -77,15 +76,15 @@ var _ = Describe("Calico windows upgrader", func() {
 		syncPeriodOption = calicoWindowsUpgraderSyncPeriod(2 * time.Second)
 
 		nlw := test.NodeListWatch{cs}
-		nodeIndexer, nodeInformer = node.CreateNodeIndexerInformer(nlw)
+		nodeIndexInformer = node.CreateNodeSharedIndexInformer(nlw)
 
 		ctx, cancel = context.WithCancel(context.TODO())
-		go nodeInformer.Run(ctx.Done())
-		for !nodeInformer.HasSynced() {
+		go nodeIndexInformer.Run(ctx.Done())
+		for !nodeIndexInformer.HasSynced() {
 			time.Sleep(100 * time.Millisecond)
 		}
 
-		c = NewCalicoWindowsUpgrader(cs, client, nodeIndexer, mockStatus, syncPeriodOption)
+		c = NewCalicoWindowsUpgrader(cs, client, nodeIndexInformer, mockStatus, syncPeriodOption)
 		one := intstr.FromInt(1)
 		cr = &operator.InstallationSpec{
 			Variant: operator.Calico,
@@ -167,7 +166,7 @@ var _ = Describe("Calico windows upgrader", func() {
 
 		// Set the latest Calico Windows variant and version like the node service would.
 		mockStatus.On("RemoveWindowsNodeUpgrade", "node2")
-		setNodeVariantAndVersion(cs, nodeIndexer, n2, operator.Calico, components.CalicoRelease)
+		setNodeVariantAndVersion(cs, nodeIndexInformer, n2, operator.Calico, components.CalicoRelease)
 
 		// Ensure that when calicoWindowsUpgrader runs again, the node taint and
 		// label are removed.
@@ -203,7 +202,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		// Ensure that when calicoWindowsUpgrader runs again, the node taint and
 		// label are removed.
 		mockStatus.On("RemoveWindowsNodeUpgrade", "node1")
-		setNodeVariantAndVersion(cs, nodeIndexer, n1, operator.Calico, components.CalicoRelease)
+		setNodeVariantAndVersion(cs, nodeIndexInformer, n1, operator.Calico, components.CalicoRelease)
 
 		Eventually(func() error {
 			return assertNodesFinishedUpgrade(cs, n1)
@@ -232,7 +231,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		c.UpdateConfig(cr)
 
 		count := func() int {
-			return countNodesUpgrading(nodeIndexer)
+			return countNodesUpgrading(nodeIndexInformer)
 		}
 		Eventually(count, 10*time.Second).Should(Equal(1))
 		Consistently(count, 10*time.Second).Should(Equal(1))
@@ -260,7 +259,7 @@ var _ = Describe("Calico windows upgrader", func() {
 			c.UpdateConfig(cr)
 
 			count := func() int {
-				return countNodesUpgrading(nodeIndexer)
+				return countNodesUpgrading(nodeIndexInformer)
 			}
 			Eventually(count, 5*time.Second).Should(Equal(1))
 			Consistently(count, 5*time.Second).Should(Equal(1))
@@ -291,7 +290,7 @@ var _ = Describe("Calico windows upgrader", func() {
 			c.UpdateConfig(cr)
 
 			count := func() int {
-				return countNodesUpgrading(nodeIndexer)
+				return countNodesUpgrading(nodeIndexInformer)
 			}
 			Eventually(count, 5*time.Second).Should(Equal(1))
 			Consistently(count, 5*time.Second).Should(Equal(1))
@@ -325,7 +324,7 @@ var _ = Describe("Calico windows upgrader", func() {
 			c.UpdateConfig(cr)
 
 			count := func() int {
-				return countNodesUpgrading(nodeIndexer)
+				return countNodesUpgrading(nodeIndexInformer)
 			}
 			Eventually(count, 5*time.Second).Should(Equal(1))
 			Consistently(count, 5*time.Second).Should(Equal(1))
@@ -359,7 +358,7 @@ var _ = Describe("Calico windows upgrader", func() {
 			c.UpdateConfig(cr)
 
 			count := func() int {
-				return countNodesUpgrading(nodeIndexer)
+				return countNodesUpgrading(nodeIndexInformer)
 			}
 			// All of the pending nodes should still be upgraded despite max unavailability
 			// value.
@@ -379,9 +378,9 @@ func createWindowsNode(cs kubernetes.Interface, name string, variant operator.Pr
 		})
 }
 
-func countNodesUpgrading(nodeIndexer cache.Indexer) int {
+func countNodesUpgrading(nodeIndexInformer cache.SharedIndexInformer) int {
 	count := 0
-	for _, obj := range nodeIndexer.List() {
+	for _, obj := range nodeIndexInformer.GetIndexer().List() {
 		node := obj.(*corev1.Node)
 		if _, ok := node.Labels[common.CalicoWindowsUpgradeLabel]; !ok {
 			continue
@@ -423,7 +422,7 @@ func assertNodesFinishedUpgrade(c kubernetes.Interface, nodes ...*corev1.Node) e
 	return nil
 }
 
-func setNodeVariantAndVersion(c kubernetes.Interface, indexer cache.Indexer, node *corev1.Node, variant operator.ProductVariant, version string) {
+func setNodeVariantAndVersion(c kubernetes.Interface, indexInformer cache.SharedIndexInformer, node *corev1.Node, variant operator.ProductVariant, version string) {
 	// Get the existing node.
 	n, err := c.CoreV1().Nodes().Get(context.Background(), node.Name, metav1.GetOptions{})
 	Expect(err).To(BeNil())
@@ -439,7 +438,7 @@ func setNodeVariantAndVersion(c kubernetes.Interface, indexer cache.Indexer, nod
 	Expect(err).To(BeNil())
 
 	Eventually(func() error {
-		obj, exists, err := indexer.GetByKey(node.Name)
+		obj, exists, err := indexInformer.GetIndexer().GetByKey(node.Name)
 		if !exists {
 			return fmt.Errorf("node doesn't exist, did a test get updated?")
 		}

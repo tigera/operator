@@ -40,8 +40,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 	var ctx context.Context
 	var cancel context.CancelFunc
 	var nlw, tlw cache.ListerWatcher
-	var nodeIndexer cache.Indexer
-	var nodeInformer cache.Controller
+	var nodeIndexInformer cache.SharedIndexInformer
 
 	BeforeEach(func() {
 		statusManager = new(status.MockStatus)
@@ -60,11 +59,11 @@ var _ = Describe("Test typha autoscaler ", func() {
 
 		// Create the indexer and informer shared by the typhaAutoscaler and
 		// calicoWindowsUpgrader.
-		nodeIndexer, nodeInformer = node.CreateNodeIndexerInformer(nlw)
+		nodeIndexInformer = node.CreateNodeSharedIndexInformer(nlw)
 
 		ctx, cancel = context.WithCancel(context.Background())
-		go nodeInformer.Run(ctx.Done())
-		for !nodeInformer.HasSynced() {
+		go nodeIndexInformer.Run(ctx.Done())
+		for !nodeIndexInformer.HasSynced() {
 			time.Sleep(100 * time.Millisecond)
 		}
 	})
@@ -74,7 +73,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 	})
 
 	It("should initialize an autoscaler", func() {
-		ta := newTyphaAutoscaler(c, nodeIndexer, tlw, statusManager)
+		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager)
 		ta.start(ctx)
 	})
 
@@ -82,7 +81,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		n1 := CreateNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
 		_ = CreateNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"}, nil)
 
-		ta := newTyphaAutoscaler(c, nodeIndexer, tlw, statusManager)
+		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager)
 		ta.start(ctx)
 
 		Eventually(func() error {
@@ -140,7 +139,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		_ = CreateNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"}, nil)
 
 		// Create the autoscaler and run it
-		ta := newTyphaAutoscaler(c, nodeIndexer, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
+		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
 		ta.start(ctx)
 
 		verifyTyphaReplicas(c, 2)
@@ -179,7 +178,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		CreateNode(c, "node3", map[string]string{"kubernetes.io/os": "linux", "projectcalico.org/operator-node-migration": "pre-operator"}, nil)
 
 		// Create the autoscaler and run it
-		ta := newTyphaAutoscaler(c, nodeIndexer, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
+		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
 		ta.start(ctx)
 
 		// normally we'd expect to see three replicas for three nodes, but since one node is not migrated,
@@ -210,7 +209,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		CreateNode(c, "node3", map[string]string{"kubernetes.io/os": "linux", "kubernetes.azure.com/cluster": "foo", "type": "virtual-kubelet"}, nil)
 
 		// Create the autoscaler and run it
-		ta := newTyphaAutoscaler(c, nodeIndexer, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
+		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
 		ta.start(ctx)
 
 		// normally we'd expect to see three replicas for three nodes, but since one node is a virtual-kubelet,
@@ -244,7 +243,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		_ = CreateNode(c, "node4", map[string]string{"kubernetes.io/os": "window"}, nil)
 
 		// Create the autoscaler and run it
-		ta := newTyphaAutoscaler(c, nodeIndexer, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
+		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
 		ta.start(ctx)
 
 		// This blocks until the first run is done.

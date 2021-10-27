@@ -123,6 +123,11 @@ func (c *intrusionDetectionComponent) ResolveImages(is *operatorv1.ImageSet) err
 		errMsgs = append(errMsgs, err.Error())
 	}
 
+	c.adJobsImage, err = components.GetReference(components.ComponentADJobs, reg, path, prefix, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
 	if len(errMsgs) != 0 {
 		return fmt.Errorf(strings.Join(errMsgs, ","))
 	}

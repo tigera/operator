@@ -393,6 +393,14 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				Resources: []string{"blockaffinities"},
 				Verbs:     []string{"watch"},
 			},
+			{
+				// calico-upgrade service needs to query the calico-node
+				// daemonset.
+				APIGroups:     []string{"apps"},
+				Resources:     []string{"daemonsets"},
+				ResourceNames: []string{"calico-node"},
+				Verbs:         []string{"get"},
+			},
 		},
 	}
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {

@@ -485,6 +485,11 @@ spec:
                 description: FlowLogsFileMaxFiles sets the number of log files to
                   keep.
                 type: integer
+              flowLogsFileNatOutgoingPortLimit:
+                description: FlowLogsFileNatOutgoingPortLimit is used to specify the
+                  maximum number of distinct post SNAT ports that will appear in the
+                  flowLogs. Default value is 3
+                type: integer
               flowLogsFilePerFlowProcessArgsLimit:
                 description: FlowLogsFilePerFlowProcessArgsLimit is used to specify
                   the maximum number of distinct process args that will appear in

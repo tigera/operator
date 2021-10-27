@@ -264,7 +264,8 @@ clean:
 	rm -rf .go-pkg-cache
 	rm -rf .crds
 	rm -f *-release-notes.md
-	docker rmi -f $(BUILD_IMAGE):latest $(BUILD_IMAGE):latest-$(ARCH)
+	docker rmi -f $(shell docker images -f "reference=$(BUILD_IMAGE):latest*" -q) > /dev/null 2>&1 || true
+	docker rmi $(shell docker images -f "dangling=true" -q) > /dev/null 2>&1 || true
 
 ###############################################################################
 # Tests

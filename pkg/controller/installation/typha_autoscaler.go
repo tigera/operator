@@ -53,15 +53,14 @@ const (
 //    .....
 // >3600             20
 type typhaAutoscaler struct {
-	client         kubernetes.Interface
-	syncPeriod     time.Duration
-	statusManager  status.StatusManager
-	triggerRunChan chan chan error
-	isDegradedChan chan chan bool
-	nodeInformer   cache.Controller
-	nodeIndexer    cache.Indexer
-	typhaInformer  cache.Controller
-	typhaIndexer   cache.Indexer
+	client              kubernetes.Interface
+	syncPeriod          time.Duration
+	statusManager       status.StatusManager
+	triggerRunChan      chan chan error
+	isDegradedChan      chan chan bool
+	nodeIndexerInformer cache.SharedIndexInformer
+	typhaInformer       cache.Controller
+	typhaIndexer        cache.Indexer
 
 	// Number of currently running replicas.
 	activeReplicas int32
@@ -78,18 +77,15 @@ func typhaAutoscalerPeriod(syncPeriod time.Duration) typhaAutoscalerOption {
 
 // newTyphaAutoscaler creates a new Typha autoscaler, optionally applying any options to the default autoscaler instance.
 // The default sync period is 10 seconds.
-func newTyphaAutoscaler(cs kubernetes.Interface, nodeListWatch, typhaListWatch cache.ListerWatcher, statusManager status.StatusManager, options ...typhaAutoscalerOption) *typhaAutoscaler {
+func newTyphaAutoscaler(cs kubernetes.Interface, nodeIndexerInformer cache.SharedIndexInformer, typhaListWatch cache.ListerWatcher, statusManager status.StatusManager, options ...typhaAutoscalerOption) *typhaAutoscaler {
 	ta := &typhaAutoscaler{
-		client:         cs,
-		statusManager:  statusManager,
-		syncPeriod:     defaultTyphaAutoscalerSyncPeriod,
-		triggerRunChan: make(chan chan error),
-		isDegradedChan: make(chan chan bool),
+		client:              cs,
+		statusManager:       statusManager,
+		syncPeriod:          defaultTyphaAutoscalerSyncPeriod,
+		triggerRunChan:      make(chan chan error),
+		isDegradedChan:      make(chan chan bool),
+		nodeIndexerInformer: nodeIndexerInformer,
 	}
-
-	// Create an informer to signal us when nodes are updated.
-	nodeHandlers := cache.ResourceEventHandlerFuncs{AddFunc: func(obj interface{}) {}}
-	ta.nodeIndexer, ta.nodeInformer = cache.NewIndexerInformer(nodeListWatch, &v1.Node{}, 0, nodeHandlers, cache.Indexers{})
 
 	// Configure an informer to monitor the active replicas.
 	typhaHandlers := cache.ResourceEventHandlerFuncs{
@@ -126,10 +122,9 @@ func (t *typhaAutoscaler) start(ctx context.Context) {
 		defer ticker.Stop()
 		typhaLog.Info("Starting typha autoscaler", "syncPeriod", t.syncPeriod)
 
-		// Start the informers and wait for them to sync.
-		go t.nodeInformer.Run(ctx.Done())
+		// Start the informer and wait for it to sync.
 		go t.typhaInformer.Run(ctx.Done())
-		for !t.nodeInformer.HasSynced() || !t.typhaInformer.HasSynced() {
+		for !t.typhaInformer.HasSynced() {
 			time.Sleep(100 * time.Millisecond)
 		}
 
@@ -245,7 +240,7 @@ func (t *typhaAutoscaler) updateReplicas(expectedReplicas int32) error {
 func (t *typhaAutoscaler) getNodeCounts() (int, int, error) {
 	linuxNodes := 0
 	schedulable := 0
-	for _, obj := range t.nodeIndexer.List() {
+	for _, obj := range t.nodeIndexerInformer.GetIndexer().List() {
 		n := obj.(*v1.Node)
 		if n.Spec.Unschedulable {
 			continue

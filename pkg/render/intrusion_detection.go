@@ -26,7 +26,6 @@ import (
 
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -994,18 +993,14 @@ func (c *intrusionDetectionComponent) getBaseIntrusionDetectionADJobPodTemplate(
 					{
 						Name:  "adjobs",
 						Image: c.adJobsImage,
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{
-								"memory": resource.MustParse("1G"),
-							},
-						},
 						SecurityContext: &corev1.SecurityContext{
 							Privileged: &privileged,
 						},
 						Env: []corev1.EnvVar{
 							{
-								Name:  "ELASTIC_HOST",
-								Value: dns.GetServiceDNSNames(ESGatewayServiceName, ElasticsearchNamespace, c.clusterDomain)[0],
+								Name: "ELASTIC_HOST",
+								// static index 2 refres to - <svc_name>.<ns>.svc format
+								Value: dns.GetServiceDNSNames(ESGatewayServiceName, ElasticsearchNamespace, c.clusterDomain)[2],
 							},
 							{
 								Name:  "ELASTIC_PORT",
@@ -1021,7 +1016,7 @@ func (c *intrusionDetectionComponent) getBaseIntrusionDetectionADJobPodTemplate(
 							},
 							{
 								Name:  "ES_CA_CERT",
-								Value: strconv.Itoa(ESGatewayDefaultPort),
+								Value: "/certs/es-ca.pem",
 							},
 							{
 								Name:  "CLUSTER_NAME",

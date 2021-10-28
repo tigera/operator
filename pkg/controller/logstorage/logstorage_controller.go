@@ -446,7 +446,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	result, proceed, finalizeCleanup, err := r.createLogStorage(
+	result, proceed, finalizerCleanup, err := r.createLogStorage(
 		ls,
 		install,
 		variant,
@@ -521,9 +521,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 
 	r.status.ClearDegraded()
 
-	if ls != nil && finalizeCleanup {
-		patchFrom := client.MergeFrom(ls.DeepCopy())
-
+	if ls != nil && ls.DeletionTimestamp != nil && finalizerCleanup == true {
 		ls.SetFinalizers(stringsutil.RemoveStringInSlice(LogStorageFinalizer, ls.GetFinalizers()))
 
 		// Write the logstorage back to the datastore

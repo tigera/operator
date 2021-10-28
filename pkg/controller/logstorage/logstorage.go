@@ -161,12 +161,12 @@ func (r *ReconcileLogStorage) createLogStorage(
 		}
 	}
 
-	finalizeCleanup := false
+	finalizerCleanup := false
 	if ls != nil && ls.DeletionTimestamp != nil && elasticsearch == nil && kibana == nil {
-		finalizeCleanup = true
+		finalizerCleanup = true
 	}
 
-	return reconcile.Result{}, true, finalizeCleanup, nil
+	return reconcile.Result{}, true, finalizerCleanup, nil
 }
 
 func (r *ReconcileLogStorage) validateLogStorage(curatorSecrets []*corev1.Secret, esLicenseType render.ElasticsearchLicenseType, reqLogger logr.Logger, ctx context.Context) (reconcile.Result, bool, error) {

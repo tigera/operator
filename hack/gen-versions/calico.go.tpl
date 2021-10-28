@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Components defined here are required to be kept in sync with 
+// Components defined here are required to be kept in sync with
 // config/calico_versions.yml
 
 package components

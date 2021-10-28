@@ -235,8 +235,8 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(adjobs_training).ToNot(BeNil())
 			Expect(adjobs_training.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentADJobs.Image,
-					components.ComponentADJobs.Version)))
+					components.ComponentAnomalyDetectionJobs.Image,
+					components.ComponentAnomalyDetectionJobs.Version)))
 
 			detection_pt := corev1.PodTemplate{
 				TypeMeta: metav1.TypeMeta{
@@ -254,8 +254,8 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(adjobs_detection).ToNot(BeNil())
 			Expect(adjobs_detection.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentADJobs.Image,
-					components.ComponentADJobs.Version)))
+					components.ComponentAnomalyDetectionJobs.Image,
+					components.ComponentAnomalyDetectionJobs.Version)))
 		})
 		It("should use images from imageset", func() {
 			Expect(c.Create(ctx, &operatorv1.ImageSet{
@@ -336,7 +336,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(adjobs_training).ToNot(BeNil())
 			Expect(adjobs_training.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentADJobs.Image,
+					components.ComponentAnomalyDetectionJobs.Image,
 					"sha256:anomalydetectionjobs")))
 
 			detection_pt := corev1.PodTemplate{
@@ -355,7 +355,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(adjobs_detection).ToNot(BeNil())
 			Expect(adjobs_detection.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentADJobs.Image,
+					components.ComponentAnomalyDetectionJobs.Image,
 					"sha256:anomalydetectionjobs")))
 
 		})

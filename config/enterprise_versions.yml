@@ -1,3 +1,4 @@
+# Components defined here are required to be kept in sync with hack/gen-versions/enterprise.go.tpl
 title: master
 components:
   libcalico-go:
@@ -56,6 +57,9 @@ components:
     version: master
   intrusion-detection-controller:
     image: tigera/intrusion-detection-controller
+    version: master
+  anomaly-detection-jobs:
+    image: tigera/anomaly_detection_jobs
     version: master
   compliance-controller:
     image: tigera/compliance-controller

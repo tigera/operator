@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	"github.com/elastic/cloud-on-k8s/pkg/utils/stringsutil"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	logstoragecommon "github.com/tigera/operator/pkg/controller/logstorage/common"
@@ -55,6 +56,7 @@ var log = logf.Log.WithName("controller_logstorage")
 const (
 	defaultEckOperatorMemorySetting  = "512Mi"
 	DefaultElasticsearchStorageClass = "tigera-elasticsearch"
+	LogStorageFinalizer              = "tigera.io/eck-cleanup"
 )
 
 // Add creates a new LogStorage Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -196,20 +198,11 @@ type ReconcileLogStorage struct {
 	clusterDomain string
 }
 
-func GetLogStorage(ctx context.Context, cli client.Client) (*operatorv1.LogStorage, error) {
-	instance := &operatorv1.LogStorage{}
-	err := cli.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
-	if err != nil {
-		return nil, err
-	}
+func fillDefaultsAndValidateLogStorage(ctx context.Context, cli client.Client, instance *operatorv1.LogStorage) error {
 
 	fillDefaults(instance)
 
-	if err := validateComponentResources(&instance.Spec); err != nil {
-		return nil, err
-	}
-
-	return instance, nil
+	return validateComponentResources(&instance.Spec)
 }
 
 // fillDefaults populates the default values onto an LogStorage object.
@@ -294,8 +287,10 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling LogStorage")
 
-	ls, err := GetLogStorage(ctx, r.client)
+	ls := &operatorv1.LogStorage{}
+	err := r.client.Get(ctx, utils.DefaultTSEEInstanceKey, ls)
 	if err != nil {
+		ls = nil
 		// Not finding the LogStorage CR is not an error, as a Managed cluster will not have this CR available but
 		// there are still "LogStorage" related items that need to be set up
 		if !errors.IsNotFound(err) {
@@ -305,6 +300,28 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		r.status.OnCRNotFound()
 	} else {
 		r.status.OnCRFound()
+	}
+
+	//create predefaultpatch
+	preDefaultPatchFrom := client.MergeFrom(ls.DeepCopy())
+
+	err = fillDefaultsAndValidateLogStorage(ctx, r.client, ls)
+	if err != nil {
+		r.status.SetDegraded("An error occurred while validating LogStorage", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	if ls != nil && ls.DeletionTimestamp == nil {
+		if !stringsutil.StringInSlice(LogStorageFinalizer, ls.GetFinalizers()) {
+			ls.SetFinalizers(append(ls.GetFinalizers(), LogStorageFinalizer))
+		}
+	}
+
+	// Write the logstorage back to the datastore
+	if err = r.client.Patch(ctx, ls, preDefaultPatchFrom); err != nil {
+		log.Error(err, "Failed to write defaults")
+		r.status.SetDegraded("Failed to write defaults", err.Error())
+		return reconcile.Result{}, err
 	}
 
 	variant, install, err := utils.GetInstallation(context.Background(), r.client)
@@ -427,7 +444,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	result, proceed, err := r.createLogStorage(
+	result, proceed, finalizerCleanup, err := r.createLogStorage(
 		ls,
 		install,
 		variant,
@@ -501,6 +518,17 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	r.status.ClearDegraded()
+
+	if ls != nil && ls.DeletionTimestamp != nil && finalizerCleanup == true {
+		ls.SetFinalizers(stringsutil.RemoveStringInSlice(LogStorageFinalizer, ls.GetFinalizers()))
+
+		// Write the logstorage back to the datastore
+		if err = r.client.Patch(ctx, ls, preDefaultPatchFrom); err != nil {
+			reqLogger.Error(err, "Error patching the log-storage")
+			r.status.SetDegraded("Error patching the log-storage", err.Error())
+			return reconcile.Result{}, err
+		}
+	}
 
 	if ls != nil {
 		ls.Status.State = operatorv1.TigeraStatusReady

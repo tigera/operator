@@ -198,24 +198,11 @@ type ReconcileLogStorage struct {
 	clusterDomain string
 }
 
-func getLogStorage(ctx context.Context, cli client.Client) (*operatorv1.LogStorage, error, client.Patch) {
-
-	instance := &operatorv1.LogStorage{}
-	err := cli.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
-	if err != nil {
-		return nil, err, nil
-	}
-
-	//create predefaultpatch
-	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
+func fillDefaultsAndValidateLogStorage(ctx context.Context, cli client.Client, instance *operatorv1.LogStorage) error {
 
 	fillDefaults(instance)
 
-	if err := validateComponentResources(&instance.Spec); err != nil {
-		return nil, err, nil
-	}
-
-	return instance, nil, preDefaultPatchFrom
+	return validateComponentResources(&instance.Spec)
 }
 
 // fillDefaults populates the default values onto an LogStorage object.
@@ -300,8 +287,10 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling LogStorage")
 
-	ls, err, preDefaultPatchFrom := getLogStorage(ctx, r.client)
+	ls := &operatorv1.LogStorage{}
+	err := r.client.Get(ctx, utils.DefaultTSEEInstanceKey, ls)
 	if err != nil {
+		ls = nil
 		// Not finding the LogStorage CR is not an error, as a Managed cluster will not have this CR available but
 		// there are still "LogStorage" related items that need to be set up
 		if !errors.IsNotFound(err) {
@@ -311,6 +300,15 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		r.status.OnCRNotFound()
 	} else {
 		r.status.OnCRFound()
+	}
+
+	//create predefaultpatch
+	preDefaultPatchFrom := client.MergeFrom(ls.DeepCopy())
+
+	err = fillDefaultsAndValidateLogStorage(ctx, r.client, ls)
+	if err != nil {
+		r.status.SetDegraded("An error occurred while validating LogStorage", err.Error())
+		return reconcile.Result{}, err
 	}
 
 	if ls != nil && ls.DeletionTimestamp == nil {
@@ -525,7 +523,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		ls.SetFinalizers(stringsutil.RemoveStringInSlice(LogStorageFinalizer, ls.GetFinalizers()))
 
 		// Write the logstorage back to the datastore
-		if err = r.client.Patch(ctx, ls, patchFrom); err != nil {
+		if err = r.client.Patch(ctx, ls, preDefaultPatchFrom); err != nil {
 			reqLogger.Error(err, "Error patching the log-storage")
 			r.status.SetDegraded("Error patching the log-storage", err.Error())
 			return reconcile.Result{}, err

@@ -67,16 +67,6 @@ var (
 		Image:   "tigera/intrusion-detection-job-installer",
 	}
 
-	ComponentIntrusionDetectionController = component{
-		Version: "master",
-		Image:   "tigera/intrusion-detection-controller",
-	}
-
-	ComponentAnomalyDetectionJobs = component{
-		Version: "master",
-		Image:   "tigera/anomaly_detection_jobs",
-	}
-
 	ComponentElasticsearch = component{
 		Version: "master",
 		Image:   "tigera/elasticsearch",
@@ -115,6 +105,16 @@ var (
 	ComponentGuardian = component{
 		Version: "master",
 		Image:   "tigera/guardian",
+	}
+
+	ComponentIntrusionDetectionController = component{
+		Version: "master",
+		Image:   "tigera/intrusion-detection-controller",
+	}
+
+	ComponentAnomalyDetectionJobs = component{
+		Version: "master",
+		Image:   "tigera/anomaly_detection_jobs",
 	}
 
 	ComponentKibana = component{
@@ -214,14 +214,14 @@ var (
 		ComponentEckKibana,
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,
-		ComponentIntrusionDetectionController,
-		ComponentAnomalyDetectionJobs,
 		ComponentElasticsearchOperator,
 		ComponentEsCurator,
 		ComponentEsProxy,
 		ComponentFluentd,
 		ComponentFluentdWindows,
 		ComponentGuardian,
+		ComponentIntrusionDetectionController,
+		ComponentAnomalyDetectionJobs,
 		ComponentKibana,
 		ComponentManager,
 		ComponentDex,

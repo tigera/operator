@@ -23,6 +23,7 @@ import (
 	"os"
 	goruntime "runtime"
 	"strings"
+	"time"
 
 	"github.com/cloudflare/cfssl/log"
 	"github.com/ghodss/yaml"
@@ -52,6 +53,14 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/version"
 	// +kubebuilder:scaffold:imports
+)
+
+const (
+	defaultLeaseDuration = 60 * time.Second
+	// controller-runtime Manager defaults
+	minimumLeaseDuration = 15 * time.Second
+	minimumRenewDeadline = 10 * time.Second
+	minimumRetryPeriod   = 2 * time.Second
 )
 
 var (
@@ -193,6 +202,9 @@ func main() {
 		os.Exit(0)
 	}
 
+	leaseDuration, renewDeadline, retryPeriod := getLeaderElectionDurations()
+	log.Info(fmt.Sprintf("Set leader election LeaseDuration to %s, RenewDeadline to %s, RetryPeriod to %s", leaseDuration, renewDeadline, retryPeriod))
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,
 		MetricsBindAddress: metricsAddr(),
@@ -209,6 +221,9 @@ func main() {
 		ClientDisableCacheFor: []client.Object{
 			&v3.LicenseKey{},
 		},
+		LeaseDuration: &leaseDuration,
+		RenewDeadline: &renewDeadline,
+		RetryPeriod:   &retryPeriod,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -353,4 +368,29 @@ func showCRDs(variant operatorv1.ProductVariant, outputType string) error {
 	}
 
 	return nil
+}
+
+// getLeaderElectionDurations parses LeaseDuration from the environment variable and scale RenewDeadline and RetryPeriod accordingly.
+func getLeaderElectionDurations() (time.Duration, time.Duration, time.Duration) {
+	leaseDuration, err := time.ParseDuration(os.Getenv("LEASE_DURATION"))
+	if err != nil {
+		leaseDuration = defaultLeaseDuration
+	}
+	if leaseDuration < minimumLeaseDuration {
+		leaseDuration = minimumLeaseDuration
+	}
+
+	// Scale renew deadline to 2/3 of lease duration.
+	renewDeadline := leaseDuration * 2 / 3
+	if renewDeadline < minimumRenewDeadline {
+		renewDeadline = minimumRenewDeadline
+	}
+
+	// Scale retry period to 1/6 of lease duration.
+	retryPeriod := leaseDuration / 6
+	if retryPeriod < minimumRetryPeriod {
+		retryPeriod = minimumRetryPeriod
+	}
+
+	return leaseDuration, renewDeadline, retryPeriod
 }

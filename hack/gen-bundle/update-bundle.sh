@@ -65,7 +65,7 @@ sed -i 's/\(operators\.operatorframework\.\io\.bundle\.package\.v1\)=operator/\1
 
 # Add in required labels
 cat <<EOF >> bundle.Dockerfile
-LABEL com.redhat.openshift.versions="v4.5-v4.7"
+LABEL com.redhat.openshift.versions="v4.5"
 LABEL com.redhat.delivery.backport=true
 LABEL com.redhat.delivery.operator.bundle=true
 EOF

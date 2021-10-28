@@ -130,6 +130,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "anomaly-detection-jobs" }}
+	ComponentAnomalyDetectionJobs = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with .Components.kibana }}
 	ComponentKibana = component{
 		Version: "{{ .Version }}",
@@ -252,6 +258,7 @@ var (
 		ComponentFluentdWindows,
 		ComponentGuardian,
 		ComponentIntrusionDetectionController,
+		ComponentAnomalyDetectionJobs,
 		ComponentKibana,
 		ComponentManager,
 		ComponentDex,

@@ -1,3 +1,4 @@
+# Components defined here are required to be kept in sync with hack/gen-versions/enterprise.go.tpl
 title: master
 components:
   libcalico-go:

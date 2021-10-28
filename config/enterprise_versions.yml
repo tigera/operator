@@ -57,6 +57,9 @@ components:
   intrusion-detection-controller:
     image: tigera/intrusion-detection-controller
     version: master
+  anomaly-detection-jobs:
+    image: tigera/anomaly_detection_jobs
+    version: master
   compliance-controller:
     image: tigera/compliance-controller
     version: master

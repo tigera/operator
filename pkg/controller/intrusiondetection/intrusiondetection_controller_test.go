@@ -218,6 +218,44 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentElasticTseeInstaller.Image,
 					components.ComponentElasticTseeInstaller.Version)))
+
+			training_pt := corev1.PodTemplate{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "PodTemplate",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: render.IntrusionDetectionNamespace,
+					Name:      render.ADJobPodTemplateBaseName + ".training",
+				},
+			}
+			Expect(test.GetResource(c, &training_pt)).To(BeNil())
+			Expect(training_pt.Template.Spec.Containers).To(HaveLen(1))
+			adjobs_training := test.GetContainer(training_pt.Template.Spec.Containers, "adjobs")
+			Expect(adjobs_training).ToNot(BeNil())
+			Expect(adjobs_training.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentAnomalyDetectionJobs.Image,
+					components.ComponentAnomalyDetectionJobs.Version)))
+
+			detection_pt := corev1.PodTemplate{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "PodTemplate",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: render.IntrusionDetectionNamespace,
+					Name:      render.ADJobPodTemplateBaseName + ".detection",
+				},
+			}
+			Expect(test.GetResource(c, &detection_pt)).To(BeNil())
+			Expect(detection_pt.Template.Spec.Containers).To(HaveLen(1))
+			adjobs_detection := test.GetContainer(detection_pt.Template.Spec.Containers, "adjobs")
+			Expect(adjobs_detection).ToNot(BeNil())
+			Expect(adjobs_detection.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentAnomalyDetectionJobs.Image,
+					components.ComponentAnomalyDetectionJobs.Version)))
 		})
 		It("should use images from imageset", func() {
 			Expect(c.Create(ctx, &operatorv1.ImageSet{
@@ -227,6 +265,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 						{Image: "tigera/intrusion-detection-job-installer", Digest: "sha256:intrusiondetectionjobinstallerhash"},
 						{Image: "tigera/intrusion-detection-controller", Digest: "sha256:intrusiondetectioncontrollerhash"},
 						{Image: "tigera/deep-packet-inspection", Digest: "sha256:deeppacketinspectionhash"},
+						{Image: "tigera/anomaly_detection_jobs", Digest: "sha256:anomalydetectionjobs"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -280,6 +319,44 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentDeepPacketInspection.Image,
 					"sha256:deeppacketinspectionhash")))
+
+			training_pt := corev1.PodTemplate{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "PodTemplate",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: render.IntrusionDetectionNamespace,
+					Name:      render.ADJobPodTemplateBaseName + ".training",
+				},
+			}
+			Expect(test.GetResource(c, &training_pt)).To(BeNil())
+			Expect(training_pt.Template.Spec.Containers).To(HaveLen(1))
+			adjobs_training := test.GetContainer(training_pt.Template.Spec.Containers, "adjobs")
+			Expect(adjobs_training).ToNot(BeNil())
+			Expect(adjobs_training.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentAnomalyDetectionJobs.Image,
+					"sha256:anomalydetectionjobs")))
+
+			detection_pt := corev1.PodTemplate{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "PodTemplate",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: render.IntrusionDetectionNamespace,
+					Name:      render.ADJobPodTemplateBaseName + ".detection",
+				},
+			}
+			Expect(test.GetResource(c, &detection_pt)).To(BeNil())
+			Expect(detection_pt.Template.Spec.Containers).To(HaveLen(1))
+			adjobs_detection := test.GetContainer(detection_pt.Template.Spec.Containers, "adjobs")
+			Expect(adjobs_detection).ToNot(BeNil())
+			Expect(adjobs_detection.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentAnomalyDetectionJobs.Image,
+					"sha256:anomalydetectionjobs")))
 
 		})
 		It("should not register intrusion-detection-job-installer image when cluster is managed", func() {

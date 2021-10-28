@@ -112,6 +112,11 @@ var (
 		Image:   "tigera/intrusion-detection-controller",
 	}
 
+	ComponentAnomalyDetectionJobs = component{
+		Version: "master",
+		Image:   "tigera/anomaly_detection_jobs",
+	}
+
 	ComponentKibana = component{
 		Version: "master",
 		Image:   "tigera/kibana",
@@ -216,6 +221,7 @@ var (
 		ComponentFluentdWindows,
 		ComponentGuardian,
 		ComponentIntrusionDetectionController,
+		ComponentAnomalyDetectionJobs,
 		ComponentKibana,
 		ComponentManager,
 		ComponentDex,

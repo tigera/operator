@@ -334,6 +334,21 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 			Resources: []string{"licensekeys"},
 			Verbs:     []string{"get"},
 		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"deeppacketinspections"},
+			Verbs:     []string{"get", "watch", "list"},
+		},
+		{
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{"deeppacketinspections"},
+			Verbs:     []string{"get"},
+		},
+		{
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{"deeppacketinspections/status"},
+			Verbs:     []string{"update"},
+		},
 	}
 
 	if cfg.ManagementCluster != nil {

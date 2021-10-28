@@ -16,20 +16,25 @@ package render
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/render/common/elasticsearch"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rkibana "github.com/tigera/operator/pkg/render/common/kibana"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -47,6 +52,9 @@ const (
 	ElasticsearchPerformanceHotspotsUserSecret   = "tigera-ee-performance-hotspots-elasticsearch-access"
 
 	IntrusionDetectionInstallerJobName = "intrusion-detection-es-job-installer"
+	IntrusionDetectionControllerbName  = "intrusion-detection-controller"
+
+	ADJobPodTemplateBaseName = "tigera.io.adjob"
 )
 
 func IntrusionDetection(
@@ -91,6 +99,7 @@ type intrusionDetectionComponent struct {
 	esLicenseType            ElasticsearchLicenseType
 	jobInstallerImage        string
 	controllerImage          string
+	adJobsImage              string
 	managedCluster           bool
 	hasNoLicense             bool
 	managerInternalTLSSecret *corev1.Secret
@@ -110,6 +119,11 @@ func (c *intrusionDetectionComponent) ResolveImages(is *operatorv1.ImageSet) err
 	}
 
 	c.controllerImage, err = components.GetReference(components.ComponentIntrusionDetectionController, reg, path, prefix, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	c.adJobsImage, err = components.GetReference(components.ComponentAnomalyDetectionJobs, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -134,7 +148,8 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(IntrusionDetectionNamespace, c.managerInternalTLSSecret)...)...)
 	}
 
-	objs = append(objs, c.intrusionDetectionServiceAccount(),
+	objs = append(objs,
+		c.intrusionDetectionServiceAccount(),
 		c.intrusionDetectionJobServiceAccount(),
 		c.intrusionDetectionClusterRole(),
 		c.intrusionDetectionClusterRoleBinding(),
@@ -147,6 +162,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 	}
 
 	objs = append(objs, c.globalAlertTemplates()...)
+	objs = append(objs, c.intrusionDetectionADJobsPodTemplate()...)
 
 	if !c.openshift {
 		objs = append(objs,
@@ -265,7 +281,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionServiceAccount() *corev1
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "intrusion-detection-controller",
+			Name:      IntrusionDetectionControllerbName,
 			Namespace: IntrusionDetectionNamespace,
 		},
 	}
@@ -309,6 +325,28 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 				"get", "watch",
 			},
 		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"podtemplates"},
+			Verbs:     []string{"get"},
+		},
+		{
+			APIGroups: []string{"apps"},
+			Resources: []string{"deployments"},
+			Verbs:     []string{"get"},
+		},
+		{
+			APIGroups: []string{
+				"batch",
+			},
+			Resources: []string{
+				"cronjobs",
+				"jobs",
+			},
+			Verbs: []string{
+				"get", "list", "watch", "create", "update", "patch", "delete",
+			},
+		},
 	}
 	if !c.managedCluster {
 		managementRule := []rbacv1.PolicyRule{
@@ -328,7 +366,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "intrusion-detection-controller",
+			Name: IntrusionDetectionControllerbName,
 		},
 		Rules: rules,
 	}
@@ -338,17 +376,17 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRoleBinding() *rb
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "intrusion-detection-controller",
+			Name: IntrusionDetectionControllerbName,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     "intrusion-detection-controller",
+			Name:     IntrusionDetectionControllerbName,
 		},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "intrusion-detection-controller",
+				Name:      IntrusionDetectionControllerbName,
 				Namespace: IntrusionDetectionNamespace,
 			},
 		},
@@ -359,7 +397,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionRole() *rbacv1.Role {
 	return &rbacv1.Role{
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "intrusion-detection-controller",
+			Name:      IntrusionDetectionControllerbName,
 			Namespace: IntrusionDetectionNamespace,
 		},
 		Rules: []rbacv1.PolicyRule{
@@ -382,18 +420,18 @@ func (c *intrusionDetectionComponent) intrusionDetectionRoleBinding() *rbacv1.Ro
 	return &rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "intrusion-detection-controller",
+			Name:      IntrusionDetectionControllerbName,
 			Namespace: IntrusionDetectionNamespace,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "Role",
-			Name:     "intrusion-detection-controller",
+			Name:     IntrusionDetectionControllerbName,
 		},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "intrusion-detection-controller",
+				Name:      IntrusionDetectionControllerbName,
 				Namespace: IntrusionDetectionNamespace,
 			},
 		},
@@ -406,16 +444,16 @@ func (c *intrusionDetectionComponent) intrusionDetectionDeployment() *appsv1.Dep
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "intrusion-detection-controller",
+			Name:      IntrusionDetectionControllerbName,
 			Namespace: IntrusionDetectionNamespace,
 			Labels: map[string]string{
-				"k8s-app": "intrusion-detection-controller",
+				"k8s-app": IntrusionDetectionControllerbName,
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{"k8s-app": "intrusion-detection-controller"},
+				MatchLabels: map[string]string{"k8s-app": IntrusionDetectionControllerbName},
 			},
 			Template: *c.deploymentPodTemplate(),
 		},
@@ -480,17 +518,17 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 
 	return relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "intrusion-detection-controller",
+			Name:      IntrusionDetectionControllerbName,
 			Namespace: IntrusionDetectionNamespace,
 			Labels: map[string]string{
-				"k8s-app": "intrusion-detection-controller",
+				"k8s-app": IntrusionDetectionControllerbName,
 			},
 			Annotations: c.intrusionDetectionAnnotations(),
 		},
 		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
 			Tolerations:        c.installation.ControlPlaneTolerations,
 			NodeSelector:       c.installation.ControlPlaneNodeSelector,
-			ServiceAccountName: "intrusion-detection-controller",
+			ServiceAccountName: IntrusionDetectionControllerbName,
 			ImagePullSecrets:   ps,
 			Containers: []corev1.Container{
 				container,
@@ -872,7 +910,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionPSPClusterRoleBinding() 
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "intrusion-detection-controller",
+				Name:      IntrusionDetectionControllerbName,
 				Namespace: IntrusionDetectionNamespace,
 			},
 			{
@@ -891,4 +929,119 @@ func (c *intrusionDetectionComponent) intrusionDetectionAnnotations() map[string
 		}
 	}
 	return nil
+}
+
+func (c *intrusionDetectionComponent) intrusionDetectionADJobsPodTemplate() []client.Object {
+	trainingJobPodTemplate := c.getBaseIntrusionDetectionADJobPodTemplate()
+	trainingJobPodTemplate.ObjectMeta.Name = ADJobPodTemplateBaseName + ".training"
+	trainingJobPodTemplate.Template.Spec.Containers[0].Args = append(trainingJobPodTemplate.Template.Spec.Containers[0].Args, "-train")
+
+	detecionADJobPodTemplate := c.getBaseIntrusionDetectionADJobPodTemplate()
+	detecionADJobPodTemplate.ObjectMeta.Name = ADJobPodTemplateBaseName + ".detection"
+	detecionADJobPodTemplate.Template.Spec.Containers[0].Args = append(trainingJobPodTemplate.Template.Spec.Containers[0].Args, "-detect")
+
+	return []client.Object{&trainingJobPodTemplate, &detecionADJobPodTemplate}
+}
+
+func (c *intrusionDetectionComponent) getBaseIntrusionDetectionADJobPodTemplate() corev1.PodTemplate {
+	privileged := false
+	if c.openshift {
+		privileged = true
+	}
+
+	return corev1.PodTemplate{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "PodTemplate",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: IntrusionDetectionNamespace,
+			Name:      ADJobPodTemplateBaseName,
+		},
+		Template: corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      ADJobPodTemplateBaseName,
+				Namespace: IntrusionDetectionNamespace,
+				Labels: map[string]string{
+					"k8s-app": IntrusionDetectionControllerbName,
+				},
+			},
+			Spec: corev1.PodSpec{
+				Volumes: []corev1.Volume{
+					{
+						Name: "es-certs",
+						VolumeSource: corev1.VolumeSource{
+							Secret: &corev1.SecretVolumeSource{
+								SecretName: elasticsearch.PublicCertSecret,
+								Items: []corev1.KeyToPath{
+									{Key: "tls.crt", Path: "es-ca.pem"},
+								},
+							},
+						},
+					},
+				},
+				DNSPolicy:          corev1.DNSClusterFirst,
+				ImagePullSecrets:   secret.GetReferenceList(c.pullSecrets),
+				RestartPolicy:      corev1.RestartPolicyOnFailure,
+				ServiceAccountName: IntrusionDetectionInstallerJobName,
+				Tolerations: []corev1.Toleration{
+					{
+						Effect: corev1.TaintEffectNoSchedule,
+						Key:    "node-role.kubernetes.io/master",
+					},
+				},
+				Containers: []corev1.Container{
+					{
+						Name:  "adjobs",
+						Image: c.adJobsImage,
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								"memory": resource.MustParse("1G"),
+							},
+						},
+						SecurityContext: &corev1.SecurityContext{
+							Privileged: &privileged,
+						},
+						Env: []corev1.EnvVar{
+							{
+								Name:  "ELASTIC_HOST",
+								Value: dns.GetServiceDNSNames(ESGatewayServiceName, ElasticsearchNamespace, c.clusterDomain)[0],
+							},
+							{
+								Name:  "ELASTIC_PORT",
+								Value: strconv.Itoa(ESGatewayDefaultPort),
+							},
+							{
+								Name:      "ELASTIC_USERNAME", // some pods require this name instead of ELASTIC_USER
+								ValueFrom: secret.GetEnvVarSource(ElasticsearchADJobUserSecret, "username", false),
+							},
+							{
+								Name:      "ELASTIC_PASSWORD",
+								ValueFrom: secret.GetEnvVarSource(ElasticsearchADJobUserSecret, "password", false),
+							},
+							{
+								Name:  "ES_CA_CERT",
+								Value: strconv.Itoa(ESGatewayDefaultPort),
+							},
+							{
+								Name:  "CLUSTER_NAME",
+								Value: c.esClusterConfig.ClusterName(),
+							},
+						},
+						VolumeMounts: []corev1.VolumeMount{
+							{
+								Name:      "es-certs",
+								MountPath: "/certs/es-ca.pem",
+								SubPath:   "es-ca.pem",
+							},
+						},
+					},
+				},
+				// ensures the AD pods are all deployed on the same node before a model storage cache is deployed (todo)
+				//  - without a model storage, models created by training jobs are stored on disk suceeeding detection jobs
+				//    need to read the models such that all pods running the AD containers need to run on the same node
+				NodeSelector: c.installation.ControlPlaneNodeSelector,
+			},
+		},
+	}
 }

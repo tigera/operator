@@ -1018,10 +1018,6 @@ func (c *intrusionDetectionComponent) getBaseIntrusionDetectionADJobPodTemplate(
 								Name:  "ES_CA_CERT",
 								Value: "/certs/es-ca.pem",
 							},
-							{
-								Name:  "CLUSTER_NAME",
-								Value: c.esClusterConfig.ClusterName(),
-							},
 						},
 						VolumeMounts: []corev1.VolumeMount{
 							{

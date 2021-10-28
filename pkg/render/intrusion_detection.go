@@ -1007,7 +1007,7 @@ func (c *intrusionDetectionComponent) getBaseIntrusionDetectionADJobPodTemplate(
 								Value: strconv.Itoa(ESGatewayDefaultPort),
 							},
 							{
-								Name:      "ELASTIC_USERNAME", // some pods require this name instead of ELASTIC_USER
+								Name:      "ELASTIC_USERNAME",
 								ValueFrom: secret.GetEnvVarSource(ElasticsearchADJobUserSecret, "username", false),
 							},
 							{

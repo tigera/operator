@@ -17,10 +17,7 @@
 package common
 
 import (
-	"fmt"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/components"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -41,14 +38,6 @@ const (
 	CalicoVariantAnnotation             = "projectcalico.org/variant"
 	CalicoWindowsUpgradeTaintKey        = "projectcalico.org/windows-upgrade"
 )
-
-func WindowsLatestVersionString(product operatorv1.ProductVariant) string {
-	if product == operatorv1.Calico {
-		return fmt.Sprintf("Calico-%v", components.CalicoRelease)
-	} else {
-		return fmt.Sprintf("Enterprise-%v", components.EnterpriseRelease)
-	}
-}
 
 // GetNodeVariantAndVersion gets the node's variant and version annotation
 // values and returns whether both annotations exist.

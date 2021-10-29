@@ -287,22 +287,6 @@ type windowsNodeUpgrade struct {
 	expectedVariant operator.ProductVariant
 }
 
-func (w *windowsNodeUpgrade) isPending(ctx context.Context, c client.Client) (bool, error) {
-	node := &corev1.Node{}
-	err := c.Get(ctx, client.ObjectKey{Name: w.nodeName}, node)
-	if err != nil {
-		return false, err
-	}
-
-	ok, variant, version := common.GetNodeVariantAndVersion(node)
-	if !ok {
-		// The upgrade was pending but now there is no
-		// version.
-		return false, fmt.Errorf("Node %v had upgrade triggered but is missing variant and/or version annotation", node.Name)
-	}
-	return version != w.expectedVersion || variant != w.expectedVariant, nil
-}
-
 // AddWindowsNodeUpgrade tells the status manager to monitor the health of the given
 // Windows node upgrade.
 func (m *statusManager) AddWindowsNodeUpgrade(nodeName string, currentVariant, expectedVariant operator.ProductVariant, currentVersion, expectedVersion string) {

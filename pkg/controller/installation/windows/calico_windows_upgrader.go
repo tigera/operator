@@ -64,9 +64,9 @@ type calicoWindowsUpgrader struct {
 
 type calicoWindowsUpgraderOption func(*calicoWindowsUpgrader)
 
-// calicoWindowsUpraderSyncPeriod sets the sync period for the
+// calicoWindowsUpgraderSyncPeriod sets the sync period for the
 // calicoWindowsUpgrader.
-func calicoWindowsUpgraderSyncPeriod(syncPeriod time.Duration) calicoWindowsUpgraderOption {
+func CalicoWindowsUpgraderSyncPeriod(syncPeriod time.Duration) calicoWindowsUpgraderOption {
 	return func(w *calicoWindowsUpgrader) {
 		w.syncPeriod = syncPeriod
 	}

@@ -73,7 +73,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		cs = kfake.NewSimpleClientset()
 		mockStatus = &status.MockStatus{}
 
-		syncPeriodOption = calicoWindowsUpgraderSyncPeriod(2 * time.Second)
+		syncPeriodOption = CalicoWindowsUpgraderSyncPeriod(2 * time.Second)
 
 		nlw := test.NodeListWatch{cs}
 		nodeIndexInformer = node.CreateNodeSharedIndexInformer(nlw)

@@ -96,20 +96,20 @@ func (w *calicoWindowsUpgrader) UpdateConfig(install *operatorv1.InstallationSpe
 // getNodeUpgradeStatus checks the nodes from its indexer and determines whether
 // the nodes are:
 // - pending: Node does not have the expected variant and/or version. No upgrade label.
-// - in-progress: Node does not have the expected variant and/or version. It has the upgrade in-progress label.
-// - in-sync: Node has the expected variant and version. It does not have the upgrade in-progress label.
+// - inProgress: Node does not have the expected variant and/or version. It has the upgrade in-progress label.
+// - inSync: Node has the expected variant and version. It does not have the upgrade in-progress label.
 // This returns an error (if any) and maps of the nodes that are pending,
-// in-progress, or in-sync.
-func (w *calicoWindowsUpgrader) getNodeUpgradeStatus() (error, map[string]*corev1.Node, map[string]*corev1.Node, map[string]*corev1.Node) {
+// inProgress, or inSync.
+func (w *calicoWindowsUpgrader) getNodeUpgradeStatus() (map[string]*corev1.Node, map[string]*corev1.Node, map[string]*corev1.Node, error) {
 	pending := make(map[string]*corev1.Node)
-	insync := make(map[string]*corev1.Node)
-	inprogress := make(map[string]*corev1.Node)
+	inSync := make(map[string]*corev1.Node)
+	inProgress := make(map[string]*corev1.Node)
 	expectedVersion := w.getExpectedVersion()
 
 	for _, obj := range w.nodeIndexer.GetIndexer().List() {
 		node, ok := obj.(*corev1.Node)
 		if !ok {
-			return fmt.Errorf("Never expected index to have anything other than a Node object: %v", obj), nil, nil, nil
+			return nil, nil, nil, fmt.Errorf("Never expected index to have anything other than a Node object: %v", obj)
 		}
 
 		if node.Labels[corev1.LabelOSStable] != "windows" {
@@ -123,23 +123,23 @@ func (w *calicoWindowsUpgrader) getNodeUpgradeStatus() (error, map[string]*corev
 		// Calico Windows node or it needs to be upgraded manually to
 		// a version supported by the calicoWindowsUpgrader.
 		if !exists {
-			return fmt.Errorf("Node %v does not have the version annotation, it might be unhealthy or it might be running an unsupported Calico version.", node.Name), nil, nil, nil
+			return nil, nil, nil, fmt.Errorf("Node %v does not have the version annotation, it might be unhealthy or it might be running an unsupported Calico version.", node.Name)
 		}
 
 		if node.Labels[common.CalicoWindowsUpgradeLabel] == common.CalicoWindowsUpgradeLabelInProgress {
 			windowsLog.V(1).Info(fmt.Sprintf("Node %v has the upgrade in-progress label", node.Name))
-			inprogress[node.Name] = node
+			inProgress[node.Name] = node
 		} else if variant != w.install.Variant || version != expectedVersion {
 			windowsLog.V(1).Info(fmt.Sprintf("Node %v doesn't have the latest variant and/or version. variant=%v, expectedVariant=%v, version=%v, expectedVersion=%v", node.Name, variant, w.install.Variant, version, expectedVersion))
 			pending[node.Name] = node
 		} else {
 			windowsLog.V(1).Info(fmt.Sprintf("Node %v has the latest variant and version", node.Name))
-			insync[node.Name] = node
+			inSync[node.Name] = node
 		}
 	}
 
-	windowsLog.V(1).Info(fmt.Sprintf("pending=%v, in-progress=%v, in-sync=%v", len(pending), len(inprogress), len(insync)))
-	return nil, pending, inprogress, insync
+	windowsLog.V(1).Info(fmt.Sprintf("pending=%v, in-progress=%v, in-sync=%v", len(pending), len(inProgress), len(inSync)))
+	return pending, inProgress, inSync, nil
 }
 
 func (w *calicoWindowsUpgrader) upgradeCompleted(node *corev1.Node) bool {
@@ -166,13 +166,13 @@ func (w *calicoWindowsUpgrader) getExpectedVersion() string {
 }
 
 func (w *calicoWindowsUpgrader) updateWindowsNodes() {
-	err, pending, inprogress, insync := w.getNodeUpgradeStatus()
+	pending, inProgress, inSync, err := w.getNodeUpgradeStatus()
 	if err != nil {
 		windowsLog.Error(err, "Failed to get Windows nodes upgrade status")
 		return
 	}
 
-	for _, node := range inprogress {
+	for _, node := range inProgress {
 		if w.upgradeCompleted(node) {
 			if err := w.finishUpgrade(context.Background(), node); err != nil {
 				// Log the error and continue. We will retry when we update nodes again.
@@ -181,14 +181,14 @@ func (w *calicoWindowsUpgrader) updateWindowsNodes() {
 			}
 			// Successfully finished completing the upgrade. Moving the node
 			// from in-progress to in-sync.
-			insync[node.Name] = node
-			delete(inprogress, node.Name)
+			inSync[node.Name] = node
+			delete(inProgress, node.Name)
 		}
 	}
 
 	// Get the total # of windows nodes we can have upgrading using the
 	// maxUnavailable value, if the node upgrade strategy was respected.
-	numWindowsNodes := len(pending) + len(inprogress) + len(insync)
+	numWindowsNodes := len(pending) + len(inProgress) + len(inSync)
 	maxUnavailable, err := intstr.GetValueFromIntOrPercent(w.install.NodeUpdateStrategy.RollingUpdate.MaxUnavailable, numWindowsNodes, false)
 	if err != nil {
 		windowsLog.Error(err, "Invalid maxUnavailable value, falling back to default of 1")
@@ -199,7 +199,7 @@ func (w *calicoWindowsUpgrader) updateWindowsNodes() {
 		// For upgrades from Calico -> Enterprise, we always upgrade regardless
 		// of maxUnavailable. For other upgrades, check that we have room
 		// available.
-		if w.isUpgradeFromCalicoToEnterprise(node) || len(inprogress) < maxUnavailable {
+		if w.isUpgradeFromCalicoToEnterprise(node) || len(inProgress) < maxUnavailable {
 			if err := w.startUpgrade(context.Background(), node); err != nil {
 				// Log the error and continue. We will retry when we update nodes again.
 				windowsLog.Info(fmt.Sprintf("Could not start upgrade on node %v: %v", node.Name, err))
@@ -207,7 +207,7 @@ func (w *calicoWindowsUpgrader) updateWindowsNodes() {
 			}
 			// Successfully started the upgrade. Moving the node
 			// from pending to in-progress.
-			inprogress[node.Name] = node
+			inProgress[node.Name] = node
 			delete(pending, node.Name)
 		}
 	}

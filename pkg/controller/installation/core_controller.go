@@ -46,7 +46,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
-	"github.com/tigera/operator/pkg/controller/utils/node"
 	"github.com/tigera/operator/pkg/crds"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
@@ -117,10 +116,10 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		return nil, err
 	}
 
-	// Create the sharedindexinformer used by the typhaAutoscaler and
+	// Create the SharedIndexInformer used by the typhaAutoscaler and
 	// calicoWindowsUpgrader.
 	nodeListWatch := cache.NewListWatchFromClient(cs.CoreV1().RESTClient(), "nodes", "", fields.Everything())
-	nodeIndexInformer := node.CreateNodeSharedIndexInformer(nodeListWatch)
+	nodeIndexInformer := cache.NewSharedIndexInformer(nodeListWatch, &corev1.Node{}, 0, cache.Indexers{})
 
 	go nodeIndexInformer.Run(opts.ShutdownContext.Done())
 	for nodeIndexInformer.HasSynced() {

@@ -23,13 +23,11 @@ import (
 	"strings"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/cache"
 )
 
 type ObjPatch struct {
@@ -127,10 +125,4 @@ func RemoveNodeLabel(ctx context.Context, client kubernetes.Interface, nodeName,
 		// no update needed
 		return true, nil
 	})
-}
-
-// CreateNodeSharedIndexInformer returns a Node shared index informer used
-// by the typhaAutoscaler and the calicoWindowsUpgrader.
-func CreateNodeSharedIndexInformer(nodeListWatch cache.ListerWatcher) cache.SharedIndexInformer {
-	return cache.NewSharedIndexInformer(nodeListWatch, &corev1.Node{}, 0, cache.Indexers{})
 }

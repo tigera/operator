@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/controller/utils/node"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -59,7 +58,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 
 		// Create the indexer and informer shared by the typhaAutoscaler and
 		// calicoWindowsUpgrader.
-		nodeIndexInformer = node.CreateNodeSharedIndexInformer(nlw)
+		nodeIndexInformer = cache.NewSharedIndexInformer(nlw, &corev1.Node{}, 0, cache.Indexers{})
 
 		ctx, cancel = context.WithCancel(context.Background())
 		go nodeIndexInformer.Run(ctx.Done())

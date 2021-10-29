@@ -23,7 +23,6 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/controller/utils/node"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -76,7 +75,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		syncPeriodOption = CalicoWindowsUpgraderSyncPeriod(2 * time.Second)
 
 		nlw := test.NodeListWatch{cs}
-		nodeIndexInformer = node.CreateNodeSharedIndexInformer(nlw)
+		nodeIndexInformer = cache.NewSharedIndexInformer(nlw, &corev1.Node{}, 0, cache.Indexers{})
 
 		ctx, cancel = context.WithCancel(context.TODO())
 		go nodeIndexInformer.Run(ctx.Done())

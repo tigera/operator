@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	kfake "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -48,7 +49,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/installation/windows"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/controller/utils/node"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -361,7 +361,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			// Create the indexer and informer shared by the typhaAutoscaler and
 			// calicoWindowsUpgrader.
 			nlw := test.NodeListWatch{cs}
-			nodeIndexInformer := node.CreateNodeSharedIndexInformer(nlw)
+			nodeIndexInformer := cache.NewSharedIndexInformer(nlw, &corev1.Node{}, 0, cache.Indexers{})
 
 			go nodeIndexInformer.Run(ctx.Done())
 			for nodeIndexInformer.HasSynced() {
@@ -708,7 +708,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			// Create the indexer and informer shared by the typhaAutoscaler and
 			// calicoWindowsUpgrader.
 			nlw := test.NodeListWatch{cs}
-			nodeIndexInformer := node.CreateNodeSharedIndexInformer(nlw)
+			nodeIndexInformer := cache.NewSharedIndexInformer(nlw, &corev1.Node{}, 0, cache.Indexers{})
 
 			go nodeIndexInformer.Run(ctx.Done())
 			for nodeIndexInformer.HasSynced() {
@@ -875,7 +875,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			// Create the indexer and informer shared by the typhaAutoscaler and
 			// calicoWindowsUpgrader.
 			nlw := test.NodeListWatch{cs}
-			nodeIndexInformer := node.CreateNodeSharedIndexInformer(nlw)
+			nodeIndexInformer := cache.NewSharedIndexInformer(nlw, &corev1.Node{}, 0, cache.Indexers{})
 
 			go nodeIndexInformer.Run(ctx.Done())
 			for nodeIndexInformer.HasSynced() {

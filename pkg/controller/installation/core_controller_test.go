@@ -27,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	kfake "k8s.io/client-go/kubernetes/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -367,6 +368,8 @@ var _ = Describe("Testing core-controller installation", func() {
 				time.Sleep(100 * time.Millisecond)
 			}
 
+			syncPeriodOption := windows.CalicoWindowsUpgraderSyncPeriod(2 * time.Second)
+
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
 				config:                nil, // there is no fake for config
@@ -375,7 +378,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				autoDetectedProvider:  operator.ProviderNone,
 				status:                mockStatus,
 				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexInformer, test.TyphaListWatch{cs}, mockStatus),
-				calicoWindowsUpgrader: windows.NewCalicoWindowsUpgrader(cs, c, nodeIndexInformer, mockStatus),
+				calicoWindowsUpgrader: windows.NewCalicoWindowsUpgrader(cs, c, nodeIndexInformer, mockStatus, syncPeriodOption),
 				namespaceMigration:    &fakeNamespaceMigration{},
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,
@@ -712,6 +715,8 @@ var _ = Describe("Testing core-controller installation", func() {
 				time.Sleep(100 * time.Millisecond)
 			}
 
+			syncPeriodOption := windows.CalicoWindowsUpgraderSyncPeriod(2 * time.Second)
+
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
 				config:                nil, // there is no fake for config
@@ -720,7 +725,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				autoDetectedProvider:  operator.ProviderNone,
 				status:                mockStatus,
 				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexInformer, test.TyphaListWatch{cs}, mockStatus),
-				calicoWindowsUpgrader: windows.NewCalicoWindowsUpgrader(cs, c, nodeIndexInformer, mockStatus),
+				calicoWindowsUpgrader: windows.NewCalicoWindowsUpgrader(cs, c, nodeIndexInformer, mockStatus, syncPeriodOption),
 				namespaceMigration:    &fakeNamespaceMigration{},
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,
@@ -877,6 +882,8 @@ var _ = Describe("Testing core-controller installation", func() {
 				time.Sleep(100 * time.Millisecond)
 			}
 
+			syncPeriodOption := windows.CalicoWindowsUpgraderSyncPeriod(2 * time.Second)
+
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
 				config:                nil, // there is no fake for config
@@ -885,7 +892,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				autoDetectedProvider:  operator.ProviderNone,
 				status:                mockStatus,
 				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexInformer, test.TyphaListWatch{cs}, mockStatus),
-				calicoWindowsUpgrader: windows.NewCalicoWindowsUpgrader(cs, c, nodeIndexInformer, mockStatus),
+				calicoWindowsUpgrader: windows.NewCalicoWindowsUpgrader(cs, c, nodeIndexInformer, mockStatus, syncPeriodOption),
 				namespaceMigration:    &fakeNamespaceMigration{},
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,
@@ -1102,14 +1109,16 @@ var _ = Describe("Testing core-controller installation", func() {
 		})
 
 		Context("calicoWindowsUpgrader", func() {
-			It("should do nothing if variant is Enterprise", func() {
+			It("should do nothing if node is up to date", func() {
+				cr.Spec.Variant = operator.TigeraSecureEnterprise
 				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 
-				n1 := test.CreateWindowsNode(cs, "windows1", operator.TigeraSecureEnterprise, components.EnterpriseRelease)
+				// Create node with current Enterprise version.
+				n1 := test.CreateWindowsNode(cs, "windows1", cr.Spec.Variant, components.EnterpriseRelease)
 
-				// Node should not have changed.
+				// Node is up to date and should not have changed.
 				Consistently(func() error {
 					return test.AssertNodesUnchanged(cs, n1)
 				}, 10*time.Second, 100*time.Millisecond).Should(BeNil())
@@ -1119,28 +1128,35 @@ var _ = Describe("Testing core-controller installation", func() {
 			})
 
 			It("should trigger upgrade of out-of-date Calico Windows nodes", func() {
+				// Set variant to Calico and set maxUnavailable to 2.
 				cr.Spec.Variant = operator.Calico
+				two := intstr.FromInt(2)
+				cr.Spec.NodeUpdateStrategy = appsv1.DaemonSetUpdateStrategy{
+					RollingUpdate: &appsv1.RollingUpdateDaemonSet{
+						MaxUnavailable: &two,
+					},
+				}
 				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 
+				// Create two nodes that should be upgraded. The current variant
+				// is Calico and version is `components.CalicoRelease`.
 				n1 := test.CreateWindowsNode(cs, "windows1", operator.Calico, "v3.21.999")
 				n2 := test.CreateWindowsNode(cs, "windows2", operator.TigeraSecureEnterprise, components.EnterpriseRelease)
 
 				mockStatus.On("AddWindowsNodeUpgrade", "windows1", operator.Calico, operator.Calico, "v3.21.999", components.CalicoRelease)
-
-				// Up-to-date node should not have changed.
-				Consistently(func() error {
-					return test.AssertNodesUnchanged(cs, n2)
-				}, 10*time.Second, 100*time.Millisecond).Should(BeNil())
+				mockStatus.On("AddWindowsNodeUpgrade", "windows2", operator.TigeraSecureEnterprise, operator.Calico, components.EnterpriseRelease, components.CalicoRelease)
 
 				// Ensure that outdated nodes have the new label and taint.
 				Eventually(func() error {
-					return test.AssertNodesHadUpgradeTriggered(cs, n1)
+					return test.AssertNodesHadUpgradeTriggered(cs, n1, n2)
 				}, 10*time.Second).Should(BeNil())
 
-				// No calls to AddWindowsNodeUpgrade expected.
 				mockStatus.AssertExpectations(GinkgoT())
+				Consistently(func() error {
+					return test.AssertNodesHadUpgradeTriggered(cs, n1, n2)
+				}, 10*time.Second).Should(BeNil())
 			})
 		})
 	})

@@ -363,7 +363,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			},
 			{
 				APIGroups: []string{""},
-				Resources: []string{"serviceaccounts", "namespaces", "nodes", "events"},
+				Resources: []string{"serviceaccounts", "namespaces", "nodes", "events", "services", "replicasets",
+					"statefulsets", "daemonsets"},
 				Verbs:     []string{"list"},
 			},
 			{

@@ -61,13 +61,8 @@ func AddNodeLabel(ctx context.Context, client kubernetes.Interface, nodeName, ke
 			Value: value,
 		}}
 
-		patchBytes, err := json.Marshal(lp)
-		if err != nil {
-			return false, err
-		}
-
 		if needUpdate {
-			_, err := client.CoreV1().Nodes().Patch(ctx, node.Name, types.JSONPatchType, patchBytes, metav1.PatchOptions{})
+			err = PatchNode(ctx, client, nodeName, lp...)
 			if err == nil {
 				return true, nil
 			}
@@ -82,6 +77,16 @@ func AddNodeLabel(ctx context.Context, client kubernetes.Interface, nodeName, ke
 		// no update needed
 		return true, nil
 	})
+}
+
+func PatchNode(ctx context.Context, client kubernetes.Interface, nodeName string, jsonStringPatches ...stringPatch) error {
+	patchBytes, err := json.Marshal(jsonStringPatches)
+	if err != nil {
+		return err
+	}
+
+	_, err = client.CoreV1().Nodes().Patch(ctx, nodeName, types.JSONPatchType, patchBytes, metav1.PatchOptions{})
+	return err
 }
 
 // RemoveNodeLabel removes the specified label from the named node. Perform Get/Check/Update so that it always working on the
@@ -106,17 +111,8 @@ func RemoveNodeLabel(ctx context.Context, client kubernetes.Interface, nodeName,
 			Path: fmt.Sprintf("/metadata/labels/%s", k),
 		}}
 
-		patchBytes, err := json.Marshal(lp)
-		if err != nil {
-			return false, err
-		}
-
-		if err != nil {
-			return false, fmt.Errorf("patch to remove labels failed: %v", err)
-		}
-
 		if needUpdate {
-			_, err = client.CoreV1().Nodes().Patch(ctx, node.Name, types.JSONPatchType, patchBytes, metav1.PatchOptions{})
+			err = PatchNode(ctx, client, nodeName, lp...)
 			if err == nil {
 				return true, nil
 			}

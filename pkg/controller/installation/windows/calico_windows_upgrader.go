@@ -166,11 +166,6 @@ func (w *calicoWindowsUpgrader) getExpectedVersion() string {
 }
 
 func (w *calicoWindowsUpgrader) updateWindowsNodes() {
-	if w.install == nil {
-		windowsLog.V(1).Info("Skipping update since installation not set yet")
-		return
-	}
-
 	err, pending, inprogress, insync := w.getNodeUpgradeStatus()
 	if err != nil {
 		windowsLog.Error(err, "Failed to get Windows nodes upgrade status")
@@ -250,8 +245,12 @@ func (w *calicoWindowsUpgrader) finishUpgrade(ctx context.Context, node *corev1.
 // Start begins running the calicoWindowsUpgrader.
 func (w *calicoWindowsUpgrader) Start(ctx context.Context) {
 	go func() {
+		// Wait for initial config before starting main loop.
+		w.install = <-w.installChan
+
 		ticker := time.NewTicker(w.syncPeriod)
 		defer ticker.Stop()
+		windowsLog.Info("Starting main loop")
 		for {
 			select {
 			case install := <-w.installChan:
@@ -259,7 +258,7 @@ func (w *calicoWindowsUpgrader) Start(ctx context.Context) {
 			case <-ticker.C:
 				w.updateWindowsNodes()
 			case <-ctx.Done():
-				windowsLog.Info("Stopping sync loop")
+				windowsLog.Info("Stopping main loop")
 				return
 			}
 		}

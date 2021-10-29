@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -215,12 +216,8 @@ func (w *calicoWindowsUpgrader) updateWindowsNodes() {
 
 func (w *calicoWindowsUpgrader) startUpgrade(ctx context.Context, node *corev1.Node) error {
 	windowsLog.Info(fmt.Sprintf("Starting Calico Windows upgrade on node %v", node.Name))
-	if err := addTaint(ctx, w.clientset, node.Name, common.CalicoWindowsUpgradingTaint); err != nil {
-		return fmt.Errorf("Unable to add taint to node %v: %w", node.Name, err)
-	}
-
-	if err := nodeutils.AddNodeLabel(ctx, w.clientset, node.Name, common.CalicoWindowsUpgradeLabel, common.CalicoWindowsUpgradeLabelInProgress); err != nil {
-		return fmt.Errorf("Unable to add label to node %v: %w", node.Name, err)
+	if err := patchNodeToStartUpgrade(ctx, w.clientset, node.Name, common.CalicoWindowsUpgradingTaint); err != nil {
+		return fmt.Errorf("Unable to patch node %v to start upgrade: %w", node.Name, err)
 	}
 
 	_, currentVariant, currentVersion := common.GetNodeVariantAndVersion(node)
@@ -229,13 +226,9 @@ func (w *calicoWindowsUpgrader) startUpgrade(ctx context.Context, node *corev1.N
 }
 
 func (w *calicoWindowsUpgrader) finishUpgrade(ctx context.Context, node *corev1.Node) error {
-	windowsLog.Info(fmt.Sprintf("Finishing upgrade on upgraded node %v", node.Name))
-	if err := removeTaint(ctx, w.clientset, node.Name, common.CalicoWindowsUpgradingTaint); err != nil {
-		return fmt.Errorf("Unable to clear taint from node %v: %w", node.Name, err)
-	}
-
-	if err := nodeutils.RemoveNodeLabel(ctx, w.clientset, node.Name, common.CalicoWindowsUpgradeLabel); err != nil {
-		return fmt.Errorf("Unable to remove label from node: %w", err)
+	windowsLog.Info(fmt.Sprintf("Completing upgrade on upgraded node %v", node.Name))
+	if err := patchNodeToCompleteUpgrade(ctx, w.clientset, node.Name, common.CalicoWindowsUpgradingTaint); err != nil {
+		return fmt.Errorf("Unable to patch node %v to complete upgrade: %w", node.Name, err)
 	}
 
 	w.statusManager.RemoveWindowsNodeUpgrade(node.Name)
@@ -265,34 +258,46 @@ func (w *calicoWindowsUpgrader) Start(ctx context.Context) {
 	}()
 }
 
-type objPatch struct {
-	Op    string      `json:"op"`
-	Path  string      `json:"path"`
-	Value interface{} `json:"value,omitempty"`
-}
-
-// addTaint applies a taint to a node.
-func addTaint(ctx context.Context, client kubernetes.Interface, nodeName string, taint *corev1.Taint) error {
+// patchNodeToStartUpgrade patches a Windows node to prepare it for the calico
+// windows upgrade. It applies a NoSchedule taint and adds the upgrade label.
+func patchNodeToStartUpgrade(ctx context.Context, client kubernetes.Interface, nodeName string, taint *corev1.Taint) error {
 	return wait.PollImmediate(1*time.Second, 1*time.Minute, func() (bool, error) {
 		node, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
 
-		needUpdate := true
+		var taintExists bool
+		var upgradeLabelExists bool
 
+		// Check if the taint exists.
 		for _, t := range node.Spec.Taints {
 			if t.MatchTaint(taint) {
-				needUpdate = false
+				taintExists = true
 				break
 			}
 		}
 
-		if needUpdate {
+		// Check if the upgrade label exists.
+		if curr, ok := node.Labels[common.CalicoWindowsUpgradeLabel]; ok && curr == common.CalicoWindowsUpgradeLabelInProgress {
+			upgradeLabelExists = true
+		}
+
+		// If either the taint or label are missing, patch the node.
+		if !taintExists || !upgradeLabelExists {
+			windowsLog.V(1).Info(fmt.Sprintf("Taint or upgrade label missing for node %v. taintExists: %v, labelExists: %v", nodeName, taintExists, upgradeLabelExists))
 			newTaints := node.DeepCopy().Spec.Taints
 			newTaints = append(newTaints, *taint)
 
-			p := []objPatch{
+			// With JSONPatch '/' must be escaped as '~1' http://jsonpatch.com/
+			labelKey := strings.Replace(common.CalicoWindowsUpgradeLabel, "/", "~1", -1)
+
+			p := []nodeutils.ObjPatch{
+				{
+					Op:    "add",
+					Path:  fmt.Sprintf("/metadata/labels/%s", labelKey),
+					Value: common.CalicoWindowsUpgradeLabelInProgress,
+				},
 				// Test that the taints didn't change. If this test fails the entire
 				// patch fails.
 				{
@@ -330,27 +335,46 @@ func addTaint(ctx context.Context, client kubernetes.Interface, nodeName string,
 	})
 }
 
-// removeTaint clears a taint from a node.
-func removeTaint(ctx context.Context, client kubernetes.Interface, nodeName string, taint *corev1.Taint) error {
+// patchNodeToCompleteUpgrade patches a Windows node to remove the taint and
+// upgrade label added before upgrading the node. The taint and label should be
+// removed when the node has finished upgrading.
+func patchNodeToCompleteUpgrade(ctx context.Context, client kubernetes.Interface, nodeName string, taint *corev1.Taint) error {
 	return wait.PollImmediate(1*time.Second, 1*time.Minute, func() (bool, error) {
 		node, err := client.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
 
-		var needUpdate bool
+		var taintExists bool
+		var upgradeLabelExists bool
 		var taintIndex int
 
+		// Check if the taint exists. Keep the taint's index for the patch.
 		for i, t := range node.Spec.Taints {
 			if t.MatchTaint(taint) {
 				taintIndex = i
-				needUpdate = true
+				taintExists = true
 				break
 			}
 		}
 
-		if needUpdate {
-			p := []objPatch{
+		// Check if the label exists.
+		if curr, ok := node.Labels[common.CalicoWindowsUpgradeLabel]; ok && curr == common.CalicoWindowsUpgradeLabelInProgress {
+			upgradeLabelExists = true
+		}
+
+		// If either the taint or label exist, patch the node to remove them.
+		if taintExists || upgradeLabelExists {
+			windowsLog.V(1).Info(fmt.Sprintf("Taint or upgrade label exists for node %v. taintExists: %v, labelExists: %v", nodeName, taintExists, upgradeLabelExists))
+			// With JSONPatch '/' must be escaped as '~1' http://jsonpatch.com/
+			labelKey := strings.Replace(common.CalicoWindowsUpgradeLabel, "/", "~1", -1)
+
+			p := []nodeutils.ObjPatch{
+				// Remove the upgrade label.
+				{
+					Op:   "remove",
+					Path: fmt.Sprintf("/metadata/labels/%s", labelKey),
+				},
 				// Test that the taint to remove didn't change. If this test fails the entire
 				// patch fails.
 				{
@@ -365,12 +389,8 @@ func removeTaint(ctx context.Context, client kubernetes.Interface, nodeName stri
 				},
 			}
 
-			patchBytes, err := json.Marshal(p)
-			if err != nil {
-				return false, err
-			}
+			err = nodeutils.PatchNode(ctx, client, nodeName, p...)
 
-			_, err = client.CoreV1().Nodes().Patch(ctx, node.Name, types.JSONPatchType, patchBytes, metav1.PatchOptions{})
 			if err == nil {
 				return true, nil
 			}

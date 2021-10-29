@@ -481,12 +481,6 @@ func (m *CoreNamespaceMigration) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsR
 	})
 }
 
-type stringPatch struct {
-	Op    string `json:"op"`
-	Path  string `json:"path"`
-	Value string `json:"value"`
-}
-
 func (m *CoreNamespaceMigration) addNodeSelectorToDaemonSet(ctx context.Context, ds *appsv1.DaemonSet, namespace, key, value string, log logr.Logger) error {
 	// Check if nodeSelector is already set
 	if _, ok := ds.Spec.Template.Spec.NodeSelector[key]; !ok {
@@ -495,7 +489,7 @@ func (m *CoreNamespaceMigration) addNodeSelectorToDaemonSet(ctx context.Context,
 			k := strings.Replace(key, "/", "~1", -1)
 
 			// This patch does not work when NodeSelectors don't already exist, only use it when some already exist.
-			p := []stringPatch{
+			p := []nodeutils.ObjPatch{
 				{
 					Op:    "add",
 					Path:  fmt.Sprintf("/spec/template/spec/nodeSelector/%s", k),

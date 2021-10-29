@@ -32,10 +32,10 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-type stringPatch struct {
-	Op    string `json:"op"`
-	Path  string `json:"path"`
-	Value string `json:"value"`
+type ObjPatch struct {
+	Op    string      `json:"op"`
+	Path  string      `json:"path"`
+	Value interface{} `json:"value,omitempty"`
 }
 
 // AddNodeLabel adds the specified label to the named node. Perform
@@ -55,7 +55,7 @@ func AddNodeLabel(ctx context.Context, client kubernetes.Interface, nodeName, ke
 
 		k := strings.Replace(key, "/", "~1", -1)
 
-		lp := []stringPatch{{
+		lp := []ObjPatch{{
 			Op:    "add",
 			Path:  fmt.Sprintf("/metadata/labels/%s", k),
 			Value: value,
@@ -79,7 +79,7 @@ func AddNodeLabel(ctx context.Context, client kubernetes.Interface, nodeName, ke
 	})
 }
 
-func PatchNode(ctx context.Context, client kubernetes.Interface, nodeName string, jsonStringPatches ...stringPatch) error {
+func PatchNode(ctx context.Context, client kubernetes.Interface, nodeName string, jsonStringPatches ...ObjPatch) error {
 	patchBytes, err := json.Marshal(jsonStringPatches)
 	if err != nil {
 		return err
@@ -106,7 +106,7 @@ func RemoveNodeLabel(ctx context.Context, client kubernetes.Interface, nodeName,
 
 		// With JSONPatch '/' must be escaped as '~1' http://jsonpatch.com/
 		k := strings.Replace(key, "/", "~1", -1)
-		lp := []stringPatch{{
+		lp := []ObjPatch{{
 			Op:   "remove",
 			Path: fmt.Sprintf("/metadata/labels/%s", k),
 		}}

@@ -302,26 +302,30 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		r.status.OnCRFound()
 	}
 
-	//create predefaultpatch
-	preDefaultPatchFrom := client.MergeFrom(ls.DeepCopy())
+	var preDefaultPatchFrom client.Patch
+	if ls != nil {
 
-	err = fillDefaultsAndValidateLogStorage(ctx, r.client, ls)
-	if err != nil {
-		r.status.SetDegraded("An error occurred while validating LogStorage", err.Error())
-		return reconcile.Result{}, err
-	}
+		//create predefaultpatch
+		preDefaultPatchFrom = client.MergeFrom(ls.DeepCopy())
 
-	if ls != nil && ls.DeletionTimestamp == nil {
-		if !stringsutil.StringInSlice(LogStorageFinalizer, ls.GetFinalizers()) {
-			ls.SetFinalizers(append(ls.GetFinalizers(), LogStorageFinalizer))
+		err = fillDefaultsAndValidateLogStorage(ctx, r.client, ls)
+		if err != nil {
+			r.status.SetDegraded("An error occurred while validating LogStorage", err.Error())
+			return reconcile.Result{}, err
 		}
-	}
 
-	// Write the logstorage back to the datastore
-	if err = r.client.Patch(ctx, ls, preDefaultPatchFrom); err != nil {
-		log.Error(err, "Failed to write defaults")
-		r.status.SetDegraded("Failed to write defaults", err.Error())
-		return reconcile.Result{}, err
+		if ls.DeletionTimestamp == nil {
+			if !stringsutil.StringInSlice(LogStorageFinalizer, ls.GetFinalizers()) {
+				ls.SetFinalizers(append(ls.GetFinalizers(), LogStorageFinalizer))
+			}
+		}
+
+		// Write the logstorage back to the datastore
+		if err = r.client.Patch(ctx, ls, preDefaultPatchFrom); err != nil {
+			log.Error(err, "Failed to write defaults")
+			r.status.SetDegraded("Failed to write defaults", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	variant, install, err := utils.GetInstallation(context.Background(), r.client)

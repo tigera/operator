@@ -69,6 +69,7 @@ func (c *windowsComponent) SupportedOSType() rmeta.OSType {
 
 func (c *windowsComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
+		c.windowsServiceAccount(),
 		c.windowsUpgradeDaemonset(),
 	}
 
@@ -85,6 +86,16 @@ func (c *windowsComponent) Ready() bool {
 	return true
 }
 
+func (c *windowsComponent) windowsServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      common.CalicoWindowsUpgradeResourceName,
+			Namespace: common.CalicoNamespace,
+		},
+	}
+}
+
 func (c *windowsComponent) windowsUpgradeDaemonset() *appsv1.DaemonSet {
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
@@ -95,6 +106,7 @@ func (c *windowsComponent) windowsUpgradeDaemonset() *appsv1.DaemonSet {
 			},
 		},
 		Spec: corev1.PodSpec{
+			ServiceAccountName: common.CalicoWindowsUpgradeResourceName,
 			Affinity: &corev1.Affinity{
 				NodeAffinity: &corev1.NodeAffinity{
 					RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{

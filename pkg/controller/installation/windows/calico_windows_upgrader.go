@@ -126,31 +126,15 @@ func (w *calicoWindowsUpgrader) getNodeUpgradeStatus() (error, map[string]*corev
 			return fmt.Errorf("Node %v does not have the version annotation, it might be unhealthy or it might be running an unsupported Calico version.", node.Name), nil, nil, nil
 		}
 
-		if variant != w.install.Variant || version != expectedVersion {
+		if node.Labels[common.CalicoWindowsUpgradeLabel] == common.CalicoWindowsUpgradeLabelInProgress {
+			windowsLog.V(1).Info(fmt.Sprintf("Node %v has the upgrade in-progress label", node.Name))
+			inprogress[node.Name] = node
+		} else if variant != w.install.Variant || version != expectedVersion {
 			windowsLog.V(1).Info(fmt.Sprintf("Node %v doesn't have the latest variant and/or version. variant=%v, expectedVariant=%v, version=%v, expectedVersion=%v", node.Name, variant, w.install.Variant, version, expectedVersion))
-
-			if node.Labels[common.CalicoWindowsUpgradeLabel] == common.CalicoWindowsUpgradeLabelInProgress {
-				windowsLog.V(1).Info(fmt.Sprintf("Node %v has the upgrade in-progress label", node.Name))
-				inprogress[node.Name] = node
-			} else {
-				// If the version is outdated but it already has the upgrade label
-				// we do nothing since we're waiting for the node service to finish
-				// working.
-				windowsLog.V(1).Info(fmt.Sprintf("Node %v is pending upgrade", node.Name))
-				pending[node.Name] = node
-			}
+			pending[node.Name] = node
 		} else {
 			windowsLog.V(1).Info(fmt.Sprintf("Node %v has the latest variant and version", node.Name))
-			// If the node has the latest version and it still has the upgrade
-			// script label, then it has just finished upgrading and needs the label
-			// removed. If it does not have the label, it's already upgraded and
-			// nothing needs to be done.
-			if node.Labels[common.CalicoWindowsUpgradeLabel] == common.CalicoWindowsUpgradeLabelInProgress {
-				windowsLog.V(1).Info(fmt.Sprintf("Node %v still has the upgrade label", node.Name))
-				inprogress[node.Name] = node
-			} else {
-				insync[node.Name] = node
-			}
+			insync[node.Name] = node
 		}
 	}
 

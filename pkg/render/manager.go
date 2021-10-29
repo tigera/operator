@@ -737,7 +737,8 @@ func managerClusterRole(managementCluster, managedCluster, openshift bool) *rbac
 			},
 			{
 				APIGroups: []string{""},
-				Resources: []string{"serviceaccounts", "namespaces", "nodes", "events"},
+				Resources: []string{"serviceaccounts", "namespaces", "nodes", "events", "services", "replicasets",
+					"statefulsets", "daemonsets"},
 				Verbs:     []string{"list"},
 			},
 			// When a request is made in the manager UI, they are proxied through the Voltron backend server. If the

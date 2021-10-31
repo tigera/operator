@@ -55,6 +55,9 @@ else
 endif
 EXTRA_DOCKER_ARGS += --platform=linux/$(TARGET_PLATFORM)
 
+# location of docker credentials to push manifests
+DOCKER_CONFIG ?= $(HOME)/.docker/config.json
+
 # we want to be able to run the same recipe on multiple targets keyed on the image name
 # to do that, we would use the entire image name, e.g. calico/node:abcdefg, as the stem, or '%', in the target
 # however, make does **not** allow the usage of invalid filename characters - like / and : - in a stem, and thus errors out
@@ -148,7 +151,7 @@ PUSH_IMAGE_PREFIXES+=$(RELEASE_PREFIXES)
 endif
 
 # remove from the list to push to manifest any registries that do not support multi-arch
-EXCLUDE_MANIFEST_REGISTRIES?=quay.io/
+EXCLUDE_MANIFEST_REGISTRIES?=
 PUSH_MANIFEST_IMAGE_PREFIXES=$(PUSH_IMAGE_PREFIXES:$(EXCLUDE_MANIFEST_REGISTRIES)%=)
 PUSH_NONMANIFEST_IMAGE_PREFIXES=$(filter-out $(PUSH_MANIFEST_IMAGE_PREFIXES),$(PUSH_IMAGE_PREFIXES))
 
@@ -264,7 +267,7 @@ clean:
 	rm -rf .go-pkg-cache
 	rm -rf .crds
 	rm -f *-release-notes.md
-	docker rmi -f $(BUILD_IMAGE):latest $(BUILD_IMAGE):latest-$(ARCH)
+	docker rmi -f $(shell docker images -f "reference=$(BUILD_IMAGE):latest*" -q) > /dev/null 2>&1 || true
 
 ###############################################################################
 # Tests

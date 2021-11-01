@@ -122,9 +122,10 @@ func (t *typhaAutoscaler) start(ctx context.Context) {
 		defer ticker.Stop()
 		typhaLog.Info("Starting typha autoscaler", "syncPeriod", t.syncPeriod)
 
-		// Start the informer and wait for it to sync.
+		// Start the informer.
 		go t.typhaInformer.Run(ctx.Done())
-		for !t.typhaInformer.HasSynced() {
+		// Wait for the informers to sync.
+		for !t.nodeIndexInformer.HasSynced() || !t.typhaInformer.HasSynced() {
 			time.Sleep(100 * time.Millisecond)
 		}
 

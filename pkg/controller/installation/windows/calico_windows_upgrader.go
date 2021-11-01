@@ -52,13 +52,13 @@ type CalicoWindowsUpgrader interface {
 // calicoWindowsUpgrader helps manage the upgrade of Calico Windows nodes.
 // It works in conjunction with the CalicoUpgrade service running on each node.
 type calicoWindowsUpgrader struct {
-	clientset     kubernetes.Interface
-	client        client.Client
-	statusManager status.StatusManager
-	nodeIndexer   cache.SharedIndexInformer
-	syncPeriod    time.Duration
-	installChan   chan *operatorv1.InstallationSpec
-	install       *operatorv1.InstallationSpec
+	clientset         kubernetes.Interface
+	client            client.Client
+	statusManager     status.StatusManager
+	nodeIndexInformer cache.SharedIndexInformer
+	syncPeriod        time.Duration
+	installChan       chan *operatorv1.InstallationSpec
+	install           *operatorv1.InstallationSpec
 }
 
 type calicoWindowsUpgraderOption func(*calicoWindowsUpgrader)
@@ -72,14 +72,14 @@ func CalicoWindowsUpgraderSyncPeriod(syncPeriod time.Duration) calicoWindowsUpgr
 }
 
 // NewCalicoWindowsUpgrader creates a Calico Windows upgrader.
-func NewCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, indexer cache.SharedIndexInformer, statusManager status.StatusManager, options ...calicoWindowsUpgraderOption) CalicoWindowsUpgrader {
+func NewCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, indexInformer cache.SharedIndexInformer, statusManager status.StatusManager, options ...calicoWindowsUpgraderOption) CalicoWindowsUpgrader {
 	w := &calicoWindowsUpgrader{
-		clientset:     cs,
-		client:        c,
-		statusManager: statusManager,
-		nodeIndexer:   indexer,
-		syncPeriod:    10 * time.Second,
-		installChan:   make(chan *operatorv1.InstallationSpec, 100),
+		clientset:         cs,
+		client:            c,
+		statusManager:     statusManager,
+		nodeIndexInformer: indexInformer,
+		syncPeriod:        10 * time.Second,
+		installChan:       make(chan *operatorv1.InstallationSpec, 100),
 	}
 
 	for _, o := range options {
@@ -106,7 +106,7 @@ func (w *calicoWindowsUpgrader) getNodeUpgradeStatus() (map[string]*corev1.Node,
 	inProgress := make(map[string]*corev1.Node)
 	expectedVersion := w.getExpectedVersion()
 
-	for _, obj := range w.nodeIndexer.GetIndexer().List() {
+	for _, obj := range w.nodeIndexInformer.GetIndexer().List() {
 		node, ok := obj.(*corev1.Node)
 		if !ok {
 			return nil, nil, nil, fmt.Errorf("Never expected index to have anything other than a Node object: %v", obj)
@@ -243,6 +243,9 @@ func (w *calicoWindowsUpgrader) finishUpgrade(ctx context.Context, node *corev1.
 // Start begins running the calicoWindowsUpgrader.
 func (w *calicoWindowsUpgrader) Start(ctx context.Context) {
 	go func() {
+		for !w.nodeIndexInformer.HasSynced() {
+			time.Sleep(100 * time.Millisecond)
+		}
 		// Wait for initial config before starting main loop.
 		w.install = <-w.installChan
 

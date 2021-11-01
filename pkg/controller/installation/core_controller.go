@@ -120,11 +120,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 	// calicoWindowsUpgrader.
 	nodeListWatch := cache.NewListWatchFromClient(cs.CoreV1().RESTClient(), "nodes", "", fields.Everything())
 	nodeIndexInformer := cache.NewSharedIndexInformer(nodeListWatch, &corev1.Node{}, 0, cache.Indexers{})
-
 	go nodeIndexInformer.Run(opts.ShutdownContext.Done())
-	for nodeIndexInformer.HasSynced() {
-		time.Sleep(100 * time.Millisecond)
-	}
 
 	// Create a Typha autoscaler.
 	typhaListWatch := cache.NewListWatchFromClient(cs.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"))

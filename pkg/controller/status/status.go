@@ -566,7 +566,6 @@ func (m *statusManager) syncState() {
 
 	if reason := m.windowsNodeUpgrades.progressingReason(); reason != "" {
 		progressing = append(progressing, reason)
-
 	}
 
 	m.progressing = progressing

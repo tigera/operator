@@ -48,6 +48,10 @@ func (m *MockStatus) AddCertificateSigningRequests(name string, labels map[strin
 	m.Called(name)
 }
 
+func (m *MockStatus) AddWindowsNodeUpgrade(nodeName string, completed bool) {
+	m.Called(nodeName, completed)
+}
+
 func (m *MockStatus) RemoveDaemonsets(dss ...types.NamespacedName) {
 	m.Called(dss)
 }
@@ -66,6 +70,10 @@ func (m *MockStatus) RemoveCronJobs(cjs ...types.NamespacedName) {
 
 func (m *MockStatus) RemoveCertificateSigningRequests(label string) {
 	m.Called(label)
+}
+
+func (m *MockStatus) RemoveWindowsNodeUpgrade(nodeName string) {
+	m.Called(nodeName)
 }
 
 func (m *MockStatus) SetDegraded(reason, msg string) {

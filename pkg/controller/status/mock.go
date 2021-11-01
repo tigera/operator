@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/stretchr/testify/mock"
-	operator "github.com/tigera/operator/api/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -49,8 +48,8 @@ func (m *MockStatus) AddCertificateSigningRequests(name string, labels map[strin
 	m.Called(name)
 }
 
-func (m *MockStatus) AddWindowsNodeUpgrade(nodeName string, currentVariant, expectedVariant operator.ProductVariant, currentVersion, expectedVersion string) {
-	m.Called(nodeName, currentVariant, expectedVariant, currentVersion, expectedVersion)
+func (m *MockStatus) AddWindowsNodeUpgrade(nodeName string, completed bool) {
+	m.Called(nodeName, completed)
 }
 
 func (m *MockStatus) RemoveDaemonsets(dss ...types.NamespacedName) {

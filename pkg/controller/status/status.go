@@ -64,7 +64,7 @@ type StatusManager interface {
 	AddStatefulSets(sss []types.NamespacedName)
 	AddCronJobs(cjs []types.NamespacedName)
 	AddCertificateSigningRequests(name string, labels map[string]string)
-	AddWindowsNodeUpgrade(nodeName string, currentVariant, expectedVariant operator.ProductVariant, currentVersion, expectedVersion string)
+	AddWindowsNodeUpgrade(nodeName string, inProgress bool)
 	RemoveDaemonsets(dss ...types.NamespacedName)
 	RemoveDeployments(dps ...types.NamespacedName)
 	RemoveStatefulSets(sss ...types.NamespacedName)
@@ -87,7 +87,7 @@ type statusManager struct {
 	statefulsets              map[string]types.NamespacedName
 	cronjobs                  map[string]types.NamespacedName
 	certificatestatusrequests map[string]map[string]string
-	windowsnodeupgrades       map[string]windowsNodeUpgrade
+	windowsNodeUpgrades       *windowsNodeUpgrades
 	lock                      sync.Mutex
 	enabled                   *bool
 	kubernetesVersion         *common.VersionInfo
@@ -116,7 +116,7 @@ func New(client client.Client, component string, kubernetesVersion *common.Versi
 		statefulsets:              make(map[string]types.NamespacedName),
 		cronjobs:                  make(map[string]types.NamespacedName),
 		certificatestatusrequests: make(map[string]map[string]string),
-		windowsnodeupgrades:       make(map[string]windowsNodeUpgrade),
+		windowsNodeUpgrades:       newWindowsNodeUpgrades(),
 		kubernetesVersion:         kubernetesVersion,
 	}
 }
@@ -279,26 +279,60 @@ func (m *statusManager) AddCertificateSigningRequests(name string, labels map[st
 	m.certificatestatusrequests[name] = labels
 }
 
-type windowsNodeUpgrade struct {
-	nodeName        string
-	currentVersion  string
-	currentVariant  operator.ProductVariant
-	expectedVersion string
-	expectedVariant operator.ProductVariant
+type windowsNodeUpgrades struct {
+	nodesPending    map[string]struct{}
+	nodesInProgress map[string]struct{}
+	nodesCompleted  map[string]struct{}
+}
+
+func newWindowsNodeUpgrades() *windowsNodeUpgrades {
+	return &windowsNodeUpgrades{
+		nodesPending:    make(map[string]struct{}),
+		nodesInProgress: make(map[string]struct{}),
+		nodesCompleted:  make(map[string]struct{}),
+	}
+}
+
+func (w *windowsNodeUpgrades) progressingReason() string {
+	inProgress := len(w.nodesInProgress)
+	pending := len(w.nodesPending)
+	completed := len(w.nodesCompleted)
+	total := pending + inProgress + completed
+
+	if pending+inProgress == 0 {
+		return ""
+	}
+
+	return fmt.Sprintf("Waiting for Calico for Windows to be upgraded: %v/%v nodes have been upgraded, %v in-progress", completed, total, inProgress)
+}
+
+func (w *windowsNodeUpgrades) updateNodeUpgrade(node string, inProgress bool) {
+	if inProgress {
+		delete(w.nodesPending, node)
+		w.nodesInProgress[node] = struct{}{}
+	} else {
+		w.nodesPending[node] = struct{}{}
+	}
+}
+
+func (w *windowsNodeUpgrades) removeNodeUpgrade(nodeName string) {
+	delete(w.nodesPending, nodeName)
+	delete(w.nodesInProgress, nodeName)
+	w.nodesCompleted[nodeName] = struct{}{}
+
+	// If there are no more nodes upgrading or pending to be upgraded then clear
+	// the completed map.
+	if len(w.nodesPending) == 0 && len(w.nodesInProgress) == 0 {
+		w.nodesCompleted = make(map[string]struct{})
+	}
 }
 
 // AddWindowsNodeUpgrade tells the status manager to monitor the health of the given
 // Windows node upgrade.
-func (m *statusManager) AddWindowsNodeUpgrade(nodeName string, currentVariant, expectedVariant operator.ProductVariant, currentVersion, expectedVersion string) {
+func (m *statusManager) AddWindowsNodeUpgrade(nodeName string, inProgress bool) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	m.windowsnodeupgrades[nodeName] = windowsNodeUpgrade{
-		nodeName:        nodeName,
-		currentVersion:  currentVersion,
-		expectedVersion: expectedVersion,
-		currentVariant:  currentVariant,
-		expectedVariant: expectedVariant,
-	}
+	m.windowsNodeUpgrades.updateNodeUpgrade(nodeName, inProgress)
 }
 
 // RemoveDaemonsets tells the status manager to stop monitoring the health of the given daemonsets
@@ -349,7 +383,7 @@ func (m *statusManager) RemoveCertificateSigningRequests(name string) {
 func (m *statusManager) RemoveWindowsNodeUpgrade(nodeName string) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	delete(m.windowsnodeupgrades, nodeName)
+	m.windowsNodeUpgrades.removeNodeUpgrade(nodeName)
 }
 
 // SetDegraded sets degraded state with the provided reason and message.
@@ -530,11 +564,11 @@ func (m *statusManager) syncState() {
 		}
 	}
 
-	for _, w := range m.windowsnodeupgrades {
-		if w.currentVersion != w.expectedVersion {
-			progressing = append(progressing, fmt.Sprintf("Node %q is upgrading Calico for Windows to %q", w.nodeName, w.expectedVersion))
-		}
+	if reason := m.windowsNodeUpgrades.progressingReason(); reason != "" {
+		progressing = append(progressing, reason)
+
 	}
+
 	m.progressing = progressing
 	m.failing = failing
 	m.hasSynced = true

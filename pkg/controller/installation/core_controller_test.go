@@ -1145,8 +1145,8 @@ var _ = Describe("Testing core-controller installation", func() {
 				n1 := test.CreateWindowsNode(cs, "windows1", operator.Calico, "v3.21.999")
 				n2 := test.CreateWindowsNode(cs, "windows2", operator.TigeraSecureEnterprise, components.EnterpriseRelease)
 
-				mockStatus.On("AddWindowsNodeUpgrade", "windows1", operator.Calico, operator.Calico, "v3.21.999", components.CalicoRelease)
-				mockStatus.On("AddWindowsNodeUpgrade", "windows2", operator.TigeraSecureEnterprise, operator.Calico, components.EnterpriseRelease, components.CalicoRelease)
+				mockStatus.On("AddWindowsNodeUpgrade", "windows1", mock.Anything)
+				mockStatus.On("AddWindowsNodeUpgrade", "windows2", mock.Anything)
 
 				// Ensure that outdated nodes have the new label and taint.
 				Eventually(func() error {

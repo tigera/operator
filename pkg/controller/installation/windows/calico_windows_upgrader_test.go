@@ -117,7 +117,8 @@ var _ = Describe("Calico windows upgrader", func() {
 
 	It("should upgrade outdated nodes", func() {
 		// Only node n2 should be upgraded.
-		mockStatus.On("AddWindowsNodeUpgrade", "node2", operator.Calico, operator.Calico, "v3.21.999", components.CalicoRelease)
+		mockStatus.On("AddWindowsNodeUpgrade", "node2", false)
+		mockStatus.On("AddWindowsNodeUpgrade", "node2", true)
 
 		n1 := test.CreateNode(cs, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
 		n2 := test.CreateWindowsNode(cs, "node2", operator.Calico, "v3.21.999")
@@ -164,7 +165,8 @@ var _ = Describe("Calico windows upgrader", func() {
 		// variant.
 		n1 := test.CreateWindowsNode(cs, "node1", operator.TigeraSecureEnterprise, "v3.11.0")
 
-		mockStatus.On("AddWindowsNodeUpgrade", "node1", operator.TigeraSecureEnterprise, operator.Calico, "v3.11.0", components.CalicoRelease)
+		mockStatus.On("AddWindowsNodeUpgrade", "node1", false)
+		mockStatus.On("AddWindowsNodeUpgrade", "node1", true)
 
 		c.Start(ctx)
 		c.UpdateConfig(cr)
@@ -204,7 +206,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		_ = test.CreateWindowsNode(cs, "node5", operator.Calico, "v3.21.999")
 
 		// We won't know which nodes will end up being added for upgrade.
-		mockStatus.On("AddWindowsNodeUpgrade", mock.Anything, operator.Calico, operator.Calico, "v3.21.999", components.CalicoRelease)
+		mockStatus.On("AddWindowsNodeUpgrade", mock.Anything, mock.Anything)
 
 		c.Start(ctx)
 		c.UpdateConfig(cr)
@@ -232,7 +234,7 @@ var _ = Describe("Calico windows upgrader", func() {
 			_ = test.CreateWindowsNode(cs, "node1", operator.Calico, "v3.21.999")
 			_ = test.CreateWindowsNode(cs, "node2", operator.Calico, "v3.21.999")
 			_ = test.CreateWindowsNode(cs, "node3", operator.Calico, "v3.21.999")
-			mockStatus.On("AddWindowsNodeUpgrade", mock.Anything, operator.Calico, operator.Calico, "v3.21.999", components.CalicoRelease)
+			mockStatus.On("AddWindowsNodeUpgrade", mock.Anything, mock.Anything)
 
 			c.Start(ctx)
 			c.UpdateConfig(cr)
@@ -263,7 +265,7 @@ var _ = Describe("Calico windows upgrader", func() {
 			_ = test.CreateWindowsNode(cs, "node2", operator.TigeraSecureEnterprise, "v3.11.0")
 			_ = test.CreateWindowsNode(cs, "node3", operator.TigeraSecureEnterprise, "v3.11.0")
 
-			mockStatus.On("AddWindowsNodeUpgrade", mock.Anything, operator.TigeraSecureEnterprise, operator.Calico, "v3.11.0", components.CalicoRelease)
+			mockStatus.On("AddWindowsNodeUpgrade", mock.Anything, mock.Anything)
 
 			c.Start(ctx)
 			c.UpdateConfig(cr)
@@ -296,7 +298,7 @@ var _ = Describe("Calico windows upgrader", func() {
 			_ = test.CreateWindowsNode(cs, "node2", operator.TigeraSecureEnterprise, "old")
 			_ = test.CreateWindowsNode(cs, "node3", operator.TigeraSecureEnterprise, "old")
 
-			mockStatus.On("AddWindowsNodeUpgrade", mock.Anything, operator.TigeraSecureEnterprise, operator.TigeraSecureEnterprise, "old", components.EnterpriseRelease)
+			mockStatus.On("AddWindowsNodeUpgrade", mock.Anything, mock.Anything)
 
 			cr.Variant = operator.TigeraSecureEnterprise
 			c.Start(ctx)
@@ -330,7 +332,7 @@ var _ = Describe("Calico windows upgrader", func() {
 			_ = test.CreateWindowsNode(cs, "node2", operator.Calico, "v3.21.999")
 			_ = test.CreateWindowsNode(cs, "node3", operator.Calico, "v3.21.999")
 
-			mockStatus.On("AddWindowsNodeUpgrade", mock.Anything, operator.Calico, operator.TigeraSecureEnterprise, "v3.21.999", components.EnterpriseRelease)
+			mockStatus.On("AddWindowsNodeUpgrade", mock.Anything, mock.Anything)
 
 			cr.Variant = operator.TigeraSecureEnterprise
 			c.Start(ctx)

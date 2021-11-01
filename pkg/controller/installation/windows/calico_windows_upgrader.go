@@ -172,11 +172,6 @@ func (w *calicoWindowsUpgrader) updateWindowsNodes() {
 		return
 	}
 
-	// Notify status manager of pending upgrades.
-	for _, node := range pending {
-		w.statusManager.AddWindowsNodeUpgrade(node.Name, false)
-	}
-
 	for _, node := range inProgress {
 		if w.upgradeCompleted(node) {
 			if err := w.finishUpgrade(context.Background(), node); err != nil {
@@ -188,7 +183,6 @@ func (w *calicoWindowsUpgrader) updateWindowsNodes() {
 			// from in-progress to in-sync.
 			inSync[node.Name] = node
 			delete(inProgress, node.Name)
-			w.statusManager.RemoveWindowsNodeUpgrade(node.Name)
 		}
 	}
 
@@ -215,9 +209,23 @@ func (w *calicoWindowsUpgrader) updateWindowsNodes() {
 			// from pending to in-progress.
 			inProgress[node.Name] = node
 			delete(pending, node.Name)
-			w.statusManager.AddWindowsNodeUpgrade(node.Name, true)
 		}
 	}
+
+	pendingNodeNames := []string{}
+	inProgressNodeNames := []string{}
+	completedNodeNames := []string{}
+	for nodeName, _ := range pending {
+		pendingNodeNames = append(pendingNodeNames, nodeName)
+	}
+	for nodeName, _ := range inProgress {
+		inProgressNodeNames = append(inProgressNodeNames, nodeName)
+	}
+	for nodeName, _ := range inSync {
+		completedNodeNames = append(completedNodeNames, nodeName)
+	}
+	// Notify status manager of upgrades status.
+	w.statusManager.SetWindowsUpgradeStatus(pendingNodeNames, inProgressNodeNames, completedNodeNames)
 }
 
 func (w *calicoWindowsUpgrader) startUpgrade(ctx context.Context, node *corev1.Node) error {
@@ -226,7 +234,6 @@ func (w *calicoWindowsUpgrader) startUpgrade(ctx context.Context, node *corev1.N
 		return fmt.Errorf("Unable to patch node %v to start upgrade: %w", node.Name, err)
 	}
 
-	w.statusManager.AddWindowsNodeUpgrade(node.Name, false)
 	return nil
 }
 
@@ -236,7 +243,6 @@ func (w *calicoWindowsUpgrader) finishUpgrade(ctx context.Context, node *corev1.
 		return fmt.Errorf("Unable to patch node %v to complete upgrade: %w", node.Name, err)
 	}
 
-	w.statusManager.RemoveWindowsNodeUpgrade(node.Name)
 	return nil
 }
 

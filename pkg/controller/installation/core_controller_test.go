@@ -1118,13 +1118,12 @@ var _ = Describe("Testing core-controller installation", func() {
 				// Create node with current Enterprise version.
 				n1 := test.CreateWindowsNode(cs, "windows1", cr.Spec.Variant, components.EnterpriseRelease)
 
+				mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{}, []string{"windows1"})
+
 				// Node is up to date and should not have changed.
 				Consistently(func() error {
 					return test.AssertNodesUnchanged(cs, n1)
 				}, 10*time.Second, 100*time.Millisecond).Should(BeNil())
-
-				// No calls to AddWindowsNodeUpgrade expected.
-				mockStatus.AssertExpectations(GinkgoT())
 			})
 
 			It("should trigger upgrade of out-of-date Calico Windows nodes", func() {
@@ -1145,8 +1144,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				n1 := test.CreateWindowsNode(cs, "windows1", operator.Calico, "v3.21.999")
 				n2 := test.CreateWindowsNode(cs, "windows2", operator.TigeraSecureEnterprise, components.EnterpriseRelease)
 
-				mockStatus.On("AddWindowsNodeUpgrade", "windows1", mock.Anything)
-				mockStatus.On("AddWindowsNodeUpgrade", "windows2", mock.Anything)
+				mockStatus.On("SetWindowsUpgradeStatus", mock.Anything, mock.Anything, mock.Anything)
 
 				// Ensure that outdated nodes have the new label and taint.
 				Eventually(func() error {

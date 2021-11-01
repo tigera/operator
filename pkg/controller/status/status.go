@@ -64,13 +64,12 @@ type StatusManager interface {
 	AddStatefulSets(sss []types.NamespacedName)
 	AddCronJobs(cjs []types.NamespacedName)
 	AddCertificateSigningRequests(name string, labels map[string]string)
-	AddWindowsNodeUpgrade(nodeName string, inProgress bool)
 	RemoveDaemonsets(dss ...types.NamespacedName)
 	RemoveDeployments(dps ...types.NamespacedName)
 	RemoveStatefulSets(sss ...types.NamespacedName)
 	RemoveCronJobs(cjs ...types.NamespacedName)
 	RemoveCertificateSigningRequests(name string)
-	RemoveWindowsNodeUpgrade(nodeName string)
+	SetWindowsUpgradeStatus(pending, inProgress, completed []string)
 	SetDegraded(reason, msg string)
 	ClearDegraded()
 	IsAvailable() bool
@@ -280,16 +279,16 @@ func (m *statusManager) AddCertificateSigningRequests(name string, labels map[st
 }
 
 type windowsNodeUpgrades struct {
-	nodesPending    map[string]struct{}
-	nodesInProgress map[string]struct{}
-	nodesCompleted  map[string]struct{}
+	nodesPending    []string
+	nodesInProgress []string
+	nodesCompleted  []string
 }
 
 func newWindowsNodeUpgrades() *windowsNodeUpgrades {
 	return &windowsNodeUpgrades{
-		nodesPending:    make(map[string]struct{}),
-		nodesInProgress: make(map[string]struct{}),
-		nodesCompleted:  make(map[string]struct{}),
+		nodesPending:    []string{},
+		nodesInProgress: []string{},
+		nodesCompleted:  []string{},
 	}
 }
 
@@ -306,33 +305,14 @@ func (w *windowsNodeUpgrades) progressingReason() string {
 	return fmt.Sprintf("Waiting for Calico for Windows to be upgraded: %v/%v nodes have been upgraded, %v in-progress", completed, total, inProgress)
 }
 
-func (w *windowsNodeUpgrades) updateNodeUpgrade(node string, inProgress bool) {
-	if inProgress {
-		delete(w.nodesPending, node)
-		w.nodesInProgress[node] = struct{}{}
-	} else {
-		w.nodesPending[node] = struct{}{}
-	}
-}
-
-func (w *windowsNodeUpgrades) removeNodeUpgrade(nodeName string) {
-	delete(w.nodesPending, nodeName)
-	delete(w.nodesInProgress, nodeName)
-	w.nodesCompleted[nodeName] = struct{}{}
-
-	// If there are no more nodes upgrading or pending to be upgraded then clear
-	// the completed map.
-	if len(w.nodesPending) == 0 && len(w.nodesInProgress) == 0 {
-		w.nodesCompleted = make(map[string]struct{})
-	}
-}
-
-// AddWindowsNodeUpgrade tells the status manager to monitor the health of the given
-// Windows node upgrade.
-func (m *statusManager) AddWindowsNodeUpgrade(nodeName string, inProgress bool) {
+// SetWindowsUpgradeStatus tells the status manager to monitor the upgrade
+// status of the given Windows node upgrades.
+func (m *statusManager) SetWindowsUpgradeStatus(pending, inProgress, completed []string) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	m.windowsNodeUpgrades.updateNodeUpgrade(nodeName, inProgress)
+	m.windowsNodeUpgrades.nodesPending = pending
+	m.windowsNodeUpgrades.nodesInProgress = inProgress
+	m.windowsNodeUpgrades.nodesCompleted = completed
 }
 
 // RemoveDaemonsets tells the status manager to stop monitoring the health of the given daemonsets
@@ -376,14 +356,6 @@ func (m *statusManager) RemoveCertificateSigningRequests(name string) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	delete(m.certificatestatusrequests, name)
-}
-
-// RemoveWindowsNodeUpgrade tells the status manager to stop monitoring the health of the given
-// Windows node upgrade.
-func (m *statusManager) RemoveWindowsNodeUpgrade(nodeName string) {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-	m.windowsNodeUpgrades.removeNodeUpgrade(nodeName)
 }
 
 // SetDegraded sets degraded state with the provided reason and message.

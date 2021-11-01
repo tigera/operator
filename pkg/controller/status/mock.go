@@ -48,10 +48,6 @@ func (m *MockStatus) AddCertificateSigningRequests(name string, labels map[strin
 	m.Called(name)
 }
 
-func (m *MockStatus) AddWindowsNodeUpgrade(nodeName string, completed bool) {
-	m.Called(nodeName, completed)
-}
-
 func (m *MockStatus) RemoveDaemonsets(dss ...types.NamespacedName) {
 	m.Called(dss)
 }
@@ -72,8 +68,8 @@ func (m *MockStatus) RemoveCertificateSigningRequests(label string) {
 	m.Called(label)
 }
 
-func (m *MockStatus) RemoveWindowsNodeUpgrade(nodeName string) {
-	m.Called(nodeName)
+func (m *MockStatus) SetWindowsUpgradeStatus(pending, inProgress, completed []string) {
+	m.Called(pending, inProgress, completed)
 }
 
 func (m *MockStatus) SetDegraded(reason, msg string) {

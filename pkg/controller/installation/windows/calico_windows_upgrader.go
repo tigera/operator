@@ -25,7 +25,6 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
-	nodeutils "github.com/tigera/operator/pkg/controller/utils/node"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -298,7 +297,7 @@ func patchNodeToStartUpgrade(ctx context.Context, client kubernetes.Interface, n
 			// With JSONPatch '/' must be escaped as '~1' http://jsonpatch.com/
 			labelKey := strings.Replace(common.CalicoWindowsUpgradeLabel, "/", "~1", -1)
 
-			p := []nodeutils.ObjPatch{
+			p := []objPatch{
 				{
 					Op:    "add",
 					Path:  fmt.Sprintf("/metadata/labels/%s", labelKey),
@@ -375,7 +374,7 @@ func patchNodeToCompleteUpgrade(ctx context.Context, client kubernetes.Interface
 			// With JSONPatch '/' must be escaped as '~1' http://jsonpatch.com/
 			labelKey := strings.Replace(common.CalicoWindowsUpgradeLabel, "/", "~1", -1)
 
-			p := []nodeutils.ObjPatch{
+			p := []objPatch{
 				// Remove the upgrade label.
 				{
 					Op:   "remove",
@@ -395,7 +394,7 @@ func patchNodeToCompleteUpgrade(ctx context.Context, client kubernetes.Interface
 				},
 			}
 
-			err = nodeutils.PatchNode(ctx, client, nodeName, p...)
+			err = patchNode(ctx, client, nodeName, p...)
 
 			if err == nil {
 				return true, nil
@@ -411,4 +410,20 @@ func patchNodeToCompleteUpgrade(ctx context.Context, client kubernetes.Interface
 		// no update needed
 		return true, nil
 	})
+}
+
+type objPatch struct {
+	Op    string      `json:"op"`
+	Path  string      `json:"path"`
+	Value interface{} `json:"value,omitempty"`
+}
+
+func patchNode(ctx context.Context, client kubernetes.Interface, nodeName string, jsonStringPatches ...objPatch) error {
+	patchBytes, err := json.Marshal(jsonStringPatches)
+	if err != nil {
+		return err
+	}
+
+	_, err = client.CoreV1().Nodes().Patch(ctx, nodeName, types.JSONPatchType, patchBytes, metav1.PatchOptions{})
+	return err
 }

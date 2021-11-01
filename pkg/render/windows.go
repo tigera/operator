@@ -29,17 +29,12 @@ import (
 
 func Windows(
 	cr *operatorv1.InstallationSpec,
-	hasSupportedNodes bool,
 ) Component {
-	return &windowsComponent{
-		cr:                cr,
-		hasSupportedNodes: hasSupportedNodes,
-	}
+	return &windowsComponent{cr: cr}
 }
 
 type windowsComponent struct {
 	cr                  *operatorv1.InstallationSpec
-	hasSupportedNodes   bool
 	windowsUpgradeImage string
 }
 
@@ -71,12 +66,6 @@ func (c *windowsComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
 		c.windowsServiceAccount(),
 		c.windowsUpgradeDaemonset(),
-	}
-
-	// When there are no longer supported Windows nodes, remove the upgrade
-	// resources.
-	if !c.hasSupportedNodes {
-		return nil, objs
 	}
 
 	return objs, nil

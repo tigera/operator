@@ -1161,6 +1161,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 
+	components = append(components, render.Windows(&instance.Spec))
+
 	imageSet, err := imageset.GetImageSet(ctx, r.client, instance.Spec.Variant)
 	if err != nil {
 		r.SetDegraded("Error getting ImageSet", err, reqLogger)

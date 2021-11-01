@@ -25,7 +25,6 @@ import (
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
-	"github.com/elastic/cloud-on-k8s/pkg/utils/stringsutil"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta "k8s.io/api/batch/v1beta1"
@@ -80,8 +79,6 @@ const (
 	DefaultElasticsearchClusterName = "cluster"
 	DefaultElasticsearchReplicas    = 0
 	DefaultElasticStorageGi         = 10
-
-	LogStorageFinalizer = "tigera.io/eck-cleanup"
 
 	EsCuratorName           = "elastic-curator"
 	EsCuratorServiceAccount = "tigera-elastic-curator"
@@ -277,41 +274,26 @@ func (es *elasticsearchComponent) SupportedOSType() rmeta.OSType {
 func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 	var toCreate, toDelete []client.Object
 
-	if es.logStorage != nil {
-		if !stringsutil.StringInSlice(LogStorageFinalizer, es.logStorage.GetFinalizers()) {
-			es.logStorage.SetFinalizers(append(es.logStorage.GetFinalizers(), LogStorageFinalizer))
-		}
-	}
-
 	// Doesn't matter what the cluster type is, if LogStorage exists and the DeletionTimestamp is set finalized the
 	// deletion
 	if es.logStorage != nil && es.logStorage.DeletionTimestamp != nil {
-		finalizeCleanup := true
+
 		if es.elasticsearch != nil {
 			if es.elasticsearch.DeletionTimestamp == nil {
 				toDelete = append(toDelete, es.elasticsearch)
 			}
-			finalizeCleanup = false
 		}
 
 		if es.kibana != nil {
 			if es.kibana.DeletionTimestamp == nil {
 				toDelete = append(toDelete, es.kibana)
 			}
-			finalizeCleanup = false
 		}
 
-		if finalizeCleanup {
-			es.logStorage.SetFinalizers(stringsutil.RemoveStringInSlice(LogStorageFinalizer, es.logStorage.GetFinalizers()))
-		}
-
-		toCreate = append(toCreate, es.logStorage)
 		return toCreate, toDelete
 	}
 
 	if es.managementClusterConnection == nil {
-		// Write back LogStorage CR to persist any changes
-		toCreate = append(toCreate, es.logStorage)
 
 		// ECK CRs
 		toCreate = append(toCreate,

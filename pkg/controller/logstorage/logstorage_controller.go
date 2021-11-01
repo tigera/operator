@@ -468,6 +468,18 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		reqLogger,
 		ctx,
 	)
+
+	if ls != nil && ls.DeletionTimestamp != nil && finalizerCleanup == true {
+		ls.SetFinalizers(stringsutil.RemoveStringInSlice(LogStorageFinalizer, ls.GetFinalizers()))
+
+		// Write the logstorage back to the datastore
+		if patchErr := r.client.Patch(ctx, ls, preDefaultPatchFrom); patchErr != nil {
+			reqLogger.Error(patchErr, "Error patching the log-storage")
+			r.status.SetDegraded("Error patching the log-storage", patchErr.Error())
+			return reconcile.Result{}, patchErr
+		}
+	}
+
 	if err != nil || !proceed {
 		return result, err
 	}
@@ -524,17 +536,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	r.status.ClearDegraded()
-
-	if ls != nil && ls.DeletionTimestamp != nil && finalizerCleanup == true {
-		ls.SetFinalizers(stringsutil.RemoveStringInSlice(LogStorageFinalizer, ls.GetFinalizers()))
-
-		// Write the logstorage back to the datastore
-		if err = r.client.Patch(ctx, ls, preDefaultPatchFrom); err != nil {
-			reqLogger.Error(err, "Error patching the log-storage")
-			r.status.SetDegraded("Error patching the log-storage", err.Error())
-			return reconcile.Result{}, err
-		}
-	}
 
 	if ls != nil {
 		ls.Status.State = operatorv1.TigeraStatusReady

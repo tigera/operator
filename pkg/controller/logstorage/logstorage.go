@@ -149,21 +149,21 @@ func (r *ReconcileLogStorage) createLogStorage(
 		return reconcile.Result{}, false, false, err
 	}
 
+	finalizerCleanup := false
+	if ls != nil && ls.DeletionTimestamp != nil && elasticsearch == nil && kibana == nil {
+		finalizerCleanup = true
+	}
+
 	if managementClusterConnection == nil {
 		if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
 			r.status.SetDegraded("Waiting for Elasticsearch cluster to be operational", "")
-			return reconcile.Result{}, false, false, nil
+			return reconcile.Result{}, false, finalizerCleanup, nil
 		}
 
 		if kibana == nil || kibana.Status.AssociationStatus != cmnv1.AssociationEstablished {
 			r.status.SetDegraded("Waiting for Kibana cluster to be operational", "")
-			return reconcile.Result{}, false, false, nil
+			return reconcile.Result{}, false, finalizerCleanup, nil
 		}
-	}
-
-	finalizerCleanup := false
-	if ls != nil && ls.DeletionTimestamp != nil && elasticsearch == nil && kibana == nil {
-		finalizerCleanup = true
 	}
 
 	return reconcile.Result{}, true, finalizerCleanup, nil

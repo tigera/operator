@@ -16,7 +16,7 @@ package components
 
 var (
 	ComponentCSRInitContainer = component{
-		Version: "master",
+		Version: "v1.1.0",
 		Image:   "tigera/key-cert-provisioner",
 	}
 	CommonComponents = []component{

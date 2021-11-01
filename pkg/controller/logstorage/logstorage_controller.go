@@ -278,6 +278,14 @@ func validateComponentResources(spec *operatorv1.LogStorageSpec) error {
 	return nil
 }
 
+func setLogStorageFinalizer(ls *operatorv1.LogStorage) {
+	if ls.DeletionTimestamp == nil {
+		if !stringsutil.StringInSlice(LogStorageFinalizer, ls.GetFinalizers()) {
+			ls.SetFinalizers(append(ls.GetFinalizers(), LogStorageFinalizer))
+		}
+	}
+}
+
 // Reconcile reads that state of the cluster for a LogStorage object and makes changes based on the state read
 // and what is in the LogStorage.Spec
 // Note:
@@ -287,23 +295,21 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling LogStorage")
 
+	var preDefaultPatchFrom client.Patch
+
 	ls := &operatorv1.LogStorage{}
 	err := r.client.Get(ctx, utils.DefaultTSEEInstanceKey, ls)
 	if err != nil {
-		ls = nil
 		// Not finding the LogStorage CR is not an error, as a Managed cluster will not have this CR available but
 		// there are still "LogStorage" related items that need to be set up
 		if !errors.IsNotFound(err) {
 			r.status.SetDegraded("An error occurred while querying LogStorage", err.Error())
 			return reconcile.Result{}, err
 		}
+		ls = nil
 		r.status.OnCRNotFound()
 	} else {
 		r.status.OnCRFound()
-	}
-
-	var preDefaultPatchFrom client.Patch
-	if ls != nil {
 
 		//create predefaultpatch
 		preDefaultPatchFrom = client.MergeFrom(ls.DeepCopy())
@@ -314,11 +320,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, err
 		}
 
-		if ls.DeletionTimestamp == nil {
-			if !stringsutil.StringInSlice(LogStorageFinalizer, ls.GetFinalizers()) {
-				ls.SetFinalizers(append(ls.GetFinalizers(), LogStorageFinalizer))
-			}
-		}
+		setLogStorageFinalizer(ls)
 
 		// Write the logstorage back to the datastore
 		if err = r.client.Patch(ctx, ls, preDefaultPatchFrom); err != nil {

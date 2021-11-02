@@ -47,8 +47,9 @@ const (
 
 	ElasticsearchHTTPSEndpoint = "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
 	ElasticsearchPort          = 9200
-	KibanaHTTPSEndpoint        = "https://tigera-secure-kb-http.tigera-kibana.svc:5601"
-	KibanaPort                 = 5601
+
+	KibanaHTTPSEndpoint = "https://tigera-secure-kb-http.tigera-kibana.svc:5601"
+	KibanaPort          = 5601
 )
 
 func EsGateway(c *Config) render.Component {

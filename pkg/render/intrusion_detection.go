@@ -47,6 +47,8 @@ const (
 	ElasticsearchPerformanceHotspotsUserSecret   = "tigera-ee-performance-hotspots-elasticsearch-access"
 
 	IntrusionDetectionInstallerJobName = "intrusion-detection-es-job-installer"
+
+	adDetectionJobsDefaultPeriod = 15 * time.Minute
 )
 
 func IntrusionDetection(
@@ -594,7 +596,7 @@ func (c *intrusionDetectionComponent) imagePullSecrets() []client.Object {
 }
 
 func (c *intrusionDetectionComponent) globalAlertTemplates() []client.Object {
-	return []client.Object{
+	globalAlertTemplates := []client.Object{
 		&v3.GlobalAlertTemplate{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "GlobalAlertTemplate",
@@ -817,6 +819,151 @@ func (c *intrusionDetectionComponent) globalAlertTemplates() []client.Object {
 				Metric:      "count",
 				Condition:   "gt",
 				Threshold:   50000,
+			},
+		},
+	}
+
+	globalAlertTemplates = append(globalAlertTemplates, c.adJobsGlobalertTemplates()...)
+
+	return globalAlertTemplates
+}
+
+func (c *intrusionDetectionComponent) adJobsGlobalertTemplates() []client.Object {
+	return []client.Object{
+		&v3.GlobalAlertTemplate{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "GlobalAlertTemplate",
+				APIVersion: "projectcalico.org/v3",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "ip_sweep",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Type:        v3.GlobalAlertTypeAnomalyDetection,
+				Description: "IP Sweep detection",
+				Summary:     "Looks for pods in your cluster that are sending packets to many destinations.",
+				Severity:    100,
+				Period:      &metav1.Duration{Duration: adDetectionJobsDefaultPeriod},
+				// Threshold:   0,
+			},
+		},
+		&v3.GlobalAlertTemplate{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "GlobalAlertTemplate",
+				APIVersion: "projectcalico.org/v3",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "port_scan",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Type:        v3.GlobalAlertTypeAnomalyDetection,
+				Description: "Port Scan detection",
+				Summary:     "Looks for pods in your cluster that are sending packets to one destination on multiple ports..",
+				Severity:    100,
+				Period:      &metav1.Duration{Duration: adDetectionJobsDefaultPeriod},
+				// Threshold:   0,
+			},
+		},
+		&v3.GlobalAlertTemplate{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "GlobalAlertTemplate",
+				APIVersion: "projectcalico.org/v3",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "bytes_in",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Type:        v3.GlobalAlertTypeAnomalyDetection,
+				Description: "Inbound Service bytes anomaly",
+				Summary:     "Looks for services that receive an anomalously high amount of data.",
+				Severity:    100,
+				Period:      &metav1.Duration{Duration: adDetectionJobsDefaultPeriod},
+				// Threshold:   0,
+			},
+		},
+		&v3.GlobalAlertTemplate{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "GlobalAlertTemplate",
+				APIVersion: "projectcalico.org/v3",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "bytes_out",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Type:        v3.GlobalAlertTypeAnomalyDetection,
+				Description: "Outbound Service bytes anomaly",
+				Summary:     "Looks for pods that send an anomalously high amount of data.",
+				Severity:    100,
+				Period:      &metav1.Duration{Duration: adDetectionJobsDefaultPeriod},
+				// Threshold:   0,
+			},
+		},
+		&v3.GlobalAlertTemplate{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "GlobalAlertTemplate",
+				APIVersion: "projectcalico.org/v3",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "process_restarts",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Type:        v3.GlobalAlertTypeAnomalyDetection,
+				Description: "Process restarts anomaly",
+				Summary:     "Looks for pods with excessive number of the process restarts.",
+				Severity:    100,
+				Period:      &metav1.Duration{Duration: adDetectionJobsDefaultPeriod},
+				// Threshold:   0,
+			},
+		},
+		&v3.GlobalAlertTemplate{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "GlobalAlertTemplate",
+				APIVersion: "projectcalico.org/v3",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "dns_latency",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Type:        v3.GlobalAlertTypeAnomalyDetection,
+				Description: "DNS Latency anomaly",
+				Summary:     "Looks for the clients that have too high latency of the DNS requests.",
+				Severity:    100,
+				Period:      &metav1.Duration{Duration: adDetectionJobsDefaultPeriod},
+				// Threshold:   0,
+			},
+		},
+		&v3.GlobalAlertTemplate{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "GlobalAlertTemplate",
+				APIVersion: "projectcalico.org/v3",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "l7_latency",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Type:        v3.GlobalAlertTypeAnomalyDetection,
+				Description: "L7 Latency anomaly",
+				Summary:     "Looks for the pods that have too high latency of the L7 requests. All HTTP requests measured here.",
+				Severity:    100,
+				Period:      &metav1.Duration{Duration: adDetectionJobsDefaultPeriod},
+				// Threshold:   0,
+			},
+		},
+		&v3.GlobalAlertTemplate{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "GlobalAlertTemplate",
+				APIVersion: "projectcalico.org/v3",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "http_connection_spike",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Type:        v3.GlobalAlertTypeAnomalyDetection,
+				Description: "HTTP connection spike anomaly",
+				Summary:     "Looks for the services that get too many HTTP inbound connections.",
+				Severity:    100,
+				Period:      &metav1.Duration{Duration: adDetectionJobsDefaultPeriod},
+				// Threshold:   0,
 			},
 		},
 	}

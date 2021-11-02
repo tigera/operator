@@ -23,16 +23,15 @@ require (
 	github.com/tigera/api v0.0.0-20211011084451-556d977afc02
 	go.uber.org/zap v1.15.0
 	golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9
-	gopkg.in/inf.v0 v0.9.1
+	golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c // indirect
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
-	k8s.io/api v0.21.0-rc.0
+	k8s.io/api v0.21.0
 	k8s.io/apiextensions-apiserver v0.19.2
-	k8s.io/apimachinery v0.21.0-rc.0
-	k8s.io/client-go v0.21.0-rc.0
+	k8s.io/apimachinery v0.21.0
+	k8s.io/client-go v0.21.0
 	k8s.io/kube-aggregator v0.19.2
 	sigs.k8s.io/controller-runtime v0.7.0
-	sigs.k8s.io/kind v0.11.1 // indirect
 )
 
 replace (
@@ -41,6 +40,10 @@ replace (
 	github.com/go-logr/zapr => github.com/go-logr/zapr v0.2.0
 	//github.com/googleapis/gnostic => github.com/googleapis/gnostic v0.5.1
 	github.com/operator-framework/operator-sdk => github.com/operator-framework/operator-sdk v1.0.1
+
+	// FIXME: for official version
+	github.com/tigera/api => github.com/freecaykes/api v0.0.0-20211030002549-42973097e6b1
+
 	k8s.io/api => k8s.io/api v0.19.2
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.19.0
 	k8s.io/apimachinery => k8s.io/apimachinery v0.19.2

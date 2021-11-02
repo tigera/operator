@@ -1,16 +1,16 @@
-title: master
+title: release-v3.21
 components:
   libcalico-go:
-    version: master
+    version: release-v3.21
   typha:
-    version: master
+    version: release-v3.21
   calico/node:
-    version: master
+    version: release-v3.21
   calico/cni:
-    version: master
+    version: release-v3.21
   calico/kube-controllers:
-    version: master
+    version: release-v3.21
   flexvol:
-    version: master
+    version: release-v3.21
   calico/apiserver:
-    version: master
+    version: release-v3.21

@@ -186,7 +186,12 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			},
 			{
 				APIGroups: []string{""},
-				Resources: []string{"serviceaccounts", "namespaces", "nodes", "events"},
+				Resources: []string{"serviceaccounts", "namespaces", "nodes", "events", "services", "pods"},
+				Verbs:     []string{"list"},
+			},
+			{
+				APIGroups: []string{"apps"},
+				Resources: []string{"replicasets", "statefulsets", "daemonsets"},
 				Verbs:     []string{"list"},
 			},
 			{
@@ -363,7 +368,12 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			},
 			{
 				APIGroups: []string{""},
-				Resources: []string{"serviceaccounts", "namespaces", "nodes", "events"},
+				Resources: []string{"serviceaccounts", "namespaces", "nodes", "events", "services", "pods"},
+				Verbs:     []string{"list"},
+			},
+			{
+				APIGroups: []string{"apps"},
+				Resources: []string{"replicasets", "statefulsets", "daemonsets"},
 				Verbs:     []string{"list"},
 			},
 			{

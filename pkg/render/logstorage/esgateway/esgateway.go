@@ -46,6 +46,7 @@ const (
 	Port                  = 5554
 
 	ElasticsearchHTTPSEndpoint = "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
+	ElasticsearchPort          = 9200
 
 	KibanaHTTPSEndpoint = "https://tigera-secure-kb-http.tigera-kibana.svc:5601"
 	KibanaPort          = 5601
@@ -347,7 +348,7 @@ func (e esGateway) esGatewayService() *corev1.Service {
 			Ports: []corev1.ServicePort{
 				{
 					Name:       ElasticsearchPortName,
-					Port:       int32(render.ElasticsearchPort),
+					Port:       int32(ElasticsearchPort),
 					TargetPort: intstr.FromInt(Port),
 					Protocol:   corev1.ProtocolTCP,
 				},

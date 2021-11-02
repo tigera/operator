@@ -133,7 +133,7 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index .Components "anomaly-detection-jobs" }}
+{{ with index .Components "anomaly_detection_jobs" }}
 	ComponentAnomalyDetectionJobs = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",

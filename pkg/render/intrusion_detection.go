@@ -995,7 +995,7 @@ func (c *intrusionDetectionComponent) getBaseIntrusionDetectionADJobPodTemplate(
 							},
 							{
 								Name:  "ELASTIC_PORT",
-								Value: strconv.Itoa(ElasticsearchPort),
+								Value: strconv.Itoa(ElasticsearchDefaultPort),
 							},
 							{
 								Name:      "ELASTIC_USERNAME",

@@ -907,6 +907,7 @@ func (c *intrusionDetectionComponent) adJobsGlobalertTemplates() []client.Object
 				Name: "process_restarts",
 			},
 			Spec: v3.GlobalAlertSpec{
+				Type:        v3.GlobalAlertTypeAnomalyDetection,
 				Description: "Process restarts anomaly",
 				Summary:     "Looks for pods with excessive number of the process restarts.",
 				Severity:    100,

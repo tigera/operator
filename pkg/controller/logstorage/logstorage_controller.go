@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	"github.com/elastic/cloud-on-k8s/pkg/utils/stringsutil"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	logstoragecommon "github.com/tigera/operator/pkg/controller/logstorage/common"
@@ -55,6 +56,7 @@ var log = logf.Log.WithName("controller_logstorage")
 const (
 	defaultEckOperatorMemorySetting  = "512Mi"
 	DefaultElasticsearchStorageClass = "tigera-elasticsearch"
+	LogStorageFinalizer              = "tigera.io/eck-cleanup"
 )
 
 // Add creates a new LogStorage Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -196,22 +198,6 @@ type ReconcileLogStorage struct {
 	clusterDomain string
 }
 
-func GetLogStorage(ctx context.Context, cli client.Client) (*operatorv1.LogStorage, error) {
-	instance := &operatorv1.LogStorage{}
-	err := cli.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
-	if err != nil {
-		return nil, err
-	}
-
-	fillDefaults(instance)
-
-	if err := validateComponentResources(&instance.Spec); err != nil {
-		return nil, err
-	}
-
-	return instance, nil
-}
-
 // fillDefaults populates the default values onto an LogStorage object.
 func fillDefaults(opr *operatorv1.LogStorage) {
 	if opr.Spec.Retention == nil {
@@ -285,6 +271,14 @@ func validateComponentResources(spec *operatorv1.LogStorageSpec) error {
 	return nil
 }
 
+func setLogStorageFinalizer(ls *operatorv1.LogStorage) {
+	if ls.DeletionTimestamp == nil {
+		if !stringsutil.StringInSlice(LogStorageFinalizer, ls.GetFinalizers()) {
+			ls.SetFinalizers(append(ls.GetFinalizers(), LogStorageFinalizer))
+		}
+	}
+}
+
 // Reconcile reads that state of the cluster for a LogStorage object and makes changes based on the state read
 // and what is in the LogStorage.Spec
 // Note:
@@ -294,7 +288,10 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling LogStorage")
 
-	ls, err := GetLogStorage(ctx, r.client)
+	var preDefaultPatchFrom client.Patch
+
+	ls := &operatorv1.LogStorage{}
+	err := r.client.Get(ctx, utils.DefaultTSEEInstanceKey, ls)
 	if err != nil {
 		// Not finding the LogStorage CR is not an error, as a Managed cluster will not have this CR available but
 		// there are still "LogStorage" related items that need to be set up
@@ -302,9 +299,29 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			r.status.SetDegraded("An error occurred while querying LogStorage", err.Error())
 			return reconcile.Result{}, err
 		}
+		ls = nil
 		r.status.OnCRNotFound()
 	} else {
 		r.status.OnCRFound()
+
+		//create predefaultpatch
+		preDefaultPatchFrom = client.MergeFrom(ls.DeepCopy())
+
+		fillDefaults(ls)
+		err = validateComponentResources(&ls.Spec)
+		if err != nil {
+			r.status.SetDegraded("An error occurred while validating LogStorage", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		setLogStorageFinalizer(ls)
+
+		// Write the logstorage back to the datastore
+		if err = r.client.Patch(ctx, ls, preDefaultPatchFrom); err != nil {
+			log.Error(err, "Failed to write defaults")
+			r.status.SetDegraded("Failed to write defaults", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	variant, install, err := utils.GetInstallation(context.Background(), r.client)
@@ -427,7 +444,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	result, proceed, err := r.createLogStorage(
+	result, proceed, finalizerCleanup, err := r.createLogStorage(
 		ls,
 		install,
 		variant,
@@ -445,6 +462,18 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		reqLogger,
 		ctx,
 	)
+
+	if ls != nil && ls.DeletionTimestamp != nil && finalizerCleanup == true {
+		ls.SetFinalizers(stringsutil.RemoveStringInSlice(LogStorageFinalizer, ls.GetFinalizers()))
+
+		// Write the logstorage back to the datastore
+		if patchErr := r.client.Patch(ctx, ls, preDefaultPatchFrom); patchErr != nil {
+			reqLogger.Error(patchErr, "Error patching the log-storage")
+			r.status.SetDegraded("Error patching the log-storage", patchErr.Error())
+			return reconcile.Result{}, patchErr
+		}
+	}
+
 	if err != nil || !proceed {
 		return result, err
 	}

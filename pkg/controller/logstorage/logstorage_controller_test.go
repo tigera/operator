@@ -120,7 +120,6 @@ var _ = Describe("LogStorage controller", func() {
 	Context("Reconcile", func() {
 		Context("Check default logstorage settings", func() {
 			var ls *operatorv1.LogStorage
-			var err error
 			BeforeEach(func() {
 				Expect(cli.Create(ctx, &operatorv1.LogStorage{
 					ObjectMeta: metav1.ObjectMeta{
@@ -132,8 +131,9 @@ var _ = Describe("LogStorage controller", func() {
 						},
 					},
 				})).To(BeNil())
-				ls, err = GetLogStorage(ctx, cli)
-				Expect(err).To(BeNil())
+				ls = &operatorv1.LogStorage{}
+				fillDefaults(ls)
+				Expect(validateComponentResources(&ls.Spec)).To(BeNil())
 			})
 
 			It("should set the replica values to the default settings", func() {
@@ -185,8 +185,9 @@ var _ = Describe("LogStorage controller", func() {
 				},
 				Spec: operatorv1.LogStorageSpec{},
 			})).To(BeNil())
-			ls, err := GetLogStorage(ctx, cli)
-			Expect(err).To(BeNil())
+			ls := &operatorv1.LogStorage{}
+			fillDefaults(ls)
+			Expect(validateComponentResources(&ls.Spec)).To(BeNil())
 
 			Expect(ls.Spec.Nodes).NotTo(BeNil())
 			Expect(ls.Spec.Nodes.Count).To(Equal(int64(1)))
@@ -1292,7 +1293,10 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 		},
 	}
 
+	setLogStorageFinalizer(ls)
+
 	By("creating all the components needed for LogStorage to be available")
+
 	component := render.LogStorage(
 		ls,
 		&operatorv1.InstallationSpec{
@@ -1314,6 +1318,7 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 		},
 		nil, nil, "cluster.local", nil, render.ElasticsearchLicenseTypeBasic)
 
+	Expect(cli.Create(ctx, ls)).ShouldNot(HaveOccurred())
 	createObj, _ := component.Objects()
 	for _, obj := range createObj {
 		switch obj.(type) {

@@ -479,7 +479,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 				createResources, _ := component.Objects()
 
-				createResources = append([]client.Object{ls}, createResources...)
 				oldNodeSetName := rtest.GetResource(createResources, "tigera-secure", "tigera-elasticsearch", "elasticsearch.k8s.elastic.co", "v1", "Elasticsearch").(*esv1.Elasticsearch).Spec.NodeSets[0].Name
 
 				// update resource requirements
@@ -512,12 +511,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", nil, render.ElasticsearchLicenseTypeEnterpriseTrial)
 
 				updatedResources, _ := updatedComponent.Objects()
-
-				updatedResources = append([]client.Object{ls}, updatedResources...)
-
-				// Check updates to storage requirements are reflected
-				Expect(updatedResources[0].(*operatorv1.LogStorage).Spec.Nodes.ResourceRequirements).
-					Should(Equal(ls.Spec.Nodes.ResourceRequirements))
 
 				newNodeName := rtest.GetResource(updatedResources, "tigera-secure", "tigera-elasticsearch", "elasticsearch.k8s.elastic.co", "v1", "Elasticsearch").(*esv1.Elasticsearch).Spec.NodeSets[0].Name
 				Expect(newNodeName).NotTo(Equal(oldNodeSetName))

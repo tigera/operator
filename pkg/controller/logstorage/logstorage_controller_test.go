@@ -132,7 +132,8 @@ var _ = Describe("LogStorage controller", func() {
 						},
 					},
 				})).To(BeNil())
-				ls, err = GetLogStorage(ctx, cli)
+				ls = &operatorv1.LogStorage{}
+				err = fillDefaultsAndValidateLogStorage(ctx, cli, ls)
 				Expect(err).To(BeNil())
 			})
 
@@ -185,7 +186,8 @@ var _ = Describe("LogStorage controller", func() {
 				},
 				Spec: operatorv1.LogStorageSpec{},
 			})).To(BeNil())
-			ls, err := GetLogStorage(ctx, cli)
+			ls := &operatorv1.LogStorage{}
+			err := fillDefaultsAndValidateLogStorage(ctx, cli, ls)
 			Expect(err).To(BeNil())
 
 			Expect(ls.Spec.Nodes).NotTo(BeNil())
@@ -1292,7 +1294,10 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 		},
 	}
 
+	setLogStorageFinalizer(ls)
+
 	By("creating all the components needed for LogStorage to be available")
+
 	component := render.LogStorage(
 		ls,
 		&operatorv1.InstallationSpec{
@@ -1315,6 +1320,7 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 		nil, nil, "cluster.local", nil, render.ElasticsearchLicenseTypeBasic)
 
 	createObj, _ := component.Objects()
+	createObj = append(createObj, ls)
 	for _, obj := range createObj {
 		switch obj.(type) {
 		case *esv1.Elasticsearch:

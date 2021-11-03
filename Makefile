@@ -651,7 +651,7 @@ fmt:
 vet:
 	$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
-	go vet -composites=false ./...'
+	go vet ./...'
 
 # Generate code
 generate: $(BINDIR)/controller-gen

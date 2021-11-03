@@ -137,31 +137,38 @@ func MakeTestCA(signer string) *crypto.CA {
 // Mock a cache.ListWatcher for nodes to use in the test as there is no other suitable
 // mock available in the fake packages.
 // Ref: https://github.com/kubernetes/client-go/issues/352#issuecomment-614740790
-type NodeListWatch struct {
-	kubernetes.Interface
+type nodeListWatch struct {
+	cs kubernetes.Interface
 }
 
-func (n NodeListWatch) List(options metav1.ListOptions) (runtime.Object, error) {
-	return n.Interface.CoreV1().Nodes().List(context.Background(), options)
+func NewNodeListWatch(cs kubernetes.Interface) nodeListWatch {
+	return nodeListWatch{cs: cs}
+}
+func (n nodeListWatch) List(options metav1.ListOptions) (runtime.Object, error) {
+	return n.cs.CoreV1().Nodes().List(context.Background(), options)
 }
 
-func (n NodeListWatch) Watch(options metav1.ListOptions) (watch.Interface, error) {
-	return n.Interface.CoreV1().Nodes().Watch(context.Background(), options)
+func (n nodeListWatch) Watch(options metav1.ListOptions) (watch.Interface, error) {
+	return n.cs.CoreV1().Nodes().Watch(context.Background(), options)
 }
 
 // Mock a cache.ListWatcher for nodes to use in the test as there is no other suitable
 // mock available in the fake packages.
 // Ref: https://github.com/kubernetes/client-go/issues/352#issuecomment-614740790
-type TyphaListWatch struct {
-	kubernetes.Interface
+type typhaListWatch struct {
+	cs kubernetes.Interface
 }
 
-func (t TyphaListWatch) List(options metav1.ListOptions) (runtime.Object, error) {
-	return t.Interface.AppsV1().Deployments("calico-system").List(context.Background(), options)
+func NewTyphaListWatch(cs kubernetes.Interface) typhaListWatch {
+	return typhaListWatch{cs: cs}
 }
 
-func (t TyphaListWatch) Watch(options metav1.ListOptions) (watch.Interface, error) {
-	return t.Interface.AppsV1().Deployments("calico-system").Watch(context.Background(), options)
+func (t typhaListWatch) List(options metav1.ListOptions) (runtime.Object, error) {
+	return t.cs.AppsV1().Deployments("calico-system").List(context.Background(), options)
+}
+
+func (t typhaListWatch) Watch(options metav1.ListOptions) (watch.Interface, error) {
+	return t.cs.AppsV1().Deployments("calico-system").Watch(context.Background(), options)
 }
 
 func CreateNode(c kubernetes.Interface, name string, labels map[string]string, annotations map[string]string) *v1.Node {

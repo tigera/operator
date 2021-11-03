@@ -53,8 +53,8 @@ var _ = Describe("Test typha autoscaler ", func() {
 			},
 		}
 		c = kfake.NewSimpleClientset(objs...)
-		nlw = NodeListWatch{c}
-		tlw = TyphaListWatch{c}
+		nlw = NewNodeListWatch(c)
+		tlw = NewTyphaListWatch(c)
 
 		// Create the indexer and informer shared by the typhaAutoscaler and
 		// calicoWindowsUpgrader.

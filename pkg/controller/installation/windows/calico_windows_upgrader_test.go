@@ -74,7 +74,7 @@ var _ = Describe("Calico windows upgrader", func() {
 
 		syncPeriodOption = CalicoWindowsUpgraderSyncPeriod(2 * time.Second)
 
-		nlw := test.NodeListWatch{cs}
+		nlw := test.NewNodeListWatch(cs)
 		nodeIndexInformer = cache.NewSharedIndexInformer(nlw, &corev1.Node{}, 0, cache.Indexers{})
 
 		ctx, cancel = context.WithCancel(context.TODO())

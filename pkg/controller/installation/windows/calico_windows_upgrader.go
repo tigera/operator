@@ -169,6 +169,7 @@ func (w *calicoWindowsUpgrader) updateWindowsNodes() {
 	pending, inProgress, inSync, err := w.getNodeUpgradeStatus()
 	if err != nil {
 		windowsLog.Error(err, "Failed to get Windows nodes upgrade status")
+		w.statusManager.SetDegraded("Failed to get Windows nodes upgrade status", err.Error())
 		return
 	}
 

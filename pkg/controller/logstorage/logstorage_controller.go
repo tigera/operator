@@ -198,13 +198,6 @@ type ReconcileLogStorage struct {
 	clusterDomain string
 }
 
-func fillDefaultsAndValidateLogStorage(ctx context.Context, cli client.Client, instance *operatorv1.LogStorage) error {
-
-	fillDefaults(instance)
-
-	return validateComponentResources(&instance.Spec)
-}
-
 // fillDefaults populates the default values onto an LogStorage object.
 func fillDefaults(opr *operatorv1.LogStorage) {
 	if opr.Spec.Retention == nil {
@@ -314,7 +307,8 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		//create predefaultpatch
 		preDefaultPatchFrom = client.MergeFrom(ls.DeepCopy())
 
-		err = fillDefaultsAndValidateLogStorage(ctx, r.client, ls)
+		fillDefaults(ls)
+		err = validateComponentResources(&ls.Spec)
 		if err != nil {
 			r.status.SetDegraded("An error occurred while validating LogStorage", err.Error())
 			return reconcile.Result{}, err

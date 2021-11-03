@@ -120,7 +120,6 @@ var _ = Describe("LogStorage controller", func() {
 	Context("Reconcile", func() {
 		Context("Check default logstorage settings", func() {
 			var ls *operatorv1.LogStorage
-			var err error
 			BeforeEach(func() {
 				Expect(cli.Create(ctx, &operatorv1.LogStorage{
 					ObjectMeta: metav1.ObjectMeta{
@@ -133,8 +132,8 @@ var _ = Describe("LogStorage controller", func() {
 					},
 				})).To(BeNil())
 				ls = &operatorv1.LogStorage{}
-				err = fillDefaultsAndValidateLogStorage(ctx, cli, ls)
-				Expect(err).To(BeNil())
+				fillDefaults(ls)
+				Expect(validateComponentResources(&ls.Spec)).To(BeNil())
 			})
 
 			It("should set the replica values to the default settings", func() {
@@ -187,8 +186,8 @@ var _ = Describe("LogStorage controller", func() {
 				Spec: operatorv1.LogStorageSpec{},
 			})).To(BeNil())
 			ls := &operatorv1.LogStorage{}
-			err := fillDefaultsAndValidateLogStorage(ctx, cli, ls)
-			Expect(err).To(BeNil())
+			fillDefaults(ls)
+			Expect(validateComponentResources(&ls.Spec)).To(BeNil())
 
 			Expect(ls.Spec.Nodes).NotTo(BeNil())
 			Expect(ls.Spec.Nodes.Count).To(Equal(int64(1)))

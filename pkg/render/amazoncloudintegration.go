@@ -41,29 +41,27 @@ const (
 	credentialSecretHashAnnotation       = "hash.operator.tigera.io/credential-secret"
 )
 
-func AmazonCloudIntegration(aci *operatorv1.AmazonCloudIntegration, installation *operatorv1.InstallationSpec, cred *AmazonCredential, ps []*corev1.Secret, openshift bool) (Component, error) {
-	return &amazonCloudIntegrationComponent{
-		amazonCloudIntegration: aci,
-		installation:           installation,
-		credentials:            cred,
-		pullSecrets:            ps,
-		openshift:              openshift,
-	}, nil
+func AmazonCloudIntegration(options *AmazonCloudIntegrationComponentOptions) (Component, error) {
+	return &amazonCloudIntegrationComponent{AmazonCloudIntegrationComponentOptions: *options}, nil
+}
+
+type AmazonCloudIntegrationComponentOptions struct {
+	AmazonCloudIntegration *operatorv1.AmazonCloudIntegration
+	Installation           *operatorv1.InstallationSpec
+	Credentials            *AmazonCredential
+	PullSecrets            []*corev1.Secret
+	Openshift              bool
 }
 
 type amazonCloudIntegrationComponent struct {
-	amazonCloudIntegration *operatorv1.AmazonCloudIntegration
-	installation           *operatorv1.InstallationSpec
-	credentials            *AmazonCredential
-	pullSecrets            []*corev1.Secret
-	openshift              bool
+	AmazonCloudIntegrationComponentOptions
 	image                  string
 }
 
 func (c *amazonCloudIntegrationComponent) ResolveImages(is *operatorv1.ImageSet) error {
-	reg := c.installation.Registry
-	path := c.installation.ImagePath
-	prefix := c.installation.ImagePrefix
+	reg := c.Installation.Registry
+	path := c.Installation.ImagePath
+	prefix := c.Installation.ImagePrefix
 	var err error
 	c.image, err = components.GetReference(components.ComponentCloudControllers, reg, path, prefix, is)
 	return err
@@ -106,9 +104,9 @@ func ConvertSecretToCredential(s *corev1.Secret) (*AmazonCredential, error) {
 
 func (c *amazonCloudIntegrationComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
-		CreateNamespace(AmazonCloudIntegrationNamespace, c.installation.KubernetesProvider),
+		CreateNamespace(AmazonCloudIntegrationNamespace, c.Installation.KubernetesProvider),
 	}
-	secrets := secret.CopyToNamespace(AmazonCloudIntegrationNamespace, c.pullSecrets...)
+	secrets := secret.CopyToNamespace(AmazonCloudIntegrationNamespace, c.PullSecrets...)
 	objs = append(objs, secret.ToRuntimeObjects(secrets...)...)
 	objs = append(objs,
 		c.serviceAccount(),
@@ -203,7 +201,7 @@ func (c *amazonCloudIntegrationComponent) clusterRoleBinding() *rbacv1.ClusterRo
 }
 
 func (c *amazonCloudIntegrationComponent) credentialSecret() *corev1.Secret {
-	if c.credentials == nil {
+	if c.Credentials == nil {
 		return nil
 	}
 	return &corev1.Secret{
@@ -213,8 +211,8 @@ func (c *amazonCloudIntegrationComponent) credentialSecret() *corev1.Secret {
 			Namespace: AmazonCloudIntegrationNamespace,
 		},
 		Data: map[string][]byte{
-			AmazonCloudCredentialKeyIdName:     c.credentials.KeyId,
-			AmazonCloudCredentialKeySecretName: c.credentials.KeySecret,
+			AmazonCloudCredentialKeyIdName:     c.Credentials.KeyId,
+			AmazonCloudCredentialKeySecretName: c.Credentials.KeySecret,
 		},
 	}
 }
@@ -224,7 +222,7 @@ func (c *amazonCloudIntegrationComponent) deployment() *appsv1.Deployment {
 	var replicas int32 = 1
 
 	annotations := make(map[string]string)
-	annotations[credentialSecretHashAnnotation] = rmeta.AnnotationHash(c.credentials)
+	annotations[credentialSecretHashAnnotation] = rmeta.AnnotationHash(c.Credentials)
 
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -251,10 +249,10 @@ func (c *amazonCloudIntegrationComponent) deployment() *appsv1.Deployment {
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
-					NodeSelector:       c.installation.ControlPlaneNodeSelector,
+					NodeSelector:       c.Installation.ControlPlaneNodeSelector,
 					ServiceAccountName: AmazonCloudIntegrationComponentName,
 					Tolerations:        rmeta.TolerateAll,
-					ImagePullSecrets:   secret.GetReferenceList(c.pullSecrets),
+					ImagePullSecrets:   secret.GetReferenceList(c.PullSecrets),
 					Containers: []corev1.Container{
 						c.container(),
 					},
@@ -273,11 +271,11 @@ func (c *amazonCloudIntegrationComponent) container() corev1.Container {
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "FAILSAFE_CONTROLLER_APP_NAME", Value: AmazonCloudIntegrationComponentName},
 		{Name: "CLOUDWATCH_HEALTHREPORTING_ENABLED", Value: "false"},
-		{Name: "VPCS", Value: strings.Join(c.amazonCloudIntegration.Spec.VPCS, ",")},
-		{Name: "SQS_URL", Value: c.amazonCloudIntegration.Spec.SQSURL},
-		{Name: "AWS_REGION", Value: c.amazonCloudIntegration.Spec.AWSRegion},
-		{Name: "TIGERA_ENFORCED_GROUP_ID", Value: c.amazonCloudIntegration.Spec.EnforcedSecurityGroupID},
-		{Name: "TIGERA_TRUST_ENFORCED_GROUP_ID", Value: c.amazonCloudIntegration.Spec.TrustEnforcedSecurityGroupID},
+		{Name: "VPCS", Value: strings.Join(c.AmazonCloudIntegration.Spec.VPCS, ",")},
+		{Name: "SQS_URL", Value: c.AmazonCloudIntegration.Spec.SQSURL},
+		{Name: "AWS_REGION", Value: c.AmazonCloudIntegration.Spec.AWSRegion},
+		{Name: "TIGERA_ENFORCED_GROUP_ID", Value: c.AmazonCloudIntegration.Spec.EnforcedSecurityGroupID},
+		{Name: "TIGERA_TRUST_ENFORCED_GROUP_ID", Value: c.AmazonCloudIntegration.Spec.TrustEnforcedSecurityGroupID},
 		{Name: "AWS_SECRET_ACCESS_KEY", ValueFrom: &corev1.EnvVarSource{
 			SecretKeyRef: &corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{
@@ -296,7 +294,7 @@ func (c *amazonCloudIntegrationComponent) container() corev1.Container {
 		}},
 	}
 
-	if c.amazonCloudIntegration.Spec.DefaultPodMetadataAccess == operatorv1.MetadataAccessAllowed {
+	if c.AmazonCloudIntegration.Spec.DefaultPodMetadataAccess == operatorv1.MetadataAccessAllowed {
 		env = append(env, corev1.EnvVar{Name: "ALLOW_POD_METADATA_ACCESS", Value: "true"})
 	}
 

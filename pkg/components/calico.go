@@ -48,6 +48,11 @@ var (
 		Version: "master",
 		Image:   "calico/apiserver",
 	}
+
+	ComponentWindows = component{
+		Version: "master",
+		Image:   "calico/windows-upgrade",
+	}
 	ComponentOperatorInit = component{
 		Version: version.VERSION,
 		Image:   "tigera/operator",
@@ -61,5 +66,6 @@ var (
 		ComponentFlexVolume,
 		ComponentOperatorInit,
 		ComponentCalicoAPIServer,
+		ComponentWindows,
 	}
 )

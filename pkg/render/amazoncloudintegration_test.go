@@ -69,7 +69,7 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 			},
 			Credentials: credential,
 			PullSecrets: nil,
-			Openshift: false,
+			Openshift:   false,
 		}
 		component, err := render.AmazonCloudIntegration(renderOptions)
 		Expect(err).ToNot(HaveOccurred())
@@ -83,10 +83,10 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 		// AmazonCloudIntegration(aci *operatorv1.AmazonCloudIntegration, installation *operator.Installation, cred *AmazonCredential, ps []*corev1.Secret, openshift bool) (Component, error) {
 		renderOptions := &render.AmazonCloudIntegrationComponentOptions{
 			AmazonCloudIntegration: instance,
-			Installation: installation,
-			Credentials: credential,
-			PullSecrets: nil,
-			Openshift: openshift,
+			Installation:           installation,
+			Credentials:            credential,
+			PullSecrets:            nil,
+			Openshift:              openshift,
 		}
 		component, err := render.AmazonCloudIntegration(renderOptions)
 		Expect(err).To(BeNil(), "Expected AmazonCloudIntegration to create successfully %s", err)
@@ -201,10 +201,10 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 		instance.Spec.DefaultPodMetadataAccess = operatorv1.MetadataAccessAllowed
 		renderOptions := &render.AmazonCloudIntegrationComponentOptions{
 			AmazonCloudIntegration: instance,
-			Installation: installation,
-			Credentials: credential,
-			PullSecrets: nil,
-			Openshift: openshift,
+			Installation:           installation,
+			Credentials:            credential,
+			PullSecrets:            nil,
+			Openshift:              openshift,
 		}
 		component, err := render.AmazonCloudIntegration(renderOptions)
 		Expect(err).To(BeNil(), "Expected AmazonCloudIntegration to create successfully %s", err)

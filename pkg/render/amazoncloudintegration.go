@@ -55,7 +55,7 @@ type AmazonCloudIntegrationComponentOptions struct {
 
 type amazonCloudIntegrationComponent struct {
 	AmazonCloudIntegrationComponentOptions
-	image                  string
+	image string
 }
 
 func (c *amazonCloudIntegrationComponent) ResolveImages(is *operatorv1.ImageSet) error {

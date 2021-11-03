@@ -187,10 +187,10 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(ctx context.Context, request
 	reqLogger.V(3).Info("rendering components")
 	renderOptions := &render.AmazonCloudIntegrationComponentOptions{
 		AmazonCloudIntegration: instance,
-		Installation: network,
-		Credentials: awsCredential,
-		PullSecrets: pullSecrets,
-		Openshift: r.provider == operatorv1.ProviderOpenShift,
+		Installation:           network,
+		Credentials:            awsCredential,
+		PullSecrets:            pullSecrets,
+		Openshift:              r.provider == operatorv1.ProviderOpenShift,
 	}
 	component, err := render.AmazonCloudIntegration(renderOptions)
 	if err != nil {

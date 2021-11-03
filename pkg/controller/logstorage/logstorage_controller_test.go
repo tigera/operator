@@ -1318,8 +1318,8 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 		},
 		nil, nil, "cluster.local", nil, render.ElasticsearchLicenseTypeBasic)
 
+	Expect(cli.Create(ctx, ls)).ShouldNot(HaveOccurred())
 	createObj, _ := component.Objects()
-	createObj = append(createObj, ls)
 	for _, obj := range createObj {
 		switch obj.(type) {
 		case *esv1.Elasticsearch:

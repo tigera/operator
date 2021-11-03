@@ -1527,40 +1527,6 @@ var deleteLogStorageTests = func(managementCluster *operatorv1.ManagementCluster
 			compareResources(createResources, expectedCreateResources)
 			compareResources(deleteResources, []resourceTestObj{})
 		})
-		It("removes the finalizers from LogStorage if Elasticsearch and Kibana are both nil", func() {
-			expectedCreateResources := []resourceTestObj{}
-
-			component := render.LogStorage(
-				logStorage,
-				installation,
-				managementCluster,
-				managementClusterConnection,
-				nil, nil,
-				esConfig,
-				[]*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
-					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
-					{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: render.ElasticsearchNamespace}},
-				},
-				[]*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: common.OperatorNamespace()}},
-					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
-					{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaPublicCertSecret, Namespace: render.KibanaNamespace}},
-				},
-				[]*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-				}, operatorv1.ProviderNone,
-				[]*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: common.OperatorNamespace()}},
-					{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: common.OperatorNamespace()}},
-				},
-				nil, nil, "cluster.local", nil, render.ElasticsearchLicenseTypeEnterpriseTrial)
-
-			createResources, deleteResources := component.Objects()
-
-			compareResources(createResources, expectedCreateResources)
-			compareResources(deleteResources, []resourceTestObj{})
-		})
 	}
 }
 

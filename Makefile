@@ -55,6 +55,9 @@ else
 endif
 EXTRA_DOCKER_ARGS += --platform=linux/$(TARGET_PLATFORM)
 
+# location of docker credentials to push manifests
+DOCKER_CONFIG ?= $(HOME)/.docker/config.json
+
 # we want to be able to run the same recipe on multiple targets keyed on the image name
 # to do that, we would use the entire image name, e.g. calico/node:abcdefg, as the stem, or '%', in the target
 # however, make does **not** allow the usage of invalid filename characters - like / and : - in a stem, and thus errors out
@@ -148,7 +151,7 @@ PUSH_IMAGE_PREFIXES+=$(RELEASE_PREFIXES)
 endif
 
 # remove from the list to push to manifest any registries that do not support multi-arch
-EXCLUDE_MANIFEST_REGISTRIES?=quay.io/
+EXCLUDE_MANIFEST_REGISTRIES?=""
 PUSH_MANIFEST_IMAGE_PREFIXES=$(PUSH_IMAGE_PREFIXES:$(EXCLUDE_MANIFEST_REGISTRIES)%=)
 PUSH_NONMANIFEST_IMAGE_PREFIXES=$(filter-out $(PUSH_MANIFEST_IMAGE_PREFIXES),$(PUSH_IMAGE_PREFIXES))
 
@@ -264,7 +267,7 @@ clean:
 	rm -rf .go-pkg-cache
 	rm -rf .crds
 	rm -f *-release-notes.md
-	docker rmi -f $(BUILD_IMAGE):latest $(BUILD_IMAGE):latest-$(ARCH)
+	docker rmi -f $(shell docker images -f "reference=$(BUILD_IMAGE):latest*" -q) > /dev/null 2>&1 || true
 
 ###############################################################################
 # Tests
@@ -538,9 +541,10 @@ endef
 
 LIBCALICO?=projectcalico/libcalico-go
 read-libcalico-calico-version:
-	$(eval LIBCALICO_BRANCH := $(shell $(CONTAINERIZED) \
+	$(eval LIBCALICO_BRANCH := $(shell $(CONTAINERIZED) $(CALICO_BUILD) \
 	bash -c '$(GIT_CONFIG_SSH) \
 	yq r config/calico_versions.yml components.libcalico-go.version'))
+	if [ -z "$(LIBCALICO_BRANCH)" ]; then echo "libcalico branch not defined"; exit 1; fi
 
 update-calico-crds: fetch-calico-crds
 	$(call copy_crds,"calico")
@@ -553,9 +557,10 @@ fetch-calico-crds: prepare-for-calico-crds read-libcalico-calico-version
 
 LIBCALICO_ENTERPRISE?=tigera/libcalico-go-private
 read-libcalico-enterprise-version:
-	$(eval LIBCALICO_ENTERPRISE_BRANCH := $(shell $(CONTAINERIZED) \
+	$(eval LIBCALICO_ENTERPRISE_BRANCH := $(shell $(CONTAINERIZED) $(CALICO_BUILD) \
 	bash -c '$(GIT_CONFIG_SSH) \
 	yq r config/enterprise_versions.yml components.libcalico-go.version'))
+	if [ -z "$(LIBCALICO_ENTERPRISE_BRANCH)" ]; then echo "libcalico enterprise branch not defined"; exit 1; fi
 
 update-enterprise-crds: fetch-enterprise-crds
 	$(call copy_crds,"enterprise")

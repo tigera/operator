@@ -704,6 +704,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("AddCertificateSigningRequests", mock.Anything)
 			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
+			mockStatus.On("SetWindowsUpgradeStatus", mock.Anything, mock.Anything, mock.Anything)
 
 			// Create the indexer and informer shared by the typhaAutoscaler and
 			// calicoWindowsUpgrader.

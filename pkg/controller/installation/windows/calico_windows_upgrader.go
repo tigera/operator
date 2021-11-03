@@ -178,21 +178,13 @@ func sortedSliceFromMap(m map[string]*corev1.Node) []string {
 
 func (w *calicoWindowsUpgrader) updateWindowsNodes() {
 	pending, inProgress, inSync, err := w.getNodeUpgradeStatus()
-
-	// Make sorted slices of the node names from the node upgrade status maps.
-	// We'll loop through these slices to process node upgrades
-	// deterministically.
-	pendingNodeNames := sortedSliceFromMap(pending)
-	inProgressNodeNames := sortedSliceFromMap(inProgress)
-	inSyncNodeNames := sortedSliceFromMap(inSync)
-
 	if err != nil {
 		windowsLog.Error(err, "Failed to get Windows nodes upgrade status")
 		w.statusManager.SetDegraded("Failed to get Windows nodes upgrade status", err.Error())
 		return
 	}
 
-	for _, nodeName := range inProgressNodeNames {
+	for _, nodeName := range sortedSliceFromMap(inProgress) {
 		node := inProgress[nodeName]
 
 		if w.upgradeCompleted(node) {
@@ -217,7 +209,7 @@ func (w *calicoWindowsUpgrader) updateWindowsNodes() {
 		maxUnavailable = defaultMaxUnavailable
 	}
 
-	for _, nodeName := range pendingNodeNames {
+	for _, nodeName := range sortedSliceFromMap(pending) {
 		node := pending[nodeName]
 
 		// For upgrades from Calico -> Enterprise, we always upgrade regardless
@@ -236,14 +228,8 @@ func (w *calicoWindowsUpgrader) updateWindowsNodes() {
 		}
 	}
 
-	// Update the node name slices since the maps they are built from may have
-	// changed.
-	pendingNodeNames = sortedSliceFromMap(pending)
-	inProgressNodeNames = sortedSliceFromMap(inProgress)
-	inSyncNodeNames = sortedSliceFromMap(inSync)
-
 	// Notify status manager of upgrades status.
-	w.statusManager.SetWindowsUpgradeStatus(pendingNodeNames, inProgressNodeNames, inSyncNodeNames)
+	w.statusManager.SetWindowsUpgradeStatus(sortedSliceFromMap(pending), sortedSliceFromMap(inProgress), sortedSliceFromMap(inSync))
 }
 
 func (w *calicoWindowsUpgrader) startUpgrade(ctx context.Context, node *corev1.Node) error {

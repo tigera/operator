@@ -30,6 +30,14 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
+// createLogStorage Is called by Reconcile() in the Logstorage controller to render its components
+//
+// It returns 4 values:
+// A reconcile.Result to be returned by Reconcile() if the 'proceed' bool is false or if there is an error,
+// a 'proceed' bool indicating if the Reconcile function should proceed with the reconcile process,
+// a 'finalizerCleanup' bool indicating if it's safe to remove the LogStorage finalizer (only on deletion and after
+// kibana and elasticsearch components were successfully removed), and lastly,
+// an error if there was any or nil otherwise
 func (r *ReconcileLogStorage) createLogStorage(
 	ls *operatorv1.LogStorage,
 	install *operatorv1.InstallationSpec,

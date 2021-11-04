@@ -185,7 +185,7 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(ctx context.Context, request
 
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
-	renderOptions := &render.AmazonCloudIntegrationComponentOptions{
+	renderOptions := &render.AmazonCloudIntegrationConfiguration{
 		AmazonCloudIntegration: instance,
 		Installation:           network,
 		Credentials:            awsCredential,

@@ -62,7 +62,7 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 	})
 
 	It("should render controlPlaneNodeSelector", func() {
-		renderOptions := &render.AmazonCloudIntegrationComponentOptions{
+		renderOptions := &render.AmazonCloudIntegrationConfiguration{
 			AmazonCloudIntegration: instance,
 			Installation: &operatorv1.InstallationSpec{
 				ControlPlaneNodeSelector: map[string]string{"foo": "bar"},
@@ -81,7 +81,7 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 
 	It("should render an AmazonCloudConfiguration with specified configuration", func() {
 		// AmazonCloudIntegration(aci *operatorv1.AmazonCloudIntegration, installation *operator.Installation, cred *AmazonCredential, ps []*corev1.Secret, openshift bool) (Component, error) {
-		renderOptions := &render.AmazonCloudIntegrationComponentOptions{
+		renderOptions := &render.AmazonCloudIntegrationConfiguration{
 			AmazonCloudIntegration: instance,
 			Installation:           installation,
 			Credentials:            credential,
@@ -199,7 +199,7 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 
 	It("should set MetadataAccess when configured", func() {
 		instance.Spec.DefaultPodMetadataAccess = operatorv1.MetadataAccessAllowed
-		renderOptions := &render.AmazonCloudIntegrationComponentOptions{
+		renderOptions := &render.AmazonCloudIntegrationConfiguration{
 			AmazonCloudIntegration: instance,
 			Installation:           installation,
 			Credentials:            credential,

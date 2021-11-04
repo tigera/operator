@@ -49,7 +49,7 @@ const (
 	IntrusionDetectionInstallerJobName = "intrusion-detection-es-job-installer"
 
 	adDetectionJobsDefaultPeriod = 15 * time.Minute
-	adJobsPodTemplatePrefixName  = "tigera.io.adjobs"
+	adJobsPodTemplatePrefixName  = "tigera.io.adjobs."
 )
 
 func IntrusionDetection(

@@ -122,10 +122,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 		Context("Initial creation", func() {
 			It("should render an elasticsearchComponent", func() {
 				expectedCreateResources := []resourceTestObj{
-					{"tigera-secure", "", &operatorv1.LogStorage{}, func(resource runtime.Object) {
-						ls := resource.(*operatorv1.LogStorage)
-						Expect(ls.Finalizers).Should(ContainElement(render.LogStorageFinalizer))
-					}},
 					{render.ECKOperatorNamespace, "", &corev1.Namespace{}, nil},
 					{"tigera-pull-secret", render.ECKOperatorNamespace, &corev1.Secret{}, nil},
 					{"elastic-operator", "", &rbacv1.ClusterRole{}, nil},
@@ -209,10 +205,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			})
 			It("should render an elasticsearchComponent and delete the Elasticsearch and Kibana ExternalService", func() {
 				expectedCreateResources := []resourceTestObj{
-					{"tigera-secure", "", &operatorv1.LogStorage{}, func(resource runtime.Object) {
-						ls := resource.(*operatorv1.LogStorage)
-						Expect(ls.Finalizers).Should(ContainElement(render.LogStorageFinalizer))
-					}},
 					{render.ECKOperatorNamespace, "", &corev1.Namespace{}, nil},
 					{"tigera-pull-secret", render.ECKOperatorNamespace, &corev1.Secret{}, nil},
 					{"elastic-operator", "", &rbacv1.ClusterRole{}, nil},
@@ -287,10 +279,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					KeyAlgorithm:       "ECDSAWithCurve521",
 				}
 				expectedCreateResources := []resourceTestObj{
-					{"tigera-secure", "", &operatorv1.LogStorage{}, func(resource runtime.Object) {
-						ls := resource.(*operatorv1.LogStorage)
-						Expect(ls.Finalizers).Should(ContainElement(render.LogStorageFinalizer))
-					}},
 					{render.ECKOperatorNamespace, "", &corev1.Namespace{}, nil},
 					{"tigera-pull-secret", render.ECKOperatorNamespace, &corev1.Secret{}, nil},
 					{"elastic-operator", "", &rbacv1.ClusterRole{}, nil},
@@ -377,10 +365,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 		Context("Elasticsearch and Kibana both ready", func() {
 			It("should render correctly", func() {
 				expectedCreateResources := []resourceTestObj{
-					{"tigera-secure", "", &operatorv1.LogStorage{}, func(resource runtime.Object) {
-						ls := resource.(*operatorv1.LogStorage)
-						Expect(ls.Finalizers).Should(ContainElement(render.LogStorageFinalizer))
-					}},
 					{render.ECKOperatorNamespace, "", &corev1.Namespace{}, nil},
 					{"tigera-pull-secret", render.ECKOperatorNamespace, &corev1.Secret{}, nil},
 					{"elastic-operator", "", &rbacv1.ClusterRole{}, nil},
@@ -527,10 +511,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					}, operatorv1.ProviderNone, nil, nil, nil, "cluster.local", nil, render.ElasticsearchLicenseTypeEnterpriseTrial)
 
 				updatedResources, _ := updatedComponent.Objects()
-
-				// Check updates to storage requirements are reflected
-				Expect(updatedResources[0].(*operatorv1.LogStorage).Spec.Nodes.ResourceRequirements).
-					Should(Equal(ls.Spec.Nodes.ResourceRequirements))
 
 				newNodeName := rtest.GetResource(updatedResources, "tigera-secure", "tigera-elasticsearch", "elasticsearch.k8s.elastic.co", "v1", "Elasticsearch").(*esv1.Elasticsearch).Spec.NodeSets[0].Name
 				Expect(newNodeName).NotTo(Equal(oldNodeSetName))
@@ -1464,12 +1444,7 @@ var deleteLogStorageTests = func(managementCluster *operatorv1.ManagementCluster
 			esConfig = relasticsearch.NewClusterConfig("cluster", 1, 1, 1)
 		})
 		It("returns Elasticsearch and Kibana CR's to delete and keeps the finalizers on the LogStorage CR", func() {
-			expectedCreateResources := []resourceTestObj{
-				{"tigera-secure", "", &operatorv1.LogStorage{}, func(resource runtime.Object) {
-					ls := resource.(*operatorv1.LogStorage)
-					Expect(ls.Finalizers).Should(ContainElement(render.LogStorageFinalizer))
-				}},
-			}
+			expectedCreateResources := []resourceTestObj{}
 
 			expectedDeleteResources := []resourceTestObj{
 				{render.ElasticsearchName, render.ElasticsearchNamespace, &esv1.Elasticsearch{}, nil},
@@ -1510,12 +1485,7 @@ var deleteLogStorageTests = func(managementCluster *operatorv1.ManagementCluster
 			compareResources(deleteResources, expectedDeleteResources)
 		})
 		It("doesn't return anything to delete when Elasticsearch and Kibana have their deletion times stamps set and the LogStorage finalizers are still set", func() {
-			expectedCreateResources := []resourceTestObj{
-				{"tigera-secure", "", &operatorv1.LogStorage{}, func(resource runtime.Object) {
-					ls := resource.(*operatorv1.LogStorage)
-					Expect(ls.Finalizers).Should(ContainElement(render.LogStorageFinalizer))
-				}},
-			}
+			expectedCreateResources := []resourceTestObj{}
 
 			t := metav1.Now()
 			component := render.LogStorage(
@@ -1525,45 +1495,6 @@ var deleteLogStorageTests = func(managementCluster *operatorv1.ManagementCluster
 				managementClusterConnection,
 				&esv1.Elasticsearch{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace, DeletionTimestamp: &t}},
 				&kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaName, Namespace: render.KibanaNamespace, DeletionTimestamp: &t}},
-				esConfig,
-				[]*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
-					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
-					{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: render.ElasticsearchNamespace}},
-				},
-				[]*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: common.OperatorNamespace()}},
-					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}},
-					{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaPublicCertSecret, Namespace: render.KibanaNamespace}},
-				},
-				[]*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-				}, operatorv1.ProviderNone,
-				[]*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: common.OperatorNamespace()}},
-					{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: common.OperatorNamespace()}},
-				},
-				nil, nil, "cluster.local", nil, render.ElasticsearchLicenseTypeEnterpriseTrial)
-
-			createResources, deleteResources := component.Objects()
-
-			compareResources(createResources, expectedCreateResources)
-			compareResources(deleteResources, []resourceTestObj{})
-		})
-		It("removes the finalizers from LogStorage if Elasticsearch and Kibana are both nil", func() {
-			expectedCreateResources := []resourceTestObj{
-				{"tigera-secure", "", &operatorv1.LogStorage{}, func(resource runtime.Object) {
-					ls := resource.(*operatorv1.LogStorage)
-					Expect(ls.Finalizers).ShouldNot(ContainElement(render.LogStorageFinalizer))
-				}},
-			}
-
-			component := render.LogStorage(
-				logStorage,
-				installation,
-				managementCluster,
-				managementClusterConnection,
-				nil, nil,
 				esConfig,
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},

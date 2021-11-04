@@ -62,7 +62,7 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 	})
 
 	It("should render controlPlaneNodeSelector", func() {
-		renderOptions := &render.AmazonCloudIntegrationConfiguration{
+		cfg := &render.AmazonCloudIntegrationConfiguration{
 			AmazonCloudIntegration: instance,
 			Installation: &operatorv1.InstallationSpec{
 				ControlPlaneNodeSelector: map[string]string{"foo": "bar"},
@@ -71,7 +71,7 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 			PullSecrets: nil,
 			Openshift:   false,
 		}
-		component, err := render.AmazonCloudIntegration(renderOptions)
+		component, err := render.AmazonCloudIntegration(cfg)
 		Expect(err).ToNot(HaveOccurred())
 		resources, _ := component.Objects()
 		resource := rtest.GetResource(resources, AwsCIName, AwsCINs, "apps", "v1", "Deployment")
@@ -81,14 +81,14 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 
 	It("should render an AmazonCloudConfiguration with specified configuration", func() {
 		// AmazonCloudIntegration(aci *operatorv1.AmazonCloudIntegration, installation *operator.Installation, cred *AmazonCredential, ps []*corev1.Secret, openshift bool) (Component, error) {
-		renderOptions := &render.AmazonCloudIntegrationConfiguration{
+		cfg := &render.AmazonCloudIntegrationConfiguration{
 			AmazonCloudIntegration: instance,
 			Installation:           installation,
 			Credentials:            credential,
 			PullSecrets:            nil,
 			Openshift:              openshift,
 		}
-		component, err := render.AmazonCloudIntegration(renderOptions)
+		component, err := render.AmazonCloudIntegration(cfg)
 		Expect(err).To(BeNil(), "Expected AmazonCloudIntegration to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 
@@ -199,14 +199,14 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 
 	It("should set MetadataAccess when configured", func() {
 		instance.Spec.DefaultPodMetadataAccess = operatorv1.MetadataAccessAllowed
-		renderOptions := &render.AmazonCloudIntegrationConfiguration{
+		cfg := &render.AmazonCloudIntegrationConfiguration{
 			AmazonCloudIntegration: instance,
 			Installation:           installation,
 			Credentials:            credential,
 			PullSecrets:            nil,
 			Openshift:              openshift,
 		}
-		component, err := render.AmazonCloudIntegration(renderOptions)
+		component, err := render.AmazonCloudIntegration(cfg)
 		Expect(err).To(BeNil(), "Expected AmazonCloudIntegration to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 

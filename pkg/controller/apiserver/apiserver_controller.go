@@ -298,7 +298,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
 
-	apiServerComponentOptions := render.APIServerConfiguration{
+	apiServerCfg := render.APIServerConfiguration{
 		K8SServiceEndpoint:          k8sapi.Endpoint,
 		Installation:                network,
 		HostNetwork:                 false,
@@ -313,7 +313,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 
 	var components []render.Component
-	component, err := render.APIServer(&apiServerComponentOptions)
+	component, err := render.APIServer(&apiServerCfg)
 	if err != nil {
 		log.Error(err, "Error rendering APIServer")
 		r.status.SetDegraded("Error rendering APIServer", err.Error())

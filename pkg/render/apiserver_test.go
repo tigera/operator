@@ -99,13 +99,13 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		}
 
 		// APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool
-		renderOptions := &render.APIServerConfiguration{
+		cfg := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
 			ClusterDomain:      clusterDomain,
 		}
-		component, err := render.APIServer(renderOptions)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 
@@ -291,13 +291,13 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
-		renderOptions := &render.APIServerConfiguration{
+		cfg := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
 			ClusterDomain:      dns.DefaultClusterDomain,
 		}
-		component, err := render.APIServer(renderOptions)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -347,13 +347,13 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
-		renderOptions := &render.APIServerConfiguration{
+		cfg := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
 			ClusterDomain:      dns.DefaultClusterDomain,
 		}
-		component, err := render.APIServer(renderOptions)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -411,13 +411,13 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		}
 
 		instance.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
-		renderOptions := &render.APIServerConfiguration{
+		cfg := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
 			ClusterDomain:      dns.DefaultClusterDomain,
 		}
-		component, err := render.APIServer(renderOptions)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -437,13 +437,13 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		}
 		instance.ControlPlaneTolerations = []corev1.Toleration{tol}
 
-		renderOptions := &render.APIServerConfiguration{
+		cfg := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
 			ClusterDomain:      dns.DefaultClusterDomain,
 		}
-		component, err := render.APIServer(renderOptions)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 		d := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -484,13 +484,13 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
-		renderOptions := &render.APIServerConfiguration{
+		cfg := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
 			ClusterDomain:      dns.DefaultClusterDomain,
 		}
-		component, err := render.APIServer(renderOptions)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -524,14 +524,14 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 				PodSecurityGroupID:   "sg-podsgid",
 			},
 		}
-		renderOptions := &render.APIServerConfiguration{
+		cfg := &render.APIServerConfiguration{
 			K8SServiceEndpoint:     k8sServiceEp,
 			Installation:           instance,
 			AmazonCloudIntegration: aci,
 			Openshift:              openshift,
 			ClusterDomain:          dns.DefaultClusterDomain,
 		}
-		component, err := render.APIServer(renderOptions)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -558,14 +558,14 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		k8sServiceEp.Host = "k8shost"
 		k8sServiceEp.Port = "1234"
 
-		renderOptions := &render.APIServerConfiguration{
+		cfg := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			HostNetwork:        true,
 			Openshift:          openshift,
 			ClusterDomain:      dns.DefaultClusterDomain,
 		}
-		component, err := render.APIServer(renderOptions)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -582,13 +582,13 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		k8sServiceEp.Port = "1234"
 		instance.KubernetesProvider = operatorv1.ProviderDockerEE
 
-		renderOptions := &render.APIServerConfiguration{
+		cfg := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
 			ClusterDomain:      dns.DefaultClusterDomain,
 		}
-		component, err := render.APIServer(renderOptions)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -605,13 +605,13 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		k8sServiceEp.Port = "1234"
 		instance.KubernetesProvider = operatorv1.ProviderDockerEE
 
-		renderOptions := &render.APIServerConfiguration{
+		cfg := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
 			ClusterDomain:      dns.DefaultClusterDomain,
 		}
-		component, err := render.APIServer(renderOptions)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -624,14 +624,14 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	It("should render an API server with custom configuration with MCM enabled at startup", func() {
-		renderOptions := &render.APIServerConfiguration{
+		cfg := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			ManagementCluster:  managementCluster,
 			Openshift:          openshift,
 			ClusterDomain:      dns.DefaultClusterDomain,
 		}
-		component, err := render.APIServer(renderOptions)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 
@@ -716,7 +716,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	It("should render an API server with custom configuration with MCM enabled at restart", func() {
-		renderOptions := &render.APIServerConfiguration{
+		cfg := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			ManagementCluster:  managementCluster,
@@ -724,7 +724,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			TunnelCASecret:     &testutils.VoltronTunnelSecret,
 			ClusterDomain:      dns.DefaultClusterDomain,
 		}
-		component, err := render.APIServer(renderOptions)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 
@@ -802,13 +802,13 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 	It("should add an init container if certificate management is enabled", func() {
 		instance.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c"}
-		renderOptions := &render.APIServerConfiguration{
+		cfg := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
 			ClusterDomain:      dns.DefaultClusterDomain,
 		}
-		component, err := render.APIServer(renderOptions)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 		expectedResources := []struct {
@@ -862,13 +862,13 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		var replicas int32 = 1
 		instance.ControlPlaneReplicas = &replicas
 
-		renderOptions := &render.APIServerConfiguration{
+		cfg := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
 			ClusterDomain:      dns.DefaultClusterDomain,
 		}
-		component, err := render.APIServer(renderOptions)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -881,13 +881,13 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		var replicas int32 = 2
 		instance.ControlPlaneReplicas = &replicas
 
-		renderOptions := &render.APIServerConfiguration{
+		cfg := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
 			ClusterDomain:      dns.DefaultClusterDomain,
 		}
-		component, err := render.APIServer(renderOptions)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -1201,13 +1201,13 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		}
 
 		// APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool
-		renderOptions := &render.APIServerConfiguration{
+		cfg := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
 			ClusterDomain:      clusterDomain,
 		}
-		component, err := render.APIServer(renderOptions)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 
@@ -1323,13 +1323,13 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			&netv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-apiserver", Namespace: "calico-apiserver"}, TypeMeta: metav1.TypeMeta{APIVersion: "networking.k8s.io/v1", Kind: "NetworkPolicy"}},
 		}
 
-		renderOptions := &render.APIServerConfiguration{
+		cfg := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
 			ClusterDomain:      dns.DefaultClusterDomain,
 		}
-		component, err := render.APIServer(renderOptions)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -1358,13 +1358,13 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 
 	It("should include a ControlPlaneNodeSelector when specified", func() {
 		instance.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
-		renderOptions := &render.APIServerConfiguration{
+		cfg := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
 			ClusterDomain:      dns.DefaultClusterDomain,
 		}
-		component, err := render.APIServer(renderOptions)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -1380,13 +1380,13 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			Effect:   corev1.TaintEffectNoExecute,
 		}
 		instance.ControlPlaneTolerations = []corev1.Toleration{tol}
-		renderOptions := &render.APIServerConfiguration{
+		cfg := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
 			ClusterDomain:      dns.DefaultClusterDomain,
 		}
-		component, err := render.APIServer(renderOptions)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 		d := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -1398,14 +1398,14 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		k8sServiceEp.Port = "1234"
 		instance.KubernetesProvider = operatorv1.ProviderDockerEE
 
-		renderOptions := &render.APIServerConfiguration{
+		cfg := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			HostNetwork:        true,
 			Openshift:          openshift,
 			ClusterDomain:      dns.DefaultClusterDomain,
 		}
-		component, err := render.APIServer(renderOptions)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -1422,13 +1422,13 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		k8sServiceEp.Port = "1234"
 		instance.KubernetesProvider = operatorv1.ProviderDockerEE
 
-		renderOptions := &render.APIServerConfiguration{
+		cfg := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
 			ClusterDomain:      dns.DefaultClusterDomain,
 		}
-		component, err := render.APIServer(renderOptions)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -1445,13 +1445,13 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		k8sServiceEp.Port = "1234"
 		instance.KubernetesProvider = operatorv1.ProviderDockerEE
 
-		renderOptions := &render.APIServerConfiguration{
+		cfg := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
 			ClusterDomain:      dns.DefaultClusterDomain,
 		}
-		component, err := render.APIServer(renderOptions)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -1467,13 +1467,13 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		var replicas int32 = 1
 		instance.ControlPlaneReplicas = &replicas
 
-		renderOptions := &render.APIServerConfiguration{
+		cfg := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
 			ClusterDomain:      dns.DefaultClusterDomain,
 		}
-		component, err := render.APIServer(renderOptions)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -1486,13 +1486,13 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		var replicas int32 = 2
 		instance.ControlPlaneReplicas = &replicas
 
-		renderOptions := &render.APIServerConfiguration{
+		cfg := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
 			ClusterDomain:      dns.DefaultClusterDomain,
 		}
-		component, err := render.APIServer(renderOptions)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 

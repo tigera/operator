@@ -36,11 +36,17 @@ func GetExpectedTyphaScale(nodes int) int {
 	// We add one more to ensure there is always 1 extra for high availability purposes.
 	typhas += 1
 
-	if nodes <= 4 {
-		// For very small clusters, we only need a single Typha.
+	// We have a couple special cases for small clusters. We want to ensure that we run one fewer
+	// Typha instances than there are nodes, so that there is room for rescheduling. We also want
+	// to ensure we have at least two, where possible, so that we have redundancy.
+	if nodes <= 2 {
+		// For one and two node clusters, we only need a single typha.
 		typhas = 1
+	} else if nodes <= 4 {
+		// For three and four node clusters, we can run an additional typha.
+		typhas = 2
 	} else if typhas < 3 {
-		// For larger clusters, make sure we have a minimum of three for redundancy.
+		// For clusters with more than 4 nodes, make sure we have a minimum of three for redundancy.
 		typhas = 3
 	}
 	return typhas

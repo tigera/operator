@@ -160,21 +160,25 @@ var _ = Describe("Test typha autoscaler ", func() {
 		ta := newTyphaAutoscaler(c, nlw, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
 		ta.start(ctx)
 
-		// For clusters smaller than 4 nodes we only expect 1 replica.
-		verifyTyphaReplicas(c, 1)
-		n3 := createNode(c, "node3", map[string]string{"kubernetes.io/os": "linux"})
+		// For clusters smaller than 3 nodes we only expect 1 replica.
 		verifyTyphaReplicas(c, 1)
 
-		// For > 4 nodes, we expect redundancy with 3 replicas.
+		// For three and four node clusters, we expect 2.
+		n3 := createNode(c, "node3", map[string]string{"kubernetes.io/os": "linux"})
+		verifyTyphaReplicas(c, 2)
 		_ = createNode(c, "node4", map[string]string{"kubernetes.io/os": "linux"})
+		verifyTyphaReplicas(c, 2)
+
+		// For > 4 nodes, we expect redundancy with 3 replicas.
 		_ = createNode(c, "node5", map[string]string{"kubernetes.io/os": "linux"})
 		verifyTyphaReplicas(c, 3)
 
-		// Verify that making a node unschedulable updates replicas.
+		// Verify that making a node unschedulable updates replicas. Should bring us back
+		// down to 4 node scale.
 		n3.Spec.Unschedulable = true
 		_, err = c.CoreV1().Nodes().Update(ctx, n3, metav1.UpdateOptions{})
 		Expect(err).To(BeNil())
-		verifyTyphaReplicas(c, 1)
+		verifyTyphaReplicas(c, 2)
 	})
 
 	It("should ignore non-migrated nodes in its count", func() {
@@ -207,8 +211,8 @@ var _ = Describe("Test typha autoscaler ", func() {
 		ta.start(ctx)
 
 		// normally we'd expect to see three replicas for five nodes, but since one node is not migrated,
-		// we should still only expect one
-		verifyTyphaReplicas(c, 1)
+		// we should still only expect two
+		verifyTyphaReplicas(c, 2)
 	})
 
 	It("should ignore aks virtual nodes in its count", func() {
@@ -240,8 +244,8 @@ var _ = Describe("Test typha autoscaler ", func() {
 		ta.start(ctx)
 
 		// normally we'd expect to see three replicas for five nodes, but since one node is a virtual-kubelet,
-		// we should still only expect one
-		verifyTyphaReplicas(c, 1)
+		// we should still only expect two
+		verifyTyphaReplicas(c, 2)
 	})
 
 	It("should be degraded if there's not enough linux nodes", func() {

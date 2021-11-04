@@ -99,7 +99,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		}
 
 		// APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool
-		renderOptions := &render.APIServerComponentOptions{
+		renderOptions := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
@@ -291,7 +291,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
-		renderOptions := &render.APIServerComponentOptions{
+		renderOptions := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
@@ -347,7 +347,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
-		renderOptions := &render.APIServerComponentOptions{
+		renderOptions := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
@@ -411,7 +411,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		}
 
 		instance.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
-		renderOptions := &render.APIServerComponentOptions{
+		renderOptions := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
@@ -437,7 +437,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		}
 		instance.ControlPlaneTolerations = []corev1.Toleration{tol}
 
-		renderOptions := &render.APIServerComponentOptions{
+		renderOptions := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
@@ -484,7 +484,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
-		renderOptions := &render.APIServerComponentOptions{
+		renderOptions := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
@@ -524,7 +524,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 				PodSecurityGroupID:   "sg-podsgid",
 			},
 		}
-		renderOptions := &render.APIServerComponentOptions{
+		renderOptions := &render.APIServerConfiguration{
 			K8SServiceEndpoint:     k8sServiceEp,
 			Installation:           instance,
 			AmazonCloudIntegration: aci,
@@ -558,7 +558,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		k8sServiceEp.Host = "k8shost"
 		k8sServiceEp.Port = "1234"
 
-		renderOptions := &render.APIServerComponentOptions{
+		renderOptions := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			HostNetwork:        true,
@@ -582,7 +582,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		k8sServiceEp.Port = "1234"
 		instance.KubernetesProvider = operatorv1.ProviderDockerEE
 
-		renderOptions := &render.APIServerComponentOptions{
+		renderOptions := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
@@ -605,7 +605,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		k8sServiceEp.Port = "1234"
 		instance.KubernetesProvider = operatorv1.ProviderDockerEE
 
-		renderOptions := &render.APIServerComponentOptions{
+		renderOptions := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
@@ -624,7 +624,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	It("should render an API server with custom configuration with MCM enabled at startup", func() {
-		renderOptions := &render.APIServerComponentOptions{
+		renderOptions := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			ManagementCluster:  managementCluster,
@@ -716,7 +716,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	It("should render an API server with custom configuration with MCM enabled at restart", func() {
-		renderOptions := &render.APIServerComponentOptions{
+		renderOptions := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			ManagementCluster:  managementCluster,
@@ -802,7 +802,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 	It("should add an init container if certificate management is enabled", func() {
 		instance.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c"}
-		renderOptions := &render.APIServerComponentOptions{
+		renderOptions := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
@@ -862,7 +862,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		var replicas int32 = 1
 		instance.ControlPlaneReplicas = &replicas
 
-		renderOptions := &render.APIServerComponentOptions{
+		renderOptions := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
@@ -881,7 +881,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		var replicas int32 = 2
 		instance.ControlPlaneReplicas = &replicas
 
-		renderOptions := &render.APIServerComponentOptions{
+		renderOptions := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
@@ -1201,7 +1201,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		}
 
 		// APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool
-		renderOptions := &render.APIServerComponentOptions{
+		renderOptions := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
@@ -1323,7 +1323,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			&netv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-apiserver", Namespace: "calico-apiserver"}, TypeMeta: metav1.TypeMeta{APIVersion: "networking.k8s.io/v1", Kind: "NetworkPolicy"}},
 		}
 
-		renderOptions := &render.APIServerComponentOptions{
+		renderOptions := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
@@ -1358,7 +1358,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 
 	It("should include a ControlPlaneNodeSelector when specified", func() {
 		instance.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
-		renderOptions := &render.APIServerComponentOptions{
+		renderOptions := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
@@ -1380,7 +1380,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			Effect:   corev1.TaintEffectNoExecute,
 		}
 		instance.ControlPlaneTolerations = []corev1.Toleration{tol}
-		renderOptions := &render.APIServerComponentOptions{
+		renderOptions := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
@@ -1398,7 +1398,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		k8sServiceEp.Port = "1234"
 		instance.KubernetesProvider = operatorv1.ProviderDockerEE
 
-		renderOptions := &render.APIServerComponentOptions{
+		renderOptions := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			HostNetwork:        true,
@@ -1422,7 +1422,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		k8sServiceEp.Port = "1234"
 		instance.KubernetesProvider = operatorv1.ProviderDockerEE
 
-		renderOptions := &render.APIServerComponentOptions{
+		renderOptions := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
@@ -1445,7 +1445,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		k8sServiceEp.Port = "1234"
 		instance.KubernetesProvider = operatorv1.ProviderDockerEE
 
-		renderOptions := &render.APIServerComponentOptions{
+		renderOptions := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
@@ -1467,7 +1467,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		var replicas int32 = 1
 		instance.ControlPlaneReplicas = &replicas
 
-		renderOptions := &render.APIServerComponentOptions{
+		renderOptions := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,
@@ -1486,7 +1486,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		var replicas int32 = 2
 		instance.ControlPlaneReplicas = &replicas
 
-		renderOptions := &render.APIServerComponentOptions{
+		renderOptions := &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sServiceEp,
 			Installation:       instance,
 			Openshift:          openshift,

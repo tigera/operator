@@ -79,25 +79,17 @@ func csrRolebindingName(v operatorv1.ProductVariant) string {
 	return "tigera-apiserver"
 }
 
-func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
-	installation *operatorv1.InstallationSpec,
-	hostNetwork bool,
-	managementCluster *operatorv1.ManagementCluster,
-	managementClusterConnection *operatorv1.ManagementClusterConnection,
-	aci *operatorv1.AmazonCloudIntegration,
-	tlsKeyPair *corev1.Secret,
-	pullSecrets []*corev1.Secret,
-	openshift bool, tunnelCASecret *corev1.Secret, clusterDomain string) (Component, error) {
+func APIServer(cfg *APIServerConfiguration) (Component, error) {
 
 	tlsSecrets := []*corev1.Secret{}
 	tlsHashAnnotations := make(map[string]string)
 
-	if installation.CertificateManagement == nil {
-		svcDNSNames := dns.GetServiceDNSNames(apiserverServiceName(installation.Variant), rmeta.APIServerNamespace(installation.Variant), clusterDomain)
-		if tlsKeyPair == nil {
+	if cfg.Installation.CertificateManagement == nil {
+		svcDNSNames := dns.GetServiceDNSNames(apiserverServiceName(cfg.Installation.Variant), rmeta.APIServerNamespace(cfg.Installation.Variant), cfg.ClusterDomain)
+		if cfg.TLSKeyPair == nil {
 			var err error
-			tlsKeyPair, err = secret.CreateTLSSecret(nil,
-				apiServerTLSSecretName(installation.Variant),
+			cfg.TLSKeyPair, err = secret.CreateTLSSecret(nil,
+				apiServerTLSSecretName(cfg.Installation.Variant),
 				common.OperatorNamespace(),
 				APIServerSecretKeyName,
 				APIServerSecretCertName,
@@ -108,69 +100,68 @@ func APIServer(k8sServiceEndpoint k8sapi.ServiceEndpoint,
 			if err != nil {
 				return nil, err
 			}
-			// We only need to add the tlsKeyPair if we created it, otherwise
+			// We only need to add the TLSKeyPair if we created it, otherwise
 			// it already exists.
-			tlsSecrets = []*corev1.Secret{tlsKeyPair}
-			tlsHashAnnotations[TlsSecretHashAnnotation] = rmeta.AnnotationHash(tlsKeyPair.Data)
+			tlsSecrets = []*corev1.Secret{cfg.TLSKeyPair}
+			tlsHashAnnotations[TlsSecretHashAnnotation] = rmeta.AnnotationHash(cfg.TLSKeyPair.Data)
 		}
-		copy := tlsKeyPair.DeepCopy()
+		copy := cfg.TLSKeyPair.DeepCopy()
 		copy.ObjectMeta = metav1.ObjectMeta{
-			Name:      apiServerTLSSecretName(installation.Variant),
-			Namespace: rmeta.APIServerNamespace(installation.Variant),
+			Name:      apiServerTLSSecretName(cfg.Installation.Variant),
+			Namespace: rmeta.APIServerNamespace(cfg.Installation.Variant),
 		}
 		tlsSecrets = append(tlsSecrets, copy)
 	}
 
-	if managementCluster != nil {
-		if tunnelCASecret == nil {
-			tunnelCASecret = voltronTunnelSecret()
-			tlsSecrets = append(tlsSecrets, tunnelCASecret)
+	if cfg.ManagementCluster != nil {
+		if cfg.TunnelCASecret == nil {
+			cfg.TunnelCASecret = voltronTunnelSecret()
+			tlsSecrets = append(tlsSecrets, cfg.TunnelCASecret)
 		}
-		tlsSecrets = append(tlsSecrets, secret.CopyToNamespace(rmeta.APIServerNamespace(installation.Variant), tunnelCASecret)...)
-		tlsHashAnnotations[voltronTunnelHashAnnotation] = rmeta.AnnotationHash(tunnelCASecret.Data)
+		tlsSecrets = append(tlsSecrets, secret.CopyToNamespace(rmeta.APIServerNamespace(cfg.Installation.Variant), cfg.TunnelCASecret)...)
+		tlsHashAnnotations[voltronTunnelHashAnnotation] = rmeta.AnnotationHash(cfg.TunnelCASecret.Data)
 	}
 
 	return &apiServerComponent{
-		installation:                installation,
-		forceHostNetwork:            hostNetwork,
-		managementCluster:           managementCluster,
-		managementClusterConnection: managementClusterConnection,
-		amazonCloudIntegration:      aci,
-		tlsSecrets:                  tlsSecrets,
-		tlsAnnotations:              tlsHashAnnotations,
-		pullSecrets:                 pullSecrets,
-		openshift:                   openshift,
-		k8sServiceEp:                k8sServiceEndpoint,
-		clusterDomain:               clusterDomain,
+		cfg:            cfg,
+		tlsSecrets:     tlsSecrets,
+		tlsAnnotations: tlsHashAnnotations,
 	}, nil
 }
 
+// APIServerConfiguration contains all the config information apiServerComponent needs to render component.
+type APIServerConfiguration struct {
+	K8SServiceEndpoint          k8sapi.ServiceEndpoint
+	Installation                *operatorv1.InstallationSpec
+	HostNetwork                 bool
+	ManagementCluster           *operatorv1.ManagementCluster
+	ManagementClusterConnection *operatorv1.ManagementClusterConnection
+	AmazonCloudIntegration      *operatorv1.AmazonCloudIntegration
+	TLSKeyPair                  *corev1.Secret
+	PullSecrets                 []*corev1.Secret
+	Openshift                   bool
+	TunnelCASecret              *corev1.Secret
+	ClusterDomain               string
+}
+
 type apiServerComponent struct {
-	k8sServiceEp                k8sapi.ServiceEndpoint
-	installation                *operatorv1.InstallationSpec
-	managementCluster           *operatorv1.ManagementCluster
-	managementClusterConnection *operatorv1.ManagementClusterConnection
-	amazonCloudIntegration      *operatorv1.AmazonCloudIntegration
-	tlsSecrets                  []*corev1.Secret
-	tlsAnnotations              map[string]string
-	pullSecrets                 []*corev1.Secret
-	openshift                   bool
-	isManagement                bool
-	forceHostNetwork            bool
-	clusterDomain               string
-	apiServerImage              string
-	queryServerImage            string
-	certSignReqImage            string
+	cfg              *APIServerConfiguration
+	tlsSecrets       []*corev1.Secret
+	tlsAnnotations   map[string]string
+	isManagement     bool
+	apiServerImage   string
+	queryServerImage string
+	certSignReqImage string
 }
 
 func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
-	reg := c.installation.Registry
-	path := c.installation.ImagePath
-	prefix := c.installation.ImagePrefix
+	reg := c.cfg.Installation.Registry
+	path := c.cfg.Installation.ImagePath
+	prefix := c.cfg.Installation.ImagePrefix
 	var err error
 	errMsgs := []string{}
 
-	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		c.apiServerImage, err = components.GetReference(components.ComponentAPIServer, reg, path, prefix, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
@@ -186,8 +177,8 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		}
 	}
 
-	if c.installation.CertificateManagement != nil {
-		c.certSignReqImage, err = ResolveCSRInitImage(c.installation, is)
+	if c.cfg.Installation.CertificateManagement != nil {
+		c.certSignReqImage, err = ResolveCSRInitImage(c.cfg.Installation, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
@@ -227,7 +218,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.authReaderRoleBinding)
 	globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.webhookReaderClusterRole)
 	globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.webhookReaderClusterRoleBinding)
-	if !c.openshift {
+	if !c.cfg.Openshift {
 		globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.apiServerPodSecurityPolicy)
 	}
 
@@ -235,7 +226,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	// deleted, since they will be garbage collected on namespace deletion.
 	namespacedObjects := []client.Object{}
 	// Add in image pull secrets.
-	secrets := secret.CopyToNamespace(rmeta.APIServerNamespace(c.installation.Variant), c.pullSecrets...)
+	secrets := secret.CopyToNamespace(rmeta.APIServerNamespace(c.cfg.Installation.Variant), c.cfg.PullSecrets...)
 	namespacedObjects = append(namespacedObjects, secret.ToRuntimeObjects(secrets...)...)
 
 	namespacedObjects = append(namespacedObjects,
@@ -245,17 +236,17 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	)
 
 	// Add in certificates for API server TLS.
-	if c.installation.CertificateManagement == nil {
+	if c.cfg.Installation.CertificateManagement == nil {
 		namespacedObjects = append(namespacedObjects, c.getTLSObjects()...)
 		globalObjects = append(globalObjects, c.apiServiceRegistration(c.tlsSecrets[0].Data[APIServerSecretCertName]))
 	} else {
-		namespacedObjects = append(namespacedObjects, c.apiServiceRegistration(c.installation.CertificateManagement.CACert))
-		globalObjects = append(globalObjects, CSRClusterRoleBinding(csrRolebindingName(c.installation.Variant), rmeta.APIServerNamespace(c.installation.Variant)))
+		namespacedObjects = append(namespacedObjects, c.apiServiceRegistration(c.cfg.Installation.CertificateManagement.CACert))
+		globalObjects = append(globalObjects, CSRClusterRoleBinding(csrRolebindingName(c.cfg.Installation.Variant), rmeta.APIServerNamespace(c.cfg.Installation.Variant)))
 	}
 
 	// Global enterprise-only objects.
 	globalEnterpriseObjects := []client.Object{
-		CreateNamespace(rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise), c.installation.KubernetesProvider),
+		CreateNamespace(rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise), c.cfg.Installation.KubernetesProvider),
 		c.tigeraCustomResourcesClusterRole(),
 		c.tigeraCustomResourcesClusterRoleBinding(),
 		c.tierGetterClusterRole(),
@@ -273,12 +264,12 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 
 	// Global OSS-only objects.
 	globalCalicoObjects := []client.Object{
-		CreateNamespace(rmeta.APIServerNamespace(operatorv1.Calico), c.installation.KubernetesProvider),
+		CreateNamespace(rmeta.APIServerNamespace(operatorv1.Calico), c.cfg.Installation.KubernetesProvider),
 	}
 
 	// Compile the final arrays based on the variant.
 	objsToCreate := []client.Object{}
-	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		// Create any enterprise specific objects.
 		globalObjects = append(globalObjects, globalEnterpriseObjects...)
 		namespacedObjects = append(namespacedObjects, namespacedEnterpriseObjects...)
@@ -322,8 +313,8 @@ func (c *apiServerComponent) apiServiceRegistration(cert []byte) *apiregv1.APISe
 			VersionPriority:      200,
 			GroupPriorityMinimum: 1500,
 			Service: &apiregv1.ServiceReference{
-				Name:      apiserverServiceName(c.installation.Variant),
-				Namespace: rmeta.APIServerNamespace(c.installation.Variant),
+				Name:      apiserverServiceName(c.cfg.Installation.Variant),
+				Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 			},
 			Version:  "v3",
 			CABundle: cert,
@@ -341,7 +332,7 @@ func (c *apiServerComponent) delegateAuthClusterRoleBinding() (client.Object, cl
 	var name, nameToDelete string
 	enterpriseName := "tigera-apiserver-delegate-auth"
 	ossName := "calico-apiserver-delegate-auth"
-	switch c.installation.Variant {
+	switch c.cfg.Installation.Variant {
 	case operatorv1.TigeraSecureEnterprise:
 		name = enterpriseName
 		nameToDelete = ossName
@@ -358,8 +349,8 @@ func (c *apiServerComponent) delegateAuthClusterRoleBinding() (client.Object, cl
 			Subjects: []rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      serviceAccountName(c.installation.Variant),
-					Namespace: rmeta.APIServerNamespace(c.installation.Variant),
+					Name:      serviceAccountName(c.cfg.Installation.Variant),
+					Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 				},
 			},
 			RoleRef: rbacv1.RoleRef{
@@ -385,7 +376,7 @@ func (c *apiServerComponent) authReaderRoleBinding() (client.Object, client.Obje
 	var name, nameToDelete string
 	enterpriseName := "tigera-auth-reader"
 	ossName := "calico-apiserver-auth-reader"
-	switch c.installation.Variant {
+	switch c.cfg.Installation.Variant {
 	case operatorv1.TigeraSecureEnterprise:
 		name = enterpriseName
 		nameToDelete = ossName
@@ -408,8 +399,8 @@ func (c *apiServerComponent) authReaderRoleBinding() (client.Object, client.Obje
 			Subjects: []rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      serviceAccountName(c.installation.Variant),
-					Namespace: rmeta.APIServerNamespace(c.installation.Variant),
+					Name:      serviceAccountName(c.cfg.Installation.Variant),
+					Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 				},
 			},
 		}, &rbacv1.RoleBinding{
@@ -429,8 +420,8 @@ func (c *apiServerComponent) apiServerServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      serviceAccountName(c.installation.Variant),
-			Namespace: rmeta.APIServerNamespace(c.installation.Variant),
+			Name:      serviceAccountName(c.cfg.Installation.Variant),
+			Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 		},
 	}
 }
@@ -501,7 +492,7 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 			},
 		},
 	}
-	if !c.openshift {
+	if !c.cfg.Openshift {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -533,8 +524,8 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRoleBinding() *rbacv1.C
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      serviceAccountName(c.installation.Variant),
-				Namespace: rmeta.APIServerNamespace(c.installation.Variant),
+				Name:      serviceAccountName(c.cfg.Installation.Variant),
+				Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 			},
 		},
 		RoleRef: rbacv1.RoleRef{
@@ -552,7 +543,7 @@ func (c *apiServerComponent) authClusterRole() (client.Object, client.Object) {
 	var name, nameToDelete string
 	enterpriseName := "tigera-extension-apiserver-auth-access"
 	ossName := "calico-extension-apiserver-auth-access"
-	switch c.installation.Variant {
+	switch c.cfg.Installation.Variant {
 	case operatorv1.TigeraSecureEnterprise:
 		name = enterpriseName
 		nameToDelete = ossName
@@ -614,7 +605,7 @@ func (c *apiServerComponent) authClusterRoleBinding() (client.Object, client.Obj
 	var name, nameToDelete string
 	enterpriseName := "tigera-extension-apiserver-auth-access"
 	ossName := "calico-extension-apiserver-auth-access"
-	switch c.installation.Variant {
+	switch c.cfg.Installation.Variant {
 	case operatorv1.TigeraSecureEnterprise:
 		name = enterpriseName
 		nameToDelete = ossName
@@ -631,8 +622,8 @@ func (c *apiServerComponent) authClusterRoleBinding() (client.Object, client.Obj
 			Subjects: []rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      serviceAccountName(c.installation.Variant),
-					Namespace: rmeta.APIServerNamespace(c.installation.Variant),
+					Name:      serviceAccountName(c.cfg.Installation.Variant),
+					Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 				},
 			},
 			RoleRef: rbacv1.RoleRef{
@@ -657,7 +648,7 @@ func (c *apiServerComponent) webhookReaderClusterRole() (client.Object, client.O
 	var name, nameToDelete string
 	enterpriseName := "tigera-webhook-reader"
 	ossName := "calico-webhook-reader"
-	switch c.installation.Variant {
+	switch c.cfg.Installation.Variant {
 	case operatorv1.TigeraSecureEnterprise:
 		name = enterpriseName
 		nameToDelete = ossName
@@ -702,7 +693,7 @@ func (c *apiServerComponent) webhookReaderClusterRoleBinding() (client.Object, c
 	var name, nameToDelete, refName string
 	enterpriseName := "tigera-apiserver-webhook-reader"
 	ossName := "calico-apiserver-webhook-reader"
-	switch c.installation.Variant {
+	switch c.cfg.Installation.Variant {
 	case operatorv1.TigeraSecureEnterprise:
 		name = enterpriseName
 		nameToDelete = ossName
@@ -719,8 +710,8 @@ func (c *apiServerComponent) webhookReaderClusterRoleBinding() (client.Object, c
 			Subjects: []rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      serviceAccountName(c.installation.Variant),
-					Namespace: rmeta.APIServerNamespace(c.installation.Variant),
+					Name:      serviceAccountName(c.cfg.Installation.Variant),
+					Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 				},
 			},
 			RoleRef: rbacv1.RoleRef{
@@ -742,8 +733,8 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 	s := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      apiserverServiceName(c.installation.Variant),
-			Namespace: rmeta.APIServerNamespace(c.installation.Variant),
+			Name:      apiserverServiceName(c.cfg.Installation.Variant),
+			Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 		},
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
@@ -760,7 +751,7 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 		},
 	}
 
-	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		// Add port for queryserver if enterprise.
 		s.Spec.Ports = append(s.Spec.Ports,
 			corev1.ServicePort{
@@ -778,7 +769,7 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 // apiServer creates a deployment containing the API and query servers.
 func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 	var name string
-	switch c.installation.Variant {
+	switch c.cfg.Installation.Variant {
 	case operatorv1.TigeraSecureEnterprise:
 		name = "tigera-apiserver"
 	case operatorv1.Calico:
@@ -793,29 +784,29 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 	}
 
 	var initContainers []corev1.Container
-	if c.installation.CertificateManagement != nil {
+	if c.cfg.Installation.CertificateManagement != nil {
 		initContainers = append(initContainers, CreateCSRInitContainer(
-			c.installation.CertificateManagement,
+			c.cfg.Installation.CertificateManagement,
 			c.certSignReqImage,
-			apiServerTLSSecretName(c.installation.Variant), TLSSecretCertName,
+			apiServerTLSSecretName(c.cfg.Installation.Variant), TLSSecretCertName,
 			APIServerSecretKeyName,
 			APIServerSecretCertName,
-			dns.GetServiceDNSNames(apiserverServiceName(c.installation.Variant), rmeta.APIServerNamespace(c.installation.Variant), c.clusterDomain),
-			rmeta.APIServerNamespace(c.installation.Variant)))
+			dns.GetServiceDNSNames(apiserverServiceName(c.cfg.Installation.Variant), rmeta.APIServerNamespace(c.cfg.Installation.Variant), c.cfg.ClusterDomain),
+			rmeta.APIServerNamespace(c.cfg.Installation.Variant)))
 	}
 
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
-			Namespace: rmeta.APIServerNamespace(c.installation.Variant),
+			Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 			Labels: map[string]string{
 				"apiserver": "true",
 				"k8s-app":   name,
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: c.installation.ControlPlaneReplicas,
+			Replicas: c.cfg.Installation.ControlPlaneReplicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
@@ -823,7 +814,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
-					Namespace: rmeta.APIServerNamespace(c.installation.Variant),
+					Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 					Labels: map[string]string{
 						"apiserver": "true",
 						"k8s-app":   name,
@@ -832,11 +823,11 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 				},
 				Spec: corev1.PodSpec{
 					DNSPolicy:          dnsPolicy,
-					NodeSelector:       c.installation.ControlPlaneNodeSelector,
+					NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 					HostNetwork:        hostNetwork,
-					ServiceAccountName: serviceAccountName(c.installation.Variant),
+					ServiceAccountName: serviceAccountName(c.cfg.Installation.Variant),
 					Tolerations:        c.tolerations(),
-					ImagePullSecrets:   secret.GetReferenceList(c.pullSecrets),
+					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					InitContainers:     initContainers,
 					Containers: []corev1.Container{
 						c.apiServerContainer(),
@@ -847,11 +838,11 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 		},
 	}
 
-	if c.installation.ControlPlaneReplicas != nil && *c.installation.ControlPlaneReplicas > 1 {
-		d.Spec.Template.Spec.Affinity = podaffinity.NewPodAntiAffinity(name, rmeta.APIServerNamespace(c.installation.Variant))
+	if c.cfg.Installation.ControlPlaneReplicas != nil && *c.cfg.Installation.ControlPlaneReplicas > 1 {
+		d.Spec.Template.Spec.Affinity = podaffinity.NewPodAntiAffinity(name, rmeta.APIServerNamespace(c.cfg.Installation.Variant))
 	}
 
-	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		d.Spec.Template.Spec.Containers = append(d.Spec.Template.Spec.Containers, c.queryServerContainer())
 	}
 
@@ -859,9 +850,9 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 }
 
 func (c *apiServerComponent) hostNetwork() bool {
-	hostNetwork := c.forceHostNetwork
-	if c.installation.KubernetesProvider == operatorv1.ProviderEKS &&
-		c.installation.CNI.Type == operatorv1.PluginCalico {
+	hostNetwork := c.cfg.HostNetwork
+	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderEKS &&
+		c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
 		// Workaround the fact that webhooks don't work for non-host-networked pods
 		// when in this networking mode on EKS, because the control plane nodes don't run
 		// Calico.
@@ -873,7 +864,7 @@ func (c *apiServerComponent) hostNetwork() bool {
 // apiServerContainer creates the API server container.
 func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	volumeMounts := []corev1.VolumeMount{}
-	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		volumeMounts = append(volumeMounts,
 			corev1.VolumeMount{Name: "tigera-audit-logs", MountPath: "/var/log/calico/audit"},
 			corev1.VolumeMount{Name: "tigera-audit-policy", MountPath: "/etc/tigera/audit"},
@@ -881,10 +872,10 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	}
 
 	volumeMounts = append(volumeMounts,
-		corev1.VolumeMount{Name: apiServerTLSSecretName(c.installation.Variant), MountPath: "/code/apiserver.local.config/certificates"},
+		corev1.VolumeMount{Name: apiServerTLSSecretName(c.cfg.Installation.Variant), MountPath: "/code/apiserver.local.config/certificates"},
 	)
 
-	if c.managementCluster != nil {
+	if c.cfg.ManagementCluster != nil {
 		volumeMounts = append(volumeMounts,
 			corev1.VolumeMount{
 				Name:      VoltronTunnelSecretName,
@@ -896,7 +887,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 	// On OpenShift apiserver needs privileged access to write audit logs to host path volume
 	isPrivileged := false
-	if c.openshift {
+	if c.cfg.Openshift {
 		isPrivileged = true
 	}
 
@@ -904,14 +895,14 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 	}
 
-	env = append(env, c.k8sServiceEp.EnvVars(c.hostNetwork(), c.installation.KubernetesProvider)...)
+	env = append(env, c.cfg.K8SServiceEndpoint.EnvVars(c.hostNetwork(), c.cfg.Installation.KubernetesProvider)...)
 
-	if c.installation.CalicoNetwork != nil && c.installation.CalicoNetwork.MultiInterfaceMode != nil {
-		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.installation.CalicoNetwork.MultiInterfaceMode.Value()})
+	if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
+		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
 	}
 
 	var name string
-	switch c.installation.Variant {
+	switch c.cfg.Installation.Variant {
 	case operatorv1.TigeraSecureEnterprise:
 		name = "tigera-apiserver"
 	case operatorv1.Calico:
@@ -962,17 +953,17 @@ func (c *apiServerComponent) startUpArgs() []string {
 		fmt.Sprintf("--secure-port=%d", apiServerPort),
 	}
 
-	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		args = append(args,
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
 			"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
 		)
 	}
 
-	if c.managementCluster != nil {
+	if c.cfg.ManagementCluster != nil {
 		args = append(args, "--enable-managed-clusters-create-api=true")
-		if c.managementCluster.Spec.Address != "" {
-			args = append(args, fmt.Sprintf("--managementClusterAddr=%s", c.managementCluster.Spec.Address))
+		if c.cfg.ManagementCluster.Spec.Address != "" {
+			args = append(args, fmt.Sprintf("--managementClusterAddr=%s", c.cfg.ManagementCluster.Spec.Address))
 		}
 	}
 
@@ -987,11 +978,11 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 	}
 
-	env = append(env, c.k8sServiceEp.EnvVars(c.hostNetwork(), c.installation.KubernetesProvider)...)
-	env = append(env, GetTigeraSecurityGroupEnvVariables(c.amazonCloudIntegration)...)
+	env = append(env, c.cfg.K8SServiceEndpoint.EnvVars(c.hostNetwork(), c.cfg.Installation.KubernetesProvider)...)
+	env = append(env, GetTigeraSecurityGroupEnvVariables(c.cfg.AmazonCloudIntegration)...)
 
-	if c.installation.CalicoNetwork != nil && c.installation.CalicoNetwork.MultiInterfaceMode != nil {
-		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.installation.CalicoNetwork.MultiInterfaceMode.Value()})
+	if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
+		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
 	}
 
 	container := corev1.Container{
@@ -1018,7 +1009,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 	volumes := []corev1.Volume{}
 	hostPathType := corev1.HostPathDirectoryOrCreate
-	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		volumes = append(volumes,
 			corev1.Volume{
 				Name: "tigera-audit-logs",
@@ -1045,7 +1036,7 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 			},
 		)
 
-		if c.managementCluster != nil {
+		if c.cfg.ManagementCluster != nil {
 			volumes = append(volumes, corev1.Volume{
 				// Append volume for tunnel CA certificate
 				Name: VoltronTunnelSecretName,
@@ -1060,8 +1051,8 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 
 	volumes = append(volumes,
 		corev1.Volume{
-			Name:         apiServerTLSSecretName(c.installation.Variant),
-			VolumeSource: certificateVolumeSource(c.installation.CertificateManagement, apiServerTLSSecretName(c.installation.Variant)),
+			Name:         apiServerTLSSecretName(c.cfg.Installation.Variant),
+			VolumeSource: certificateVolumeSource(c.cfg.Installation.CertificateManagement, apiServerTLSSecretName(c.cfg.Installation.Variant)),
 		},
 	)
 
@@ -1073,7 +1064,7 @@ func (c *apiServerComponent) tolerations() []corev1.Toleration {
 	if c.hostNetwork() {
 		return rmeta.TolerateAll
 	}
-	return append(c.installation.ControlPlaneTolerations, rmeta.TolerateMaster)
+	return append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster)
 }
 
 func (c *apiServerComponent) getTLSObjects() []client.Object {
@@ -1093,7 +1084,7 @@ func (c *apiServerComponent) apiServerPodSecurityPolicy() (client.Object, client
 	enterpriseName := "tigera-apiserver"
 	ossName := "calico-apiserver"
 
-	switch c.installation.Variant {
+	switch c.cfg.Installation.Variant {
 	case operatorv1.TigeraSecureEnterprise:
 		name = enterpriseName
 		nameToDelete = ossName
@@ -1124,7 +1115,7 @@ func (c *apiServerComponent) networkPolicy() *netv1.NetworkPolicy {
 	p := intstr.FromInt(5443)
 	return &netv1.NetworkPolicy{
 		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "allow-apiserver", Namespace: rmeta.APIServerNamespace(c.installation.Variant)},
+		ObjectMeta: metav1.ObjectMeta{Name: "allow-apiserver", Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant)},
 		Spec: netv1.NetworkPolicySpec{
 			PodSelector: metav1.LabelSelector{
 				MatchLabels: map[string]string{
@@ -1185,7 +1176,7 @@ func (c *apiServerComponent) tigeraCustomResourcesClusterRole() *rbacv1.ClusterR
 			},
 		},
 	}
-	if !c.openshift {
+	if !c.cfg.Openshift {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -1217,8 +1208,8 @@ func (c *apiServerComponent) tigeraCustomResourcesClusterRoleBinding() *rbacv1.C
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      serviceAccountName(c.installation.Variant),
-				Namespace: rmeta.APIServerNamespace(c.installation.Variant),
+				Name:      serviceAccountName(c.cfg.Installation.Variant),
+				Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 			},
 		},
 		RoleRef: rbacv1.RoleRef{
@@ -1383,7 +1374,7 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 	}
 
 	// Privileges for lma.tigera.io have no effect on managed clusters.
-	if c.managementClusterConnection == nil {
+	if c.cfg.ManagementClusterConnection == nil {
 		// Access to flow logs, audit logs, and statistics.
 		// Access to log into Kibana for oidc users.
 		rules = append(rules, rbacv1.PolicyRule{
@@ -1517,7 +1508,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 	}
 
 	// Privileges for lma.tigera.io have no effect on managed clusters.
-	if c.managementClusterConnection == nil {
+	if c.cfg.ManagementClusterConnection == nil {
 		// Access to flow logs, audit logs, and statistics.
 		// Elasticsearch superuser access once logged into Kibana.
 		rules = append(rules, rbacv1.PolicyRule{

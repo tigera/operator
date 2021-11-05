@@ -69,6 +69,7 @@ type StatusManager interface {
 	RemoveStatefulSets(sss ...types.NamespacedName)
 	RemoveCronJobs(cjs ...types.NamespacedName)
 	RemoveCertificateSigningRequests(name string)
+	SetWindowsUpgradeStatus(pending, inProgress, completed []string)
 	SetDegraded(reason, msg string)
 	ClearDegraded()
 	IsAvailable() bool
@@ -85,6 +86,7 @@ type statusManager struct {
 	statefulsets              map[string]types.NamespacedName
 	cronjobs                  map[string]types.NamespacedName
 	certificatestatusrequests map[string]map[string]string
+	windowsNodeUpgrades       *windowsNodeUpgrades
 	lock                      sync.Mutex
 	enabled                   *bool
 	kubernetesVersion         *common.VersionInfo
@@ -113,6 +115,7 @@ func New(client client.Client, component string, kubernetesVersion *common.Versi
 		statefulsets:              make(map[string]types.NamespacedName),
 		cronjobs:                  make(map[string]types.NamespacedName),
 		certificatestatusrequests: make(map[string]map[string]string),
+		windowsNodeUpgrades:       newWindowsNodeUpgrades(),
 		kubernetesVersion:         kubernetesVersion,
 	}
 }
@@ -142,7 +145,7 @@ func (m *statusManager) updateStatus() {
 		}
 
 		if m.IsProgressing() {
-			m.setProgressing("Not all pods are ready", m.progressingMessage())
+			m.setProgressing("Not all resources are ready", m.progressingMessage())
 		} else {
 			m.clearProgressing()
 		}
@@ -273,6 +276,43 @@ func (m *statusManager) AddCertificateSigningRequests(name string, labels map[st
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.certificatestatusrequests[name] = labels
+}
+
+type windowsNodeUpgrades struct {
+	nodesPending    []string
+	nodesInProgress []string
+	nodesCompleted  []string
+}
+
+func newWindowsNodeUpgrades() *windowsNodeUpgrades {
+	return &windowsNodeUpgrades{
+		nodesPending:    []string{},
+		nodesInProgress: []string{},
+		nodesCompleted:  []string{},
+	}
+}
+
+func (w *windowsNodeUpgrades) progressingReason() string {
+	inProgress := len(w.nodesInProgress)
+	pending := len(w.nodesPending)
+	completed := len(w.nodesCompleted)
+	total := pending + inProgress + completed
+
+	if pending+inProgress == 0 {
+		return ""
+	}
+
+	return fmt.Sprintf("Waiting for Calico for Windows to be upgraded: %v/%v nodes have been upgraded, %v in-progress", completed, total, inProgress)
+}
+
+// SetWindowsUpgradeStatus tells the status manager to monitor the upgrade
+// status of the given Windows node upgrades.
+func (m *statusManager) SetWindowsUpgradeStatus(pending, inProgress, completed []string) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	m.windowsNodeUpgrades.nodesPending = pending
+	m.windowsNodeUpgrades.nodesInProgress = inProgress
+	m.windowsNodeUpgrades.nodesCompleted = completed
 }
 
 // RemoveDaemonsets tells the status manager to stop monitoring the health of the given daemonsets
@@ -410,7 +450,7 @@ func (m *statusManager) syncState() {
 			progressing = append(progressing, fmt.Sprintf("DaemonSet %q update is rolling out (%d out of %d updated)", dsnn.String(), ds.Status.UpdatedNumberScheduled, ds.Status.DesiredNumberScheduled))
 		} else if ds.Status.NumberUnavailable > 0 {
 			progressing = append(progressing, fmt.Sprintf("DaemonSet %q is not available (awaiting %d nodes)", dsnn.String(), ds.Status.NumberUnavailable))
-		} else if ds.Status.NumberAvailable == 0 {
+		} else if ds.Status.NumberAvailable == 0 && ds.Status.DesiredNumberScheduled != 0 {
 			progressing = append(progressing, fmt.Sprintf("DaemonSet %q is not yet scheduled on any nodes", dsnn.String()))
 		} else if ds.Generation > ds.Status.ObservedGeneration {
 			progressing = append(progressing, fmt.Sprintf("DaemonSet %q update is being processed (generation %d, observed generation %d)", dsnn.String(), ds.Generation, ds.Status.ObservedGeneration))
@@ -494,6 +534,10 @@ func (m *statusManager) syncState() {
 		} else if pending {
 			progressing = append(progressing, fmt.Sprintf("Waiting on CertificateSigningRequest(s) with labels %v to be approved", labels))
 		}
+	}
+
+	if reason := m.windowsNodeUpgrades.progressingReason(); reason != "" {
+		progressing = append(progressing, reason)
 	}
 
 	m.progressing = progressing

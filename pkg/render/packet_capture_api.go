@@ -187,6 +187,11 @@ func (pc *packetCaptureApiComponent) clusterRole() client.Object {
 			Resources: []string{"packetcaptures"},
 			Verbs:     []string{"get"},
 		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"packetcaptures/status"},
+			Verbs:     []string{"update"},
+		},
 	}
 
 	return &rbacv1.ClusterRole{

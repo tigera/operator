@@ -14,3 +14,5 @@ components:
     version: release-v3.21
   calico/apiserver:
     version: release-v3.21
+  calico/windows-upgrade:
+    version: release-v3.21

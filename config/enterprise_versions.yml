@@ -93,6 +93,9 @@ components:
   deep-packet-inspection:
     image: tigera/deep-packet-inspection
     version: release-calient-v3.11
+  windows:
+    image: tigera/calico-windows-upgrade
+    version: release-calient-v3.11
   # The components below are third-party images that have been retagged under
   # quay.io/tigera so all enterprise images come from the same repository and org.
   elasticsearch-operator:

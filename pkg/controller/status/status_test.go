@@ -428,5 +428,32 @@ var _ = Describe("Status reporting tests", func() {
 					{ObjectMeta: metav1.ObjectMeta{Name: "csr2", Labels: labels}},
 				}, false, true),
 		)
+		Context("windowsNodeUpgrades", func() {
+			BeforeEach(func() {
+				sm.ReadyToMonitor()
+			})
+			It("should report the windows node upgrade status", func() {
+				sm.SetWindowsUpgradeStatus([]string{"n1", "n2", "n3"}, []string{}, []string{})
+				Expect(sm.windowsNodeUpgrades.progressingReason()).To(Equal("Waiting for Calico for Windows to be upgraded: 0/3 nodes have been upgraded, 0 in-progress"))
+
+				sm.SetWindowsUpgradeStatus([]string{"n2", "n3"}, []string{"n1"}, []string{})
+				Expect(sm.windowsNodeUpgrades.progressingReason()).To(Equal("Waiting for Calico for Windows to be upgraded: 0/3 nodes have been upgraded, 1 in-progress"))
+
+				sm.SetWindowsUpgradeStatus([]string{"n3"}, []string{"n1", "n2"}, []string{})
+				Expect(sm.windowsNodeUpgrades.progressingReason()).To(Equal("Waiting for Calico for Windows to be upgraded: 0/3 nodes have been upgraded, 2 in-progress"))
+
+				sm.SetWindowsUpgradeStatus([]string{"n3"}, []string{"n2"}, []string{"n1"})
+				Expect(sm.windowsNodeUpgrades.progressingReason()).To(Equal("Waiting for Calico for Windows to be upgraded: 1/3 nodes have been upgraded, 1 in-progress"))
+
+				sm.SetWindowsUpgradeStatus([]string{"n3"}, []string{}, []string{"n1", "n2"})
+				Expect(sm.windowsNodeUpgrades.progressingReason()).To(Equal("Waiting for Calico for Windows to be upgraded: 2/3 nodes have been upgraded, 0 in-progress"))
+
+				sm.SetWindowsUpgradeStatus([]string{}, []string{"n3"}, []string{"n1", "n2"})
+				Expect(sm.windowsNodeUpgrades.progressingReason()).To(Equal("Waiting for Calico for Windows to be upgraded: 2/3 nodes have been upgraded, 1 in-progress"))
+
+				sm.SetWindowsUpgradeStatus([]string{}, []string{}, []string{"n1", "n2", "n3"})
+				Expect(sm.windowsNodeUpgrades.progressingReason()).To(Equal(""))
+			})
+		})
 	})
 })

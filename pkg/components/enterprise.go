@@ -197,6 +197,10 @@ var (
 		Image:   "tigera/elasticsearch-metrics",
 	}
 
+	ComponentTigeraWindows = component{
+		Version: "release-calient-v3.11",
+		Image:   "tigera/calico-windows-upgrade",
+	}
 	EnterpriseComponents = []component{
 		ComponentAPIServer,
 		ComponentComplianceBenchmarker,
@@ -234,5 +238,6 @@ var (
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
+		ComponentTigeraWindows,
 	}
 )

@@ -68,6 +68,10 @@ func (m *MockStatus) RemoveCertificateSigningRequests(label string) {
 	m.Called(label)
 }
 
+func (m *MockStatus) SetWindowsUpgradeStatus(pending, inProgress, completed []string) {
+	m.Called(pending, inProgress, completed)
+}
+
 func (m *MockStatus) SetDegraded(reason, msg string) {
 	m.Called(reason, msg)
 }

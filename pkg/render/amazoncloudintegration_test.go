@@ -37,7 +37,7 @@ const (
 var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 	var instance *operatorv1.AmazonCloudIntegration
 	var credential *render.AmazonCredential
-	var installation *operatorv1.InstallationSpec
+	var cfg *render.AmazonCloudIntegrationConfiguration
 
 	BeforeEach(func() {
 		instance = &operatorv1.AmazonCloudIntegration{
@@ -58,13 +58,18 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 			KeySecret: []byte("KeySecret"),
 		}
 
-		installation = &operatorv1.InstallationSpec{}
+		cfg = &render.AmazonCloudIntegrationConfiguration{
+			AmazonCloudIntegration: instance,
+			Installation:           &operatorv1.InstallationSpec{},
+			Credentials:            credential
+		}
 	})
 
 	It("should render controlPlaneNodeSelector", func() {
-		component, err := render.AmazonCloudIntegration(instance, &operatorv1.InstallationSpec{
+		cfg.Installation = &operatorv1.InstallationSpec{
 			ControlPlaneNodeSelector: map[string]string{"foo": "bar"},
-		}, credential, nil, false)
+		}
+		component, err := render.AmazonCloudIntegration(cfg)
 		Expect(err).ToNot(HaveOccurred())
 		resources, _ := component.Objects()
 		resource := rtest.GetResource(resources, AwsCIName, AwsCINs, "apps", "v1", "Deployment")
@@ -74,7 +79,8 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 
 	It("should render an AmazonCloudConfiguration with specified configuration", func() {
 		// AmazonCloudIntegration(aci *operatorv1.AmazonCloudIntegration, installation *operator.Installation, cred *AmazonCredential, ps []*corev1.Secret, openshift bool) (Component, error) {
-		component, err := render.AmazonCloudIntegration(instance, installation, credential, nil, openshift)
+		cfg.Openshift = openshift
+		component, err := render.AmazonCloudIntegration(cfg)
 		Expect(err).To(BeNil(), "Expected AmazonCloudIntegration to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 
@@ -184,8 +190,9 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 	})
 
 	It("should set MetadataAccess when configured", func() {
-		instance.Spec.DefaultPodMetadataAccess = operatorv1.MetadataAccessAllowed
-		component, err := render.AmazonCloudIntegration(instance, installation, credential, nil, openshift)
+		cfg.Openshift = openshift
+		cfg.AmazonCloudIntegration.Spec.DefaultPodMetadataAccess = operatorv1.MetadataAccessAllowed
+		component, err := render.AmazonCloudIntegration(cfg)
 		Expect(err).To(BeNil(), "Expected AmazonCloudIntegration to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 

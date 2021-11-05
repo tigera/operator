@@ -61,7 +61,7 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 		cfg = &render.AmazonCloudIntegrationConfiguration{
 			AmazonCloudIntegration: instance,
 			Installation:           &operatorv1.InstallationSpec{},
-			Credentials:            credential
+			Credentials:            credential,
 		}
 	})
 

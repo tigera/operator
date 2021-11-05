@@ -301,21 +301,14 @@ func patchNodeToStartUpgrade(ctx context.Context, client kubernetes.Interface, n
 			upgradeLabelExists = true
 		}
 
-		// If either the taint or label are missing, patch the node.
-		if !taintExists || !upgradeLabelExists {
-			windowsLog.V(1).Info(fmt.Sprintf("Taint or upgrade label missing for node %v. taintExists: %v, labelExists: %v", nodeName, taintExists, upgradeLabelExists))
+		patches := []objPatch{}
+
+		if !taintExists {
+			windowsLog.V(1).Info(fmt.Sprintf("Taint missing for node %v", nodeName))
 			newTaints := node.DeepCopy().Spec.Taints
 			newTaints = append(newTaints, *common.CalicoWindowsUpgradingTaint)
 
-			// With JSONPatch '/' must be escaped as '~1' http://jsonpatch.com/
-			labelKey := strings.Replace(common.CalicoWindowsUpgradeLabel, "/", "~1", -1)
-
 			p := []objPatch{
-				{
-					Op:    "add",
-					Path:  fmt.Sprintf("/metadata/labels/%s", labelKey),
-					Value: common.CalicoWindowsUpgradeLabelInProgress,
-				},
 				// Test that the taints didn't change. If this test fails the entire
 				// patch fails.
 				{
@@ -330,13 +323,29 @@ func patchNodeToStartUpgrade(ctx context.Context, client kubernetes.Interface, n
 					Value: newTaints,
 				},
 			}
+			patches = append(patches, p...)
 
-			patchBytes, err := json.Marshal(p)
-			if err != nil {
-				return false, err
+		}
+
+		if !upgradeLabelExists {
+			windowsLog.V(1).Info(fmt.Sprintf("Upgrade label missing for node %v", nodeName))
+			// With JSONPatch '/' must be escaped as '~1' http://jsonpatch.com/
+			labelKey := strings.Replace(common.CalicoWindowsUpgradeLabel, "/", "~1", -1)
+
+			p := objPatch{
+				Op:    "add",
+				Path:  fmt.Sprintf("/metadata/labels/%s", labelKey),
+				Value: common.CalicoWindowsUpgradeLabelInProgress,
 			}
+			patches = append(patches, p)
+		}
 
-			_, err = client.CoreV1().Nodes().Patch(ctx, node.Name, types.JSONPatchType, patchBytes, metav1.PatchOptions{})
+		// If either the taint or label do not exist, patch the node to add them.
+		if len(patches) > 0 {
+			windowsLog.V(1).Info(fmt.Sprintf("Patching node %v to add upgrade taint and/or label", nodeName))
+
+			err = patchNode(ctx, client, nodeName, patches...)
+
 			if err == nil {
 				return true, nil
 			}
@@ -381,18 +390,11 @@ func patchNodeToCompleteUpgrade(ctx context.Context, client kubernetes.Interface
 			upgradeLabelExists = true
 		}
 
-		// If either the taint or label exist, patch the node to remove them.
-		if taintExists || upgradeLabelExists {
-			windowsLog.V(1).Info(fmt.Sprintf("Taint or upgrade label exists for node %v. taintExists: %v, labelExists: %v", nodeName, taintExists, upgradeLabelExists))
-			// With JSONPatch '/' must be escaped as '~1' http://jsonpatch.com/
-			labelKey := strings.Replace(common.CalicoWindowsUpgradeLabel, "/", "~1", -1)
+		patches := []objPatch{}
 
+		if taintExists {
+			windowsLog.V(1).Info(fmt.Sprintf("Upgrade taint exists for node %v", nodeName))
 			p := []objPatch{
-				// Remove the upgrade label.
-				{
-					Op:   "remove",
-					Path: fmt.Sprintf("/metadata/labels/%s", labelKey),
-				},
 				// Test that the taint to remove didn't change. If this test fails the entire
 				// patch fails.
 				{
@@ -406,8 +408,27 @@ func patchNodeToCompleteUpgrade(ctx context.Context, client kubernetes.Interface
 					Path: fmt.Sprintf("/spec/taints/%d", taintIndex),
 				},
 			}
+			patches = append(patches, p...)
+		}
 
-			err = patchNode(ctx, client, nodeName, p...)
+		if upgradeLabelExists {
+			windowsLog.V(1).Info(fmt.Sprintf("Upgrade label exists for node %v", nodeName))
+			// With JSONPatch '/' must be escaped as '~1' http://jsonpatch.com/
+			labelKey := strings.Replace(common.CalicoWindowsUpgradeLabel, "/", "~1", -1)
+
+			p := objPatch{
+				// Remove the upgrade label.
+				Op:   "remove",
+				Path: fmt.Sprintf("/metadata/labels/%s", labelKey),
+			}
+			patches = append(patches, p)
+		}
+
+		// If either the taint or label exist, patch the node to remove them.
+		if len(patches) > 0 {
+			windowsLog.V(1).Info(fmt.Sprintf("Patching node %v to remove upgrade taint and/or label", nodeName))
+
+			err = patchNode(ctx, client, nodeName, patches...)
 
 			if err == nil {
 				return true, nil

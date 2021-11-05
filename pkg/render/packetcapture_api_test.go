@@ -309,6 +309,11 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 				Resources: []string{"packetcaptures"},
 				Verbs:     []string{"get"},
 			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"packetcaptures/status"},
+				Verbs:     []string{"update"},
+			},
 		}))
 		clusterRoleBinding := rtest.GetResource(resources, render.PacketCaptureClusterRoleBindingName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 		Expect(clusterRoleBinding.RoleRef.Name).To(Equal(render.PacketCaptureClusterRoleName))

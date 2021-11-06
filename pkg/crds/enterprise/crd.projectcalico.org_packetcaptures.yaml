@@ -73,7 +73,6 @@ spec:
                   type: object
                 type: array
               selector:
-                default: all()
                 description: "The selector is an expression used to pick out the endpoints
                   that the policy should be applied to.  The selector will only match
                   endpoints in the same namespace as the PacketCapture resource. \n
@@ -86,12 +85,12 @@ spec:
                   \"c\" \thas(label_name)  -> True if that label is present \t! expr
                   -> negation of expr \texpr && expr  -> Short-circuit and \texpr
                   || expr  -> Short-circuit or \t( expr ) -> parens for grouping \tall()
-                  -> matches all endpoints. \tan empty selector will default to all
-                  \n Label names are allowed to contain alphanumerics, -, _ and /.
-                  String literals are more permissive but they do not support escape
-                  characters. \n Examples (with made-up labels): \n \ttype == \"webserver\"
-                  && deployment == \"prod\" \ttype in {\"frontend\", \"backend\"}
-                  \tdeployment != \"dev\" \t! has(label_name)"
+                  or the empty selector -> matches all endpoints. \n Label names are
+                  allowed to contain alphanumerics, -, _ and /. String literals are
+                  more permissive but they do not support escape characters. \n Examples
+                  (with made-up labels): \n \ttype == \"webserver\" && deployment
+                  == \"prod\" \ttype in {\"frontend\", \"backend\"} \tdeployment !=
+                  \"dev\" \t! has(label_name)"
                 type: string
               startTime:
                 description: Defines the start time from which this PacketCapture
@@ -138,7 +137,6 @@ spec:
                       - Finished
                       - Scheduled
                       - Error
-                      - WaitingForTraffic
                       type: string
                   type: object
                 type: array

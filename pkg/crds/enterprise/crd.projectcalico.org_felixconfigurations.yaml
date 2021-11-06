@@ -43,21 +43,6 @@ spec:
                   will add a rule to drop VXLAN encapsulated traffic from workloads
                   [Default: false]'
                 type: boolean
-              awsRequestTimeout:
-                description: 'AWSRequestTimeout is the timeout on AWS API requests.
-                  [Default: 30s]'
-                type: string
-              awsSecondaryIPRoutingRulePriority:
-                description: 'AWSSecondaryIPRoutingRulePriority controls the priority
-                  that Felix will use for routing rules when programming them for
-                  AWS Secondary IP support. [Default: 101]'
-                type: integer
-              awsSecondaryIPSupport:
-                description: 'AWSSecondaryIPSupport controls whether Felix will try
-                  to provision AWS secondary ENIs and secondary IPs for workloads
-                  that have IPs from IP pools that are configured with an AWS subnet
-                  ID. [Default: Disabled]'
-                type: string
               awsSrcDstCheck:
                 description: 'Set source-destination-check on AWS EC2 instances. Accepted
                   value must be one of "DoNothing", "Enable" or "Disable". [Default:
@@ -133,20 +118,6 @@ spec:
                   logs are emitted to the BPF trace pipe, accessible with the command
                   `tc exec bpf debug`. [Default: Off].'
                 type: string
-              bpfPSNATPorts:
-                anyOf:
-                - type: integer
-                - type: string
-                description: 'BPFPSNATPorts sets the range from which we randomly
-                  pick a port if there is a source port collision. This should be
-                  within the ephemeral range as defined by RFC 6056 (1024–65535) and
-                  preferably outside the  ephemeral ranges used by common operating
-                  systems. Linux uses 32768–60999, while others mostly use the IANA
-                  defined range 49152–65535. It is not necessarily a problem if this
-                  range overlaps with the operating systems. Both ends of the range
-                  are inclusive. [Default: 20000:29999]'
-                pattern: ^.*
-                x-kubernetes-int-or-string: true
               captureDir:
                 description: 'CaptureDir controls directory to store file capture.
                   [Default: /var/log/calico/pcap]'
@@ -411,10 +382,6 @@ spec:
                 description: FlowLogsCollectTcpStats enables flow logs reporting TCP
                   socket stats
                 type: boolean
-              flowLogsCollectorDebugTrace:
-                description: When FlowLogsCollectorDebugTrace is set to true, enables
-                  the logs in the collector to be printed in their entirety.
-                type: boolean
               flowLogsDynamicAggregationEnabled:
                 description: FlowLogsDynamicAggregationEnabled is used to enable/disable
                   dynamically changing aggregation levels. Default is true.
@@ -484,11 +451,6 @@ spec:
               flowLogsFileMaxFiles:
                 description: FlowLogsFileMaxFiles sets the number of log files to
                   keep.
-                type: integer
-              flowLogsFileNatOutgoingPortLimit:
-                description: FlowLogsFileNatOutgoingPortLimit is used to specify the
-                  maximum number of distinct post SNAT ports that will appear in the
-                  flowLogs. Default value is 3
                 type: integer
               flowLogsFilePerFlowProcessArgsLimit:
                 description: FlowLogsFilePerFlowProcessArgsLimit is used to specify

@@ -19,6 +19,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/render/common/authentication"
+	"github.com/tigera/operator/pkg/render/common/configmap"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -43,37 +46,83 @@ const (
 	CalicoNodeAlertmanager      = "calico-node-alertmanager"
 	CalicoNodeMonitor           = "calico-node-monitor"
 	CalicoNodePrometheus        = "calico-node-prometheus"
+	PrometheusTLSSecretName     = "calico-node-prometheus-tls"
 	ElasticsearchMetrics        = "elasticsearch-metrics"
 	FluentdMetrics              = "fluentd-metrics"
+	TigeraPrometheusObjectName  = "tigera-prometheus"
+	TigeraPrometheusSAName      = "prometheus"
 	TigeraPrometheusDPRate      = "tigera-prometheus-dp-rate"
 	TigeraPrometheusRole        = "tigera-prometheus-role"
 	TigeraPrometheusRoleBinding = "tigera-prometheus-role-binding"
 
 	PrometheusHTTPAPIServiceName = "prometheus-http-api"
 	PrometheusDefaultPort        = 9090
+	PrometheusProxyPort          = 9095
+
+	calicoNodePrometheusServiceName = "calico-node-prometheus"
+
+	tigeraPrometheusServiceHealthEndpoint = "/health"
 
 	AlertmanagerConfigSecret = "alertmanager-calico-node-alertmanager"
 
 	prometheusServiceAccountName = "prometheus"
 )
+)
 
 func Monitor(
 	installation *operatorv1.InstallationSpec,
-	pullSecrets []*corev1.Secret,
+	keyValidatorConfig authentication.KeyValidatorConfig,
 	alertmanagerConfigSecret *corev1.Secret,
-) render.Component {
-	return &monitorComponent{
-		installation:             installation,
-		pullSecrets:              pullSecrets,
-		alertmanagerConfigSecret: alertmanagerConfigSecret,
+	pullSecrets []*corev1.Secret,
+	tlsSecret *corev1.Secret,
+	clusterDomain string,
+) (render.Component, error) {
+
+	var err error
+	var tlsSecrets []*corev1.Secret
+	var tlsHash string
+	if installation.CertificateManagement == nil {
+		if tlsSecret == nil {
+			svcDNSNames := dns.GetServiceDNSNames(PrometheusHTTPAPIServiceName, common.TigeraPrometheusNamespace, clusterDomain)
+			tlsSecret, err = secret.CreateTLSSecret(nil,
+				PrometheusTLSSecretName,
+				common.OperatorNamespace(),
+				corev1.TLSPrivateKeyKey,
+				corev1.TLSCertKey,
+				rmeta.DefaultCertificateDuration,
+				nil,
+				svcDNSNames...,
+			)
+			if err != nil {
+				return nil, err
+			}
+		}
+		tlsSecrets = []*corev1.Secret{tlsSecret, secret.CopyToNamespace(common.TigeraPrometheusNamespace, tlsSecret)[0]}
+		tlsHash = rmeta.AnnotationHash(tlsSecret.Data)
 	}
+
+	return &monitorComponent{
+		installation: installation,
+		keyValidatorConfig: keyValidatorConfig,
+		pullSecrets:  pullSecrets,
+		alertmanagerConfigSecret: alertmanagerConfigSecret,
+		tlsSecrets:         tlsSecrets,
+		tlsAnnotation:      tlsHash,
+		clusterDomain:      clusterDomain,
+	}, nil
 }
 
 type monitorComponent struct {
 	installation             *operatorv1.InstallationSpec
+	keyValidatorConfig     authentication.KeyValidatorConfig
 	pullSecrets              []*corev1.Secret
+	tlsSecrets             []*corev1.Secret
 	alertmanagerImage        string
 	prometheusImage          string
+	prometheusServiceImage string
+	csrImage               string
+	clusterDomain          string
+	tlsAnnotation          string
 	alertmanagerConfigSecret *corev1.Secret
 }
 
@@ -95,6 +144,18 @@ func (mc *monitorComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
+	mc.prometheusServiceImage, err = components.GetReference(components.ComponentTigeraPrometheusService, reg, path, prefix, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	if mc.installation.CertificateManagement != nil {
+		mc.csrImage, err = render.ResolveCSRInitImage(mc.installation, is)
+		if err != nil {
+			errMsgs = append(errMsgs, err.Error())
+		}
+	}
+
 	if len(errMsgs) != 0 {
 		return fmt.Errorf(strings.Join(errMsgs, ","))
 	}
@@ -112,7 +173,11 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 
 	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.pullSecrets...)...)...)
 	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.alertmanagerConfigSecret)...)...)
-
+	if mc.installation.CertificateManagement == nil {
+		toCreate = append(toCreate, secret.ToRuntimeObjects(mc.tlsSecrets...)...)
+	} else {
+		toCreate = append(toCreate, render.CSRClusterRoleBinding(TigeraPrometheusObjectName, common.TigeraPrometheusNamespace))
+	}
 	toCreate = append(toCreate,
 		mc.role(),
 		mc.roleBinding(),
@@ -127,7 +192,14 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		mc.serviceMonitorElasticsearch(),
 		mc.podMonitor(),
 		mc.prometheusHTTPAPIService(),
+		mc.clusterRole(),
+		mc.clusterRoleBinding(),
 	)
+
+	if mc.keyValidatorConfig != nil {
+		toCreate = append(toCreate, secret.ToRuntimeObjects(mc.keyValidatorConfig.RequiredSecrets(common.TigeraPrometheusNamespace)...)...)
+		toCreate = append(toCreate, configmap.ToRuntimeObjects(mc.keyValidatorConfig.RequiredConfigMaps(common.TigeraPrometheusNamespace)...)...)
+	}
 
 	// This is to delete a service that had been released in v3.8 with a typo in the name.
 	// TODO Remove the toDelete object after we drop support for v3.8.
@@ -136,6 +208,55 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	return toCreate, toDelete
+}
+
+func (mc *monitorComponent) clusterRole() client.Object {
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{"authentication.k8s.io"},
+			Resources: []string{"tokenreviews"},
+			Verbs:     []string{"create"},
+		},
+		{
+			APIGroups: []string{"authorization.k8s.io"},
+			Resources: []string{"subjectaccessreviews"},
+			Verbs:     []string{"create"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"authenticationreviews"},
+			Verbs:     []string{"create"},
+		},
+	}
+
+	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: TigeraPrometheusObjectName,
+		},
+		Rules: rules,
+	}
+}
+
+func (mc *monitorComponent) clusterRoleBinding() client.Object {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: TigeraPrometheusObjectName,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     TigeraPrometheusObjectName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      TigeraPrometheusSAName,
+				Namespace: common.TigeraPrometheusNamespace,
+			},
+		},
+	}
 }
 
 func (mc *monitorComponent) Ready() bool {
@@ -184,6 +305,65 @@ func (mc *monitorComponent) alertmanagerService() *corev1.Service {
 }
 
 func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
+	certVolume := corev1.Volume{
+		Name: PrometheusTLSSecretName,
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: PrometheusTLSSecretName,
+			},
+		},
+	}
+	volumes := []corev1.Volume{
+		certVolume,
+	}
+
+	var initContainers []corev1.Container
+	if mc.installation.CertificateManagement != nil {
+		svcDNSNames := dns.GetServiceDNSNames(PrometheusHTTPAPIServiceName, common.TigeraPrometheusNamespace, mc.clusterDomain)
+
+		initContainers = append(initContainers, render.CreateCSRInitContainer(
+			mc.installation.CertificateManagement,
+			mc.csrImage,
+			PrometheusTLSSecretName,
+			PrometheusHTTPAPIServiceName,
+			corev1.TLSPrivateKeyKey,
+			corev1.TLSCertKey,
+			svcDNSNames,
+			common.TigeraPrometheusNamespace))
+
+		certVolume.VolumeSource = corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}
+	}
+
+	env := []corev1.EnvVar{
+		{
+			Name:  "PROMETHEUS_ENDPOINT_URL",
+			Value: "http://localhost:9090",
+		},
+		{
+			Name:  "LISTEN_ADDR",
+			Value: fmt.Sprintf(":%d", PrometheusProxyPort),
+		},
+		{
+			// No other way to annotate this pod.
+			Name:  "TLS_SECRET_HASH_ANNOTATION",
+			Value: mc.tlsAnnotation,
+		},
+	}
+
+	volumeMounts := []corev1.VolumeMount{
+		{
+			Name:      PrometheusTLSSecretName,
+			MountPath: "/tls",
+			ReadOnly:  true,
+		},
+	}
+
+	if mc.keyValidatorConfig != nil {
+		volumeMounts = append(volumeMounts, mc.keyValidatorConfig.RequiredVolumeMounts()...)
+		env = append(env, mc.keyValidatorConfig.RequiredEnv("")...)
+		volumes = append(volumes, mc.keyValidatorConfig.RequiredVolumes()...)
+	}
+
 	return &monitoringv1.Prometheus{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PrometheusesKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
@@ -194,6 +374,42 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 			Image:                  &mc.prometheusImage,
 			ImagePullSecrets:       secret.GetReferenceList(mc.pullSecrets),
 			ServiceAccountName:     prometheusServiceAccountName,
+			Volumes:          volumes,
+			Containers: []corev1.Container{
+				{
+					Name:            "authn-proxy",
+					Image:           "gcr.io/tigera-dev/rd/tigera/prometheus-service:rene", //revert to mc.prometheusServiceImage
+					ImagePullPolicy: "Always",                                              //todo: remove
+					Ports: []corev1.ContainerPort{
+						{
+							ContainerPort: PrometheusProxyPort,
+						},
+					},
+					Env:          env,
+					VolumeMounts: volumeMounts,
+					ReadinessProbe: &corev1.Probe{
+						Handler: corev1.Handler{
+							HTTPGet: &corev1.HTTPGetAction{
+								Path:   tigeraPrometheusServiceHealthEndpoint,
+								Port:   intstr.FromInt(PrometheusProxyPort),
+								Scheme: "HTTPS",
+							},
+						},
+					},
+					LivenessProbe: &corev1.Probe{
+						Handler: corev1.Handler{
+							HTTPGet: &corev1.HTTPGetAction{
+								Path:   tigeraPrometheusServiceHealthEndpoint,
+								Port:   intstr.FromInt(PrometheusProxyPort),
+								Scheme: "HTTPS",
+							},
+						},
+					},
+				},
+			},
+			// ListenLocal makes the Prometheus server listen on loopback, so that it
+			// does not bind against the Pod IP. This forces traffic to go through the authn-proxy.
+			ListenLocal:            true,
 			ServiceMonitorSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"team": "network-operators"}},
 			PodMonitorSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"team": "network-operators"}},
 			Version:                components.ComponentPrometheus.Version,
@@ -302,7 +518,7 @@ func (mc *monitorComponent) prometheusHTTPAPIService() *corev1.Service {
 					Name:       "web",
 					Port:       PrometheusDefaultPort,
 					Protocol:   corev1.ProtocolTCP,
-					TargetPort: intstr.FromInt(PrometheusDefaultPort),
+					TargetPort: intstr.FromInt(PrometheusProxyPort),
 				},
 			},
 			Selector: map[string]string{

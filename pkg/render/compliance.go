@@ -59,6 +59,7 @@ const (
 	complianceServerTLSVolumeName = "tls"
 
 	complianceServerTLSHashAnnotation = "hash.operator.tigera.io/tls-certificate"
+	prometheusTLSHashAnnotation       = "hash.operator.tigera.io/prometheus-tls-certificate"
 )
 
 func Compliance(

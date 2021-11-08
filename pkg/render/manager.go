@@ -87,6 +87,7 @@ func Manager(
 	kibanaSecrets []*corev1.Secret,
 	complianceServerCertSecret *corev1.Secret,
 	packetCaptureServerCertSecret *corev1.Secret,
+	prometheusCertSecret *corev1.Secret,
 	esClusterConfig *relasticsearch.ClusterConfig,
 	tlsKeyPair *corev1.Secret,
 	pullSecrets []*corev1.Secret,
@@ -133,6 +134,7 @@ func Manager(
 		kibanaSecrets:                 kibanaSecrets,
 		complianceServerCertSecret:    complianceServerCertSecret,
 		packetCaptureServerCertSecret: packetCaptureServerCertSecret,
+		prometheusCertSecret:          prometheusCertSecret,
 		esClusterConfig:               esClusterConfig,
 		tlsSecrets:                    tlsSecrets,
 		tlsAnnotations:                tlsAnnotations,
@@ -152,6 +154,7 @@ type managerComponent struct {
 	kibanaSecrets                 []*corev1.Secret
 	complianceServerCertSecret    *corev1.Secret
 	packetCaptureServerCertSecret *corev1.Secret
+	prometheusCertSecret          *corev1.Secret
 	esClusterConfig               *relasticsearch.ClusterConfig
 	tlsSecrets                    []*corev1.Secret
 	tlsAnnotations                map[string]string
@@ -237,6 +240,9 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	if c.packetCaptureServerCertSecret != nil {
 		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.packetCaptureServerCertSecret)...)...)
 	}
+	if c.prometheusCertSecret != nil {
+		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.prometheusCertSecret)...)...)
+	}
 	objs = append(objs, c.managerDeployment())
 	if c.keyValidatorConfig != nil {
 		objs = append(objs, configmap.ToRuntimeObjects(c.keyValidatorConfig.RequiredConfigMaps(ManagerNamespace)...)...)
@@ -276,6 +282,9 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		annotations[PacketCaptureTLSHashAnnotation] = rmeta.AnnotationHash(c.packetCaptureServerCertSecret.Data)
 	}
 
+	if c.prometheusCertSecret != nil {
+		annotations[prometheusTLSHashAnnotation] = rmeta.AnnotationHash(c.prometheusCertSecret.Data)
+	}
 	// Add a hash of the Secret to ensure if it changes the manager will be
 	// redeployed.	The following secrets are annotated:
 	// manager-tls : cert used for tigera UI
@@ -411,6 +420,17 @@ func (c *managerComponent) managerVolumes() []corev1.Volume {
 		})
 	}
 
+	if c.prometheusCertSecret != nil {
+		v = append(v, corev1.Volume{
+			Name: PrometheusTLSSecretName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: PrometheusTLSSecretName,
+				},
+			},
+		})
+	}
+
 	if c.managementCluster != nil {
 		v = append(v,
 			corev1.Volume{
@@ -503,7 +523,7 @@ func (c *managerComponent) managerProxyProbe() *corev1.Probe {
 // managerEnvVars returns the envvars for the manager container.
 func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 	envs := []corev1.EnvVar{
-		{Name: "CNX_PROMETHEUS_API_URL", Value: fmt.Sprintf("/api/v1/namespaces/%s/services/calico-node-prometheus:9090/proxy/api/v1", common.TigeraPrometheusNamespace)},
+		{Name: "CNX_PROMETHEUS_API_URL", Value: "/tigera-prometheus/api/v1"},
 		{Name: "CNX_COMPLIANCE_REPORTS_API_URL", Value: "/compliance/reports"},
 		{Name: "CNX_QUERY_API_URL", Value: "/api/v1/namespaces/tigera-system/services/https:tigera-api:8080/proxy"},
 		{Name: "CNX_ELASTICSEARCH_API_URL", Value: "/tigera-elasticsearch"},
@@ -578,7 +598,8 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 
 	return corev1.Container{
 		Name:            VoltronName,
-		Image:           c.proxyImage,
+		Image:           "gcr.io/tigera-dev/rd/tigera/voltron:rene", //todo: revert
+		ImagePullPolicy: "Always",                                   //todo: revert
 		Env:             env,
 		VolumeMounts:    c.volumeMountsForProxyManager(),
 		LivenessProbe:   c.managerProxyProbe(),
@@ -598,6 +619,10 @@ func (c *managerComponent) volumeMountsForProxyManager() []corev1.VolumeMount {
 
 	if c.packetCaptureServerCertSecret != nil {
 		mounts = append(mounts, corev1.VolumeMount{Name: PacketCaptureCertSecret, MountPath: "/certs/packetcapture", ReadOnly: true})
+	}
+
+	if c.prometheusCertSecret != nil {
+		mounts = append(mounts, corev1.VolumeMount{Name: PrometheusTLSSecretName, MountPath: "/certs/prometheus", ReadOnly: true})
 	}
 
 	if c.managementCluster != nil {

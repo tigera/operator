@@ -264,6 +264,8 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		c.tigeraNetworkAdminClusterRole(),
 		c.tieredPolicyPassthruClusterRole(),
 		c.tieredPolicyPassthruClusterRolebinding(),
+		c.uiSettingsPassthruClusterRole(),
+		c.uiSettingsPassthruClusterRolebinding(),
 	}
 
 	// Namespaced enterprise-only objects.
@@ -1290,7 +1292,7 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 				"",
 			},
 			// Use both the networkpolicies and tier.networkpolicies resource types to ensure identical behavior
-			// irrespective of the Calico RBAC scheme (see the ClusterRole "ee-calico-tiered-policy-passthru" for
+			// irrespective of the Calico RBAC scheme (see the ClusterRole "tigera-tiered-policy-passthrough" for
 			// more details).  Similar for all tiered policy resource types.
 			Resources: []string{
 				"tiers",
@@ -1418,7 +1420,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 				"extensions",
 			},
 			// Use both the networkpolicies and tier.networkpolicies resource types to ensure identical behavior
-			// irrespective of the Calico RBAC scheme (see the ClusterRole "ee-calico-tiered-policy-passthru" for
+			// irrespective of the Calico RBAC scheme (see the ClusterRole "tigera-tiered-policy-passthrough" for
 			// more details).  Similar for all tiered policy resource types.
 			Resources: []string{
 				"tiers",
@@ -1586,6 +1588,59 @@ func (c *apiServerComponent) tieredPolicyPassthruClusterRolebinding() *rbacv1.Cl
 		RoleRef: rbacv1.RoleRef{
 			Kind:     "ClusterRole",
 			Name:     "tigera-tiered-policy-passthrough",
+			APIGroup: "rbac.authorization.k8s.io",
+		},
+	}
+}
+
+// uiSettingsPassthruClusterRole creates a clusterrole that is used to control the RBAC mechanism for Tigera UI Settings.
+// RBAC for these is handled within the Tigera API Server which checks uisettingsgroups/data permissions for the user.
+//
+// Calico Enterprise only
+func (c *apiServerComponent) uiSettingsPassthruClusterRole() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-uisettings-passthrough",
+		},
+		// If tiered policy is enabled we allow all authenticated users to access the main tier resource, instead
+		// restricting access using the tier.xxx resource type. Kubernetes NetworkPolicy and the
+		// StagedKubernetesNetworkPolicy are handled using normal (non-tiered) RBAC.
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"uisettings"},
+				Verbs:     []string{"*"},
+			},
+		},
+	}
+}
+
+// uiSettingsPassthruClusterRolebinding creates a clusterrolebinding that applies uiSettingsPassthruClusterRole to all
+// users.
+//
+// Calico Enterprise only
+func (c *apiServerComponent) uiSettingsPassthruClusterRolebinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-uisettings-passthrough",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:     "Group",
+				Name:     "system:authenticated",
+				APIGroup: "rbac.authorization.k8s.io",
+			},
+			{
+				Kind:     "Group",
+				Name:     "system:unauthenticated",
+				APIGroup: "rbac.authorization.k8s.io",
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			Kind:     "ClusterRole",
+			Name:     "tigera-uisettings-passthrough",
 			APIGroup: "rbac.authorization.k8s.io",
 		},
 	}

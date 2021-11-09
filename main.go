@@ -178,10 +178,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	sigHandler := ctrl.SetupSignalHandler()
-	active.WaitUntilActive(cs, c, sigHandler, setupLog)
-	log.Info("Active operator: proceeding")
-
+	// Because we only run this as a job that is set up by the operator, it should not be
+	// launched except by an operator that is the active operator. So we do not need to
+	// check that we're the active operator before running the AWS SG setup.
 	if sgSetup {
 		log.Info("Setting up AWS Security Groups")
 
@@ -192,6 +191,10 @@ func main() {
 		}
 		os.Exit(0)
 	}
+
+	sigHandler := ctrl.SetupSignalHandler()
+	active.WaitUntilActive(cs, c, sigHandler, setupLog)
+	log.Info("Active operator: proceeding")
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,

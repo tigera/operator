@@ -152,12 +152,8 @@ const (
 	csrVolumeNameHTTP = "elastic-internal-http-certificates"
 	// Volume that is added by ECK and is overridden if certificate management is used.
 	csrVolumeNameTransport = "elastic-internal-transport-certificates"
-	// Volume that is added by us and contains the expected secret for ECK.
-	transportSecretVolumeName = "elastic-internal-transport-certificates-secret"
 	// Volume name that is added by ECK for the purpose of mounting certs.
 	caVolumeName = "elasticsearch-certs"
-	// Name of the secret that ECK mounts for the prepare-fs script.
-	transportSecretName = "tigera-secure-es-transport-certificates"
 )
 
 var log = logf.Log.WithName("render")
@@ -572,7 +568,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			SecurityContext: &corev1.SecurityContext{
 				Privileged: ptr.BoolToPtr(false),
 			},
-			Args: []string{"bash", "-c", "/mnt/elastic-internal/scripts/prepare-fs.sh"},
+			Command: []string{"bash", "-c", "mkdir /mnt/elastic-internal/transport-certificates/ && touch /mnt/elastic-internal/transport-certificates/$HOSTNAME.tls.key && /mnt/elastic-internal/scripts/prepare-fs.sh"},
 			Resources: corev1.ResourceRequirements{
 				Limits: corev1.ResourceList{
 					"cpu":    resource.MustParse("100m"),
@@ -584,26 +580,10 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 				},
 			},
 			VolumeMounts: []corev1.VolumeMount{
-				// Even though it won't be used for TLS, we need to mount the secret volume for initialization.
-				{
-					Name:      transportSecretVolumeName,
-					MountPath: "/mnt/elastic-internal/transport-certificates",
-					ReadOnly:  false,
-				},
 				// Create transport mount, such that ECK will not auto-fill this with a secret volume.
 				{
 					Name:      csrVolumeNameTransport,
 					MountPath: "/csr",
-					ReadOnly:  false,
-				},
-				{
-					Name:      "elastic-internal-elasticsearch-config-local",
-					MountPath: "/mnt/elastic-internal/elasticsearch-config-local",
-					ReadOnly:  false,
-				},
-				{
-					Name:      "elastic-internal-elasticsearch-bin-local",
-					MountPath: "/mnt/elastic-internal/elasticsearch-bin-local",
 					ReadOnly:  false,
 				},
 			},
@@ -650,14 +630,6 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				}},
-			corev1.Volume{
-				Name: transportSecretVolumeName,
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						SecretName: transportSecretName,
-					},
-				},
-			},
 		)
 		// Make the pod mount the serviceaccount token of tigera-elasticsearch. On behalf of it, CSRs will be submitted.
 		autoMountToken = true

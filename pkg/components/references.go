@@ -39,7 +39,8 @@ func GetReference(c component, registry, imagePath, imagePrefix string, is *oper
 			ComponentCalicoTypha,
 			ComponentCalicoKubeControllers,
 			ComponentFlexVolume,
-			ComponentCalicoAPIServer:
+			ComponentCalicoAPIServer,
+			ComponentWindows:
 
 			registry = CalicoRegistry
 		case ComponentElasticsearchOperator:

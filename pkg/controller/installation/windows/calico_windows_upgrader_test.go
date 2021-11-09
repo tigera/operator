@@ -113,6 +113,8 @@ var _ = Describe("Calico windows upgrader", func() {
 			return test.AssertNodesUnchanged(cs, n1, n2)
 		}, 10*time.Second, 100*time.Millisecond).Should(BeNil())
 
+		// Wait until SetWindowsUpgradeStatus has been called.
+		waitForSetWindowsUpgradeStatusCalled(mockStatus, []string{}, []string{}, []string{})
 		mockStatus.AssertExpectations(GinkgoT())
 	})
 
@@ -141,11 +143,13 @@ var _ = Describe("Calico windows upgrader", func() {
 			return test.AssertNodesHadUpgradeTriggered(cs, n2)
 		}, 5*time.Second).Should(BeNil())
 
-		// At this point, we should only have a call to AddWindowsNodeUpgrade.
+		// Wait until SetWindowsUpgradeStatus has been called.
+		waitForSetWindowsUpgradeStatusCalled(mockStatus, []string{}, []string{"node2"}, []string{"node3"})
 		mockStatus.AssertExpectations(GinkgoT())
 
 		// Last arg will contain both node 2 and node 3, in some order.
 		mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{}, mock.Anything)
+
 		// Set the latest Calico Windows variant and version like the node service would.
 		setNodeVariantAndVersion(cs, nodeIndexInformer, n2, operator.Calico, components.CalicoRelease)
 
@@ -155,6 +159,8 @@ var _ = Describe("Calico windows upgrader", func() {
 			return assertNodesFinishedUpgrade(cs, n2)
 		}, 5*time.Second).Should(BeNil())
 
+		// Wait until SetWindowsUpgradeStatus has been called.
+		waitForSetWindowsUpgradeStatusCalled(mockStatus, []string{}, []string{}, mock.Anything)
 		mockStatus.AssertExpectations(GinkgoT())
 	})
 
@@ -176,19 +182,23 @@ var _ = Describe("Calico windows upgrader", func() {
 			return test.AssertNodesHadUpgradeTriggered(cs, n1)
 		}, 5*time.Second).Should(BeNil())
 
-		// At this point, we should only have a call to AddWindowsNodeUpgrade.
+		// Wait until SetWindowsUpgradeStatus has been called.
+		waitForSetWindowsUpgradeStatusCalled(mockStatus, []string{}, []string{"node1"}, []string{})
 		mockStatus.AssertExpectations(GinkgoT())
 
 		// Set the latest Calico Windows version like the node service would. This will trigger a reconcile.
 		// Ensure that when calicoWindowsUpgrader runs again, the node taint and
 		// label are removed.
 		mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{}, []string{"node1"})
+
 		setNodeVariantAndVersion(cs, nodeIndexInformer, n1, operator.Calico, components.CalicoRelease)
 
 		Eventually(func() error {
 			return assertNodesFinishedUpgrade(cs, n1)
 		}, 5*time.Second).Should(BeNil())
 
+		// Wait until SetWindowsUpgradeStatus has been called.
+		waitForSetWindowsUpgradeStatusCalled(mockStatus, []string{}, []string{}, []string{"node1"})
 		mockStatus.AssertExpectations(GinkgoT())
 	})
 
@@ -392,6 +402,14 @@ func assertNodesFinishedUpgrade(c kubernetes.Interface, nodes ...*corev1.Node) e
 		}
 	}
 	return nil
+}
+
+// Ensure that SetWindowsUpgradeStatus was eventually called with the given
+// arguments for the given status.
+func waitForSetWindowsUpgradeStatusCalled(mockStatus *status.MockStatus, arguments ...interface{}) {
+	Eventually(func() bool {
+		return mockStatus.WasCalled("SetWindowsUpgradeStatus", arguments...)
+	}, 5*time.Second).Should(BeTrue())
 }
 
 func setNodeVariantAndVersion(c kubernetes.Interface, indexInformer cache.SharedIndexInformer, node *corev1.Node, variant operator.ProductVariant, version string) {

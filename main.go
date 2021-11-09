@@ -178,10 +178,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	sigHandler := ctrl.SetupSignalHandler()
-	active.WaitUntilActive(cs, c, sigHandler, setupLog)
-	log.Info("Active operator: proceeding")
-
 	if sgSetup {
 		log.Info("Setting up AWS Security Groups")
 
@@ -192,6 +188,10 @@ func main() {
 		}
 		os.Exit(0)
 	}
+
+	sigHandler := ctrl.SetupSignalHandler()
+	active.WaitUntilActive(cs, c, sigHandler, setupLog)
+	log.Info("Active operator: proceeding")
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:             scheme,

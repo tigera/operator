@@ -114,7 +114,8 @@ func allCalicoComponents(
 		MetricsPort:                 kubeControllersMetricsPort,
 	}
 
-	return []render.Component{namespaces, secretsAndConfigMaps, render.Typha(typhaCfg), render.Node(nodeCfg), kubecontrollers.NewCalicoKubeControllers(kcCfg)}, nil
+	windowsUpgrader := render.Windows(cr)
+	return []render.Component{namespaces, secretsAndConfigMaps, render.Typha(typhaCfg), render.Node(nodeCfg), kubecontrollers.NewCalicoKubeControllers(kcCfg), windowsUpgrader}, nil
 }
 
 var _ = Describe("Rendering tests", func() {
@@ -190,10 +191,11 @@ var _ = Describe("Rendering tests", func() {
 		// - 2 ConfigMap for Typha comms (1 in operator namespace and 1 in calico namespace)
 		// - 7 typha resources (Service, SA, Role, Binding, Deployment, PodDisruptionBudget, PodSecurityPolicy)
 		// - 6 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment, PodSecurityPolicy, Service, Secret)
+		// - 2 windows-upgrader resources (ServiceAccount, DaemonSet)
 		// - 1 namespace
 		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, operatorv1.ProviderNone, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c)).To(Equal(6 + 4 + 2 + 7 + 6 + 1))
+		Expect(componentCount(c)).To(Equal(6 + 4 + 2 + 7 + 6 + 2 + 1))
 	})
 
 	It("should render all resources when variant is Tigera Secure", func() {
@@ -206,7 +208,7 @@ var _ = Describe("Rendering tests", func() {
 		instance.NodeMetricsPort = &nodeMetricsPort
 		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, operatorv1.ProviderNone, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c)).To(Equal((6 + 4 + 2 + 7 + 6 + 1) + 1 + 1))
+		Expect(componentCount(c)).To(Equal((6 + 4 + 2 + 7 + 6 + 2 + 1) + 1 + 1))
 	})
 
 	It("should render all resources when variant is Tigera Secure and Management Cluster", func() {
@@ -272,6 +274,10 @@ var _ = Describe("Rendering tests", func() {
 			{render.ManagerInternalTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
 			{common.KubeControllersDeploymentName, "", "policy", "v1beta1", "PodSecurityPolicy"},
 			{"calico-kube-controllers-metrics", common.CalicoNamespace, "", "v1", "Service"},
+
+			// windows upgrader objects.
+			{common.CalicoWindowsUpgradeResourceName, common.CalicoNamespace, "", "v1", "ServiceAccount"},
+			{common.CalicoWindowsUpgradeResourceName, common.CalicoNamespace, "apps", "v1", "DaemonSet"},
 		}
 
 		var resources []client.Object

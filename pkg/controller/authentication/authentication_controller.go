@@ -256,16 +256,18 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	// Create a component handler to manage the rendered component.
 	hlr := utils.NewComponentHandler(log, r.client, r.scheme, authentication)
 
+	dexComponentCfg := &render.DexComponentConfiguration{
+		PullSecrets:   pullSecrets,
+		Openshift:     r.provider == oprv1.ProviderOpenShift,
+		Installation:  install,
+		DexConfig:     dexCfg,
+		ClusterDomain: r.clusterDomain,
+		DeleteDex:     disableDex,
+	}
+
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
-	component := render.Dex(
-		pullSecrets,
-		r.provider == oprv1.ProviderOpenShift,
-		install,
-		dexCfg,
-		r.clusterDomain,
-		disableDex,
-	)
+	component := render.Dex(dexComponentCfg)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
 		log.Error(err, "Error with images from ImageSet")

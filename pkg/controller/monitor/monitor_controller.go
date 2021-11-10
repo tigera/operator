@@ -204,8 +204,13 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	if createInOperatorNamespace {
 		components = append(components, render.NewPassthrough([]client.Object{alertmanagerConfigSecret}))
 	}
+	monitorCfg := &monitor.Config{
+		Installation:             install,
+		PullSecrets:              pullSecrets,
+		AlertmanagerConfigSecret: alertmanagerConfigSecret,
+	}
 	// Render prometheus component
-	components = append(components, monitor.Monitor(install, pullSecrets, alertmanagerConfigSecret))
+	components = append(components, monitor.Monitor(monitorCfg))
 	// Render tigera prometheus api component
 	tigeraPrometheusApi, err := monitor.TigeraPrometheusAPI(install, pullSecrets, tigeraPrometheusAPIConfigMap)
 	if err != nil {

@@ -61,64 +61,47 @@ const (
 	complianceServerTLSHashAnnotation = "hash.operator.tigera.io/tls-certificate"
 )
 
-func Compliance(
-	esSecrets []*corev1.Secret,
-	managerInternalTLSSecret *corev1.Secret,
-	installation *operatorv1.InstallationSpec,
-	complianceServerCertSecret *corev1.Secret,
-	esClusterConfig *relasticsearch.ClusterConfig,
-	pullSecrets []*corev1.Secret,
-	openshift bool,
-	managementCluster *operatorv1.ManagementCluster,
-	managementClusterConnection *operatorv1.ManagementClusterConnection,
-	keyValidatorConfig authentication.KeyValidatorConfig,
-	clusterDomain string,
-	hasNoLicense bool,
-) (Component, error) {
-	complianceServerCertSecrets := []*corev1.Secret{complianceServerCertSecret}
-	complianceServerCertSecrets = append(complianceServerCertSecrets, secret.CopyToNamespace(ComplianceNamespace, complianceServerCertSecret)...)
+func Compliance(cfg *ComplianceConfiguration) (Component, error) {
+	complianceServerCertSecrets := []*corev1.Secret{cfg.ComplianceServerCertSecret}
+	complianceServerCertSecrets = append(complianceServerCertSecrets, secret.CopyToNamespace(ComplianceNamespace, cfg.ComplianceServerCertSecret)...)
 
 	return &complianceComponent{
-		esSecrets:                   esSecrets,
-		managerInternalTLSSecret:    managerInternalTLSSecret,
-		installation:                installation,
-		esClusterConfig:             esClusterConfig,
-		pullSecrets:                 pullSecrets,
+		cfg:                         cfg,
 		complianceServerCertSecrets: complianceServerCertSecrets,
-		openshift:                   openshift,
-		clusterDomain:               clusterDomain,
-		managementCluster:           managementCluster,
-		managementClusterConnection: managementClusterConnection,
-		keyValidatorConfig:          keyValidatorConfig,
-		hasNoLicense:                hasNoLicense,
 	}, nil
 }
 
+// ComplianceConfiguration contains all the config information needed to render the component.
+type ComplianceConfiguration struct {
+	ESSecrets                   []*corev1.Secret
+	ManagerInternalTLSSecret    *corev1.Secret
+	Installation                *operatorv1.InstallationSpec
+	ComplianceServerCertSecret  *corev1.Secret
+	ESClusterConfig             *relasticsearch.ClusterConfig
+	PullSecrets                 []*corev1.Secret
+	Openshift                   bool
+	ManagementCluster           *operatorv1.ManagementCluster
+	ManagementClusterConnection *operatorv1.ManagementClusterConnection
+	KeyValidatorConfig          authentication.KeyValidatorConfig
+	ClusterDomain               string
+	HasNoLicense                bool
+}
+
 type complianceComponent struct {
-	esSecrets                   []*corev1.Secret
-	managerInternalTLSSecret    *corev1.Secret
-	installation                *operatorv1.InstallationSpec
-	esClusterConfig             *relasticsearch.ClusterConfig
-	pullSecrets                 []*corev1.Secret
+	cfg                         *ComplianceConfiguration
 	complianceServerCertSecrets []*corev1.Secret
-	openshift                   bool
-	clusterDomain               string
-	managementCluster           *operatorv1.ManagementCluster
-	managementClusterConnection *operatorv1.ManagementClusterConnection
-	keyValidatorConfig          authentication.KeyValidatorConfig
 	benchmarkerImage            string
 	snapshotterImage            string
 	serverImage                 string
 	controllerImage             string
 	reporterImage               string
 	csrInitImage                string
-	hasNoLicense                bool
 }
 
 func (c *complianceComponent) ResolveImages(is *operatorv1.ImageSet) error {
-	reg := c.installation.Registry
-	path := c.installation.ImagePath
-	prefix := c.installation.ImagePrefix
+	reg := c.cfg.Installation.Registry
+	path := c.cfg.Installation.ImagePath
+	prefix := c.cfg.Installation.ImagePrefix
 	var err error
 	c.benchmarkerImage, err = components.GetReference(components.ComponentComplianceBenchmarker, reg, path, prefix, is)
 
@@ -147,8 +130,8 @@ func (c *complianceComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	if c.installation.CertificateManagement != nil {
-		c.csrInitImage, err = ResolveCSRInitImage(c.installation, is)
+	if c.cfg.Installation.CertificateManagement != nil {
+		c.csrInitImage, err = ResolveCSRInitImage(c.cfg.Installation, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
@@ -166,8 +149,8 @@ func (c *complianceComponent) SupportedOSType() rmeta.OSType {
 
 func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 	complianceObjs := append(
-		[]client.Object{CreateNamespace(ComplianceNamespace, c.installation.KubernetesProvider)},
-		secret.ToRuntimeObjects(secret.CopyToNamespace(ComplianceNamespace, c.pullSecrets...)...)...,
+		[]client.Object{CreateNamespace(ComplianceNamespace, c.cfg.Installation.KubernetesProvider)},
+		secret.ToRuntimeObjects(secret.CopyToNamespace(ComplianceNamespace, c.cfg.PullSecrets...)...)...,
 	)
 	complianceObjs = append(complianceObjs,
 		c.complianceControllerServiceAccount(),
@@ -203,18 +186,18 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 		c.complianceServerClusterRoleBinding(),
 	)
 
-	if c.managerInternalTLSSecret != nil {
-		complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(ComplianceNamespace, c.managerInternalTLSSecret)...)...)
+	if c.cfg.ManagerInternalTLSSecret != nil {
+		complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(ComplianceNamespace, c.cfg.ManagerInternalTLSSecret)...)...)
 	}
 
-	if c.keyValidatorConfig != nil {
-		complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(c.keyValidatorConfig.RequiredSecrets(ComplianceNamespace)...)...)
-		complianceObjs = append(complianceObjs, configmap.ToRuntimeObjects(c.keyValidatorConfig.RequiredConfigMaps(ComplianceNamespace)...)...)
+	if c.cfg.KeyValidatorConfig != nil {
+		complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(c.cfg.KeyValidatorConfig.RequiredSecrets(ComplianceNamespace)...)...)
+		complianceObjs = append(complianceObjs, configmap.ToRuntimeObjects(c.cfg.KeyValidatorConfig.RequiredConfigMaps(ComplianceNamespace)...)...)
 	}
 
 	var objsToDelete []client.Object
 	// Compliance server is only for Standalone or Management clusters
-	if c.managementClusterConnection == nil {
+	if c.cfg.ManagementClusterConnection == nil {
 		complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(c.complianceServerCertSecrets...)...)
 		complianceObjs = append(complianceObjs,
 			c.complianceServerClusterRole(),
@@ -222,7 +205,7 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 			c.complianceServerDeployment(),
 		)
 
-		if c.installation.CertificateManagement != nil {
+		if c.cfg.Installation.CertificateManagement != nil {
 			complianceObjs = append(complianceObjs, CSRClusterRoleBinding("tigera-compliance-server", ComplianceNamespace))
 		}
 
@@ -231,12 +214,12 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 			c.complianceServerManagedClusterRole(),
 		)
 		objsToDelete = []client.Object{c.complianceServerDeployment()}
-		if c.installation.CertificateManagement != nil {
+		if c.cfg.Installation.CertificateManagement != nil {
 			objsToDelete = append(objsToDelete, CSRClusterRoleBinding("tigera-compliance-server", ComplianceNamespace))
 		}
 	}
 
-	if c.openshift {
+	if c.cfg.Openshift {
 		complianceObjs = append(complianceObjs, c.complianceBenchmarkerSecurityContextConstraints())
 	} else {
 		complianceObjs = append(complianceObjs,
@@ -249,13 +232,13 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 
 	// Need to grant cluster admin permissions in DockerEE to the controller since a pod starting pods with
 	// host path volumes requires cluster admin permissions.
-	if c.installation.KubernetesProvider == operatorv1.ProviderDockerEE {
+	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderDockerEE {
 		complianceObjs = append(complianceObjs, c.complianceControllerClusterAdminClusterRoleBinding())
 	}
 
-	complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(ComplianceNamespace, c.esSecrets...)...)...)
+	complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(ComplianceNamespace, c.cfg.ESSecrets...)...)...)
 
-	if c.hasNoLicense {
+	if c.cfg.HasNoLicense {
 		return nil, complianceObjs
 	}
 
@@ -303,7 +286,7 @@ func (c *complianceComponent) complianceControllerRole() *rbacv1.Role {
 		},
 	}
 
-	if !c.openshift {
+	if !c.cfg.Openshift {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -419,19 +402,19 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 		},
 		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
 			ServiceAccountName: "tigera-compliance-controller",
-			Tolerations:        append(c.installation.ControlPlaneTolerations, rmeta.TolerateMaster),
-			NodeSelector:       c.installation.ControlPlaneNodeSelector,
-			ImagePullSecrets:   secret.GetReferenceList(c.pullSecrets),
+			Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster),
+			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
+			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorate(corev1.Container{
 					Name:          ComplianceControllerName,
 					Image:         c.controllerImage,
 					Env:           envVars,
 					LivenessProbe: complianceLivenessProbe,
-				}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceControllerUserSecret, c.clusterDomain, c.SupportedOSType()),
+				}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceControllerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()),
 			},
 		}),
-	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
+	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -475,7 +458,7 @@ func (c *complianceComponent) complianceReporterClusterRole() *rbacv1.ClusterRol
 		},
 	}
 
-	if !c.openshift {
+	if !c.cfg.Openshift {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -514,7 +497,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 	dirOrCreate := corev1.HostPathDirectoryOrCreate
 	privileged := false
 	// On OpenShift reporter needs privileged access to write compliance reports to host path volume
-	if c.openshift {
+	if c.cfg.Openshift {
 		privileged = true
 	}
 
@@ -541,9 +524,9 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 			},
 			Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
 				ServiceAccountName: "tigera-compliance-reporter",
-				Tolerations:        append(c.installation.ControlPlaneTolerations, rmeta.TolerateMaster),
-				NodeSelector:       c.installation.ControlPlaneNodeSelector,
-				ImagePullSecrets:   secret.GetReferenceList(c.pullSecrets),
+				Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster),
+				NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
+				ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 				Containers: []corev1.Container{
 					relasticsearch.ContainerDecorateIndexCreator(
 						relasticsearch.ContainerDecorate(corev1.Container{
@@ -557,7 +540,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 							VolumeMounts: []corev1.VolumeMount{
 								{MountPath: "/var/log/calico", Name: "var-log-calico"},
 							},
-						}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceReporterUserSecret, c.clusterDomain, c.SupportedOSType()), c.esClusterConfig.Replicas(), c.esClusterConfig.Shards(),
+						}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceReporterUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()), c.cfg.ESClusterConfig.Replicas(), c.cfg.ESClusterConfig.Shards(),
 					),
 				},
 				Volumes: []corev1.Volume{
@@ -609,7 +592,7 @@ func (c *complianceComponent) complianceServerClusterRole() *rbacv1.ClusterRole 
 		},
 	}
 
-	if c.managementCluster != nil {
+	if c.cfg.ManagementCluster != nil {
 		// For cross-cluster requests, an authentication review will be done for authenticating the compliance-server.
 		// Requests on behalf of the compliance-server will be sent to Voltron, where an authentication review will take
 		// place with its bearer token.
@@ -620,7 +603,7 @@ func (c *complianceComponent) complianceServerClusterRole() *rbacv1.ClusterRole 
 		})
 	}
 
-	if !c.openshift {
+	if !c.cfg.Openshift {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		clusterRole.Rules = append(clusterRole.Rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
@@ -694,19 +677,19 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
 	}
-	if c.keyValidatorConfig != nil {
-		envVars = append(envVars, c.keyValidatorConfig.RequiredEnv("TIGERA_COMPLIANCE_")...)
+	if c.cfg.KeyValidatorConfig != nil {
+		envVars = append(envVars, c.cfg.KeyValidatorConfig.RequiredEnv("TIGERA_COMPLIANCE_")...)
 	}
 	var initContainers []corev1.Container
-	if c.installation.CertificateManagement != nil {
+	if c.cfg.Installation.CertificateManagement != nil {
 		initContainers = append(initContainers, CreateCSRInitContainer(
-			c.installation.CertificateManagement,
+			c.cfg.Installation.CertificateManagement,
 			c.csrInitImage,
 			complianceServerTLSVolumeName,
 			ComplianceServiceName,
 			APIServerSecretKeyName,
 			APIServerSecretCertName,
-			dns.GetServiceDNSNames(ComplianceServiceName, ComplianceNamespace, c.clusterDomain),
+			dns.GetServiceDNSNames(ComplianceServiceName, ComplianceNamespace, c.cfg.ClusterDomain),
 			ComplianceNamespace))
 	}
 
@@ -721,9 +704,9 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 		},
 		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
 			ServiceAccountName: "tigera-compliance-server",
-			Tolerations:        append(c.installation.ControlPlaneTolerations, rmeta.TolerateMaster),
-			NodeSelector:       c.installation.ControlPlaneNodeSelector,
-			ImagePullSecrets:   secret.GetReferenceList(c.pullSecrets),
+			Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster),
+			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
+			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorate(corev1.Container{
@@ -755,11 +738,11 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 						FailureThreshold:    5,
 					},
 					VolumeMounts: c.complianceServerVolumeMounts(),
-				}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceServerUserSecret, c.clusterDomain, c.SupportedOSType()),
+				}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceServerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()),
 			},
 			Volumes: c.complianceServerVolumes(),
 		}),
-	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
+	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -794,7 +777,7 @@ func (c *complianceComponent) complianceServerVolumeMounts() []corev1.VolumeMoun
 		ReadOnly:  true,
 	}}
 
-	if c.managerInternalTLSSecret != nil {
+	if c.cfg.ManagerInternalTLSSecret != nil {
 		mounts = append(mounts, corev1.VolumeMount{
 			Name:      ManagerInternalTLSSecretName,
 			MountPath: "/manager-tls",
@@ -802,8 +785,8 @@ func (c *complianceComponent) complianceServerVolumeMounts() []corev1.VolumeMoun
 		})
 	}
 
-	if c.keyValidatorConfig != nil {
-		mounts = append(mounts, c.keyValidatorConfig.RequiredVolumeMounts()...)
+	if c.cfg.KeyValidatorConfig != nil {
+		mounts = append(mounts, c.cfg.KeyValidatorConfig.RequiredVolumeMounts()...)
 	}
 
 	return mounts
@@ -812,8 +795,8 @@ func (c *complianceComponent) complianceServerVolumeMounts() []corev1.VolumeMoun
 func (c *complianceComponent) complianceServerVolumes() []corev1.Volume {
 	defaultMode := int32(420)
 
-	serverVolumeSource := certificateVolumeSource(c.installation.CertificateManagement, ComplianceServerCertSecret)
-	if c.installation.CertificateManagement == nil {
+	serverVolumeSource := certificateVolumeSource(c.cfg.Installation.CertificateManagement, ComplianceServerCertSecret)
+	if c.cfg.Installation.CertificateManagement == nil {
 		serverVolumeSource.Secret.Items = []corev1.KeyToPath{
 			{
 				Key:  corev1.TLSCertKey,
@@ -830,7 +813,7 @@ func (c *complianceComponent) complianceServerVolumes() []corev1.Volume {
 		VolumeSource: serverVolumeSource,
 	}}
 
-	if c.managerInternalTLSSecret != nil {
+	if c.cfg.ManagerInternalTLSSecret != nil {
 		volumes = append(volumes,
 			corev1.Volume{
 				Name: ManagerInternalTLSSecretName,
@@ -849,8 +832,8 @@ func (c *complianceComponent) complianceServerVolumes() []corev1.Volume {
 			})
 	}
 
-	if c.keyValidatorConfig != nil {
-		volumes = append(volumes, c.keyValidatorConfig.RequiredVolumes()...)
+	if c.cfg.KeyValidatorConfig != nil {
+		volumes = append(volumes, c.cfg.KeyValidatorConfig.RequiredVolumes()...)
 	}
 
 	return volumes
@@ -861,8 +844,8 @@ func complianceAnnotations(c *complianceComponent) map[string]string {
 		complianceServerTLSHashAnnotation: rmeta.AnnotationHash(c.complianceServerCertSecrets[0].Data),
 	}
 
-	if c.managerInternalTLSSecret != nil {
-		annotations[ManagerInternalTLSHashAnnotation] = rmeta.AnnotationHash(c.managerInternalTLSSecret.Data)
+	if c.cfg.ManagerInternalTLSSecret != nil {
+		annotations[ManagerInternalTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.ManagerInternalTLSSecret.Data)
 	}
 
 	return annotations
@@ -896,7 +879,7 @@ func (c *complianceComponent) complianceSnapshotterClusterRole() *rbacv1.Cluster
 		},
 	}
 
-	if !c.openshift {
+	if !c.cfg.Openshift {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		rules = append(rules, rbacv1.PolicyRule{APIGroups: []string{"policy"},
 			Resources:     []string{"podsecuritypolicies"},
@@ -948,9 +931,9 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 		},
 		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
 			ServiceAccountName: "tigera-compliance-snapshotter",
-			Tolerations:        append(c.installation.ControlPlaneTolerations, rmeta.TolerateMaster),
-			NodeSelector:       c.installation.ControlPlaneNodeSelector,
-			ImagePullSecrets:   secret.GetReferenceList(c.pullSecrets),
+			Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster),
+			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
+			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorateIndexCreator(
 					relasticsearch.ContainerDecorate(corev1.Container{
@@ -958,11 +941,11 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 						Image:         c.snapshotterImage,
 						Env:           envVars,
 						LivenessProbe: complianceLivenessProbe,
-					}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceSnapshotterUserSecret, c.clusterDomain, c.SupportedOSType()), c.esClusterConfig.Replicas(), c.esClusterConfig.Shards(),
+					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceSnapshotterUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()), c.cfg.ESClusterConfig.Replicas(), c.cfg.ESClusterConfig.Shards(),
 				),
 			},
 		}),
-	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
+	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -1011,7 +994,7 @@ func (c *complianceComponent) complianceBenchmarkerClusterRole() *rbacv1.Cluster
 		},
 	}
 
-	if !c.openshift {
+	if !c.cfg.Openshift {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		rules = append(rules, rbacv1.PolicyRule{APIGroups: []string{"policy"},
 			Resources:     []string{"podsecuritypolicies"},
@@ -1094,7 +1077,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 			ServiceAccountName: "tigera-compliance-benchmarker",
 			HostPID:            true,
 			Tolerations:        rmeta.TolerateAll,
-			ImagePullSecrets:   secret.GetReferenceList(c.pullSecrets),
+			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorateIndexCreator(
 					relasticsearch.ContainerDecorate(corev1.Container{
@@ -1103,12 +1086,12 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 						Env:           envVars,
 						VolumeMounts:  volMounts,
 						LivenessProbe: complianceLivenessProbe,
-					}, c.esClusterConfig.ClusterName(), ElasticsearchComplianceBenchmarkerUserSecret, c.clusterDomain, c.SupportedOSType()), c.esClusterConfig.Replicas(), c.esClusterConfig.Shards(),
+					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceBenchmarkerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()), c.cfg.ESClusterConfig.Replicas(), c.cfg.ESClusterConfig.Shards(),
 				),
 			},
 			Volumes: vols,
 		}),
-	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
+	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 
 	return &appsv1.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},

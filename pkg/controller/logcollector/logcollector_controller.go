@@ -419,20 +419,21 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
+	fluentdCfg := &render.FluentdConfiguration{
+		LC:              instance,
+		ESSecrets:       esSecrets,
+		ESClusterConfig: esClusterConfig,
+		S3Credential:    s3Credential,
+		SplkCredential:  splunkCredential,
+		Filters:         filters,
+		EKSConfig:       eksConfig,
+		PullSecrets:     pullSecrets,
+		Installation:    installation,
+		ClusterDomain:   r.clusterDomain,
+		OSType:          rmeta.OSTypeLinux,
+	}
 	// Render the fluentd component for Linux
-	component := render.Fluentd(
-		instance,
-		esSecrets,
-		esClusterConfig,
-		s3Credential,
-		splunkCredential,
-		filters,
-		eksConfig,
-		pullSecrets,
-		installation,
-		r.clusterDomain,
-		rmeta.OSTypeLinux,
-	)
+	component := render.Fluentd(fluentdCfg)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
 		reqLogger.Error(err, "Error with images from ImageSet")
@@ -452,19 +453,20 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	if hasWindowsNodes {
-		component = render.Fluentd(
-			instance,
-			esSecrets,
-			esClusterConfig,
-			s3Credential,
-			splunkCredential,
-			filters,
-			eksConfig,
-			pullSecrets,
-			installation,
-			r.clusterDomain,
-			rmeta.OSTypeWindows,
-		)
+		fluentdCfg = &render.FluentdConfiguration{
+			LC:              instance,
+			ESSecrets:       esSecrets,
+			ESClusterConfig: esClusterConfig,
+			S3Credential:    s3Credential,
+			SplkCredential:  splunkCredential,
+			Filters:         filters,
+			EKSConfig:       eksConfig,
+			PullSecrets:     pullSecrets,
+			Installation:    installation,
+			ClusterDomain:   r.clusterDomain,
+			OSType:          rmeta.OSTypeWindows,
+		}
+		component = render.Fluentd(fluentdCfg)
 
 		if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
 			reqLogger.Error(err, "Error with images from ImageSet")

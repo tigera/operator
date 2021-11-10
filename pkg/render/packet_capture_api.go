@@ -270,8 +270,8 @@ func (pc *packetCaptureApiComponent) initContainers() []corev1.Container {
 			pc.csrInitImage,
 			PacketCaptureCertSecret,
 			PacketCaptureServiceName,
-			APIServerSecretKeyName,
-			APIServerSecretCertName,
+			corev1.TLSPrivateKeyKey,
+			corev1.TLSCertKey,
 			dns.GetServiceDNSNames(PacketCaptureServiceName, PacketCaptureNamespace, pc.clusterDomain),
 			PacketCaptureNamespace))
 	}

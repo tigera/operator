@@ -63,7 +63,7 @@ func allCalicoComponents(
 	logCollector *operatorv1.LogCollector,
 ) ([]render.Component, error) {
 
-	namespaces := render.Namespaces(cr, pullSecrets)
+	namespaces := render.Namespaces(&render.NamespaceConfiguration{Installation: cr, PullSecrets: pullSecrets})
 
 	objs := []client.Object{}
 	if typhaNodeTLS.CAConfigMap != nil {

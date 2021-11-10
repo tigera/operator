@@ -118,7 +118,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret,
 			render.ElasticsearchManagerUserSecret, render.KibanaPublicCertSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureCertSecret,
-			render.ManagerInternalTLSSecretName, render.DexCertSecretName,
+			render.ManagerInternalTLSSecretName, render.DexCertSecretName, render.PrometheusTLSSecretName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("manager-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
@@ -490,6 +490,22 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, nil
 	}
 
+	prometheusCertSecret, err := utils.ValidateCertPair(r.client,
+		common.OperatorNamespace(),
+		render.PrometheusTLSSecretName,
+		"", // We don't need the key.
+		corev1.TLSCertKey,
+	)
+	if err != nil {
+		reqLogger.Error(err, fmt.Sprintf("failed to retrieve %s", render.PrometheusTLSSecretName))
+		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s", render.PrometheusTLSSecretName), err.Error())
+		return reconcile.Result{}, err
+	} else if prometheusCertSecret == nil {
+		reqLogger.Info(fmt.Sprintf("Waiting for secret '%s' to become available", render.PrometheusTLSSecretName))
+		r.status.SetDegraded(fmt.Sprintf("Waiting for secret '%s' to become available", render.PrometheusTLSSecretName), "")
+		return reconcile.Result{}, nil
+	}
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -508,6 +524,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		[]*corev1.Secret{kibanaPublicCertSecret},
 		complianceServerCertSecret,
 		packetCaptureServerCertSecret,
+		prometheusCertSecret,
 		esClusterConfig,
 		tlsSecret,
 		pullSecrets,

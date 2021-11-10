@@ -19,12 +19,11 @@ import (
 	"strconv"
 	"strings"
 
-	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
-	"github.com/tigera/operator/pkg/render/common/podaffinity"
-
 	ocsv1 "github.com/openshift/api/security/v1"
 	"github.com/tigera/operator/pkg/render/common/authentication"
+	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
 	"github.com/tigera/operator/pkg/render/common/configmap"
+	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -68,6 +67,9 @@ const (
 
 	KibanaTLSHashAnnotation         = "hash.operator.tigera.io/kibana-secrets"
 	ElasticsearchUserHashAnnotation = "hash.operator.tigera.io/elasticsearch-user"
+
+	PrometheusTLSSecretName     = "calico-node-prometheus-tls"
+	prometheusTLSHashAnnotation = "hash.operator.tigera.io/prometheus-tls"
 )
 
 // ManagementClusterConnection configuration constants

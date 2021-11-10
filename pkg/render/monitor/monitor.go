@@ -46,7 +46,6 @@ const (
 	CalicoNodeAlertmanager      = "calico-node-alertmanager"
 	CalicoNodeMonitor           = "calico-node-monitor"
 	CalicoNodePrometheus        = "calico-node-prometheus"
-	PrometheusTLSSecretName     = "calico-node-prometheus-tls"
 	ElasticsearchMetrics        = "elasticsearch-metrics"
 	FluentdMetrics              = "fluentd-metrics"
 	TigeraPrometheusObjectName  = "tigera-prometheus"
@@ -55,10 +54,10 @@ const (
 	TigeraPrometheusRole        = "tigera-prometheus-role"
 	TigeraPrometheusRoleBinding = "tigera-prometheus-role-binding"
 
-	PrometheusHTTPAPIServiceName = "prometheus-http-api"
-	PrometheusDefaultPort        = 9090
-	PrometheusProxyPort          = 9095
-
+	PrometheusHTTPAPIServiceName    = "prometheus-http-api"
+	PrometheusDefaultPort           = 9090
+	PrometheusProxyPort             = 9095
+	PrometheusTLSSecretName         = "calico-node-prometheus-tls"
 	calicoNodePrometheusServiceName = "calico-node-prometheus"
 
 	tigeraPrometheusServiceHealthEndpoint = "/health"
@@ -66,7 +65,6 @@ const (
 	AlertmanagerConfigSecret = "alertmanager-calico-node-alertmanager"
 
 	prometheusServiceAccountName = "prometheus"
-)
 )
 
 func Monitor(
@@ -102,27 +100,27 @@ func Monitor(
 	}
 
 	return &monitorComponent{
-		installation: installation,
-		keyValidatorConfig: keyValidatorConfig,
-		pullSecrets:  pullSecrets,
+		installation:             installation,
+		keyValidatorConfig:       keyValidatorConfig,
+		pullSecrets:              pullSecrets,
 		alertmanagerConfigSecret: alertmanagerConfigSecret,
-		tlsSecrets:         tlsSecrets,
-		tlsAnnotation:      tlsHash,
-		clusterDomain:      clusterDomain,
+		tlsSecrets:               tlsSecrets,
+		tlsAnnotation:            tlsHash,
+		clusterDomain:            clusterDomain,
 	}, nil
 }
 
 type monitorComponent struct {
 	installation             *operatorv1.InstallationSpec
-	keyValidatorConfig     authentication.KeyValidatorConfig
+	keyValidatorConfig       authentication.KeyValidatorConfig
 	pullSecrets              []*corev1.Secret
-	tlsSecrets             []*corev1.Secret
+	tlsSecrets               []*corev1.Secret
 	alertmanagerImage        string
 	prometheusImage          string
-	prometheusServiceImage string
-	csrImage               string
-	clusterDomain          string
-	tlsAnnotation          string
+	prometheusServiceImage   string
+	csrImage                 string
+	clusterDomain            string
+	tlsAnnotation            string
 	alertmanagerConfigSecret *corev1.Secret
 }
 
@@ -176,7 +174,7 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 	if mc.installation.CertificateManagement == nil {
 		toCreate = append(toCreate, secret.ToRuntimeObjects(mc.tlsSecrets...)...)
 	} else {
-		toCreate = append(toCreate, render.CSRClusterRoleBinding(TigeraPrometheusObjectName, common.TigeraPrometheusNamespace))
+		toCreate = append(toCreate, render.CSRClusterRoleBinding(prometheusServiceAccountName, common.TigeraPrometheusNamespace))
 	}
 	toCreate = append(toCreate,
 		mc.role(),
@@ -307,14 +305,6 @@ func (mc *monitorComponent) alertmanagerService() *corev1.Service {
 func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 	certVolume := corev1.Volume{
 		Name: PrometheusTLSSecretName,
-		VolumeSource: corev1.VolumeSource{
-			Secret: &corev1.SecretVolumeSource{
-				SecretName: PrometheusTLSSecretName,
-			},
-		},
-	}
-	volumes := []corev1.Volume{
-		certVolume,
 	}
 
 	var initContainers []corev1.Container
@@ -332,8 +322,16 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 			common.TigeraPrometheusNamespace))
 
 		certVolume.VolumeSource = corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}
+	} else {
+		certVolume.VolumeSource = corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{
+				SecretName: PrometheusTLSSecretName,
+			},
+		}
 	}
-
+	volumes := []corev1.Volume{
+		certVolume,
+	}
 	env := []corev1.EnvVar{
 		{
 			Name:  "PROMETHEUS_ENDPOINT_URL",
@@ -371,10 +369,11 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 			Namespace: common.TigeraPrometheusNamespace,
 		},
 		Spec: monitoringv1.PrometheusSpec{
-			Image:                  &mc.prometheusImage,
-			ImagePullSecrets:       secret.GetReferenceList(mc.pullSecrets),
-			ServiceAccountName:     prometheusServiceAccountName,
-			Volumes:          volumes,
+			Image:              &mc.prometheusImage,
+			ImagePullSecrets:   secret.GetReferenceList(mc.pullSecrets),
+			ServiceAccountName: prometheusServiceAccountName,
+			Volumes:            volumes,
+			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				{
 					Name:            "authn-proxy",

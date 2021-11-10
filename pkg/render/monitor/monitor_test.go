@@ -36,7 +36,7 @@ import (
 	"github.com/tigera/operator/pkg/render/monitor"
 )
 
-var _ = Describe("monitor rendering tests", func() {
+var _ = Describe("monitor rendering tests", func() { //todo: revert
 	defaultAlertmanagerConfigSecret := &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -49,14 +49,14 @@ var _ = Describe("monitor rendering tests", func() {
 	}
 
 	It("Should render Prometheus resources", func() {
-		component :=
-		monitor.Monitor(
-			component, _ := monitor.Monitor(
+
+		component, _ := monitor.Monitor(
 			&operatorv1.InstallationSpec{},
 			nil,
+			defaultAlertmanagerConfigSecret,
 			[]*corev1.Secret{
 				{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-			}, nil, "example.org", defaultAlertmanagerConfigSecret,
+			}, nil, "example.org",
 		)
 
 		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
@@ -109,10 +109,12 @@ var _ = Describe("monitor rendering tests", func() {
 		component, _ := monitor.Monitor(
 			&operatorv1.InstallationSpec{},
 			nil,
+			defaultAlertmanagerConfigSecret,
 			[]*corev1.Secret{
 				{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 			},
-			defaultAlertmanagerConfigSecret, nil, "example.org",
+			nil,
+			"example.org",
 		)
 
 		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
@@ -337,16 +339,17 @@ var _ = Describe("monitor rendering tests", func() {
 				},
 			},
 			dns.DefaultClusterDomain)
-		component, _ := render.Monitor(
+		component, _ := monitor.Monitor(
 			&operatorv1.InstallationSpec{},
 			dexCfg,
+			defaultAlertmanagerConfigSecret,
 			[]*corev1.Secret{
 				{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 			},
 			&corev1.Secret{
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.PrometheusTLSSecretName,
+					Name:      monitor.PrometheusTLSSecretName,
 					Namespace: common.OperatorNamespace(),
 				},
 				Type: corev1.SecretTypeTLS,
@@ -370,8 +373,8 @@ var _ = Describe("monitor rendering tests", func() {
 		}{
 			{"tigera-prometheus", "", "", "v1", "Namespace"},
 			{"tigera-pull-secret", common.TigeraPrometheusNamespace, "", "", ""},
-			{render.PrometheusTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
-			{render.PrometheusTLSSecretName, common.TigeraPrometheusNamespace, "", "v1", "Secret"},
+			{monitor.PrometheusTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
+			{monitor.PrometheusTLSSecretName, common.TigeraPrometheusNamespace, "", "v1", "Secret"},
 			{"tigera-prometheus-role", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "Role"},
 			{"tigera-prometheus-role-binding", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding"},
 			{"calico-node-alertmanager", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.AlertmanagersKind},
@@ -381,8 +384,8 @@ var _ = Describe("monitor rendering tests", func() {
 			{"elasticsearch-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
 			{"fluentd-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PodMonitorsKind},
 			{"prometheus-http-api", common.TigeraPrometheusNamespace, "", "v1", "Service"},
-			{name: render.TigeraPrometheusObjectName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: render.TigeraPrometheusObjectName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: monitor.TigeraPrometheusObjectName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: monitor.TigeraPrometheusObjectName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-dex-tls", ns: common.TigeraPrometheusNamespace, group: "", version: "v1", kind: "Secret"},
 		}
 
@@ -396,7 +399,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(toDelete).To(HaveLen(1))
 
 		// Prometheus
-		prometheusObj, ok := rtest.GetResource(toCreate, render.CalicoNodePrometheus, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind).(*monitoringv1.Prometheus)
+		prometheusObj, ok := rtest.GetResource(toCreate, monitor.CalicoNodePrometheus, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind).(*monitoringv1.Prometheus)
 		Expect(ok).To(BeTrue())
 		prometheusCom := components.ComponentPrometheus
 		Expect(*prometheusObj.Spec.Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", prometheusCom.Image, prometheusCom.Version)))

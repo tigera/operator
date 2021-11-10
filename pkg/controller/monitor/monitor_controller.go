@@ -113,7 +113,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("monitor-controller failed to watch ImageSet: %w", err)
 	}
 
-	if err = utils.AddSecretsWatch(c, render.PrometheusTLSSecretName, common.OperatorNamespace()); err != nil {
+	if err = utils.AddSecretsWatch(c, monitor.PrometheusTLSSecretName, common.OperatorNamespace()); err != nil {
 		return fmt.Errorf("monitor-controller failed to watch secret: %w", err)
 	}
 
@@ -205,7 +205,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		// If it does not exist then this function still returns true
 		tlsSecret, err = utils.ValidateCertPair(r.client,
 			common.OperatorNamespace(),
-			render.PrometheusTLSSecretName,
+			monitor.PrometheusTLSSecretName,
 			corev1.TLSPrivateKeyKey,
 			corev1.TLSCertKey,
 		)
@@ -242,18 +242,18 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	hdler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	// render prometheus components
-	monitor, err := render.Monitor(install, keyValidatorConfig, pullSecrets, tlsSecret, r.clusterDomain)
-	if err != nil {
-		log.Error(err, "Failed to create monitor component")
-		r.status.SetDegraded("Failed to create monitor component", err.Error())
-		return reconcile.Result{}, err
-	}
+
 	alertmanagerConfigSecret, createInOperatorNamespace, err := r.readAlertmanagerConfigSecret(ctx)
 	if err != nil {
 		r.setDegraded(reqLogger, err, "Error retrieving Alertmanager configuration secret")
 		return reconcile.Result{}, err
 	}
-
+	monitor, err := monitor.Monitor(install, keyValidatorConfig, alertmanagerConfigSecret, pullSecrets, tlsSecret, r.clusterDomain)
+	if err != nil {
+		log.Error(err, "Failed to create monitor component")
+		r.status.SetDegraded("Failed to create monitor component", err.Error())
+		return reconcile.Result{}, err
+	}
 	components := []render.Component{monitor}
 	if createInOperatorNamespace {
 		components = append(components, render.NewPassthrough([]client.Object{alertmanagerConfigSecret}))

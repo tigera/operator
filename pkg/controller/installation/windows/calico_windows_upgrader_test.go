@@ -86,7 +86,8 @@ var _ = Describe("Calico windows upgrader", func() {
 		c = NewCalicoWindowsUpgrader(cs, client, nodeIndexInformer, mockStatus, syncPeriodOption)
 		one := intstr.FromInt(1)
 		cr = &operator.InstallationSpec{
-			Variant: operator.Calico,
+			Variant:            operator.Calico,
+			KubernetesProvider: operator.ProviderAKS,
 			NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
 				RollingUpdate: &appsv1.RollingUpdateDaemonSet{
 					MaxUnavailable: &one,
@@ -97,6 +98,26 @@ var _ = Describe("Calico windows upgrader", func() {
 
 	AfterEach(func() {
 		cancel()
+	})
+
+	It("should do nothing if provider is not AKS", func() {
+		cr.KubernetesProvider = operator.ProviderEKS
+		c.Start(ctx)
+
+		n1 := test.CreateNode(cs, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
+		n2 := test.CreateWindowsNode(cs, "node2", operator.Calico, "v3.21.999")
+		n3 := test.CreateWindowsNode(cs, "node3", operator.Calico, components.CalicoRelease)
+
+		c.UpdateConfig(cr)
+
+		Consistently(func() error {
+			return test.AssertNodesUnchanged(cs, n1, n2, n3)
+		}, 10*time.Second, 100*time.Millisecond).Should(BeNil())
+
+		// No SetWindowsUpgradeStatus calls are expected since
+		// calicoWindowsUpgrader should have exited its loop because
+		// provider != AKS.
+		mockStatus.AssertExpectations(GinkgoT())
 	})
 
 	It("should ignore linux nodes", func() {

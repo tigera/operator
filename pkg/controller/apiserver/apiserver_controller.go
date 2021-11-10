@@ -376,7 +376,15 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			return reconcile.Result{}, err
 		}
 
-		var pc = render.PacketCaptureAPI(pullSecrets, r.provider == operatorv1.ProviderOpenShift, network, keyValidatorConfig, packetCaptureCertSecret, r.clusterDomain)
+		packetCaptureApiCfg := &render.PacketCaptureApiConfiguration{
+			PullSecrets:        pullSecrets,
+			Openshift:          r.provider == operatorv1.ProviderOpenShift,
+			Installation:       network,
+			KeyValidatorConfig: keyValidatorConfig,
+			ServerCertSecret:   packetCaptureCertSecret,
+			ClusterDomain:      r.clusterDomain,
+		}
+		var pc = render.PacketCaptureAPI(packetCaptureApiCfg)
 		components = append(components, pc)
 	}
 

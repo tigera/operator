@@ -129,7 +129,7 @@ func APIServer(cfg *APIServerConfiguration) (Component, error) {
 	}, nil
 }
 
-// APIServerConfiguration contains all the config information apiServerComponent needs to render component.
+// APIServerConfiguration contains all the config information needed to render the component.
 type APIServerConfiguration struct {
 	K8SServiceEndpoint          k8sapi.ServiceEndpoint
 	Installation                *operatorv1.InstallationSpec

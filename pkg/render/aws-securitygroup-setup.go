@@ -28,14 +28,19 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 )
 
-func AWSSecurityGroupSetup(ps []corev1.LocalObjectReference, installcr *operatorv1.InstallationSpec) (Component, error) {
-	return &awsSGSetupComponent{pullSecrets: ps, installcr: installcr}, nil
+func AWSSecurityGroupSetup(cfg *AWSSGSetupConfiguration) (Component, error) {
+	return &awsSGSetupComponent{cfg: cfg}, nil
+}
+
+// AWSSGSetupConfiguration contains all the config information needed to render the component.
+type AWSSGSetupConfiguration struct {
+	PullSecrets []corev1.LocalObjectReference
+	Installcr   *operatorv1.InstallationSpec
 }
 
 type awsSGSetupComponent struct {
-	pullSecrets []corev1.LocalObjectReference
-	installcr   *operatorv1.InstallationSpec
-	image       string
+	cfg   *AWSSGSetupConfiguration
+	image string
 }
 
 func (c *awsSGSetupComponent) SupportedOSType() rmeta.OSType {
@@ -43,9 +48,9 @@ func (c *awsSGSetupComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *awsSGSetupComponent) ResolveImages(is *operatorv1.ImageSet) error {
-	reg := c.installcr.Registry
-	path := c.installcr.ImagePath
-	prefix := c.installcr.ImagePrefix
+	reg := c.cfg.Installcr.Registry
+	path := c.cfg.Installcr.ImagePath
+	prefix := c.cfg.Installcr.ImagePrefix
 	var err error
 	c.image, err = components.GetReference(components.ComponentOperatorInit, reg, path, prefix, is)
 	return err
@@ -83,7 +88,7 @@ func (c *awsSGSetupComponent) setupJob() *batchv1.Job {
 				},
 				Spec: corev1.PodSpec{
 					RestartPolicy:      corev1.RestartPolicyOnFailure,
-					ImagePullSecrets:   c.pullSecrets,
+					ImagePullSecrets:   c.cfg.PullSecrets,
 					ServiceAccountName: TigeraAWSSGSetupName,
 					HostNetwork:        true,
 					Tolerations:        rmeta.TolerateAll,

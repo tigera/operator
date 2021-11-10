@@ -1111,6 +1111,10 @@ var _ = Describe("Testing core-controller installation", func() {
 		})
 
 		Context("calicoWindowsUpgrader", func() {
+			BeforeEach(func() {
+				cr.Spec.KubernetesProvider = operator.ProviderAKS
+			})
+
 			It("should do nothing if node is up to date", func() {
 				cr.Spec.Variant = operator.TigeraSecureEnterprise
 				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())

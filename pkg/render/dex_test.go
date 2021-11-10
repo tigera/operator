@@ -30,7 +30,6 @@ var _ = Describe("dex rendering tests", func() {
 		)
 
 		var (
-			installation   *operatorv1.InstallationSpec
 			authentication *operatorv1.Authentication
 			tlsSecret      *corev1.Secret
 			certSecret     *corev1.Secret
@@ -38,10 +37,11 @@ var _ = Describe("dex rendering tests", func() {
 			idpSecret      *corev1.Secret
 			pullSecrets    []*corev1.Secret
 			replicas       int32
+			cfg            *render.DexComponentConfiguration
 		)
 
 		BeforeEach(func() {
-			installation = &operatorv1.InstallationSpec{
+			installation := &operatorv1.InstallationSpec{
 				ControlPlaneReplicas: &replicas,
 				KubernetesProvider:   operatorv1.ProviderNone,
 				Registry:             "testregistry.com/",
@@ -84,13 +84,20 @@ var _ = Describe("dex rendering tests", func() {
 				}}
 
 			replicas = 2
+
+			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName)
+
+			cfg = &render.DexComponentConfiguration{
+				PullSecrets:   pullSecrets,
+				Installation:  installation,
+				DexConfig:     dexCfg,
+				ClusterDomain: clusterName,
+			}
 		})
 
 		It("should render all resources for a OIDC setup", func() {
 
-			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName)
-
-			component := render.Dex(pullSecrets, false, installation, dexCfg, clusterName, false)
+			component := render.Dex(cfg)
 			resources, _ := component.Objects()
 
 			expectedResources := []struct {
@@ -146,21 +153,22 @@ var _ = Describe("dex rendering tests", func() {
 				Effect:   corev1.TaintEffectNoExecute,
 			}
 
-			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName)
-			component := render.Dex(pullSecrets, false, &operatorv1.InstallationSpec{
-				ControlPlaneReplicas:    installation.ControlPlaneReplicas,
+			cfg.Installation = &operatorv1.InstallationSpec{
+				ControlPlaneReplicas:    cfg.Installation.ControlPlaneReplicas,
 				ControlPlaneTolerations: []corev1.Toleration{t},
-			}, dexCfg, clusterName, false)
+			}
+
+			component := render.Dex(cfg)
 			resources, _ := component.Objects()
 			d := rtest.GetResource(resources, render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(t, rmeta.TolerateMaster))
 		})
 
 		It("should render all resources for a certificate management", func() {
-			installation.CertificateManagement = &operatorv1.CertificateManagement{}
-			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName)
+			cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{}
+			cfg.DexConfig = render.NewDexConfig(cfg.Installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName)
 
-			component := render.Dex(pullSecrets, false, installation, dexCfg, clusterName, false)
+			component := render.Dex(cfg)
 			resources, _ := component.Objects()
 
 			expectedResources := []struct {
@@ -195,10 +203,9 @@ var _ = Describe("dex rendering tests", func() {
 
 		It("should not render PodAffinity when ControlPlaneReplicas is 1", func() {
 			var replicas int32 = 1
-			installation.ControlPlaneReplicas = &replicas
+			cfg.Installation.ControlPlaneReplicas = &replicas
 
-			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName)
-			component := render.Dex(pullSecrets, false, installation, dexCfg, clusterName, false)
+			component := render.Dex(cfg)
 			resources, _ := component.Objects()
 			deploy, ok := rtest.GetResource(resources, render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(ok).To(BeTrue())
@@ -207,10 +214,9 @@ var _ = Describe("dex rendering tests", func() {
 
 		It("should render PodAffinity when ControlPlaneReplicas is greater than 1", func() {
 			var replicas int32 = 2
-			installation.ControlPlaneReplicas = &replicas
+			cfg.Installation.ControlPlaneReplicas = &replicas
 
-			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName)
-			component := render.Dex(pullSecrets, false, installation, dexCfg, clusterName, false)
+			component := render.Dex(cfg)
 			resources, _ := component.Objects()
 			deploy, ok := rtest.GetResource(resources, render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(ok).To(BeTrue())

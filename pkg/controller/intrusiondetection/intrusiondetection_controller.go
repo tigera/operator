@@ -360,20 +360,21 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	reqLogger.V(3).Info("rendering components")
 	// Render the desired objects from the CRD and create or update them.
 	var hasNoLicense = !utils.IsFeatureActive(license, common.ThreatDefenseFeature)
-	component := render.IntrusionDetection(
-		lc,
-		esSecrets,
-		kibanaPublicCertSecret,
-		network,
-		esClusterConfig,
-		pullSecrets,
-		r.provider == operatorv1.ProviderOpenShift,
-		r.clusterDomain,
-		esLicenseType,
-		managementClusterConnection != nil,
-		hasNoLicense,
-		managerInternalTLSSecret,
-	)
+	intrusionDetectionCfg := &render.IntrusionDetectionConfiguration{
+		LC:                       lc,
+		ESSecrets:                esSecrets,
+		KibanaCertSecret:         kibanaPublicCertSecret,
+		Installation:             network,
+		ESClusterConfig:          esClusterConfig,
+		PullSecrets:              pullSecrets,
+		Openshift:                r.provider == operatorv1.ProviderOpenShift,
+		ClusterDomain:            r.clusterDomain,
+		ESLicenseType:            esLicenseType,
+		ManagedCluster:           managementClusterConnection != nil,
+		HasNoLicense:             hasNoLicense,
+		ManagerInternalTLSSecret: managerInternalTLSSecret,
+	}
+	component := render.IntrusionDetection(intrusionDetectionCfg)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
 		reqLogger.Error(err, "Error with images from ImageSet")

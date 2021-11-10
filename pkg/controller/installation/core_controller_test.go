@@ -1153,7 +1153,12 @@ var _ = Describe("Testing core-controller installation", func() {
 					return test.AssertNodesHadUpgradeTriggered(cs, n1, n2)
 				}, 10*time.Second).Should(BeNil())
 
+				Eventually(func() bool {
+					return mockStatus.WasCalled("SetWindowsUpgradeStatus", mock.Anything, mock.Anything, mock.Anything)
+				}, 5*time.Second).Should(BeTrue())
+
 				mockStatus.AssertExpectations(GinkgoT())
+
 				Consistently(func() error {
 					return test.AssertNodesHadUpgradeTriggered(cs, n1, n2)
 				}, 10*time.Second).Should(BeNil())

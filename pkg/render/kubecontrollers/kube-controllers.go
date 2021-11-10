@@ -336,7 +336,7 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 			// Needed to validate the license
 			APIGroups: []string{"crd.projectcalico.org"},
 			Resources: []string{"licensekeys"},
-			Verbs:     []string{"get"},
+			Verbs:     []string{"get", "watch"},
 		},
 	}
 

@@ -359,10 +359,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				}
 				compareInitContainer(initContainers[0], "elastic-internal-init-os-settings", []corev1.VolumeMount{})
 				compareInitContainer(initContainers[1], "elastic-internal-init-filesystem", []corev1.VolumeMount{
-					{Name: "elastic-internal-transport-certificates-secret", MountPath: "/mnt/elastic-internal/transport-certificates"},
 					{Name: "elastic-internal-transport-certificates", MountPath: "/csr"},
-					{Name: "elastic-internal-elasticsearch-config-local", MountPath: "/mnt/elastic-internal/elasticsearch-config-local"},
-					{Name: "elastic-internal-elasticsearch-bin-local", MountPath: "/mnt/elastic-internal/elasticsearch-bin-local"},
 				})
 				compareInitContainer(initContainers[2], "key-cert-elastic", []corev1.VolumeMount{
 					{Name: "elastic-internal-http-certificates", MountPath: render.CSRCMountPath},

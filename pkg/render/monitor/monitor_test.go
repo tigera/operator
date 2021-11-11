@@ -16,7 +16,6 @@ package monitor_test
 
 import (
 	"fmt"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -46,14 +45,20 @@ var _ = Describe("monitor rendering tests", func() {
 		},
 	}
 
-	It("Should render Prometheus resources", func() {
-		component := monitor.Monitor(
-			&operatorv1.InstallationSpec{},
-			[]*corev1.Secret{
+	var cfg *monitor.Config
+
+	BeforeEach(func() {
+		cfg = &monitor.Config{
+			Installation: &operatorv1.InstallationSpec{},
+			PullSecrets: []*corev1.Secret{
 				{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 			},
-			defaultAlertmanagerConfigSecret,
-		)
+			AlertmanagerConfigSecret: defaultAlertmanagerConfigSecret,
+		}
+	})
+
+	It("Should render Prometheus resources", func() {
+		component := monitor.Monitor(cfg)
 
 		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
 		toCreate, toDelete := component.Objects()
@@ -98,13 +103,7 @@ var _ = Describe("monitor rendering tests", func() {
 	})
 
 	It("Should render Prometheus resource Specs correctly", func() {
-		component := monitor.Monitor(
-			&operatorv1.InstallationSpec{},
-			[]*corev1.Secret{
-				{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-			},
-			defaultAlertmanagerConfigSecret,
-		)
+		component := monitor.Monitor(cfg)
 
 		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
 		toCreate, _ := component.Objects()

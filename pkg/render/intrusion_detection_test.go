@@ -36,18 +36,26 @@ var (
 )
 
 var _ = Describe("Intrusion Detection rendering tests", func() {
-	It("should render all resources for a default configuration", func() {
-		esConfigMap := relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 
-		component := render.IntrusionDetection(
-			nil,
-			nil,
-			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}},
-			&operatorv1.InstallationSpec{Registry: "testregistry.com/"},
-			esConfigMap, nil, notOpenshift, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, notManagedCluster,
-			false,
-			&testutils.InternalManagerTLSSecret,
-		)
+	var cfg *render.IntrusionDetectionConfiguration
+
+	BeforeEach(func() {
+		// Initialize a default instance to use. Each test can override this to its
+		// desired configuration.
+		cfg = &render.IntrusionDetectionConfiguration{
+			KibanaCertSecret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}},
+			Installation:     &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
+			ESClusterConfig:  relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1),
+			ClusterDomain:    dns.DefaultClusterDomain,
+			ESLicenseType:    render.ElasticsearchLicenseTypeUnknown,
+			ManagedCluster:   notManagedCluster,
+		}
+	})
+
+	It("should render all resources for a default configuration", func() {
+		cfg.Openshift = notOpenshift
+		cfg.ManagerInternalTLSSecret = &testutils.InternalManagerTLSSecret
+		component := render.IntrusionDetection(cfg)
 		resources, _ := component.Objects()
 
 		// Should render the correct resources.
@@ -116,27 +124,18 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 	})
 
 	It("should render all resources for a configuration that includes event forwarding turned on (Syslog)", func() {
-		esConfigMap := relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
-
 		// Initialize a default LogCollector instance to use.
-		lc := &operatorv1.LogCollector{}
-		lc.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
+		cfg.LogCollector = &operatorv1.LogCollector{}
+		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
 			Syslog: &operatorv1.SyslogStoreSpec{
 				LogTypes: []operatorv1.SyslogLogType{
 					operatorv1.SyslogLogIDSEvents,
 				},
 			},
 		}
+		cfg.Openshift = notOpenshift
 
-		component := render.IntrusionDetection(
-			lc,
-			nil,
-			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}},
-			&operatorv1.InstallationSpec{Registry: "testregistry.com/"},
-			esConfigMap, nil, notOpenshift, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, notManagedCluster,
-			false,
-			nil,
-		)
+		component := render.IntrusionDetection(cfg)
 		resources, _ := component.Objects()
 
 		// Should render the correct resources.
@@ -209,17 +208,10 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 	})
 
 	It("should not render intrusion-detection-es-job-installer and should disable GlobalAlert controller when cluster is managed", func() {
-		esConfigMap := relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
+		cfg.Openshift = notOpenshift
+		cfg.ManagedCluster = managedCluster
 
-		component := render.IntrusionDetection(
-			nil,
-			nil,
-			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}},
-			&operatorv1.InstallationSpec{Registry: "testregistry.com/"},
-			esConfigMap, nil, notOpenshift, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, managedCluster,
-			false,
-			nil,
-		)
+		component := render.IntrusionDetection(cfg)
 		resources, _ := component.Objects()
 
 		// Should render the correct resources.
@@ -282,15 +274,11 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 	})
 
 	It("should apply controlPlaneNodeSelector correctly", func() {
-		component := render.IntrusionDetection(nil, nil,
-			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}},
-			&operatorv1.InstallationSpec{
-				ControlPlaneNodeSelector: map[string]string{"foo": "bar"},
-			},
-			&relasticsearch.ClusterConfig{}, nil, false, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, notManagedCluster,
-			false,
-			nil,
-		)
+		cfg.Installation = &operatorv1.InstallationSpec{
+			ControlPlaneNodeSelector: map[string]string{"foo": "bar"},
+		}
+		cfg.ESClusterConfig = &relasticsearch.ClusterConfig{}
+		component := render.IntrusionDetection(cfg)
 		resources, _ := component.Objects()
 		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		job := rtest.GetResource(resources, render.IntrusionDetectionInstallerJobName, render.IntrusionDetectionNamespace, "batch", "v1", "Job").(*batchv1.Job)
@@ -303,12 +291,11 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			Operator: corev1.TolerationOpEqual,
 			Value:    "bar",
 		}
-		component := render.IntrusionDetection(nil, nil,
-			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}},
-			&operatorv1.InstallationSpec{
-				ControlPlaneTolerations: []corev1.Toleration{t},
-			},
-			&relasticsearch.ClusterConfig{}, nil, false, dns.DefaultClusterDomain, render.ElasticsearchLicenseTypeUnknown, notManagedCluster, false, nil)
+		cfg.Installation = &operatorv1.InstallationSpec{
+			ControlPlaneTolerations: []corev1.Toleration{t},
+		}
+		cfg.ESClusterConfig = &relasticsearch.ClusterConfig{}
+		component := render.IntrusionDetection(cfg)
 		resources, _ := component.Objects()
 		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		job := rtest.GetResource(resources, render.IntrusionDetectionInstallerJobName, render.IntrusionDetectionNamespace, "batch", "v1", "Job").(*batchv1.Job)

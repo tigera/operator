@@ -58,20 +58,20 @@ var _ = Describe("Rendering tests", func() {
 				"tls.key": []byte("bar"),
 			},
 		}
-		g = render.Guardian(
-			addr,
-			[]*corev1.Secret{{
+		cfg := &render.GuardianConfiguration{
+			URL: addr,
+			PullSecrets: []*corev1.Secret{{
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pull-secret",
 					Namespace: common.OperatorNamespace(),
 				},
 			}},
-			false,
-			&i,
-			secret,
-			packetCaptureSecret,
-		)
+			Installation:        &i,
+			TunnelSecret:        secret,
+			PacketCaptureSecret: packetCaptureSecret,
+		}
+		g = render.Guardian(cfg)
 		Expect(g.ResolveImages(nil)).To(BeNil())
 		resources, _ = g.Objects()
 		return

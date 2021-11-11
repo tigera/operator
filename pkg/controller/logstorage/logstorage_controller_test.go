@@ -1297,26 +1297,30 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 
 	By("creating all the components needed for LogStorage to be available")
 
-	component := render.LogStorage(
-		ls,
-		&operatorv1.InstallationSpec{
+	cfg := &render.ElasticsearchConfiguration{
+		LogStorage: ls,
+		Installation: &operatorv1.InstallationSpec{
 			KubernetesProvider: operatorv1.ProviderNone,
 			Registry:           "testregistry.com/",
 		},
-		nil, managementClusterConnection,
-		&esv1.Elasticsearch{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}},
-		&kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaName, Namespace: render.KibanaNamespace}},
-		relasticsearch.NewClusterConfig("cluster", 1, 1, 1),
-		toSecrets(createESSecrets()),
-		toSecrets(createKibanaSecrets()),
-		[]*corev1.Secret{
+		ManagementClusterConnection: managementClusterConnection,
+		Elasticsearch:               &esv1.Elasticsearch{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}},
+		Kibana:                      &kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaName, Namespace: render.KibanaNamespace}},
+		ClusterConfig:               relasticsearch.NewClusterConfig("cluster", 1, 1, 1),
+		ElasticsearchSecrets:        toSecrets(createESSecrets()),
+		KibanaSecrets:               toSecrets(createKibanaSecrets()),
+		PullSecrets: []*corev1.Secret{
 			{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 		},
-		operatorv1.ProviderNone,
-		[]*corev1.Secret{
+		Provider: operatorv1.ProviderNone,
+		CuratorSecrets: []*corev1.Secret{
 			{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: common.OperatorNamespace()}},
 		},
-		nil, nil, "cluster.local", nil, render.ElasticsearchLicenseTypeBasic)
+		ClusterDomain:      "cluster.local",
+		ElasticLicenseType: render.ElasticsearchLicenseTypeBasic,
+	}
+
+	component := render.LogStorage(cfg)
 
 	Expect(cli.Create(ctx, ls)).ShouldNot(HaveOccurred())
 	createObj, _ := component.Objects()

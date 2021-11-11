@@ -45,6 +45,7 @@ func AmazonCloudIntegration(cfg *AmazonCloudIntegrationConfiguration) (Component
 	return &amazonCloudIntegrationComponent{cfg: cfg}, nil
 }
 
+// AmazonCloudIntegrationConfiguration contains all the config information needed to render the component.
 type AmazonCloudIntegrationConfiguration struct {
 	AmazonCloudIntegration *operatorv1.AmazonCloudIntegration
 	Installation           *operatorv1.InstallationSpec

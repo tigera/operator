@@ -69,7 +69,7 @@ type StatusManager interface {
 	RemoveStatefulSets(sss ...types.NamespacedName)
 	RemoveCronJobs(cjs ...types.NamespacedName)
 	RemoveCertificateSigningRequests(name string)
-	SetWindowsUpgradeStatus(pending, inProgress, completed []string)
+	SetWindowsUpgradeStatus(pending, inProgress, completed []string, err error)
 	SetDegraded(reason, msg string)
 	ClearDegraded()
 	IsAvailable() bool
@@ -307,12 +307,28 @@ func (w *windowsNodeUpgrades) progressingReason() string {
 
 // SetWindowsUpgradeStatus tells the status manager to monitor the upgrade
 // status of the given Windows node upgrades.
-func (m *statusManager) SetWindowsUpgradeStatus(pending, inProgress, completed []string) {
+func (m *statusManager) SetWindowsUpgradeStatus(pending, inProgress, completed []string, err error) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
+
+	if err != nil {
+		m.degraded = true
+		m.explicitDegradedReason = common.CalicoWindowsNodeUpgradeStatusErrorReason
+		m.explicitDegradedMsg = err.Error()
+		return
+	}
+
 	m.windowsNodeUpgrades.nodesPending = pending
 	m.windowsNodeUpgrades.nodesInProgress = inProgress
 	m.windowsNodeUpgrades.nodesCompleted = completed
+
+	// If the degraded reason is set by this function then clear it since there
+	// was no error.
+	if m.explicitDegradedReason == common.CalicoWindowsNodeUpgradeStatusErrorReason {
+		m.degraded = false
+		m.explicitDegradedReason = ""
+		m.explicitDegradedMsg = ""
+	}
 }
 
 // RemoveDaemonsets tells the status manager to stop monitoring the health of the given daemonsets

@@ -48,6 +48,7 @@ var (
 type CalicoWindowsUpgrader interface {
 	UpdateConfig(install *operatorv1.InstallationSpec)
 	Start(ctx context.Context)
+	IsDegraded() bool
 }
 
 // calicoWindowsUpgrader helps manage the upgrade of Calico Windows nodes.
@@ -60,6 +61,7 @@ type calicoWindowsUpgrader struct {
 	syncPeriod        time.Duration
 	installChan       chan *operatorv1.InstallationSpec
 	install           *operatorv1.InstallationSpec
+	isDegraded        bool
 	isRunning         bool
 }
 
@@ -184,8 +186,9 @@ func sortedSliceFromMap(m map[string]*corev1.Node) []string {
 func (w *calicoWindowsUpgrader) updateWindowsNodes() {
 	pending, inProgress, inSync, err := w.getNodeUpgradeStatus()
 	if err != nil {
-		// TODO: handle reporting status
 		windowsLog.Error(err, "Failed to get Windows nodes upgrade status")
+		w.isDegraded = true
+		w.statusManager.SetWindowsUpgradeStatus(nil, nil, nil, err)
 		return
 	}
 
@@ -234,7 +237,8 @@ func (w *calicoWindowsUpgrader) updateWindowsNodes() {
 	}
 
 	// Notify status manager of upgrades status.
-	w.statusManager.SetWindowsUpgradeStatus(sortedSliceFromMap(pending), sortedSliceFromMap(inProgress), sortedSliceFromMap(inSync))
+	w.isDegraded = false
+	w.statusManager.SetWindowsUpgradeStatus(sortedSliceFromMap(pending), sortedSliceFromMap(inProgress), sortedSliceFromMap(inSync), nil)
 }
 
 func (w *calicoWindowsUpgrader) startUpgrade(ctx context.Context, node *corev1.Node) error {
@@ -293,6 +297,10 @@ func (w *calicoWindowsUpgrader) Start(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+func (w *calicoWindowsUpgrader) IsDegraded() bool {
+	return w.isDegraded
 }
 
 // patchNodeToStartUpgrade patches a Windows node to prepare it for the calico

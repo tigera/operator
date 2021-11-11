@@ -30,27 +30,22 @@ import (
 )
 
 var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
-	var instance *operatorv1.LogCollector
-	var s3Creds *render.S3Credential
-	var filters *render.FluentdFilters
-	var eksConfig *render.EksCloudwatchLogConfig
-	var installation *operatorv1.InstallationSpec
 	var esConfigMap *relasticsearch.ClusterConfig
-	var splkCreds *render.SplunkCredential
+	var cfg *render.FluentdConfiguration
 
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
-		instance = &operatorv1.LogCollector{}
-		installation = &operatorv1.InstallationSpec{
-			KubernetesProvider: operatorv1.ProviderNone,
-		}
-		s3Creds = nil
-		filters = nil
-		eksConfig = nil
-		splkCreds = nil
-
 		esConfigMap = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
+		cfg = &render.FluentdConfiguration{
+			LogCollector:    &operatorv1.LogCollector{},
+			ESClusterConfig: esConfigMap,
+			ClusterDomain:   dns.DefaultClusterDomain,
+			OSType:          rmeta.OSTypeLinux,
+			Installation: &operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderNone,
+			},
+		}
 	})
 
 	It("should render with a default configuration", func() {
@@ -72,7 +67,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain, rmeta.OSTypeLinux)
+		component := render.Fluentd(cfg)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -146,10 +141,10 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	})
 
 	It("should render with a resource quota for provider GKE", func() {
-		installation.KubernetesProvider = operatorv1.ProviderGKE
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderGKE
 
 		// Should render the correct resources.
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain, rmeta.OSTypeLinux)
+		component := render.Fluentd(cfg)
 		resources, _ := component.Objects()
 
 		// Should render resource quota
@@ -171,8 +166,9 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: "fluentd-node-windows", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
+		cfg.OSType = rmeta.OSTypeWindows
 		// Should render the correct resources.
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain, rmeta.OSTypeWindows)
+		component := render.Fluentd(cfg)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -245,11 +241,11 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	})
 
 	It("should render with S3 configuration", func() {
-		s3Creds := &render.S3Credential{
+		cfg.S3Credential = &render.S3Credential{
 			KeyId:     []byte("IdForTheKey"),
 			KeySecret: []byte("SecretForTheKey"),
 		}
-		instance.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
+		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
 			S3: &operatorv1.S3StoreSpec{
 				Region:     "anyplace",
 				BucketName: "thebucket",
@@ -276,7 +272,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain, rmeta.OSTypeLinux)
+		component := render.Fluentd(cfg)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -340,7 +336,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		var ps int32 = 180
-		instance.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
+		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
 			Syslog: &operatorv1.SyslogStoreSpec{
 				Endpoint:   "tcp://1.2.3.4:80",
 				PacketSize: &ps,
@@ -351,7 +347,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 				},
 			},
 		}
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain, rmeta.OSTypeLinux)
+		component := render.Fluentd(cfg)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -406,11 +402,11 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	})
 
 	It("should render with splunk configuration with ca", func() {
-		splkCreds := &render.SplunkCredential{
+		cfg.SplkCredential = &render.SplunkCredential{
 			Token:       []byte("TokenForHEC"),
 			Certificate: []byte("Certificates"),
 		}
-		instance.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
+		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
 			Splunk: &operatorv1.SplunkStoreSpec{
 				Endpoint: "https://1.2.3.4:8088",
 			},
@@ -436,7 +432,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain, rmeta.OSTypeLinux)
+		component := render.Fluentd(cfg)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -491,10 +487,10 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	})
 
 	It("should render with splunk configuration without ca", func() {
-		splkCreds := &render.SplunkCredential{
+		cfg.SplkCredential = &render.SplunkCredential{
 			Token: []byte("TokenForHEC"),
 		}
-		instance.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
+		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
 			Splunk: &operatorv1.SplunkStoreSpec{
 				Endpoint: "https://1.2.3.4:8088",
 			},
@@ -519,7 +515,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain, rmeta.OSTypeLinux)
+		component := render.Fluentd(cfg)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -567,7 +563,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	})
 
 	It("should render with filter", func() {
-		filters = &render.FluentdFilters{
+		cfg.Filters = &render.FluentdFilters{
 			Flow: "flow-filter",
 		}
 
@@ -590,7 +586,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain, rmeta.OSTypeLinux)
+		component := render.Fluentd(cfg)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -634,7 +630,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		fetchInterval := int32(900)
-		eksConfig = &render.EksCloudwatchLogConfig{
+		cfg.EKSConfig = &render.EksCloudwatchLogConfig{
 			AwsId:         []byte("aws-id"),
 			AwsKey:        []byte("aws-key"),
 			AwsRegion:     "us-west-1",
@@ -646,11 +642,11 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			Operator: corev1.TolerationOpEqual,
 			Value:    "bar",
 		}
-		installation = &operatorv1.InstallationSpec{
+		cfg.Installation = &operatorv1.InstallationSpec{
 			KubernetesProvider:      operatorv1.ProviderEKS,
 			ControlPlaneTolerations: []corev1.Toleration{t},
 		}
-		component := render.Fluentd(instance, nil, esConfigMap, s3Creds, splkCreds, filters, eksConfig, nil, installation, dns.DefaultClusterDomain, rmeta.OSTypeLinux)
+		component := render.Fluentd(cfg)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -668,7 +664,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		Expect(deploy.Spec.Template.Spec.Tolerations).To(ContainElement(t))
 		envs := deploy.Spec.Template.Spec.Containers[0].Env
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "K8S_PLATFORM", Value: "eks"}))
-		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "AWS_REGION", Value: eksConfig.AwsRegion}))
+		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "AWS_REGION", Value: cfg.EKSConfig.AwsRegion}))
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"}))
 
 		fetchIntervalVal := "900"

@@ -358,20 +358,22 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	reqLogger.V(3).Info("rendering components")
 	var hasNoLicense = !utils.IsFeatureActive(license, common.ComplianceFeature)
 	openshift := r.provider == operatorv1.ProviderOpenShift
+	complianceCfg := &render.ComplianceConfiguration{
+		ESSecrets:                   esSecrets,
+		ManagerInternalTLSSecret:    managerInternalTLSSecret,
+		Installation:                network,
+		ComplianceServerCertSecret:  complianceServerCertSecret,
+		ESClusterConfig:             esClusterConfig,
+		PullSecrets:                 pullSecrets,
+		Openshift:                   openshift,
+		ManagementCluster:           managementCluster,
+		ManagementClusterConnection: managementClusterConnection,
+		KeyValidatorConfig:          keyValidatorConfig,
+		ClusterDomain:               r.clusterDomain,
+		HasNoLicense:                hasNoLicense,
+	}
 	// Render the desired objects from the CRD and create or update them.
-	component, err := render.Compliance(
-		esSecrets,
-		managerInternalTLSSecret,
-		network,
-		complianceServerCertSecret,
-		esClusterConfig,
-		pullSecrets,
-		openshift,
-		managementCluster,
-		managementClusterConnection,
-		keyValidatorConfig,
-		r.clusterDomain,
-		hasNoLicense)
+	component, err := render.Compliance(complianceCfg)
 	if err != nil {
 		log.Error(err, "error rendering Compliance")
 		r.status.SetDegraded("Error rendering Compliance", err.Error())

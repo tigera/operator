@@ -57,30 +57,29 @@ const (
 	prometheusServiceAccountName = "prometheus"
 )
 
-func Monitor(
-	installation *operatorv1.InstallationSpec,
-	pullSecrets []*corev1.Secret,
-	alertmanagerConfigSecret *corev1.Secret,
-) render.Component {
+func Monitor(cfg *Config) render.Component {
 	return &monitorComponent{
-		installation:             installation,
-		pullSecrets:              pullSecrets,
-		alertmanagerConfigSecret: alertmanagerConfigSecret,
+		cfg: cfg,
 	}
 }
 
+// Config contains all the config information needed to render the Monitor component.
+type Config struct {
+	Installation             *operatorv1.InstallationSpec
+	PullSecrets              []*corev1.Secret
+	AlertmanagerConfigSecret *corev1.Secret
+}
+
 type monitorComponent struct {
-	installation             *operatorv1.InstallationSpec
-	pullSecrets              []*corev1.Secret
-	alertmanagerImage        string
-	prometheusImage          string
-	alertmanagerConfigSecret *corev1.Secret
+	cfg               *Config
+	alertmanagerImage string
+	prometheusImage   string
 }
 
 func (mc *monitorComponent) ResolveImages(is *operatorv1.ImageSet) error {
-	reg := mc.installation.Registry
-	path := mc.installation.ImagePath
-	prefix := mc.installation.ImagePrefix
+	reg := mc.cfg.Installation.Registry
+	path := mc.cfg.Installation.ImagePath
+	prefix := mc.cfg.Installation.ImagePrefix
 
 	errMsgs := []string{}
 	var err error
@@ -107,11 +106,11 @@ func (mc *monitorComponent) SupportedOSType() rmeta.OSType {
 
 func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 	toCreate := []client.Object{
-		render.CreateNamespace(common.TigeraPrometheusNamespace, mc.installation.KubernetesProvider),
+		render.CreateNamespace(common.TigeraPrometheusNamespace, mc.cfg.Installation.KubernetesProvider),
 	}
 
-	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.pullSecrets...)...)...)
-	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.alertmanagerConfigSecret)...)...)
+	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.cfg.PullSecrets...)...)...)
+	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.cfg.AlertmanagerConfigSecret)...)...)
 
 	toCreate = append(toCreate,
 		mc.role(),
@@ -151,11 +150,11 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 		},
 		Spec: monitoringv1.AlertmanagerSpec{
 			Image:            &mc.alertmanagerImage,
-			ImagePullSecrets: secret.GetReferenceList(mc.pullSecrets),
+			ImagePullSecrets: secret.GetReferenceList(mc.cfg.PullSecrets),
 			Replicas:         ptr.Int32ToPtr(3),
 			Version:          components.ComponentPrometheusAlertmanager.Version,
-			Tolerations:      mc.installation.ControlPlaneTolerations,
-			NodeSelector:     mc.installation.ControlPlaneNodeSelector,
+			Tolerations:      mc.cfg.Installation.ControlPlaneTolerations,
+			NodeSelector:     mc.cfg.Installation.ControlPlaneNodeSelector,
 		},
 	}
 }
@@ -192,7 +191,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		},
 		Spec: monitoringv1.PrometheusSpec{
 			Image:                  &mc.prometheusImage,
-			ImagePullSecrets:       secret.GetReferenceList(mc.pullSecrets),
+			ImagePullSecrets:       secret.GetReferenceList(mc.cfg.PullSecrets),
 			ServiceAccountName:     prometheusServiceAccountName,
 			ServiceMonitorSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"team": "network-operators"}},
 			PodMonitorSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"team": "network-operators"}},
@@ -203,8 +202,8 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 				"prometheus": CalicoNodePrometheus,
 				"role":       "tigera-prometheus-rules",
 			}},
-			Tolerations:  mc.installation.ControlPlaneTolerations,
-			NodeSelector: mc.installation.ControlPlaneNodeSelector,
+			Tolerations:  mc.cfg.Installation.ControlPlaneTolerations,
+			NodeSelector: mc.cfg.Installation.ControlPlaneNodeSelector,
 			Alerting: &monitoringv1.AlertingSpec{
 				Alertmanagers: []monitoringv1.AlertmanagerEndpoints{
 					{

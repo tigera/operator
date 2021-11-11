@@ -44,7 +44,6 @@ var _ = Describe("dex rendering tests", func() {
 			installation := &operatorv1.InstallationSpec{
 				ControlPlaneReplicas: &replicas,
 				KubernetesProvider:   operatorv1.ProviderNone,
-				Registry:             "testregistry.com/",
 			}
 
 			authentication = &operatorv1.Authentication{

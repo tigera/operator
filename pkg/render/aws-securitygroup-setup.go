@@ -34,8 +34,8 @@ func AWSSecurityGroupSetup(cfg *AWSSGSetupConfiguration) (Component, error) {
 
 // AWSSGSetupConfiguration contains all the config information needed to render the component.
 type AWSSGSetupConfiguration struct {
-	PullSecrets []corev1.LocalObjectReference
-	Installcr   *operatorv1.InstallationSpec
+	PullSecrets  []corev1.LocalObjectReference
+	Installation *operatorv1.InstallationSpec
 }
 
 type awsSGSetupComponent struct {
@@ -48,9 +48,9 @@ func (c *awsSGSetupComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *awsSGSetupComponent) ResolveImages(is *operatorv1.ImageSet) error {
-	reg := c.cfg.Installcr.Registry
-	path := c.cfg.Installcr.ImagePath
-	prefix := c.cfg.Installcr.ImagePrefix
+	reg := c.cfg.Installation.Registry
+	path := c.cfg.Installation.ImagePath
+	prefix := c.cfg.Installation.ImagePrefix
 	var err error
 	c.image, err = components.GetReference(components.ComponentOperatorInit, reg, path, prefix, is)
 	return err

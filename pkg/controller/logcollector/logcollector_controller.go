@@ -420,7 +420,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	fluentdCfg := &render.FluentdConfiguration{
-		LC:              instance,
+		LogCollector:    instance,
 		ESSecrets:       esSecrets,
 		ESClusterConfig: esClusterConfig,
 		S3Credential:    s3Credential,
@@ -454,7 +454,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 
 	if hasWindowsNodes {
 		fluentdCfg = &render.FluentdConfiguration{
-			LC:              instance,
+			LogCollector:    instance,
 			ESSecrets:       esSecrets,
 			ESClusterConfig: esClusterConfig,
 			S3Credential:    s3Credential,

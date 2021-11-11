@@ -361,7 +361,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	// Render the desired objects from the CRD and create or update them.
 	var hasNoLicense = !utils.IsFeatureActive(license, common.ThreatDefenseFeature)
 	intrusionDetectionCfg := &render.IntrusionDetectionConfiguration{
-		LC:                       lc,
+		LogCollector:             lc,
 		ESSecrets:                esSecrets,
 		KibanaCertSecret:         kibanaPublicCertSecret,
 		Installation:             network,

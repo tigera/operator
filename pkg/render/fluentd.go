@@ -125,7 +125,7 @@ type EksCloudwatchLogConfig struct {
 
 // FluentdConfiguration contains all the config information needed to render the component.
 type FluentdConfiguration struct {
-	LC              *operatorv1.LogCollector
+	LogCollector    *operatorv1.LogCollector
 	ESSecrets       []*corev1.Secret
 	ESClusterConfig *relasticsearch.ClusterConfig
 	S3Credential    *S3Credential
@@ -530,8 +530,8 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		{Name: "NODENAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
 	}
 
-	if c.cfg.LC.Spec.AdditionalStores != nil {
-		s3 := c.cfg.LC.Spec.AdditionalStores.S3
+	if c.cfg.LogCollector.Spec.AdditionalStores != nil {
+		s3 := c.cfg.LogCollector.Spec.AdditionalStores.S3
 		if s3 != nil {
 			envs = append(envs,
 				corev1.EnvVar{Name: "AWS_KEY_ID",
@@ -559,7 +559,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 				corev1.EnvVar{Name: "S3_FLUSH_INTERVAL", Value: fluentdDefaultFlush},
 			)
 		}
-		syslog := c.cfg.LC.Spec.AdditionalStores.Syslog
+		syslog := c.cfg.LogCollector.Spec.AdditionalStores.Syslog
 		if syslog != nil {
 			proto, host, port, _ := url.ParseEndpoint(syslog.Endpoint)
 			envs = append(envs,
@@ -610,7 +610,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 				}
 			}
 		}
-		splunk := c.cfg.LC.Spec.AdditionalStores.Splunk
+		splunk := c.cfg.LogCollector.Spec.AdditionalStores.Splunk
 		if splunk != nil {
 			proto, host, port, _ := url.ParseEndpoint(splunk.Endpoint)
 			envs = append(envs,

@@ -125,8 +125,8 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 
 	It("should render all resources for a configuration that includes event forwarding turned on (Syslog)", func() {
 		// Initialize a default LogCollector instance to use.
-		cfg.LC = &operatorv1.LogCollector{}
-		cfg.LC.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
+		cfg.LogCollector = &operatorv1.LogCollector{}
+		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
 			Syslog: &operatorv1.SyslogStoreSpec{
 				LogTypes: []operatorv1.SyslogLogType{
 					operatorv1.SyslogLogIDSEvents,

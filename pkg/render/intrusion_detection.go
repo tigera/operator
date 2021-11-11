@@ -57,7 +57,7 @@ func IntrusionDetection(cfg *IntrusionDetectionConfiguration) Component {
 
 // IntrusionDetectionConfiguration contains all the config information needed to render the component.
 type IntrusionDetectionConfiguration struct {
-	LC                       *operatorv1.LogCollector
+	LogCollector             *operatorv1.LogCollector
 	ESSecrets                []*corev1.Secret
 	KibanaCertSecret         *corev1.Secret
 	Installation             *operatorv1.InstallationSpec
@@ -541,8 +541,8 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 // Look inside LogCollector spec for whether or not Syslog log type SyslogLogIDSEvents
 // exists. If it does, then we need to turn on forwarding for IDS event logs.
 func (c *intrusionDetectionComponent) syslogForwardingIsEnabled() bool {
-	if c.cfg.LC != nil && c.cfg.LC.Spec.AdditionalStores != nil {
-		syslog := c.cfg.LC.Spec.AdditionalStores.Syslog
+	if c.cfg.LogCollector != nil && c.cfg.LogCollector.Spec.AdditionalStores != nil {
+		syslog := c.cfg.LogCollector.Spec.AdditionalStores.Syslog
 		if syslog != nil {
 			if syslog.LogTypes != nil {
 				for _, t := range syslog.LogTypes {

@@ -38,7 +38,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		// desired configuration.
 		esConfigMap = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 		cfg = &render.FluentdConfiguration{
-			LC:              &operatorv1.LogCollector{},
+			LogCollector:    &operatorv1.LogCollector{},
 			ESClusterConfig: esConfigMap,
 			ClusterDomain:   dns.DefaultClusterDomain,
 			OSType:          rmeta.OSTypeLinux,
@@ -245,7 +245,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			KeyId:     []byte("IdForTheKey"),
 			KeySecret: []byte("SecretForTheKey"),
 		}
-		cfg.LC.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
+		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
 			S3: &operatorv1.S3StoreSpec{
 				Region:     "anyplace",
 				BucketName: "thebucket",
@@ -336,7 +336,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		var ps int32 = 180
-		cfg.LC.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
+		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
 			Syslog: &operatorv1.SyslogStoreSpec{
 				Endpoint:   "tcp://1.2.3.4:80",
 				PacketSize: &ps,
@@ -406,7 +406,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			Token:       []byte("TokenForHEC"),
 			Certificate: []byte("Certificates"),
 		}
-		cfg.LC.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
+		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
 			Splunk: &operatorv1.SplunkStoreSpec{
 				Endpoint: "https://1.2.3.4:8088",
 			},
@@ -490,7 +490,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		cfg.SplkCredential = &render.SplunkCredential{
 			Token: []byte("TokenForHEC"),
 		}
-		cfg.LC.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
+		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
 			Splunk: &operatorv1.SplunkStoreSpec{
 				Endpoint: "https://1.2.3.4:8088",
 			},

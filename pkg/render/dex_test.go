@@ -152,11 +152,7 @@ var _ = Describe("dex rendering tests", func() {
 				Value:    "bar",
 				Effect:   corev1.TaintEffectNoExecute,
 			}
-
-			cfg.Installation = &operatorv1.InstallationSpec{
-				ControlPlaneReplicas:    cfg.Installation.ControlPlaneReplicas,
-				ControlPlaneTolerations: []corev1.Toleration{t},
-			}
+			cfg.Installation.ControlPlaneTolerations = []corev1.Toleration{t}
 
 			component := render.Dex(cfg)
 			resources, _ := component.Objects()

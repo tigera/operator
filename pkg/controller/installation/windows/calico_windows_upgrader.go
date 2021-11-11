@@ -48,6 +48,7 @@ var (
 type CalicoWindowsUpgrader interface {
 	UpdateConfig(install *operatorv1.InstallationSpec)
 	Start(ctx context.Context)
+	IsDegraded() bool
 }
 
 // calicoWindowsUpgrader helps manage the upgrade of Calico Windows nodes.
@@ -60,6 +61,8 @@ type calicoWindowsUpgrader struct {
 	syncPeriod        time.Duration
 	installChan       chan *operatorv1.InstallationSpec
 	install           *operatorv1.InstallationSpec
+	isDegraded        bool
+	isRunning         bool
 }
 
 type calicoWindowsUpgraderOption func(*calicoWindowsUpgrader)
@@ -91,6 +94,10 @@ func NewCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, indexInf
 
 // UpdateConfig updates the calicoWindowsUpgrader's installation config.
 func (w *calicoWindowsUpgrader) UpdateConfig(install *operatorv1.InstallationSpec) {
+	if !w.isRunning {
+		windowsLog.V(1).Info("windows upgrader is not running, skipping config update")
+		return
+	}
 	w.installChan <- install
 }
 
@@ -179,8 +186,9 @@ func sortedSliceFromMap(m map[string]*corev1.Node) []string {
 func (w *calicoWindowsUpgrader) updateWindowsNodes() {
 	pending, inProgress, inSync, err := w.getNodeUpgradeStatus()
 	if err != nil {
-		// TODO: handle reporting status
 		windowsLog.Error(err, "Failed to get Windows nodes upgrade status")
+		w.isDegraded = true
+		w.statusManager.SetWindowsUpgradeStatus(nil, nil, nil, err)
 		return
 	}
 
@@ -229,7 +237,8 @@ func (w *calicoWindowsUpgrader) updateWindowsNodes() {
 	}
 
 	// Notify status manager of upgrades status.
-	w.statusManager.SetWindowsUpgradeStatus(sortedSliceFromMap(pending), sortedSliceFromMap(inProgress), sortedSliceFromMap(inSync))
+	w.isDegraded = false
+	w.statusManager.SetWindowsUpgradeStatus(sortedSliceFromMap(pending), sortedSliceFromMap(inProgress), sortedSliceFromMap(inSync), nil)
 }
 
 func (w *calicoWindowsUpgrader) startUpgrade(ctx context.Context, node *corev1.Node) error {
@@ -252,7 +261,17 @@ func (w *calicoWindowsUpgrader) finishUpgrade(ctx context.Context, node *corev1.
 
 // Start begins running the calicoWindowsUpgrader.
 func (w *calicoWindowsUpgrader) Start(ctx context.Context) {
+	// Set calicoWindowsUpgrader running status so it can determine whether it
+	// should receive install config updates. Do this here instead of inside
+	// the new goroutine so there are no race issues if we call w.UpdateConfig right after w.Start.
+	w.isRunning = true
+
 	go func() {
+		// Make sure we update the running status when we exit.
+		defer func() {
+			w.isRunning = false
+		}()
+
 		for !w.nodeIndexInformer.HasSynced() {
 			time.Sleep(100 * time.Millisecond)
 		}
@@ -267,6 +286,10 @@ func (w *calicoWindowsUpgrader) Start(ctx context.Context) {
 			case install := <-w.installChan:
 				w.install = install
 			case <-ticker.C:
+				if w.install.KubernetesProvider != operatorv1.ProviderAKS {
+					windowsLog.Info("windows upgrader only runs on AKS. Stopping main loop")
+					return
+				}
 				w.updateWindowsNodes()
 			case <-ctx.Done():
 				windowsLog.Info("Stopping main loop")
@@ -274,6 +297,10 @@ func (w *calicoWindowsUpgrader) Start(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+func (w *calicoWindowsUpgrader) IsDegraded() bool {
+	return w.isDegraded
 }
 
 // patchNodeToStartUpgrade patches a Windows node to prepare it for the calico
@@ -301,21 +328,14 @@ func patchNodeToStartUpgrade(ctx context.Context, client kubernetes.Interface, n
 			upgradeLabelExists = true
 		}
 
-		// If either the taint or label are missing, patch the node.
-		if !taintExists || !upgradeLabelExists {
-			windowsLog.V(1).Info(fmt.Sprintf("Taint or upgrade label missing for node %v. taintExists: %v, labelExists: %v", nodeName, taintExists, upgradeLabelExists))
+		patches := []objPatch{}
+
+		if !taintExists {
+			windowsLog.V(1).Info(fmt.Sprintf("Taint missing for node %v", nodeName))
 			newTaints := node.DeepCopy().Spec.Taints
 			newTaints = append(newTaints, *common.CalicoWindowsUpgradingTaint)
 
-			// With JSONPatch '/' must be escaped as '~1' http://jsonpatch.com/
-			labelKey := strings.Replace(common.CalicoWindowsUpgradeLabel, "/", "~1", -1)
-
 			p := []objPatch{
-				{
-					Op:    "add",
-					Path:  fmt.Sprintf("/metadata/labels/%s", labelKey),
-					Value: common.CalicoWindowsUpgradeLabelInProgress,
-				},
 				// Test that the taints didn't change. If this test fails the entire
 				// patch fails.
 				{
@@ -330,13 +350,29 @@ func patchNodeToStartUpgrade(ctx context.Context, client kubernetes.Interface, n
 					Value: newTaints,
 				},
 			}
+			patches = append(patches, p...)
 
-			patchBytes, err := json.Marshal(p)
-			if err != nil {
-				return false, err
+		}
+
+		if !upgradeLabelExists {
+			windowsLog.V(1).Info(fmt.Sprintf("Upgrade label missing for node %v", nodeName))
+			// With JSONPatch '/' must be escaped as '~1' http://jsonpatch.com/
+			labelKey := strings.Replace(common.CalicoWindowsUpgradeLabel, "/", "~1", -1)
+
+			p := objPatch{
+				Op:    "add",
+				Path:  fmt.Sprintf("/metadata/labels/%s", labelKey),
+				Value: common.CalicoWindowsUpgradeLabelInProgress,
 			}
+			patches = append(patches, p)
+		}
 
-			_, err = client.CoreV1().Nodes().Patch(ctx, node.Name, types.JSONPatchType, patchBytes, metav1.PatchOptions{})
+		// If either the taint or label do not exist, patch the node to add them.
+		if len(patches) > 0 {
+			windowsLog.V(1).Info(fmt.Sprintf("Patching node %v to add upgrade taint and/or label", nodeName))
+
+			err = patchNode(ctx, client, nodeName, patches...)
+
 			if err == nil {
 				return true, nil
 			}
@@ -381,18 +417,11 @@ func patchNodeToCompleteUpgrade(ctx context.Context, client kubernetes.Interface
 			upgradeLabelExists = true
 		}
 
-		// If either the taint or label exist, patch the node to remove them.
-		if taintExists || upgradeLabelExists {
-			windowsLog.V(1).Info(fmt.Sprintf("Taint or upgrade label exists for node %v. taintExists: %v, labelExists: %v", nodeName, taintExists, upgradeLabelExists))
-			// With JSONPatch '/' must be escaped as '~1' http://jsonpatch.com/
-			labelKey := strings.Replace(common.CalicoWindowsUpgradeLabel, "/", "~1", -1)
+		patches := []objPatch{}
 
+		if taintExists {
+			windowsLog.V(1).Info(fmt.Sprintf("Upgrade taint exists for node %v", nodeName))
 			p := []objPatch{
-				// Remove the upgrade label.
-				{
-					Op:   "remove",
-					Path: fmt.Sprintf("/metadata/labels/%s", labelKey),
-				},
 				// Test that the taint to remove didn't change. If this test fails the entire
 				// patch fails.
 				{
@@ -406,8 +435,27 @@ func patchNodeToCompleteUpgrade(ctx context.Context, client kubernetes.Interface
 					Path: fmt.Sprintf("/spec/taints/%d", taintIndex),
 				},
 			}
+			patches = append(patches, p...)
+		}
 
-			err = patchNode(ctx, client, nodeName, p...)
+		if upgradeLabelExists {
+			windowsLog.V(1).Info(fmt.Sprintf("Upgrade label exists for node %v", nodeName))
+			// With JSONPatch '/' must be escaped as '~1' http://jsonpatch.com/
+			labelKey := strings.Replace(common.CalicoWindowsUpgradeLabel, "/", "~1", -1)
+
+			p := objPatch{
+				// Remove the upgrade label.
+				Op:   "remove",
+				Path: fmt.Sprintf("/metadata/labels/%s", labelKey),
+			}
+			patches = append(patches, p)
+		}
+
+		// If either the taint or label exist, patch the node to remove them.
+		if len(patches) > 0 {
+			windowsLog.V(1).Info(fmt.Sprintf("Patching node %v to remove upgrade taint and/or label", nodeName))
+
+			err = patchNode(ctx, client, nodeName, patches...)
 
 			if err == nil {
 				return true, nil

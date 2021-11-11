@@ -235,17 +235,17 @@ spec:
                       properties:
                         id:
                           type: string
-                        x:
+                        xPos:
                           type: integer
-                        "y":
+                        yPos:
                           type: integer
-                        z:
+                        zPos:
                           type: integer
                       required:
                       - id
-                      - x
-                      - "y"
-                      - z
+                      - xPos
+                      - yPos
+                      - zPos
                       type: object
                     type: array
                   splitIngressEgress:

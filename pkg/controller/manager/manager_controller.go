@@ -501,25 +501,26 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		replicas = &mcmReplicas
 	}
 
+	managerCfg := &render.ManagerConfiguration{
+		KeyValidatorConfig:            keyValidatorConfig,
+		ESSecrets:                     esSecrets,
+		KibanaSecrets:                 []*corev1.Secret{kibanaPublicCertSecret},
+		ComplianceServerCertSecret:    complianceServerCertSecret,
+		PacketCaptureServerCertSecret: packetCaptureServerCertSecret,
+		ESClusterConfig:               esClusterConfig,
+		TLSKeyPair:                    tlsSecret,
+		PullSecrets:                   pullSecrets,
+		Openshift:                     r.provider == operatorv1.ProviderOpenShift,
+		Installation:                  installation,
+		ManagementCluster:             managementCluster,
+		TunnelSecret:                  tunnelSecret,
+		InternalTrafficSecret:         internalTrafficSecret,
+		ClusterDomain:                 r.clusterDomain,
+		ESLicenseType:                 elasticLicenseType,
+		Replicas:                      replicas,
+	}
 	// Render the desired objects from the CRD and create or update them.
-	component, err := render.Manager(
-		keyValidatorConfig,
-		esSecrets,
-		[]*corev1.Secret{kibanaPublicCertSecret},
-		complianceServerCertSecret,
-		packetCaptureServerCertSecret,
-		esClusterConfig,
-		tlsSecret,
-		pullSecrets,
-		r.provider == operatorv1.ProviderOpenShift,
-		installation,
-		managementCluster,
-		tunnelSecret,
-		internalTrafficSecret,
-		r.clusterDomain,
-		elasticLicenseType,
-		replicas,
-	)
+	component, err := render.Manager(managerCfg)
 	if err != nil {
 		log.Error(err, "Error rendering Manager")
 		r.status.SetDegraded("Error rendering Manager", err.Error())

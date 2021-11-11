@@ -126,25 +126,27 @@ func (r *ReconcileLogStorage) createLogStorage(
 		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexCertSecret, dexSecret, r.clusterDomain)
 	}
 
-	component := render.LogStorage(
-		ls,
-		install,
-		managementCluster,
-		managementClusterConnection,
-		elasticsearch,
-		kibana,
-		clusterConfig,
-		[]*corev1.Secret{esCertSecret, esInternalCertSecret, esAdminUserSecret},
-		kibanaSecrets,
-		pullSecrets,
-		r.provider,
-		curatorSecrets,
-		esService,
-		kbService,
-		r.clusterDomain,
-		dexCfg,
-		esLicenseType,
-	)
+	logStorageCfg := &render.ElasticsearchConfiguration{
+		LogStorage:                  ls,
+		Installation:                install,
+		ManagementCluster:           managementCluster,
+		ManagementClusterConnection: managementClusterConnection,
+		Elasticsearch:               elasticsearch,
+		Kibana:                      kibana,
+		ClusterConfig:               clusterConfig,
+		ElasticsearchSecrets:        []*corev1.Secret{esCertSecret, esInternalCertSecret, esAdminUserSecret},
+		KibanaSecrets:               kibanaSecrets,
+		PullSecrets:                 pullSecrets,
+		Provider:                    r.provider,
+		CuratorSecrets:              curatorSecrets,
+		ESService:                   esService,
+		KbService:                   kbService,
+		ClusterDomain:               r.clusterDomain,
+		DexCfg:                      dexCfg,
+		ElasticLicenseType:          esLicenseType,
+	}
+
+	component := render.LogStorage(logStorageCfg)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
 		reqLogger.Error(err, "Error with images from ImageSet")

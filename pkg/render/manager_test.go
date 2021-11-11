@@ -403,15 +403,16 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	// renderManager passes in as few parameters as possible to render.Manager without it
 	// panicing. It accepts variations on the installspec for testing purposes.
 	renderManager := func(i *operatorv1.InstallationSpec) *appsv1.Deployment {
-		component, err := render.Manager(nil, nil, nil,
-			rtest.CreateCertSecret(render.ComplianceServerCertSecret, common.OperatorNamespace()),
-			rtest.CreateCertSecret(render.PacketCaptureCertSecret, common.OperatorNamespace()),
-			&relasticsearch.ClusterConfig{},
-			rtest.CreateCertSecret(render.ManagerTLSSecretName, common.OperatorNamespace()),
-			nil, false,
-			i,
-			nil, nil, nil, "", render.ElasticsearchLicenseTypeUnknown,
-			&replicas)
+		cfg := &render.ManagerConfiguration{
+			ComplianceServerCertSecret:    rtest.CreateCertSecret(render.ComplianceServerCertSecret, common.OperatorNamespace()),
+			PacketCaptureServerCertSecret: rtest.CreateCertSecret(render.PacketCaptureCertSecret, common.OperatorNamespace()),
+			ESClusterConfig:               &relasticsearch.ClusterConfig{},
+			TLSKeyPair:                    rtest.CreateCertSecret(render.ManagerTLSSecretName, common.OperatorNamespace()),
+			Installation:                  i,
+			ESLicenseType:                 render.ElasticsearchLicenseTypeUnknown,
+			Replicas:                      &replicas,
+		}
+		component, err := render.Manager(cfg)
 		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 		resources, _ := component.Objects()
 		return rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -535,23 +536,22 @@ func renderObjects(oidc bool, managementCluster *operatorv1.ManagementCluster, i
 	}
 
 	esConfigMap := relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
-	component, err := render.Manager(dexCfg,
-		nil,
-		nil,
-		rtest.CreateCertSecret(render.ComplianceServerCertSecret, common.OperatorNamespace()),
-		rtest.CreateCertSecret(render.PacketCaptureCertSecret, common.OperatorNamespace()),
-		esConfigMap,
-		managerTLS,
-		nil,
-		false,
-		installation,
-		managementCluster,
-		tunnelSecret,
-		internalTraffic,
-		dns.DefaultClusterDomain,
-		render.ElasticsearchLicenseTypeEnterpriseTrial,
-		installation.ControlPlaneReplicas,
-	)
+
+	cfg := &render.ManagerConfiguration{
+		KeyValidatorConfig:            dexCfg,
+		ComplianceServerCertSecret:    rtest.CreateCertSecret(render.ComplianceServerCertSecret, common.OperatorNamespace()),
+		PacketCaptureServerCertSecret: rtest.CreateCertSecret(render.PacketCaptureCertSecret, common.OperatorNamespace()),
+		ESClusterConfig:               esConfigMap,
+		TLSKeyPair:                    managerTLS,
+		Installation:                  installation,
+		ManagementCluster:             managementCluster,
+		TunnelSecret:                  tunnelSecret,
+		InternalTrafficSecret:         internalTraffic,
+		ClusterDomain:                 dns.DefaultClusterDomain,
+		ESLicenseType:                 render.ElasticsearchLicenseTypeEnterpriseTrial,
+		Replicas:                      installation.ControlPlaneReplicas,
+	}
+	component, err := render.Manager(cfg)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 	Expect(component.ResolveImages(nil)).To(BeNil())
 	resources, _ := component.Objects()

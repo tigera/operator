@@ -89,6 +89,7 @@ type esGateway struct {
 	esAdminUserName string
 }
 
+// Config contains all the config information needed to render the EsGateway component.
 type Config struct {
 	Installation               *operatorv1.InstallationSpec
 	PullSecrets                []*corev1.Secret

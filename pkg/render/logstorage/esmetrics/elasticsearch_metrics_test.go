@@ -34,16 +34,25 @@ import (
 
 var _ = Describe("Elasticsearch metrics", func() {
 	Context("Rendering resources", func() {
-		var installation *operatorv1.InstallationSpec
 		var esConfig *relasticsearch.ClusterConfig
+		var cfg *Config
 
 		BeforeEach(func() {
-			installation = &operatorv1.InstallationSpec{
+			installation := &operatorv1.InstallationSpec{
 				KubernetesProvider: operatorv1.ProviderNone,
 				Registry:           "testregistry.com/",
 			}
 
 			esConfig = relasticsearch.NewClusterConfig("cluster", 1, 1, 1)
+
+			cfg = &Config{
+				Installation:         installation,
+				PullSecrets:          []*corev1.Secret{{ObjectMeta: metav1.ObjectMeta{Name: "pullsecret", Namespace: render.ElasticsearchNamespace}}},
+				ESConfig:             esConfig,
+				ESMetricsCredsSecret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
+				ESCertSecret:         &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
+				ClusterDomain:        "cluster.local",
+			}
 		})
 
 		It("Successfully renders the Elasticsearch metrics resources", func() {
@@ -165,12 +174,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 				},
 			}
 
-			component := ElasticsearchMetrics(installation,
-				[]*corev1.Secret{{ObjectMeta: metav1.ObjectMeta{Name: "pullsecret", Namespace: render.ElasticsearchNamespace}}},
-				esConfig,
-				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
-				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
-				"cluster.local")
+			component := ElasticsearchMetrics(cfg)
 
 			Expect(component.ResolveImages(&operatorv1.ImageSet{
 				Spec: operatorv1.ImageSetSpec{
@@ -186,14 +190,9 @@ var _ = Describe("Elasticsearch metrics", func() {
 		})
 
 		It("should apply controlPlaneNodeSelector correctly", func() {
-			installation.ControlPlaneNodeSelector = map[string]string{"foo": "bar"}
+			cfg.Installation.ControlPlaneNodeSelector = map[string]string{"foo": "bar"}
 
-			component := ElasticsearchMetrics(installation,
-				[]*corev1.Secret{{ObjectMeta: metav1.ObjectMeta{Name: "pullsecret", Namespace: render.ElasticsearchNamespace}}},
-				esConfig,
-				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
-				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
-				"cluster.local")
+			component := ElasticsearchMetrics(cfg)
 
 			resources, _ := component.Objects()
 			d, ok := rtest.GetResource(resources, "tigera-elasticsearch-metrics", render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -208,13 +207,8 @@ var _ = Describe("Elasticsearch metrics", func() {
 				Value:    "bar",
 			}
 
-			installation.ControlPlaneTolerations = []corev1.Toleration{t}
-			component := ElasticsearchMetrics(installation,
-				[]*corev1.Secret{{ObjectMeta: metav1.ObjectMeta{Name: "pullsecret", Namespace: render.ElasticsearchNamespace}}},
-				esConfig,
-				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
-				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
-				"cluster.local")
+			cfg.Installation.ControlPlaneTolerations = []corev1.Toleration{t}
+			component := ElasticsearchMetrics(cfg)
 
 			resources, _ := component.Objects()
 			d, ok := rtest.GetResource(resources, "tigera-elasticsearch-metrics", render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)

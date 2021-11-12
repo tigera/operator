@@ -30,13 +30,14 @@ var (
 )
 
 const (
-	CalicoWindowsUpgradeResourceName    = "calico-windows-upgrade"
-	CalicoWindowsUpgradeVolumePath      = `c:\CalicoUpgrade`
-	CalicoWindowsUpgradeLabel           = "projectcalico.org/windows-upgrade"
-	CalicoWindowsUpgradeLabelInProgress = "in-progress"
-	CalicoVersionAnnotation             = "projectcalico.org/version"
-	CalicoVariantAnnotation             = "projectcalico.org/variant"
-	CalicoWindowsUpgradeTaintKey        = "projectcalico.org/windows-upgrade"
+	CalicoWindowsUpgradeResourceName          = "calico-windows-upgrade"
+	CalicoWindowsUpgradeVolumePath            = `c:\CalicoUpgrade`
+	CalicoWindowsUpgradeLabel                 = "projectcalico.org/windows-upgrade"
+	CalicoWindowsUpgradeLabelInProgress       = "in-progress"
+	CalicoVersionAnnotation                   = "projectcalico.org/version"
+	CalicoVariantAnnotation                   = "projectcalico.org/variant"
+	CalicoWindowsUpgradeTaintKey              = "projectcalico.org/windows-upgrade"
+	CalicoWindowsNodeUpgradeStatusErrorReason = "Error getting Calico for Windows nodes upgrade status"
 )
 
 // GetNodeVariantAndVersion gets the node's variant and version annotation

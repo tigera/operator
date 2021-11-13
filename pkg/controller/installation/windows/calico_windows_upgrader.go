@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -62,6 +63,7 @@ type calicoWindowsUpgrader struct {
 	installChan       chan *operatorv1.InstallationSpec
 	install           *operatorv1.InstallationSpec
 	isDegraded        bool
+	lock              sync.Mutex
 }
 
 type calicoWindowsUpgraderOption func(*calicoWindowsUpgrader)
@@ -179,6 +181,9 @@ func sortedSliceFromMap(m map[string]*corev1.Node) []string {
 }
 
 func (w *calicoWindowsUpgrader) updateWindowsNodes() {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+
 	pending, inProgress, inSync, err := w.getNodeUpgradeStatus()
 	if err != nil {
 		windowsLog.Error(err, "Failed to get Windows nodes upgrade status")
@@ -285,6 +290,8 @@ func (w *calicoWindowsUpgrader) Start(ctx context.Context) {
 }
 
 func (w *calicoWindowsUpgrader) IsDegraded() bool {
+	w.lock.Lock()
+	defer w.lock.Unlock()
 	return w.isDegraded
 }
 

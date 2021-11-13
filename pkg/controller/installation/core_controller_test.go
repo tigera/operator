@@ -1112,6 +1112,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 		Context("calicoWindowsUpgrader", func() {
 			BeforeEach(func() {
+				// calicoWindowsUpgrader only upgrades nodes on AKS.
 				cr.Spec.KubernetesProvider = operator.ProviderAKS
 			})
 

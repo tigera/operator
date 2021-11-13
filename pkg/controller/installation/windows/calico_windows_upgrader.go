@@ -62,7 +62,6 @@ type calicoWindowsUpgrader struct {
 	installChan       chan *operatorv1.InstallationSpec
 	install           *operatorv1.InstallationSpec
 	isDegraded        bool
-	isRunning         bool
 }
 
 type calicoWindowsUpgraderOption func(*calicoWindowsUpgrader)
@@ -94,10 +93,6 @@ func NewCalicoWindowsUpgrader(cs kubernetes.Interface, c client.Client, indexInf
 
 // UpdateConfig updates the calicoWindowsUpgrader's installation config.
 func (w *calicoWindowsUpgrader) UpdateConfig(install *operatorv1.InstallationSpec) {
-	if !w.isRunning {
-		windowsLog.V(1).Info("windows upgrader is not running, skipping config update")
-		return
-	}
 	w.installChan <- install
 }
 
@@ -261,17 +256,7 @@ func (w *calicoWindowsUpgrader) finishUpgrade(ctx context.Context, node *corev1.
 
 // Start begins running the calicoWindowsUpgrader.
 func (w *calicoWindowsUpgrader) Start(ctx context.Context) {
-	// Set calicoWindowsUpgrader running status so it can determine whether it
-	// should receive install config updates. Do this here instead of inside
-	// the new goroutine so there are no race issues if we call w.UpdateConfig right after w.Start.
-	w.isRunning = true
-
 	go func() {
-		// Make sure we update the running status when we exit.
-		defer func() {
-			w.isRunning = false
-		}()
-
 		for !w.nodeIndexInformer.HasSynced() {
 			time.Sleep(100 * time.Millisecond)
 		}
@@ -286,11 +271,11 @@ func (w *calicoWindowsUpgrader) Start(ctx context.Context) {
 			case install := <-w.installChan:
 				w.install = install
 			case <-ticker.C:
-				if w.install.KubernetesProvider != operatorv1.ProviderAKS {
-					windowsLog.Info("windows upgrader only runs on AKS. Stopping main loop")
-					return
+				if w.install.KubernetesProvider == operatorv1.ProviderAKS {
+					w.updateWindowsNodes()
+				} else {
+					windowsLog.V(1).Info("windows upgrader only runs on AKS, skipping update call")
 				}
-				w.updateWindowsNodes()
 			case <-ctx.Done():
 				windowsLog.Info("Stopping main loop")
 				return

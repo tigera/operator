@@ -1242,6 +1242,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		reqLogger.V(1).Info("Unable to determine MTU - no explicit config, and /var/lib/calico is not mounted")
 	}
 
+	// Check whether the calicoWindowsUpgrader is degraded. If so, requeue
+	// a reconcile.
+	if r.calicoWindowsUpgrader.IsDegraded() {
+		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+
 	// We have successfully reconciled the Calico installation.
 	if instance.Spec.KubernetesProvider == operator.ProviderOpenShift {
 		openshiftConfig := &configv1.Network{}

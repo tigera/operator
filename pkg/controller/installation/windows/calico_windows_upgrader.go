@@ -164,10 +164,16 @@ func (w *calicoWindowsUpgrader) isUpgradeFromCalicoToEnterprise(node *corev1.Nod
 }
 
 func (w *calicoWindowsUpgrader) getExpectedVersion() string {
+	// Use the component's version rather than top-level version values
+	// `EnterpriseRelease` or `CalicoRelease` since for dev releases we use
+	// a custom versions YAML file with an aggregate release name.
+	//
+	// For release versions, the windows upgrade component version will be equal
+	// to the top-level version.
 	if w.install.Variant == operatorv1.TigeraSecureEnterprise {
-		return components.EnterpriseRelease
+		return components.ComponentTigeraWindows.Version
 	}
-	return components.CalicoRelease
+	return components.ComponentWindows.Version
 }
 
 func sortedSliceFromMap(m map[string]*corev1.Node) []string {

@@ -106,7 +106,7 @@ var _ = Describe("Calico windows upgrader", func() {
 
 		n1 := test.CreateNode(cs, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
 		n2 := test.CreateWindowsNode(cs, "node2", operator.Calico, "v3.21.999")
-		n3 := test.CreateWindowsNode(cs, "node3", operator.Calico, components.CalicoRelease)
+		n3 := test.CreateWindowsNode(cs, "node3", operator.Calico, components.ComponentWindows.Version)
 
 		c.UpdateConfig(cr)
 
@@ -145,7 +145,7 @@ var _ = Describe("Calico windows upgrader", func() {
 
 		n1 := test.CreateNode(cs, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
 		n2 := test.CreateWindowsNode(cs, "node2", operator.Calico, "v3.21.999")
-		n3 := test.CreateWindowsNode(cs, "node3", operator.Calico, components.CalicoRelease)
+		n3 := test.CreateWindowsNode(cs, "node3", operator.Calico, components.ComponentWindows.Version)
 
 		c.Start(ctx)
 		c.UpdateConfig(cr)
@@ -172,7 +172,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{}, mock.Anything, nil)
 
 		// Set the latest Calico Windows variant and version like the node service would.
-		setNodeVariantAndVersion(cs, nodeIndexInformer, n2, operator.Calico, components.CalicoRelease)
+		setNodeVariantAndVersion(cs, nodeIndexInformer, n2, operator.Calico, components.ComponentWindows.Version)
 
 		// Ensure that when calicoWindowsUpgrader runs again, the node taint and
 		// label are removed.
@@ -212,7 +212,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		// label are removed.
 		mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{}, []string{"node1"}, nil)
 
-		setNodeVariantAndVersion(cs, nodeIndexInformer, n1, operator.Calico, components.CalicoRelease)
+		setNodeVariantAndVersion(cs, nodeIndexInformer, n1, operator.Calico, components.ComponentWindows.Version)
 
 		Eventually(func() error {
 			return assertNodesFinishedUpgrade(cs, n1)
@@ -263,7 +263,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		// Ensure that when calicoWindowsUpgrader runs again, the node taint and
 		// label are removed.
 		mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{}, []string{"node1"}, nil)
-		setNodeVariantAndVersion(cs, nodeIndexInformer, n1, operator.Calico, components.CalicoRelease)
+		setNodeVariantAndVersion(cs, nodeIndexInformer, n1, operator.Calico, components.ComponentWindows.Version)
 
 		Eventually(func() error {
 			return assertNodesFinishedUpgrade(cs, n1)
@@ -299,7 +299,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		Expect(err).To(BeNil())
 
 		// Set the latest Calico Windows variant and version like the node service would.
-		setNodeVariantAndVersion(cs, nodeIndexInformer, n1, operator.Calico, components.CalicoRelease)
+		setNodeVariantAndVersion(cs, nodeIndexInformer, n1, operator.Calico, components.ComponentWindows.Version)
 
 		// Ensure that when calicoWindowsUpgrader runs again, the node taint and
 		// label are removed.

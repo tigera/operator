@@ -247,14 +247,13 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-
 	monitorCfg := &monitor.Config{
 		Installation:             install,
 		PullSecrets:              pullSecrets,
 		AlertmanagerConfigSecret: alertmanagerConfigSecret,
-		KeyValidatorConfig: keyValidatorConfig,
-		TLSSecret: tlsSecret,
-		ClusterDomain: r.clusterDomain,
+		KeyValidatorConfig:       keyValidatorConfig,
+		TLSSecret:                tlsSecret,
+		ClusterDomain:            r.clusterDomain,
 	}
 
 	// Render prometheus component
@@ -270,7 +269,6 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		components = append(components, render.NewPassthrough([]client.Object{alertmanagerConfigSecret}))
 	}
 	components = append(components, monitor)
-
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, components...); err != nil {
 		r.setDegraded(reqLogger, err, "Error with images from ImageSet")

@@ -523,7 +523,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		KibanaSecrets:                 []*corev1.Secret{kibanaPublicCertSecret},
 		ComplianceServerCertSecret:    complianceServerCertSecret,
 		PacketCaptureServerCertSecret: packetCaptureServerCertSecret,
-		PrometheusCertSecret: prometheusCertSecret,
+		PrometheusCertSecret:          prometheusCertSecret,
 		ESClusterConfig:               esClusterConfig,
 		TLSKeyPair:                    tlsSecret,
 		PullSecrets:                   pullSecrets,

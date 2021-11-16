@@ -409,7 +409,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		cfg := &render.ManagerConfiguration{
 			ComplianceServerCertSecret:    rtest.CreateCertSecret(render.ComplianceServerCertSecret, common.OperatorNamespace()),
 			PacketCaptureServerCertSecret: rtest.CreateCertSecret(render.PacketCaptureCertSecret, common.OperatorNamespace()),
-			PrometheusCertSecret: rtest.CreateCertSecret(render.PrometheusTLSSecretName, common.OperatorNamespace()),
+			PrometheusCertSecret:          rtest.CreateCertSecret(render.PrometheusTLSSecretName, common.OperatorNamespace()),
 			ESClusterConfig:               &relasticsearch.ClusterConfig{},
 			TLSKeyPair:                    rtest.CreateCertSecret(render.ManagerTLSSecretName, common.OperatorNamespace()),
 			Installation:                  i,
@@ -545,7 +545,7 @@ func renderObjects(oidc bool, managementCluster *operatorv1.ManagementCluster, i
 		KeyValidatorConfig:            dexCfg,
 		ComplianceServerCertSecret:    rtest.CreateCertSecret(render.ComplianceServerCertSecret, common.OperatorNamespace()),
 		PacketCaptureServerCertSecret: rtest.CreateCertSecret(render.PacketCaptureCertSecret, common.OperatorNamespace()),
-		PrometheusCertSecret: rtest.CreateCertSecret(render.PrometheusTLSSecretName, common.OperatorNamespace()),
+		PrometheusCertSecret:          rtest.CreateCertSecret(render.PrometheusTLSSecretName, common.OperatorNamespace()),
 		ESClusterConfig:               esConfigMap,
 		TLSKeyPair:                    managerTLS,
 		Installation:                  installation,

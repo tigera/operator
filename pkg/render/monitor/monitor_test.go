@@ -57,7 +57,7 @@ var _ = Describe("monitor rendering tests", func() {
 				{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 			},
 			AlertmanagerConfigSecret: defaultAlertmanagerConfigSecret,
-			ClusterDomain: "example.org",
+			ClusterDomain:            "example.org",
 		}
 	})
 

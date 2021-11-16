@@ -180,8 +180,8 @@ spec:
                             within the selected service(s) will be matched, and only
                             to/from each endpoint's port. \n Services cannot be specified
                             on the same rule as Selector, NotSelector, NamespaceSelector,
-                            Ports, NotPorts, Nets, NotNets or ServiceAccounts. \n
-                            Only valid on egress rules."
+                            Nets, NotNets or ServiceAccounts. \n Ports and NotPorts
+                            can only be specified with Services on ingress rules."
                           properties:
                             name:
                               description: Name specifies the name of a Kubernetes
@@ -415,8 +415,8 @@ spec:
                             within the selected service(s) will be matched, and only
                             to/from each endpoint's port. \n Services cannot be specified
                             on the same rule as Selector, NotSelector, NamespaceSelector,
-                            Ports, NotPorts, Nets, NotNets or ServiceAccounts. \n
-                            Only valid on egress rules."
+                            Nets, NotNets or ServiceAccounts. \n Ports and NotPorts
+                            can only be specified with Services on ingress rules."
                           properties:
                             name:
                               description: Name specifies the name of a Kubernetes
@@ -571,8 +571,8 @@ spec:
                             within the selected service(s) will be matched, and only
                             to/from each endpoint's port. \n Services cannot be specified
                             on the same rule as Selector, NotSelector, NamespaceSelector,
-                            Ports, NotPorts, Nets, NotNets or ServiceAccounts. \n
-                            Only valid on egress rules."
+                            Nets, NotNets or ServiceAccounts. \n Ports and NotPorts
+                            can only be specified with Services on ingress rules."
                           properties:
                             name:
                               description: Name specifies the name of a Kubernetes
@@ -806,8 +806,8 @@ spec:
                             within the selected service(s) will be matched, and only
                             to/from each endpoint's port. \n Services cannot be specified
                             on the same rule as Selector, NotSelector, NamespaceSelector,
-                            Ports, NotPorts, Nets, NotNets or ServiceAccounts. \n
-                            Only valid on egress rules."
+                            Nets, NotNets or ServiceAccounts. \n Ports and NotPorts
+                            can only be specified with Services on ingress rules."
                           properties:
                             name:
                               description: Name specifies the name of a Kubernetes

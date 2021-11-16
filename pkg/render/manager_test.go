@@ -550,6 +550,7 @@ func renderObjects(oidc bool, managementCluster *operatorv1.ManagementCluster, i
 		ClusterDomain:                 dns.DefaultClusterDomain,
 		ESLicenseType:                 render.ElasticsearchLicenseTypeEnterpriseTrial,
 		Replicas:                      installation.ControlPlaneReplicas,
+		OperatorManagedTLSKeyPair:     includeManagerTLSSecret,
 	}
 	component, err := render.Manager(cfg)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)

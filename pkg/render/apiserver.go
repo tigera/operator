@@ -1572,11 +1572,6 @@ func (c *apiServerComponent) tieredPolicyPassthruClusterRolebinding() *rbacv1.Cl
 				Name:     "system:authenticated",
 				APIGroup: "rbac.authorization.k8s.io",
 			},
-			{
-				Kind:     "Group",
-				Name:     "system:unauthenticated",
-				APIGroup: "rbac.authorization.k8s.io",
-			},
 		},
 		RoleRef: rbacv1.RoleRef{
 			Kind:     "ClusterRole",
@@ -1620,11 +1615,6 @@ func (c *apiServerComponent) uiSettingsPassthruClusterRolebinding() *rbacv1.Clus
 			{
 				Kind:     "Group",
 				Name:     "system:authenticated",
-				APIGroup: "rbac.authorization.k8s.io",
-			},
-			{
-				Kind:     "Group",
-				Name:     "system:unauthenticated",
 				APIGroup: "rbac.authorization.k8s.io",
 			},
 		},

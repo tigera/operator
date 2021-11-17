@@ -96,7 +96,7 @@ type statusManager struct {
 	explicitDegradedMsg    string
 	explicitDegradedReason string
 	// Track degraded state set by calicoWindowsUpgrader.
-	windowsUpgradeDegradedReason string
+	windowsUpgradeDegradedMsg string
 
 	// Keep track of currently calculated status.
 	progressing []string
@@ -314,14 +314,14 @@ func (m *statusManager) SetWindowsUpgradeStatus(pending, inProgress, completed [
 	defer m.lock.Unlock()
 
 	if err != nil {
-		m.windowsUpgradeDegradedReason = err.Error()
+		m.windowsUpgradeDegradedMsg = err.Error()
 		return
 	}
 
 	m.windowsNodeUpgrades.nodesPending = pending
 	m.windowsNodeUpgrades.nodesInProgress = inProgress
 	m.windowsNodeUpgrades.nodesCompleted = completed
-	m.windowsUpgradeDegradedReason = ""
+	m.windowsUpgradeDegradedMsg = ""
 }
 
 // RemoveDaemonsets tells the status manager to stop monitoring the health of the given daemonsets
@@ -383,7 +383,7 @@ func (m *statusManager) ClearDegraded() {
 	m.degraded = false
 	m.explicitDegradedReason = ""
 	m.explicitDegradedMsg = ""
-	m.windowsUpgradeDegradedReason = ""
+	m.windowsUpgradeDegradedMsg = ""
 }
 
 // IsAvailable returns true if the component is available and false otherwise.
@@ -428,7 +428,7 @@ func (m *statusManager) IsDegraded() bool {
 	// should start monitoring resources.
 	// windowsUpgradeDegradedReason indicates an error has occurred with the
 	// Calico Windows upgrade.
-	if m.degraded || m.windowsUpgradeDegradedReason != "" {
+	if m.degraded || m.windowsUpgradeDegradedMsg != "" {
 		return true
 	}
 
@@ -762,6 +762,9 @@ func (m *statusManager) degradedMessage() string {
 	if m.explicitDegradedMsg != "" {
 		msgs = append(msgs, m.explicitDegradedMsg)
 	}
+	if m.windowsUpgradeDegradedMsg != "" {
+		msgs = append(msgs, m.windowsUpgradeDegradedMsg)
+	}
 	msgs = append(msgs, m.failing...)
 	return strings.Join(msgs, "\n")
 }
@@ -773,8 +776,9 @@ func (m *statusManager) degradedReason() string {
 	if m.explicitDegradedReason != "" {
 		reasons = append(reasons, m.explicitDegradedReason)
 	}
-	if m.windowsUpgradeDegradedReason != "" {
-		reasons = append(reasons, m.windowsUpgradeDegradedReason)
+	// Add a reason if we have a windows upgrade degraded msg.
+	if m.windowsUpgradeDegradedMsg != "" {
+		reasons = append(reasons, common.CalicoWindowsNodeUpgradeStatusErrorReason)
 	}
 	if len(m.failing) != 0 {
 		reasons = append(reasons, "Some pods are failing")

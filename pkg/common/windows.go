@@ -37,7 +37,7 @@ const (
 	CalicoVersionAnnotation                   = "projectcalico.org/version"
 	CalicoVariantAnnotation                   = "projectcalico.org/variant"
 	CalicoWindowsUpgradeTaintKey              = "projectcalico.org/windows-upgrade"
-	CalicoWindowsNodeUpgradeStatusErrorReason = "Error getting Calico for Windows nodes upgrade status"
+	CalicoWindowsNodeUpgradeStatusErrorReason = "Error processing Calico for Windows upgrades"
 )
 
 // GetNodeVariantAndVersion gets the node's variant and version annotation

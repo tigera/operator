@@ -194,7 +194,7 @@ func (w *calicoWindowsUpgrader) updateWindowsNodes() {
 	if err != nil {
 		windowsLog.Error(err, "Failed to get Windows nodes upgrade status")
 		w.isDegraded = true
-		w.statusManager.SetWindowsUpgradeStatus(nil, nil, nil, err)
+		w.statusManager.SetDegraded(common.CalicoWindowsNodeUpgradeStatusErrorReason, err.Error())
 		return
 	}
 
@@ -244,7 +244,7 @@ func (w *calicoWindowsUpgrader) updateWindowsNodes() {
 
 	// Notify status manager of upgrades status.
 	w.isDegraded = false
-	w.statusManager.SetWindowsUpgradeStatus(sortedSliceFromMap(pending), sortedSliceFromMap(inProgress), sortedSliceFromMap(inSync), nil)
+	w.statusManager.SetWindowsUpgradeStatus(sortedSliceFromMap(pending), sortedSliceFromMap(inProgress), sortedSliceFromMap(inSync))
 }
 
 func (w *calicoWindowsUpgrader) startUpgrade(ctx context.Context, node *corev1.Node) error {

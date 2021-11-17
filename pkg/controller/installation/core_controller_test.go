@@ -704,7 +704,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("AddCertificateSigningRequests", mock.Anything)
 			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
-			mockStatus.On("SetWindowsUpgradeStatus", mock.Anything, mock.Anything, mock.Anything, nil)
+			mockStatus.On("SetWindowsUpgradeStatus", mock.Anything, mock.Anything, mock.Anything)
 
 			// Create the indexer and informer shared by the typhaAutoscaler and
 			// calicoWindowsUpgrader.
@@ -1125,7 +1125,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				// Create node with current Enterprise version.
 				n1 := test.CreateWindowsNode(cs, "windows1", cr.Spec.Variant, components.ComponentTigeraWindows.Version)
 
-				mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{}, []string{"windows1"}, nil)
+				mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{}, []string{"windows1"})
 
 				// Node is up to date and should not have changed.
 				Consistently(func() error {
@@ -1151,7 +1151,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				n1 := test.CreateWindowsNode(cs, "windows1", operator.Calico, "v3.21.999")
 				n2 := test.CreateWindowsNode(cs, "windows2", operator.TigeraSecureEnterprise, components.ComponentTigeraWindows.Version)
 
-				mockStatus.On("SetWindowsUpgradeStatus", mock.Anything, mock.Anything, mock.Anything, nil)
+				mockStatus.On("SetWindowsUpgradeStatus", mock.Anything, mock.Anything, mock.Anything)
 
 				// Ensure that outdated nodes have the new label and taint.
 				Eventually(func() error {
@@ -1159,7 +1159,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				}, 10*time.Second).Should(BeNil())
 
 				Eventually(func() bool {
-					return mockStatus.WasCalled("SetWindowsUpgradeStatus", mock.Anything, mock.Anything, mock.Anything, nil)
+					return mockStatus.WasCalled("SetWindowsUpgradeStatus", mock.Anything, mock.Anything, mock.Anything)
 				}, 5*time.Second).Should(BeTrue())
 
 				mockStatus.AssertExpectations(GinkgoT())

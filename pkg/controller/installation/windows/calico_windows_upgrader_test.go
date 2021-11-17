@@ -127,7 +127,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		n2 := test.CreateNode(cs, "node2", map[string]string{"kubernetes.io/os": "linux"},
 			map[string]string{common.CalicoVersionAnnotation: "v2.0.0", common.CalicoVariantAnnotation: string(operator.TigeraSecureEnterprise)})
 
-		mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{}, []string{}, nil)
+		mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{}, []string{})
 		c.UpdateConfig(cr)
 
 		Consistently(func() error {
@@ -135,13 +135,13 @@ var _ = Describe("Calico windows upgrader", func() {
 		}, 10*time.Second, 100*time.Millisecond).Should(BeNil())
 
 		// Wait until SetWindowsUpgradeStatus has been called.
-		waitForSetWindowsUpgradeStatusCalled(mockStatus, []string{}, []string{}, []string{}, nil)
+		waitForSetWindowsUpgradeStatusCalled(mockStatus, []string{}, []string{}, []string{})
 		mockStatus.AssertExpectations(GinkgoT())
 	})
 
 	It("should upgrade outdated nodes", func() {
 		// Only node n2 should be upgraded.
-		mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{"node2"}, []string{"node3"}, nil)
+		mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{"node2"}, []string{"node3"})
 
 		n1 := test.CreateNode(cs, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
 		n2 := test.CreateWindowsNode(cs, "node2", operator.Calico, "v3.21.999")
@@ -165,11 +165,11 @@ var _ = Describe("Calico windows upgrader", func() {
 		}, 5*time.Second).Should(BeNil())
 
 		// Wait until SetWindowsUpgradeStatus has been called.
-		waitForSetWindowsUpgradeStatusCalled(mockStatus, []string{}, []string{"node2"}, []string{"node3"}, nil)
+		waitForSetWindowsUpgradeStatusCalled(mockStatus, []string{}, []string{"node2"}, []string{"node3"})
 		mockStatus.AssertExpectations(GinkgoT())
 
 		// Last arg will contain both node 2 and node 3, in some order.
-		mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{}, mock.Anything, nil)
+		mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{}, mock.Anything)
 
 		// Set the latest Calico Windows variant and version like the node service would.
 		setNodeVariantAndVersion(cs, nodeIndexInformer, n2, operator.Calico, components.ComponentWindows.Version)
@@ -181,7 +181,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		}, 5*time.Second).Should(BeNil())
 
 		// Wait until SetWindowsUpgradeStatus has been called.
-		waitForSetWindowsUpgradeStatusCalled(mockStatus, []string{}, []string{}, mock.Anything, nil)
+		waitForSetWindowsUpgradeStatusCalled(mockStatus, []string{}, []string{}, mock.Anything)
 		mockStatus.AssertExpectations(GinkgoT())
 	})
 
@@ -193,7 +193,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		// variant.
 		n1 := test.CreateWindowsNode(cs, "node1", operator.TigeraSecureEnterprise, "v3.11.0")
 
-		mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{"node1"}, []string{}, nil)
+		mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{"node1"}, []string{})
 
 		c.Start(ctx)
 		c.UpdateConfig(cr)
@@ -204,13 +204,13 @@ var _ = Describe("Calico windows upgrader", func() {
 		}, 5*time.Second).Should(BeNil())
 
 		// Wait until SetWindowsUpgradeStatus has been called.
-		waitForSetWindowsUpgradeStatusCalled(mockStatus, []string{}, []string{"node1"}, []string{}, nil)
+		waitForSetWindowsUpgradeStatusCalled(mockStatus, []string{}, []string{"node1"}, []string{})
 		mockStatus.AssertExpectations(GinkgoT())
 
 		// Set the latest Calico Windows version like the node service would. This will trigger a reconcile.
 		// Ensure that when calicoWindowsUpgrader runs again, the node taint and
 		// label are removed.
-		mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{}, []string{"node1"}, nil)
+		mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{}, []string{"node1"})
 
 		setNodeVariantAndVersion(cs, nodeIndexInformer, n1, operator.Calico, components.ComponentWindows.Version)
 
@@ -219,7 +219,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		}, 5*time.Second).Should(BeNil())
 
 		// Wait until SetWindowsUpgradeStatus has been called.
-		waitForSetWindowsUpgradeStatusCalled(mockStatus, []string{}, []string{}, []string{"node1"}, nil)
+		waitForSetWindowsUpgradeStatusCalled(mockStatus, []string{}, []string{}, []string{"node1"})
 		mockStatus.AssertExpectations(GinkgoT())
 	})
 
@@ -245,7 +245,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		n1, err := cs.CoreV1().Nodes().Create(context.Background(), n1, metav1.CreateOptions{})
 		Expect(err).To(BeNil())
 
-		mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{"node1"}, []string{}, nil)
+		mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{"node1"}, []string{})
 
 		c.Start(ctx)
 		c.UpdateConfig(cr)
@@ -256,25 +256,25 @@ var _ = Describe("Calico windows upgrader", func() {
 		}, 5*time.Second).Should(BeNil())
 
 		// Wait until SetWindowsUpgradeStatus has been called.
-		waitForSetWindowsUpgradeStatusCalled(mockStatus, []string{}, []string{"node1"}, []string{}, nil)
+		waitForSetWindowsUpgradeStatusCalled(mockStatus, []string{}, []string{"node1"}, []string{})
 		mockStatus.AssertExpectations(GinkgoT())
 
 		// Set the latest Calico Windows version like the node service would. This will trigger a reconcile.
 		// Ensure that when calicoWindowsUpgrader runs again, the node taint and
 		// label are removed.
-		mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{}, []string{"node1"}, nil)
+		mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{}, []string{"node1"})
 		setNodeVariantAndVersion(cs, nodeIndexInformer, n1, operator.Calico, components.ComponentWindows.Version)
 
 		Eventually(func() error {
 			return assertNodesFinishedUpgrade(cs, n1)
 		}, 5*time.Second).Should(BeNil())
 
-		waitForSetWindowsUpgradeStatusCalled(mockStatus, []string{}, []string{}, []string{"node1"}, nil)
+		waitForSetWindowsUpgradeStatusCalled(mockStatus, []string{}, []string{}, []string{"node1"})
 		mockStatus.AssertExpectations(GinkgoT())
 	})
 
 	It("should patch nodes to complete upgrade even if the upgrade taint is missing", func() {
-		mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{"node1"}, []string{}, nil)
+		mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{"node1"}, []string{})
 
 		n1 := test.CreateWindowsNode(cs, "node1", operator.Calico, "v3.21.999")
 
@@ -287,10 +287,10 @@ var _ = Describe("Calico windows upgrader", func() {
 		}, 5*time.Second).Should(BeNil())
 
 		// Wait until SetWindowsUpgradeStatus has been called.
-		waitForSetWindowsUpgradeStatusCalled(mockStatus, []string{}, []string{"node1"}, []string{}, nil)
+		waitForSetWindowsUpgradeStatusCalled(mockStatus, []string{}, []string{"node1"}, []string{})
 		mockStatus.AssertExpectations(GinkgoT())
 
-		mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{}, []string{"node1"}, nil)
+		mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{}, []string{"node1"})
 
 		n, err := cs.CoreV1().Nodes().Get(context.Background(), "node1", metav1.GetOptions{})
 		Expect(err).To(BeNil())
@@ -308,7 +308,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		}, 5*time.Second).Should(BeNil())
 
 		// Wait until SetWindowsUpgradeStatus has been called.
-		waitForSetWindowsUpgradeStatusCalled(mockStatus, []string{}, []string{}, []string{"node1"}, nil)
+		waitForSetWindowsUpgradeStatusCalled(mockStatus, []string{}, []string{}, []string{"node1"})
 		mockStatus.AssertExpectations(GinkgoT())
 	})
 
@@ -326,7 +326,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		_ = test.CreateWindowsNode(cs, "node5", operator.Calico, "v3.21.999")
 
 		// We won't know which nodes will end up being added for upgrade.
-		mockStatus.On("SetWindowsUpgradeStatus", mock.Anything, mock.Anything, mock.Anything, nil)
+		mockStatus.On("SetWindowsUpgradeStatus", mock.Anything, mock.Anything, mock.Anything)
 
 		c.Start(ctx)
 		c.UpdateConfig(cr)
@@ -354,7 +354,7 @@ var _ = Describe("Calico windows upgrader", func() {
 			_ = test.CreateWindowsNode(cs, "node1", operator.Calico, "v3.21.999")
 			_ = test.CreateWindowsNode(cs, "node2", operator.Calico, "v3.21.999")
 			_ = test.CreateWindowsNode(cs, "node3", operator.Calico, "v3.21.999")
-			mockStatus.On("SetWindowsUpgradeStatus", mock.Anything, mock.Anything, mock.Anything, nil)
+			mockStatus.On("SetWindowsUpgradeStatus", mock.Anything, mock.Anything, mock.Anything)
 
 			c.Start(ctx)
 			c.UpdateConfig(cr)
@@ -385,7 +385,7 @@ var _ = Describe("Calico windows upgrader", func() {
 			_ = test.CreateWindowsNode(cs, "node2", operator.TigeraSecureEnterprise, "v3.11.0")
 			_ = test.CreateWindowsNode(cs, "node3", operator.TigeraSecureEnterprise, "v3.11.0")
 
-			mockStatus.On("SetWindowsUpgradeStatus", mock.Anything, mock.Anything, mock.Anything, nil)
+			mockStatus.On("SetWindowsUpgradeStatus", mock.Anything, mock.Anything, mock.Anything)
 
 			c.Start(ctx)
 			c.UpdateConfig(cr)
@@ -418,7 +418,7 @@ var _ = Describe("Calico windows upgrader", func() {
 			_ = test.CreateWindowsNode(cs, "node2", operator.TigeraSecureEnterprise, "old")
 			_ = test.CreateWindowsNode(cs, "node3", operator.TigeraSecureEnterprise, "old")
 
-			mockStatus.On("SetWindowsUpgradeStatus", mock.Anything, mock.Anything, mock.Anything, nil)
+			mockStatus.On("SetWindowsUpgradeStatus", mock.Anything, mock.Anything, mock.Anything)
 
 			cr.Variant = operator.TigeraSecureEnterprise
 			c.Start(ctx)
@@ -452,7 +452,7 @@ var _ = Describe("Calico windows upgrader", func() {
 			_ = test.CreateWindowsNode(cs, "node2", operator.Calico, "v3.21.999")
 			_ = test.CreateWindowsNode(cs, "node3", operator.Calico, "v3.21.999")
 
-			mockStatus.On("SetWindowsUpgradeStatus", mock.Anything, mock.Anything, mock.Anything, nil)
+			mockStatus.On("SetWindowsUpgradeStatus", mock.Anything, mock.Anything, mock.Anything)
 
 			cr.Variant = operator.TigeraSecureEnterprise
 			c.Start(ctx)

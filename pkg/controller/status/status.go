@@ -69,7 +69,7 @@ type StatusManager interface {
 	RemoveStatefulSets(sss ...types.NamespacedName)
 	RemoveCronJobs(cjs ...types.NamespacedName)
 	RemoveCertificateSigningRequests(name string)
-	SetWindowsUpgradeStatus(pending, inProgress, completed []string)
+	SetWindowsUpgradeStatus(pending, inProgress, completed []string, err error)
 	SetDegraded(reason, msg string)
 	ClearDegraded()
 	IsAvailable() bool
@@ -95,6 +95,8 @@ type statusManager struct {
 	degraded               bool
 	explicitDegradedMsg    string
 	explicitDegradedReason string
+	// Track degraded state set by calicoWindowsUpgrader.
+	windowsUpgradeDegradedReason string
 
 	// Keep track of currently calculated status.
 	progressing []string
@@ -307,12 +309,19 @@ func (w *windowsNodeUpgrades) progressingReason() string {
 
 // SetWindowsUpgradeStatus tells the status manager to monitor the upgrade
 // status of the given Windows node upgrades.
-func (m *statusManager) SetWindowsUpgradeStatus(pending, inProgress, completed []string) {
+func (m *statusManager) SetWindowsUpgradeStatus(pending, inProgress, completed []string, err error) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
+
+	if err != nil {
+		m.windowsUpgradeDegradedReason = err.Error()
+		return
+	}
+
 	m.windowsNodeUpgrades.nodesPending = pending
 	m.windowsNodeUpgrades.nodesInProgress = inProgress
 	m.windowsNodeUpgrades.nodesCompleted = completed
+	m.windowsUpgradeDegradedReason = ""
 }
 
 // RemoveDaemonsets tells the status manager to stop monitoring the health of the given daemonsets
@@ -374,6 +383,7 @@ func (m *statusManager) ClearDegraded() {
 	m.degraded = false
 	m.explicitDegradedReason = ""
 	m.explicitDegradedMsg = ""
+	m.windowsUpgradeDegradedReason = ""
 }
 
 // IsAvailable returns true if the component is available and false otherwise.
@@ -416,7 +426,9 @@ func (m *statusManager) IsDegraded() bool {
 
 	// Controllers can explicitly set us degraded, which can be set even before we tell the status manager that it
 	// should start monitoring resources.
-	if m.degraded {
+	// windowsUpgradeDegradedReason indicates an error has occurred with the
+	// Calico Windows upgrade.
+	if m.degraded || m.windowsUpgradeDegradedReason != "" {
 		return true
 	}
 
@@ -760,6 +772,9 @@ func (m *statusManager) degradedReason() string {
 	reasons := []string{}
 	if m.explicitDegradedReason != "" {
 		reasons = append(reasons, m.explicitDegradedReason)
+	}
+	if m.windowsUpgradeDegradedReason != "" {
+		reasons = append(reasons, m.windowsUpgradeDegradedReason)
 	}
 	if len(m.failing) != 0 {
 		reasons = append(reasons, "Some pods are failing")

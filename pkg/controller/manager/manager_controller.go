@@ -489,6 +489,11 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, nil
 	}
 
+	var components []render.Component
+	if tlsSecret != nil && certOperatorManaged {
+		components = append(components, render.NewPassthrough([]client.Object{tlsSecret}))
+	}
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -517,8 +522,8 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		ClusterDomain:                 r.clusterDomain,
 		ESLicenseType:                 elasticLicenseType,
 		Replicas:                      replicas,
-		OperatorManagedTLSKeyPair:     certOperatorManaged,
 	}
+
 	// Render the desired objects from the CRD and create or update them.
 	component, err := render.Manager(managerCfg)
 	if err != nil {
@@ -526,16 +531,19 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		r.status.SetDegraded("Error rendering Manager", err.Error())
 		return reconcile.Result{}, err
 	}
+	components = append(components, component)
 
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
-		log.Error(err, "Error with images from ImageSet")
-		r.status.SetDegraded("Error with images from ImageSet", err.Error())
-		return reconcile.Result{}, err
-	}
+	for _, component := range components {
+		if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+			log.Error(err, "Error with images from ImageSet")
+			r.status.SetDegraded("Error with images from ImageSet", err.Error())
+			return reconcile.Result{}, err
+		}
 
-	if err := handler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
-		r.status.SetDegraded("Error creating / updating resource", err.Error())
-		return reconcile.Result{}, err
+		if err := handler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+			r.status.SetDegraded("Error creating / updating resource", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	// Clear the degraded bit if we've reached this far.

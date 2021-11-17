@@ -88,9 +88,6 @@ func Manager(cfg *ManagerConfiguration) (Component, error) {
 	}
 	var tlsAnnotation string
 	if cfg.Installation.CertificateManagement == nil {
-		if cfg.OperatorManagedTLSKeyPair {
-			tlsSecrets = append(tlsSecrets, cfg.TLSKeyPair)
-		}
 		tlsSecrets = append(tlsSecrets, secret.CopyToNamespace(ManagerNamespace, cfg.TLSKeyPair)...)
 		tlsAnnotation = rmeta.AnnotationHash(cfg.TLSKeyPair.Data)
 	}
@@ -137,7 +134,6 @@ type ManagerConfiguration struct {
 	ClusterDomain                 string
 	ESLicenseType                 ElasticsearchLicenseType
 	Replicas                      *int32
-	OperatorManagedTLSKeyPair     bool
 }
 
 type managerComponent struct {

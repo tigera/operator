@@ -88,7 +88,6 @@ func Manager(cfg *ManagerConfiguration) (Component, error) {
 	}
 	var tlsAnnotation string
 	if cfg.Installation.CertificateManagement == nil {
-		tlsSecrets = append(tlsSecrets, cfg.TLSKeyPair)
 		tlsSecrets = append(tlsSecrets, secret.CopyToNamespace(ManagerNamespace, cfg.TLSKeyPair)...)
 		tlsAnnotation = rmeta.AnnotationHash(cfg.TLSKeyPair.Data)
 	}

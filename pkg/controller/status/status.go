@@ -310,6 +310,7 @@ func (w *windowsNodeUpgrades) progressingReason() string {
 func (m *statusManager) SetWindowsUpgradeStatus(pending, inProgress, completed []string) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
+
 	m.windowsNodeUpgrades.nodesPending = pending
 	m.windowsNodeUpgrades.nodesInProgress = inProgress
 	m.windowsNodeUpgrades.nodesCompleted = completed

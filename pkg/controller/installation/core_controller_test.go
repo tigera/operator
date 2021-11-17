@@ -1111,6 +1111,11 @@ var _ = Describe("Testing core-controller installation", func() {
 		})
 
 		Context("calicoWindowsUpgrader", func() {
+			BeforeEach(func() {
+				// calicoWindowsUpgrader only upgrades nodes on AKS.
+				cr.Spec.KubernetesProvider = operator.ProviderAKS
+			})
+
 			It("should do nothing if node is up to date", func() {
 				cr.Spec.Variant = operator.TigeraSecureEnterprise
 				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
@@ -1118,7 +1123,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 
 				// Create node with current Enterprise version.
-				n1 := test.CreateWindowsNode(cs, "windows1", cr.Spec.Variant, components.EnterpriseRelease)
+				n1 := test.CreateWindowsNode(cs, "windows1", cr.Spec.Variant, components.ComponentTigeraWindows.Version)
 
 				mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{}, []string{"windows1"})
 
@@ -1144,7 +1149,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				// Create two nodes that should be upgraded. The current variant
 				// is Calico and version is `components.CalicoRelease`.
 				n1 := test.CreateWindowsNode(cs, "windows1", operator.Calico, "v3.21.999")
-				n2 := test.CreateWindowsNode(cs, "windows2", operator.TigeraSecureEnterprise, components.EnterpriseRelease)
+				n2 := test.CreateWindowsNode(cs, "windows2", operator.TigeraSecureEnterprise, components.ComponentTigeraWindows.Version)
 
 				mockStatus.On("SetWindowsUpgradeStatus", mock.Anything, mock.Anything, mock.Anything)
 

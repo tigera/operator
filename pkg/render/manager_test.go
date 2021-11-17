@@ -50,7 +50,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	expectedDNSNames = append(expectedDNSNames, "localhost")
 
 	It("should render all resources for a default configuration", func() {
-		resources := renderObjects(false, nil, installation, true)
+		resources := renderObjects(false, nil, installation, true, true)
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -118,7 +118,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	It("should ensure cnx policy recommendation support is always set to true", func() {
-		resources := renderObjects(false, nil, installation, true)
+		resources := renderObjects(false, nil, installation, true, true)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 
 		// Should render the correct resource based on test case.
@@ -218,7 +218,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		oidcEnvVar.Value = authority
 
 		// Should render the correct resource based on test case.
-		resources := renderObjects(true, nil, installation, true)
+		resources := renderObjects(true, nil, installation, true, true)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber + 1)) //Extra tls secret was added.
 		d := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		// tigera-manager volumes/volumeMounts checks.
@@ -228,7 +228,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	It("should render multicluster settings properly", func() {
-		resources := renderObjects(false, &operatorv1.ManagementCluster{}, installation, true)
+		resources := renderObjects(false, &operatorv1.ManagementCluster{}, installation, true, true)
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -445,7 +445,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		resources := renderObjects(false, nil, &operatorv1.InstallationSpec{
 			CertificateManagement: &operatorv1.CertificateManagement{},
 			ControlPlaneReplicas:  &replicas,
-		}, false)
+		}, false, false)
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -492,7 +492,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		resources := renderObjects(false, nil, &operatorv1.InstallationSpec{
 			CertificateManagement: &operatorv1.CertificateManagement{},
 			ControlPlaneReplicas:  &replicas,
-		}, false)
+		}, false, false)
 		deploy, ok := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
 		Expect(deploy.Spec.Template.Spec.Affinity).To(BeNil())
@@ -505,15 +505,26 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		resources := renderObjects(false, nil, &operatorv1.InstallationSpec{
 			CertificateManagement: &operatorv1.CertificateManagement{},
 			ControlPlaneReplicas:  &replicas,
-		}, false)
+		}, false, false)
 		deploy, ok := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
 		Expect(deploy.Spec.Template.Spec.Affinity).NotTo(BeNil())
 		Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("tigera-manager", render.ManagerNamespace)))
 	})
+
+	It("should not render an user supplied manager TLS certificate", func() {
+
+		resources := renderObjects(false, nil, &operatorv1.InstallationSpec{}, true, false)
+		secret, ok := rtest.GetResource(resources, render.ManagerTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret").(*corev1.Secret)
+		Expect(secret).To(BeNil())
+
+		secret, ok = rtest.GetResource(resources, render.ManagerTLSSecretName, render.ManagerNamespace, "", "v1", "Secret").(*corev1.Secret)
+		Expect(ok).To(BeTrue())
+		Expect(secret).ToNot(BeNil())
+	})
 })
 
-func renderObjects(oidc bool, managementCluster *operatorv1.ManagementCluster, installation *operatorv1.InstallationSpec, includeManagerTLSSecret bool) []client.Object {
+func renderObjects(oidc bool, managementCluster *operatorv1.ManagementCluster, installation *operatorv1.InstallationSpec, includeManagerTLSSecret, operatorManagedTLSSecret bool) []client.Object {
 	var dexCfg authentication.KeyValidatorConfig
 	if oidc {
 		authentication := &operatorv1.Authentication{
@@ -550,7 +561,7 @@ func renderObjects(oidc bool, managementCluster *operatorv1.ManagementCluster, i
 		ClusterDomain:                 dns.DefaultClusterDomain,
 		ESLicenseType:                 render.ElasticsearchLicenseTypeEnterpriseTrial,
 		Replicas:                      installation.ControlPlaneReplicas,
-		OperatorManagedTLSKeyPair:     includeManagerTLSSecret,
+		OperatorManagedTLSKeyPair:     operatorManagedTLSSecret,
 	}
 	component, err := render.Manager(cfg)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)

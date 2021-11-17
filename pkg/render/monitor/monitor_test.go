@@ -337,6 +337,18 @@ var _ = Describe("monitor rendering tests", func() {
 			},
 			dns.DefaultClusterDomain)
 		cfg.KeyValidatorConfig = dexCfg
+		cfg.TLSSecret = &corev1.Secret{
+			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      monitor.PrometheusTLSSecretName,
+				Namespace: common.OperatorNamespace(),
+			},
+			Type: corev1.SecretTypeTLS,
+			Data: map[string][]byte{
+				corev1.TLSCertKey:       []byte("cert"),
+				corev1.TLSPrivateKeyKey: []byte("key"),
+			},
+		}
 		component, err := monitor.Monitor(cfg)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -353,19 +365,24 @@ var _ = Describe("monitor rendering tests", func() {
 		}{
 			{"tigera-prometheus", "", "", "v1", "Namespace"},
 			{"tigera-pull-secret", common.TigeraPrometheusNamespace, "", "", ""},
+			{"alertmanager-calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Secret"},
 			{monitor.PrometheusTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
 			{monitor.PrometheusTLSSecretName, common.TigeraPrometheusNamespace, "", "v1", "Secret"},
 			{"tigera-prometheus-role", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "Role"},
 			{"tigera-prometheus-role-binding", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding"},
+			{"calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Service"},
 			{"calico-node-alertmanager", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.AlertmanagersKind},
+			{"prometheus", common.TigeraPrometheusNamespace, "", "v1", "ServiceAccount"},
+			{"prometheus", "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
+			{"prometheus", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
 			{"calico-node-prometheus", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind},
 			{"tigera-prometheus-dp-rate", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusRuleKind},
 			{"calico-node-monitor", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
 			{"elasticsearch-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
 			{"fluentd-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PodMonitorsKind},
 			{"prometheus-http-api", common.TigeraPrometheusNamespace, "", "v1", "Service"},
-			{name: monitor.TigeraPrometheusObjectName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: monitor.TigeraPrometheusObjectName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{monitor.TigeraPrometheusObjectName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
+			{monitor.TigeraPrometheusObjectName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
 			{name: "tigera-dex-tls", ns: common.TigeraPrometheusNamespace, group: "", version: "v1", kind: "Secret"},
 		}
 

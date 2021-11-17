@@ -92,9 +92,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(esProxy.VolumeMounts[0].Name).To(Equal("elastic-ca-cert-volume"))
 		Expect(esProxy.VolumeMounts[0].MountPath).To(Equal("/etc/ssl/elastic/"))
 
-		// Expect 3 volume mounts for voltron
 		var voltron = deployment.Spec.Template.Spec.Containers[2]
-		Expect(len(voltron.VolumeMounts)).To(Equal(4))
+		Expect(len(voltron.VolumeMounts)).To(Equal(5))
 		Expect(voltron.VolumeMounts[0].Name).To(Equal(render.ManagerTLSSecretName))
 		Expect(voltron.VolumeMounts[0].MountPath).To(Equal("/certs/https"))
 		Expect(voltron.VolumeMounts[1].Name).To(Equal(render.KibanaPublicCertSecret))
@@ -103,9 +102,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(voltron.VolumeMounts[2].MountPath).To(Equal("/certs/compliance"))
 		Expect(voltron.VolumeMounts[3].Name).To(Equal(render.PacketCaptureCertSecret))
 		Expect(voltron.VolumeMounts[3].MountPath).To(Equal("/certs/packetcapture"))
+		Expect(voltron.VolumeMounts[4].Name).To(Equal(render.PrometheusTLSSecretName))
+		Expect(voltron.VolumeMounts[4].MountPath).To(Equal("/certs/prometheus"))
 
 		//Expect 4 volumes mapped to 4 secrets
-		Expect(len(deployment.Spec.Template.Spec.Volumes)).To(Equal(5))
+		Expect(len(deployment.Spec.Template.Spec.Volumes)).To(Equal(6))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ManagerTLSSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ManagerTLSSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[1].Name).To(Equal(render.KibanaPublicCertSecret))
@@ -114,8 +115,10 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal(render.ComplianceServerCertSecret))
 		Expect(deployment.Spec.Template.Spec.Volumes[3].Name).To(Equal(render.PacketCaptureCertSecret))
 		Expect(deployment.Spec.Template.Spec.Volumes[3].Secret.SecretName).To(Equal(render.PacketCaptureCertSecret))
-		Expect(deployment.Spec.Template.Spec.Volumes[4].Name).To(Equal("elastic-ca-cert-volume"))
-		Expect(deployment.Spec.Template.Spec.Volumes[4].Secret.SecretName).To(Equal(relasticsearch.PublicCertSecret))
+		Expect(deployment.Spec.Template.Spec.Volumes[4].Name).To(Equal(render.PrometheusTLSSecretName))
+		Expect(deployment.Spec.Template.Spec.Volumes[4].Secret.SecretName).To(Equal(render.PrometheusTLSSecretName))
+		Expect(deployment.Spec.Template.Spec.Volumes[5].Name).To(Equal("elastic-ca-cert-volume"))
+		Expect(deployment.Spec.Template.Spec.Volumes[5].Secret.SecretName).To(Equal(relasticsearch.PublicCertSecret))
 	})
 
 	It("should ensure cnx policy recommendation support is always set to true", func() {

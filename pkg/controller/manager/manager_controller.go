@@ -533,13 +533,13 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 	components = append(components, component)
 
-	for _, component := range components {
-		if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
-			log.Error(err, "Error with images from ImageSet")
-			r.status.SetDegraded("Error with images from ImageSet", err.Error())
-			return reconcile.Result{}, err
-		}
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+		log.Error(err, "Error with images from ImageSet")
+		r.status.SetDegraded("Error with images from ImageSet", err.Error())
+		return reconcile.Result{}, err
+	}
 
+	for _, component := range components {
 		if err := handler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 			r.status.SetDegraded("Error creating / updating resource", err.Error())
 			return reconcile.Result{}, err

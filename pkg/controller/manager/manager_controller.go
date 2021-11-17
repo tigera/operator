@@ -277,12 +277,11 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	// operator.
 	certOperatorManaged := true
 	if tlsSecret != nil {
-		issuer, err := utils.GetCertificateIssuer(tlsSecret.Data[render.ManagerInternalSecretCertName])
+		certOperatorManaged, err = utils.IsCertOperatorIssued(tlsSecret.Data[render.ManagerInternalSecretCertName])
 		if err != nil {
 			r.status.SetDegraded(fmt.Sprintf("Error checking if manager TLS certificate is operator managed"), err.Error())
 			return reconcile.Result{}, err
 		}
-		certOperatorManaged = utils.IsOperatorIssued(issuer)
 	}
 
 	if installation.CertificateManagement == nil {
@@ -290,7 +289,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		// If the secret exists but is operator managed, then check that it has the
 		// right DNS names and update it if necessary.
 		if tlsSecret == nil || certOperatorManaged {
-			// Create the cert if doesn't exist. If the cert exists, check that the cert
+			// Create the cert if it doesn't exist. If the cert exists, check that the cert
 			// has the expected DNS names. If the cert doesn't exist, the cert is recreated and returned.
 			// Note that validation of DNS names is not required for a user-provided manager TLS secret.
 			svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
@@ -518,6 +517,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		ClusterDomain:                 r.clusterDomain,
 		ESLicenseType:                 elasticLicenseType,
 		Replicas:                      replicas,
+		OperatorManagedTLSKeyPair:     certOperatorManaged,
 	}
 	// Render the desired objects from the CRD and create or update them.
 	component, err := render.Manager(managerCfg)

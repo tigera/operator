@@ -39,15 +39,11 @@ import (
 const (
 	TigeraPrometheusAPIName = "tigera-prometheus-api"
 
-	calicoNodePrometheusServiceName = "calico-node-prometheus"
-
 	prometheusEndpointUrlEnvVarName     = "PROMETHEUS_ENDPOINT_URL"
 	prometheusOperatedHttpServiceScheme = "http"
 	prometheusOperatedHttpServiceHost   = PrometheusHTTPAPIServiceName + ".tigera-prometheus"
 
 	prometheusServiceListenAddrEnvVarName = "LISTEN_ADDR"
-
-	tigeraPrometheusServiceHealthEndpoint = "/health"
 
 	// pod listens to and the TargetPort of calico-node-prometheus service.
 	// If not set it defaults to port 9090. In the scenario that the cluster

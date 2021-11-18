@@ -83,7 +83,7 @@ var (
 	}
 
 	ComponentEsProxy = component{
-		Version: "v3.10.0",
+		Version: "v3.10.1-1",
 		Image:   "tigera/es-proxy",
 	}
 
@@ -118,7 +118,7 @@ var (
 	}
 
 	ComponentManager = component{
-		Version: "tesla-v3.10.0",
+		Version: "tesla-v3.10.1-1",
 		Image:   "tigera/cnx-manager",
 	}
 

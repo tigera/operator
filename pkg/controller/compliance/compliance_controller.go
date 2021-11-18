@@ -323,7 +323,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		// operator, the cert is recreated and returned. If the invalid cert is supplied by
 		// the user, set the component degraded.
 
-		complianceServerCertSecret, err = utils.EnsureCertificateSecret(
+		complianceServerCertSecret, _, err = utils.EnsureCertificateSecret(
 			render.ComplianceServerCertSecret, complianceServerCertSecret, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, r.clusterDomain)...,
 		)
 		if err != nil {

@@ -346,7 +346,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			if packetCaptureCertSecret == nil {
 				renderSecret = true
 			}
-			packetCaptureCertSecret, err = utils.EnsureCertificateSecret(
+			packetCaptureCertSecret, _, err = utils.EnsureCertificateSecret(
 				render.PacketCaptureCertSecret, packetCaptureCertSecret, v1.TLSPrivateKeyKey, v1.TLSCertKey, rmeta.DefaultCertificateDuration, dns.GetServiceDNSNames(render.PacketCaptureServiceName, render.PacketCaptureNamespace, r.clusterDomain)...,
 			)
 			if err != nil {

@@ -302,6 +302,7 @@ type LinuxDataplaneOption string
 const (
 	LinuxDataplaneIptables LinuxDataplaneOption = "Iptables"
 	LinuxDataplaneBPF      LinuxDataplaneOption = "BPF"
+	LinuxDataplaneVPP      LinuxDataplaneOption = "VPP"
 )
 
 // CalicoNetworkSpec specifies configuration options for Calico provided pod networking.
@@ -311,7 +312,7 @@ type CalicoNetworkSpec struct {
 	// If not specified, iptables mode is used.
 	// Default: Iptables
 	// +optional
-	// +kubebuilder:validation:Enum=Iptables;BPF
+	// +kubebuilder:validation:Enum=Iptables;BPF;VPP
 	LinuxDataplane *LinuxDataplaneOption `json:"linuxDataplane,omitempty"`
 
 	// BGP configures whether or not to enable Calico's BGP capabilities.

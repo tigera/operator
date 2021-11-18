@@ -16,6 +16,7 @@ package monitor_test
 
 import (
 	"fmt"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
@@ -72,13 +73,13 @@ var _ = Describe("monitor rendering tests", func() {
 			kind    string
 		}{
 			{"tigera-prometheus", "", "", "v1", "Namespace"},
-			{"tigera-pull-secret", common.TigeraPrometheusNamespace, "", "", ""},
-			{"alertmanager-calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Secret"},
+			{"prometheus", common.TigeraPrometheusNamespace, "", "v1", "ServiceAccount"},
 			{"tigera-prometheus-role", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "Role"},
 			{"tigera-prometheus-role-binding", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding"},
+			{"tigera-pull-secret", common.TigeraPrometheusNamespace, "", "", ""},
+			{"alertmanager-calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Secret"},
 			{"calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Service"},
 			{"calico-node-alertmanager", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.AlertmanagersKind},
-			{"prometheus", common.TigeraPrometheusNamespace, "", "v1", "ServiceAccount"},
 			{"prometheus", "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
 			{"prometheus", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
 			{"calico-node-prometheus", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind},

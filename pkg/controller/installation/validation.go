@@ -247,6 +247,16 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			}
 		}
 
+		// VPP specific validation
+		if instance.Spec.CalicoNetwork.LinuxDataplane != nil && *instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneVPP {
+			if instance.Spec.CNI.Type != operatorv1.PluginCalico {
+				return fmt.Errorf("The VPP dataplane only supports the Calico CNI (configured: %s)", instance.Spec.CNI.Type)
+			}
+			if instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled {
+				return fmt.Errorf("VPP requires BGP to be enabled")
+			}
+		}
+
 		if bpfDataplane && instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 == nil {
 			return fmt.Errorf("spec.calicoNetwork.nodeAddressAutodetectionV4 is required for the BPF dataplane")
 		}

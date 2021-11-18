@@ -51,9 +51,13 @@ spec:
                 description: Layer data. One of View, Layer or Dashboard should be
                   specified.
                 properties:
+                  color:
+                    description: The color used to represent the layer when an Icon
+                      has not been specified.
+                    type: string
                   icon:
-                    description: A user-configurable icon in SVG format. If not specified,
-                      the default layer icon is used for this layer node.
+                    description: A user-configurable icon. If not specified, the default
+                      layer icon is used for this layer node.
                     type: string
                   nodes:
                     description: The nodes that are aggregated into a single layer.
@@ -79,7 +83,6 @@ spec:
                       type: object
                     type: array
                 required:
-                - icon
                 - nodes
                 type: object
               view:
@@ -222,13 +225,13 @@ spec:
                     items:
                       type: string
                     type: array
-                  layout:
+                  layoutType:
                     description: Layout type. Semi-arbitrary value used to specify
                       the layout-type/algorithm. For example could specify different
                       layout algorithms, or click-to-grid.  Mostly here for future
                       use.
                     type: string
-                  position:
+                  positions:
                     description: Positions of graph nodes.
                     items:
                       description: UI screen position.
@@ -259,8 +262,8 @@ spec:
                 - expandPorts
                 - followConnectionDirection
                 - layers
-                - layout
-                - position
+                - layoutType
+                - positions
                 - splitIngressEgress
                 type: object
             required:

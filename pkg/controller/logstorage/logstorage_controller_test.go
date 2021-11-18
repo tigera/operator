@@ -1308,7 +1308,6 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 		Kibana:                      &kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaName, Namespace: render.KibanaNamespace}},
 		ClusterConfig:               relasticsearch.NewClusterConfig("cluster", 1, 1, 1),
 		ElasticsearchSecrets:        toSecrets(createESSecrets()),
-		KibanaSecrets:               toSecrets(createKibanaSecrets()),
 		PullSecrets: []*corev1.Secret{
 			{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 		},
@@ -1320,26 +1319,36 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 		ElasticLicenseType: render.ElasticsearchLicenseTypeBasic,
 	}
 
+	kibanaSecrets := createKibanaSecrets()
+	cfg.KibanaCertSecret = toSecrets(kibanaSecrets)[0]
+
+	var components []render.Component
+	components = append(components, render.NewPassthrough(kibanaSecrets))
+
 	component := render.LogStorage(cfg)
+	components = append(components, component)
 
 	Expect(cli.Create(ctx, ls)).ShouldNot(HaveOccurred())
-	createObj, _ := component.Objects()
-	for _, obj := range createObj {
-		switch obj.(type) {
-		case *esv1.Elasticsearch:
-			By("setting the Elasticsearch status to operational so we pass the Elasticsearch ready check")
-			es := obj.(*esv1.Elasticsearch)
-			es.Status.Phase = esv1.ElasticsearchReadyPhase
-			obj = es
 
-		case *kbv1.Kibana:
-			By("setting the Kibana status to operational so we pass the Kibana ready check")
-			kb := obj.(*kbv1.Kibana)
-			kb.Status.AssociationStatus = cmnv1.AssociationEstablished
-			obj = kb
+	for _, component := range components {
+		createObj, _ := component.Objects()
+		for _, obj := range createObj {
+			switch obj.(type) {
+			case *esv1.Elasticsearch:
+				By("setting the Elasticsearch status to operational so we pass the Elasticsearch ready check")
+				es := obj.(*esv1.Elasticsearch)
+				es.Status.Phase = esv1.ElasticsearchReadyPhase
+				obj = es
+
+			case *kbv1.Kibana:
+				By("setting the Kibana status to operational so we pass the Kibana ready check")
+				kb := obj.(*kbv1.Kibana)
+				kb.Status.AssociationStatus = cmnv1.AssociationEstablished
+				obj = kb
+			}
+
+			Expect(cli.Create(ctx, obj)).ShouldNot(HaveOccurred())
 		}
-
-		Expect(cli.Create(ctx, obj)).ShouldNot(HaveOccurred())
 	}
 
 	Expect(
@@ -1399,12 +1408,9 @@ func createKibanaSecrets() []client.Object {
 	)
 	Expect(err).ShouldNot(HaveOccurred())
 
-	kbOperNsSecret := secret.CopyToNamespace(render.KibanaNamespace, kbSecret)[0]
-
 	kbPublicSecret := createPubSecret(render.KibanaPublicCertSecret, render.KibanaNamespace, kbSecret.Data["tls.crt"], "tls.crt")
 	return []client.Object{
 		kbSecret,
-		kbOperNsSecret,
 		kbPublicSecret,
 	}
 }

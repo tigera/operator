@@ -301,20 +301,6 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	return reconcile.Result{}, nil
 }
 
-// getTigeraPrometheusAPIConfigMap attempts to retrieve an existing ConfigMap for tigera-prometheus-api
-func (r *ReconcileMonitor) getTigeraPrometheusAPIConfigMap() (*corev1.ConfigMap, error) {
-	cm := &corev1.ConfigMap{}
-	cmNamespacedName := types.NamespacedName{
-		Name:      monitor.TigeraPrometheusAPIName,
-		Namespace: common.OperatorNamespace(),
-	}
-
-	if err := r.client.Get(context.Background(), cmNamespacedName, cm); err != nil {
-		return nil, err
-	}
-	return cm, nil
-}
-
 //go:embed alertmanager-config.yaml
 var alertmanagerConfig string
 

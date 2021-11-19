@@ -106,6 +106,7 @@ type statusManager struct {
 	// if there are any, and report statuses based on the state of those resources.
 	readyToMonitor bool
 	hasSynced      bool
+	crExists       bool
 }
 
 func New(client client.Client, component string, kubernetesVersion *common.VersionInfo) StatusManager {
@@ -568,11 +569,18 @@ func (m *statusManager) isInitialized() bool {
 func (m *statusManager) removeTigeraStatus() bool {
 	m.lock.Lock()
 	defer m.lock.Unlock()
+	if !m.crExists {
+		// No CR to delete, so short-circuit.
+		return true
+	}
 	if m.enabled != nil && !*m.enabled {
 		ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: m.component}}
 		err := m.client.Delete(context.TODO(), ts)
 		if err != nil && !errors.IsNotFound(err) {
 			log.WithValues("reason", err).Info("Failed to remove TigeraStatus", "component", m.component)
+		} else {
+			// CR no longer exists.
+			m.crExists = false
 		}
 		return true
 	}
@@ -687,6 +695,7 @@ func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondi
 			}
 		}
 	}
+	m.crExists = true
 }
 
 func (m *statusManager) setAvailable(reason, msg string) {

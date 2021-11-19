@@ -85,6 +85,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady
 		provider:        opts.DetectedProvider,
 		status:          status.New(mgr.GetClient(), "monitor", opts.KubernetesVersion),
 		prometheusReady: prometheusReady,
+		clusterDomain:   opts.ClusterDomain,
 	}
 
 	r.status.AddStatefulSets([]types.NamespacedName{
@@ -112,6 +113,15 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("monitor-controller failed to watch ImageSet: %w", err)
 	}
 
+	if err = utils.AddSecretsWatch(c, monitor.PrometheusTLSSecretName, common.OperatorNamespace()); err != nil {
+		return fmt.Errorf("monitor-controller failed to watch secret: %w", err)
+	}
+
+	err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("monitor-controller failed to watch resource: %w", err)
+	}
+
 	return nil
 }
 
@@ -124,6 +134,7 @@ type ReconcileMonitor struct {
 	provider        operatorv1.Provider
 	status          status.StatusManager
 	prometheusReady *utils.ReadyFlag
+	clusterDomain   string
 }
 
 func (r *ReconcileMonitor) getMonitor(ctx context.Context) (*operatorv1.Monitor, error) {
@@ -179,9 +190,6 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	// checks for an existing configmap
-	tigeraPrometheusAPIConfigMap, err := r.getTigeraPrometheusAPIConfigMap()
-
 	if err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("No ConfigMap found, a default one will be created.")
@@ -189,6 +197,45 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 			r.setDegraded(reqLogger, err, "Internal error attempting to retrieve ConfigMap")
 			return reconcile.Result{}, err
 		}
+	}
+
+	var tlsSecret *corev1.Secret
+	if install.CertificateManagement == nil {
+		// Check that if the apiserver cert pair secret exists that it is valid (has key and cert fields)
+		// If it does not exist then this function still returns true
+		tlsSecret, err = utils.ValidateCertPair(r.client,
+			common.OperatorNamespace(),
+			monitor.PrometheusTLSSecretName,
+			corev1.TLSPrivateKeyKey,
+			corev1.TLSCertKey,
+		)
+		if err != nil {
+			log.Error(err, "Invalid TLS Cert")
+			r.status.SetDegraded("Error validating TLS certificate", err.Error())
+			return reconcile.Result{}, err
+		}
+		r.status.RemoveCertificateSigningRequests(common.TigeraPrometheusNamespace)
+	} else {
+		// Monitor pending CSRs for the TigeraStatus
+		r.status.AddCertificateSigningRequests(common.TigeraPrometheusNamespace, map[string]string{"k8s-app": common.TigeraPrometheusNamespace})
+	}
+
+	// Fetch the Authentication spec. If present, we use to configure user authentication.
+	authenticationCR, err := utils.GetAuthentication(ctx, r.client)
+	if err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded("Error querying Authentication", err.Error())
+		return reconcile.Result{}, err
+	}
+	if authenticationCR != nil && authenticationCR.Status.State != operatorv1.TigeraStatusReady {
+		r.status.SetDegraded("Authentication is not ready", fmt.Sprintf("authenticationCR status: %s", authenticationCR.Status.State))
+		return reconcile.Result{}, nil
+	}
+
+	keyValidatorConfig, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.clusterDomain)
+	if err != nil {
+		log.Error(err, "Failed to process the authentication CR.")
+		r.status.SetDegraded("Failed to process the authentication CR.", err.Error())
+		return reconcile.Result{}, err
 	}
 
 	// Create a component handler to manage the rendered component.
@@ -200,23 +247,28 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	components := []render.Component{}
-	if createInOperatorNamespace {
-		components = append(components, render.NewPassthrough([]client.Object{alertmanagerConfigSecret}))
-	}
 	monitorCfg := &monitor.Config{
 		Installation:             install,
 		PullSecrets:              pullSecrets,
 		AlertmanagerConfigSecret: alertmanagerConfigSecret,
+		KeyValidatorConfig:       keyValidatorConfig,
+		TLSSecret:                tlsSecret,
+		ClusterDomain:            r.clusterDomain,
 	}
+
 	// Render prometheus component
-	components = append(components, monitor.Monitor(monitorCfg))
-	// Render tigera prometheus api component
-	tigeraPrometheusApi, err := monitor.TigeraPrometheusAPI(install, pullSecrets, tigeraPrometheusAPIConfigMap)
+	monitor, err := monitor.Monitor(monitorCfg)
 	if err != nil {
+		log.Error(err, "Failed to create monitor component")
+		r.status.SetDegraded("Failed to create monitor component", err.Error())
 		return reconcile.Result{}, err
 	}
-	components = append(components, tigeraPrometheusApi)
+
+	components := []render.Component{}
+	if createInOperatorNamespace {
+		components = append(components, render.NewPassthrough([]client.Object{alertmanagerConfigSecret}))
+	}
+	components = append(components, monitor)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, components...); err != nil {
 		r.setDegraded(reqLogger, err, "Error with images from ImageSet")

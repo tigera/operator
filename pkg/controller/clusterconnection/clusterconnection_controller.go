@@ -95,6 +95,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	if err = utils.AddSecretsWatch(c, render.PacketCaptureCertSecret, common.OperatorNamespace()); err != nil {
 		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, render.PacketCaptureCertSecret, err)
 	}
+	// Watch for changes to the secrets associated with the PacketCapture APIs.
+	if err = utils.AddSecretsWatch(c, render.PrometheusTLSSecretName, common.OperatorNamespace()); err != nil {
+		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, render.PrometheusTLSSecretName, err)
+	}
 
 	if err = utils.AddNetworkWatch(c); err != nil {
 		return fmt.Errorf("%s failed to watch Network resource: %w", controllerName, err)
@@ -194,14 +198,31 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, nil
 	}
 
+	prometheusCertSecret, err := utils.ValidateCertPair(r.Client,
+		common.OperatorNamespace(),
+		render.PrometheusTLSSecretName,
+		"", // We don't need the key.
+		corev1.TLSCertKey,
+	)
+	if err != nil {
+		reqLogger.Error(err, fmt.Sprintf("failed to retrieve %s", render.PrometheusTLSSecretName))
+		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s", render.PrometheusTLSSecretName), err.Error())
+		return reconcile.Result{}, err
+	} else if prometheusCertSecret == nil {
+		reqLogger.Info(fmt.Sprintf("Waiting for secret '%s' to become available", render.PrometheusTLSSecretName))
+		r.status.SetDegraded(fmt.Sprintf("Waiting for secret '%s' to become available", render.PrometheusTLSSecretName), "")
+		return reconcile.Result{}, nil
+	}
+
 	ch := utils.NewComponentHandler(log, r.Client, r.Scheme, managementClusterConnection)
 	guardianCfg := &render.GuardianConfiguration{
-		URL:                 managementClusterConnection.Spec.ManagementClusterAddr,
-		PullSecrets:         pullSecrets,
-		Openshift:           r.Provider == operatorv1.ProviderOpenShift,
-		Installation:        instl,
-		TunnelSecret:        tunnelSecret,
-		PacketCaptureSecret: packetCaptureServerCertSecret,
+		URL:                  managementClusterConnection.Spec.ManagementClusterAddr,
+		PullSecrets:          pullSecrets,
+		Openshift:            r.Provider == operatorv1.ProviderOpenShift,
+		Installation:         instl,
+		TunnelSecret:         tunnelSecret,
+		PacketCaptureSecret:  packetCaptureServerCertSecret,
+		PrometheusCertSecret: prometheusCertSecret,
 	}
 	component := render.Guardian(guardianCfg)
 

@@ -52,12 +52,13 @@ func Guardian(cfg *GuardianConfiguration) Component {
 
 // GuardianConfiguration contains all the config information needed to render the component.
 type GuardianConfiguration struct {
-	URL                 string
-	PullSecrets         []*corev1.Secret
-	Openshift           bool
-	Installation        *operatorv1.InstallationSpec
-	TunnelSecret        *corev1.Secret
-	PacketCaptureSecret *corev1.Secret
+	URL                  string
+	PullSecrets          []*corev1.Secret
+	Openshift            bool
+	Installation         *operatorv1.InstallationSpec
+	TunnelSecret         *corev1.Secret
+	PacketCaptureSecret  *corev1.Secret
+	PrometheusCertSecret *corev1.Secret
 }
 
 type GuardianComponent struct {
@@ -97,6 +98,9 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		managerClusterRole(false, true, c.cfg.Openshift),
 		managerClusterRoleBinding(),
 	)
+	if c.cfg.PrometheusCertSecret != nil {
+		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(GuardianNamespace, c.cfg.PrometheusCertSecret)...)...)
+	}
 
 	return objs, nil
 }
@@ -237,7 +241,7 @@ func (c *GuardianComponent) deployment() client.Object {
 }
 
 func (c *GuardianComponent) volumes() []corev1.Volume {
-	return []corev1.Volume{
+	volumes := []corev1.Volume{
 		{
 			Name: GuardianVolumeName,
 			VolumeSource: corev1.VolumeSource{
@@ -259,6 +263,18 @@ func (c *GuardianComponent) volumes() []corev1.Volume {
 			},
 		},
 	}
+	if c.cfg.PrometheusCertSecret != nil {
+		volumes = append(volumes, corev1.Volume{
+			Name: PrometheusTLSSecretName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+
+					SecretName: PrometheusTLSSecretName,
+				},
+			},
+		})
+	}
+	return volumes
 }
 
 func (c *GuardianComponent) container() []corev1.Container {
@@ -298,7 +314,7 @@ func (c *GuardianComponent) container() []corev1.Container {
 }
 
 func (c *GuardianComponent) volumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{
+	mounts := []corev1.VolumeMount{
 		{
 			Name:      GuardianVolumeName,
 			MountPath: "/certs/",
@@ -310,6 +326,11 @@ func (c *GuardianComponent) volumeMounts() []corev1.VolumeMount {
 			ReadOnly:  true,
 		},
 	}
+	if c.cfg.PrometheusCertSecret != nil {
+		mounts = append(mounts, corev1.VolumeMount{Name: PrometheusTLSSecretName, MountPath: "/certs/prometheus", ReadOnly: true})
+	}
+
+	return mounts
 }
 
 func (c *GuardianComponent) annotations() map[string]string {
@@ -317,5 +338,8 @@ func (c *GuardianComponent) annotations() map[string]string {
 
 	annotations[PacketCaptureTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.PacketCaptureSecret.Data)
 
+	if c.cfg.PrometheusCertSecret != nil {
+		annotations[prometheusTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.PrometheusCertSecret.Data)
+	}
 	return annotations
 }

@@ -18,6 +18,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/tigera/operator/pkg/common"
 	"hash/fnv"
 	"net/url"
 	"strings"
@@ -160,8 +161,27 @@ var log = logf.Log.WithName("render")
 
 // Elasticsearch renders the
 func LogStorage(cfg *ElasticsearchConfiguration) Component {
+
+	var kibanaSecrets []*corev1.Secret
+
+	if cfg.KibanaCertSecret != nil {
+
+		kibanaSecrets = append(kibanaSecrets, secret.CopyToNamespace(KibanaNamespace, cfg.KibanaCertSecret)...)
+
+		if cfg.Installation.CertificateManagement != nil {
+
+			kibanaSecrets = append(kibanaSecrets,
+				CreateCertificateSecret(cfg.Installation.CertificateManagement.CACert, relasticsearch.InternalCertSecret, KibanaNamespace),
+				CreateCertificateSecret(cfg.Installation.CertificateManagement.CACert, KibanaInternalCertSecret, common.OperatorNamespace()))
+		} else if cfg.KibanaInternalCertSecret != nil {
+			//copy the valid cert to operator namespace.
+			kibanaSecrets = append(kibanaSecrets, secret.CopyToNamespace(common.OperatorNamespace(), cfg.KibanaInternalCertSecret)...)
+		}
+	}
+
 	return &elasticsearchComponent{
-		cfg: cfg,
+		cfg:           cfg,
+		kibanaSecrets: kibanaSecrets,
 	}
 }
 
@@ -175,7 +195,8 @@ type ElasticsearchConfiguration struct {
 	Kibana                      *kbv1.Kibana
 	ClusterConfig               *relasticsearch.ClusterConfig
 	ElasticsearchSecrets        []*corev1.Secret
-	KibanaSecrets               []*corev1.Secret
+	KibanaCertSecret            *corev1.Secret
+	KibanaInternalCertSecret    *corev1.Secret
 	PullSecrets                 []*corev1.Secret
 	Provider                    operatorv1.Provider
 	CuratorSecrets              []*corev1.Secret
@@ -188,6 +209,7 @@ type ElasticsearchConfiguration struct {
 
 type elasticsearchComponent struct {
 	cfg             *ElasticsearchConfiguration
+	kibanaSecrets   []*corev1.Secret
 	esImage         string
 	esOperatorImage string
 	kibanaImage     string
@@ -323,8 +345,8 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(KibanaNamespace, es.cfg.PullSecrets...)...)...)
 		}
 
-		if len(es.cfg.KibanaSecrets) > 0 {
-			toCreate = append(toCreate, secret.ToRuntimeObjects(es.cfg.KibanaSecrets...)...)
+		if len(es.kibanaSecrets) > 0 {
+			toCreate = append(toCreate, secret.ToRuntimeObjects(es.kibanaSecrets...)...)
 		}
 
 		toCreate = append(toCreate, es.kibanaCR())
@@ -1202,6 +1224,8 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 					EmptyDir: &corev1.EmptyDirVolumeSource{}}})
 	}
 
+	kibanaSecrets := append(es.kibanaSecrets, es.cfg.KibanaCertSecret)
+
 	return &kbv1.Kibana{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      KibanaName,
@@ -1235,7 +1259,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: KibanaNamespace,
 					Annotations: map[string]string{
-						KibanaTLSAnnotationHash: rmeta.SecretsAnnotationHash(es.cfg.KibanaSecrets...),
+						KibanaTLSAnnotationHash: rmeta.SecretsAnnotationHash(kibanaSecrets...),
 					},
 					Labels: map[string]string{
 						"name":    KibanaName,

@@ -277,11 +277,9 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	// operator.
 	var operatorManagedCertSecret bool
 	if installation.CertificateManagement == nil {
-		// If the secret does not exist, then create one.
-		// If the secret exists but is operator managed, then check that it has the
-		// expected DNS names and update it if necessary.
+		// We use EnsureCertificateSecret to ensure a secret exists, creating one if one is not passed in.
+		// It also ensures the secret passed has the proper DNS names if the secret is operator managed.
 
-		// Note that validation of DNS names is not required for a user-provided manager TLS secret.
 		svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
 		svcDNSNames = append(svcDNSNames, "localhost")
 		certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept

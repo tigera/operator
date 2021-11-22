@@ -140,7 +140,7 @@ func parseCertificate(certBytes []byte) (*x509.Certificate, error) {
 	return cert, nil
 }
 
-// Check that the cert in the secret has the expected DNS names.
+// SecretHasExpectedDNSNames Check that the cert in the secret has the expected DNS names.
 func SecretHasExpectedDNSNames(secret *corev1.Secret, certKeyName string, expectedDNSNames []string) error {
 	cert, err := parseCertificate(secret.Data[certKeyName])
 	if err != nil {

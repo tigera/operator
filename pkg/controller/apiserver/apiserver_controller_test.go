@@ -17,6 +17,10 @@ package apiserver
 import (
 	"context"
 	"fmt"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/dns"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/secret"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -47,6 +51,7 @@ var _ = Describe("apiserver controller tests", func() {
 		scheme     *runtime.Scheme
 		ctx        context.Context
 		mockStatus *status.MockStatus
+		variant operatorv1.ProductVariant
 	)
 
 	BeforeEach(func() {
@@ -72,18 +77,20 @@ var _ = Describe("apiserver controller tests", func() {
 		mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 		mockStatus.On("ReadyToMonitor")
 
+		variant = operatorv1.TigeraSecureEnterprise
+
 		var replicas int32 = 2
 		Expect(cli.Create(ctx, &operatorv1.Installation{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "default",
 			},
 			Status: operatorv1.InstallationStatus{
-				Variant:  operatorv1.TigeraSecureEnterprise,
+				Variant:  variant,
 				Computed: &operatorv1.InstallationSpec{},
 			},
 			Spec: operatorv1.InstallationSpec{
 				ControlPlaneReplicas:  &replicas,
-				Variant:               operatorv1.TigeraSecureEnterprise,
+				Variant:               variant,
 				Registry:              "some.registry.org/",
 				CertificateManagement: &operatorv1.CertificateManagement{},
 			},
@@ -247,6 +254,33 @@ var _ = Describe("apiserver controller tests", func() {
 			}
 			Expect(test.GetResource(cli, &pcSecret)).To(BeNil())
 			Expect(pcSecret).NotTo(BeNil())
+		})
+
+		It("should not add OwnerReference to user supplied apiserver TLS cert", func() {
+			secretName := "calico-apiserver-certs"
+			if variant == operatorv1.TigeraSecureEnterprise {
+				secretName = "tigera-apiserver-certs"
+			}
+
+			testCA := test.MakeTestCA("apiserver-test")
+			apiSecret, err := secret.CreateTLSSecret(testCA,
+				secretName, common.OperatorNamespace(), render.APIServerSecretKeyName, render.APIServerSecretCertName,
+				rmeta.DefaultCertificateDuration, nil, "tigera-api", "tigera-system", dns.DefaultClusterDomain,
+			)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(cli.Create(ctx, apiSecret)).ShouldNot(HaveOccurred())
+
+			r := ReconcileAPIServer{
+				client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
+			}
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(cli.Get(ctx, client.ObjectKey{Namespace: common.OperatorNamespace(), Name: secretName}, apiSecret)).ShouldNot(HaveOccurred())
+			Expect(apiSecret.GetOwnerReferences()).To(HaveLen(0))
 		})
 	})
 })

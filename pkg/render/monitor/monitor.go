@@ -17,6 +17,8 @@ package monitor
 import (
 	_ "embed"
 	"fmt"
+	"io/ioutil"
+	"os"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -25,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 
@@ -56,6 +59,26 @@ const (
 
 	prometheusServiceAccountName = "prometheus"
 )
+
+var log = logf.Log.WithName("monitor_render")
+
+var operatorServiceAccountName = ""
+
+func init() {
+	v, ok := os.LookupEnv("OPERATOR_SERVICEACCOUNT")
+	if ok {
+		operatorServiceAccountName = v
+		return
+	}
+	body, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	if err != nil {
+		log.Info("Failed to read serviceaccount/namespace file")
+	} else {
+		operatorServiceAccountName = string(body)
+		return
+	}
+	operatorServiceAccountName = "tigera-operator"
+}
 
 func Monitor(cfg *Config) render.Component {
 	return &monitorComponent{
@@ -484,7 +507,7 @@ func (mc *monitorComponent) roleBinding() *rbacv1.RoleBinding {
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "tigera-operator",
+				Name:      operatorServiceAccountName,
 				Namespace: common.OperatorNamespace(),
 			},
 		},

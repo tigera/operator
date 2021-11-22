@@ -162,7 +162,12 @@ var log = logf.Log.WithName("render")
 // Elasticsearch renders the
 func LogStorage(cfg *ElasticsearchConfiguration) Component {
 
-	var kibanaSecrets []*corev1.Secret
+	var elasticsearchSecrets, kibanaSecrets []*corev1.Secret
+
+	if cfg.ElasticsearchAdminUserSecret != nil {
+		// Copy the admin user secret to copy to the operator namespace.
+		elasticsearchSecrets = append(elasticsearchSecrets, secret.CopyToNamespace(common.OperatorNamespace(), cfg.ElasticsearchAdminUserSecret)...)
+	}
 
 	if cfg.KibanaCertSecret != nil {
 
@@ -180,41 +185,45 @@ func LogStorage(cfg *ElasticsearchConfiguration) Component {
 	}
 
 	return &elasticsearchComponent{
-		cfg:           cfg,
-		kibanaSecrets: kibanaSecrets,
+		cfg:                  cfg,
+		kibanaSecrets:        kibanaSecrets,
+		elasticsearchSecrets: elasticsearchSecrets,
 	}
 }
 
 // ElasticsearchConfiguration contains all the config information needed to render the component.
 type ElasticsearchConfiguration struct {
-	LogStorage                  *operatorv1.LogStorage
-	Installation                *operatorv1.InstallationSpec
-	ManagementCluster           *operatorv1.ManagementCluster
-	ManagementClusterConnection *operatorv1.ManagementClusterConnection
-	Elasticsearch               *esv1.Elasticsearch
-	Kibana                      *kbv1.Kibana
-	ClusterConfig               *relasticsearch.ClusterConfig
-	ElasticsearchSecrets        []*corev1.Secret
-	KibanaCertSecret            *corev1.Secret
-	KibanaInternalCertSecret    *corev1.Secret
-	PullSecrets                 []*corev1.Secret
-	Provider                    operatorv1.Provider
-	CuratorSecrets              []*corev1.Secret
-	ESService                   *corev1.Service
-	KbService                   *corev1.Service
-	ClusterDomain               string
-	DexCfg                      DexRelyingPartyConfig
-	ElasticLicenseType          ElasticsearchLicenseType
+	LogStorage                      *operatorv1.LogStorage
+	Installation                    *operatorv1.InstallationSpec
+	ManagementCluster               *operatorv1.ManagementCluster
+	ManagementClusterConnection     *operatorv1.ManagementClusterConnection
+	Elasticsearch                   *esv1.Elasticsearch
+	Kibana                          *kbv1.Kibana
+	ClusterConfig                   *relasticsearch.ClusterConfig
+	ElasticsearchCertSecret         *corev1.Secret
+	ElasticsearchInternalCertSecret *corev1.Secret
+	ElasticsearchAdminUserSecret    *corev1.Secret
+	KibanaCertSecret                *corev1.Secret
+	KibanaInternalCertSecret        *corev1.Secret
+	PullSecrets                     []*corev1.Secret
+	Provider                        operatorv1.Provider
+	CuratorSecrets                  []*corev1.Secret
+	ESService                       *corev1.Service
+	KbService                       *corev1.Service
+	ClusterDomain                   string
+	DexCfg                          DexRelyingPartyConfig
+	ElasticLicenseType              ElasticsearchLicenseType
 }
 
 type elasticsearchComponent struct {
-	cfg             *ElasticsearchConfiguration
-	kibanaSecrets   []*corev1.Secret
-	esImage         string
-	esOperatorImage string
-	kibanaImage     string
-	curatorImage    string
-	csrImage        string
+	cfg                  *ElasticsearchConfiguration
+	elasticsearchSecrets []*corev1.Secret
+	kibanaSecrets        []*corev1.Secret
+	esImage              string
+	esOperatorImage      string
+	kibanaImage          string
+	curatorImage         string
+	csrImage             string
 }
 
 func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -323,8 +332,8 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.cfg.PullSecrets...)...)...)
 		}
 
-		if len(es.cfg.ElasticsearchSecrets) > 0 {
-			toCreate = append(toCreate, secret.ToRuntimeObjects(es.cfg.ElasticsearchSecrets...)...)
+		if len(es.elasticsearchSecrets) > 0 {
+			toCreate = append(toCreate, secret.ToRuntimeObjects(es.elasticsearchSecrets...)...)
 		}
 
 		toCreate = append(toCreate, es.elasticsearchServiceAccount())
@@ -523,8 +532,10 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 
 	initContainers := []corev1.Container{initOSSettingsContainer}
 
+	elasticsearchSecrets := append(es.elasticsearchSecrets, es.cfg.ElasticsearchCertSecret, es.cfg.ElasticsearchInternalCertSecret)
+
 	annotations := map[string]string{
-		ElasticsearchTLSHashAnnotation: rmeta.SecretsAnnotationHash(es.cfg.ElasticsearchSecrets...),
+		ElasticsearchTLSHashAnnotation: rmeta.SecretsAnnotationHash(elasticsearchSecrets...),
 	}
 	if es.supportsOIDC() {
 		initKeystore := corev1.Container{

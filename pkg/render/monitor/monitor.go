@@ -109,12 +109,17 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		render.CreateNamespace(common.TigeraPrometheusNamespace, mc.cfg.Installation.KubernetesProvider),
 	}
 
+	// Create role and role bindings first.
+	// Operator needs the create/update roles for Alertmanger configuration secret for example.
+	toCreate = append(toCreate,
+		mc.role(),
+		mc.roleBinding(),
+	)
+
 	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.cfg.PullSecrets...)...)...)
 	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.cfg.AlertmanagerConfigSecret)...)...)
 
 	toCreate = append(toCreate,
-		mc.role(),
-		mc.roleBinding(),
 		mc.alertmanagerService(),
 		mc.alertmanager(),
 		mc.prometheusServiceAccount(),

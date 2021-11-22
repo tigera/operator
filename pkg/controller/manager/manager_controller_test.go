@@ -246,6 +246,28 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(secret.Data).To(Equal(userSecret.Data))
 		})
 
+		It("should not add OwnerReference to an user supplied manager TLS cert", func() {
+			// Create a manager cert secret.
+			dnsNames := []string{"manager.example.com", "192.168.10.22"}
+			testCA := test.MakeTestCA("manager-test")
+			userSecret, err := secret.CreateTLSSecret(
+				testCA, render.ManagerTLSSecretName, common.OperatorNamespace(), render.ManagerSecretKeyName,
+				render.ManagerSecretCertName, rmeta.DefaultCertificateDuration, nil, dnsNames...)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(c.Create(ctx, userSecret)).NotTo(HaveOccurred())
+
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Verify that the existing cert didn't get an owner reference
+			secret := &corev1.Secret{}
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
+			Expect(secret.GetOwnerReferences()).To(HaveLen(0))
+
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
+			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
+		})
+
 		It("should reconcile if operator-managed cert exists and user replaces it with a custom cert", func() {
 			// Reconcile and check that the operator managed cert was created
 			_, err := r.Reconcile(ctx, reconcile.Request{})

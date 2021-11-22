@@ -427,12 +427,15 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 
 	// If this is a Managed cluster ls must be nil to get to this point (unless the DeletionTimestamp is set) so we must
 	// create the ComponentHandler from the managementClusterConnection.
-	var hdler utils.ComponentHandler
+	var hdler, hdlerESInternalCertSecret utils.ComponentHandler
 	if ls != nil {
 		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
 	} else {
 		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, managementClusterConnection)
 	}
+
+	// Create the ComponentHandler to handle relasticsearch.InternalCertSecret without an OwnerReference
+	hdlerESInternalCertSecret = utils.NewComponentHandler(reqLogger, r.client, r.scheme, nil)
 
 	authentication, err := utils.GetAuthentication(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
@@ -455,6 +458,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		pullSecrets,
 		authentication,
 		hdler,
+		hdlerESInternalCertSecret,
 		reqLogger,
 		ctx,
 	)

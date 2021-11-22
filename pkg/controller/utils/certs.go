@@ -75,12 +75,10 @@ func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName s
 		return secret, true, err
 	}
 
-	issuer, err := GetCertificateIssuer(secret.Data[certName])
+	operatorManaged, err := IsCertOperatorIssued(secret.Data[certName])
 	if err != nil {
 		return nil, false, err
 	}
-
-	operatorManaged := IsOperatorIssued(issuer)
 
 	// For user provided certs, skip checking whether they have the right DNS
 	// names.
@@ -106,6 +104,16 @@ func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName s
 // IsOperatorIssued checks if the cert secret is issued operator.
 func IsOperatorIssued(issuer string) bool {
 	return operatorIssuedCertRegexp.MatchString(issuer)
+}
+
+func IsCertOperatorIssued(certPem []byte) (bool, error) {
+
+	issuer, err := GetCertificateIssuer(certPem)
+	if err != nil {
+		return false, err
+	}
+
+	return IsOperatorIssued(issuer), nil
 }
 
 // GetCertificateIssuer returns the issuer of a PEM block.

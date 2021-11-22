@@ -295,13 +295,11 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 
 	} else if tlsSecret != nil {
-
-		issuer, err := utils.GetCertificateIssuer(tlsSecret.Data[render.ManagerInternalSecretCertName])
+		operatorManagedCertSecret, err = utils.IsCertOperatorIssued(tlsSecret.Data[render.ManagerInternalSecretCertName])
 		if err != nil {
 			r.status.SetDegraded(fmt.Sprintf("Error checking if manager TLS certificate is operator managed"), err.Error())
 			return reconcile.Result{}, err
 		}
-		operatorManagedCertSecret = utils.IsOperatorIssued(issuer)
 
 		if !operatorManagedCertSecret {
 			err := fmt.Errorf("user provided secret %s/%s is not supported when certificate management is enabled", render.ManagerNamespace, render.ManagerTLSSecretName)
@@ -487,6 +485,11 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, nil
 	}
 
+	var components []render.Component
+	if tlsSecret != nil && operatorManagedCertSecret {
+		components = append(components, render.NewPassthrough([]client.Object{tlsSecret}))
+	}
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -496,11 +499,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	if managementCluster != nil || managementClusterConnection != nil {
 		var mcmReplicas int32 = 1
 		replicas = &mcmReplicas
-	}
-
-	var components []render.Component
-	if tlsSecret != nil && operatorManagedCertSecret {
-		components = append(components, render.NewPassthrough([]client.Object{tlsSecret}))
 	}
 
 	managerCfg := &render.ManagerConfiguration{
@@ -528,6 +526,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		r.status.SetDegraded("Error rendering Manager", err.Error())
 		return reconcile.Result{}, err
 	}
+	components = append(components, component)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
 		log.Error(err, "Error with images from ImageSet")
@@ -535,7 +534,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	components = append(components, component)
 	for _, component := range components {
 		if err := handler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 			r.status.SetDegraded("Error creating / updating resource", err.Error())

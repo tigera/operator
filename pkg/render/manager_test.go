@@ -17,7 +17,6 @@ package render_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -508,6 +507,17 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(ok).To(BeTrue())
 		Expect(deploy.Spec.Template.Spec.Affinity).NotTo(BeNil())
 		Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("tigera-manager", render.ManagerNamespace)))
+	})
+
+	It("should not render an user supplied manager TLS certificate", func() {
+
+		resources := renderObjects(false, nil, &operatorv1.InstallationSpec{}, true)
+		secret, ok := rtest.GetResource(resources, render.ManagerTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret").(*corev1.Secret)
+		Expect(secret).To(BeNil())
+
+		secret, ok = rtest.GetResource(resources, render.ManagerTLSSecretName, render.ManagerNamespace, "", "v1", "Secret").(*corev1.Secret)
+		Expect(ok).To(BeTrue())
+		Expect(secret).ToNot(BeNil())
 	})
 })
 

@@ -53,11 +53,13 @@ func (r *ReconcileLogStorage) createLogStorage(
 	pullSecrets []*corev1.Secret,
 	authentication *operatorv1.Authentication,
 	hdler utils.ComponentHandler,
+	hdlerESInternalCertSecret utils.ComponentHandler,
 	reqLogger logr.Logger,
 	ctx context.Context,
 ) (reconcile.Result, bool, bool, error) {
 	var esInternalCertSecret, esCertSecret *corev1.Secret
-	var kibanaSecrets []*corev1.Secret
+	var kbCertSecret, kbInternalCertSecret *corev1.Secret
+	var kbOperatorManagedCertSecret, esOperatorManagedCertSecret bool
 	var err error
 	finalizerCleanup := false
 
@@ -75,13 +77,13 @@ func (r *ReconcileLogStorage) createLogStorage(
 			return reconcile.Result{}, false, finalizerCleanup, err
 		}
 
-		if esCertSecret, esInternalCertSecret, err = r.getElasticsearchCertificateSecrets(ctx, install); err != nil {
+		if esCertSecret, esInternalCertSecret, esOperatorManagedCertSecret, err = r.getElasticsearchCertificateSecrets(ctx, install); err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Failed to create Elasticsearch secrets", err.Error())
 			return reconcile.Result{}, false, finalizerCleanup, err
 		}
 
-		if kibanaSecrets, err = r.kibanaInternalSecrets(ctx, install); err != nil {
+		if kbCertSecret, kbInternalCertSecret, kbOperatorManagedCertSecret, err = r.kibanaInternalSecrets(ctx, install); err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Failed to create kibana secrets", err.Error())
 			return reconcile.Result{}, false, finalizerCleanup, err
@@ -126,24 +128,36 @@ func (r *ReconcileLogStorage) createLogStorage(
 		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexCertSecret, dexSecret, r.clusterDomain)
 	}
 
+	var components []render.Component
+
+	if esCertSecret != nil && esOperatorManagedCertSecret {
+		components = append(components, render.NewPassthrough([]client.Object{esCertSecret}))
+	}
+	if kbCertSecret != nil && kbOperatorManagedCertSecret {
+		components = append(components, render.NewPassthrough([]client.Object{kbCertSecret}))
+	}
+
 	logStorageCfg := &render.ElasticsearchConfiguration{
-		LogStorage:                  ls,
-		Installation:                install,
-		ManagementCluster:           managementCluster,
-		ManagementClusterConnection: managementClusterConnection,
-		Elasticsearch:               elasticsearch,
-		Kibana:                      kibana,
-		ClusterConfig:               clusterConfig,
-		ElasticsearchSecrets:        []*corev1.Secret{esCertSecret, esInternalCertSecret, esAdminUserSecret},
-		KibanaSecrets:               kibanaSecrets,
-		PullSecrets:                 pullSecrets,
-		Provider:                    r.provider,
-		CuratorSecrets:              curatorSecrets,
-		ESService:                   esService,
-		KbService:                   kbService,
-		ClusterDomain:               r.clusterDomain,
-		DexCfg:                      dexCfg,
-		ElasticLicenseType:          esLicenseType,
+		LogStorage:                      ls,
+		Installation:                    install,
+		ManagementCluster:               managementCluster,
+		ManagementClusterConnection:     managementClusterConnection,
+		Elasticsearch:                   elasticsearch,
+		Kibana:                          kibana,
+		ClusterConfig:                   clusterConfig,
+		ElasticsearchCertSecret:         esCertSecret,
+		ElasticsearchInternalCertSecret: esInternalCertSecret,
+		ElasticsearchAdminUserSecret:    esAdminUserSecret,
+		KibanaCertSecret:                kbCertSecret,
+		KibanaInternalCertSecret:        kbInternalCertSecret,
+		PullSecrets:                     pullSecrets,
+		Provider:                        r.provider,
+		CuratorSecrets:                  curatorSecrets,
+		ESService:                       esService,
+		KbService:                       kbService,
+		ClusterDomain:                   r.clusterDomain,
+		DexCfg:                          dexCfg,
+		ElasticLicenseType:              esLicenseType,
 	}
 
 	component := render.LogStorage(logStorageCfg)
@@ -154,10 +168,22 @@ func (r *ReconcileLogStorage) createLogStorage(
 		return reconcile.Result{}, false, finalizerCleanup, err
 	}
 
-	if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
-		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Error creating / updating resource", err.Error())
-		return reconcile.Result{}, false, finalizerCleanup, err
+	components = append(components, component)
+	for _, component := range components {
+		if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+			reqLogger.Error(err, err.Error())
+			r.status.SetDegraded("Error creating / updating resource", err.Error())
+			return reconcile.Result{}, false, finalizerCleanup, err
+		}
+	}
+
+	if esInternalCertSecret != nil {
+		component := render.NewPassthrough([]client.Object{esInternalCertSecret})
+		if err := hdlerESInternalCertSecret.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+			reqLogger.Error(err, err.Error())
+			r.status.SetDegraded("Error creating / updating resource", err.Error())
+			return reconcile.Result{}, false, finalizerCleanup, err
+		}
 	}
 
 	if ls != nil && ls.DeletionTimestamp != nil && elasticsearch == nil && kibana == nil {
@@ -189,7 +215,7 @@ func (r *ReconcileLogStorage) validateLogStorage(curatorSecrets []*corev1.Secret
 	}
 
 	// kube-controller creates the ConfigMap and Secret needed for SSO into Kibana.
-	// If elastisearch uses basic license, degrade logstorage if the ConfigMap and Secret
+	// If elasticsearch uses basic license, degrade logstorage if the ConfigMap and Secret
 	// needed for logging user into Kibana is not available.
 	if esLicenseType == render.ElasticsearchLicenseTypeBasic {
 		if err = r.checkOIDCUsersEsResource(ctx); err != nil {

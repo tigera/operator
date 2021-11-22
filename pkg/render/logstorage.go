@@ -18,6 +18,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/tigera/operator/pkg/common"
 	"hash/fnv"
 	"net/url"
 	"strings"
@@ -160,39 +161,69 @@ var log = logf.Log.WithName("render")
 
 // Elasticsearch renders the
 func LogStorage(cfg *ElasticsearchConfiguration) Component {
+
+	var elasticsearchSecrets, kibanaSecrets []*corev1.Secret
+
+	if cfg.ElasticsearchAdminUserSecret != nil {
+		// Copy the admin user secret to copy to the operator namespace.
+		elasticsearchSecrets = append(elasticsearchSecrets, secret.CopyToNamespace(common.OperatorNamespace(), cfg.ElasticsearchAdminUserSecret)...)
+	}
+
+	if cfg.KibanaCertSecret != nil {
+
+		kibanaSecrets = append(kibanaSecrets, secret.CopyToNamespace(KibanaNamespace, cfg.KibanaCertSecret)...)
+
+		if cfg.Installation.CertificateManagement != nil {
+
+			kibanaSecrets = append(kibanaSecrets,
+				CreateCertificateSecret(cfg.Installation.CertificateManagement.CACert, relasticsearch.InternalCertSecret, KibanaNamespace),
+				CreateCertificateSecret(cfg.Installation.CertificateManagement.CACert, KibanaInternalCertSecret, common.OperatorNamespace()))
+		} else if cfg.KibanaInternalCertSecret != nil {
+			//copy the valid cert to operator namespace.
+			kibanaSecrets = append(kibanaSecrets, secret.CopyToNamespace(common.OperatorNamespace(), cfg.KibanaInternalCertSecret)...)
+		}
+	}
+
 	return &elasticsearchComponent{
-		cfg: cfg,
+		cfg:                  cfg,
+		kibanaSecrets:        kibanaSecrets,
+		elasticsearchSecrets: elasticsearchSecrets,
 	}
 }
 
 // ElasticsearchConfiguration contains all the config information needed to render the component.
 type ElasticsearchConfiguration struct {
-	LogStorage                  *operatorv1.LogStorage
-	Installation                *operatorv1.InstallationSpec
-	ManagementCluster           *operatorv1.ManagementCluster
-	ManagementClusterConnection *operatorv1.ManagementClusterConnection
-	Elasticsearch               *esv1.Elasticsearch
-	Kibana                      *kbv1.Kibana
-	ClusterConfig               *relasticsearch.ClusterConfig
-	ElasticsearchSecrets        []*corev1.Secret
-	KibanaSecrets               []*corev1.Secret
-	PullSecrets                 []*corev1.Secret
-	Provider                    operatorv1.Provider
-	CuratorSecrets              []*corev1.Secret
-	ESService                   *corev1.Service
-	KbService                   *corev1.Service
-	ClusterDomain               string
-	DexCfg                      DexRelyingPartyConfig
-	ElasticLicenseType          ElasticsearchLicenseType
+	LogStorage                      *operatorv1.LogStorage
+	Installation                    *operatorv1.InstallationSpec
+	ManagementCluster               *operatorv1.ManagementCluster
+	ManagementClusterConnection     *operatorv1.ManagementClusterConnection
+	Elasticsearch                   *esv1.Elasticsearch
+	Kibana                          *kbv1.Kibana
+	ClusterConfig                   *relasticsearch.ClusterConfig
+	ElasticsearchCertSecret         *corev1.Secret
+	ElasticsearchInternalCertSecret *corev1.Secret
+	ElasticsearchAdminUserSecret    *corev1.Secret
+	KibanaCertSecret                *corev1.Secret
+	KibanaInternalCertSecret        *corev1.Secret
+	PullSecrets                     []*corev1.Secret
+	Provider                        operatorv1.Provider
+	CuratorSecrets                  []*corev1.Secret
+	ESService                       *corev1.Service
+	KbService                       *corev1.Service
+	ClusterDomain                   string
+	DexCfg                          DexRelyingPartyConfig
+	ElasticLicenseType              ElasticsearchLicenseType
 }
 
 type elasticsearchComponent struct {
-	cfg             *ElasticsearchConfiguration
-	esImage         string
-	esOperatorImage string
-	kibanaImage     string
-	curatorImage    string
-	csrImage        string
+	cfg                  *ElasticsearchConfiguration
+	elasticsearchSecrets []*corev1.Secret
+	kibanaSecrets        []*corev1.Secret
+	esImage              string
+	esOperatorImage      string
+	kibanaImage          string
+	curatorImage         string
+	csrImage             string
 }
 
 func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -301,8 +332,8 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.cfg.PullSecrets...)...)...)
 		}
 
-		if len(es.cfg.ElasticsearchSecrets) > 0 {
-			toCreate = append(toCreate, secret.ToRuntimeObjects(es.cfg.ElasticsearchSecrets...)...)
+		if len(es.elasticsearchSecrets) > 0 {
+			toCreate = append(toCreate, secret.ToRuntimeObjects(es.elasticsearchSecrets...)...)
 		}
 
 		toCreate = append(toCreate, es.elasticsearchServiceAccount())
@@ -323,8 +354,8 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(KibanaNamespace, es.cfg.PullSecrets...)...)...)
 		}
 
-		if len(es.cfg.KibanaSecrets) > 0 {
-			toCreate = append(toCreate, secret.ToRuntimeObjects(es.cfg.KibanaSecrets...)...)
+		if len(es.kibanaSecrets) > 0 {
+			toCreate = append(toCreate, secret.ToRuntimeObjects(es.kibanaSecrets...)...)
 		}
 
 		toCreate = append(toCreate, es.kibanaCR())
@@ -501,8 +532,10 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 
 	initContainers := []corev1.Container{initOSSettingsContainer}
 
+	elasticsearchSecrets := append(es.elasticsearchSecrets, es.cfg.ElasticsearchCertSecret, es.cfg.ElasticsearchInternalCertSecret)
+
 	annotations := map[string]string{
-		ElasticsearchTLSHashAnnotation: rmeta.SecretsAnnotationHash(es.cfg.ElasticsearchSecrets...),
+		ElasticsearchTLSHashAnnotation: rmeta.SecretsAnnotationHash(elasticsearchSecrets...),
 	}
 	if es.supportsOIDC() {
 		initKeystore := corev1.Container{
@@ -1202,6 +1235,8 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 					EmptyDir: &corev1.EmptyDirVolumeSource{}}})
 	}
 
+	kibanaSecrets := append(es.kibanaSecrets, es.cfg.KibanaCertSecret)
+
 	return &kbv1.Kibana{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      KibanaName,
@@ -1235,7 +1270,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: KibanaNamespace,
 					Annotations: map[string]string{
-						KibanaTLSAnnotationHash: rmeta.SecretsAnnotationHash(es.cfg.KibanaSecrets...),
+						KibanaTLSAnnotationHash: rmeta.SecretsAnnotationHash(kibanaSecrets...),
 					},
 					Labels: map[string]string{
 						"name":    KibanaName,

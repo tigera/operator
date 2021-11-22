@@ -55,34 +55,35 @@ func GetSecret(ctx context.Context, client client.Client, name string, ns string
 }
 
 // EnsureCertificateSecret ensures that the certificate in the
-// secret has the expected DNS names. If no secret is provided, a new
-// secret is created and returned. If the secret does have the
-// right DNS names then the secret is returned.
-// If the cert in the secret has invalid DNS names and the secret is operator
-// managed, then a new secret is created and returned. Otherwise,
-// if the secret is user-supplied, an error is returned.
-func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName string, certName string, certDuration time.Duration, svcDNSNames ...string) (*corev1.Secret, error) {
+// secret has the expected DNS names. If no secret is provided, a new secret is created.
+// The first returned value (*corev1.Secret) is the validated or created Secret to use.
+// The second returned value (bool) is true if the Secret returned was generated and needs to be created, otherwise false is returned.
+// The third returned value (error) is nil if the Secret pass in is valid or was created successfully. If there was a
+// problem creating the certificate or the Secret has invalid DNS names and the secret is not operator managed, an error is returned.
+func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName string, certName string, certDuration time.Duration, svcDNSNames ...string) (*corev1.Secret, bool, error) {
 	var err error
 
 	// Create the secret if it doesn't exist.
 	if secret == nil {
 		certsLogger.Info(fmt.Sprintf("cert %q doesn't exist, creating it", secretName))
 
-		return rsecret.CreateTLSSecret(nil,
+		secret, err = rsecret.CreateTLSSecret(nil,
 			secretName, common.OperatorNamespace(), keyName, certName,
 			certDuration, nil, svcDNSNames...,
 		)
+
+		return secret, true, err
 	}
 
 	operatorManaged, err := IsCertOperatorIssued(secret.Data[certName])
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	// For user provided certs, skip checking whether they have the right DNS
 	// names.
 	if !operatorManaged {
-		return secret, err
+		return secret, operatorManaged, err
 	}
 
 	err = SecretHasExpectedDNSNames(secret, certName, svcDNSNames)
@@ -91,13 +92,13 @@ func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName s
 		// replace the invalid one since it's managed by the operator.
 		certsLogger.Info(fmt.Sprintf("operator-managed cert %q has wrong DNS names, recreating it", secretName))
 
-		return rsecret.CreateTLSSecret(nil,
+		secret, err = rsecret.CreateTLSSecret(nil,
 			secretName, common.OperatorNamespace(), keyName, certName,
 			rmeta.DefaultCertificateDuration, nil, svcDNSNames...,
 		)
 	}
 
-	return secret, err
+	return secret, operatorManaged, err
 }
 
 // IsOperatorIssued checks if the cert secret is issued operator.
@@ -139,7 +140,7 @@ func parseCertificate(certBytes []byte) (*x509.Certificate, error) {
 	return cert, nil
 }
 
-// Check that the cert in the secret has the expected DNS names.
+// SecretHasExpectedDNSNames Check that the cert in the secret has the expected DNS names.
 func SecretHasExpectedDNSNames(secret *corev1.Secret, certKeyName string, expectedDNSNames []string) error {
 	cert, err := parseCertificate(secret.Data[certKeyName])
 	if err != nil {

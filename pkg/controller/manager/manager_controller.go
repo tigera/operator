@@ -275,41 +275,37 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	// If the manager TLS secret exists, check whether it is managed by the
 	// operator.
-	certOperatorManaged := true
-	if tlsSecret != nil {
-		certOperatorManaged, err = utils.IsCertOperatorIssued(tlsSecret.Data[render.ManagerInternalSecretCertName])
+	var operatorManagedCertSecret bool
+	if installation.CertificateManagement == nil {
+		// If the secret does not exist, then create one.
+		// If the secret exists but is operator managed, then check that it has the
+		// expected DNS names and update it if necessary.
+
+		// Note that validation of DNS names is not required for a user-provided manager TLS secret.
+		svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
+		svcDNSNames = append(svcDNSNames, "localhost")
+		certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
+		tlsSecret, operatorManagedCertSecret, err = utils.EnsureCertificateSecret(
+			render.ManagerTLSSecretName, tlsSecret, render.ManagerSecretKeyName, render.ManagerSecretCertName, certDur, svcDNSNames...,
+		)
+
+		if err != nil {
+			r.status.SetDegraded(fmt.Sprintf("Error ensuring manager TLS certificate %q exists and has valid DNS names", render.ManagerTLSSecretName), err.Error())
+			return reconcile.Result{}, err
+		}
+
+	} else if tlsSecret != nil {
+		operatorManagedCertSecret, err = utils.IsCertOperatorIssued(tlsSecret.Data[render.ManagerInternalSecretCertName])
 		if err != nil {
 			r.status.SetDegraded(fmt.Sprintf("Error checking if manager TLS certificate is operator managed"), err.Error())
 			return reconcile.Result{}, err
 		}
-	}
 
-	if installation.CertificateManagement == nil {
-		// If the secret does not exist, then create one.
-		// If the secret exists but is operator managed, then check that it has the
-		// right DNS names and update it if necessary.
-		if tlsSecret == nil || certOperatorManaged {
-			// Create the cert if it doesn't exist. If the cert exists, check that the cert
-			// has the expected DNS names. If the cert doesn't exist, the cert is recreated and returned.
-			// Note that validation of DNS names is not required for a user-provided manager TLS secret.
-			svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
-			svcDNSNames = append(svcDNSNames, "localhost")
-			certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
-			tlsSecret, err = utils.EnsureCertificateSecret(
-				render.ManagerTLSSecretName, tlsSecret, render.ManagerSecretKeyName, render.ManagerSecretCertName, certDur, svcDNSNames...,
-			)
-
-			if err != nil {
-				r.status.SetDegraded(fmt.Sprintf("Error ensuring manager TLS certificate %q exists and has valid DNS names", render.ManagerTLSSecretName), err.Error())
-				return reconcile.Result{}, err
-			}
+		if !operatorManagedCertSecret {
+			err := fmt.Errorf("user provided secret %s/%s is not supported when certificate management is enabled", render.ManagerNamespace, render.ManagerTLSSecretName)
+			r.status.SetDegraded("Invalid certificate configuration", err.Error())
+			return reconcile.Result{}, err
 		}
-	} else if !certOperatorManaged {
-		err := fmt.Errorf("user provided secret %s/%s is not supported when certificate management is enabled", render.ManagerNamespace, render.ManagerTLSSecretName)
-		r.status.SetDegraded("Invalid certificate configuration", err.Error())
-		return reconcile.Result{}, err
-	} else {
-		tlsSecret = nil
 	}
 
 	var installCompliance = utils.IsFeatureActive(license, common.ComplianceFeature)
@@ -490,7 +486,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	var components []render.Component
-	if tlsSecret != nil && certOperatorManaged {
+	if tlsSecret != nil && operatorManagedCertSecret {
 		components = append(components, render.NewPassthrough([]client.Object{tlsSecret}))
 	}
 
@@ -523,7 +519,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		ESLicenseType:                 elasticLicenseType,
 		Replicas:                      replicas,
 	}
-
 	// Render the desired objects from the CRD and create or update them.
 	component, err := render.Manager(managerCfg)
 	if err != nil {

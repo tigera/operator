@@ -37,7 +37,6 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
-	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/test"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -204,10 +203,8 @@ var _ = Describe("Manager controller tests", func() {
 
 		It("should render a new manager cert if existing cert has invalid DNS names and the cert is operator managed", func() {
 			// Create a manager cert managed by the operator.
-			ca, err := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
-			Expect(err).ShouldNot(HaveOccurred())
 			oldCert, err := secret.CreateTLSSecret(
-				ca, render.ManagerTLSSecretName, common.OperatorNamespace(), render.ManagerSecretKeyName,
+				nil, render.ManagerTLSSecretName, common.OperatorNamespace(), render.ManagerSecretKeyName,
 				render.ManagerSecretCertName, rmeta.DefaultCertificateDuration, nil, "tigera-manager.tigera-manager.svc")
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(c.Create(ctx, oldCert)).NotTo(HaveOccurred())

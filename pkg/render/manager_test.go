@@ -44,7 +44,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	}
 	var replicas int32 = 2
 	installation := &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas}
-	const expectedResourcesNumber = 11
+	const expectedResourcesNumber = 10
 
 	expectedDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
 	expectedDNSNames = append(expectedDNSNames, "localhost")
@@ -64,7 +64,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{name: render.ManagerServiceAccount, ns: render.ManagerNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: render.ManagerClusterRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: render.ManagerClusterRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: render.ManagerTLSSecretName, ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: render.ManagerTLSSecretName, ns: render.ManagerNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-manager", ns: render.ManagerNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "tigera-manager", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
@@ -242,7 +241,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "tigera-manager-role", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-manager-binding", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "manager-tls", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: "manager-tls", ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},
 			{name: render.VoltronTunnelSecretName, ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},
 			{name: render.ManagerInternalTLSSecretName, ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},

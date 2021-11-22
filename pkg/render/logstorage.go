@@ -1257,7 +1257,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: KibanaNamespace,
 					Annotations: map[string]string{
-						KibanaTLSAnnotationHash: rmeta.SecretsAnnotationHash(kibanaSecrets...),
+						KibanaTLSAnnotationHash: rmeta.SecretsAnnotationHash(es.kibanaSecrets...),
 					},
 					Labels: map[string]string{
 						"name":    KibanaName,

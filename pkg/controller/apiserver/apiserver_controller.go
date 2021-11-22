@@ -342,11 +342,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			// has the expected DNS names. If the cert doesn't and the cert is managed by the
 			// operator, the cert is recreated and returned. If the invalid cert is supplied by
 			// the user, set the component degraded.
-
-			if packetCaptureCertSecret == nil {
-				renderSecret = true
-			}
-			packetCaptureCertSecret, _, err = utils.EnsureCertificateSecret(
+			packetCaptureCertSecret, renderSecret, err = utils.EnsureCertificateSecret(
 				render.PacketCaptureCertSecret, packetCaptureCertSecret, v1.TLSPrivateKeyKey, v1.TLSCertKey, rmeta.DefaultCertificateDuration, dns.GetServiceDNSNames(render.PacketCaptureServiceName, render.PacketCaptureNamespace, r.clusterDomain)...,
 			)
 			if err != nil {

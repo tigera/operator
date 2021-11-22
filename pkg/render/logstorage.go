@@ -1224,8 +1224,6 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 					EmptyDir: &corev1.EmptyDirVolumeSource{}}})
 	}
 
-	kibanaSecrets := append(es.kibanaSecrets, es.cfg.KibanaCertSecret)
-
 	return &kbv1.Kibana{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      KibanaName,

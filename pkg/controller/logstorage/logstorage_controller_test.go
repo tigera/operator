@@ -1369,36 +1369,26 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 		ElasticLicenseType: render.ElasticsearchLicenseTypeBasic,
 	}
 
-	kibanaSecrets := createKibanaSecrets()
-	cfg.KibanaCertSecret = toSecrets(kibanaSecrets)[0]
-
-	var components []render.Component
-	components = append(components, render.NewPassthrough(kibanaSecrets))
-
 	component := render.LogStorage(cfg)
-	components = append(components, component)
 
 	Expect(cli.Create(ctx, ls)).ShouldNot(HaveOccurred())
+	createObj, _ := component.Objects()
+	for _, obj := range createObj {
+		switch obj.(type) {
+		case *esv1.Elasticsearch:
+			By("setting the Elasticsearch status to operational so we pass the Elasticsearch ready check")
+			es := obj.(*esv1.Elasticsearch)
+			es.Status.Phase = esv1.ElasticsearchReadyPhase
+			obj = es
 
-	for _, component := range components {
-		createObj, _ := component.Objects()
-		for _, obj := range createObj {
-			switch obj.(type) {
-			case *esv1.Elasticsearch:
-				By("setting the Elasticsearch status to operational so we pass the Elasticsearch ready check")
-				es := obj.(*esv1.Elasticsearch)
-				es.Status.Phase = esv1.ElasticsearchReadyPhase
-				obj = es
-
-			case *kbv1.Kibana:
-				By("setting the Kibana status to operational so we pass the Kibana ready check")
-				kb := obj.(*kbv1.Kibana)
-				kb.Status.AssociationStatus = cmnv1.AssociationEstablished
-				obj = kb
-			}
-
-			Expect(cli.Create(ctx, obj)).ShouldNot(HaveOccurred())
+		case *kbv1.Kibana:
+			By("setting the Kibana status to operational so we pass the Kibana ready check")
+			kb := obj.(*kbv1.Kibana)
+			kb.Status.AssociationStatus = cmnv1.AssociationEstablished
+			obj = kb
 		}
+
+		Expect(cli.Create(ctx, obj)).ShouldNot(HaveOccurred())
 	}
 
 	Expect(

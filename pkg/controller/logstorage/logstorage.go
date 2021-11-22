@@ -129,6 +129,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 	}
 
 	var components []render.Component
+
 	if esCertSecret != nil && esOperatorManagedCertSecret {
 		components = append(components, render.NewPassthrough([]client.Object{esCertSecret}))
 	}
@@ -214,7 +215,7 @@ func (r *ReconcileLogStorage) validateLogStorage(curatorSecrets []*corev1.Secret
 	}
 
 	// kube-controller creates the ConfigMap and Secret needed for SSO into Kibana.
-	// If elastisearch uses basic license, degrade logstorage if the ConfigMap and Secret
+	// If elasticsearch uses basic license, degrade logstorage if the ConfigMap and Secret
 	// needed for logging user into Kibana is not available.
 	if esLicenseType == render.ElasticsearchLicenseTypeBasic {
 		if err = r.checkOIDCUsersEsResource(ctx); err != nil {

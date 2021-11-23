@@ -57,7 +57,8 @@ func (r *ReconcileLogStorage) createLogStorage(
 	ctx context.Context,
 ) (reconcile.Result, bool, bool, error) {
 	var esInternalCertSecret, esCertSecret *corev1.Secret
-	var kibanaSecrets []*corev1.Secret
+	var kbCertSecret, kbInternalCertSecret *corev1.Secret
+	var kbOperatorManagedCertSecret bool
 	var err error
 	finalizerCleanup := false
 
@@ -81,7 +82,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 			return reconcile.Result{}, false, finalizerCleanup, err
 		}
 
-		if kibanaSecrets, err = r.kibanaInternalSecrets(ctx, install); err != nil {
+		if kbCertSecret, kbOperatorManagedCertSecret, kbInternalCertSecret, err = r.kibanaInternalSecrets(ctx, install); err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Failed to create kibana secrets", err.Error())
 			return reconcile.Result{}, false, finalizerCleanup, err
@@ -126,6 +127,11 @@ func (r *ReconcileLogStorage) createLogStorage(
 		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexCertSecret, dexSecret, r.clusterDomain)
 	}
 
+	var components []render.Component
+	if kbCertSecret != nil && kbOperatorManagedCertSecret {
+		components = append(components, render.NewPassthrough([]client.Object{kbCertSecret}))
+	}
+
 	logStorageCfg := &render.ElasticsearchConfiguration{
 		LogStorage:                  ls,
 		Installation:                install,
@@ -135,7 +141,8 @@ func (r *ReconcileLogStorage) createLogStorage(
 		Kibana:                      kibana,
 		ClusterConfig:               clusterConfig,
 		ElasticsearchSecrets:        []*corev1.Secret{esCertSecret, esInternalCertSecret, esAdminUserSecret},
-		KibanaSecrets:               kibanaSecrets,
+		KibanaCertSecret:            kbCertSecret,
+		KibanaInternalCertSecret:    kbInternalCertSecret,
 		PullSecrets:                 pullSecrets,
 		Provider:                    r.provider,
 		CuratorSecrets:              curatorSecrets,
@@ -154,10 +161,13 @@ func (r *ReconcileLogStorage) createLogStorage(
 		return reconcile.Result{}, false, finalizerCleanup, err
 	}
 
-	if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
-		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Error creating / updating resource", err.Error())
-		return reconcile.Result{}, false, finalizerCleanup, err
+	components = append(components, component)
+	for _, component := range components {
+		if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+			reqLogger.Error(err, err.Error())
+			r.status.SetDegraded("Error creating / updating resource", err.Error())
+			return reconcile.Result{}, false, finalizerCleanup, err
+		}
 	}
 
 	if ls != nil && ls.DeletionTimestamp != nil && elasticsearch == nil && kibana == nil {

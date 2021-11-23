@@ -500,10 +500,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		reqLogger.Error(err, fmt.Sprintf("failed to retrieve %s", render.PrometheusTLSSecretName))
 		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s", render.PrometheusTLSSecretName), err.Error())
 		return reconcile.Result{}, err
-	} else if prometheusCertSecret == nil {
-		reqLogger.Info(fmt.Sprintf("Waiting for secret '%s' to become available", render.PrometheusTLSSecretName))
-		r.status.SetDegraded(fmt.Sprintf("Waiting for secret '%s' to become available", render.PrometheusTLSSecretName), "")
-		return reconcile.Result{}, nil
 	}
 
 	// Create a component handler to manage the rendered component.

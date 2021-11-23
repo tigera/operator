@@ -559,7 +559,7 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 	}
 
 	// Ensure that cert is valid.
-	esKeyCert, err = utils.EnsureCertificateSecret(render.TigeraElasticsearchInternalCertSecret, esKeyCert, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, svcDNSNames...)
+	esKeyCert, _, err = utils.EnsureCertificateSecret(render.TigeraElasticsearchInternalCertSecret, esKeyCert, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, svcDNSNames...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -599,62 +599,53 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 	return esKeyCert, certSecret, err
 }
 
-func (r *ReconcileLogStorage) kibanaInternalSecrets(ctx context.Context, instl *operatorv1.InstallationSpec) ([]*corev1.Secret, error) {
+func (r *ReconcileLogStorage) kibanaInternalSecrets(ctx context.Context, instl *operatorv1.InstallationSpec) (*corev1.Secret, *corev1.Secret, bool, error) {
 
-	var secrets []*corev1.Secret
 	svcDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
+	operatorManaged := false
 
 	// Get the secret - might be nil
 	secret, err := utils.GetSecret(ctx, r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace())
 	if err != nil {
-		return nil, err
+		return nil, nil, operatorManaged, err
 	}
 
 	// Ensure that cert is valid.
-	secret, err = utils.EnsureCertificateSecret(render.TigeraKibanaCertSecret, secret, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, svcDNSNames...)
+	secret, operatorManaged, err = utils.EnsureCertificateSecret(render.TigeraKibanaCertSecret, secret, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, svcDNSNames...)
 	if err != nil {
-		return nil, err
+		return nil, nil, operatorManaged, err
 	}
 
 	if instl.CertificateManagement != nil {
-		return []*corev1.Secret{
-			secret,
-			rsecret.CopyToNamespace(render.KibanaNamespace, secret)[0],
-			render.CreateCertificateSecret(instl.CertificateManagement.CACert, relasticsearch.InternalCertSecret, render.KibanaNamespace),
-			render.CreateCertificateSecret(instl.CertificateManagement.CACert, render.KibanaInternalCertSecret, common.OperatorNamespace()),
-		}, nil
+		return secret, nil, operatorManaged, nil
 	}
-
-	secrets = append(secrets, secret, rsecret.CopyToNamespace(render.KibanaNamespace, secret)[0])
 
 	// Get the pub secret - might be nil
 	internalSecret, err := utils.GetSecret(ctx, r.client, render.KibanaInternalCertSecret, render.KibanaNamespace)
 	if err != nil {
-		return nil, err
+		return nil, nil, operatorManaged, err
 	}
 
 	if internalSecret == nil {
 		log.Info(fmt.Sprintf("Internal cert secret %q not found yet", render.KibanaInternalCertSecret))
-		return secrets, nil
+		return secret, nil, operatorManaged, nil
 	}
 
 	issuer, err := utils.GetCertificateIssuer(secret.Data[corev1.TLSCertKey])
 	if err != nil {
-		return nil, err
+		return nil, nil, operatorManaged, err
 	}
 
 	if utils.IsOperatorIssued(issuer) {
 		err = utils.SecretHasExpectedDNSNames(internalSecret, corev1.TLSCertKey, svcDNSNames)
 		if err == utils.ErrInvalidCertDNSNames {
 			if err := logstoragecommon.DeleteInvalidECKManagedPublicCertSecret(ctx, internalSecret, r.client, log); err != nil {
-				return nil, err
+				return nil, nil, operatorManaged, err
 			}
 		}
 	}
-	// If the cert was not deleted, copy the valid cert to operator namespace.
-	secrets = append(secrets, rsecret.CopyToNamespace(common.OperatorNamespace(), internalSecret)...)
 
-	return secrets, nil
+	return secret, internalSecret, operatorManaged, nil
 }
 
 func (r *ReconcileLogStorage) getElasticsearch(ctx context.Context) (*esv1.Elasticsearch, error) {

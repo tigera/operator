@@ -25,7 +25,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -55,8 +54,6 @@ const (
 	// will be HostNetwoked. This is configurable in the configMap passed to TigeraPrometheusAPI
 	tigeraPrometheusAPIListenPortFieldName = "tigeraPrometheusAPIListenPort"
 )
-
-var log = logf.Log.WithName("prometheus_api")
 
 func TigeraPrometheusAPI(cr *operatorv1.InstallationSpec, pullSecrets []*corev1.Secret, configMap *corev1.ConfigMap) (render.Component, error) {
 

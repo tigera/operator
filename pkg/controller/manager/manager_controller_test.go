@@ -102,6 +102,7 @@ var _ = Describe("Manager controller tests", func() {
 			mockStatus.On("ClearDegraded")
 			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
 			mockStatus.On("SetDegraded", "Waiting for secret 'tigera-packetcapture-server-tls' to become available", "").Return().Maybe()
+			mockStatus.On("SetDegraded", "Waiting for secret 'calico-node-prometheus-tls' to become available", "").Return().Maybe()
 			mockStatus.On("ReadyToMonitor")
 
 			r = ReconcileManager{
@@ -175,6 +176,17 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.PacketCaptureCertSecret,
+					Namespace: common.OperatorNamespace(),
+				},
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				Data: map[string][]byte{
+					"tls.crt": []byte("crt"),
+					"tls.key": []byte("crt"),
+				},
+			})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.PrometheusTLSSecretName,
 					Namespace: common.OperatorNamespace(),
 				},
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
@@ -363,6 +375,7 @@ var _ = Describe("Manager controller tests", func() {
 			mockStatus.On("OnCRFound").Return()
 			mockStatus.On("ClearDegraded")
 			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+			mockStatus.On("SetDegraded", "Waiting for secret 'calico-node-prometheus-tls' to become available", "").Return().Maybe()
 			mockStatus.On("SetDegraded", "Waiting for secret 'tigera-packetcapture-server-tls' to become available", "").Return().Maybe()
 			mockStatus.On("ReadyToMonitor")
 
@@ -436,6 +449,17 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.PacketCaptureCertSecret,
+					Namespace: common.OperatorNamespace(),
+				},
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				Data: map[string][]byte{
+					"tls.crt": []byte("crt"),
+					"tls.key": []byte("crt"),
+				},
+			})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.PrometheusTLSSecretName,
 					Namespace: common.OperatorNamespace(),
 				},
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},

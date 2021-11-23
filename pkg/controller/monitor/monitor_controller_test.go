@@ -69,6 +69,7 @@ var _ = Describe("Monitor controller tests", func() {
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ReadyToMonitor")
+		mockStatus.On("RemoveCertificateSigningRequests", common.TigeraPrometheusNamespace)
 
 		// Create an object we can use throughout the test to do the monitor reconcile loops.
 		r = ReconcileMonitor{

@@ -69,7 +69,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		mockStatus.On("AddStatefulSets", mock.Anything)
 		mockStatus.On("AddCronJobs", mock.Anything)
 		mockStatus.On("ClearDegraded", mock.Anything)
-		mockStatus.On("SetDegraded", mock.Anything)
+		mockStatus.On("SetDegraded", mock.Anything, mock.Anything)
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ReadyToMonitor")
 
@@ -103,6 +103,16 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 			},
 		}
 		c.Create(ctx, pcSecret)
+		c.Create(ctx, &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      render.PrometheusTLSSecretName,
+				Namespace: common.OperatorNamespace(),
+			},
+			Data: map[string][]byte{
+				"tls.crt": []byte("foo"),
+				"tls.key": []byte("bar"),
+			},
+		})
 
 		By("applying the required prerequisites")
 		// Create a ManagementClusterConnection in the k8s client.

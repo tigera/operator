@@ -781,16 +781,8 @@ var _ = Describe("LogStorage controller", func() {
 							Name: "tigera-secure",
 						},
 						Spec: operatorv1.LogStorageSpec{
-							Nodes: &operatorv1.Nodes{
-								Count: int64(1),
-							},
 							StorageClassName: storageClassName,
 						},
-					})).ShouldNot(HaveOccurred())
-
-					Expect(cli.Create(ctx, &corev1.ConfigMap{
-						ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
-						Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 					})).ShouldNot(HaveOccurred())
 
 					testCA := test.MakeTestCA("logstorage-test")

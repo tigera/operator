@@ -82,7 +82,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 			return reconcile.Result{}, false, finalizerCleanup, err
 		}
 
-		if kbCertSecret, kbInternalCertSecret, kbOperatorManagedCertSecret, err = r.kibanaInternalSecrets(ctx, install); err != nil {
+		if kbCertSecret, kbOperatorManagedCertSecret, kbInternalCertSecret, err = r.kibanaInternalSecrets(ctx, install); err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Failed to create kibana secrets", err.Error())
 			return reconcile.Result{}, false, finalizerCleanup, err

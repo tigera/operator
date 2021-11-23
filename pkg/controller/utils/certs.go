@@ -57,7 +57,7 @@ func GetSecret(ctx context.Context, client client.Client, name string, ns string
 // EnsureCertificateSecret ensures that the certificate in the
 // secret has the expected DNS names. If no secret is provided, a new secret is created.
 // The first returned value (*corev1.Secret) is the validated or created Secret to use.
-// The second returned value (bool) is true if the Secret returned was generated and needs to be created, otherwise false is returned.
+// The second returned value (bool) is true if the Secret returned is managed by the operator or false if the secret is user-supplied.
 // The third returned value (error) is nil if the Secret pass in is valid or was created successfully. If there was a
 // problem creating the certificate or the Secret has invalid DNS names and the secret is not operator managed, an error is returned.
 func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName string, certName string, certDuration time.Duration, svcDNSNames ...string) (*corev1.Secret, bool, error) {

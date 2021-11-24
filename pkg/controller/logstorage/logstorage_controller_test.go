@@ -769,6 +769,82 @@ var _ = Describe("LogStorage controller", func() {
 					mockStatus.AssertExpectations(GinkgoT())
 				})
 
+				It("test that LogStorage creates a kibana TLS cert secret if not provided and add an OwnerReference to it", func() {
+					Expect(cli.Create(ctx, &storagev1.StorageClass{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: storageClassName,
+						},
+					})).ShouldNot(HaveOccurred())
+
+					Expect(cli.Create(ctx, &operatorv1.LogStorage{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "tigera-secure",
+						},
+						Spec: operatorv1.LogStorageSpec{
+							StorageClassName: storageClassName,
+						},
+					})).ShouldNot(HaveOccurred())
+
+					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					mockStatus.On("SetDegraded", "Waiting for Elasticsearch cluster to be operational", "").Return()
+					result, err := r.Reconcile(ctx, reconcile.Request{})
+					Expect(err).ShouldNot(HaveOccurred())
+					// Expect to be waiting for Elasticsearch and Kibana to be functional
+					Expect(result).Should(Equal(reconcile.Result{}))
+
+					secret := &corev1.Secret{}
+
+					Expect(cli.Get(ctx, kbCertSecretOperKey, secret)).ShouldNot(HaveOccurred())
+					Expect(secret.GetOwnerReferences()).To(HaveLen(1))
+
+					Expect(cli.Get(ctx, kbCertSecretKey, secret)).ShouldNot(HaveOccurred())
+					Expect(secret.GetOwnerReferences()).To(HaveLen(1))
+				})
+
+				It("should not add OwnerReference to user supplied kibana TLS cert", func() {
+					Expect(cli.Create(ctx, &storagev1.StorageClass{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: storageClassName,
+						},
+					})).ShouldNot(HaveOccurred())
+
+					Expect(cli.Create(ctx, &operatorv1.LogStorage{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "tigera-secure",
+						},
+						Spec: operatorv1.LogStorageSpec{
+							StorageClassName: storageClassName,
+						},
+					})).ShouldNot(HaveOccurred())
+
+					testCA := test.MakeTestCA("logstorage-test")
+					kbSecret, err := secret.CreateTLSSecret(testCA,
+						render.TigeraKibanaCertSecret, common.OperatorNamespace(), "tls.key", "tls.crt",
+						rmeta.DefaultCertificateDuration, nil, "tigera-secure-kb-http.tigera-elasticsearch.svc",
+					)
+					Expect(err).ShouldNot(HaveOccurred())
+					Expect(cli.Create(ctx, kbSecret)).ShouldNot(HaveOccurred())
+
+					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					mockStatus.On("SetDegraded", "Waiting for Elasticsearch cluster to be operational", "").Return()
+					result, err := r.Reconcile(ctx, reconcile.Request{})
+					Expect(err).ShouldNot(HaveOccurred())
+					// Expect to be waiting for Elasticsearch and Kibana to be functional
+					Expect(result).Should(Equal(reconcile.Result{}))
+
+					secret := &corev1.Secret{}
+
+					Expect(cli.Get(ctx, kbCertSecretOperKey, secret)).ShouldNot(HaveOccurred())
+					Expect(secret.GetOwnerReferences()).To(HaveLen(0))
+
+					Expect(cli.Get(ctx, kbCertSecretKey, secret)).ShouldNot(HaveOccurred())
+					Expect(secret.GetOwnerReferences()).To(HaveLen(1))
+				})
+
 				Context("checking rendered images", func() {
 					BeforeEach(func() {
 						mockStatus.On("ClearDegraded", mock.Anything)
@@ -1308,7 +1384,6 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 		Kibana:                      &kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaName, Namespace: render.KibanaNamespace}},
 		ClusterConfig:               relasticsearch.NewClusterConfig("cluster", 1, 1, 1),
 		ElasticsearchSecrets:        toSecrets(createESSecrets()),
-		KibanaSecrets:               toSecrets(createKibanaSecrets()),
 		PullSecrets: []*corev1.Secret{
 			{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 		},
@@ -1399,12 +1474,9 @@ func createKibanaSecrets() []client.Object {
 	)
 	Expect(err).ShouldNot(HaveOccurred())
 
-	kbOperNsSecret := secret.CopyToNamespace(render.KibanaNamespace, kbSecret)[0]
-
 	kbPublicSecret := createPubSecret(render.KibanaPublicCertSecret, render.KibanaNamespace, kbSecret.Data["tls.crt"], "tls.crt")
 	return []client.Object{
 		kbSecret,
-		kbOperNsSecret,
 		kbPublicSecret,
 	}
 }

@@ -705,7 +705,6 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("AddCertificateSigningRequests", mock.Anything)
 			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
-			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
 			mockStatus.On("SetWindowsUpgradeStatus", mock.Anything, mock.Anything, mock.Anything, nil)
 
 			// Create the indexer and informer shared by the typhaAutoscaler and
@@ -805,6 +804,24 @@ var _ = Describe("Testing core-controller installation", func() {
 			dnsNames = append(dnsNames, "localhost")
 			Expect(test.GetResource(c, internalManagerTLSSecret)).To(BeNil())
 			test.VerifyCert(internalManagerTLSSecret, render.ManagerInternalSecretKeyName, render.ManagerInternalSecretCertName, dnsNames...)
+		})
+
+		It("should create typha and node TLS cert secrets if not provided and add OwnerReference to those", func() {
+
+			exited := false
+			osExitOverride = func(_ int) { exited = false }
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(exited).Should(BeFalse())
+
+			secret := &corev1.Secret{}
+
+			Expect(c.Get(ctx, client.ObjectKey{Name: render.NodeTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
+			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
+
+			Expect(c.Get(ctx, client.ObjectKey{Name: render.TyphaTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
+			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
 		})
 
 		It("should not add OwnerReference to user supplied typha and node certs", func() {

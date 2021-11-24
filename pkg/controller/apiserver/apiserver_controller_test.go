@@ -241,10 +241,7 @@ var _ = Describe("apiserver controller tests", func() {
 		It("should not add OwnerReference to user-supplied apiserver and packetcapture TLS cert secrets", func() {
 			setUpApiServerInstallation(cli, ctx, variant, nil)
 
-			secretName := "calico-apiserver-certs"
-			if variant == operatorv1.TigeraSecureEnterprise {
-				secretName = "tigera-apiserver-certs"
-			}
+			secretName := render.ApiServerTLSSecretName(variant)
 
 			testCA := test.MakeTestCA("apiserver-test")
 			apiSecret, err := secret.CreateTLSSecret(testCA,

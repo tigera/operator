@@ -886,7 +886,7 @@ var _ = Describe("LogStorage controller", func() {
 							ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
 							Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 						},
-						&corev1.Secret {
+						&corev1.Secret{
 							ObjectMeta: metav1.ObjectMeta{
 								Name:      render.ElasticsearchAdminUserSecret,
 								Namespace: render.ElasticsearchNamespace,
@@ -895,7 +895,7 @@ var _ = Describe("LogStorage controller", func() {
 								"elastic": []byte("password"),
 							},
 						},
-						&corev1.Secret {
+						&corev1.Secret{
 							ObjectMeta: metav1.ObjectMeta{
 								Name:      render.KibanaInternalCertSecret,
 								Namespace: common.OperatorNamespace(),
@@ -963,7 +963,7 @@ var _ = Describe("LogStorage controller", func() {
 							ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
 							Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 						},
-						&corev1.Secret {
+						&corev1.Secret{
 							ObjectMeta: metav1.ObjectMeta{
 								Name:      render.ElasticsearchAdminUserSecret,
 								Namespace: render.ElasticsearchNamespace,
@@ -972,7 +972,7 @@ var _ = Describe("LogStorage controller", func() {
 								"elastic": []byte("password"),
 							},
 						},
-						&corev1.Secret {
+						&corev1.Secret{
 							ObjectMeta: metav1.ObjectMeta{
 								Name:      render.KibanaInternalCertSecret,
 								Namespace: common.OperatorNamespace(),

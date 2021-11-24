@@ -324,7 +324,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	if variant == operatorv1.TigeraSecureEnterprise {
 
 		var packetCaptureCertSecret *v1.Secret
-		var renderSecret bool
+		operatorManagedPacketCaptureSecret := true
 		if network.CertificateManagement == nil {
 			packetCaptureCertSecret, err = utils.ValidateCertPair(r.client,
 				common.OperatorNamespace(),
@@ -342,7 +342,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			// has the expected DNS names. If the cert doesn't and the cert is managed by the
 			// operator, the cert is recreated and returned. If the invalid cert is supplied by
 			// the user, set the component degraded.
-			packetCaptureCertSecret, renderSecret, err = utils.EnsureCertificateSecret(
+			packetCaptureCertSecret, operatorManagedPacketCaptureSecret, err = utils.EnsureCertificateSecret(
 				render.PacketCaptureCertSecret, packetCaptureCertSecret, v1.TLSPrivateKeyKey, v1.TLSCertKey, rmeta.DefaultCertificateDuration, dns.GetServiceDNSNames(render.PacketCaptureServiceName, render.PacketCaptureNamespace, r.clusterDomain)...,
 			)
 			if err != nil {
@@ -351,11 +351,10 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			}
 		} else {
 			packetCaptureCertSecret = render.CreateCertificateSecret(network.CertificateManagement.CACert, render.PacketCaptureCertSecret, common.OperatorNamespace())
-			renderSecret = true
 		}
 
-		if renderSecret {
-			components = append(components, render.Secrets([]*v1.Secret{packetCaptureCertSecret}))
+		if operatorManagedPacketCaptureSecret {
+			components = append(components, render.NewPassthrough([]client.Object{packetCaptureCertSecret}))
 		}
 
 		// Fetch the Authentication spec. If present, we use to configure user authentication.

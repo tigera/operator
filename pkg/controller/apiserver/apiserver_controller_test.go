@@ -238,7 +238,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(pcSecret).NotTo(BeNil())
 		})
 
-		It("should not add OwnerReference to user supplied apiserver and packetcapture TLS certs", func() {
+		It("should not add OwnerReference to user-supplied apiserver and packetcapture TLS cert secrets", func() {
 			setUpApiServerInstallation(cli, ctx, variant, nil)
 
 			secretName := "calico-apiserver-certs"
@@ -275,6 +275,32 @@ var _ = Describe("apiserver controller tests", func() {
 
 			Expect(cli.Get(ctx, client.ObjectKey{Namespace: common.OperatorNamespace(), Name: render.PacketCaptureCertSecret}, packetCaptureSecret)).ShouldNot(HaveOccurred())
 			Expect(packetCaptureSecret.GetOwnerReferences()).To(HaveLen(0))
+		})
+
+
+		It("should add OwnerReference apiserver and packetcapture TLS cert operator managed secrets", func() {
+			setUpApiServerInstallation(cli, ctx, variant, nil)
+
+			secretName := "calico-apiserver-certs"
+			if variant == operatorv1.TigeraSecureEnterprise {
+				secretName = "tigera-apiserver-certs"
+			}
+
+			r := ReconcileAPIServer{
+				client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
+			}
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			secret := &v1.Secret{}
+			Expect(cli.Get(ctx, client.ObjectKey{Namespace: common.OperatorNamespace(), Name: secretName}, secret)).ShouldNot(HaveOccurred())
+			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
+
+			Expect(cli.Get(ctx, client.ObjectKey{Namespace: common.OperatorNamespace(), Name: render.PacketCaptureCertSecret}, secret)).ShouldNot(HaveOccurred())
+			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
 		})
 	})
 })

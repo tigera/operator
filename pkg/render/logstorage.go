@@ -18,10 +18,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/tigera/operator/pkg/common"
 	"hash/fnv"
 	"net/url"
 	"strings"
+
+	"github.com/tigera/operator/pkg/common"
 
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"

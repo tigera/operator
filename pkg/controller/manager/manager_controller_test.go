@@ -255,6 +255,16 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(secret.Data).To(Equal(userSecret.Data))
 		})
 
+		It("should create a manager TLS cert secret if not provided and add an OwnerReference to it", func() {
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			secret := &corev1.Secret{}
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
+			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
+		})
+
 		It("should not add OwnerReference to an user supplied manager TLS cert", func() {
 			// Create a manager cert secret.
 			dnsNames := []string{"manager.example.com", "192.168.10.22"}

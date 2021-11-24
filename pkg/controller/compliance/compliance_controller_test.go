@@ -272,6 +272,18 @@ var _ = Describe("Compliance controller tests", func() {
 		assertExpectedCertDNSNames(c, dnsNames...)
 	})
 
+	It("test that Compliance creates a TLS cert secret if not provided and add an OwnerReference to it", func() {
+
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).NotTo(HaveOccurred())
+
+		secret := &corev1.Secret{}
+
+		err = c.Get(ctx, client.ObjectKey{Name: render.ComplianceServerCertSecret, Namespace: common.OperatorNamespace()}, secret)
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(secret.GetOwnerReferences()).To(HaveLen(1))
+	})
+
 	It("should not add OwnerReference to an user supplied compliance TLS cert", func() {
 
 		dnsNames := dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, dns.DefaultClusterDomain)

@@ -305,6 +305,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	var complianceServerCertSecret *corev1.Secret
+	operatorManagedComplianceSecret := true
 	if network.CertificateManagement == nil {
 		complianceServerCertSecret, err = utils.ValidateCertPair(r.client,
 			common.OperatorNamespace(),
@@ -323,7 +324,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		// operator, the cert is recreated and returned. If the invalid cert is supplied by
 		// the user, set the component degraded.
 
-		complianceServerCertSecret, err = utils.EnsureCertificateSecret(
+		complianceServerCertSecret, operatorManagedComplianceSecret, err = utils.EnsureCertificateSecret(
 			render.ComplianceServerCertSecret, complianceServerCertSecret, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, r.clusterDomain)...,
 		)
 		if err != nil {
@@ -353,6 +354,11 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		log.Error(err, "Failed to process the authentication CR.")
 		r.status.SetDegraded("Failed to process the authentication CR.", err.Error())
 		return reconcile.Result{}, err
+	}
+
+	var components []render.Component
+	if operatorManagedComplianceSecret {
+		components = append(components, render.NewPassthrough([]client.Object{complianceServerCertSecret}))
 	}
 
 	reqLogger.V(3).Info("rendering components")
@@ -386,9 +392,12 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	if err := handler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
-		r.status.SetDegraded("Error creating / updating / deleting resource", err.Error())
-		return reconcile.Result{}, err
+	components = append(components, component)
+	for _, component := range components {
+		if err := handler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+			r.status.SetDegraded("Error creating / updating / deleting resource", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	if hasNoLicense {

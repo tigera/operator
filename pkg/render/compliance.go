@@ -62,8 +62,7 @@ const (
 )
 
 func Compliance(cfg *ComplianceConfiguration) (Component, error) {
-	complianceServerCertSecrets := []*corev1.Secret{cfg.ComplianceServerCertSecret}
-	complianceServerCertSecrets = append(complianceServerCertSecrets, secret.CopyToNamespace(ComplianceNamespace, cfg.ComplianceServerCertSecret)...)
+	complianceServerCertSecrets := secret.CopyToNamespace(ComplianceNamespace, cfg.ComplianceServerCertSecret)
 
 	return &complianceComponent{
 		cfg:                         cfg,

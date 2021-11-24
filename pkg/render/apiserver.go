@@ -33,7 +33,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/dns"
@@ -51,14 +50,14 @@ const (
 
 // The following functions are helpers for determining resource names based on
 // the configured product variant.
-func apiServerTLSSecretName(v operatorv1.ProductVariant) string {
+func ApiServerTLSSecretName(v operatorv1.ProductVariant) string {
 	if v == operatorv1.Calico {
 		return "calico-apiserver-certs"
 	}
 	return "tigera-apiserver-certs"
 }
 
-func apiserverServiceName(v operatorv1.ProductVariant) string {
+func ApiserverServiceName(v operatorv1.ProductVariant) string {
 	if v == operatorv1.Calico {
 		return "calico-api"
 	}
@@ -85,29 +84,13 @@ func APIServer(cfg *APIServerConfiguration) (Component, error) {
 	tlsHashAnnotations := make(map[string]string)
 
 	if cfg.Installation.CertificateManagement == nil {
-		svcDNSNames := dns.GetServiceDNSNames(apiserverServiceName(cfg.Installation.Variant), rmeta.APIServerNamespace(cfg.Installation.Variant), cfg.ClusterDomain)
-		if cfg.TLSKeyPair == nil {
-			var err error
-			cfg.TLSKeyPair, err = secret.CreateTLSSecret(nil,
-				apiServerTLSSecretName(cfg.Installation.Variant),
-				common.OperatorNamespace(),
-				APIServerSecretKeyName,
-				APIServerSecretCertName,
-				rmeta.DefaultCertificateDuration,
-				nil,
-				svcDNSNames...,
-			)
-			if err != nil {
-				return nil, err
-			}
-			// We only need to add the TLSKeyPair if we created it, otherwise
-			// it already exists.
-			tlsSecrets = []*corev1.Secret{cfg.TLSKeyPair}
+		if cfg.TLSKeyPairAnnotationHash {
 			tlsHashAnnotations[TlsSecretHashAnnotation] = rmeta.AnnotationHash(cfg.TLSKeyPair.Data)
 		}
+
 		copy := cfg.TLSKeyPair.DeepCopy()
 		copy.ObjectMeta = metav1.ObjectMeta{
-			Name:      apiServerTLSSecretName(cfg.Installation.Variant),
+			Name:      ApiServerTLSSecretName(cfg.Installation.Variant),
 			Namespace: rmeta.APIServerNamespace(cfg.Installation.Variant),
 		}
 		tlsSecrets = append(tlsSecrets, copy)
@@ -142,6 +125,7 @@ type APIServerConfiguration struct {
 	Openshift                   bool
 	TunnelCASecret              *corev1.Secret
 	ClusterDomain               string
+	TLSKeyPairAnnotationHash    bool
 }
 
 type apiServerComponent struct {
@@ -238,7 +222,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	// Add in certificates for API server TLS.
 	if c.cfg.Installation.CertificateManagement == nil {
 		namespacedObjects = append(namespacedObjects, c.getTLSObjects()...)
-		globalObjects = append(globalObjects, c.apiServiceRegistration(c.tlsSecrets[0].Data[APIServerSecretCertName]))
+		globalObjects = append(globalObjects, c.apiServiceRegistration(c.cfg.TLSKeyPair.Data[APIServerSecretCertName]))
 	} else {
 		namespacedObjects = append(namespacedObjects, c.apiServiceRegistration(c.cfg.Installation.CertificateManagement.CACert))
 		globalObjects = append(globalObjects, CSRClusterRoleBinding(csrRolebindingName(c.cfg.Installation.Variant), rmeta.APIServerNamespace(c.cfg.Installation.Variant)))
@@ -315,7 +299,7 @@ func (c *apiServerComponent) apiServiceRegistration(cert []byte) *apiregv1.APISe
 			VersionPriority:      200,
 			GroupPriorityMinimum: 1500,
 			Service: &apiregv1.ServiceReference{
-				Name:      apiserverServiceName(c.cfg.Installation.Variant),
+				Name:      ApiserverServiceName(c.cfg.Installation.Variant),
 				Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 			},
 			Version:  "v3",
@@ -735,7 +719,7 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 	s := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      apiserverServiceName(c.cfg.Installation.Variant),
+			Name:      ApiserverServiceName(c.cfg.Installation.Variant),
 			Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 		},
 		Spec: corev1.ServiceSpec{
@@ -790,10 +774,10 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 		initContainers = append(initContainers, CreateCSRInitContainer(
 			c.cfg.Installation.CertificateManagement,
 			c.certSignReqImage,
-			apiServerTLSSecretName(c.cfg.Installation.Variant), TLSSecretCertName,
+			ApiServerTLSSecretName(c.cfg.Installation.Variant), TLSSecretCertName,
 			APIServerSecretKeyName,
 			APIServerSecretCertName,
-			dns.GetServiceDNSNames(apiserverServiceName(c.cfg.Installation.Variant), rmeta.APIServerNamespace(c.cfg.Installation.Variant), c.cfg.ClusterDomain),
+			dns.GetServiceDNSNames(ApiserverServiceName(c.cfg.Installation.Variant), rmeta.APIServerNamespace(c.cfg.Installation.Variant), c.cfg.ClusterDomain),
 			rmeta.APIServerNamespace(c.cfg.Installation.Variant)))
 	}
 
@@ -874,7 +858,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	}
 
 	volumeMounts = append(volumeMounts,
-		corev1.VolumeMount{Name: apiServerTLSSecretName(c.cfg.Installation.Variant), MountPath: "/code/apiserver.local.config/certificates"},
+		corev1.VolumeMount{Name: ApiServerTLSSecretName(c.cfg.Installation.Variant), MountPath: "/code/apiserver.local.config/certificates"},
 	)
 
 	if c.cfg.ManagementCluster != nil {
@@ -1053,8 +1037,8 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 
 	volumes = append(volumes,
 		corev1.Volume{
-			Name:         apiServerTLSSecretName(c.cfg.Installation.Variant),
-			VolumeSource: certificateVolumeSource(c.cfg.Installation.CertificateManagement, apiServerTLSSecretName(c.cfg.Installation.Variant)),
+			Name:         ApiServerTLSSecretName(c.cfg.Installation.Variant),
+			VolumeSource: certificateVolumeSource(c.cfg.Installation.CertificateManagement, ApiServerTLSSecretName(c.cfg.Installation.Variant)),
 		},
 	)
 

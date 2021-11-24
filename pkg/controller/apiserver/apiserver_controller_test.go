@@ -29,6 +29,10 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/test"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/dns"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/secret"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -47,6 +51,7 @@ var _ = Describe("apiserver controller tests", func() {
 		scheme     *runtime.Scheme
 		ctx        context.Context
 		mockStatus *status.MockStatus
+		variant    operatorv1.ProductVariant
 	)
 
 	BeforeEach(func() {
@@ -72,30 +77,12 @@ var _ = Describe("apiserver controller tests", func() {
 		mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 		mockStatus.On("ReadyToMonitor")
 
-		var replicas int32 = 2
-		Expect(cli.Create(ctx, &operatorv1.Installation{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "default",
-			},
-			Status: operatorv1.InstallationStatus{
-				Variant:  operatorv1.TigeraSecureEnterprise,
-				Computed: &operatorv1.InstallationSpec{},
-			},
-			Spec: operatorv1.InstallationSpec{
-				ControlPlaneReplicas:  &replicas,
-				Variant:               operatorv1.TigeraSecureEnterprise,
-				Registry:              "some.registry.org/",
-				CertificateManagement: &operatorv1.CertificateManagement{},
-			},
-		})).To(BeNil())
-		// Apply prerequisites for the basic reconcile to succeed.
-		Expect(cli.Create(ctx, &operatorv1.APIServer{
-			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-		})).ToNot(HaveOccurred())
+		variant = operatorv1.TigeraSecureEnterprise
 	})
 
 	Context("verify reconciliation", func() {
 		It("should use builtin images", func() {
+			setUpApiServerInstallation(cli, ctx, variant, &operatorv1.CertificateManagement{})
 
 			r := ReconcileAPIServer{
 				client:          cli,
@@ -168,6 +155,8 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(pcSecret).NotTo(BeNil())
 		})
 		It("should use images from imageset", func() {
+			setUpApiServerInstallation(cli, ctx, variant, &operatorv1.CertificateManagement{})
+
 			Expect(cli.Create(ctx, &operatorv1.ImageSet{
 				ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
 				Spec: operatorv1.ImageSetSpec{
@@ -248,5 +237,90 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(test.GetResource(cli, &pcSecret)).To(BeNil())
 			Expect(pcSecret).NotTo(BeNil())
 		})
+
+		It("should not add OwnerReference to user-supplied apiserver and packetcapture TLS cert secrets", func() {
+			setUpApiServerInstallation(cli, ctx, variant, nil)
+
+			secretName := render.ApiServerTLSSecretName(variant)
+
+			testCA := test.MakeTestCA("apiserver-test")
+			apiSecret, err := secret.CreateTLSSecret(testCA,
+				secretName, common.OperatorNamespace(), render.APIServerSecretKeyName, render.APIServerSecretCertName,
+				rmeta.DefaultCertificateDuration, nil, "tigera-api", "tigera-system", dns.DefaultClusterDomain,
+			)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(cli.Create(ctx, apiSecret)).ShouldNot(HaveOccurred())
+
+			packetCaptureSecret, err := secret.CreateTLSSecret(testCA,
+				render.PacketCaptureCertSecret, common.OperatorNamespace(), v1.TLSPrivateKeyKey, v1.TLSCertKey,
+				rmeta.DefaultCertificateDuration, nil, dns.GetServiceDNSNames(render.PacketCaptureServiceName, render.PacketCaptureNamespace, dns.DefaultClusterDomain)...,
+			)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(cli.Create(ctx, packetCaptureSecret)).ShouldNot(HaveOccurred())
+
+			r := ReconcileAPIServer{
+				client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
+			}
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(cli.Get(ctx, client.ObjectKey{Namespace: common.OperatorNamespace(), Name: secretName}, apiSecret)).ShouldNot(HaveOccurred())
+			Expect(apiSecret.GetOwnerReferences()).To(HaveLen(0))
+
+			Expect(cli.Get(ctx, client.ObjectKey{Namespace: common.OperatorNamespace(), Name: render.PacketCaptureCertSecret}, packetCaptureSecret)).ShouldNot(HaveOccurred())
+			Expect(packetCaptureSecret.GetOwnerReferences()).To(HaveLen(0))
+		})
+
+		It("should add OwnerReference apiserver and packetcapture TLS cert operator managed secrets", func() {
+			setUpApiServerInstallation(cli, ctx, variant, nil)
+
+			secretName := "calico-apiserver-certs"
+			if variant == operatorv1.TigeraSecureEnterprise {
+				secretName = "tigera-apiserver-certs"
+			}
+
+			r := ReconcileAPIServer{
+				client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
+			}
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			secret := &v1.Secret{}
+			Expect(cli.Get(ctx, client.ObjectKey{Namespace: common.OperatorNamespace(), Name: secretName}, secret)).ShouldNot(HaveOccurred())
+			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
+
+			Expect(cli.Get(ctx, client.ObjectKey{Namespace: common.OperatorNamespace(), Name: render.PacketCaptureCertSecret}, secret)).ShouldNot(HaveOccurred())
+			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
+		})
 	})
 })
+
+func setUpApiServerInstallation(cli client.Client, ctx context.Context, variant operatorv1.ProductVariant, certificateManagement *operatorv1.CertificateManagement) {
+
+	replicas := int32(2)
+	Expect(cli.Create(ctx, &operatorv1.Installation{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "default",
+		},
+		Status: operatorv1.InstallationStatus{
+			Variant:  variant,
+			Computed: &operatorv1.InstallationSpec{},
+		},
+		Spec: operatorv1.InstallationSpec{
+			ControlPlaneReplicas:  &replicas,
+			Variant:               variant,
+			Registry:              "some.registry.org/",
+			CertificateManagement: certificateManagement,
+		},
+	})).To(BeNil())
+	// Apply prerequisites for the basic reconcile to succeed.
+	Expect(cli.Create(ctx, &operatorv1.APIServer{
+		ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+	})).ToNot(HaveOccurred())
+}

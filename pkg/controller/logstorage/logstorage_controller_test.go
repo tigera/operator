@@ -845,6 +845,91 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(secret.GetOwnerReferences()).To(HaveLen(1))
 				})
 
+				It("should not add OwnerReference to user supplied ES gateway TLS cert", func() {
+
+					resources := []client.Object{
+						&storagev1.StorageClass{
+							ObjectMeta: metav1.ObjectMeta{
+								Name: storageClassName,
+							},
+						},
+						&operatorv1.LogStorage{
+							ObjectMeta: metav1.ObjectMeta{
+								Name: "tigera-secure",
+							},
+							Spec: operatorv1.LogStorageSpec{
+								Nodes: &operatorv1.Nodes{
+									Count: int64(1),
+								},
+								StorageClassName: storageClassName,
+							},
+						},
+						&esv1.Elasticsearch{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      render.ElasticsearchName,
+								Namespace: render.ElasticsearchNamespace,
+							},
+							Status: esv1.ElasticsearchStatus{
+								Phase: esv1.ElasticsearchReadyPhase,
+							},
+						},
+						&kbv1.Kibana{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      render.KibanaName,
+								Namespace: render.KibanaNamespace,
+							},
+							Status: kbv1.KibanaStatus{
+								AssociationStatus: cmnv1.AssociationEstablished,
+							},
+						},
+						&corev1.ConfigMap{
+							ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
+							Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
+						},
+						&corev1.Secret {
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      render.ElasticsearchAdminUserSecret,
+								Namespace: render.ElasticsearchNamespace,
+							},
+							Data: map[string][]byte{
+								"elastic": []byte("password"),
+							},
+						},
+						&corev1.Secret {
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      render.KibanaInternalCertSecret,
+								Namespace: common.OperatorNamespace(),
+							},
+						},
+					}
+
+					testCA := test.MakeTestCA("logstorage-test")
+					dnsNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
+					kbSecret, err := secret.CreateTLSSecret(testCA,
+						render.TigeraElasticsearchCertSecret, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey,
+						rmeta.DefaultCertificateDuration, nil, dnsNames...,
+					)
+					Expect(err).ShouldNot(HaveOccurred())
+					resources = append(resources, kbSecret)
+
+					for _, rec := range resources {
+						Expect(cli.Create(ctx, rec)).ShouldNot(HaveOccurred())
+					}
+
+					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain)
+					Expect(err).ShouldNot(HaveOccurred())
+
+					mockStatus.On("SetDegraded", "Waiting for curator secrets to become available", "").Return()
+					result, err := r.Reconcile(ctx, reconcile.Request{})
+					Expect(err).ShouldNot(HaveOccurred())
+					Expect(result).Should(Equal(reconcile.Result{}))
+
+					secret := &corev1.Secret{}
+
+					Expect(cli.Get(ctx, esCertSecretOperKey, secret)).ShouldNot(HaveOccurred())
+					Expect(secret.GetOwnerReferences()).To(HaveLen(0))
+				})
+
 				Context("checking rendered images", func() {
 					BeforeEach(func() {
 						mockStatus.On("ClearDegraded", mock.Anything)

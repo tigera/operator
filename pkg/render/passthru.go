@@ -28,8 +28,8 @@ func (p *passthroughComponent) ResolveImages(is *operatorv1.ImageSet) error {
 // rendering.
 func (p *passthroughComponent) Objects() (objsToCreate []client.Object, objsToDelete []client.Object) {
 	// Filter out nil objects. This makes it easier for the calling code, so we don't need to duplicate
-	// this filtering logic in all the controllers that user this component.
-	objs := []client.Object{}
+	// this filtering logic in all the controllers that use this component.
+	var objs []client.Object
 	for _, o := range p.objs {
 		if o == nil {
 			continue
@@ -44,7 +44,7 @@ func (p *passthroughComponent) Ready() bool {
 	return true
 }
 
-// SupportedOSTypes returns operating systems that is supported of the components returned by the Objects() function.
+// SupportedOSType returns operating systems that is supported of the components returned by the Objects() function.
 // The "componentHandler" converts the returned OSTypes to a node selectors for the "kubernetes.io/os" label on client.Objects
 // that create pods. Return OSTypeAny means that no node selector should be set for the "kubernetes.io/os" label.
 func (p *passthroughComponent) SupportedOSType() rmeta.OSType {

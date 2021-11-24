@@ -277,7 +277,6 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(packetCaptureSecret.GetOwnerReferences()).To(HaveLen(0))
 		})
 
-
 		It("should add OwnerReference apiserver and packetcapture TLS cert operator managed secrets", func() {
 			setUpApiServerInstallation(cli, ctx, variant, nil)
 

@@ -17,6 +17,7 @@ package apiserver
 import (
 	"context"
 	"fmt"
+	"github.com/tigera/operator/pkg/render/common/secret"
 	"time"
 
 	"github.com/tigera/operator/pkg/common"
@@ -200,10 +201,8 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	ns := rmeta.APIServerNamespace(variant)
 
 	// We need separate certificates for OSS vs Enterprise.
-	secretName := "calico-apiserver-certs"
-	if network.Variant == operatorv1.TigeraSecureEnterprise {
-		secretName = "tigera-apiserver-certs"
-	}
+	secretName := render.ApiServerTLSSecretName(network.Variant)
+	operatorManagedApiserverSecret := true
 	var tlsSecret *v1.Secret
 	if network.CertificateManagement == nil {
 		// Check that if the apiserver cert pair secret exists that it is valid (has key and cert fields)
@@ -219,7 +218,36 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			r.status.SetDegraded("Error validating TLS certificate", err.Error())
 			return reconcile.Result{}, err
 		}
+
 		r.status.RemoveCertificateSigningRequests(ns)
+
+		if tlsSecret == nil {
+
+			svcDNSNames := dns.GetServiceDNSNames(render.ApiserverServiceName(network.Variant), rmeta.APIServerNamespace(network.Variant), r.ClusterDomain)
+			tlsSecret, err = secret.CreateTLSSecret(nil,
+				secretName,
+				common.OperatorNamespace(),
+				render.APIServerSecretKeyName,
+				render.APIServerSecretCertName,
+				rmeta.DefaultCertificateDuration,
+				nil,
+				svcDNSNames...,
+			)
+			if err != nil {
+				log.Error(err, "Error creating TLS Cert")
+				r.status.SetDegraded("Error creating TLS certificate", err.Error())
+				return reconcile.Result{}, err
+			}
+
+		} else {
+			operatorManagedApiserverSecret, err = utils.IsCertOperatorIssued(tlsSecret.Data[render.APIServerSecretCertName])
+			if err != nil {
+				log.Error(err, "Error checking if TLS certificate is operator managed")
+				r.status.SetDegraded("Error checking if TLS certificate is operator managed", err.Error())
+				return reconcile.Result{}, err
+			}
+		}
+
 	} else {
 		// Monitor pending CSRs for the TigeraStatus
 		r.status.AddCertificateSigningRequests(ns, map[string]string{"k8s-app": ns})
@@ -291,7 +319,10 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		r.status.SetDegraded("Error reading services endpoint configmap", err.Error())
 		return reconcile.Result{}, err
 	}
-
+	var components []render.Component
+	if tlsSecret != nil && operatorManagedApiserverSecret {
+		components = append(components, render.NewPassthrough([]client.Object{tlsSecret}))
+	}
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -310,9 +341,9 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		Openshift:                   r.provider == operatorv1.ProviderOpenShift,
 		TunnelCASecret:              tunnelCASecret,
 		ClusterDomain:               r.clusterDomain,
+		TLSKeyPairAnnotationHash:    operatorManagedApiserverSecret,
 	}
 
-	var components []render.Component
 	component, err := render.APIServer(&apiServerCfg)
 	if err != nil {
 		log.Error(err, "Error rendering APIServer")

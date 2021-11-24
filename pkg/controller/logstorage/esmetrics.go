@@ -36,7 +36,7 @@ func (r *ReconcileLogStorage) createEsMetrics(
 		return reconcile.Result{}, false, nil
 	}
 
-	publicCertSecretESCopy, err := utils.GetSecret(context.Background(), r.client, relasticsearch.PublicCertSecret, render.ElasticsearchNamespace)
+	publicCertSecretESCopy, err := utils.GetSecret(context.Background(), r.client, relasticsearch.ESGatewayPublicCertSecret, render.ElasticsearchNamespace)
 	if err != nil {
 		r.status.SetDegraded("Failed to retrieve Elasticsearch public cert secret.", err.Error())
 		return reconcile.Result{}, false, err

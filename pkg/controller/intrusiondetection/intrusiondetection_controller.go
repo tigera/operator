@@ -138,7 +138,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	for _, secretName := range []string{
-		relasticsearch.PublicCertSecret,
+		relasticsearch.ESGatewayPublicCertSecret,
 		render.ElasticsearchIntrusionDetectionUserSecret,
 		render.ElasticsearchIntrusionDetectionJobUserSecret,
 		render.ElasticsearchADJobUserSecret,
@@ -157,7 +157,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	// These watches are here to catch a modification to the resources we create in reconcile so the changes would be corrected.
-	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, render.IntrusionDetectionNamespace); err != nil {
+	if err = utils.AddSecretsWatch(c, relasticsearch.ESGatewayPublicCertSecret, render.IntrusionDetectionNamespace); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
 	}
 

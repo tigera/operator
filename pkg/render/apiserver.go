@@ -33,7 +33,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/dns"
@@ -85,26 +84,10 @@ func APIServer(cfg *APIServerConfiguration) (Component, error) {
 	tlsHashAnnotations := make(map[string]string)
 
 	if cfg.Installation.CertificateManagement == nil {
-		svcDNSNames := dns.GetServiceDNSNames(apiserverServiceName(cfg.Installation.Variant), rmeta.APIServerNamespace(cfg.Installation.Variant), cfg.ClusterDomain)
-		if cfg.TLSKeyPair == nil {
-			var err error
-			cfg.TLSKeyPair, err = secret.CreateTLSSecret(nil,
-				apiServerTLSSecretName(cfg.Installation.Variant),
-				common.OperatorNamespace(),
-				APIServerSecretKeyName,
-				APIServerSecretCertName,
-				rmeta.DefaultCertificateDuration,
-				nil,
-				svcDNSNames...,
-			)
-			if err != nil {
-				return nil, err
-			}
-			// We only need to add the TLSKeyPair if we created it, otherwise
-			// it already exists.
-			tlsSecrets = []*corev1.Secret{cfg.TLSKeyPair}
+		if cfg.TLSKeyPairAnnotationHash {
 			tlsHashAnnotations[TlsSecretHashAnnotation] = rmeta.AnnotationHash(cfg.TLSKeyPair.Data)
 		}
+
 		copy := cfg.TLSKeyPair.DeepCopy()
 		copy.ObjectMeta = metav1.ObjectMeta{
 			Name:      ApiServerTLSSecretName(cfg.Installation.Variant),
@@ -142,6 +125,7 @@ type APIServerConfiguration struct {
 	Openshift                   bool
 	TunnelCASecret              *corev1.Secret
 	ClusterDomain               string
+	TLSKeyPairAnnotationHash    bool
 }
 
 type apiServerComponent struct {
@@ -238,7 +222,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	// Add in certificates for API server TLS.
 	if c.cfg.Installation.CertificateManagement == nil {
 		namespacedObjects = append(namespacedObjects, c.getTLSObjects()...)
-		globalObjects = append(globalObjects, c.apiServiceRegistration(c.tlsSecrets[0].Data[APIServerSecretCertName]))
+		globalObjects = append(globalObjects, c.apiServiceRegistration(c.cfg.TLSKeyPair.Data[APIServerSecretCertName]))
 	} else {
 		namespacedObjects = append(namespacedObjects, c.apiServiceRegistration(c.cfg.Installation.CertificateManagement.CACert))
 		globalObjects = append(globalObjects, CSRClusterRoleBinding(csrRolebindingName(c.cfg.Installation.Variant), rmeta.APIServerNamespace(c.cfg.Installation.Variant)))

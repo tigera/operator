@@ -15,6 +15,7 @@
 package installation
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"time"
@@ -739,9 +740,8 @@ var _ = Describe("Testing core-controller installation", func() {
 			cr = &operator.Installation{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 				Spec: operator.InstallationSpec{
-					Variant:               operator.TigeraSecureEnterprise,
-					Registry:              "some.registry.org/",
-					CertificateManagement: &operator.CertificateManagement{},
+					Variant:  operator.TigeraSecureEnterprise,
+					Registry: "some.registry.org/",
 				},
 				Status: operator.InstallationStatus{
 					Variant: operator.TigeraSecureEnterprise,
@@ -752,8 +752,6 @@ var _ = Describe("Testing core-controller installation", func() {
 					},
 				},
 			}
-			// We start off with a 'standard' installation, with nothing special
-			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 
 			Expect(c.Create(
 				ctx,
@@ -777,6 +775,8 @@ var _ = Describe("Testing core-controller installation", func() {
 		})
 
 		It("should create an internal manager TLS cert secret", func() {
+			cr.Spec.CertificateManagement = &operator.CertificateManagement{}
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -787,6 +787,8 @@ var _ = Describe("Testing core-controller installation", func() {
 		})
 
 		It("should replace the internal manager TLS cert secret if its DNS names are invalid", func() {
+			cr.Spec.CertificateManagement = &operator.CertificateManagement{}
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			// Create a internal manager TLS secret with old DNS name.
 			oldSecret, err := secret.CreateTLSSecret(nil,
 				render.ManagerInternalTLSSecretName, common.OperatorNamespace(), render.ManagerInternalSecretKeyName,
@@ -802,6 +804,74 @@ var _ = Describe("Testing core-controller installation", func() {
 			dnsNames = append(dnsNames, "localhost")
 			Expect(test.GetResource(c, internalManagerTLSSecret)).To(BeNil())
 			test.VerifyCert(internalManagerTLSSecret, render.ManagerInternalSecretKeyName, render.ManagerInternalSecretCertName, dnsNames...)
+		})
+
+		It("should create typha and node TLS cert secrets if not provided and add OwnerReference to those", func() {
+
+			exited := false
+			osExitOverride = func(_ int) { exited = false }
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(exited).Should(BeFalse())
+
+			secret := &corev1.Secret{}
+
+			Expect(c.Get(ctx, client.ObjectKey{Name: render.NodeTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
+			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
+
+			Expect(c.Get(ctx, client.ObjectKey{Name: render.TyphaTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
+			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
+		})
+
+		It("should not add OwnerReference to user supplied typha and node certs", func() {
+
+			testCA := test.MakeTestCA("core-test")
+			crtContent := &bytes.Buffer{}
+			keyContent := &bytes.Buffer{}
+			Expect(testCA.Config.WriteCertConfig(crtContent, keyContent)).NotTo(HaveOccurred())
+
+			// Take CA cert and create ConfigMap
+			caConfigMap := &corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.TyphaCAConfigMapName,
+					Namespace: common.OperatorNamespace(),
+				},
+				Data: map[string]string{
+					render.TyphaCABundleName: crtContent.String(),
+				},
+			}
+			Expect(c.Create(ctx, caConfigMap)).NotTo(HaveOccurred())
+
+			nodeSecret, err := secret.CreateTLSSecret(testCA,
+				render.NodeTLSSecretName, common.OperatorNamespace(), render.TLSSecretKeyName,
+				render.TLSSecretCertName, rmeta.DefaultCertificateDuration, nil, render.FelixCommonName,
+			)
+			nodeSecret.Data[render.CommonName] = []byte(render.FelixCommonName)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(c.Create(ctx, nodeSecret)).NotTo(HaveOccurred())
+
+			typhaSecret, err := secret.CreateTLSSecret(testCA,
+				render.TyphaTLSSecretName, common.OperatorNamespace(), render.TLSSecretKeyName,
+				render.TLSSecretCertName, rmeta.DefaultCertificateDuration, nil, render.TyphaCommonName,
+			)
+			typhaSecret.Data[render.CommonName] = []byte(render.TyphaCommonName)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(c.Create(ctx, typhaSecret)).NotTo(HaveOccurred())
+
+			exited := false
+			osExitOverride = func(_ int) { exited = false }
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(exited).Should(BeFalse())
+
+			Expect(test.GetResource(c, nodeSecret)).To(BeNil())
+			Expect(nodeSecret.GetOwnerReferences()).To(HaveLen(0))
+
+			Expect(test.GetResource(c, typhaSecret)).To(BeNil())
+			Expect(typhaSecret.GetOwnerReferences()).To(HaveLen(0))
 		})
 	})
 	Context("Reconcile tests", func() {

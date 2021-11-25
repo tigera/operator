@@ -29,16 +29,26 @@ import (
 
 func Windows(
 	cr *operatorv1.InstallationSpec,
+	hasWindowsNodes bool,
 ) Component {
-	return &windowsComponent{cr: cr}
+	return &windowsComponent{cr: cr, hasWindowsNodes: hasWindowsNodes}
 }
 
 type windowsComponent struct {
 	cr                  *operatorv1.InstallationSpec
 	windowsUpgradeImage string
+	hasWindowsNodes     bool
 }
 
 func (c *windowsComponent) ResolveImages(is *operatorv1.ImageSet) error {
+	// If the cluster doesn't have Windows nodes, skip resolving the component's
+	// image from the imageset. This resolved image is used for the windows upgrade
+	// daemonset but the component handler will only delete the daemonset in
+	// this case.
+	if !c.hasWindowsNodes {
+		return nil
+	}
+
 	reg := c.cr.Registry
 	path := c.cr.ImagePath
 	prefix := c.cr.ImagePrefix
@@ -68,7 +78,11 @@ func (c *windowsComponent) Objects() ([]client.Object, []client.Object) {
 		c.windowsUpgradeDaemonset(),
 	}
 
-	return objs, nil
+	if c.hasWindowsNodes {
+		return objs, nil
+	} else {
+		return nil, objs
+	}
 }
 
 func (c *windowsComponent) Ready() bool {

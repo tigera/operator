@@ -138,6 +138,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		status:                statusManager,
 		typhaAutoscaler:       typhaScaler,
 		calicoWindowsUpgrader: calicoWindowsUpgrader,
+		nodeIndexer:           nodeIndexInformer.GetIndexer(),
 		namespaceMigration:    nm,
 		amazonCRDExists:       opts.AmazonCRDExists,
 		enterpriseCRDsExist:   opts.EnterpriseCRDExists,
@@ -314,6 +315,7 @@ type ReconcileInstallation struct {
 	status                status.StatusManager
 	typhaAutoscaler       *typhaAutoscaler
 	calicoWindowsUpgrader windows.CalicoWindowsUpgrader
+	nodeIndexer           cache.Indexer
 	namespaceMigration    migration.NamespaceMigration
 	enterpriseCRDsExist   bool
 	amazonCRDExists       bool
@@ -1165,7 +1167,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 
-	components = append(components, render.Windows(&instance.Spec))
+	found, err := hasWindowsNodes(r.nodeIndexer)
+	if err != nil {
+		r.SetDegraded("Error getting windows nodes", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	components = append(components, render.Windows(&instance.Spec, found))
 
 	imageSet, err := imageset.GetImageSet(ctx, r.client, instance.Spec.Variant)
 	if err != nil {
@@ -1783,4 +1790,18 @@ func addCRDWatches(c controller.Controller, v operator.ProductVariant) error {
 		}
 	}
 	return nil
+}
+
+func hasWindowsNodes(nodeIndexer cache.Indexer) (bool, error) {
+	for _, obj := range nodeIndexer.List() {
+		node, ok := obj.(*corev1.Node)
+		if !ok {
+			return false, fmt.Errorf("never expected index to have anything other than a node object: %v", obj)
+		}
+
+		if node.Labels[corev1.LabelOSStable] == "windows" {
+			return true, nil
+		}
+	}
+	return false, nil
 }

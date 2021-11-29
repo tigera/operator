@@ -916,8 +916,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	var typhaNodeTLS *render.TyphaNodeTLS
-	operatorManagedNodeSecret := true
-	operatorManagedTyphaSecret := true
+	var renderNodeAndTyphaSecrets bool
 	if instance.Spec.CertificateManagement == nil {
 		// First, attempt to load TLS secrets from the cluster, if any exist.
 		typhaNodeTLS, err = r.GetTyphaNodeTLSConfig()
@@ -935,20 +934,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 				r.SetDegraded("Error generating Typha/Felix secrets", err, reqLogger)
 				return reconcile.Result{}, err
 			}
-		} else {
-			operatorManagedNodeSecret, err = utils.IsCertOperatorIssued(typhaNodeTLS.NodeSecret.Data[render.TLSSecretCertName])
-			if err != nil {
-				log.Error(err, "Error checking if Felix secrets are operator managed")
-				r.SetDegraded("Error checking if Felix secrets are operator managed", err, reqLogger)
-				return reconcile.Result{}, err
-			}
-			operatorManagedTyphaSecret, err = utils.IsCertOperatorIssued(typhaNodeTLS.TyphaSecret.Data[render.TLSSecretCertName])
-			if err != nil {
-				log.Error(err, "Error checking if Typha secrets are operator managed")
-				r.SetDegraded("Error checking if Typha secrets are operator managed", err, reqLogger)
-				return reconcile.Result{}, err
-			}
+
+			renderNodeAndTyphaSecrets = true
 		}
+
 	} else {
 		// Use CSR-based certificate signing.
 		typhaNodeTLS = &render.TyphaNodeTLS{
@@ -1087,11 +1076,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		typhaNodeTLS.CAConfigMap,
 	}
 
-	if typhaNodeTLS.NodeSecret != nil && operatorManagedNodeSecret {
-		objs = append(objs, typhaNodeTLS.NodeSecret)
-	}
-	if typhaNodeTLS.TyphaSecret != nil && operatorManagedTyphaSecret {
-		objs = append(objs, typhaNodeTLS.TyphaSecret)
+	if renderNodeAndTyphaSecrets {
+		objs = append(objs, typhaNodeTLS.NodeSecret, typhaNodeTLS.TyphaSecret)
 	}
 	if managerInternalTLSSecret != nil {
 		objs = append(objs, managerInternalTLSSecret)

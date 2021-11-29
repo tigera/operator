@@ -41,7 +41,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
 var log = logf.Log.WithName("controller_apiserver")
@@ -201,7 +200,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	ns := rmeta.APIServerNamespace(variant)
 
 	// We need separate certificates for OSS vs Enterprise.
-	secretName := render.ApiServerTLSSecretName(network.Variant)
+	secretName := render.ProjectCalicoApiServerTLSSecretName(network.Variant)
 	operatorManagedApiserverSecret := true
 	var tlsSecret *v1.Secret
 	if network.CertificateManagement == nil {
@@ -221,31 +220,15 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 		r.status.RemoveCertificateSigningRequests(ns)
 
-		if tlsSecret == nil {
+		svcDNSNames := dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(network.Variant), rmeta.APIServerNamespace(network.Variant), r.clusterDomain)
+		tlsSecret, operatorManagedApiserverSecret, err = utils.EnsureCertificateSecret(
+			secretName, tlsSecret, render.APIServerSecretKeyName, render.APIServerSecretCertName, rmeta.DefaultCertificateDuration, svcDNSNames...,
+		)
 
-			svcDNSNames := dns.GetServiceDNSNames(render.ApiserverServiceName(network.Variant), rmeta.APIServerNamespace(network.Variant), r.clusterDomain)
-			tlsSecret, err = secret.CreateTLSSecret(nil,
-				secretName,
-				common.OperatorNamespace(),
-				render.APIServerSecretKeyName,
-				render.APIServerSecretCertName,
-				rmeta.DefaultCertificateDuration,
-				nil,
-				svcDNSNames...,
-			)
-			if err != nil {
-				log.Error(err, "Error creating TLS Cert")
-				r.status.SetDegraded("Error creating TLS certificate", err.Error())
-				return reconcile.Result{}, err
-			}
-
-		} else {
-			operatorManagedApiserverSecret, err = utils.IsCertOperatorIssued(tlsSecret.Data[render.APIServerSecretCertName])
-			if err != nil {
-				log.Error(err, "Error checking if TLS certificate is operator managed")
-				r.status.SetDegraded("Error checking if TLS certificate is operator managed", err.Error())
-				return reconcile.Result{}, err
-			}
+		if err != nil {
+			log.Error(err, "Error ensuring TLS certificate exists and has valid DNS names")
+			r.status.SetDegraded("Error ensuring TLS certificate exists and has valid DNS names", err.Error())
+			return reconcile.Result{}, err
 		}
 
 	} else {
@@ -341,7 +324,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		Openshift:                   r.provider == operatorv1.ProviderOpenShift,
 		TunnelCASecret:              tunnelCASecret,
 		ClusterDomain:               r.clusterDomain,
-		TLSKeyPairAnnotationHash:    operatorManagedApiserverSecret,
 	}
 
 	component, err := render.APIServer(&apiServerCfg)

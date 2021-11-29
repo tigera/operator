@@ -50,14 +50,14 @@ const (
 
 // The following functions are helpers for determining resource names based on
 // the configured product variant.
-func ApiServerTLSSecretName(v operatorv1.ProductVariant) string {
+func ProjectCalicoApiServerTLSSecretName(v operatorv1.ProductVariant) string {
 	if v == operatorv1.Calico {
 		return "calico-apiserver-certs"
 	}
 	return "tigera-apiserver-certs"
 }
 
-func ApiserverServiceName(v operatorv1.ProductVariant) string {
+func ProjectCalicoApiServerServiceName(v operatorv1.ProductVariant) string {
 	if v == operatorv1.Calico {
 		return "calico-api"
 	}
@@ -84,13 +84,11 @@ func APIServer(cfg *APIServerConfiguration) (Component, error) {
 	tlsHashAnnotations := make(map[string]string)
 
 	if cfg.Installation.CertificateManagement == nil {
-		if cfg.TLSKeyPairAnnotationHash {
-			tlsHashAnnotations[TlsSecretHashAnnotation] = rmeta.AnnotationHash(cfg.TLSKeyPair.Data)
-		}
+		tlsHashAnnotations[TlsSecretHashAnnotation] = rmeta.AnnotationHash(cfg.TLSKeyPair.Data)
 
 		copy := cfg.TLSKeyPair.DeepCopy()
 		copy.ObjectMeta = metav1.ObjectMeta{
-			Name:      ApiServerTLSSecretName(cfg.Installation.Variant),
+			Name:      ProjectCalicoApiServerTLSSecretName(cfg.Installation.Variant),
 			Namespace: rmeta.APIServerNamespace(cfg.Installation.Variant),
 		}
 		tlsSecrets = append(tlsSecrets, copy)
@@ -125,7 +123,6 @@ type APIServerConfiguration struct {
 	Openshift                   bool
 	TunnelCASecret              *corev1.Secret
 	ClusterDomain               string
-	TLSKeyPairAnnotationHash    bool
 }
 
 type apiServerComponent struct {
@@ -299,7 +296,7 @@ func (c *apiServerComponent) apiServiceRegistration(cert []byte) *apiregv1.APISe
 			VersionPriority:      200,
 			GroupPriorityMinimum: 1500,
 			Service: &apiregv1.ServiceReference{
-				Name:      ApiserverServiceName(c.cfg.Installation.Variant),
+				Name:      ProjectCalicoApiServerServiceName(c.cfg.Installation.Variant),
 				Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 			},
 			Version:  "v3",
@@ -719,7 +716,7 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 	s := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ApiserverServiceName(c.cfg.Installation.Variant),
+			Name:      ProjectCalicoApiServerServiceName(c.cfg.Installation.Variant),
 			Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 		},
 		Spec: corev1.ServiceSpec{
@@ -774,10 +771,10 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 		initContainers = append(initContainers, CreateCSRInitContainer(
 			c.cfg.Installation.CertificateManagement,
 			c.certSignReqImage,
-			ApiServerTLSSecretName(c.cfg.Installation.Variant), TLSSecretCertName,
+			ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant), TLSSecretCertName,
 			APIServerSecretKeyName,
 			APIServerSecretCertName,
-			dns.GetServiceDNSNames(ApiserverServiceName(c.cfg.Installation.Variant), rmeta.APIServerNamespace(c.cfg.Installation.Variant), c.cfg.ClusterDomain),
+			dns.GetServiceDNSNames(ProjectCalicoApiServerServiceName(c.cfg.Installation.Variant), rmeta.APIServerNamespace(c.cfg.Installation.Variant), c.cfg.ClusterDomain),
 			rmeta.APIServerNamespace(c.cfg.Installation.Variant)))
 	}
 
@@ -858,7 +855,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	}
 
 	volumeMounts = append(volumeMounts,
-		corev1.VolumeMount{Name: ApiServerTLSSecretName(c.cfg.Installation.Variant), MountPath: "/code/apiserver.local.config/certificates"},
+		corev1.VolumeMount{Name: ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant), MountPath: "/code/apiserver.local.config/certificates"},
 	)
 
 	if c.cfg.ManagementCluster != nil {
@@ -1037,8 +1034,8 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 
 	volumes = append(volumes,
 		corev1.Volume{
-			Name:         ApiServerTLSSecretName(c.cfg.Installation.Variant),
-			VolumeSource: certificateVolumeSource(c.cfg.Installation.CertificateManagement, ApiServerTLSSecretName(c.cfg.Installation.Variant)),
+			Name:         ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant),
+			VolumeSource: certificateVolumeSource(c.cfg.Installation.CertificateManagement, ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant)),
 		},
 	)
 

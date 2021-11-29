@@ -63,13 +63,13 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		}
 
 		tlsKeyPair, err := secret.CreateTLSSecret(nil,
-			render.ApiServerTLSSecretName(instance.Variant),
+			render.ProjectCalicoApiServerTLSSecretName(instance.Variant),
 			common.OperatorNamespace(),
 			render.APIServerSecretKeyName,
 			render.APIServerSecretCertName,
 			rmeta.DefaultCertificateDuration,
 			nil,
-			dns.GetServiceDNSNames(render.ApiserverServiceName(instance.Variant), rmeta.APIServerNamespace(instance.Variant), dns.DefaultClusterDomain)...,
+			dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(instance.Variant), rmeta.APIServerNamespace(instance.Variant), dns.DefaultClusterDomain)...,
 		)
 		Expect(err).ShouldNot(HaveOccurred())
 
@@ -78,7 +78,6 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			K8SServiceEndpoint:       k8sapi.ServiceEndpoint{},
 			Installation:             instance,
 			TLSKeyPair:               tlsKeyPair,
-			TLSKeyPairAnnotationHash: true,
 			Openshift:                openshift,
 			ClusterDomain:            dns.DefaultClusterDomain,
 		}
@@ -121,13 +120,13 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		var err error
 		cfg.TLSKeyPair, err = secret.CreateTLSSecret(nil,
-			render.ApiServerTLSSecretName(cfg.Installation.Variant),
+			render.ProjectCalicoApiServerTLSSecretName(cfg.Installation.Variant),
 			common.OperatorNamespace(),
 			render.APIServerSecretKeyName,
 			render.APIServerSecretCertName,
 			rmeta.DefaultCertificateDuration,
 			nil,
-			dns.GetServiceDNSNames(render.ApiserverServiceName(cfg.Installation.Variant), rmeta.APIServerNamespace(cfg.Installation.Variant), clusterDomain)...,
+			dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(cfg.Installation.Variant), rmeta.APIServerNamespace(cfg.Installation.Variant), clusterDomain)...,
 		)
 		Expect(err).ShouldNot(HaveOccurred())
 
@@ -1118,13 +1117,13 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		}
 
 		tlsKeyPair, err := secret.CreateTLSSecret(nil,
-			render.ApiServerTLSSecretName(instance.Variant),
+			render.ProjectCalicoApiServerTLSSecretName(instance.Variant),
 			common.OperatorNamespace(),
 			render.APIServerSecretKeyName,
 			render.APIServerSecretCertName,
 			rmeta.DefaultCertificateDuration,
 			nil,
-			dns.GetServiceDNSNames(render.ApiserverServiceName(instance.Variant), rmeta.APIServerNamespace(instance.Variant), dns.DefaultClusterDomain)...,
+			dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(instance.Variant), rmeta.APIServerNamespace(instance.Variant), dns.DefaultClusterDomain)...,
 		)
 		Expect(err).ShouldNot(HaveOccurred())
 
@@ -1133,7 +1132,6 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			K8SServiceEndpoint:       k8sapi.ServiceEndpoint{},
 			Installation:             instance,
 			TLSKeyPair:               tlsKeyPair,
-			TLSKeyPairAnnotationHash: true,
 			Openshift:                openshift,
 			ClusterDomain:            dns.DefaultClusterDomain,
 		}
@@ -1166,13 +1164,13 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 
 		var err error
 		cfg.TLSKeyPair, err = secret.CreateTLSSecret(nil,
-			render.ApiServerTLSSecretName(cfg.Installation.Variant),
+			render.ProjectCalicoApiServerTLSSecretName(cfg.Installation.Variant),
 			common.OperatorNamespace(),
 			render.APIServerSecretKeyName,
 			render.APIServerSecretCertName,
 			rmeta.DefaultCertificateDuration,
 			nil,
-			dns.GetServiceDNSNames(render.ApiserverServiceName(cfg.Installation.Variant), rmeta.APIServerNamespace(cfg.Installation.Variant), clusterDomain)...,
+			dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(cfg.Installation.Variant), rmeta.APIServerNamespace(cfg.Installation.Variant), clusterDomain)...,
 		)
 		Expect(err).ShouldNot(HaveOccurred())
 

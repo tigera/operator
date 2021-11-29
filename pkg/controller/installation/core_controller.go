@@ -916,6 +916,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	var typhaNodeTLS *render.TyphaNodeTLS
+	var renderNodeAndTyphaSecrets bool
 	if instance.Spec.CertificateManagement == nil {
 		// First, attempt to load TLS secrets from the cluster, if any exist.
 		typhaNodeTLS, err = r.GetTyphaNodeTLSConfig()
@@ -933,7 +934,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 				r.SetDegraded("Error generating Typha/Felix secrets", err, reqLogger)
 				return reconcile.Result{}, err
 			}
+
+			renderNodeAndTyphaSecrets = true
 		}
+
 	} else {
 		// Use CSR-based certificate signing.
 		typhaNodeTLS = &render.TyphaNodeTLS{
@@ -1072,11 +1076,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		typhaNodeTLS.CAConfigMap,
 	}
 
-	if typhaNodeTLS.NodeSecret != nil {
-		objs = append(objs, typhaNodeTLS.NodeSecret)
-	}
-	if typhaNodeTLS.TyphaSecret != nil {
-		objs = append(objs, typhaNodeTLS.TyphaSecret)
+	if renderNodeAndTyphaSecrets {
+		objs = append(objs, typhaNodeTLS.NodeSecret, typhaNodeTLS.TyphaSecret)
 	}
 	if managerInternalTLSSecret != nil {
 		objs = append(objs, managerInternalTLSSecret)

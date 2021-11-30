@@ -98,7 +98,7 @@ func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 			ObjectMeta: metav1.ObjectMeta{Name: render.TyphaTLSSecretName, Namespace: DeepPacketInspectionNamespace}})
 		commonObjs = append(commonObjs, &corev1.Secret{
 			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: DeepPacketInspectionNamespace}})
+			ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.ESGatewayPublicCertSecret, Namespace: DeepPacketInspectionNamespace}})
 		commonObjs = append(commonObjs, &corev1.ConfigMap{
 			TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: render.TyphaCAConfigMapName, Namespace: DeepPacketInspectionNamespace}})

@@ -118,13 +118,13 @@ func GetESGatewayCertificateSecrets(ctx context.Context, instl *operatorv1.Insta
 	svcDNSNames = append(svcDNSNames, dns.GetServiceDNSNames(esgateway.ServiceName, render.ElasticsearchNamespace, clusterDomain)...)
 
 	// Get the secret - might be nil
-	oprKeyCert, err := utils.GetSecret(ctx, cli, render.TigeraElasticsearchCertSecret, common.OperatorNamespace())
+	oprKeyCert, err := utils.GetSecret(ctx, cli, render.TigeraESGatewayCertSecret, common.OperatorNamespace())
 	if err != nil {
 		return nil, nil, false, err
 	}
 
 	// Ensure that cert is valid.
-	oprKeyCert, _, err = utils.EnsureCertificateSecret(render.TigeraElasticsearchCertSecret, oprKeyCert, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, svcDNSNames...)
+	oprKeyCert, _, err = utils.EnsureCertificateSecret(render.TigeraESGatewayCertSecret, oprKeyCert, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, svcDNSNames...)
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -155,9 +155,9 @@ func GetESGatewayCertificateSecrets(ctx context.Context, instl *operatorv1.Insta
 		}
 
 		oprKeyCert.Data[corev1.TLSCertKey] = instl.CertificateManagement.CACert
-		publicCertSecret = render.CreateCertificateSecret(instl.CertificateManagement.CACert, relasticsearch.PublicCertSecret, common.OperatorNamespace())
+		publicCertSecret = render.CreateCertificateSecret(instl.CertificateManagement.CACert, relasticsearch.ESGatewayPublicCertSecret, common.OperatorNamespace())
 	} else {
-		publicCertSecret = render.CreateCertificateSecret(oprKeyCert.Data[corev1.TLSCertKey], relasticsearch.PublicCertSecret, common.OperatorNamespace())
+		publicCertSecret = render.CreateCertificateSecret(oprKeyCert.Data[corev1.TLSCertKey], relasticsearch.ESGatewayPublicCertSecret, common.OperatorNamespace())
 	}
 
 	return oprKeyCert, publicCertSecret, customerProvidedCert, nil

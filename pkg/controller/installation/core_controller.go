@@ -916,7 +916,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	var typhaNodeTLS *render.TyphaNodeTLS
-	var renderNodeAndTyphaSecrets bool
+	// Object to be rendered by the passthrough component
+	var objs []client.Object
 	if instance.Spec.CertificateManagement == nil {
 		// First, attempt to load TLS secrets from the cluster, if any exist.
 		typhaNodeTLS, err = r.GetTyphaNodeTLSConfig()
@@ -935,7 +936,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 				return reconcile.Result{}, err
 			}
 
-			renderNodeAndTyphaSecrets = true
+			objs = append(objs, typhaNodeTLS.CAConfigMap, typhaNodeTLS.NodeSecret, typhaNodeTLS.TyphaSecret)
 		}
 
 	} else {
@@ -952,6 +953,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 				},
 			},
 		}
+
+		objs = append(objs, typhaNodeTLS.CAConfigMap)
 	}
 
 	birdTemplates, err := getBirdTemplates(r.client)
@@ -1072,13 +1075,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Create a passthrough component for the simple purpose of caching generated resources in the tigera-operator namespace.
 	// We store TLS secrets and config to be fetched on future reconcile iterations.
-	objs := []client.Object{
-		typhaNodeTLS.CAConfigMap,
-	}
-
-	if renderNodeAndTyphaSecrets {
-		objs = append(objs, typhaNodeTLS.NodeSecret, typhaNodeTLS.TyphaSecret)
-	}
 	if managerInternalTLSSecret != nil {
 		objs = append(objs, managerInternalTLSSecret)
 	}

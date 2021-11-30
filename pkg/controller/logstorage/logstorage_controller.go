@@ -144,11 +144,11 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Catch if something modifies the certs that this controller creates.
-	if err = utils.AddSecretsWatch(c, relasticsearch.ESGatewayPublicCertSecret, common.OperatorNamespace()); err != nil {
+	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, common.OperatorNamespace()); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 	}
 
-	if err = utils.AddSecretsWatch(c, relasticsearch.ESGatewayPublicCertSecret, render.ElasticsearchNamespace); err != nil {
+	if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, render.ElasticsearchNamespace); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 	}
 

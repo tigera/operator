@@ -155,9 +155,9 @@ func GetESGatewayCertificateSecrets(ctx context.Context, instl *operatorv1.Insta
 		}
 
 		oprKeyCert.Data[corev1.TLSCertKey] = instl.CertificateManagement.CACert
-		publicCertSecret = render.CreateCertificateSecret(instl.CertificateManagement.CACert, relasticsearch.ESGatewayPublicCertSecret, common.OperatorNamespace())
+		publicCertSecret = render.CreateCertificateSecret(instl.CertificateManagement.CACert, relasticsearch.PublicCertSecret, common.OperatorNamespace())
 	} else {
-		publicCertSecret = render.CreateCertificateSecret(oprKeyCert.Data[corev1.TLSCertKey], relasticsearch.ESGatewayPublicCertSecret, common.OperatorNamespace())
+		publicCertSecret = render.CreateCertificateSecret(oprKeyCert.Data[corev1.TLSCertKey], relasticsearch.PublicCertSecret, common.OperatorNamespace())
 	}
 
 	return oprKeyCert, publicCertSecret, customerProvidedCert, nil

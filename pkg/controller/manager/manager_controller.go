@@ -115,7 +115,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	// Watch the given secrets in each both the manager and operator namespaces
 	for _, namespace := range []string{common.OperatorNamespace(), render.ManagerNamespace} {
 		for _, secretName := range []string{
-			render.ManagerTLSSecretName, relasticsearch.ESGatewayPublicCertSecret,
+			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret,
 			render.ElasticsearchManagerUserSecret, render.KibanaPublicCertSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureCertSecret,
 			render.ManagerInternalTLSSecretName, render.DexCertSecretName, render.PrometheusTLSSecretName,

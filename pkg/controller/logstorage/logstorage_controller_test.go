@@ -69,15 +69,15 @@ var (
 
 	esCertSecretKey        = client.ObjectKey{Name: render.TigeraESGatewayCertSecret, Namespace: render.ElasticsearchNamespace}
 	esCertSecretOperKey    = client.ObjectKey{Name: render.TigeraESGatewayCertSecret, Namespace: common.OperatorNamespace()}
-	esCertPubSecretKey     = client.ObjectKey{Name: relasticsearch.ESGatewayPublicCertSecret, Namespace: render.ElasticsearchNamespace}
-	esCertPubSecretOperKey = client.ObjectKey{Name: relasticsearch.ESGatewayPublicCertSecret, Namespace: common.OperatorNamespace()}
+	esCertPubSecretKey     = client.ObjectKey{Name: relasticsearch.PublicCertSecret, Namespace: render.ElasticsearchNamespace}
+	esCertPubSecretOperKey = client.ObjectKey{Name: relasticsearch.PublicCertSecret, Namespace: common.OperatorNamespace()}
 
 	kbCertSecretKey        = client.ObjectKey{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}
 	kbCertSecretOperKey    = client.ObjectKey{Name: render.TigeraKibanaCertSecret, Namespace: common.OperatorNamespace()}
 	kbCertPubSecretKey     = client.ObjectKey{Name: render.KibanaPublicCertSecret, Namespace: render.KibanaNamespace}
 	kbCertPubSecretOperKey = client.ObjectKey{Name: render.KibanaPublicCertSecret, Namespace: common.OperatorNamespace()}
 
-	esPublicCertObjMeta       = metav1.ObjectMeta{Name: relasticsearch.ESGatewayPublicCertSecret, Namespace: render.ElasticsearchNamespace}
+	esPublicCertObjMeta       = metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: render.ElasticsearchNamespace}
 	kbPublicCertObjMeta       = metav1.ObjectMeta{Name: render.KibanaPublicCertSecret, Namespace: render.KibanaNamespace}
 	curatorUsrSecretObjMeta   = metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: common.OperatorNamespace()}
 	esMetricsUsrSecretObjMeta = metav1.ObjectMeta{Name: esmetrics.ElasticsearchMetricsSecret, Namespace: common.OperatorNamespace()}
@@ -415,7 +415,7 @@ var _ = Describe("LogStorage controller", func() {
 					test.VerifyCert(secret, "tls.key", "tls.crt", kbInternalDNSNames...)
 
 					// Create public ES and KB secrets
-					esPublicSecret := createPubSecret(relasticsearch.ESGatewayPublicCertSecret, render.ElasticsearchNamespace, secret.Data["tls.crt"], "tls.crt")
+					esPublicSecret := createPubSecret(relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, secret.Data["tls.crt"], "tls.crt")
 					Expect(cli.Create(ctx, esPublicSecret)).ShouldNot(HaveOccurred())
 
 					Expect(cli.Get(ctx, kbCertSecretKey, secret)).ShouldNot(HaveOccurred())
@@ -541,7 +541,7 @@ var _ = Describe("LogStorage controller", func() {
 					// Create public ES and KB secrets
 					secret := &corev1.Secret{}
 					//Expect(cli.Get(ctx, esCertSecretKey, secret)).ShouldNot(HaveOccurred())
-					//esPublicSecret := createPubSecret(relasticsearch.ESGatewayPublicCertSecret, render.ElasticsearchNamespace, secret.Data["tls.crt"], "tls.crt")
+					//esPublicSecret := createPubSecret(relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, secret.Data["tls.crt"], "tls.crt")
 					//Expect(cli.Create(ctx, esPublicSecret)).ShouldNot(HaveOccurred())
 
 					Expect(cli.Get(ctx, kbCertSecretKey, secret)).ShouldNot(HaveOccurred())
@@ -605,7 +605,7 @@ var _ = Describe("LogStorage controller", func() {
 					)
 					Expect(err).ShouldNot(HaveOccurred())
 
-					esPublicSecret := createPubSecret(relasticsearch.ESGatewayPublicCertSecret, render.ElasticsearchNamespace, esSecret.Data["tls.crt"], "tls.crt")
+					esPublicSecret := createPubSecret(relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, esSecret.Data["tls.crt"], "tls.crt")
 					Expect(cli.Create(ctx, esSecret)).ShouldNot(HaveOccurred())
 					Expect(cli.Create(ctx, esPublicSecret)).ShouldNot(HaveOccurred())
 
@@ -1657,8 +1657,8 @@ func createESSecrets() []client.Object {
 
 	esOperNsSecret := secret.CopyToNamespace(render.ElasticsearchNamespace, esSecret)[0]
 
-	esPublicOperNsSecret := createPubSecret(relasticsearch.ESGatewayPublicCertSecret, common.OperatorNamespace(), esSecret.Data["tls.crt"], "tls.crt")
-	esPublicSecret := createPubSecret(relasticsearch.ESGatewayPublicCertSecret, render.ElasticsearchNamespace, esSecret.Data["tls.crt"], "tls.crt")
+	esPublicOperNsSecret := createPubSecret(relasticsearch.PublicCertSecret, common.OperatorNamespace(), esSecret.Data["tls.crt"], "tls.crt")
+	esPublicSecret := createPubSecret(relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, esSecret.Data["tls.crt"], "tls.crt")
 	return []client.Object{
 		esSecret,
 		esOperNsSecret,

@@ -752,6 +752,8 @@ var _ = Describe("Testing core-controller installation", func() {
 					},
 				},
 			}
+			// We start off with a 'standard' installation, with nothing special
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 
 			Expect(c.Create(
 				ctx,
@@ -775,8 +777,6 @@ var _ = Describe("Testing core-controller installation", func() {
 		})
 
 		It("should create an internal manager TLS cert secret", func() {
-			cr.Spec.CertificateManagement = &operator.CertificateManagement{}
-			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -787,8 +787,6 @@ var _ = Describe("Testing core-controller installation", func() {
 		})
 
 		It("should replace the internal manager TLS cert secret if its DNS names are invalid", func() {
-			cr.Spec.CertificateManagement = &operator.CertificateManagement{}
-			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			// Create a internal manager TLS secret with old DNS name.
 			oldSecret, err := secret.CreateTLSSecret(nil,
 				render.ManagerInternalTLSSecretName, common.OperatorNamespace(), render.ManagerInternalSecretKeyName,
@@ -806,16 +804,16 @@ var _ = Describe("Testing core-controller installation", func() {
 			test.VerifyCert(internalManagerTLSSecret, render.ManagerInternalSecretKeyName, render.ManagerInternalSecretCertName, dnsNames...)
 		})
 
-		It("should create typha and node TLS cert secrets if not provided and add OwnerReference to those", func() {
+		It("should create node and typha TLS cert secrets if not provided and add OwnerReference to those", func() {
 
-			exited := false
-			osExitOverride = func(_ int) { exited = false }
-			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(exited).Should(BeFalse())
 
 			secret := &corev1.Secret{}
+			cfgMap := &corev1.ConfigMap{}
+
+			Expect(c.Get(ctx, client.ObjectKey{Name: render.TyphaCAConfigMapName, Namespace: common.OperatorNamespace()}, cfgMap)).ShouldNot(HaveOccurred())
+			Expect(cfgMap.GetOwnerReferences()).To(HaveLen(1))
 
 			Expect(c.Get(ctx, client.ObjectKey{Name: render.NodeTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
 			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
@@ -824,7 +822,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
 		})
 
-		It("should not add OwnerReference to user supplied typha and node certs", func() {
+		It("should not add OwnerReference to user supplied node and typha certs", func() {
 
 			testCA := test.MakeTestCA("core-test")
 			crtContent := &bytes.Buffer{}
@@ -860,12 +858,8 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(c.Create(ctx, typhaSecret)).NotTo(HaveOccurred())
 
-			exited := false
-			osExitOverride = func(_ int) { exited = false }
-			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(exited).Should(BeFalse())
 
 			Expect(test.GetResource(c, nodeSecret)).To(BeNil())
 			Expect(nodeSecret.GetOwnerReferences()).To(HaveLen(0))

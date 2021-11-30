@@ -67,8 +67,8 @@ var (
 	kbObjKey          = client.ObjectKey{Name: render.KibanaName, Namespace: render.KibanaNamespace}
 	curatorObjKey     = types.NamespacedName{Namespace: render.ElasticsearchNamespace, Name: render.EsCuratorName}
 
-	esCertSecretKey        = client.ObjectKey{Name: render.TigeraESGatewayCertSecret, Namespace: render.ElasticsearchNamespace}
-	esCertSecretOperKey    = client.ObjectKey{Name: render.TigeraESGatewayCertSecret, Namespace: common.OperatorNamespace()}
+	esCertSecretKey        = client.ObjectKey{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}
+	esCertSecretOperKey    = client.ObjectKey{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}
 	esCertPubSecretKey     = client.ObjectKey{Name: relasticsearch.PublicCertSecret, Namespace: render.ElasticsearchNamespace}
 	esCertPubSecretOperKey = client.ObjectKey{Name: relasticsearch.PublicCertSecret, Namespace: common.OperatorNamespace()}
 
@@ -600,7 +600,7 @@ var _ = Describe("LogStorage controller", func() {
 					esDNSNames := []string{"es.example.com", "192.168.10.10"}
 					testCA := test.MakeTestCA("logstorage-test")
 					esSecret, err := secret.CreateTLSSecret(testCA,
-						render.TigeraESGatewayCertSecret, common.OperatorNamespace(), "tls.key", "tls.crt",
+						render.TigeraElasticsearchCertSecret, common.OperatorNamespace(), "tls.key", "tls.crt",
 						rmeta.DefaultCertificateDuration, nil, esDNSNames...,
 					)
 					Expect(err).ShouldNot(HaveOccurred())
@@ -983,7 +983,7 @@ var _ = Describe("LogStorage controller", func() {
 					testCA := test.MakeTestCA("logstorage-test")
 					dnsNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
 					kbSecret, err := secret.CreateTLSSecret(testCA,
-						render.TigeraESGatewayCertSecret, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey,
+						render.TigeraElasticsearchCertSecret, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey,
 						rmeta.DefaultCertificateDuration, nil, dnsNames...,
 					)
 					Expect(err).ShouldNot(HaveOccurred())
@@ -1650,7 +1650,7 @@ func createESSecrets() []client.Object {
 	dnsNames = append(dnsNames, dns.GetServiceDNSNames(esgateway.ServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)...)
 
 	esSecret, err := secret.CreateTLSSecret(nil,
-		render.TigeraESGatewayCertSecret, common.OperatorNamespace(), "tls.key", "tls.crt",
+		render.TigeraElasticsearchCertSecret, common.OperatorNamespace(), "tls.key", "tls.crt",
 		rmeta.DefaultCertificateDuration, nil, dnsNames...,
 	)
 	Expect(err).ShouldNot(HaveOccurred())

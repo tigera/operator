@@ -49,8 +49,8 @@ var _ = Describe("Elasticsearch metrics", func() {
 				Installation:         installation,
 				PullSecrets:          []*corev1.Secret{{ObjectMeta: metav1.ObjectMeta{Name: "pullsecret", Namespace: render.ElasticsearchNamespace}}},
 				ESConfig:             esConfig,
-				ESMetricsCredsSecret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraESGatewayCertSecret, Namespace: common.OperatorNamespace()}},
-				ESCertSecret:         &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraESGatewayCertSecret, Namespace: common.OperatorNamespace()}},
+				ESMetricsCredsSecret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
+				ESCertSecret:         &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
 				ClusterDomain:        "cluster.local",
 			}
 		})
@@ -59,7 +59,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 			expectedResources := []client.Object{
 				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      render.TigeraESGatewayCertSecret,
+						Name:      render.TigeraElasticsearchCertSecret,
 						Namespace: render.ElasticsearchNamespace,
 					},
 				},

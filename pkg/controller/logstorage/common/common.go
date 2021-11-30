@@ -118,13 +118,13 @@ func GetESGatewayCertificateSecrets(ctx context.Context, instl *operatorv1.Insta
 	svcDNSNames = append(svcDNSNames, dns.GetServiceDNSNames(esgateway.ServiceName, render.ElasticsearchNamespace, clusterDomain)...)
 
 	// Get the secret - might be nil
-	oprKeyCert, err := utils.GetSecret(ctx, cli, render.TigeraESGatewayCertSecret, common.OperatorNamespace())
+	oprKeyCert, err := utils.GetSecret(ctx, cli, render.TigeraElasticsearchCertSecret, common.OperatorNamespace())
 	if err != nil {
 		return nil, nil, false, err
 	}
 
 	// Ensure that cert is valid.
-	oprKeyCert, _, err = utils.EnsureCertificateSecret(render.TigeraESGatewayCertSecret, oprKeyCert, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, svcDNSNames...)
+	oprKeyCert, _, err = utils.EnsureCertificateSecret(render.TigeraElasticsearchCertSecret, oprKeyCert, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, svcDNSNames...)
 	if err != nil {
 		return nil, nil, false, err
 	}

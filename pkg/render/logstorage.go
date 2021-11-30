@@ -57,7 +57,7 @@ const (
 
 	ElasticsearchNamespace = "tigera-elasticsearch"
 
-	TigeraESGatewayCertSecret             = "tigera-secure-elasticsearch-cert"
+	TigeraElasticsearchCertSecret         = "tigera-secure-elasticsearch-cert"
 	TigeraElasticsearchInternalCertSecret = "tigera-secure-internal-elasticsearch-cert"
 
 	ElasticsearchName                     = "tigera-secure"

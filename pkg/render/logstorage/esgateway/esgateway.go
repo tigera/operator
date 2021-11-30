@@ -207,7 +207,7 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 		Name: VolumeName,
 		VolumeSource: corev1.VolumeSource{
 			Secret: &corev1.SecretVolumeSource{
-				SecretName: render.TigeraESGatewayCertSecret,
+				SecretName: render.TigeraElasticsearchCertSecret,
 			},
 		},
 	}

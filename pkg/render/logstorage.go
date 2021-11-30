@@ -159,7 +159,7 @@ const (
 
 var log = logf.Log.WithName("render")
 
-// Elasticsearch renders the
+// LogStorage renders the components necessary for kibana and elasticsearch
 func LogStorage(cfg *ElasticsearchConfiguration) Component {
 
 	var kibanaSecrets []*corev1.Secret
@@ -171,7 +171,7 @@ func LogStorage(cfg *ElasticsearchConfiguration) Component {
 		if cfg.Installation.CertificateManagement != nil {
 
 			kibanaSecrets = append(kibanaSecrets,
-				CreateCertificateSecret(cfg.Installation.CertificateManagement.CACert, relasticsearch.InternalCertSecret, KibanaNamespace),
+				CreateCertificateSecret(cfg.Installation.CertificateManagement.CACert, relasticsearch.InternalPublicCertSecret, KibanaNamespace),
 				CreateCertificateSecret(cfg.Installation.CertificateManagement.CACert, KibanaInternalCertSecret, common.OperatorNamespace()))
 		} else if cfg.KibanaInternalCertSecret != nil {
 			//copy the valid cert to operator namespace.

@@ -131,6 +131,12 @@ func (w *calicoWindowsUpgrader) getNodeUpgradeStatus() (map[string]*corev1.Node,
 			return nil, nil, nil, fmt.Errorf("Node %v does not have the version annotation, it might be unhealthy or it might be running an unsupported Calico version.", node.Name)
 		}
 
+		// Don't upgrade from Calico to Calico
+		if variant == w.install.Variant && variant == operatorv1.Calico {
+			windowsLog.V(1).Info(fmt.Sprintf("Skipping upgrade of node %v from Calico to Calico", node.Name))
+			continue
+		}
+
 		if node.Labels[common.CalicoWindowsUpgradeLabel] == common.CalicoWindowsUpgradeLabelInProgress {
 			windowsLog.V(1).Info(fmt.Sprintf("Node %v has the upgrade in-progress label", node.Name))
 			inProgress[node.Name] = node

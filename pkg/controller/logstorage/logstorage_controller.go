@@ -573,10 +573,10 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 	// If Certificate management is enabled, we only want to trust the CA cert and let the init container handle private key generation.
 	if instl.CertificateManagement != nil {
 		esSecret.Data[corev1.TLSCertKey] = instl.CertificateManagement.CACert
-		esPublicSecret = render.CreateCertificateSecret(instl.CertificateManagement.CACert, relasticsearch.InternalPublicCertSecret, render.ElasticsearchNamespace)
+		esPublicSecret = render.CreateCertificateSecret(instl.CertificateManagement.CACert, relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
 	} else {
 		// Get the internal public cert secret - might be nil.
-		esPublicSecret, err = utils.GetSecret(ctx, r.client, relasticsearch.InternalPublicCertSecret, render.ElasticsearchNamespace)
+		esPublicSecret, err = utils.GetSecret(ctx, r.client, relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -595,7 +595,7 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 			// TODO: Understand why this is needed. This is creating a secret that it is expected will be created
 			// by the ECK operator but the understanding is that this is an optimization. Ideally this can be
 			// removed and we can count on the ECK operator to do what is expected.
-			esPublicSecret = render.CreateCertificateSecret(esSecret.Data[corev1.TLSCertKey], relasticsearch.InternalPublicCertSecret, render.ElasticsearchNamespace)
+			esPublicSecret = render.CreateCertificateSecret(esSecret.Data[corev1.TLSCertKey], relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
 		}
 	}
 

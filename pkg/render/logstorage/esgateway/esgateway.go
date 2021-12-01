@@ -241,10 +241,10 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 			},
 		},
 		{
-			Name: relasticsearch.InternalPublicCertSecret,
+			Name: relasticsearch.InternalCertSecret,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: relasticsearch.InternalPublicCertSecret,
+					SecretName: relasticsearch.InternalCertSecret,
 				},
 			},
 		},
@@ -253,7 +253,7 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 	volumeMounts := []corev1.VolumeMount{
 		{Name: VolumeName, MountPath: "/certs/https", ReadOnly: true},
 		{Name: render.KibanaInternalCertSecret, MountPath: "/certs/kibana", ReadOnly: true},
-		{Name: relasticsearch.InternalPublicCertSecret, MountPath: "/certs/elasticsearch", ReadOnly: true},
+		{Name: relasticsearch.InternalCertSecret, MountPath: "/certs/elasticsearch", ReadOnly: true},
 	}
 
 	podTemplate := &corev1.PodTemplateSpec{

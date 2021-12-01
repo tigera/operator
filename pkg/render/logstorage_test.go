@@ -276,7 +276,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{"tigera-kibana", render.KibanaNamespace, &corev1.ServiceAccount{}, nil},
 					{"tigera-pull-secret", render.KibanaNamespace, &corev1.Secret{}, nil},
 					{render.TigeraKibanaCertSecret, render.KibanaNamespace, &corev1.Secret{}, nil},
-					{relasticsearch.InternalPublicCertSecret, render.KibanaNamespace, &corev1.Secret{}, nil},
+					{relasticsearch.InternalCertSecret, render.KibanaNamespace, &corev1.Secret{}, nil},
 					{render.KibanaInternalCertSecret, common.OperatorNamespace(), &corev1.Secret{}, nil},
 					{render.KibanaName, render.KibanaNamespace, &kbv1.Kibana{}, nil},
 					{render.EsManagerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},

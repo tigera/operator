@@ -171,7 +171,7 @@ func LogStorage(cfg *ElasticsearchConfiguration) Component {
 		if cfg.Installation.CertificateManagement != nil {
 
 			kibanaSecrets = append(kibanaSecrets,
-				CreateCertificateSecret(cfg.Installation.CertificateManagement.CACert, relasticsearch.InternalPublicCertSecret, KibanaNamespace),
+				CreateCertificateSecret(cfg.Installation.CertificateManagement.CACert, relasticsearch.InternalCertSecret, KibanaNamespace),
 				CreateCertificateSecret(cfg.Installation.CertificateManagement.CACert, KibanaInternalCertSecret, common.OperatorNamespace()))
 		} else if cfg.KibanaInternalCertSecret != nil {
 			//copy the valid cert to operator namespace.

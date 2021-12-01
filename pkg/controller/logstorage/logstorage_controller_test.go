@@ -1042,7 +1042,7 @@ var _ = Describe("LogStorage controller", func() {
 
 					secret := &corev1.Secret{}
 
-					Expect(cli.Get(ctx, client.ObjectKey{Name: relasticsearch.InternalPublicCertSecret, Namespace: render.ElasticsearchNamespace}, secret)).ShouldNot(HaveOccurred())
+					Expect(cli.Get(ctx, client.ObjectKey{Name: relasticsearch.InternalCertSecret, Namespace: render.ElasticsearchNamespace}, secret)).ShouldNot(HaveOccurred())
 					Expect(secret.GetOwnerReferences()).To(HaveLen(0))
 				})
 

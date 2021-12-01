@@ -342,11 +342,11 @@ var _ = Describe("Calico windows upgrader", func() {
 
 		// Create 5 nodes, all ready to be upgraded from an old Enterprise
 		// version to the latest.
-		_ = test.CreateWindowsNode(cs, "node1", operator.TigeraSecureEnterprise, "v3.11.0")
-		_ = test.CreateWindowsNode(cs, "node2", operator.TigeraSecureEnterprise, "v3.11.0")
-		_ = test.CreateWindowsNode(cs, "node3", operator.TigeraSecureEnterprise, "v3.11.0")
-		_ = test.CreateWindowsNode(cs, "node4", operator.TigeraSecureEnterprise, "v3.11.0")
-		_ = test.CreateWindowsNode(cs, "node5", operator.TigeraSecureEnterprise, "v3.11.0")
+		_ = test.CreateWindowsNode(cs, "node1", operator.TigeraSecureEnterprise, "v3.11-old")
+		_ = test.CreateWindowsNode(cs, "node2", operator.TigeraSecureEnterprise, "v3.11-old")
+		_ = test.CreateWindowsNode(cs, "node3", operator.TigeraSecureEnterprise, "v3.11-old")
+		_ = test.CreateWindowsNode(cs, "node4", operator.TigeraSecureEnterprise, "v3.11-old")
+		_ = test.CreateWindowsNode(cs, "node5", operator.TigeraSecureEnterprise, "v3.11-old")
 
 		// We won't know which nodes will end up being added for upgrade.
 		mockStatus.On("SetWindowsUpgradeStatus", mock.Anything, mock.Anything, mock.Anything, nil)

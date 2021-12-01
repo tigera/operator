@@ -53,6 +53,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 	pullSecrets []*corev1.Secret,
 	authentication *operatorv1.Authentication,
 	hdler utils.ComponentHandler,
+	hndlerNoOwner utils.ComponentHandler,
 	reqLogger logr.Logger,
 	ctx context.Context,
 ) (reconcile.Result, bool, bool, error) {
@@ -140,7 +141,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 		Elasticsearch:               elasticsearch,
 		Kibana:                      kibana,
 		ClusterConfig:               clusterConfig,
-		ElasticsearchSecrets:        []*corev1.Secret{esCertSecret, esInternalCertSecret, esAdminUserSecret},
+		ElasticsearchSecrets:        []*corev1.Secret{esCertSecret, esAdminUserSecret},
 		KibanaCertSecret:            kbCertSecret,
 		KibanaInternalCertSecret:    kbInternalCertSecret,
 		PullSecrets:                 pullSecrets,
@@ -159,6 +160,21 @@ func (r *ReconcileLogStorage) createLogStorage(
 		reqLogger.Error(err, "Error with images from ImageSet")
 		r.status.SetDegraded("Error with images from ImageSet", err.Error())
 		return reconcile.Result{}, false, finalizerCleanup, err
+	}
+
+	// esInternalCertSecret is a secret handled by ECK
+	if esInternalCertSecret != nil {
+		esPublicSecretComponent := render.NewPassthrough([]client.Object{esInternalCertSecret})
+		if install.CertificateManagement != nil {
+			components = append(components, esPublicSecretComponent)
+		} else {
+			// create the secret component in a handler that will not add an operator OwnerReference
+			if err := hndlerNoOwner.CreateOrUpdateOrDelete(ctx, esPublicSecretComponent, r.status); err != nil {
+				reqLogger.Error(err, err.Error())
+				r.status.SetDegraded("Error creating / updating resource", err.Error())
+				return reconcile.Result{}, false, finalizerCleanup, err
+			}
+		}
 	}
 
 	components = append(components, component)

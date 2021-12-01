@@ -159,7 +159,7 @@ const (
 
 var log = logf.Log.WithName("render")
 
-// Elasticsearch renders the
+// LogStorage renders the components necessary for kibana and elasticsearch
 func LogStorage(cfg *ElasticsearchConfiguration) Component {
 
 	var kibanaSecrets []*corev1.Secret

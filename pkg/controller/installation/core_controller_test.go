@@ -1135,7 +1135,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			It("should trigger upgrade of out-of-date Calico Windows nodes", func() {
 				// Set variant to Calico and set maxUnavailable to 2.
-				cr.Spec.Variant = operator.Calico
+				cr.Spec.Variant = operator.TigeraSecureEnterprise
 				two := intstr.FromInt(2)
 				cr.Spec.NodeUpdateStrategy = appsv1.DaemonSetUpdateStrategy{
 					RollingUpdate: &appsv1.RollingUpdateDaemonSet{
@@ -1146,10 +1146,11 @@ var _ = Describe("Testing core-controller installation", func() {
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 
-				// Create two nodes that should be upgraded. The current variant
-				// is Calico and version is `components.CalicoRelease`.
+				// Create two nodes that should be upgraded to the latest Enterprise version
+				// - n1 is running Calico
+				// - n2 is running an older Enterprise version
 				n1 := test.CreateWindowsNode(cs, "windows1", operator.Calico, "v3.21.999")
-				n2 := test.CreateWindowsNode(cs, "windows2", operator.TigeraSecureEnterprise, components.ComponentTigeraWindows.Version)
+				n2 := test.CreateWindowsNode(cs, "windows2", operator.TigeraSecureEnterprise, "v3.11.999")
 
 				mockStatus.On("SetWindowsUpgradeStatus", mock.Anything, mock.Anything, mock.Anything, nil)
 

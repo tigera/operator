@@ -163,13 +163,17 @@ func (r *ReconcileLogStorage) createLogStorage(
 	}
 
 	// esInternalCertSecret is a secret handled by ECK
-	// create the secret component in a handler that will not add an operator OwnerReference
 	if esInternalCertSecret != nil {
 		esPublicSecretComponent := render.NewPassthrough([]client.Object{esInternalCertSecret})
-		if err := hndlerNoOwner.CreateOrUpdateOrDelete(ctx, esPublicSecretComponent, r.status); err != nil {
-			reqLogger.Error(err, err.Error())
-			r.status.SetDegraded("Error creating / updating resource", err.Error())
-			return reconcile.Result{}, false, finalizerCleanup, err
+		if install.CertificateManagement != nil {
+			components = append(components, esPublicSecretComponent)
+		} else {
+			// create the secret component in a handler that will not add an operator OwnerReference
+			if err := hndlerNoOwner.CreateOrUpdateOrDelete(ctx, esPublicSecretComponent, r.status); err != nil {
+				reqLogger.Error(err, err.Error())
+				r.status.SetDegraded("Error creating / updating resource", err.Error())
+				return reconcile.Result{}, false, finalizerCleanup, err
+			}
 		}
 	}
 

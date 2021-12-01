@@ -53,7 +53,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 	pullSecrets []*corev1.Secret,
 	authentication *operatorv1.Authentication,
 	hdler utils.ComponentHandler,
-	hdlrPublicSecret utils.ComponentHandler,
+	hndlerNoOwner utils.ComponentHandler,
 	reqLogger logr.Logger,
 	ctx context.Context,
 ) (reconcile.Result, bool, bool, error) {
@@ -166,7 +166,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 	// create the secret component in a handler that will not add an operator OwnerReference
 	if esInternalCertSecret != nil {
 		esPublicSecretComponent := render.NewPassthrough([]client.Object{esInternalCertSecret})
-		if err := hdlrPublicSecret.CreateOrUpdateOrDelete(ctx, esPublicSecretComponent, r.status); err != nil {
+		if err := hndlerNoOwner.CreateOrUpdateOrDelete(ctx, esPublicSecretComponent, r.status); err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Error creating / updating resource", err.Error())
 			return reconcile.Result{}, false, finalizerCleanup, err

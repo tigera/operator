@@ -439,7 +439,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	//Handler for the ECK ES public secret
-	hdlrPublicSecret := utils.NewComponentHandler(reqLogger, r.client, r.scheme, nil)
+	hndlerNoOwner := utils.NewComponentHandler(reqLogger, r.client, r.scheme, nil)
 
 	authentication, err := utils.GetAuthentication(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
@@ -462,7 +462,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		pullSecrets,
 		authentication,
 		hdler,
-		hdlrPublicSecret,
+		hndlerNoOwner,
 		reqLogger,
 		ctx,
 	)

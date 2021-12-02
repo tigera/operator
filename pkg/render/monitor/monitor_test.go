@@ -79,6 +79,8 @@ var _ = Describe("monitor rendering tests", func() {
 			{"alertmanager-calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Secret"},
 			{"tigera-prometheus-role", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "Role"},
 			{"tigera-prometheus-role-binding", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding"},
+			{monitor.PrometheusTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
+			{monitor.PrometheusTLSSecretName, common.TigeraPrometheusNamespace, "", "v1", "Secret"},
 			{"calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Service"},
 			{"calico-node-alertmanager", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.AlertmanagersKind},
 			{"prometheus", common.TigeraPrometheusNamespace, "", "v1", "ServiceAccount"},
@@ -378,10 +380,10 @@ var _ = Describe("monitor rendering tests", func() {
 			kind    string
 		}{
 			{"tigera-prometheus", "", "", "v1", "Namespace"},
-			{"tigera-prometheus-role", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "Role"},
-			{"tigera-prometheus-role-binding", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding"},
 			{"tigera-pull-secret", common.TigeraPrometheusNamespace, "", "", ""},
 			{"alertmanager-calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Secret"},
+			{"tigera-prometheus-role", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "Role"},
+			{"tigera-prometheus-role-binding", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding"},
 			{monitor.PrometheusTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
 			{monitor.PrometheusTLSSecretName, common.TigeraPrometheusNamespace, "", "v1", "Secret"},
 			{"calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Service"},
@@ -403,7 +405,10 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(len(toCreate)).To(Equal(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
+			exObj := fmt.Sprintf("%v %v", expectedRes.kind, expectedRes.name)
 			obj := toCreate[i]
+			acObj := fmt.Sprintf("%v %v", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName())
+			Expect(acObj).To(Equal(exObj), fmt.Sprintf("check %v", i))
 			rtest.ExpectResource(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 

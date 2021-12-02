@@ -159,8 +159,6 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		mc.roleBinding(),
 	)
 
-	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.pullSecrets...)...)...)
-	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.alertmanagerConfigSecret)...)...)
 	if mc.installation.CertificateManagement == nil {
 		toCreate = append(toCreate, secret.ToRuntimeObjects(mc.tlsSecrets...)...)
 	} else {

@@ -71,7 +71,7 @@ func Monitor(cfg *Config) render.Component {
 	var tlsSecrets []*corev1.Secret
 	var tlsHash string
 	if cfg.Installation.CertificateManagement == nil {
-		tlsSecrets = []*corev1.Secret{cfg.TLSSecret, secret.CopyToNamespace(common.TigeraPrometheusNamespace, cfg.TLSSecret)[0]}
+		tlsSecrets = []*corev1.Secret{secret.CopyToNamespace(common.TigeraPrometheusNamespace, cfg.TLSSecret)[0]}
 		tlsHash = rmeta.AnnotationHash(cfg.TLSSecret.Data)
 	}
 

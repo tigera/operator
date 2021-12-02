@@ -1078,7 +1078,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if managerInternalTLSSecret != nil {
 		objs = append(objs, managerInternalTLSSecret)
 	}
-	operatorComponent := render.NewPassthrough(objs)
+	operatorComponent := render.NewPassthrough(objs...)
 	components = append(components, operatorComponent)
 
 	namespaceCfg := &render.NamespaceConfiguration{
@@ -1090,7 +1090,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	if newActiveCM != nil {
 		log.Info("adding active configmap")
-		components = append(components, render.NewPassthrough([]client.Object{newActiveCM}))
+		components = append(components, render.NewPassthrough(newActiveCM))
 	}
 
 	// If we're on OpenShift on AWS render a Job (and needed resources) to
@@ -1118,7 +1118,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		criticalPriorityClasses := []string{render.NodePriorityClassName, render.ClusterPriorityClassName}
 		resourceQuotaObj := resourcequota.ResourceQuotaForPriorityClassScope(resourcequota.CalicoCriticalResourceQuotaName,
 			common.CalicoNamespace, criticalPriorityClasses)
-		resourceQuotaComponent := render.NewPassthrough([]client.Object{resourceQuotaObj})
+		resourceQuotaComponent := render.NewPassthrough(resourceQuotaObj)
 		components = append(components, resourceQuotaComponent)
 
 	}
@@ -1519,7 +1519,7 @@ func (r *ReconcileInstallation) updateCRDs(ctx context.Context, variant operator
 	if !r.manageCRDs {
 		return nil
 	}
-	crdComponent := render.NewPassthrough(crds.ToRuntimeObjects(crds.GetCRDs(variant)...))
+	crdComponent := render.NewPassthrough(crds.ToRuntimeObjects(crds.GetCRDs(variant)...)...)
 	// Specify nil for the CR so no ownership is put on the CRDs. We do this so removing the
 	// Installation CR will not remove the CRDs.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, nil)

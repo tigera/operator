@@ -34,6 +34,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -80,8 +81,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			}
 
 			installation := &operatorv1.InstallationSpec{
-				KubernetesProvider: operatorv1.ProviderNone,
-				Registry:           "testregistry.com/",
+				ControlPlaneReplicas: &replicas,
+				KubernetesProvider:   operatorv1.ProviderNone,
+				Registry:             "testregistry.com/",
 			}
 
 			esConfig := relasticsearch.NewClusterConfig("cluster", 1, 1, 1)
@@ -583,9 +585,11 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 		var managementClusterConnection *operatorv1.ManagementClusterConnection
 
 		BeforeEach(func() {
+			replicas := int32(1)
 			installation := &operatorv1.InstallationSpec{
-				KubernetesProvider: operatorv1.ProviderNone,
-				Registry:           "testregistry.com/",
+				ControlPlaneReplicas: &replicas,
+				KubernetesProvider:   operatorv1.ProviderNone,
+				Registry:             "testregistry.com/",
 			}
 
 			managementClusterConnection = &operatorv1.ManagementClusterConnection{}
@@ -650,8 +654,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			}
 
 			installation := &operatorv1.InstallationSpec{
-				KubernetesProvider: operatorv1.ProviderNone,
-				Registry:           "testregistry.com/",
+				ControlPlaneReplicas: &replicas,
+				KubernetesProvider:   operatorv1.ProviderNone,
+				Registry:             "testregistry.com/",
 			}
 			esConfig := relasticsearch.NewClusterConfig("cluster", 1, 1, 1)
 
@@ -1101,6 +1106,99 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			})
 		})
 	})
+
+	Context("Kibana high availability", func() {
+		var cfg *render.ElasticsearchConfiguration
+		replicas := int32(1)
+		retention := int32(1)
+
+		BeforeEach(func() {
+			logStorage := &operatorv1.LogStorage{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "tigera-secure",
+				},
+				Spec: operatorv1.LogStorageSpec{
+					Nodes: &operatorv1.Nodes{
+						Count:                1,
+						ResourceRequirements: nil,
+					},
+					Indices: &operatorv1.Indices{
+						Replicas: &replicas,
+					},
+					Retention: &operatorv1.Retention{
+						Flows:             &retention,
+						AuditReports:      &retention,
+						Snapshots:         &retention,
+						ComplianceReports: &retention,
+					},
+				},
+				Status: operatorv1.LogStorageStatus{
+					State: "",
+				},
+			}
+
+			installation := &operatorv1.InstallationSpec{
+				ControlPlaneReplicas: &replicas,
+				KubernetesProvider:   operatorv1.ProviderNone,
+				Registry:             "testregistry.com/",
+			}
+
+			esConfig := relasticsearch.NewClusterConfig("cluster", 1, 1, 1)
+
+			cfg = &render.ElasticsearchConfiguration{
+				LogStorage:    logStorage,
+				Installation:  installation,
+				ClusterConfig: esConfig,
+				ElasticsearchSecrets: []*corev1.Secret{
+					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
+					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}},
+				},
+				KibanaCertSecret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret, Namespace: common.OperatorNamespace()}},
+				PullSecrets: []*corev1.Secret{
+					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+				},
+				Provider:           operatorv1.ProviderNone,
+				ClusterDomain:      "cluster.local",
+				ElasticLicenseType: render.ElasticsearchLicenseTypeEnterpriseTrial,
+			}
+		})
+
+		It("should set count to 1 when ControlPlaneReplicas is nil", func() {
+			cfg.Installation.ControlPlaneReplicas = nil
+			component := render.LogStorage(cfg)
+			resources, _ := component.Objects()
+
+			kibana, ok := rtest.GetResource(resources, "tigera-secure", "tigera-kibana", "kibana.k8s.elastic.co", "v1", "Kibana").(*kbv1.Kibana)
+			Expect(ok).To(BeTrue())
+			Expect(kibana.Spec.Count).To(Equal(int32(1)))
+			Expect(kibana.Spec.PodTemplate.Spec.Affinity).To(BeNil())
+		})
+
+		It("should not render PodAffinity when ControlPlaneReplicas is 1", func() {
+			var replicas int32 = 1
+			cfg.Installation.ControlPlaneReplicas = &replicas
+
+			component := render.LogStorage(cfg)
+			resources, _ := component.Objects()
+
+			kibana, ok := rtest.GetResource(resources, "tigera-secure", "tigera-kibana", "kibana.k8s.elastic.co", "v1", "Kibana").(*kbv1.Kibana)
+			Expect(ok).To(BeTrue())
+			Expect(kibana.Spec.PodTemplate.Spec.Affinity).To(BeNil())
+		})
+
+		It("should render PodAffinity when ControlPlaneReplicas is greater than 1", func() {
+			var replicas int32 = 2
+			cfg.Installation.ControlPlaneReplicas = &replicas
+
+			component := render.LogStorage(cfg)
+			resources, _ := component.Objects()
+
+			kibana, ok := rtest.GetResource(resources, "tigera-secure", "tigera-kibana", "kibana.k8s.elastic.co", "v1", "Kibana").(*kbv1.Kibana)
+			Expect(ok).To(BeTrue())
+			Expect(kibana.Spec.PodTemplate.Spec.Affinity).NotTo(BeNil())
+			Expect(kibana.Spec.PodTemplate.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("tigera-secure", "tigera-kibana")))
+		})
+	})
 })
 
 var deleteLogStorageTests = func(managementCluster *operatorv1.ManagementCluster, managementClusterConnection *operatorv1.ManagementClusterConnection) func() {
@@ -1138,8 +1236,9 @@ var deleteLogStorageTests = func(managementCluster *operatorv1.ManagementCluster
 			}
 
 			installation := &operatorv1.InstallationSpec{
-				KubernetesProvider: operatorv1.ProviderNone,
-				Registry:           "testregistry.com/",
+				ControlPlaneReplicas: &replicas,
+				KubernetesProvider:   operatorv1.ProviderNone,
+				Registry:             "testregistry.com/",
 			}
 			esConfig := relasticsearch.NewClusterConfig("cluster", 1, 1, 1)
 

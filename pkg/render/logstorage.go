@@ -44,6 +44,7 @@ import (
 	"github.com/tigera/operator/pkg/ptr"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 )
@@ -1224,7 +1225,13 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 					EmptyDir: &corev1.EmptyDirVolumeSource{}}})
 	}
 
-	return &kbv1.Kibana{
+	count := int32(1)
+	if es.cfg.Installation.ControlPlaneReplicas != nil {
+		count = *es.cfg.Installation.ControlPlaneReplicas
+	}
+
+	kibana := &kbv1.Kibana{
+		TypeMeta: metav1.TypeMeta{Kind: "Kibana", APIVersion: "kibana.k8s.elastic.co/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      KibanaName,
 			Namespace: KibanaNamespace,
@@ -1241,7 +1248,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 			Config: &cmnv1.Config{
 				Data: config,
 			},
-			Count: 1,
+			Count: count,
 			HTTP: cmnv1.HTTPConfig{
 				TLS: cmnv1.TLSOptions{
 					Certificate: cmnv1.SecretRef{
@@ -1291,6 +1298,12 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 			},
 		},
 	}
+
+	if es.cfg.Installation.ControlPlaneReplicas != nil && *es.cfg.Installation.ControlPlaneReplicas > 1 {
+		kibana.Spec.PodTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity(KibanaName, KibanaNamespace)
+	}
+
+	return kibana
 }
 
 func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {

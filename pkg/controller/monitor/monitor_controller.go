@@ -270,7 +270,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 
 	components := []render.Component{}
 	if createInOperatorNamespace {
-		components = append(components, render.NewPassthrough([]client.Object{alertmanagerConfigSecret}))
+		components = append(components, render.NewPassthrough([]client.Object{alertmanagerConfigSecret, tlsSecret}))
 	}
 	// Render prometheus component
 	components = append(components, monitor.Monitor(

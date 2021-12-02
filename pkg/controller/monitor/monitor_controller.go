@@ -282,7 +282,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		monitor.Monitor(monitorCfg),
 	}
 	if createInOperatorNamespace {
-		components = append(components, render.NewPassthrough([]client.Object{alertmanagerConfigSecret}))
+		components = append(components, render.NewPassthrough([]client.Object{alertmanagerConfigSecret, tlsSecret}))
 	}
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, components...); err != nil {

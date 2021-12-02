@@ -358,7 +358,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 
 	var components []render.Component
 	if operatorManagedComplianceSecret {
-		components = append(components, render.NewPassthrough([]client.Object{complianceServerCertSecret}))
+		components = append(components, render.NewPassthrough(complianceServerCertSecret))
 	}
 
 	reqLogger.V(3).Info("rendering components")

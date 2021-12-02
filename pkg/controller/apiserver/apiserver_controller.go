@@ -304,7 +304,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 	var components []render.Component
 	if tlsSecret != nil && operatorManagedApiserverSecret {
-		components = append(components, render.NewPassthrough([]client.Object{tlsSecret}))
+		components = append(components, render.NewPassthrough(tlsSecret))
 	}
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
@@ -367,7 +367,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}
 
 		if operatorManagedPacketCaptureSecret {
-			components = append(components, render.NewPassthrough([]client.Object{packetCaptureCertSecret}))
+			components = append(components, render.NewPassthrough(packetCaptureCertSecret))
 		}
 
 		// Fetch the Authentication spec. If present, we use to configure user authentication.

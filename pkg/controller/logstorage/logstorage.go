@@ -130,7 +130,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 
 	var components []render.Component
 	if kbCertSecret != nil && kbOperatorManagedCertSecret {
-		components = append(components, render.NewPassthrough([]client.Object{kbCertSecret}))
+		components = append(components, render.NewPassthrough(kbCertSecret))
 	}
 
 	logStorageCfg := &render.ElasticsearchConfiguration{
@@ -164,7 +164,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 
 	// esInternalCertSecret is a secret handled by ECK
 	if esInternalCertSecret != nil {
-		esPublicSecretComponent := render.NewPassthrough([]client.Object{esInternalCertSecret})
+		esPublicSecretComponent := render.NewPassthrough(esInternalCertSecret)
 		if install.CertificateManagement != nil {
 			components = append(components, esPublicSecretComponent)
 		} else {

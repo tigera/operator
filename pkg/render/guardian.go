@@ -51,25 +51,28 @@ func Guardian(
 	installation *operatorv1.InstallationSpec,
 	tunnelSecret *corev1.Secret,
 	packetCaptureSecret *corev1.Secret,
+	prometheusCertSecret *corev1.Secret,
 ) Component {
 	return &GuardianComponent{
-		url:                 url,
-		pullSecrets:         pullSecrets,
-		openshift:           openshift,
-		installation:        installation,
-		tunnelSecret:        tunnelSecret,
-		packetCaptureSecret: packetCaptureSecret,
+		url:                  url,
+		pullSecrets:          pullSecrets,
+		openshift:            openshift,
+		installation:         installation,
+		tunnelSecret:         tunnelSecret,
+		packetCaptureSecret:  packetCaptureSecret,
+		prometheusCertSecret: prometheusCertSecret,
 	}
 }
 
 type GuardianComponent struct {
-	url                 string
-	pullSecrets         []*corev1.Secret
-	openshift           bool
-	installation        *operatorv1.InstallationSpec
-	tunnelSecret        *corev1.Secret
-	packetCaptureSecret *corev1.Secret
-	image               string
+	url                  string
+	pullSecrets          []*corev1.Secret
+	openshift            bool
+	installation         *operatorv1.InstallationSpec
+	tunnelSecret         *corev1.Secret
+	packetCaptureSecret  *corev1.Secret
+	prometheusCertSecret *corev1.Secret
+	image                string
 }
 
 func (c *GuardianComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -104,6 +107,9 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		managerClusterRole(false, true, c.openshift),
 		managerClusterRoleBinding(),
 	)
+	if c.prometheusCertSecret != nil {
+		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(GuardianNamespace, c.prometheusCertSecret)...)...)
+	}
 
 	return objs, nil
 }
@@ -244,7 +250,7 @@ func (c *GuardianComponent) deployment() client.Object {
 }
 
 func (c *GuardianComponent) volumes() []corev1.Volume {
-	return []corev1.Volume{
+	volumes := []corev1.Volume{
 		{
 			Name: GuardianVolumeName,
 			VolumeSource: corev1.VolumeSource{
@@ -266,6 +272,18 @@ func (c *GuardianComponent) volumes() []corev1.Volume {
 			},
 		},
 	}
+	if c.prometheusCertSecret != nil {
+		volumes = append(volumes, corev1.Volume{
+			Name: PrometheusTLSSecretName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+
+					SecretName: PrometheusTLSSecretName,
+				},
+			},
+		})
+	}
+	return volumes
 }
 
 func (c *GuardianComponent) container() []corev1.Container {
@@ -305,7 +323,7 @@ func (c *GuardianComponent) container() []corev1.Container {
 }
 
 func (c *GuardianComponent) volumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{
+	mounts := []corev1.VolumeMount{
 		{
 			Name:      GuardianVolumeName,
 			MountPath: "/certs/",
@@ -317,6 +335,11 @@ func (c *GuardianComponent) volumeMounts() []corev1.VolumeMount {
 			ReadOnly:  true,
 		},
 	}
+	if c.prometheusCertSecret != nil {
+		mounts = append(mounts, corev1.VolumeMount{Name: PrometheusTLSSecretName, MountPath: "/certs/prometheus", ReadOnly: true})
+	}
+
+	return mounts
 }
 
 func (c *GuardianComponent) annotations() map[string]string {
@@ -324,5 +347,8 @@ func (c *GuardianComponent) annotations() map[string]string {
 
 	annotations[PacketCaptureTLSHashAnnotation] = rmeta.AnnotationHash(c.packetCaptureSecret.Data)
 
+	if c.prometheusCertSecret != nil {
+		annotations[prometheusTLSHashAnnotation] = rmeta.AnnotationHash(c.prometheusCertSecret.Data)
+	}
 	return annotations
 }

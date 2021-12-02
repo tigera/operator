@@ -118,7 +118,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret,
 			render.ElasticsearchManagerUserSecret, render.KibanaPublicCertSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureCertSecret,
-			render.ManagerInternalTLSSecretName, render.DexCertSecretName,
+			render.ManagerInternalTLSSecretName, render.DexCertSecretName, render.PrometheusTLSSecretName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("manager-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
@@ -290,7 +290,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		// If the secret exists but is operator managed, then check that it has the
 		// right DNS names and update it if necessary.
 		if tlsSecret == nil || certOperatorManaged {
-			// Create the cert if doesn't exist. If the cert exists, check that the cert
+			// Create the cert if it doesn't exist. If the cert exists, check that the cert
 			// has the expected DNS names. If the cert doesn't exist, the cert is recreated and returned.
 			// Note that validation of DNS names is not required for a user-provided manager TLS secret.
 			svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
@@ -490,6 +490,18 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, nil
 	}
 
+	prometheusCertSecret, err := utils.ValidateCertPair(r.client,
+		common.OperatorNamespace(),
+		render.PrometheusTLSSecretName,
+		"", // We don't need the key.
+		corev1.TLSCertKey,
+	)
+	if err != nil {
+		reqLogger.Error(err, fmt.Sprintf("failed to retrieve %s", render.PrometheusTLSSecretName))
+		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s", render.PrometheusTLSSecretName), err.Error())
+		return reconcile.Result{}, err
+	}
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -508,6 +520,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		[]*corev1.Secret{kibanaPublicCertSecret},
 		complianceServerCertSecret,
 		packetCaptureServerCertSecret,
+		prometheusCertSecret,
 		esClusterConfig,
 		tlsSecret,
 		pullSecrets,

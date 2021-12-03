@@ -127,10 +127,16 @@ func (r *ReconcileLogStorage) createLogStorage(
 		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexCertSecret, dexSecret, r.clusterDomain)
 	}
 
-	var components []render.Component
+	var objs []client.Object
 	if kbCertSecret != nil && kbOperatorManagedCertSecret {
-		components = append(components, render.NewPassthrough([]client.Object{kbCertSecret}))
+		objs = append(objs, kbCertSecret)
 	}
+	if esInternalCertSecret != nil {
+		objs = append(objs, esInternalCertSecret)
+	}
+
+	var components []render.Component
+	components = append(components, render.NewPassthrough(objs...))
 
 	logStorageCfg := &render.ElasticsearchConfiguration{
 		LogStorage:                  ls,
@@ -140,7 +146,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 		Elasticsearch:               elasticsearch,
 		Kibana:                      kibana,
 		ClusterConfig:               clusterConfig,
-		ElasticsearchSecrets:        []*corev1.Secret{esCertSecret, esInternalCertSecret, esAdminUserSecret},
+		ElasticsearchSecrets:        []*corev1.Secret{esCertSecret, esAdminUserSecret},
 		KibanaCertSecret:            kbCertSecret,
 		KibanaInternalCertSecret:    kbInternalCertSecret,
 		PullSecrets:                 pullSecrets,

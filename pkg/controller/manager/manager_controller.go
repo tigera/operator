@@ -497,7 +497,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	var components []render.Component
 	if tlsSecret != nil && operatorManagedCertSecret {
-		components = append(components, render.NewPassthrough([]client.Object{tlsSecret}))
+		components = append(components, render.NewPassthrough(tlsSecret))
 	}
 
 	// Create a component handler to manage the rendered component.

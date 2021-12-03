@@ -81,7 +81,7 @@ func allCalicoComponents(
 	if managerInternalTLSSecret != nil {
 		objs = append(objs, managerInternalTLSSecret)
 	}
-	secretsAndConfigMaps := render.NewPassthrough(objs)
+	secretsAndConfigMaps := render.NewPassthrough(objs...)
 
 	nodeCfg := &render.NodeConfiguration{
 		K8sServiceEp:            k8sServiceEp,

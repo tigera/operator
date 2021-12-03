@@ -545,46 +545,45 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 
 // getElasticsearchCertificateSecrets retrieves Elasticsearch certificate secrets needed for Elasticsearch to run or for
 // ES gateway to communicate with Elasticsearch. The order of the secrets returned are:
-// 1) The certificate secret needed for Elasticsearch (in the Elasticsearch namespace). If the user didn't create this it is
-//    created.
+// 1) The internal certificate secret needed for Elasticsearch (in the Elasticsearch namespace)
 // 2) The certificate mounted by ES gateway to connect to Elasticsearch.
 func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Context, instl *operatorv1.InstallationSpec) (*corev1.Secret, *corev1.Secret, error) {
-	var esKeyCert, certSecret *corev1.Secret
+	var esPublicSecret *corev1.Secret
 	svcDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
 
 	// Get the secret - might be nil
-	esKeyCert, err := utils.GetSecret(ctx, r.client, render.TigeraElasticsearchInternalCertSecret, render.ElasticsearchNamespace)
+	esSecret, err := utils.GetSecret(ctx, r.client, render.TigeraElasticsearchInternalCertSecret, render.ElasticsearchNamespace)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	// Ensure that cert is valid.
-	esKeyCert, _, err = utils.EnsureCertificateSecret(render.TigeraElasticsearchInternalCertSecret, esKeyCert, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, svcDNSNames...)
+	esSecret, _, err = utils.EnsureCertificateSecret(render.TigeraElasticsearchInternalCertSecret, esSecret, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, svcDNSNames...)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	// Override the Operator namespace set by utils.EnsureCertificateSecret.
-	esKeyCert.Namespace = render.ElasticsearchNamespace
+	esSecret.Namespace = render.ElasticsearchNamespace
 
 	// If Certificate management is enabled, we only want to trust the CA cert and let the init container handle private key generation.
 	if instl.CertificateManagement != nil {
-		esKeyCert.Data[corev1.TLSCertKey] = instl.CertificateManagement.CACert
-		certSecret = render.CreateCertificateSecret(instl.CertificateManagement.CACert, relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
+		esSecret.Data[corev1.TLSCertKey] = instl.CertificateManagement.CACert
+		esPublicSecret = render.CreateCertificateSecret(instl.CertificateManagement.CACert, relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
 	} else {
 		// Get the internal public cert secret - might be nil.
-		certSecret, err = utils.GetSecret(ctx, r.client, relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
+		esPublicSecret, err = utils.GetSecret(ctx, r.client, relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
 		if err != nil {
 			return nil, nil, err
 		}
 
-		if certSecret != nil {
+		if esPublicSecret != nil {
 			// When the provided certificate secret (secret) is managed by the operator we need to check if the secret that
 			// Elasticsearch creates from that given secret (internalSecret) has the expected DNS name. If it doesn't, delete the
 			// public secret so it can get recreated.
-			err = utils.SecretHasExpectedDNSNames(certSecret, corev1.TLSCertKey, svcDNSNames)
+			err = utils.SecretHasExpectedDNSNames(esPublicSecret, corev1.TLSCertKey, svcDNSNames)
 			if err == utils.ErrInvalidCertDNSNames {
-				if err := logstoragecommon.DeleteInvalidECKManagedPublicCertSecret(ctx, certSecret, r.client, log); err != nil {
+				if err := logstoragecommon.DeleteInvalidECKManagedPublicCertSecret(ctx, esPublicSecret, r.client, log); err != nil {
 					return nil, nil, err
 				}
 			}
@@ -592,11 +591,11 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 			// TODO: Understand why this is needed. This is creating a secret that it is expected will be created
 			// by the ECK operator but the understanding is that this is an optimization. Ideally this can be
 			// removed and we can count on the ECK operator to do what is expected.
-			certSecret = render.CreateCertificateSecret(esKeyCert.Data[corev1.TLSCertKey], relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
+			esPublicSecret = render.CreateCertificateSecret(esSecret.Data[corev1.TLSCertKey], relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
 		}
 	}
 
-	return esKeyCert, certSecret, err
+	return esSecret, esPublicSecret, err
 }
 
 // kibanaInternalSecrets Get the operator kibana secret and kibana's public secret if it has valid DNS names

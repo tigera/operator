@@ -106,10 +106,25 @@ type statusManager struct {
 	// if there are any, and report statuses based on the state of those resources.
 	readyToMonitor bool
 	hasSynced      bool
-	crExists       bool
+
+	// crExists tracks whether the status manager believes the CR to exist or not. It's used
+	// to determine whether we need to call Delete() on the object, without sending unnecessary
+	// get/delete calls to the API server.
+	crExists bool
 }
 
 func New(client client.Client, component string, kubernetesVersion *common.VersionInfo) StatusManager {
+	// Best-effort initialization of CR status by checking for its existence.
+	crExists := true
+	ts := &operator.TigeraStatus{}
+	err := client.Get(context.TODO(), types.NamespacedName{Name: component}, ts)
+	if err != nil && errors.IsNotFound(err) {
+		// CR doesn't exist. If we hit any other type of error, we'll assume the CR does
+		// exist. This may result in one unnecessary delete call if the resource in fact doesn't exist,
+		// but we can't assume the object has been deleted without hard evidence.
+		crExists = false
+	}
+
 	return &statusManager{
 		client:                    client,
 		component:                 component,
@@ -120,6 +135,7 @@ func New(client client.Client, component string, kubernetesVersion *common.Versi
 		certificatestatusrequests: make(map[string]map[string]string),
 		windowsNodeUpgrades:       newWindowsNodeUpgrades(),
 		kubernetesVersion:         kubernetesVersion,
+		crExists:                  crExists,
 	}
 }
 
@@ -574,6 +590,7 @@ func (m *statusManager) removeTigeraStatus() bool {
 		return true
 	}
 	if m.enabled != nil && !*m.enabled {
+		// Status manager is explicitly disabled. Delete the TigeraStatus CR if it exists.
 		ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: m.component}}
 		err := m.client.Delete(context.TODO(), ts)
 		if err != nil && !errors.IsNotFound(err) {

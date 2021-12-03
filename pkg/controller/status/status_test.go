@@ -89,11 +89,17 @@ var _ = Describe("Status reporting tests", func() {
 		})
 
 		It("existing status is removed after CR query attempt", func() {
+			// Convince the status manager that its CR has previously existed.
+			sm.crExists = true
 			ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: "test-component"}}
 			err := client.Create(context.TODO(), ts)
 			Expect(err).NotTo(HaveOccurred())
+
+			// Simulate the controller failing to find its CR.
 			sm.OnCRNotFound()
 			sm.updateStatus()
+
+			// Expect the status manager to have cleaned up the tigera status CR.
 			stat := &operator.TigeraStatus{}
 			err = client.Get(context.TODO(), types.NamespacedName{Name: "test-component"}, stat)
 			Expect(err).To(HaveOccurred())

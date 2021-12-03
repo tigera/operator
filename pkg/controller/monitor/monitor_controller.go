@@ -268,7 +268,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	components := []render.Component{}
+	components := []render.Component{render.NewPassthrough([]client.Object{tlsSecret})}
 	if createInOperatorNamespace {
 		components = append(components, render.NewPassthrough([]client.Object{alertmanagerConfigSecret, tlsSecret}))
 	}

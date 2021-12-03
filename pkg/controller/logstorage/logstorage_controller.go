@@ -438,9 +438,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, managementClusterConnection)
 	}
 
-	//Handler for the ECK ES public secret
-	hndlerNoOwner := utils.NewComponentHandler(reqLogger, r.client, r.scheme, nil)
-
 	authentication, err := utils.GetAuthentication(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded("Error while fetching Authentication", err.Error())
@@ -462,7 +459,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		pullSecrets,
 		authentication,
 		hdler,
-		hndlerNoOwner,
 		reqLogger,
 		ctx,
 	)

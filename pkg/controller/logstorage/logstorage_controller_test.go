@@ -1007,7 +1007,7 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(secret.GetOwnerReferences()).To(HaveLen(0))
 				})
 
-				It("should not add OwnerReference to the public internal elasticsearch TLS cert", func() {
+				It("should add OwnerReference to the public elasticsearch TLS cert secret", func() {
 					Expect(cli.Create(ctx, &storagev1.StorageClass{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: storageClassName,
@@ -1043,7 +1043,7 @@ var _ = Describe("LogStorage controller", func() {
 					secret := &corev1.Secret{}
 
 					Expect(cli.Get(ctx, client.ObjectKey{Name: relasticsearch.InternalCertSecret, Namespace: render.ElasticsearchNamespace}, secret)).ShouldNot(HaveOccurred())
-					Expect(secret.GetOwnerReferences()).To(HaveLen(0))
+					Expect(secret.GetOwnerReferences()).To(HaveLen(1))
 				})
 
 				Context("checking rendered images", func() {

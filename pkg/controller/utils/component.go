@@ -226,8 +226,15 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 	// as-is.
 	currentAnnotations := mapExistsOrInitialize(currentMeta.GetAnnotations())
 	desiredAnnotations := mapExistsOrInitialize(desiredMeta.GetAnnotations())
-	mergedAnnotations := mergeAnnotations(currentAnnotations, desiredAnnotations)
+	mergedAnnotations := mergeMaps(currentAnnotations, desiredAnnotations)
 	desiredMeta.SetAnnotations(mergedAnnotations)
+
+	// Merge labels by reconciling the ones that components expect, but leaving everything else
+	// as-is.
+	currentLabels := mapExistsOrInitialize(currentMeta.GetLabels())
+	desiredLabels := mapExistsOrInitialize(desiredMeta.GetLabels())
+	mergedLabels := mergeMaps(currentLabels, desiredLabels)
+	desiredMeta.SetLabels(mergedLabels)
 
 	switch desired.(type) {
 	case *v1.Service:
@@ -361,9 +368,9 @@ func ensureOSSchedulingRestrictions(obj client.Object, osType rmeta.OSType) {
 	}
 }
 
-// mergeAnnotations merges current and desired annotations. If both current and desired annotations contain the same key, the
-// desired annotation, i.e, the ones that the operators Components specify take preference.
-func mergeAnnotations(current, desired map[string]string) map[string]string {
+// mergeMaps merges current and desired maps. If both current and desired maps contain the same key, the
+// desired map, i.e, the ones that the operators Components specify take preference.
+func mergeMaps(current, desired map[string]string) map[string]string {
 	for k, v := range current {
 		// Copy over annotations that should be copied.
 		if _, ok := desired[k]; !ok {

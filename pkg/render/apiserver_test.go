@@ -180,9 +180,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		d := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 
 		Expect(d.Name).To(Equal("tigera-apiserver"))
-		Expect(len(d.Labels)).To(Equal(2))
+		Expect(len(d.Labels)).To(Equal(1))
 		Expect(d.Labels).To(HaveKeyWithValue("apiserver", "true"))
-		Expect(d.Labels).To(HaveKeyWithValue("k8s-app", "tigera-apiserver"))
 
 		Expect(*d.Spec.Replicas).To(BeEquivalentTo(2))
 		Expect(d.Spec.Strategy.Type).To(Equal(appsv1.RecreateDeploymentStrategyType))
@@ -191,9 +190,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		Expect(d.Spec.Template.Name).To(Equal("tigera-apiserver"))
 		Expect(d.Spec.Template.Namespace).To(Equal("tigera-system"))
-		Expect(len(d.Spec.Template.Labels)).To(Equal(2))
+		Expect(len(d.Spec.Template.Labels)).To(Equal(1))
 		Expect(d.Spec.Template.Labels).To(HaveKeyWithValue("apiserver", "true"))
-		Expect(d.Spec.Template.Labels).To(HaveKeyWithValue("k8s-app", "tigera-apiserver"))
 
 		Expect(d.Spec.Template.Spec.ServiceAccountName).To(Equal("tigera-apiserver"))
 
@@ -1208,9 +1206,8 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		d := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment").(*appsv1.Deployment)
 
 		Expect(d.Name).To(Equal("calico-apiserver"))
-		Expect(len(d.Labels)).To(Equal(2))
+		Expect(len(d.Labels)).To(Equal(1))
 		Expect(d.Labels).To(HaveKeyWithValue("apiserver", "true"))
-		Expect(d.Labels).To(HaveKeyWithValue("k8s-app", "calico-apiserver"))
 
 		Expect(*d.Spec.Replicas).To(BeEquivalentTo(2))
 		Expect(d.Spec.Strategy.Type).To(Equal(appsv1.RecreateDeploymentStrategyType))
@@ -1219,9 +1216,8 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 
 		Expect(d.Spec.Template.Name).To(Equal("calico-apiserver"))
 		Expect(d.Spec.Template.Namespace).To(Equal("calico-apiserver"))
-		Expect(len(d.Spec.Template.Labels)).To(Equal(2))
+		Expect(len(d.Spec.Template.Labels)).To(Equal(1))
 		Expect(d.Spec.Template.Labels).To(HaveKeyWithValue("apiserver", "true"))
-		Expect(d.Spec.Template.Labels).To(HaveKeyWithValue("k8s-app", "calico-apiserver"))
 
 		Expect(d.Spec.Template.Spec.ServiceAccountName).To(Equal("calico-apiserver"))
 

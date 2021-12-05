@@ -104,6 +104,8 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 		// system as specified by the osType.
 		ensureOSSchedulingRestrictions(obj, osType)
 
+		setCommonFields(obj)
+
 		// Keep track of some objects so we can report on their status.
 		switch obj.(type) {
 		case *apps.Deployment:
@@ -358,6 +360,48 @@ func ensureOSSchedulingRestrictions(obj client.Object, osType rmeta.OSType) {
 			podSpec.NodeSelector = make(map[string]string)
 		}
 		podSpec.NodeSelector["kubernetes.io/os"] = string(osType)
+	}
+}
+
+func setCommonFields(obj client.Object) {
+	var podTemplate *v1.PodTemplateSpec
+	var name string
+	switch obj.(type) {
+	case *apps.Deployment:
+		d := obj.(*apps.Deployment)
+		name = d.ObjectMeta.Name
+		if d.ObjectMeta.Labels == nil {
+			d.ObjectMeta.Labels = make(map[string]string)
+		}
+		d.ObjectMeta.Labels["k8s-app"] = name
+		d.ObjectMeta.Labels["app.kubernetes.io/name"] = name
+		if d.Spec.Selector == nil {
+			d.Spec.Selector = &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"k8s-app": name,
+				},
+			}
+		}
+		podTemplate = &d.Spec.Template
+	case *apps.DaemonSet:
+		d := obj.(*apps.DaemonSet)
+		name = d.ObjectMeta.Name
+		if d.Spec.Selector == nil {
+			d.Spec.Selector = &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"k8s-app": name,
+				},
+			}
+		}
+		podTemplate = &d.Spec.Template
+	default:
+		return
+	}
+
+	if podTemplate.ObjectMeta.Labels == nil {
+		podTemplate.ObjectMeta.Labels = make(map[string]string)
+		podTemplate.ObjectMeta.Labels["k8s-app"] = name
+		podTemplate.ObjectMeta.Labels["app.kubernetes.io/name"] = name
 	}
 }
 

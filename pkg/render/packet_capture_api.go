@@ -226,27 +226,16 @@ func (pc *packetCaptureApiComponent) deployment() client.Object {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      PacketCaptureDeploymentName,
 			Namespace: PacketCaptureNamespace,
-			Labels: map[string]string{
-				"k8s-app": PacketCaptureName,
-			},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"k8s-app": PacketCaptureName,
-				},
-			},
 			Replicas: ptr.Int32ToPtr(1),
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      PacketCaptureDeploymentName,
-					Namespace: PacketCaptureNamespace,
-					Labels: map[string]string{
-						"k8s-app": PacketCaptureName,
-					},
+					Name:        PacketCaptureDeploymentName,
+					Namespace:   PacketCaptureNamespace,
 					Annotations: pc.annotations(),
 				},
 				Spec: corev1.PodSpec{

@@ -389,15 +389,9 @@ func (c *intrusionDetectionComponent) intrusionDetectionDeployment() *appsv1.Dep
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "intrusion-detection-controller",
 			Namespace: IntrusionDetectionNamespace,
-			Labels: map[string]string{
-				"k8s-app": "intrusion-detection-controller",
-			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{"k8s-app": "intrusion-detection-controller"},
-			},
 			Template: *c.deploymentPodTemplate(),
 		},
 	}
@@ -461,11 +455,8 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 
 	return relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "intrusion-detection-controller",
-			Namespace: IntrusionDetectionNamespace,
-			Labels: map[string]string{
-				"k8s-app": "intrusion-detection-controller",
-			},
+			Name:        "intrusion-detection-controller",
+			Namespace:   IntrusionDetectionNamespace,
 			Annotations: c.intrusionDetectionAnnotations(),
 		},
 		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{

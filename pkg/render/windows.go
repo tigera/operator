@@ -90,9 +90,6 @@ func (c *windowsComponent) windowsUpgradeDaemonset() *appsv1.DaemonSet {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      common.CalicoWindowsUpgradeResourceName,
 			Namespace: "calico-system",
-			Labels: map[string]string{
-				"k8s-app": common.CalicoWindowsUpgradeResourceName,
-			},
 		},
 		Spec: corev1.PodSpec{
 			ServiceAccountName: common.CalicoWindowsUpgradeResourceName,
@@ -138,7 +135,6 @@ func (c *windowsComponent) windowsUpgradeDaemonset() *appsv1.DaemonSet {
 			Namespace: "calico-system",
 		},
 		Spec: appsv1.DaemonSetSpec{
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": common.CalicoWindowsUpgradeResourceName}},
 			Template: *podTemplate,
 		},
 	}

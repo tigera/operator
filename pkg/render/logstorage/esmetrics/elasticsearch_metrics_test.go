@@ -89,12 +89,8 @@ var _ = Describe("Elasticsearch metrics", func() {
 					},
 					Spec: appsv1.DeploymentSpec{
 						Replicas: ptr.Int32ToPtr(1),
-						Selector: &metav1.LabelSelector{
-							MatchLabels: map[string]string{"k8s-app": "tigera-elasticsearch-metrics"},
-						},
 						Template: corev1.PodTemplateSpec{
 							ObjectMeta: metav1.ObjectMeta{
-								Labels: map[string]string{"k8s-app": "tigera-elasticsearch-metrics"},
 								Annotations: map[string]string{
 									"hash.operator.tigera.io/elasticsearch-configmap": "ae0242f242af19c4916434cb08e8f68f8c15f61d",
 									"hash.operator.tigera.io/elasticsearch-secrets":   "9718549725e37ca6a5f12ba2405392a04d7b5521",

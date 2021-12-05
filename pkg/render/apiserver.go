@@ -785,7 +785,6 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 			Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 			Labels: map[string]string{
 				"apiserver": "true",
-				"k8s-app":   name,
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -793,6 +792,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
+			// Why do we use apiserver: true instead of k8s-app: name?
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"apiserver": "true"}},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
@@ -800,7 +800,6 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 					Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 					Labels: map[string]string{
 						"apiserver": "true",
-						"k8s-app":   name,
 					},
 					Annotations: c.tlsAnnotations,
 				},

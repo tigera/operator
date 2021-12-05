@@ -260,11 +260,8 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      DeploymentName,
-			Namespace: render.ElasticsearchNamespace,
-			Labels: map[string]string{
-				"k8s-app": DeploymentName,
-			},
+			Name:        DeploymentName,
+			Namespace:   render.ElasticsearchNamespace,
 			Annotations: e.tlsAnnotations,
 		},
 		Spec: corev1.PodSpec{
@@ -305,15 +302,11 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      DeploymentName,
 			Namespace: render.ElasticsearchNamespace,
-			Labels: map[string]string{
-				"k8s-app": DeploymentName,
-			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": DeploymentName}},
 			Template: *podTemplate,
 			Replicas: e.installation.ControlPlaneReplicas,
 		},

@@ -417,9 +417,6 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Labels: map[string]string{
-				"k8s-app": c.fluentdNodeName(),
-			},
 			Annotations: annots,
 		},
 		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
@@ -440,7 +437,6 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 			Namespace: LogCollectorNamespace,
 		},
 		Spec: appsv1.DaemonSetSpec{
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": c.fluentdNodeName()}},
 			Template: *podTemplate,
 			UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
 				RollingUpdate: &appsv1.RollingUpdateDaemonSet{

@@ -154,9 +154,6 @@ func (c *component) daemonset() *appsv1.DaemonSet {
 
 	podTemplate := corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Labels: map[string]string{
-				"k8s-app": L7LogCollectorDeamonsetName,
-			},
 			Annotations: annots,
 		},
 		Spec: corev1.PodSpec{
@@ -179,7 +176,6 @@ func (c *component) daemonset() *appsv1.DaemonSet {
 			Namespace: common.CalicoNamespace,
 		},
 		Spec: appsv1.DaemonSetSpec{
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": L7LogCollectorDeamonsetName}},
 			Template: podTemplate,
 			UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
 				RollingUpdate: &appsv1.RollingUpdateDaemonSet{

@@ -497,27 +497,16 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      c.kubeControllerName,
 			Namespace: common.CalicoNamespace,
-			Labels: map[string]string{
-				"k8s-app": c.kubeControllerName,
-			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"k8s-app": c.kubeControllerName,
-				},
-			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      c.kubeControllerName,
-					Namespace: common.CalicoNamespace,
-					Labels: map[string]string{
-						"k8s-app": c.kubeControllerName,
-					},
+					Name:        c.kubeControllerName,
+					Namespace:   common.CalicoNamespace,
 					Annotations: c.annotations(),
 				},
 				Spec: podSpec,

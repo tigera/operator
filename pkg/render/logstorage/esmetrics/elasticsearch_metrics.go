@@ -117,17 +117,7 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: ptr.Int32ToPtr(1),
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"k8s-app": "tigera-elasticsearch-metrics",
-				},
-			},
 			Template: *relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"k8s-app": "tigera-elasticsearch-metrics",
-					},
-				},
 				Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
 					Tolerations:      e.cfg.Installation.ControlPlaneTolerations,
 					NodeSelector:     e.cfg.Installation.ControlPlaneNodeSelector,

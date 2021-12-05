@@ -371,9 +371,6 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceControllerName,
 			Namespace: ComplianceNamespace,
-			Labels: map[string]string{
-				"k8s-app": ComplianceControllerName,
-			},
 		},
 		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
 			ServiceAccountName: "tigera-compliance-controller",
@@ -405,7 +402,6 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": ComplianceControllerName}},
 			Template: *podTemplate,
 		},
 	}
@@ -657,11 +653,8 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ComplianceServerName,
-			Namespace: ComplianceNamespace,
-			Labels: map[string]string{
-				"k8s-app": ComplianceServerName,
-			},
+			Name:        ComplianceServerName,
+			Namespace:   ComplianceNamespace,
 			Annotations: complianceAnnotations(c),
 		},
 		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
@@ -716,16 +709,12 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceServerName,
 			Namespace: ComplianceNamespace,
-			Labels: map[string]string{
-				"k8s-app": ComplianceServerName,
-			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &complianceReplicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": ComplianceServerName}},
 			Template: *podTemplate,
 		},
 	}
@@ -836,9 +825,6 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceSnapshotterName,
 			Namespace: ComplianceNamespace,
-			Labels: map[string]string{
-				"k8s-app": ComplianceSnapshotterName,
-			},
 		},
 		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
 			ServiceAccountName: "tigera-compliance-snapshotter",
@@ -863,16 +849,12 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceSnapshotterName,
 			Namespace: ComplianceNamespace,
-			Labels: map[string]string{
-				"k8s-app": ComplianceSnapshotterName,
-			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &complianceReplicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": ComplianceSnapshotterName}},
 			Template: *podTemplate,
 		},
 	}
@@ -990,9 +972,6 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "compliance-benchmarker",
 			Namespace: ComplianceNamespace,
-			Labels: map[string]string{
-				"k8s-app": "compliance-benchmarker",
-			},
 		},
 		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
 			ServiceAccountName: "tigera-compliance-benchmarker",
@@ -1019,11 +998,9 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "compliance-benchmarker",
 			Namespace: ComplianceNamespace,
-			Labels:    map[string]string{"k8s-app": "compliance-benchmarker"},
 		},
 
 		Spec: appsv1.DaemonSetSpec{
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "compliance-benchmarker"}},
 			Template: *podTemplate,
 		},
 	}

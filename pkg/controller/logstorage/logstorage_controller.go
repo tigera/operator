@@ -531,7 +531,10 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 
 	r.status.ClearDegraded()
 
-	if ls != nil {
+	// Since we don't re poll for the object we need to make sure the object wouldn't have been deleted on the patch
+	// that may have removed the finalizers.
+	// TODO We may want to just return if we remove the finalizers from the LogStorage object.
+	if ls != nil && (ls.DeletionTimestamp == nil || len(ls.GetFinalizers()) > 0) {
 		ls.Status.State = operatorv1.TigeraStatusReady
 		if err := r.client.Status().Update(ctx, ls); err != nil {
 			reqLogger.Error(err, fmt.Sprintf("Error updating the log-storage status %s", operatorv1.TigeraStatusReady))

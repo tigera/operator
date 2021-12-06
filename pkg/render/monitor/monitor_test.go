@@ -403,10 +403,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(len(toCreate)).To(Equal(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
-			exObj := fmt.Sprintf("%v %v", expectedRes.kind, expectedRes.name)
 			obj := toCreate[i]
-			acObj := fmt.Sprintf("%v %v", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName())
-			Expect(acObj).To(Equal(exObj), fmt.Sprintf("check %v", i))
 			rtest.ExpectResource(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 

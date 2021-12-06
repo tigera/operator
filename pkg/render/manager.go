@@ -19,12 +19,23 @@ import (
 	"strconv"
 	"strings"
 
-	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
-	"github.com/tigera/operator/pkg/render/common/podaffinity"
-
 	ocsv1 "github.com/openshift/api/security/v1"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render/common/authentication"
+	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
 	"github.com/tigera/operator/pkg/render/common/configmap"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rkibana "github.com/tigera/operator/pkg/render/common/kibana"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/podaffinity"
+	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
+	"github.com/tigera/operator/pkg/render/common/secret"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -32,17 +43,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/dns"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	rkibana "github.com/tigera/operator/pkg/render/common/kibana"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
-	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
 const (
@@ -68,6 +68,9 @@ const (
 
 	KibanaTLSHashAnnotation         = "hash.operator.tigera.io/kibana-secrets"
 	ElasticsearchUserHashAnnotation = "hash.operator.tigera.io/elasticsearch-user"
+
+	PrometheusTLSSecretName     = "calico-node-prometheus-tls"
+	prometheusTLSHashAnnotation = "hash.operator.tigera.io/prometheus-tls"
 )
 
 // ManagementClusterConnection configuration constants
@@ -87,6 +90,7 @@ func Manager(
 	kibanaSecrets []*corev1.Secret,
 	complianceServerCertSecret *corev1.Secret,
 	packetCaptureServerCertSecret *corev1.Secret,
+	prometheusCertSecret *corev1.Secret,
 	esClusterConfig *relasticsearch.ClusterConfig,
 	tlsKeyPair *corev1.Secret,
 	pullSecrets []*corev1.Secret,
@@ -133,6 +137,7 @@ func Manager(
 		kibanaSecrets:                 kibanaSecrets,
 		complianceServerCertSecret:    complianceServerCertSecret,
 		packetCaptureServerCertSecret: packetCaptureServerCertSecret,
+		prometheusCertSecret:          prometheusCertSecret,
 		esClusterConfig:               esClusterConfig,
 		tlsSecrets:                    tlsSecrets,
 		tlsAnnotations:                tlsAnnotations,
@@ -152,6 +157,7 @@ type managerComponent struct {
 	kibanaSecrets                 []*corev1.Secret
 	complianceServerCertSecret    *corev1.Secret
 	packetCaptureServerCertSecret *corev1.Secret
+	prometheusCertSecret          *corev1.Secret
 	esClusterConfig               *relasticsearch.ClusterConfig
 	tlsSecrets                    []*corev1.Secret
 	tlsAnnotations                map[string]string
@@ -237,6 +243,9 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	if c.packetCaptureServerCertSecret != nil {
 		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.packetCaptureServerCertSecret)...)...)
 	}
+	if c.prometheusCertSecret != nil {
+		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.prometheusCertSecret)...)...)
+	}
 	objs = append(objs, c.managerDeployment())
 	if c.keyValidatorConfig != nil {
 		objs = append(objs, configmap.ToRuntimeObjects(c.keyValidatorConfig.RequiredConfigMaps(ManagerNamespace)...)...)
@@ -276,6 +285,9 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		annotations[PacketCaptureTLSHashAnnotation] = rmeta.AnnotationHash(c.packetCaptureServerCertSecret.Data)
 	}
 
+	if c.prometheusCertSecret != nil {
+		annotations[prometheusTLSHashAnnotation] = rmeta.AnnotationHash(c.prometheusCertSecret.Data)
+	}
 	// Add a hash of the Secret to ensure if it changes the manager will be
 	// redeployed.	The following secrets are annotated:
 	// manager-tls : cert used for tigera UI
@@ -406,6 +418,17 @@ func (c *managerComponent) managerVolumes() []corev1.Volume {
 						Path: "tls.crt",
 					}},
 					SecretName: PacketCaptureCertSecret,
+				},
+			},
+		})
+	}
+
+	if c.prometheusCertSecret != nil {
+		v = append(v, corev1.Volume{
+			Name: PrometheusTLSSecretName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: PrometheusTLSSecretName,
 				},
 			},
 		})
@@ -598,6 +621,10 @@ func (c *managerComponent) volumeMountsForProxyManager() []corev1.VolumeMount {
 
 	if c.packetCaptureServerCertSecret != nil {
 		mounts = append(mounts, corev1.VolumeMount{Name: PacketCaptureCertSecret, MountPath: "/certs/packetcapture", ReadOnly: true})
+	}
+
+	if c.prometheusCertSecret != nil {
+		mounts = append(mounts, corev1.VolumeMount{Name: PrometheusTLSSecretName, MountPath: "/certs/prometheus", ReadOnly: true})
 	}
 
 	if c.managementCluster != nil {

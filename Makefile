@@ -285,21 +285,21 @@ run-uts:
 
 ## Create a local kind dual stack cluster.
 KUBECONFIG?=./kubeconfig.yaml
-K8S_VERSION?=v1.18.6
+K8S_VERSION?=v1.21.2
 cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	# First make sure any previous cluster is deleted
 	make cluster-destroy
-	
+
 	# Create a kind cluster.
 	$(BINDIR)/kind create cluster \
 	        --config ./deploy/kind-config.yaml \
 	        --kubeconfig $(KUBECONFIG) \
 	        --image kindest/node:$(K8S_VERSION)
-	
+
 	./deploy/scripts/ipv6_kind_cluster_update.sh
 	# Deploy resources needed in test env.
 	$(MAKE) deploy-crds
-	
+
 	# Wait for controller manager to be running and healthy.
 	while ! KUBECONFIG=$(KUBECONFIG) $(BINDIR)/kubectl get serviceaccount default; do echo "Waiting for default serviceaccount to be created..."; sleep 2; done
 
@@ -520,7 +520,7 @@ define prep_local_crds
 	mkdir -p pkg/crds/$(dir)
 	mkdir -p .crds/$(dir)
 endef
-define fetch_crds 
+define fetch_crds
     $(eval project := $(1))
     $(eval branch := $(2))
     $(eval dir := $(3))

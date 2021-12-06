@@ -306,10 +306,9 @@ var _ = Describe("LogStorage controller", func() {
 						Expect(err).ShouldNot(HaveOccurred())
 						Expect(result).Should(Equal(reconcile.Result{}))
 
-						By("expecting not to find the eck-cleanup finalizer in the LogStorage CR anymore")
+						By("expecting logstorage to have been deleted after the finalizer was removed")
 						ls = &operatorv1.LogStorage{}
-						Expect(cli.Get(ctx, utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
-						Expect(ls.Finalizers).ShouldNot(ContainElement("tigera.io/eck-cleanup"))
+						Expect(cli.Get(ctx, utils.DefaultTSEEInstanceKey, ls)).Should(HaveOccurred())
 
 						mockStatus.AssertExpectations(GinkgoT())
 					})
@@ -1454,8 +1453,7 @@ var _ = Describe("LogStorage controller", func() {
 
 					By("expecting not to find the eck-cleanup finalizer in the LogStorage CR anymore")
 					ls = &operatorv1.LogStorage{}
-					Expect(cli.Get(ctx, utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
-					Expect(ls.Finalizers).ShouldNot(ContainElement("tigera.io/eck-cleanup"))
+					Expect(cli.Get(ctx, utils.DefaultTSEEInstanceKey, ls)).Should(HaveOccurred())
 
 					mockStatus.AssertExpectations(GinkgoT())
 				})

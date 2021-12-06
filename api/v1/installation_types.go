@@ -32,13 +32,13 @@ type InstallationSpec struct {
 	// +kubebuilder:validation:Enum=Calico;TigeraSecureEnterprise
 	Variant ProductVariant `json:"variant,omitempty"`
 
-	// Registry is the default Docker registry used for component Docker images. If specified,
-	// all images will be pulled from this registry. If not specified then the default registries
-	// will be used. A special case value, UseDefault, is supported to explicitly specify
-	// the default registries will be used.
+	// Registry is the default Docker registry used for component Docker images.
+	// If specified then the given value must end with a slash character (`/`) and all images will be pulled from this registry.
+	// If not specified then the default registries will be used. A special case value, UseDefault, is
+	// supported to explicitly specify the default registries will be used.
 	//
 	// Image format:
-	//    `<registry>/<imagePath>/<imagePrefix><imageName>:<image-tag>`
+	//    `<registry><imagePath>/<imagePrefix><imageName>:<image-tag>`
 	//
 	// This option allows configuring the `<registry>` portion of the above format.
 	// +optional
@@ -51,7 +51,7 @@ type InstallationSpec struct {
 	// image path will be used for each image.
 	//
 	// Image format:
-	//    `<registry>/<imagePath>/<imagePrefix><imageName>:<image-tag>`
+	//    `<registry><imagePath>/<imagePrefix><imageName>:<image-tag>`
 	//
 	// This option allows configuring the `<imagePath>` portion of the above format.
 	// +optional
@@ -64,7 +64,7 @@ type InstallationSpec struct {
 	// image prefix will be used for each image.
 	//
 	// Image format:
-	//    `<registry>/<imagePath>/<imagePrefix><imageName>:<image-tag>`
+	//    `<registry><imagePath>/<imagePrefix><imageName>:<image-tag>`
 	//
 	// This option allows configuring the `<imagePrefix>` portion of the above format.
 	// +optional

@@ -3,10 +3,10 @@ module github.com/tigera/operator
 go 1.16
 
 require (
-	github.com/aws/aws-sdk-go v1.19.6
+	github.com/aws/aws-sdk-go v1.25.37
 	github.com/cloudflare/cfssl v1.4.1
 	github.com/containernetworking/cni v0.8.0
-	github.com/elastic/cloud-on-k8s v0.0.0-20200811130517-b53162318c20
+	github.com/elastic/cloud-on-k8s v0.0.0-20210914143041-4f367c381636
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-ldap/ldap v3.0.3+incompatible
 	github.com/go-logr/logr v0.4.0
@@ -20,7 +20,7 @@ require (
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.52.1
 	github.com/r3labs/diff/v2 v2.8.0
 	github.com/stretchr/testify v1.7.0
-	github.com/tigera/api v0.0.0-20211202170222-d8128d06db71
+	github.com/tigera/api v0.0.0-20211206200601-c5525835af81
 	go.uber.org/zap v1.19.0
 	golang.org/x/crypto v0.0.0-20210220033148-5ea612d1eb83
 	gopkg.in/yaml.v2 v2.4.0

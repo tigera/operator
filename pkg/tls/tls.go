@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"github.com/openshift/library-go/pkg/crypto"
+	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func SetClientAuth(x *x509.Certificate) error {
@@ -51,4 +53,25 @@ func MakeCA(signerName string) (*crypto.CA, error) {
 		SerialGenerator: &crypto.RandomSerialGenerator{},
 		Config:          caConfig,
 	}, nil
+}
+
+type TigeraCA interface {
+	GetOrCreateCertificate(cli client.Client, cn, secretName, secretNamespace string, dnsNames []string) (Certificate, error)
+	GetTrustedCertificate(cli client.Client, secretName, secretNamespace string) (Certificate, error)
+	Certificate
+}
+
+type Certificate interface {
+	Secret() *corev1.Secret
+	HashAnnotation() (string, string)
+	VolumeMount(folder string) corev1.VolumeMount
+	Volume() corev1.Volume
+}
+
+type TrustedBundle interface {
+	MountPath() string
+	ConfigMap(namespace string) *corev1.ConfigMap
+	HashAnnotations() map[string]string
+	VolumeMount() corev1.VolumeMount
+	Volume() corev1.Volume
 }

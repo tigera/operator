@@ -406,14 +406,14 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	// panicing. It accepts variations on the installspec for testing purposes.
 	renderManager := func(i *operatorv1.InstallationSpec) *appsv1.Deployment {
 		cfg := &render.ManagerConfiguration{
-			ComplianceServerCertSecret:    rtest.CreateCertSecret(render.ComplianceServerCertSecret, common.OperatorNamespace()),
-			PacketCaptureServerCertSecret: rtest.CreateCertSecret(render.PacketCaptureCertSecret, common.OperatorNamespace()),
-			PrometheusCertSecret:          rtest.CreateCertSecret(render.PrometheusTLSSecretName, common.OperatorNamespace()),
-			ESClusterConfig:               &relasticsearch.ClusterConfig{},
-			TLSKeyPair:                    rtest.CreateCertSecret(render.ManagerTLSSecretName, common.OperatorNamespace()),
-			Installation:                  i,
-			ESLicenseType:                 render.ElasticsearchLicenseTypeUnknown,
-			Replicas:                      &replicas,
+			//ComplianceServerCertSecret:    rtest.CreateCertSecret(render.ComplianceServerCertSecret, common.OperatorNamespace()),
+			//PacketCaptureServerCertSecret: rtest.CreateCertSecret(render.PacketCaptureCertSecret, common.OperatorNamespace()),
+			//PrometheusCertSecret:          rtest.CreateCertSecret(render.PrometheusTLSSecretName, common.OperatorNamespace()),
+			ESClusterConfig: &relasticsearch.ClusterConfig{},
+			TLSKeyPair:      rtest.CreateCertSecret(render.ManagerTLSSecretName, common.OperatorNamespace()),
+			Installation:    i,
+			ESLicenseType:   render.ElasticsearchLicenseTypeUnknown,
+			Replicas:        &replicas,
 		}
 		component, err := render.Manager(cfg)
 		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
@@ -552,19 +552,19 @@ func renderObjects(oidc bool, managementCluster *operatorv1.ManagementCluster, i
 	esConfigMap := relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 
 	cfg := &render.ManagerConfiguration{
-		KeyValidatorConfig:            dexCfg,
-		ComplianceServerCertSecret:    rtest.CreateCertSecret(render.ComplianceServerCertSecret, common.OperatorNamespace()),
-		PacketCaptureServerCertSecret: rtest.CreateCertSecret(render.PacketCaptureCertSecret, common.OperatorNamespace()),
-		PrometheusCertSecret:          rtest.CreateCertSecret(render.PrometheusTLSSecretName, common.OperatorNamespace()),
-		ESClusterConfig:               esConfigMap,
-		TLSKeyPair:                    managerTLS,
-		Installation:                  installation,
-		ManagementCluster:             managementCluster,
-		TunnelSecret:                  tunnelSecret,
-		InternalTrafficSecret:         internalTraffic,
-		ClusterDomain:                 dns.DefaultClusterDomain,
-		ESLicenseType:                 render.ElasticsearchLicenseTypeEnterpriseTrial,
-		Replicas:                      installation.ControlPlaneReplicas,
+		KeyValidatorConfig: dexCfg,
+		//ComplianceServerCertSecret:    rtest.CreateCertSecret(render.ComplianceServerCertSecret, common.OperatorNamespace()),
+		//PacketCaptureServerCertSecret: rtest.CreateCertSecret(render.PacketCaptureCertSecret, common.OperatorNamespace()),
+		//PrometheusCertSecret:          rtest.CreateCertSecret(render.PrometheusTLSSecretName, common.OperatorNamespace()),
+		ESClusterConfig:       esConfigMap,
+		TLSKeyPair:            managerTLS,
+		Installation:          installation,
+		ManagementCluster:     managementCluster,
+		TunnelSecret:          tunnelSecret,
+		InternalTrafficSecret: internalTraffic,
+		ClusterDomain:         dns.DefaultClusterDomain,
+		ESLicenseType:         render.ElasticsearchLicenseTypeEnterpriseTrial,
+		Replicas:              installation.ControlPlaneReplicas,
 	}
 	component, err := render.Manager(cfg)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)

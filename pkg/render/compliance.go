@@ -58,7 +58,7 @@ const (
 	ComplianceServerCertSecret    = "tigera-compliance-server-tls"
 	complianceServerTLSVolumeName = "tls"
 
-	complianceServerTLSHashAnnotation = "hash.operator.tigera.io/tls-certificate"
+	complianceServerTLSHashAnnotation = "hash.operator.tigera.io/tigera-compliance-server-tls"
 )
 
 func Compliance(cfg *ComplianceConfiguration) (Component, error) {

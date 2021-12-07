@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	ocsv1 "github.com/openshift/api/security/v1"
+	"github.com/tigera/operator/pkg/tls"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -121,23 +122,21 @@ func Manager(cfg *ManagerConfiguration) (Component, error) {
 
 // ManagerConfiguration contains all the config information needed to render the component.
 type ManagerConfiguration struct {
-	KeyValidatorConfig            authentication.KeyValidatorConfig
-	ESSecrets                     []*corev1.Secret
-	KibanaSecrets                 []*corev1.Secret
-	ComplianceServerCertSecret    *corev1.Secret
-	PacketCaptureServerCertSecret *corev1.Secret
-	PrometheusCertSecret          *corev1.Secret
-	ESClusterConfig               *relasticsearch.ClusterConfig
-	TLSKeyPair                    *corev1.Secret
-	PullSecrets                   []*corev1.Secret
-	Openshift                     bool
-	Installation                  *operatorv1.InstallationSpec
-	ManagementCluster             *operatorv1.ManagementCluster
-	TunnelSecret                  *corev1.Secret
-	InternalTrafficSecret         *corev1.Secret
-	ClusterDomain                 string
-	ESLicenseType                 ElasticsearchLicenseType
-	Replicas                      *int32
+	KeyValidatorConfig    authentication.KeyValidatorConfig
+	ESSecrets             []*corev1.Secret
+	KibanaSecrets         []*corev1.Secret
+	TrustedCerts          tls.TrustedBundle
+	ESClusterConfig       *relasticsearch.ClusterConfig
+	TLSKeyPair            *corev1.Secret
+	PullSecrets           []*corev1.Secret
+	Openshift             bool
+	Installation          *operatorv1.InstallationSpec
+	ManagementCluster     *operatorv1.ManagementCluster
+	TunnelSecret          *corev1.Secret
+	InternalTrafficSecret *corev1.Secret
+	ClusterDomain         string
+	ESLicenseType         ElasticsearchLicenseType
+	Replicas              *int32
 }
 
 type managerComponent struct {
@@ -213,14 +212,8 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.cfg.ESSecrets...)...)...)
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.cfg.KibanaSecrets...)...)...)
-	if c.cfg.ComplianceServerCertSecret != nil {
-		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.cfg.ComplianceServerCertSecret)...)...)
-	}
-	if c.cfg.PacketCaptureServerCertSecret != nil {
-		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.cfg.PacketCaptureServerCertSecret)...)...)
-	}
-	if c.cfg.PrometheusCertSecret != nil {
-		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.cfg.PrometheusCertSecret)...)...)
+	if c.cfg.TrustedCerts != nil {
+		objs = append(objs, c.cfg.TrustedCerts.ConfigMap(ManagerNamespace))
 	}
 	objs = append(objs, c.managerDeployment())
 	if c.cfg.KeyValidatorConfig != nil {
@@ -252,18 +245,12 @@ func (c *managerComponent) Ready() bool {
 // managerDeployment creates a deployment for the Tigera Secure manager component.
 func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	annotations := make(map[string]string)
-
-	if c.cfg.ComplianceServerCertSecret != nil {
-		annotations[complianceServerTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.ComplianceServerCertSecret.Data)
+	if c.cfg.TrustedCerts != nil {
+		for k, v := range c.cfg.TrustedCerts.HashAnnotations() {
+			annotations[k] = v
+		}
 	}
 
-	if c.cfg.PacketCaptureServerCertSecret != nil {
-		annotations[PacketCaptureTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.PacketCaptureServerCertSecret.Data)
-	}
-
-	if c.cfg.PrometheusCertSecret != nil {
-		annotations[prometheusTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.PrometheusCertSecret.Data)
-	}
 	// Add a hash of the Secret to ensure if it changes the manager will be
 	// redeployed.	The following secrets are annotated:
 	// manager-tls : cert used for tigera UI
@@ -369,45 +356,8 @@ func (c *managerComponent) managerVolumes() []corev1.Volume {
 		},
 	}
 
-	if c.cfg.ComplianceServerCertSecret != nil {
-		v = append(v, corev1.Volume{
-			Name: ComplianceServerCertSecret,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					Items: []corev1.KeyToPath{{
-						Key:  "tls.crt",
-						Path: "tls.crt",
-					}},
-					SecretName: ComplianceServerCertSecret,
-				},
-			},
-		})
-	}
-
-	if c.cfg.PacketCaptureServerCertSecret != nil {
-		v = append(v, corev1.Volume{
-			Name: PacketCaptureCertSecret,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					Items: []corev1.KeyToPath{{
-						Key:  "tls.crt",
-						Path: "tls.crt",
-					}},
-					SecretName: PacketCaptureCertSecret,
-				},
-			},
-		})
-	}
-
-	if c.cfg.PrometheusCertSecret != nil {
-		v = append(v, corev1.Volume{
-			Name: PrometheusTLSSecretName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: PrometheusTLSSecretName,
-				},
-			},
-		})
+	if c.cfg.TrustedCerts != nil {
+		v = append(v, c.cfg.TrustedCerts.Volume())
 	}
 
 	if c.cfg.ManagementCluster != nil {
@@ -562,6 +512,9 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		{Name: "VOLTRON_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
 		{Name: "VOLTRON_KIBANA_BASE_PATH", Value: fmt.Sprintf("/%s/", KibanaBasePath)},
 		{Name: "VOLTRON_KIBANA_CA_BUNDLE_PATH", Value: "/certs/kibana/tls.crt"},
+		{Name: "VOLTRON_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCerts.MountPath()},
+		{Name: "VOLTRON_PROMTHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCerts.MountPath()},
+		{Name: "VOLTRON_COMPLIANCE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCerts.MountPath()},
 		{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
 		{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
 		{Name: "VOLTRON_DEFAULT_FORWARD_SERVER", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc:9200"},
@@ -571,7 +524,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		env = append(env, c.cfg.KeyValidatorConfig.RequiredEnv("VOLTRON_")...)
 	}
 
-	if c.cfg.ComplianceServerCertSecret == nil {
+	if _, ok := c.tlsAnnotations[complianceServerTLSHashAnnotation]; !ok {
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: "false"})
 	}
 
@@ -591,16 +544,8 @@ func (c *managerComponent) volumeMountsForProxyManager() []corev1.VolumeMount {
 		{Name: KibanaPublicCertSecret, MountPath: "/certs/kibana", ReadOnly: true},
 	}
 
-	if c.cfg.ComplianceServerCertSecret != nil {
-		mounts = append(mounts, corev1.VolumeMount{Name: ComplianceServerCertSecret, MountPath: "/certs/compliance", ReadOnly: true})
-	}
-
-	if c.cfg.PacketCaptureServerCertSecret != nil {
-		mounts = append(mounts, corev1.VolumeMount{Name: PacketCaptureCertSecret, MountPath: "/certs/packetcapture", ReadOnly: true})
-	}
-
-	if c.cfg.PrometheusCertSecret != nil {
-		mounts = append(mounts, corev1.VolumeMount{Name: PrometheusTLSSecretName, MountPath: "/certs/prometheus", ReadOnly: true})
+	if c.cfg.TrustedCerts != nil {
+		mounts = append(mounts, c.cfg.TrustedCerts.VolumeMount())
 	}
 
 	if c.cfg.ManagementCluster != nil {

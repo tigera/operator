@@ -17,16 +17,16 @@ require (
 	github.com/openshift/api v0.0.0-20200923080607-2a18526802e3
 	github.com/openshift/library-go v0.0.0-20200924151131-575c4875cdbe
 	github.com/pkg/errors v0.9.1
-	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.48.1
+	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.52.1
 	github.com/r3labs/diff/v2 v2.8.0
 	github.com/stretchr/testify v1.7.0
 	github.com/tigera/api v0.0.0-20211202170222-d8128d06db71
 	go.uber.org/zap v1.19.0
 	golang.org/x/crypto v0.0.0-20210220033148-5ea612d1eb83
 	gopkg.in/yaml.v2 v2.4.0
-	k8s.io/api v0.21.7
-	k8s.io/apiextensions-apiserver v0.21.7
-	k8s.io/apimachinery v0.21.7
+	k8s.io/api v0.22.3
+	k8s.io/apiextensions-apiserver v0.22.3
+	k8s.io/apimachinery v0.22.3
 	k8s.io/client-go v0.21.7
 	k8s.io/kube-aggregator v0.21.7
 	sigs.k8s.io/controller-runtime v0.9.7

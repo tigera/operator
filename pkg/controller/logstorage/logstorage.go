@@ -127,16 +127,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexCertSecret, dexSecret, r.clusterDomain)
 	}
 
-	var objs []client.Object
-	if kbCertSecret != nil && kbOperatorManagedCertSecret {
-		objs = append(objs, kbCertSecret)
-	}
-	if esInternalCertSecret != nil {
-		objs = append(objs, esInternalCertSecret)
-	}
-
 	var components []render.Component
-	components = append(components, render.NewPassthrough(objs...))
 
 	logStorageCfg := &render.ElasticsearchConfiguration{
 		LogStorage:                  ls,
@@ -168,6 +159,19 @@ func (r *ReconcileLogStorage) createLogStorage(
 	}
 
 	components = append(components, component)
+
+	var passThroughSecrets []client.Object
+	if kbCertSecret != nil && kbOperatorManagedCertSecret {
+		passThroughSecrets = append(passThroughSecrets, kbCertSecret)
+	}
+	if esInternalCertSecret != nil {
+		passThroughSecrets = append(passThroughSecrets, esInternalCertSecret)
+	}
+
+	if len(passThroughSecrets) > 0 {
+		components = append(components, render.NewPassthrough(passThroughSecrets...))
+	}
+
 	for _, component := range components {
 		if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 			reqLogger.Error(err, err.Error())

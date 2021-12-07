@@ -1260,9 +1260,6 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 			nodeEnv = append(nodeEnv, corev1.EnvVar{
 				Name:  "FELIX_AWSSRCDSTCHECK",
 				Value: "Disable",
-			}, corev1.EnvVar{
-				Name:  "IP_AUTODETECTION_METHOD",
-				Value: "interface=eth0",
 			})
 		}
 	}
@@ -1301,6 +1298,7 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 	} else {
 		// BGP is enabled.
 		if c.vppDataplaneEnabled() {
+			// VPP comes with its own BGP daemon, so bird should be disabled
 			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "none"})
 		} else {
 			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"})

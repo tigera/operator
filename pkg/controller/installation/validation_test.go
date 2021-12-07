@@ -107,6 +107,19 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
+	It("should not allow VPP to be used with a variant other than Calico", func() {
+		vpp := operator.LinuxDataplaneVPP
+		en := operator.BGPEnabled
+		instance.Spec.CalicoNetwork.LinuxDataplane = &vpp
+		instance.Spec.CalicoNetwork.BGP = &en
+		instance.Spec.CNI.Type = operator.PluginCalico
+		err := validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+		instance.Spec.Variant = operator.TigeraSecureEnterprise
+		err = validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
+
 	It("should not allow VPP to be used with a CNI other than Calico", func() {
 		vpp := operator.LinuxDataplaneVPP
 		en := operator.BGPEnabled

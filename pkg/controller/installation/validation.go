@@ -249,6 +249,9 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 
 		// VPP specific validation
 		if instance.Spec.CalicoNetwork.LinuxDataplane != nil && *instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneVPP {
+			if instance.Spec.Variant != operatorv1.Calico {
+				return fmt.Errorf("The VPP dataplane only supports the Calico variant (configured: %s)", instance.Spec.Variant)
+			}
 			if instance.Spec.CNI.Type != operatorv1.PluginCalico {
 				return fmt.Errorf("The VPP dataplane only supports the Calico CNI (configured: %s)", instance.Spec.CNI.Type)
 			}

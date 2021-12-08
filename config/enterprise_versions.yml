@@ -100,7 +100,7 @@ components:
   # quay.io/tigera so all enterprise images come from the same repository and org.
   elasticsearch-operator:
     image: tigera/eck-operator
-    version: 1.7.1
+    version: 1.8.0
   prometheus:
     image: tigera/prometheus
     version: v2.17.2

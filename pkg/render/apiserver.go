@@ -232,6 +232,8 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		c.tigeraCustomResourcesClusterRoleBinding(),
 		c.tierGetterClusterRole(),
 		c.kubeControllersTierGetterClusterRoleBinding(),
+		c.uisettingsgroupGetterClusterRole(),
+		c.kubeControllersUisettingsgroupGetterClusterRoleBinding(),
 		c.tigeraUserClusterRole(),
 		c.tigeraNetworkAdminClusterRole(),
 		c.tieredPolicyPassthruClusterRole(),
@@ -1238,6 +1240,56 @@ func (c *apiServerComponent) kubeControllersTierGetterClusterRoleBinding() *rbac
 		RoleRef: rbacv1.RoleRef{
 			Kind:     "ClusterRole",
 			Name:     "tigera-tier-getter",
+			APIGroup: "rbac.authorization.k8s.io",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:     "User",
+				Name:     "system:kube-controller-manager",
+				APIGroup: "rbac.authorization.k8s.io",
+			},
+		},
+	}
+}
+
+// uisettingsgroupGetterClusterRole creates a clusterrole that gives permissions to get uisettingsgroups.
+//
+// Calico Enterprise only
+func (c *apiServerComponent) uisettingsgroupGetterClusterRole() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-uisettingsgroup-getter",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"uisettingsgroups",
+				},
+				Verbs: []string{"get"},
+			},
+		},
+	}
+}
+
+// kubeControllersUisettingsgroupGetterClusterRoleBinding creates a rolebinding that allows the k8s kube-controller to
+// get uisettingsgroups.
+//
+// In k8s 1.15+, cascading resource deletions (for instance pods for a replicaset) failed due to k8s kube-controller
+// not having permissions to get tiers. UISettings and UISettingsGroups RBAC works in a similar way to tiered policy
+// and so we need similar RBAC for UISettingsGroups.
+//
+// Calico Enterprise only
+func (c *apiServerComponent) kubeControllersUisettingsgroupGetterClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-uisettingsgroup-getter",
+		},
+		RoleRef: rbacv1.RoleRef{
+			Kind:     "ClusterRole",
+			Name:     "tigera-uisettingsgroup-getter",
 			APIGroup: "rbac.authorization.k8s.io",
 		},
 		Subjects: []rbacv1.Subject{

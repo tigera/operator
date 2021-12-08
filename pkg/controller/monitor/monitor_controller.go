@@ -280,9 +280,10 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	// Render prometheus component
 	components := []render.Component{
 		monitor.Monitor(monitorCfg),
+		render.NewPassthrough(tlsSecret),
 	}
 	if createInOperatorNamespace {
-		components = append(components, render.NewPassthrough(alertmanagerConfigSecret, tlsSecret))
+		components = append(components, render.NewPassthrough(alertmanagerConfigSecret))
 	}
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, components...); err != nil {

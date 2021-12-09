@@ -1572,11 +1572,13 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 
 	By("creating all the components needed for LogStorage to be available")
 
+	var replicas int32 = 2
 	cfg := &render.ElasticsearchConfiguration{
 		LogStorage: ls,
 		Installation: &operatorv1.InstallationSpec{
-			KubernetesProvider: operatorv1.ProviderNone,
-			Registry:           "testregistry.com/",
+			ControlPlaneReplicas: &replicas,
+			KubernetesProvider:   operatorv1.ProviderNone,
+			Registry:             "testregistry.com/",
 		},
 		ManagementClusterConnection: managementClusterConnection,
 		Elasticsearch:               &esv1.Elasticsearch{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}},

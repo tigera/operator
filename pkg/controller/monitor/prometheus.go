@@ -158,11 +158,11 @@ func waitToAddPrometheusWatch(c controller.Controller, client kubernetes.Interfa
 
 	for {
 		if err := requiresPrometheusResources(client); err != nil {
-			log.Info("%v. monitor-controller will retry.", err)
+			log.Info(fmt.Sprintf("%v. monitor-controller will retry.", "reason", err))
 		} else {
 			// watch for prometheus resource changes
 			if err := addWatch(c); err != nil {
-				log.Info("%v. monitor-controller will retry.", err)
+				log.Info(fmt.Sprintf("%v. monitor-controller will retry.", "reason", err))
 			} else {
 				readyFlag.MarkAsReady()
 				return nil

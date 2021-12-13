@@ -140,6 +140,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Verbs:     []string{"create"},
 			},
 			{
+				APIGroups: []string{"authentication.k8s.io"},
+				Resources: []string{"tokenreviews"},
+				Verbs:     []string{"create"},
+			},
+			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{
 					"networksets",

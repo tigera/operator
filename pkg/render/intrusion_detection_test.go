@@ -117,8 +117,8 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		}))
 
 		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"authenticationreviews"},
+			APIGroups: []string{"authentication.k8s.io"},
+			Resources: []string{"tokenreviews"},
 			Verbs:     []string{"create"},
 		}))
 	})

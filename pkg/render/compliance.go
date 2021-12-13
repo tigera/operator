@@ -596,8 +596,8 @@ func (c *complianceComponent) complianceServerClusterRole() *rbacv1.ClusterRole 
 		// Requests on behalf of the compliance-server will be sent to Voltron, where an authentication review will take
 		// place with its bearer token.
 		clusterRole.Rules = append(clusterRole.Rules, rbacv1.PolicyRule{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"authenticationreviews"},
+			APIGroups: []string{"authentication.k8s.io"},
+			Resources: []string{"tokenreviews"},
 			Verbs:     []string{"create"},
 		})
 	}

@@ -174,8 +174,8 @@ func (pc *packetCaptureApiComponent) clusterRole() client.Object {
 			Verbs:     []string{"create"},
 		},
 		{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"authenticationreviews"},
+			APIGroups: []string{"authentication.k8s.io"},
+			Resources: []string{"tokenreviews"},
 			Verbs:     []string{"create"},
 		},
 		{

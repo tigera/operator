@@ -299,8 +299,8 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 				Verbs:     []string{"create"},
 			},
 			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"authenticationreviews"},
+				APIGroups: []string{"authentication.k8s.io"},
+				Resources: []string{"tokenreviews"},
 				Verbs:     []string{"create"},
 			},
 			{

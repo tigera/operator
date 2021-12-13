@@ -1345,16 +1345,6 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			},
 			Verbs: []string{"get", "watch", "list"},
 		},
-		// A POST to AuthenticationReviews can be compared with a POST to the TokenReviews endpoint.
-		// This api is added to circumvent a bug in the k8s-apiserver that is present in k8s
-		// versions up to v1.18 (kubernetes/pull/87612) when oidc audiences are enabled.
-		//
-		// Also include AuthorizationReviews that the UI uses to determine what features it can enable.
-		{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"authenticationreviews", "authorizationreviews"},
-			Verbs:     []string{"create"},
-		},
 	}
 
 	// Privileges for lma.tigera.io have no effect on managed clusters.
@@ -1479,16 +1469,6 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 				"globalthreatfeeds/status",
 			},
 			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
-		},
-		// A POST to AuthenticationReviews can be compared with a POST to the TokenReviews endpoint.
-		// This api is added to circumvent a bug in the k8s-apiserver that is present in k8s
-		// versions up to v1.18 (kubernetes/pull/87612) when oidc audiences are enabled.
-		//
-		// Also include AuthorizationReviews that the UI uses to determine what features it can enable.
-		{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"authenticationreviews", "authorizationreviews"},
-			Verbs:     []string{"create"},
 		},
 	}
 

@@ -238,8 +238,8 @@ var _ = Describe("compliance rendering tests", func() {
 					Verbs:     []string{"create"},
 				},
 				{
-					APIGroups: []string{"projectcalico.org"},
-					Resources: []string{"authenticationreviews"},
+					APIGroups: []string{"authentication.k8s.io"},
+					Resources: []string{"tokenreviews"},
 					Verbs:     []string{"create"},
 				},
 				{

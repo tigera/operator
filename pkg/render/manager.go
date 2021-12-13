@@ -693,6 +693,12 @@ func managerClusterRole(managementCluster, managedCluster, openshift bool) *rbac
 				Verbs:     []string{"create"},
 			},
 			{
+				APIGroups: []string{"authentication.k8s.io"},
+				Resources: []string{"tokenreviews"},
+				Verbs:     []string{"create"},
+			},
+
+			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{
 					"networksets",
@@ -767,17 +773,6 @@ func managerClusterRole(managementCluster, managedCluster, openshift bool) *rbac
 				Verbs:     []string{"list", "get", "watch", "update"},
 			},
 		)
-	}
-
-	if managementCluster {
-		// For cross-cluster requests an authentication review will be done for authenticating the tigera-manager.
-		// Requests on behalf of the tigera-manager will be sent to Voltron, where an authentication review will
-		// take place with its bearer token.
-		cr.Rules = append(cr.Rules, rbacv1.PolicyRule{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"authenticationreviews"},
-			Verbs:     []string{"create"},
-		})
 	}
 
 	if !openshift {

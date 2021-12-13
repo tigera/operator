@@ -335,16 +335,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(dp.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ManagerInternalTLSSecretName))
 
 		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:" + components.ComponentTigeraKubeControllers.Version))
-
-		// Management clusters also have a role for authenticationreviews.
-		clusterRole := rtest.GetResource(resources, kubecontrollers.KubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(len(clusterRole.Rules)).To(Equal(19))
-		Expect(clusterRole.Rules).To(ContainElement(
-			rbacv1.PolicyRule{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"authenticationreviews"},
-				Verbs:     []string{"create"},
-			}))
 	})
 
 	It("should render all es-calico-kube-controllers resources for a default configuration using TigeraSecureEnterprise and ClusterType is Management", func() {
@@ -410,15 +400,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:" + components.ComponentTigeraKubeControllers.Version))
 
-		// Management clusters also have a role for authenticationreviews.
 		clusterRole := rtest.GetResource(resources, kubecontrollers.EsKubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(len(clusterRole.Rules)).To(Equal(20))
-		Expect(clusterRole.Rules).To(ContainElement(
-			rbacv1.PolicyRule{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"authenticationreviews"},
-				Verbs:     []string{"create"},
-			}))
 	})
 
 	It("should include a ControlPlaneNodeSelector when specified", func() {

@@ -299,8 +299,8 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 				Verbs:     []string{"watch", "list", "get"},
 			},
 			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"authenticationreviews"},
+				APIGroups: []string{"authentication.k8s.io"},
+				Resources: []string{"tokenreviews"},
 				Verbs:     []string{"create"},
 			},
 		}

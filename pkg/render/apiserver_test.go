@@ -990,6 +990,11 @@ var (
 			Verbs: []string{"get", "watch", "list"},
 		},
 		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"authorizationreviews"},
+			Verbs:     []string{"create"},
+		},
+		{
 			APIGroups: []string{"lma.tigera.io"},
 			Resources: []string{"*"},
 			ResourceNames: []string{
@@ -1082,6 +1087,11 @@ var (
 				"globalthreatfeeds/status",
 			},
 			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"authorizationreviews"},
+			Verbs:     []string{"create"},
 		},
 		{
 			APIGroups: []string{"lma.tigera.io"},

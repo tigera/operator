@@ -1345,6 +1345,12 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			},
 			Verbs: []string{"get", "watch", "list"},
 		},
+		// A POST to AuthorizationReviews lets the UI determine what features it can enable.
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"authorizationreviews"},
+			Verbs:     []string{"create"},
+		},
 	}
 
 	// Privileges for lma.tigera.io have no effect on managed clusters.
@@ -1469,6 +1475,12 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 				"globalthreatfeeds/status",
 			},
 			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
+		},
+		// A POST to AuthorizationReviews lets the UI determine what features it can enable.
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"authorizationreviews"},
+			Verbs:     []string{"create"},
 		},
 	}
 

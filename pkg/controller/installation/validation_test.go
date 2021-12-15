@@ -147,6 +147,22 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
+	It("should not allow HostPorts to be disabled with VPP", func() {
+		vpp := operator.LinuxDataplaneVPP
+		bgp := operator.BGPEnabled
+		en := operator.HostPortsEnabled
+		dis := operator.HostPortsDisabled
+		instance.Spec.CalicoNetwork.LinuxDataplane = &vpp
+		instance.Spec.CalicoNetwork.BGP = &bgp
+		instance.Spec.CNI.Type = operator.PluginCalico
+		instance.Spec.CalicoNetwork.HostPorts = &dis
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+		instance.Spec.CalicoNetwork.HostPorts = &en
+		err = validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 	It("should prevent IPIP if BGP is disabled", func() {
 		disabled := operator.BGPDisabled
 		instance.Spec.CalicoNetwork.BGP = &disabled

@@ -333,25 +333,16 @@ func (d *dexConfig) RequiredEnv(string) []corev1.EnvVar {
 		{Name: dexSecretEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: d.dexSecret.Name}}}},
 	}
 	if d.idpSecret != nil {
-		for key := range d.idpSecret.Data {
-			switch key {
-			case ClientIDSecretField:
-				env = append(env, corev1.EnvVar{Name: clientIDEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientIDSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: d.idpSecret.Name}}}})
-				break
-			case ClientSecretSecretField:
-				env = append(env, corev1.EnvVar{Name: clientSecretEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: d.idpSecret.Name}}}})
-				break
-			case adminEmailSecretField:
-				env = append(env, corev1.EnvVar{Name: googleAdminEmailEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: adminEmailSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: d.idpSecret.Name}}}})
-				break
-			case BindDNSecretField:
-				env = append(env, corev1.EnvVar{Name: bindDNEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: BindDNSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: d.idpSecret.Name}}}})
-				break
-			case BindPWSecretField:
-				env = append(env, corev1.EnvVar{Name: bindPWEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: BindPWSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: d.idpSecret.Name}}}})
-				break
+		addIfPresent := func(fieldName, envName string) {
+			if _, found := d.idpSecret.Data[fieldName]; found {
+				env = append(env, corev1.EnvVar{Name: envName, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: fieldName, LocalObjectReference: corev1.LocalObjectReference{Name: d.idpSecret.Name}}}})
 			}
 		}
+		addIfPresent(ClientIDSecretField, clientIDEnv)
+		addIfPresent(ClientSecretSecretField, clientSecretEnv)
+		addIfPresent(adminEmailSecretField, googleAdminEmailEnv)
+		addIfPresent(BindDNSecretField, bindDNEnv)
+		addIfPresent(BindPWSecretField, bindPWEnv)
 	}
 
 	return env

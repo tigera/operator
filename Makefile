@@ -525,25 +525,23 @@ define fetch_crds
     $(eval branch := $(2))
     $(eval dir := $(3))
 	@echo "Fetching $(dir) CRDs from $(project) branch $(branch)"
-	git -C .crds/$(dir) clone git@github.com:$(project).git ./
-	git -C .crds/$(dir) fetch --all origin 2>&1 | grep -v -e "new branch" -e "new tag"
-	git -C .crds/$(dir) checkout -q $(branch)
+	git -C .crds/$(dir) clone --depth 1 --branch $(branch) --single-branch git@github.com:$(project).git ./
 endef
 define copy_crds
     $(eval dir := $(1))
 	@cp .crds/$(dir)/libcalico-go/config/crd/* pkg/crds/$(dir)/ && echo "Copied $(dir) CRDs"
 endef
 
-.PHONY: read-libcalico-version read-libcalico-enterprise-version
+.PHONY: read-calico-crds-branch read-calico-enterprise-crds-branch
 .PHONY: update-calico-crds update-enterprise-crds
 .PHONY: fetch-calico-crds fetch-enterprise-crds
 .PHONY: prepare-for-calico-crds prepare-for-enterprise-crds
 
 CALICO?=projectcalico/calico
-read-libcalico-calico-version:
+read-calico-crds-branch:
 	$(eval CALICO_BRANCH := $(shell $(CONTAINERIZED) $(CALICO_BUILD) \
 	bash -c '$(GIT_CONFIG_SSH) \
-	yq r config/calico_versions.yml components.libcalico-go.version'))
+	yq r config/calico_crds.yml calico.branch'))
 	if [ -z "$(CALICO_BRANCH)" ]; then echo "libcalico branch not defined"; exit 1; fi
 
 update-calico-crds: fetch-calico-crds
@@ -552,15 +550,15 @@ update-calico-crds: fetch-calico-crds
 prepare-for-calico-crds:
 	$(call prep_local_crds,"calico")
 
-fetch-calico-crds: prepare-for-calico-crds read-libcalico-calico-version
+fetch-calico-crds: prepare-for-calico-crds read-calico-crds-branch
 	$(call fetch_crds,$(CALICO),$(CALICO_BRANCH),"calico")
 
 CALICO_ENTERPRISE?=tigera/calico-private
-read-libcalico-enterprise-version:
+read-calico-enterprise-crds-branch:
 	$(eval CALICO_ENTERPRISE_BRANCH := $(shell $(CONTAINERIZED) $(CALICO_BUILD) \
 	bash -c '$(GIT_CONFIG_SSH) \
-	yq r config/enterprise_versions.yml components.libcalico-go.version'))
-	if [ -z "$(CALICO_ENTERPRISE_BRANCH)" ]; then echo "libcalico enterprise branch not defined"; exit 1; fi
+	yq r config/calico_crds.yml enterprise.branch'))
+	if [ -z "$(CALICO_ENTERPRISE_BRANCH)" ]; then echo "calico enterprise branch not defined"; exit 1; fi
 
 update-enterprise-crds: fetch-enterprise-crds
 	$(call copy_crds,"enterprise")
@@ -568,7 +566,7 @@ update-enterprise-crds: fetch-enterprise-crds
 prepare-for-enterprise-crds:
 	$(call prep_local_crds,"enterprise")
 
-fetch-enterprise-crds: prepare-for-enterprise-crds  read-libcalico-enterprise-version
+fetch-enterprise-crds: prepare-for-enterprise-crds  read-calico-enterprise-crds-branch
 	$(call fetch_crds,$(CALICO_ENTERPRISE),$(CALICO_ENTERPRISE_BRANCH),"enterprise")
 
 .PHONY: prepull-image

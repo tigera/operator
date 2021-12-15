@@ -1,0 +1,6 @@
+# The Makefile goals for read-calico-crds-version and read-calico-enterprise-crds-version read from here what branch
+# on the calico repo to use for downloading the ./libcalico CRDs.
+calico:
+  branch: master
+enterprise:
+  branch: master

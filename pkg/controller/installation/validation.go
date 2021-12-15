@@ -258,6 +258,9 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			if instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled {
 				return fmt.Errorf("VPP requires BGP to be enabled")
 			}
+			if instance.Spec.CalicoNetwork.HostPorts != nil && *instance.Spec.CalicoNetwork.HostPorts == operatorv1.HostPortsDisabled {
+				return fmt.Errorf("VPP doesn't support disabling HostPorts")
+			}
 		}
 
 		if bpfDataplane && instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 == nil {

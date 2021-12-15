@@ -488,6 +488,15 @@ func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
 		k8sAPIRoot = fmt.Sprintf("\n          \"k8s_api_root\":\"%s\",", apiRoot)
 	}
 
+	var externalDataplane string = ""
+	if c.vppDataplaneEnabled() {
+		externalDataplane = `,
+      "dataplane_options": {
+        "type": "grpc",
+        "socket": "unix:///var/run/calico/cni-server.sock"
+      }`
+	}
+
 	// Build the CNI configuration json.
 	var config = fmt.Sprintf(`{
   "name": "k8s-pod-network",
@@ -509,14 +518,14 @@ func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
       },
       "kubernetes": {%s
           "kubeconfig": "__KUBECONFIG_FILEPATH__"
-      }
+      }%s
     },
     {
       "type": "bandwidth",
       "capabilities": {"bandwidth": true}
     }%s
   ]
-}`, mtu, nodenameFileOptional, ipam, ipForward, k8sAPIRoot, portmap)
+}`, mtu, nodenameFileOptional, ipam, ipForward, k8sAPIRoot, externalDataplane, portmap)
 
 	return &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
@@ -787,6 +796,13 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 		)
 	}
 
+	if c.vppDataplaneEnabled() {
+		volumes = append(volumes,
+			// Volume that contains the felix dataplane binary
+			corev1.Volume{Name: "felix-plugins", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/calico/felix-plugins"}}},
+		)
+	}
+
 	// If needed for this configuration, then include the CNI volumes.
 	if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
 		// Determine directories to use for CNI artifacts based on the provider.
@@ -850,6 +866,12 @@ func (c *nodeComponent) bpfDataplaneEnabled() bool {
 	return c.cfg.Installation.CalicoNetwork != nil &&
 		c.cfg.Installation.CalicoNetwork.LinuxDataplane != nil &&
 		*c.cfg.Installation.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF
+}
+
+func (c *nodeComponent) vppDataplaneEnabled() bool {
+	return c.cfg.Installation.CalicoNetwork != nil &&
+		c.cfg.Installation.CalicoNetwork.LinuxDataplane != nil &&
+		*c.cfg.Installation.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneVPP
 }
 
 func (c *nodeComponent) collectProcessPathEnabled() bool {
@@ -1023,6 +1045,9 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 	}
 	if c.bpfDataplaneEnabled() {
 		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/sys/fs/bpf", Name: "bpffs"})
+	}
+	if c.vppDataplaneEnabled() {
+		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/usr/local/bin/felix-plugins", Name: "felix-plugins", ReadOnly: true})
 	}
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		extraNodeMounts := []corev1.VolumeMount{
@@ -1220,6 +1245,24 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 	if c.bpfDataplaneEnabled() {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_BPFENABLED", Value: "true"})
 	}
+	if c.vppDataplaneEnabled() {
+		nodeEnv = append(nodeEnv, corev1.EnvVar{
+			Name:  "FELIX_USEINTERNALDATAPLANEDRIVER",
+			Value: "false",
+		}, corev1.EnvVar{
+			Name:  "FELIX_DATAPLANEDRIVER",
+			Value: "/usr/local/bin/felix-plugins/felix-api-proxy",
+		}, corev1.EnvVar{
+			Name:  "FELIX_XDPENABLED",
+			Value: "false",
+		})
+		if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderEKS {
+			nodeEnv = append(nodeEnv, corev1.EnvVar{
+				Name:  "FELIX_AWSSRCDSTCHECK",
+				Value: "Disable",
+			})
+		}
+	}
 
 	if c.collectProcessPathEnabled() {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_FLOWLOGSCOLLECTPROCESSPATH", Value: "true"})
@@ -1254,7 +1297,12 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		}
 	} else {
 		// BGP is enabled.
-		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"})
+		if c.vppDataplaneEnabled() {
+			// VPP comes with its own BGP daemon, so bird should be disabled
+			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "none"})
+		} else {
+			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"})
+		}
 		if mtu != nil {
 			ipipMtu := strconv.Itoa(int(*mtu))
 			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_IPINIPMTU", Value: ipipMtu})
@@ -1406,8 +1454,8 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Pr
 		readinessCmd = []string{"/bin/calico-node", "-bird-ready", "-felix-ready", "-bgp-metrics-ready"}
 	}
 
-	// If not using BGP, don't check bird status (or bgp metrics server for enterprise).
-	if !bgpEnabled(c.cfg.Installation) {
+	// If not using BGP or using VPP, don't check bird status (or bgp metrics server for enterprise).
+	if !bgpEnabled(c.cfg.Installation) || c.vppDataplaneEnabled() {
 		readinessCmd = []string{"/bin/calico-node", "-felix-ready"}
 	}
 

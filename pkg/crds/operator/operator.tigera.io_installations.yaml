@@ -116,6 +116,7 @@ spec:
                     enum:
                     - Iptables
                     - BPF
+                    - VPP
                     type: string
                   mtu:
                     description: MTU specifies the maximum transmission unit to use
@@ -817,6 +818,7 @@ spec:
                         enum:
                         - Iptables
                         - BPF
+                        - VPP
                         type: string
                       mtu:
                         description: MTU specifies the maximum transmission unit to

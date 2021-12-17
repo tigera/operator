@@ -124,6 +124,11 @@ var _ = Describe("compliance rendering tests", func() {
 					Verbs:     []string{"create"},
 				},
 				{
+					APIGroups: []string{"authentication.k8s.io"},
+					Resources: []string{"tokenreviews"},
+					Verbs:     []string{"create"},
+				},
+				{
 					APIGroups:     []string{"policy"},
 					Resources:     []string{"podsecuritypolicies"},
 					Verbs:         []string{"use"},

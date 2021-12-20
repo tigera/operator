@@ -1836,6 +1836,11 @@ func (in *NodeAddressAutodetection) DeepCopyInto(out *NodeAddressAutodetection) 
 		*out = new(bool)
 		**out = **in
 	}
+	if in.Kubernetes != nil {
+		in, out := &in.Kubernetes, &out.Kubernetes
+		*out = new(KubernetesAutodetectionMethod)
+		**out = **in
+	}
 	if in.CIDRS != nil {
 		in, out := &in.CIDRS, &out.CIDRS
 		*out = make([]string, len(*in))

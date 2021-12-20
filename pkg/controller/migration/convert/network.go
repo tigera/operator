@@ -395,6 +395,7 @@ func handleAutoDetectionMethod(c *components, install *operatorv1.Installation) 
 		AutodetectionMethodInterface     = "interface="
 		AutodetectionMethodSkipInterface = "skip-interface="
 		AutodetectionMethodCIDR          = "cidr="
+		AutodetectionMethodNodeIP        = "kubernetes-internal-ip"
 	)
 
 	// first-found
@@ -425,10 +426,18 @@ func handleAutoDetectionMethod(c *components, install *operatorv1.Installation) 
 		return nil
 	}
 
+	// cidr=
 	if strings.HasPrefix(*method, AutodetectionMethodCIDR) {
 		ifStr := strings.TrimPrefix(*method, AutodetectionMethodCIDR)
 		cidrs := strings.Split(ifStr, ",")
 		install.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operatorv1.NodeAddressAutodetection{CIDRS: cidrs}
+		return nil
+	}
+
+	// kubernetes-internal-ip
+	if *method == "" || *method == AutodetectionMethodNodeIP {
+		var k = operatorv1.KubernetesAutodetectionMethodInternalIP
+		install.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operatorv1.NodeAddressAutodetection{Kubernetes: &k}
 		return nil
 	}
 

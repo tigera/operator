@@ -83,6 +83,25 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).To(MatchError("IPv6 IP pool is specified but eBPF mode does not support IPv6"))
 	})
 
+	It("should prevent multiple node address autodetection methods", func() {
+		nodeIP := operator.KubernetesAutodetectionMethodInternalIP
+		instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
+			CanReach:   "8.8.8.8",
+			Kubernetes: &nodeIP,
+		}
+		err := validateCustomResource(instance)
+		Expect(err).To(MatchError("no more than one node address autodetection method can be specified per-family"))
+	})
+
+	It("should allow autodetection based on Kubernetes node IP", func() {
+		nodeIP := operator.KubernetesAutodetectionMethodInternalIP
+		instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
+			Kubernetes: &nodeIP,
+		}
+		err := validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 	It("should prevent host ports if BPF is enabled", func() {
 		bpf := operator.LinuxDataplaneBPF
 		instance.Spec.CalicoNetwork.LinuxDataplane = &bpf

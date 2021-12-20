@@ -19,11 +19,23 @@ import (
 	"strconv"
 	"strings"
 
-	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
-
 	ocsv1 "github.com/openshift/api/security/v1"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render/common/authentication"
+	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
 	"github.com/tigera/operator/pkg/render/common/configmap"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rkibana "github.com/tigera/operator/pkg/render/common/kibana"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/podaffinity"
+	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
+	"github.com/tigera/operator/pkg/render/common/secret"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -31,17 +43,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/dns"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	rkibana "github.com/tigera/operator/pkg/render/common/kibana"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
-	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
 const (
@@ -67,6 +68,9 @@ const (
 
 	KibanaTLSHashAnnotation         = "hash.operator.tigera.io/kibana-secrets"
 	ElasticsearchUserHashAnnotation = "hash.operator.tigera.io/elasticsearch-user"
+
+	PrometheusTLSSecretName     = "calico-node-prometheus-tls"
+	prometheusTLSHashAnnotation = "hash.operator.tigera.io/prometheus-tls"
 )
 
 // ManagementClusterConnection configuration constants
@@ -92,6 +96,7 @@ func Manager(
 	kibanaSecrets []*corev1.Secret,
 	complianceServerCertSecret *corev1.Secret,
 	packetCaptureServerCertSecret *corev1.Secret,
+	prometheusCertSecret *corev1.Secret,
 	esClusterConfig *relasticsearch.ClusterConfig,
 	tlsKeyPair *corev1.Secret,
 	pullSecrets []*corev1.Secret,
@@ -102,6 +107,7 @@ func Manager(
 	internalTrafficSecret *corev1.Secret,
 	clusterDomain string,
 	esLicenseType ElasticsearchLicenseType,
+	replicas *int32,
 	tenantID string,
 ) (Component, error) {
 	var tlsSecrets []*corev1.Secret
@@ -138,6 +144,7 @@ func Manager(
 		kibanaSecrets:                 kibanaSecrets,
 		complianceServerCertSecret:    complianceServerCertSecret,
 		packetCaptureServerCertSecret: packetCaptureServerCertSecret,
+		prometheusCertSecret:          prometheusCertSecret,
 		esClusterConfig:               esClusterConfig,
 		tlsSecrets:                    tlsSecrets,
 		tlsAnnotations:                tlsAnnotations,
@@ -147,6 +154,7 @@ func Manager(
 		installation:                  installation,
 		managementCluster:             managementCluster,
 		esLicenseType:                 esLicenseType,
+		replicas:                      replicas,
 		tenantID:                      tenantID,
 	}, nil
 }
@@ -157,6 +165,7 @@ type managerComponent struct {
 	kibanaSecrets                 []*corev1.Secret
 	complianceServerCertSecret    *corev1.Secret
 	packetCaptureServerCertSecret *corev1.Secret
+	prometheusCertSecret          *corev1.Secret
 	esClusterConfig               *relasticsearch.ClusterConfig
 	tlsSecrets                    []*corev1.Secret
 	tlsAnnotations                map[string]string
@@ -170,6 +179,7 @@ type managerComponent struct {
 	proxyImage                    string
 	esProxyImage                  string
 	csrInitImage                  string
+	replicas                      *int32
 	tenantID                      string
 }
 
@@ -242,6 +252,9 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	if c.packetCaptureServerCertSecret != nil {
 		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.packetCaptureServerCertSecret)...)...)
 	}
+	if c.prometheusCertSecret != nil {
+		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.prometheusCertSecret)...)...)
+	}
 	objs = append(objs, c.managerDeployment())
 	if c.keyValidatorConfig != nil {
 		objs = append(objs, configmap.ToRuntimeObjects(c.keyValidatorConfig.RequiredConfigMaps(ManagerNamespace)...)...)
@@ -255,7 +268,7 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      ManagerTLSSecretName,
-				Namespace: rmeta.OperatorNamespace(),
+				Namespace: common.OperatorNamespace(),
 			},
 		}
 		toDelete = append(toDelete, secretToDelete)
@@ -271,7 +284,6 @@ func (c *managerComponent) Ready() bool {
 
 // managerDeployment creates a deployment for the Tigera Secure manager component.
 func (c *managerComponent) managerDeployment() *appsv1.Deployment {
-	var replicas int32 = 1
 	annotations := make(map[string]string)
 
 	if c.complianceServerCertSecret != nil {
@@ -282,6 +294,9 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		annotations[PacketCaptureTLSHashAnnotation] = rmeta.AnnotationHash(c.packetCaptureServerCertSecret.Data)
 	}
 
+	if c.prometheusCertSecret != nil {
+		annotations[prometheusTLSHashAnnotation] = rmeta.AnnotationHash(c.prometheusCertSecret.Data)
+	}
 	// Add a hash of the Secret to ensure if it changes the manager will be
 	// redeployed.	The following secrets are annotated:
 	// manager-tls : cert used for tigera UI
@@ -328,6 +343,10 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		}),
 	}, c.esClusterConfig, c.esSecrets).(*corev1.PodTemplateSpec)
 
+	if c.replicas != nil && *c.replicas > 1 {
+		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity("tigera-manager", ManagerNamespace)
+	}
+
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -343,7 +362,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 					"k8s-app": "tigera-manager",
 				},
 			},
-			Replicas: &replicas,
+			Replicas: c.replicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
@@ -408,6 +427,17 @@ func (c *managerComponent) managerVolumes() []corev1.Volume {
 						Path: "tls.crt",
 					}},
 					SecretName: PacketCaptureCertSecret,
+				},
+			},
+		})
+	}
+
+	if c.prometheusCertSecret != nil {
+		v = append(v, corev1.Volume{
+			Name: PrometheusTLSSecretName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: PrometheusTLSSecretName,
 				},
 			},
 		})
@@ -629,6 +659,10 @@ func (c *managerComponent) volumeMountsForProxyManager() []corev1.VolumeMount {
 		mounts = append(mounts, corev1.VolumeMount{Name: PacketCaptureCertSecret, MountPath: "/certs/packetcapture", ReadOnly: true})
 	}
 
+	if c.prometheusCertSecret != nil {
+		mounts = append(mounts, corev1.VolumeMount{Name: PrometheusTLSSecretName, MountPath: "/certs/prometheus", ReadOnly: true})
+	}
+
 	if c.managementCluster != nil {
 		mounts = append(mounts, corev1.VolumeMount{Name: ManagerInternalTLSSecretName, MountPath: "/certs/internal", ReadOnly: true})
 		mounts = append(mounts, corev1.VolumeMount{Name: VoltronTunnelSecretName, MountPath: "/certs/tunnel", ReadOnly: true})
@@ -767,7 +801,12 @@ func managerClusterRole(managementCluster, managedCluster, openshift bool) *rbac
 			},
 			{
 				APIGroups: []string{""},
-				Resources: []string{"serviceaccounts", "namespaces", "nodes", "events"},
+				Resources: []string{"serviceaccounts", "namespaces", "nodes", "events", "services", "pods"},
+				Verbs:     []string{"list"},
+			},
+			{
+				APIGroups: []string{"apps"},
+				Resources: []string{"replicasets", "statefulsets", "daemonsets"},
 				Verbs:     []string{"list"},
 			},
 			// When a request is made in the manager UI, they are proxied through the Voltron backend server. If the

@@ -38,6 +38,7 @@ var defaultImages = map[string]string{
 	"tigera-cni":              "tigera/cni",
 	"key-cert-provisioner":    "tigera/key-cert-provisioner",
 	"calico/apiserver":        "calico/apiserver",
+	"calico/windows-upgrade":  "calico/windows-upgrade",
 }
 
 var ignoredImages = map[string]struct{}{
@@ -47,6 +48,7 @@ var ignoredImages = map[string]struct{}{
 	"cnx-manager-proxy": {},
 	"busybox":           {},
 	"calico/api":        {},
+	"libcalico-go":      {},
 }
 
 type Release struct {

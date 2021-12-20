@@ -28,7 +28,6 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -42,21 +41,21 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 	esLicenseType render.ElasticsearchLicenseType,
 	ctx context.Context,
 ) (reconcile.Result, bool, error) {
-	kubeControllerEsPublicCertSecret, err := utils.GetSecret(ctx, r.client, relasticsearch.PublicCertSecret, rmeta.OperatorNamespace())
+	kubeControllerEsPublicCertSecret, err := utils.GetSecret(ctx, r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
 	if err != nil {
 		log.Error(err, err.Error())
 		r.status.SetDegraded("Failed to get Elasticsearch pub cert secret used by kube controllers", err.Error())
 		return reconcile.Result{}, false, err
 	}
 
-	kubeControllersUserSecret, err := utils.GetSecret(ctx, r.client, kubecontrollers.ElasticsearchKubeControllersUserSecret, rmeta.OperatorNamespace())
+	kubeControllersUserSecret, err := utils.GetSecret(ctx, r.client, kubecontrollers.ElasticsearchKubeControllersUserSecret, common.OperatorNamespace())
 	if err != nil {
 		log.Error(err, err.Error())
 		r.status.SetDegraded("Failed to get kube controllers gateway secret", err.Error())
 		return reconcile.Result{}, false, err
 	}
 
-	kubeControllerKibanaPublicCertSecret, err := utils.GetSecret(ctx, r.client, render.KibanaPublicCertSecret, rmeta.OperatorNamespace())
+	kubeControllerKibanaPublicCertSecret, err := utils.GetSecret(ctx, r.client, render.KibanaPublicCertSecret, common.OperatorNamespace())
 	if err != nil {
 		log.Error(err, err.Error())
 		r.status.SetDegraded("Failed to get Kibana pub cert secret used by kube controllers", err.Error())
@@ -91,8 +90,7 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 			return reconcile.Result{}, false, err
 		}
 	}
-
-	kubeControllersCfg := &kubecontrollers.KubeControllersConfiguration{
+	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:                 k8sapi.Endpoint,
 		Installation:                 install,
 		ManagementCluster:            managementCluster,
@@ -108,12 +106,12 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 
 	// Multi-tenancy modifications.
 	if r.elasticExternal {
-		if result, proceed, err := r.esKubeControllersAddCloudModificationsToConfig(kubeControllersCfg, reqLogger, ctx); err != nil || !proceed {
+		if result, proceed, err := r.esKubeControllersAddCloudModificationsToConfig(&kubeControllersCfg, reqLogger, ctx); err != nil || !proceed {
 			return result, proceed, err
 		}
 	}
 
-	esKubeControllerComponents := kubecontrollers.NewElasticsearchKubeControllers(kubeControllersCfg)
+	esKubeControllerComponents := kubecontrollers.NewElasticsearchKubeControllers(&kubeControllersCfg)
 
 	imageSet, err := imageset.GetImageSet(ctx, r.client, install.Variant)
 	if err != nil {

@@ -160,6 +160,18 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "l7-collector" }}
+	ComponentL7Collector = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
+{{ with index .Components "envoy" }}
+	ComponentEnvoyProxy = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "prometheus" }}
 	ComponentPrometheus = component{
 		Version: "{{ .Version }}",
@@ -220,7 +232,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-
+{{ with index .Components "windows" }}
+	ComponentTigeraWindows = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 	EnterpriseComponents = []component{
 		ComponentAPIServer,
 		ComponentComplianceBenchmarker,
@@ -245,6 +262,8 @@ var (
 		ComponentDex,
 		ComponentManagerProxy,
 		ComponentPacketCapture,
+		ComponentL7Collector,
+		ComponentEnvoyProxy,
 		ComponentPrometheus,
 		ComponentTigeraPrometheusService,
 		ComponentPrometheusAlertmanager,
@@ -256,5 +275,6 @@ var (
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
+		ComponentTigeraWindows,
 	}
 )

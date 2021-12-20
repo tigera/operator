@@ -39,7 +39,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
 // allCalicoComponents takes the given configuration and returns all the components
@@ -115,7 +114,7 @@ func allCalicoComponents(
 		MetricsPort:                 kubeControllersMetricsPort,
 	}
 
-	return []render.Component{namespaces, secretsAndConfigMaps, render.Typha(typhaCfg), render.Node(nodeCfg), kubecontrollers.NewCalicoKubeControllers(kcCfg)}, nil
+	return []render.Component{namespaces, secretsAndConfigMaps, render.Typha(typhaCfg), render.Node(nodeCfg), kubecontrollers.NewCalicoKubeControllers(kcCfg), render.Windows(cr)}, nil
 }
 
 var _ = Describe("Rendering tests", func() {
@@ -151,14 +150,14 @@ var _ = Describe("Rendering tests", func() {
 
 		nodeSecret := corev1.Secret{}
 		nodeSecret.Name = render.NodeTLSSecretName
-		nodeSecret.Namespace = rmeta.OperatorNamespace()
+		nodeSecret.Namespace = common.OperatorNamespace()
 		nodeSecret.Data = map[string][]byte{"k": []byte("v")}
 		nodeSecret.Kind = "Secret"
 		nodeSecret.APIVersion = "v1"
 
 		typhaSecret := corev1.Secret{}
 		typhaSecret.Name = render.TyphaTLSSecretName
-		typhaSecret.Namespace = rmeta.OperatorNamespace()
+		typhaSecret.Namespace = common.OperatorNamespace()
 		typhaSecret.Data = map[string][]byte{"k": []byte("v")}
 		typhaSecret.Kind = "Secret"
 		typhaSecret.APIVersion = "v1"
@@ -171,7 +170,7 @@ var _ = Describe("Rendering tests", func() {
 			NodeSecret:  &nodeSecret,
 		}
 		typhaNodeTLS.CAConfigMap.Name = render.TyphaCAConfigMapName
-		typhaNodeTLS.CAConfigMap.Namespace = rmeta.OperatorNamespace()
+		typhaNodeTLS.CAConfigMap.Namespace = common.OperatorNamespace()
 		typhaNodeTLS.CAConfigMap.Kind = "ConfigMap"
 		typhaNodeTLS.CAConfigMap.APIVersion = "v1"
 	})
@@ -191,10 +190,11 @@ var _ = Describe("Rendering tests", func() {
 		// - 2 ConfigMap for Typha comms (1 in operator namespace and 1 in calico namespace)
 		// - 7 typha resources (Service, SA, Role, Binding, Deployment, PodDisruptionBudget, PodSecurityPolicy)
 		// - 6 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment, PodSecurityPolicy, Service, Secret)
+		// - 2 windows-upgrader resources (ServiceAccount, DaemonSet)
 		// - 1 namespace
 		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, operatorv1.ProviderNone, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c)).To(Equal(6 + 4 + 2 + 7 + 6 + 1))
+		Expect(componentCount(c)).To(Equal(6 + 4 + 2 + 7 + 6 + 2 + 1))
 	})
 
 	It("should render all resources when variant is Tigera Secure", func() {
@@ -207,7 +207,7 @@ var _ = Describe("Rendering tests", func() {
 		instance.NodeMetricsPort = &nodeMetricsPort
 		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, operatorv1.ProviderNone, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c)).To(Equal((6 + 4 + 2 + 7 + 6 + 1) + 1 + 1))
+		Expect(componentCount(c)).To(Equal((6 + 4 + 2 + 7 + 6 + 2 + 1) + 1 + 1))
 	})
 
 	It("should render all resources when variant is Tigera Secure and Management Cluster", func() {
@@ -221,7 +221,7 @@ var _ = Describe("Rendering tests", func() {
 		internalManagerTLSSecret := &corev1.Secret{
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
-				Name: render.ManagerInternalTLSSecretName, Namespace: rmeta.OperatorNamespace(),
+				Name: render.ManagerInternalTLSSecretName, Namespace: common.OperatorNamespace(),
 			},
 		}
 		c, err := allCalicoComponents(k8sServiceEp, instance, &operatorv1.ManagementCluster{}, nil, nil, typhaNodeTLS, internalManagerTLSSecret, nil, operatorv1.ProviderNone, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
@@ -239,10 +239,10 @@ var _ = Describe("Rendering tests", func() {
 			{render.DexObjectName, "", "", "v1", "Namespace"},
 
 			// Secrets and configmaps from tigera-operator namespace.
-			{render.TyphaCAConfigMapName, rmeta.OperatorNamespace(), "", "v1", "ConfigMap"},
-			{render.NodeTLSSecretName, rmeta.OperatorNamespace(), "", "v1", "Secret"},
-			{render.TyphaTLSSecretName, rmeta.OperatorNamespace(), "", "v1", "Secret"},
-			{render.ManagerInternalTLSSecretName, rmeta.OperatorNamespace(), "", "v1", "Secret"},
+			{render.TyphaCAConfigMapName, common.OperatorNamespace(), "", "v1", "ConfigMap"},
+			{render.NodeTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
+			{render.TyphaTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
+			{render.ManagerInternalTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
 
 			// Typha objects.
 			{render.TyphaServiceAccountName, common.CalicoNamespace, "", "v1", "ServiceAccount"},
@@ -273,6 +273,10 @@ var _ = Describe("Rendering tests", func() {
 			{render.ManagerInternalTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
 			{common.KubeControllersDeploymentName, "", "policy", "v1beta1", "PodSecurityPolicy"},
 			{"calico-kube-controllers-metrics", common.CalicoNamespace, "", "v1", "Service"},
+
+			// windows upgrader objects.
+			{common.CalicoWindowsUpgradeResourceName, common.CalicoNamespace, "", "v1", "ServiceAccount"},
+			{common.CalicoWindowsUpgradeResourceName, common.CalicoNamespace, "apps", "v1", "DaemonSet"},
 		}
 
 		var resources []client.Object
@@ -312,7 +316,7 @@ var _ = Describe("Rendering tests", func() {
 			},
 		}
 		bgpLayout.Name = "bgp-layout"
-		bgpLayout.Namespace = rmeta.OperatorNamespace()
+		bgpLayout.Namespace = common.OperatorNamespace()
 		comps, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, operatorv1.ProviderNone, nil, false, "", dns.DefaultClusterDomain, 0, 0, bgpLayout, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		var cm *corev1.ConfigMap

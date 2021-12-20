@@ -314,6 +314,10 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		}
 	}
 
+	if instance.Spec.ControlPlaneReplicas != nil && *instance.Spec.ControlPlaneReplicas <= 0 {
+		return fmt.Errorf("Installation spec.ControlPlaneReplicas should be greater than 0")
+	}
+
 	validComponentNames := map[operatorv1.ComponentName]struct{}{
 		operatorv1.ComponentNameKubeControllers: {},
 		operatorv1.ComponentNameNode:            {},
@@ -323,6 +327,21 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 	for _, resource := range instance.Spec.ComponentResources {
 		if _, ok := validComponentNames[resource.ComponentName]; !ok {
 			return fmt.Errorf("Installation spec.ComponentResources.ComponentName %s is not supported", resource.ComponentName)
+		}
+	}
+
+	// Verify that we are running in non-privileged mode only with the appropriate feature set
+	if instance.Spec.NonPrivileged != nil && *instance.Spec.NonPrivileged == operatorv1.NonPrivilegedEnabled {
+		// BPF must be disabled
+		if instance.Spec.CalicoNetwork != nil &&
+			instance.Spec.CalicoNetwork.LinuxDataplane != nil &&
+			*instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF {
+			return fmt.Errorf("Non-privileged Calico is not supported when BPF dataplane is enabled")
+		}
+
+		// Only allowed to run as non-privileged for OS Calico
+		if instance.Spec.Variant == operatorv1.TigeraSecureEnterprise {
+			return fmt.Errorf("Non-privileged Calico is not supported for spec.Variant=%s", operatorv1.TigeraSecureEnterprise)
 		}
 	}
 

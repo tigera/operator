@@ -29,48 +29,48 @@ import (
 
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/monitor"
 )
 
 func addAlertmanagerWatch(c controller.Controller) error {
 	return utils.AddNamespacedWatch(c, &monitoringv1.Alertmanager{
-		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.AlertmanagersKind, APIVersion: render.MonitoringAPIVersion},
-		ObjectMeta: metav1.ObjectMeta{Name: render.CalicoNodeAlertmanager, Namespace: common.TigeraPrometheusNamespace},
+		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.AlertmanagersKind, APIVersion: monitor.MonitoringAPIVersion},
+		ObjectMeta: metav1.ObjectMeta{Name: monitor.CalicoNodeAlertmanager, Namespace: common.TigeraPrometheusNamespace},
 	})
 }
 
 func addPrometheusWatch(c controller.Controller) error {
 	return utils.AddNamespacedWatch(c, &monitoringv1.Prometheus{
-		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.PrometheusesKind, APIVersion: render.MonitoringAPIVersion},
-		ObjectMeta: metav1.ObjectMeta{Name: render.CalicoNodePrometheus, Namespace: common.TigeraPrometheusNamespace},
+		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.PrometheusesKind, APIVersion: monitor.MonitoringAPIVersion},
+		ObjectMeta: metav1.ObjectMeta{Name: monitor.CalicoNodePrometheus, Namespace: common.TigeraPrometheusNamespace},
 	})
 }
 
 func addPodMonitorWatch(c controller.Controller) error {
 	return utils.AddNamespacedWatch(c, &monitoringv1.PodMonitor{
-		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.PodMonitorsKind, APIVersion: render.MonitoringAPIVersion},
-		ObjectMeta: metav1.ObjectMeta{Name: render.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace},
+		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.PodMonitorsKind, APIVersion: monitor.MonitoringAPIVersion},
+		ObjectMeta: metav1.ObjectMeta{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace},
 	})
 }
 
 func addPrometheusRuleWatch(c controller.Controller) error {
 	return utils.AddNamespacedWatch(c, &monitoringv1.PrometheusRule{
-		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.PrometheusRuleKind, APIVersion: render.MonitoringAPIVersion},
-		ObjectMeta: metav1.ObjectMeta{Name: render.TigeraPrometheusDPRate, Namespace: common.TigeraPrometheusNamespace},
+		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.PrometheusRuleKind, APIVersion: monitor.MonitoringAPIVersion},
+		ObjectMeta: metav1.ObjectMeta{Name: monitor.TigeraPrometheusDPRate, Namespace: common.TigeraPrometheusNamespace},
 	})
 }
 
 func addServiceMonitorCalicoNodeWatch(c controller.Controller) error {
 	return utils.AddNamespacedWatch(c, &monitoringv1.ServiceMonitor{
-		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: render.MonitoringAPIVersion},
-		ObjectMeta: metav1.ObjectMeta{Name: render.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace},
+		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: monitor.MonitoringAPIVersion},
+		ObjectMeta: metav1.ObjectMeta{Name: monitor.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace},
 	})
 }
 
 func addServiceMonitorElasticsearchWatch(c controller.Controller) error {
 	return utils.AddNamespacedWatch(c, &monitoringv1.ServiceMonitor{
-		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: render.MonitoringAPIVersion},
-		ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace},
+		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: monitor.MonitoringAPIVersion},
+		ObjectMeta: metav1.ObjectMeta{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace},
 	})
 }
 
@@ -98,6 +98,14 @@ func addWatch(c controller.Controller) error {
 
 	if err = addPodMonitorWatch(c); err != nil {
 		return fmt.Errorf("failed to watch PodMonitor resource: %w", err)
+	}
+
+	if err = utils.AddSecretsWatch(c, monitor.AlertmanagerConfigSecret, common.OperatorNamespace()); err != nil {
+		return fmt.Errorf("failed to watch Alertmanager configuration secret in Operator namespace: %w", err)
+	}
+
+	if err = utils.AddSecretsWatch(c, monitor.AlertmanagerConfigSecret, common.TigeraPrometheusNamespace); err != nil {
+		return fmt.Errorf("failed to watch Alertmanager configuration secret in Prometheus namespace: %w", err)
 	}
 
 	return err
@@ -135,7 +143,7 @@ func requiresPrometheusResources(client kubernetes.Interface) error {
 	return nil
 }
 
-func waitToAddWatch(c controller.Controller, client kubernetes.Interface, log logr.Logger, readyFlag *utils.ReadyFlag) error {
+func waitToAddPrometheusWatch(c controller.Controller, client kubernetes.Interface, log logr.Logger, readyFlag *utils.ReadyFlag) error {
 	const (
 		initBackoff   = 30 * time.Second
 		maxBackoff    = 8 * time.Minute

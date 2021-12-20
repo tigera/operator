@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/dns"
 
 	v1 "k8s.io/api/core/v1"
@@ -61,7 +62,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileAPISe
 		status:              status.New(mgr.GetClient(), "apiserver", opts.KubernetesVersion),
 		clusterDomain:       opts.ClusterDomain,
 	}
-	r.status.Run()
+	r.status.Run(opts.ShutdownContext)
 	return r
 }
 
@@ -85,7 +86,7 @@ func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 		return fmt.Errorf("apiserver-controller failed to watch Tigera network resource: %v", err)
 	}
 
-	if err = utils.AddConfigMapWatch(c, render.K8sSvcEndpointConfigMapName, rmeta.OperatorNamespace()); err != nil {
+	if err = utils.AddConfigMapWatch(c, render.K8sSvcEndpointConfigMapName, common.OperatorNamespace()); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch ConfigMap %s: %w", render.K8sSvcEndpointConfigMapName, err)
 	}
 
@@ -110,7 +111,7 @@ func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 			return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
 		}
 
-		for _, namespace := range []string{rmeta.OperatorNamespace(), rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise)} {
+		for _, namespace := range []string{common.OperatorNamespace(), rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise)} {
 			if err = utils.AddSecretsWatch(c, render.VoltronTunnelSecretName, namespace); err != nil {
 				return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 			}
@@ -124,14 +125,14 @@ func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 	}
 
 	// Watch for certificate changes. We watch both secrets in case the user is switching between variants.
-	if err = utils.AddSecretsWatch(c, "calico-apiserver-certs", rmeta.OperatorNamespace()); err != nil {
+	if err = utils.AddSecretsWatch(c, "calico-apiserver-certs", common.OperatorNamespace()); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 	}
-	if err = utils.AddSecretsWatch(c, "tigera-apiserver-certs", rmeta.OperatorNamespace()); err != nil {
+	if err = utils.AddSecretsWatch(c, "tigera-apiserver-certs", common.OperatorNamespace()); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 	}
 
-	if err = utils.AddSecretsWatch(c, render.PacketCaptureCertSecret, rmeta.OperatorNamespace()); err != nil {
+	if err = utils.AddSecretsWatch(c, render.PacketCaptureCertSecret, common.OperatorNamespace()); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 	}
 
@@ -208,7 +209,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		// Check that if the apiserver cert pair secret exists that it is valid (has key and cert fields)
 		// If it does not exist then this function still returns true
 		tlsSecret, err = utils.ValidateCertPair(r.client,
-			rmeta.OperatorNamespace(),
+			common.OperatorNamespace(),
 			secretName,
 			render.APIServerSecretKeyName,
 			render.APIServerSecretCertName,
@@ -260,7 +261,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 		if managementCluster != nil {
 			tunnelCASecret, err = utils.ValidateCertPair(r.client,
-				rmeta.OperatorNamespace(),
+				common.OperatorNamespace(),
 				render.VoltronTunnelSecretName,
 				render.VoltronTunnelSecretKeyName,
 				render.VoltronTunnelSecretCertName,
@@ -312,7 +313,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		var renderSecret bool
 		if network.CertificateManagement == nil {
 			packetCaptureCertSecret, err = utils.ValidateCertPair(r.client,
-				rmeta.OperatorNamespace(),
+				common.OperatorNamespace(),
 				render.PacketCaptureCertSecret,
 				v1.TLSPrivateKeyKey,
 				v1.TLSCertKey,
@@ -339,7 +340,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 				return reconcile.Result{}, err
 			}
 		} else {
-			packetCaptureCertSecret = render.CreateCertificateSecret(network.CertificateManagement.CACert, render.PacketCaptureCertSecret, rmeta.OperatorNamespace())
+			packetCaptureCertSecret = render.CreateCertificateSecret(network.CertificateManagement.CACert, render.PacketCaptureCertSecret, common.OperatorNamespace())
 			renderSecret = true
 		}
 

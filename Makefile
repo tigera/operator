@@ -55,6 +55,9 @@ else
 endif
 EXTRA_DOCKER_ARGS += --platform=linux/$(TARGET_PLATFORM)
 
+# location of docker credentials to push manifests
+DOCKER_CONFIG ?= $(HOME)/.docker/config.json
+
 # we want to be able to run the same recipe on multiple targets keyed on the image name
 # to do that, we would use the entire image name, e.g. calico/node:abcdefg, as the stem, or '%', in the target
 # however, make does **not** allow the usage of invalid filename characters - like / and : - in a stem, and thus errors out
@@ -84,11 +87,18 @@ endif
 EXCLUDEARCH ?= s390x
 VALIDARCHES = $(filter-out $(EXCLUDEARCH),$(ARCHES))
 
+# We need CGO to leverage Boring SSL.  However, the cross-compile doesn't support CGO yet.
+ifeq ($(ARCH), $(filter $(ARCH),amd64))
+CGO_ENABLED=1
+else
+CGO_ENABLED=0
+endif
+
 ###############################################################################
 
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=v0.50
+GO_BUILD_VER?=v0.63
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(ARCH)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./api -name '*.go')
@@ -125,8 +135,7 @@ CONTAINERIZED= mkdir -p .go-pkg-cache $(GOMOD_CACHE) && \
 		-e KUBECONFIG=/go/src/$(PACKAGE_NAME)/kubeconfig.yaml \
 		-w /go/src/$(PACKAGE_NAME) \
 		--net=host \
-		$(EXTRA_DOCKER_ARGS) \
-		$(CALICO_BUILD)
+		$(EXTRA_DOCKER_ARGS)
 
 BUILD_IMAGE?=tigera-cc-dev/operator-cloud
 BUILD_INIT_IMAGE?=tigera-cc-dev/operator-cloud-init
@@ -211,9 +220,9 @@ endif
 build: fmt vet $(BINDIR)/operator-$(ARCH)
 $(BINDIR)/operator-$(ARCH): $(SRC_FILES)
 	mkdir -p $(BINDIR)
-	$(CONTAINERIZED) \
+	$(CONTAINERIZED) -e CGO_ENABLED=$(CGO_ENABLED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
-	go build -v -i -o $(BINDIR)/operator-$(ARCH) -ldflags "-X $(PACKAGE_NAME)/version.VERSION=$(GIT_VERSION) -s -w" ./main.go'
+	go build -v -i -o $(BINDIR)/operator-$(ARCH) -ldflags "-X $(PACKAGE_NAME)/version.VERSION=$(GIT_VERSION) -w" ./main.go'
 
 .PHONY: image
 image: build $(BUILD_IMAGE)
@@ -240,17 +249,25 @@ ifeq ($(ARCH),amd64)
 	docker tag $(BUILD_IMAGE):latest-$(ARCH) $(BUILD_INIT_IMAGE):latest
 endif
 
-build/init/bin/kubectl:
-	mkdir -p build/init/bin
-	curl -o build/init/bin/kubectl https://storage.googleapis.com/kubernetes-release/release/v1.14.0/bin/linux/amd64/kubectl
+BINDIR?=build/init/bin
+$(BINDIR)/kubectl:
+	mkdir -p $(BINDIR)
+	curl -L https://storage.googleapis.com/kubernetes-release/release/v1.22.0/bin/linux/$(ARCH)/kubectl -o $@
+	chmod +x $@
+
+kubectl: $(BINDIR)/kubectl
+
+$(BINDIR)/kind:
+	$(CONTAINERIZED) $(CALICO_BUILD) sh -c "GOBIN=/go/src/$(PACKAGE_NAME)/$(BINDIR) go install sigs.k8s.io/kind"
 
 clean:
 	rm -rf build/_output
 	rm -rf build/init/bin
 	rm -rf hack/bin
 	rm -rf .go-pkg-cache
+	rm -rf .crds
 	rm -f *-release-notes.md
-	docker rmi -f $(BUILD_IMAGE):latest $(BUILD_IMAGE):latest-$(ARCH)
+	docker rmi -f $(shell docker images -f "reference=$(BUILD_IMAGE):latest*" -q) > /dev/null 2>&1 || true
 
 ###############################################################################
 # Tests
@@ -263,40 +280,47 @@ GINKGO_FOCUS?=.*
 ut: cluster-create run-uts cluster-destroy
 run-uts:
 	-mkdir -p .go-pkg-cache report
-	$(CONTAINERIZED) sh -c '$(GIT_CONFIG_SSH) \
+	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
 	ginkgo -r --skipPackage ./vendor -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(WHAT)"'
 
 ## Create a local kind dual stack cluster.
 KUBECONFIG?=./kubeconfig.yaml
-cluster-create: kubectl
+K8S_VERSION?=v1.21.2
+cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	# First make sure any previous cluster is deleted
 	make cluster-destroy
-	./deploy/scripts/create_kind_cluster.sh
-	cp ~/.kube/kind-config-kind $(KUBECONFIG)
+
+	# Create a kind cluster.
+	$(BINDIR)/kind create cluster \
+	        --config ./deploy/kind-config.yaml \
+	        --kubeconfig $(KUBECONFIG) \
+	        --image kindest/node:$(K8S_VERSION)
+
+	./deploy/scripts/ipv6_kind_cluster_update.sh
+	# Deploy resources needed in test env.
 	$(MAKE) deploy-crds
-	$(MAKE) create-tigera-operator-namespace
+
+	# Wait for controller manager to be running and healthy.
+	while ! KUBECONFIG=$(KUBECONFIG) $(BINDIR)/kubectl get serviceaccount default; do echo "Waiting for default serviceaccount to be created..."; sleep 2; done
 
 ## Deploy CRDs needed for UTs.  CRDs needed by ECK that we don't use are not deployed.
 deploy-crds: kubectl
 	@export KUBECONFIG=$(KUBECONFIG) && \
-		./kubectl apply -f config/crd/bases/ && \
-		./kubectl apply -f deploy/crds/calico/ && \
-		./kubectl apply -f deploy/crds/enterprise/ && \
-		./kubectl apply -f deploy/crds/elastic/elasticsearch-crd.yaml && \
-		./kubectl apply -f deploy/crds/elastic/kibana-crd.yaml && \
-		./kubectl apply -f deploy/crds/prometheus
+		$(BINDIR)/kubectl apply -f pkg/crds/operator/ && \
+		$(BINDIR)/kubectl apply -f pkg/crds/calico/ && \
+		$(BINDIR)/kubectl apply -f pkg/crds/enterprise/ && \
+		$(BINDIR)/kubectl apply -f deploy/crds/elastic/elasticsearch-crd.yaml && \
+		$(BINDIR)/kubectl apply -f deploy/crds/elastic/kibana-crd.yaml && \
+		$(BINDIR)/kubectl apply -f deploy/crds/prometheus
 
 create-tigera-operator-namespace: kubectl
-	KUBECONFIG=$(KUBECONFIG) ./kubectl create ns tigera-operator
+	KUBECONFIG=$(KUBECONFIG) $(BINDIR)/kubectl create ns tigera-operator
 
 ## Destroy local kind cluster
-cluster-destroy:
-	./deploy/scripts/delete_kind_cluster.sh
+cluster-destroy: $(BINDIR)/kubectl $(BINDIR)/kind
+	-$(BINDIR)/kind delete cluster
 	rm -f $(KUBECONFIG)
 
-kubectl:
-	curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.17.0/bin/linux/amd64/kubectl
-	chmod +x ./kubectl
 
 
 ###############################################################################
@@ -304,19 +328,24 @@ kubectl:
 ###############################################################################
 .PHONY: static-checks
 ## Perform static checks on the code.
-static-checks:
-	$(CONTAINERIZED) golangci-lint run --deadline 5m
+static-checks: check-boring-ssl
+	$(CONTAINERIZED) $(CALICO_BUILD) golangci-lint run --deadline 5m
+
+check-boring-ssl: $(BINDIR)/operator-amd64
+	$(CONTAINERIZED) -e CGO_ENABLED=$(CGO_ENABLED) $(CALICO_BUILD) \
+		go tool nm $(BINDIR)/operator-amd64 > $(BINDIR)/tags.txt && grep '_Cfunc__goboringcrypto_' $(BINDIR)/tags.txt 1> /dev/null
+	-rm -f $(BINDIR)/tags.txt
 
 .PHONY: fix
 ## Fix static checks
 fix:
-	$(CONTAINERIZED) \
+	$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
 	goimports -w $(SRC_FILES)'
 
 .PHONY: format-check
 format-check:
-	@$(CONTAINERIZED) \
+	@$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
 	files=$$(gofmt -l ./pkg ./controllers ./api ./test); \
 	[ "$$files" = "" ] && exit 0; \
@@ -327,8 +356,11 @@ format-check:
 
 .PHONY: dirty-check
 dirty-check:
-	@if [ "$$(git diff --stat)" = "" ]; then exit 0; fi; \
-	echo "The following files are dirty"; git diff --stat; exit 1
+	@if [ "$$(git diff --stat)" != "" ]; then \
+	echo "The following files are dirty"; git diff --stat; exit 1; fi
+	@# Check that no new CRDs needed to be committed
+	@if [ "$$(git status --porcelain pkg/crds)" != "" ]; then \
+	echo "The following CRD files need to be added"; git status --porcelain pkg/crds; exit 1; fi
 
 foss-checks:
 	@echo Running $@...
@@ -344,7 +376,7 @@ foss-checks:
 ###############################################################################
 .PHONY: ci
 ## Run what CI runs
-ci: clean format-check image-all test dirty-check validate-gen-versions
+ci: clean format-check validate-gen-versions image-all test dirty-check test-crds
 
 validate-gen-versions:
 	make gen-versions
@@ -458,16 +490,86 @@ gen-files: manifests generate
 OS_VERSIONS?=config/calico_versions.yml
 EE_VERSIONS?=config/enterprise_versions.yml
 COMMON_VERSIONS?=config/common_versions.yml
-gen-versions: $(BINDIR)/gen-versions
+
+.PHONY: gen-versions gen-versions-calico gen-versions-enterprise gen-versions-common
+
+gen-versions: gen-versions-calico gen-versions-enterprise gen-versions-common
+
+gen-versions-calico: $(BINDIR)/gen-versions update-calico-crds
 	$(BINDIR)/gen-versions -os-versions=$(OS_VERSIONS) > pkg/components/calico.go
+
+gen-versions-enterprise: $(BINDIR)/gen-versions update-enterprise-crds
 	$(BINDIR)/gen-versions -ee-versions=$(EE_VERSIONS) > pkg/components/enterprise.go
+
+gen-versions-common: $(BINDIR)/gen-versions
 	$(BINDIR)/gen-versions -common-versions=$(COMMON_VERSIONS) > pkg/components/common.go
 
 $(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
 	mkdir -p $(BINDIR)
-	$(CONTAINERIZED) \
+	$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
 	go build -o $(BINDIR)/gen-versions ./hack/gen-versions'
+
+# $(1) is the github project
+# $(2) is the branch or tag to fetch
+# $(3) is the directory name to use
+define prep_local_crds
+    $(eval dir := $(1))
+	rm -rf pkg/crds/$(dir)
+	rm -rf .crds/$(dir)
+	mkdir -p pkg/crds/$(dir)
+	mkdir -p .crds/$(dir)
+endef
+define fetch_crds
+    $(eval project := $(1))
+    $(eval branch := $(2))
+    $(eval dir := $(3))
+	@echo "Fetching $(dir) CRDs from $(project) branch $(branch)"
+	git -C .crds/$(dir) clone git@github.com:$(project).git ./
+	git -C .crds/$(dir) fetch --all origin 2>&1 | grep -v -e "new branch" -e "new tag"
+	git -C .crds/$(dir) checkout -q $(branch)
+endef
+define copy_crds
+    $(eval dir := $(1))
+	@cp .crds/$(dir)/config/crd/* pkg/crds/$(dir)/ && echo "Copied $(dir) CRDs"
+endef
+
+.PHONY: read-libcalico-version read-libcalico-enterprise-version
+.PHONY: update-calico-crds update-enterprise-crds
+.PHONY: fetch-calico-crds fetch-enterprise-crds
+.PHONY: prepare-for-calico-crds prepare-for-enterprise-crds
+
+LIBCALICO?=projectcalico/libcalico-go
+read-libcalico-calico-version:
+	$(eval LIBCALICO_BRANCH := $(shell $(CONTAINERIZED) $(CALICO_BUILD) \
+	bash -c '$(GIT_CONFIG_SSH) \
+	yq r config/calico_versions.yml components.libcalico-go.version'))
+	if [ -z "$(LIBCALICO_BRANCH)" ]; then echo "libcalico branch not defined"; exit 1; fi
+
+update-calico-crds: fetch-calico-crds
+	$(call copy_crds,"calico")
+
+prepare-for-calico-crds:
+	$(call prep_local_crds,"calico")
+
+fetch-calico-crds: prepare-for-calico-crds read-libcalico-calico-version
+	$(call fetch_crds,$(LIBCALICO),$(LIBCALICO_BRANCH),"calico")
+
+LIBCALICO_ENTERPRISE?=tigera/libcalico-go-private
+read-libcalico-enterprise-version:
+	$(eval LIBCALICO_ENTERPRISE_BRANCH := $(shell $(CONTAINERIZED) $(CALICO_BUILD) \
+	bash -c '$(GIT_CONFIG_SSH) \
+	yq r config/enterprise_versions.yml components.libcalico-go.version'))
+	if [ -z "$(LIBCALICO_ENTERPRISE_BRANCH)" ]; then echo "libcalico enterprise branch not defined"; exit 1; fi
+
+update-enterprise-crds: fetch-enterprise-crds
+	$(call copy_crds,"enterprise")
+
+prepare-for-enterprise-crds:
+	$(call prep_local_crds,"enterprise")
+
+fetch-enterprise-crds: prepare-for-enterprise-crds  read-libcalico-enterprise-version
+	$(call fetch_crds,$(LIBCALICO_ENTERPRISE),$(LIBCALICO_ENTERPRISE_BRANCH),"enterprise")
 
 .PHONY: prepull-image
 prepull-image:
@@ -550,13 +652,13 @@ manifests: controller-gen
 
 # Run go fmt against code
 fmt:
-	$(CONTAINERIZED) \
+	$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
 	go fmt ./...'
 
 # Run go vet against code
 vet:
-	$(CONTAINERIZED) \
+	$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
 	go vet ./...'
 
@@ -639,7 +741,7 @@ ifndef PREV_VERSION
 	$(error PREV_VERSION is undefined - run using make $@ VERSION=X.Y.Z PREV_VERSION=D.E.F)
 endif
 	$(eval EXTRA_DOCKER_ARGS += -e BUNDLE_CRD_DIR=$(BUNDLE_CRD_DIR) -e BUNDLE_DEPLOY_DIR=$(BUNDLE_DEPLOY_DIR))
-	$(CONTAINERIZED) "hack/gen-bundle/get-manifests.sh"
+	$(CONTAINERIZED) $(CALICO_BUILD) "hack/gen-bundle/get-manifests.sh"
 
 .PHONY: bundle-generate
 bundle-generate: bundle-crd-options manifests $(KUSTOMIZE) $(OPERATOR_SDK_BARE) bundle-manifests
@@ -656,7 +758,7 @@ bundle-generate: bundle-crd-options manifests $(KUSTOMIZE) $(OPERATOR_SDK_BARE) 
 .PHONY: update-bundle
 update-bundle: $(OPERATOR_SDK_BARE) get-digest
 	$(eval EXTRA_DOCKER_ARGS += -e OPERATOR_IMAGE_INSPECT="$(OPERATOR_IMAGE_INSPECT)" -e VERSION=$(VERSION) -e PREV_VERSION=$(PREV_VERSION))
-	$(CONTAINERIZED) hack/gen-bundle/update-bundle.sh
+	$(CONTAINERIZED) $(CALICO_BUILD) hack/gen-bundle/update-bundle.sh
 
 # Build the bundle image.
 .PHONY: bundle-build
@@ -665,3 +767,19 @@ ifndef VERSION
 	$(error VERSION is undefined - run using make $@ VERSION=X.Y.Z)
 endif
 	docker build -f bundle/bundle-v$(VERSION).Dockerfile -t tigera-operator-bundle:$(VERSION) bundle/
+
+
+.PHONY: test-crds
+test-crds: test-enterprise-crds test-calico-crds
+
+# TODO: Improve this testing by comparing the individual source files
+# with the yaml printed out, this will need to be a yaml diff since the
+# fields won't necessarily be in the same order or indentation.
+test-calico-crds: $(BINDIR)/operator-$(ARCH)
+	$(BINDIR)/operator-$(ARCH) --print-calico-crds all >/dev/null 2>&1
+
+# TODO: Improve this testing by comparing the individual source files
+# with the yaml printed out, this will need to be a yaml diff since the
+# fields won't necessarily be in the same order or indentation.
+test-enterprise-crds: $(BINDIR)/operator-$(ARCH)
+	$(BINDIR)/operator-$(ARCH) --print-enterprise-crds all >/dev/null 2>&1

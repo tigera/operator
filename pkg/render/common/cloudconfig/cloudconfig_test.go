@@ -1,9 +1,9 @@
 package cloudconfig
 
 import (
+	"github.com/tigera/operator/pkg/common"
 	"strconv"
 
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -19,7 +19,7 @@ var _ = Describe("CloudConfig ConfigMap tests", func() {
 			configMap = &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      CloudConfigConfigMapName,
-					Namespace: rmeta.OperatorNamespace(),
+					Namespace: common.OperatorNamespace(),
 				},
 				Data: map[string]string{
 					"tenantId":             "abc123",
@@ -93,7 +93,7 @@ var _ = Describe("CloudConfig ConfigMap tests", func() {
 			expectedConfigMap := &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      CloudConfigConfigMapName,
-					Namespace: rmeta.OperatorNamespace(),
+					Namespace: common.OperatorNamespace(),
 				},
 				Data: map[string]string{
 					"tenantId":             "abc123",

@@ -39,9 +39,11 @@ import (
 )
 
 var (
-	openshift    = true
-	notOpenshift = false
-	bgpEnabled   = operatorv1.BGPEnabled
+	openshift            = true
+	notOpenshift         = false
+	bgpEnabled           = operatorv1.BGPEnabled
+	bgpDisabled          = operatorv1.BGPDisabled
+	nonPrivilegedEnabled = operatorv1.NonPrivilegedEnabled
 )
 
 var _ = Describe("Node rendering tests", func() {
@@ -316,7 +318,7 @@ var _ = Describe("Node rendering tests", func() {
 			{MountPath: "/var/run/nodeagent", Name: "policysync"},
 			{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
 			{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
-			{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: true},
+			{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
 
@@ -563,7 +565,7 @@ var _ = Describe("Node rendering tests", func() {
 			{MountPath: "/var/run/nodeagent", Name: "policysync"},
 			{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
 			{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
-			{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: true},
+			{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 			{MountPath: "/sys/fs/bpf", Name: "bpffs"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
@@ -752,6 +754,144 @@ var _ = Describe("Node rendering tests", func() {
 		verifyProbesAndLifecycle(ds, false, true)
 	})
 
+	It("should render all resources with the appropriate permissions when running as non-privileged", func() {
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
+			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
+			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
+		}
+
+		defaultInstance.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
+		defaultInstance.NonPrivileged = &nonPrivilegedEnabled
+		component := render.Node(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+		// Should render the correct resources.
+		i := 0
+		for _, expectedRes := range expectedResources {
+			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			i++
+		}
+
+		dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		Expect(dsResource).ToNot(BeNil())
+
+		// The DaemonSet should have the correct security context.
+		ds := dsResource.(*appsv1.DaemonSet)
+		nodeContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "calico-node")
+		Expect(nodeContainer).ToNot(BeNil())
+		Expect(nodeContainer.SecurityContext).ToNot(BeNil())
+		Expect(nodeContainer.SecurityContext.RunAsUser).ToNot(BeNil())
+		Expect(*nodeContainer.SecurityContext.RunAsUser).To(Equal(int64(999)))
+		Expect(nodeContainer.SecurityContext.RunAsGroup).ToNot(BeNil())
+		Expect(*nodeContainer.SecurityContext.RunAsGroup).To(Equal(int64(0)))
+		Expect(*nodeContainer.SecurityContext.Privileged).To(BeFalse())
+		Expect(nodeContainer.SecurityContext.Capabilities.Add).To(HaveLen(3))
+		Expect(nodeContainer.SecurityContext.Capabilities.Add[0]).To(Equal(corev1.Capability("NET_RAW")))
+		Expect(nodeContainer.SecurityContext.Capabilities.Add[1]).To(Equal(corev1.Capability("NET_ADMIN")))
+		Expect(nodeContainer.SecurityContext.Capabilities.Add[2]).To(Equal(corev1.Capability("NET_BIND_SERVICE")))
+
+		// hostpath init container should have the correct env and security context.
+		hostPathContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "hostpath-init")
+		rtest.ExpectEnv(hostPathContainer.Env, "NODE_USER_ID", "999")
+		Expect(*hostPathContainer.SecurityContext.RunAsUser).To(Equal(int64(0)))
+
+		// Verify hostpath init container volume mounts.
+		expectedHostPathInitVolumeMounts := []corev1.VolumeMount{
+			{MountPath: "/var/run", Name: "var-run"},
+			{MountPath: "/var/lib", Name: "var-lib"},
+			{MountPath: "/var/log", Name: "var-log"},
+		}
+		Expect(hostPathContainer.VolumeMounts).To(ConsistOf(expectedHostPathInitVolumeMounts))
+
+		// Node image override results in correct image.
+		calicoNodeImage := fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(calicoNodeImage))
+
+		// Validate correct number of init containers.
+		Expect(len(ds.Spec.Template.Spec.InitContainers)).To(Equal(3))
+
+		// CNI container uses image override.
+		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoCNI.Image, components.ComponentCalicoCNI.Version)))
+
+		// Verify the Flex volume container image.
+		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentFlexVolume.Image, components.ComponentFlexVolume.Version)))
+
+		// Verify the mount-bpffs image and command.
+		mountBpffs := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "mount-bpffs")
+		Expect(mountBpffs).To(BeNil())
+
+		// Verify volumes.
+		var fileOrCreate = corev1.HostPathFileOrCreate
+		var dirOrCreate = corev1.HostPathDirectoryOrCreate
+		expectedVols := []corev1.Volume{
+			{Name: "lib-modules", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/lib/modules"}}},
+			{Name: "var-run", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run"}}},
+			{Name: "var-lib", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib"}}},
+			{Name: "var-log", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log"}}},
+			{Name: "xtables-lock", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
+			{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/opt/cni/bin"}}},
+			{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/etc/cni/net.d"}}},
+			{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
+			{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
+			{
+				Name: "typha-ca",
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: render.TyphaCAConfigMapName,
+						},
+					},
+				},
+			},
+			{
+				Name: "felix-certs",
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName:  render.NodeTLSSecretName,
+						DefaultMode: &defaultMode,
+					},
+				},
+			},
+			{Name: "flexvol-driver-host", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/nodeagent~uds", Type: &dirOrCreate}}},
+		}
+		Expect(ds.Spec.Template.Spec.Volumes).To(ConsistOf(expectedVols))
+
+		// Verify volume mounts.
+		expectedNodeVolumeMounts := []corev1.VolumeMount{
+			{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
+			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
+			{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
+			{MountPath: "/var/run", Name: "var-run"},
+			{MountPath: "/var/lib", Name: "var-lib"},
+			{MountPath: "/var/log", Name: "var-log"},
+			{MountPath: "/var/run/nodeagent", Name: "policysync"},
+			{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
+			{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
+			{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
+		}
+		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
+
+		expectedCNIVolumeMounts := []corev1.VolumeMount{
+			{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
+			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
+		}
+		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
+	})
+
 	It("should render all resources when using Calico CNI on EKS", func() {
 		expectedResources := []struct {
 			name    string
@@ -770,10 +910,9 @@ var _ = Describe("Node rendering tests", func() {
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
-		disabled := operatorv1.BGPDisabled
 		defaultInstance.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
 		defaultInstance.KubernetesProvider = operatorv1.ProviderEKS
-		defaultInstance.CalicoNetwork.BGP = &disabled
+		defaultInstance.CalicoNetwork.BGP = &bgpDisabled
 		defaultInstance.CalicoNetwork.IPPools[0].Encapsulation = operatorv1.EncapsulationVXLAN
 		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -968,7 +1107,7 @@ var _ = Describe("Node rendering tests", func() {
 			{MountPath: "/var/run/nodeagent", Name: "policysync"},
 			{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
 			{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
-			{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: true},
+			{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
 
@@ -1416,7 +1555,7 @@ var _ = Describe("Node rendering tests", func() {
 			{MountPath: "/var/run/nodeagent", Name: "policysync"},
 			{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
 			{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
-			{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: true},
+			{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
 

@@ -19,9 +19,11 @@ import (
 	"strings"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"gopkg.in/yaml.v2"
@@ -50,8 +52,6 @@ const (
 	// Common name to add to the Dex TLS secret.
 	DexCNPattern = "tigera-dex.tigera-dex.svc.%s"
 )
-
-var dexReplicas int32 = 1
 
 func Dex(
 	pullSecrets []*corev1.Secret,
@@ -128,7 +128,7 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 	// TODO so we can't just do a blanket delete of the secrets in the operator namespace. We need to refactor
 	// TODO the RequiredSecrets in the dex condig to not pass back secrets of this type.
 	if !c.deleteDex {
-		objs = append(objs, secret.ToRuntimeObjects(c.dexConfig.RequiredSecrets(rmeta.OperatorNamespace())...)...)
+		objs = append(objs, secret.ToRuntimeObjects(c.dexConfig.RequiredSecrets(common.OperatorNamespace())...)...)
 	}
 
 	objs = append(objs, c.dexConfig.CreateCertSecret())
@@ -214,7 +214,7 @@ func (c *dexComponent) deployment() client.Object {
 			DexNamespace))
 	}
 
-	return &appsv1.Deployment{
+	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      DexObjectName,
@@ -229,7 +229,7 @@ func (c *dexComponent) deployment() client.Object {
 					"k8s-app": DexObjectName,
 				},
 			},
-			Replicas: &dexReplicas,
+			Replicas: c.installation.ControlPlaneReplicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
@@ -273,6 +273,12 @@ func (c *dexComponent) deployment() client.Object {
 			},
 		},
 	}
+
+	if c.installation.ControlPlaneReplicas != nil && *c.installation.ControlPlaneReplicas > 1 {
+		d.Spec.Template.Spec.Affinity = podaffinity.NewPodAntiAffinity(DexObjectName, DexNamespace)
+	}
+
+	return d
 }
 
 func (c *dexComponent) service() client.Object {

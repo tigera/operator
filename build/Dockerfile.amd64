@@ -1,4 +1,4 @@
-# Copyright (c) 2019 Tigera, Inc. All rights reserved.
+# Copyright (c) 2019-2021 Tigera, Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM registry.access.redhat.com/ubi8/ubi-minimal:8.2-301.1592810506 AS ubi
+FROM registry.access.redhat.com/ubi8/ubi-minimal:8.5 AS ubi
 
 # Update base packages to get security updates.
 RUN microdnf update
@@ -25,20 +25,22 @@ FROM scratch
 COPY --from=ubi /licenses /licenses
 COPY --from=ubi /etc/pki /etc/pki
 COPY --from=ubi /usr/share/pki /usr/share/pki
+COPY --from=ubi /lib /lib
+COPY --from=ubi /lib64 /lib64
 
 ARG GIT_VERSION=unknown
-LABEL name="Calico Operator" \
-      vendor="Project Calico" \
+LABEL name="Tigera Operator" \
+      vendor="Tigera" \
       version=$GIT_VERSION \
       release="1" \
-      summary="Calico Operator manages the lifecycle of a Calico or Tigera Secure installation on Kubernetes or OpenShift" \
-      description="Calico Operator manages the lifecycle of a Calico or Tigera Secure installation on Kubernetes or OpenShift" \
-      maintainer="Laurence Man <laurence@tigera.io>"
+      summary="Tigera Operator manages the lifecycle of a Calico or Calico Enterprise installation on Kubernetes or OpenShift" \
+      description="Tigera Operator manages the lifecycle of a Calico or Calico Enterprise installation on Kubernetes or OpenShift" \
+      maintainer="maintainers@tigera.io>"
 
 ENV OPERATOR=/usr/local/bin/operator \
     USER_UID=1001
 
-# install operator binary
+# Install operator binary
 COPY build/_output/bin/operator-amd64 ${OPERATOR}
 
 # The exec form of ENTRYPOINT does not invoke a command shell.

@@ -12,8 +12,8 @@ import (
 
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type patch struct {
@@ -29,7 +29,7 @@ func (s *patches) Type() types.PatchType {
 	return types.JSONPatchType
 }
 
-func (s *patches) Data(obj runtime.Object) ([]byte, error) {
+func (s *patches) Data(obj client.Object) ([]byte, error) {
 	return json.Marshal(s)
 }
 

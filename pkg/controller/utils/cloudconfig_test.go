@@ -6,8 +6,8 @@ import (
 	"strconv"
 
 	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render/common/cloudconfig"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1beta "k8s.io/api/batch/v1beta1"
@@ -54,7 +54,7 @@ var _ = Describe("CloudConfig utils tests", func() {
 			Expect(cli.Create(ctx, &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      cloudconfig.CloudConfigConfigMapName,
-					Namespace: rmeta.OperatorNamespace(),
+					Namespace: common.OperatorNamespace(),
 				},
 				Data: map[string]string{
 					"tenantId":             "abc123",

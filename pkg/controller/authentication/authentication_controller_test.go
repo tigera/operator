@@ -26,11 +26,11 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/test"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -52,6 +52,7 @@ var _ = Describe("authentication controller tests", func() {
 		mockStatus *status.MockStatus
 		idpSecret  *corev1.Secret
 		auth       *operatorv1.Authentication
+		replicas   int32
 	)
 
 	BeforeEach(func() {
@@ -79,7 +80,7 @@ var _ = Describe("authentication controller tests", func() {
 		idpSecret = &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      render.OIDCSecretName,
-				Namespace: rmeta.OperatorNamespace(),
+				Namespace: common.OperatorNamespace(),
 			},
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			Data: map[string][]byte{
@@ -92,6 +93,8 @@ var _ = Describe("authentication controller tests", func() {
 				ManagerDomain: "https://example.com",
 			},
 		}
+
+		replicas = 2
 	})
 
 	Context("OIDC connector config options", func() {
@@ -106,7 +109,8 @@ var _ = Describe("authentication controller tests", func() {
 					Computed: &operatorv1.InstallationSpec{},
 				},
 				Spec: operatorv1.InstallationSpec{
-					Variant: operatorv1.TigeraSecureEnterprise,
+					ControlPlaneReplicas: &replicas,
+					Variant:              operatorv1.TigeraSecureEnterprise,
 				},
 			})).ToNot(HaveOccurred())
 
@@ -147,8 +151,9 @@ var _ = Describe("authentication controller tests", func() {
 					Computed: &operatorv1.InstallationSpec{},
 				},
 				Spec: operatorv1.InstallationSpec{
-					Variant:  operatorv1.TigeraSecureEnterprise,
-					Registry: "some.registry.org/",
+					ControlPlaneReplicas: &replicas,
+					Variant:              operatorv1.TigeraSecureEnterprise,
+					Registry:             "some.registry.org/",
 				},
 			})).To(BeNil())
 			Expect(cli.Create(ctx, &operatorv1.Authentication{
@@ -252,7 +257,8 @@ var _ = Describe("authentication controller tests", func() {
 				Computed: &operatorv1.InstallationSpec{},
 			},
 			Spec: operatorv1.InstallationSpec{
-				Variant: operatorv1.TigeraSecureEnterprise,
+				ControlPlaneReplicas: &replicas,
+				Variant:              operatorv1.TigeraSecureEnterprise,
 			},
 		})).ToNot(HaveOccurred())
 

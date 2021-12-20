@@ -15,40 +15,40 @@
 package components
 
 var (
-	EnterpriseRelease string = "v3.10.0"
+	EnterpriseRelease string = "v3.11.1"
 
 	ComponentAPIServer = component{
-		Version: "v3.10.0",
+		Version: "v3.11.1",
 		Image:   "tigera/cnx-apiserver",
 	}
 
 	ComponentComplianceBenchmarker = component{
-		Version: "v3.10.0",
+		Version: "v3.11.1",
 		Image:   "tigera/compliance-benchmarker",
 	}
 
 	ComponentComplianceController = component{
-		Version: "v3.10.0",
+		Version: "v3.11.1",
 		Image:   "tigera/compliance-controller",
 	}
 
 	ComponentComplianceReporter = component{
-		Version: "v3.10.0",
+		Version: "v3.11.1",
 		Image:   "tigera/compliance-reporter",
 	}
 
 	ComponentComplianceServer = component{
-		Version: "v3.10.0",
+		Version: "v3.11.1",
 		Image:   "tigera/compliance-server",
 	}
 
 	ComponentComplianceSnapshotter = component{
-		Version: "v3.10.0",
+		Version: "v3.11.1",
 		Image:   "tigera/compliance-snapshotter",
 	}
 
 	ComponentDeepPacketInspection = component{
-		Version: "v3.10.0",
+		Version: "v3.11.1",
 		Image:   "tigera/deep-packet-inspection",
 	}
 
@@ -63,78 +63,88 @@ var (
 	}
 
 	ComponentElasticTseeInstaller = component{
-		Version: "v3.10.0",
+		Version: "v3.11.1",
 		Image:   "tigera/intrusion-detection-job-installer",
 	}
 
 	ComponentElasticsearch = component{
-		Version: "v3.10.0",
+		Version: "v3.11.1",
 		Image:   "tigera/elasticsearch",
 	}
 
 	ComponentElasticsearchOperator = component{
-		Version: "1.7.1",
+		Version: "1.8.0",
 		Image:   "tigera/eck-operator",
 	}
 
 	ComponentEsCurator = component{
-		Version: "v3.10.0",
+		Version: "v3.11.1",
 		Image:   "tigera/es-curator",
 	}
 
 	ComponentEsProxy = component{
-		Version: "v3.10.1-1",
+		Version: "v3.11.1",
 		Image:   "tigera/es-proxy",
 	}
 
 	ComponentESGateway = component{
-		Version: "v3.10.0",
+		Version: "v3.11.1",
 		Image:   "tigera/es-gateway",
 	}
 
 	ComponentFluentd = component{
-		Version: "v3.10.0",
+		Version: "v3.11.1",
 		Image:   "tigera/fluentd",
 	}
 
 	ComponentFluentdWindows = component{
-		Version: "v3.10.0",
+		Version: "v3.11.1",
 		Image:   "tigera/fluentd-windows",
 	}
 
 	ComponentGuardian = component{
-		Version: "v3.10.0",
+		Version: "v3.11.1",
 		Image:   "tigera/guardian",
 	}
 
 	ComponentIntrusionDetectionController = component{
-		Version: "v3.10.0",
+		Version: "v3.11.1",
 		Image:   "tigera/intrusion-detection-controller",
 	}
 
 	ComponentKibana = component{
-		Version: "tesla-v3.10.0",
+		Version: "tesla-v3.11.1",
 		Image:   "tigera/kibana",
 	}
 
 	ComponentManager = component{
-		Version: "tesla-v3.10.1-1",
+		Version: "tesla-v3.11.1",
 		Image:   "tigera/cnx-manager",
 	}
 
 	ComponentDex = component{
-		Version: "v3.10.0",
+		Version: "v3.11.1",
 		Image:   "tigera/dex",
 	}
 
 	ComponentManagerProxy = component{
-		Version: "v3.10.0",
+		Version: "v3.11.1",
 		Image:   "tigera/voltron",
 	}
 
 	ComponentPacketCapture = component{
-		Version: "v3.10.0",
+		Version: "v3.11.1",
 		Image:   "tigera/packetcapture-api",
+	}
+
+	ComponentL7Collector = component{
+		Version: "v3.11.1",
+		Image:   "tigera/l7-collector",
+	}
+
+	ComponentEnvoyProxy = component{
+		Version: "v3.11.1",
+		Image:   "tigera/envoy",
 	}
 
 	ComponentPrometheus = component{
@@ -143,7 +153,7 @@ var (
 	}
 
 	ComponentTigeraPrometheusService = component{
-		Version: "v3.10.0",
+		Version: "v3.11.1",
 		Image:   "tigera/prometheus-service",
 	}
 
@@ -153,40 +163,44 @@ var (
 	}
 
 	ComponentQueryServer = component{
-		Version: "v3.10.0",
+		Version: "v3.11.1",
 		Image:   "tigera/cnx-queryserver",
 	}
 
 	ComponentTigeraKubeControllers = component{
-		Version: "v3.10.1-2",
+		Version: "v3.11.1",
 		Image:   "tigera/kube-controllers",
 	}
 
 	ComponentTigeraNode = component{
-		Version: "v3.10.0",
+		Version: "v3.11.1",
 		Image:   "tigera/cnx-node",
 	}
 
 	ComponentTigeraTypha = component{
-		Version: "v3.10.0",
+		Version: "v3.11.1",
 		Image:   "tigera/typha",
 	}
 
 	ComponentTigeraCNI = component{
-		Version: "v3.10.0",
+		Version: "v3.11.1",
 		Image:   "tigera/cni",
 	}
 
 	ComponentCloudControllers = component{
-		Version: "v3.10.0",
+		Version: "v3.11.1",
 		Image:   "tigera/cloud-controllers",
 	}
 
 	ComponentElasticsearchMetrics = component{
-		Version: "v3.10.0",
+		Version: "v3.11.1",
 		Image:   "tigera/elasticsearch-metrics",
 	}
 
+	ComponentTigeraWindows = component{
+		Version: "v3.11.1",
+		Image:   "tigera/calico-windows-upgrade",
+	}
 	EnterpriseComponents = []component{
 		ComponentAPIServer,
 		ComponentComplianceBenchmarker,
@@ -211,6 +225,8 @@ var (
 		ComponentDex,
 		ComponentManagerProxy,
 		ComponentPacketCapture,
+		ComponentL7Collector,
+		ComponentEnvoyProxy,
 		ComponentPrometheus,
 		ComponentTigeraPrometheusService,
 		ComponentPrometheusAlertmanager,
@@ -222,5 +238,6 @@ var (
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
+		ComponentTigeraWindows,
 	}
 )

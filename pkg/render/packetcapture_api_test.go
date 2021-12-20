@@ -21,6 +21,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/ptr"
@@ -44,7 +45,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      render.PacketCaptureCertSecret,
-			Namespace: rmeta.OperatorNamespace(),
+			Namespace: common.OperatorNamespace(),
 		},
 		Data: map[string][]byte{
 			"tls.crt": []byte("foo"),
@@ -56,7 +57,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "pull-secret",
-			Namespace: rmeta.OperatorNamespace(),
+			Namespace: common.OperatorNamespace(),
 		},
 	}}
 	// Installation with minimal setup
@@ -307,6 +308,11 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"packetcaptures"},
 				Verbs:     []string{"get"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"packetcaptures/status"},
+				Verbs:     []string{"update"},
 			},
 		}))
 		clusterRoleBinding := rtest.GetResource(resources, render.PacketCaptureClusterRoleBindingName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)

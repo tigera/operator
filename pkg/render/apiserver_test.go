@@ -21,30 +21,30 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tigera/operator/pkg/render/testutils"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/onsi/gomega/gstruct"
 	"github.com/openshift/library-go/pkg/crypto"
-	netv1 "k8s.io/api/networking/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	netv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/test"
 )
 
@@ -52,13 +52,16 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	var instance *operatorv1.InstallationSpec
 	var managementCluster = &operatorv1.ManagementCluster{Spec: operatorv1.ManagementClusterSpec{Address: "example.com:1234"}}
 	var k8sServiceEp k8sapi.ServiceEndpoint
+	var replicas int32
 
 	BeforeEach(func() {
 		instance = &operatorv1.InstallationSpec{
-			Registry: "testregistry.com/",
-			Variant:  operatorv1.TigeraSecureEnterprise,
+			ControlPlaneReplicas: &replicas,
+			Registry:             "testregistry.com/",
+			Variant:              operatorv1.TigeraSecureEnterprise,
 		}
 		k8sServiceEp = k8sapi.ServiceEndpoint{}
+		replicas = 2
 	})
 
 	DescribeTable("should render an API server with default configuration", func(clusterDomain string) {
@@ -152,7 +155,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(d.Labels).To(HaveKeyWithValue("apiserver", "true"))
 		Expect(d.Labels).To(HaveKeyWithValue("k8s-app", "tigera-apiserver"))
 
-		Expect(*d.Spec.Replicas).To(BeEquivalentTo(1))
+		Expect(*d.Spec.Replicas).To(BeEquivalentTo(2))
 		Expect(d.Spec.Strategy.Type).To(Equal(appsv1.RecreateDeploymentStrategyType))
 		Expect(len(d.Spec.Selector.MatchLabels)).To(Equal(1))
 		Expect(d.Spec.Selector.MatchLabels).To(HaveKeyWithValue("apiserver", "true"))
@@ -601,7 +604,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "tigera-apiserver-certs", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-apiserver-certs", ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
-			{name: render.VoltronTunnelSecretName, ns: rmeta.OperatorNamespace(), group: "", version: "v1", kind: "Secret"},
+			{name: render.VoltronTunnelSecretName, ns: common.OperatorNamespace(), group: "", version: "v1", kind: "Secret"},
 			{name: render.VoltronTunnelSecretName, ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
 			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1", kind: "APIService"},
 			{name: "tigera-apiserver", ns: "tigera-system", group: "apps", version: "v1", kind: "Deployment"},
@@ -623,7 +626,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		By("Validating the newly created tunnel secret")
 		// Use the x509 package to validate that the cert was signed with the privatekey
-		operatorTunnelSec := rtest.GetResource(resources, render.VoltronTunnelSecretName, rmeta.OperatorNamespace(), "", "v1", "Secret")
+		operatorTunnelSec := rtest.GetResource(resources, render.VoltronTunnelSecretName, common.OperatorNamespace(), "", "v1", "Secret")
 		apiServerTunnelSec := rtest.GetResource(resources, render.VoltronTunnelSecretName, "tigera-system", "", "v1", "Secret")
 		validateTunnelSecret(operatorTunnelSec.(*corev1.Secret))
 		validateTunnelSecret(apiServerTunnelSec.(*corev1.Secret))
@@ -718,6 +721,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		}
 		Expect((dep.(*appsv1.Deployment)).Spec.Template.Spec.Containers[0].Args).To(ConsistOf(expectedArgs))
 	})
+
 	It("should add an init container if certificate management is enabled", func() {
 		instance.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c"}
 		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
@@ -770,6 +774,32 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		rtest.ExpectEnv(deploy.Spec.Template.Spec.InitContainers[0].Env, "SIGNER", "a.b/c")
 	})
 
+	It("should not render PodAffinity when ControlPlaneReplicas is 1", func() {
+		var replicas int32 = 1
+		instance.ControlPlaneReplicas = &replicas
+
+		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		resources, _ := component.Objects()
+
+		deploy, ok := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(ok).To(BeTrue())
+		Expect(deploy.Spec.Template.Spec.Affinity).To(BeNil())
+	})
+
+	It("should render PodAffinity when ControlPlaneReplicas is greater than 1", func() {
+		var replicas int32 = 2
+		instance.ControlPlaneReplicas = &replicas
+
+		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		resources, _ := component.Objects()
+
+		deploy, ok := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(ok).To(BeTrue())
+		Expect(deploy.Spec.Template.Spec.Affinity).NotTo(BeNil())
+		Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("tigera-apiserver", "tigera-system")))
+	})
 })
 
 func verifyAPIService(service *apiregv1.APIService, enterprise bool, clusterDomain string) {
@@ -1036,13 +1066,16 @@ var (
 var _ = Describe("API server rendering tests (Calico)", func() {
 	var instance *operatorv1.InstallationSpec
 	var k8sServiceEp k8sapi.ServiceEndpoint
+	var replicas int32
 
 	BeforeEach(func() {
 		instance = &operatorv1.InstallationSpec{
-			Registry: "testregistry.com/",
-			Variant:  operatorv1.Calico,
+			ControlPlaneReplicas: &replicas,
+			Registry:             "testregistry.com/",
+			Variant:              operatorv1.Calico,
 		}
 		k8sServiceEp = k8sapi.ServiceEndpoint{}
+		replicas = 2
 	})
 
 	DescribeTable("should render an API server with default configuration", func(clusterDomain string) {
@@ -1112,7 +1145,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(d.Labels).To(HaveKeyWithValue("apiserver", "true"))
 		Expect(d.Labels).To(HaveKeyWithValue("k8s-app", "calico-apiserver"))
 
-		Expect(*d.Spec.Replicas).To(BeEquivalentTo(1))
+		Expect(*d.Spec.Replicas).To(BeEquivalentTo(2))
 		Expect(d.Spec.Strategy.Type).To(Equal(appsv1.RecreateDeploymentStrategyType))
 		Expect(len(d.Spec.Selector.MatchLabels)).To(Equal(1))
 		Expect(d.Spec.Selector.MatchLabels).To(HaveKeyWithValue("apiserver", "true"))
@@ -1289,5 +1322,32 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 
 		deployment := deploymentResource.(*appsv1.Deployment)
 		rtest.ExpectK8sServiceEpEnvVars(deployment.Spec.Template.Spec, "k8shost", "1234")
+	})
+
+	It("should not render PodAffinity when ControlPlaneReplicas is 1", func() {
+		var replicas int32 = 1
+		instance.ControlPlaneReplicas = &replicas
+
+		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		resources, _ := component.Objects()
+
+		deploy, ok := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(ok).To(BeTrue())
+		Expect(deploy.Spec.Template.Spec.Affinity).To(BeNil())
+	})
+
+	It("should render PodAffinity when ControlPlaneReplicas is greater than 1", func() {
+		var replicas int32 = 2
+		instance.ControlPlaneReplicas = &replicas
+
+		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		resources, _ := component.Objects()
+
+		deploy, ok := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(ok).To(BeTrue())
+		Expect(deploy.Spec.Template.Spec.Affinity).NotTo(BeNil())
+		Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("calico-apiserver", "calico-apiserver")))
 	})
 })

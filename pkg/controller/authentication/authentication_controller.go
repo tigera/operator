@@ -22,12 +22,12 @@ import (
 	"github.com/go-ldap/ldap"
 
 	oprv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -69,7 +69,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileAuthe
 		status:        status.New(mgr.GetClient(), "authentication", opts.KubernetesVersion),
 		clusterDomain: opts.ClusterDomain,
 	}
-	r.status.Run()
+	r.status.Run(opts.ShutdownContext)
 	return r
 }
 
@@ -94,7 +94,7 @@ func add(mgr manager.Manager, r *ReconcileAuthentication) error {
 		return fmt.Errorf("%s failed to watch resource: %w", controllerName, err)
 	}
 
-	for _, namespace := range []string{rmeta.OperatorNamespace(), render.DexNamespace} {
+	for _, namespace := range []string{common.OperatorNamespace(), render.DexNamespace} {
 		for _, secretName := range []string{
 			render.DexTLSSecretName, render.DexCertSecretName, render.OIDCSecretName, render.OpenshiftSecretName, render.DexObjectName,
 		} {
@@ -207,7 +207,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	var tlsSecret *corev1.Secret
 	if install.CertificateManagement == nil {
 		tlsSecret = &corev1.Secret{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: rmeta.OperatorNamespace()}, tlsSecret); err != nil {
+		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: common.OperatorNamespace()}, tlsSecret); err != nil {
 			if errors.IsNotFound(err) {
 				tlsSecret = render.CreateDexTLSSecret(fmt.Sprintf(render.DexCNPattern, r.clusterDomain))
 			} else {
@@ -227,7 +227,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	}
 
 	dexSecret := &corev1.Secret{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexObjectName, Namespace: rmeta.OperatorNamespace()}, dexSecret); err != nil {
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexObjectName, Namespace: common.OperatorNamespace()}, dexSecret); err != nil {
 		if errors.IsNotFound(err) {
 			// We need to render a new one.
 			dexSecret = render.CreateDexClientSecret()

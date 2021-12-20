@@ -3,7 +3,6 @@ package meta
 import (
 	"crypto/sha1"
 	"fmt"
-	"os"
 	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -81,16 +80,6 @@ func SecretsAnnotationHash(secrets ...*corev1.Secret) string {
 	}
 
 	return AnnotationHash(annoteArr)
-}
-
-// OperatorNamespace returns the namespace the operator is running in. If the namespace is defined in the environment
-// with the OPERATOR_NAMESPACE key then that is return, otherwise the default "tigera-operator" namespace is returned.
-func OperatorNamespace() string {
-	v, ok := os.LookupEnv("OPERATOR_NAMESPACE")
-	if ok {
-		return v
-	}
-	return "tigera-operator"
 }
 
 // APIServerNamespace returns the namespace to use for the API server component.

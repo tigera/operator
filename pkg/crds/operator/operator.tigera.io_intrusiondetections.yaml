@@ -1,0 +1,104 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.3.0
+  name: intrusiondetections.operator.tigera.io
+spec:
+  group: operator.tigera.io
+  names:
+    kind: IntrusionDetection
+    listKind: IntrusionDetectionList
+    plural: intrusiondetections
+    singular: intrusiondetection
+  scope: Cluster
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        description: IntrusionDetection installs the components required for Tigera
+          intrusion detection. At most one instance of this resource is supported.
+          It must be named "tigera-secure".
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: Specification of the desired state for Tigera intrusion detection.
+            properties:
+              componentResources:
+                description: ComponentResources can be used to customize the resource
+                  requirements for each component. Only DeepPacketInspection is supported
+                  for this spec.
+                items:
+                  description: The ComponentResource struct associates a ResourceRequirements
+                    with a component by name
+                  properties:
+                    componentName:
+                      description: ComponentName is an enum which identifies the component
+                      enum:
+                      - DeepPacketInspection
+                      type: string
+                    resourceRequirements:
+                      description: ResourceRequirements allows customization of limits
+                        and requests for compute resources such as cpu and memory.
+                      properties:
+                        limits:
+                          additionalProperties:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          description: 'Limits describes the maximum amount of compute
+                            resources allowed. More info: https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/'
+                          type: object
+                        requests:
+                          additionalProperties:
+                            anyOf:
+                            - type: integer
+                            - type: string
+                            pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                            x-kubernetes-int-or-string: true
+                          description: 'Requests describes the minimum amount of compute
+                            resources required. If Requests is omitted for a container,
+                            it defaults to Limits if that is explicitly specified,
+                            otherwise to an implementation-defined value. More info:
+                            https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/'
+                          type: object
+                      type: object
+                  required:
+                  - componentName
+                  - resourceRequirements
+                  type: object
+                type: array
+            type: object
+          status:
+            description: Most recently observed state for Tigera intrusion detection.
+            properties:
+              state:
+                description: State provides user-readable status.
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/common"
 
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -88,7 +88,7 @@ func (c CloudConfig) ConfigMap() *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      CloudConfigConfigMapName,
-			Namespace: rmeta.OperatorNamespace(),
+			Namespace: common.OperatorNamespace(),
 		},
 		Data: map[string]string{
 			"tenantId":             c.tenantId,

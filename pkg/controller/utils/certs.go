@@ -23,6 +23,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/tigera/operator/pkg/common"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
 
@@ -68,7 +69,7 @@ func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName s
 		certsLogger.Info(fmt.Sprintf("cert %q doesn't exist, creating it", secretName))
 
 		return rsecret.CreateTLSSecret(nil,
-			secretName, rmeta.OperatorNamespace(), keyName, certName,
+			secretName, common.OperatorNamespace(), keyName, certName,
 			certDuration, nil, svcDNSNames...,
 		)
 	}
@@ -93,7 +94,7 @@ func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName s
 		certsLogger.Info(fmt.Sprintf("operator-managed cert %q has wrong DNS names, recreating it", secretName))
 
 		return rsecret.CreateTLSSecret(nil,
-			secretName, rmeta.OperatorNamespace(), keyName, certName,
+			secretName, common.OperatorNamespace(), keyName, certName,
 			rmeta.DefaultCertificateDuration, nil, svcDNSNames...,
 		)
 	}

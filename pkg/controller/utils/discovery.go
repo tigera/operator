@@ -55,6 +55,8 @@ func RequiresTigeraSecure(cfg *rest.Config) (bool, error) {
 			fallthrough
 		case "IntrusionDetection":
 			fallthrough
+		case "ApplicationLayer":
+			fallthrough
 		case "Monitor":
 			fallthrough
 		case "ManagementCluster":

@@ -192,6 +192,26 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(validateCustomResource(instance)).To(HaveOccurred())
 	})
 
+	It("should validate ControlPlaneReplicas", func() {
+		var replicas int32
+
+		replicas = -1
+		instance.Spec.ControlPlaneReplicas = &replicas
+		Expect(validateCustomResource(instance)).To(HaveOccurred())
+
+		replicas = 0
+		instance.Spec.ControlPlaneReplicas = &replicas
+		Expect(validateCustomResource(instance)).To(HaveOccurred())
+
+		replicas = 1
+		instance.Spec.ControlPlaneReplicas = &replicas
+		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+
+		replicas = 2
+		instance.Spec.ControlPlaneReplicas = &replicas
+		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+	})
+
 	It("should validate HostPorts", func() {
 		instance.Spec.CalicoNetwork.HostPorts = nil
 		err := validateCustomResource(instance)
@@ -210,6 +230,23 @@ var _ = Describe("Installation validation tests", func() {
 		hp = "NotValid"
 		instance.Spec.CalicoNetwork.HostPorts = &hp
 		err = validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should not allow Calico to run in non-privileged mode if BPF is enabled", func() {
+		np := operator.NonPrivilegedEnabled
+		bpf := operator.LinuxDataplaneBPF
+		instance.Spec.NonPrivileged = &np
+		instance.Spec.CalicoNetwork.LinuxDataplane = &bpf
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should not allow Calico to run in non-privileged mode with Tigera Secure Enterprise", func() {
+		np := operator.NonPrivilegedEnabled
+		instance.Spec.NonPrivileged = &np
+		instance.Spec.Variant = operator.TigeraSecureEnterprise
+		err := validateCustomResource(instance)
 		Expect(err).To(HaveOccurred())
 	})
 

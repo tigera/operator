@@ -18,12 +18,12 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -51,18 +51,18 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 	statusManager := status.New(mgr.GetClient(), "management-cluster-connection", opts.KubernetesVersion)
-	return add(mgr, newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider))
+	return add(mgr, newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider, opts))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, p operatorv1.Provider) reconcile.Reconciler {
+func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, p operatorv1.Provider, opts options.AddOptions) reconcile.Reconciler {
 	c := &ReconcileConnection{
 		Client:   cli,
 		Scheme:   schema,
 		Provider: p,
 		status:   statusMgr,
 	}
-	c.status.Run()
+	c.status.Run(opts.ShutdownContext)
 	return c
 }
 
@@ -87,13 +87,17 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to the secrets associated with the ManagementClusterConnection.
-	if err = utils.AddSecretsWatch(c, render.GuardianSecretName, rmeta.OperatorNamespace()); err != nil {
+	if err = utils.AddSecretsWatch(c, render.GuardianSecretName, common.OperatorNamespace()); err != nil {
 		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, render.GuardianSecretName, err)
 	}
 
 	// Watch for changes to the secrets associated with the PacketCapture APIs.
-	if err = utils.AddSecretsWatch(c, render.PacketCaptureCertSecret, rmeta.OperatorNamespace()); err != nil {
+	if err = utils.AddSecretsWatch(c, render.PacketCaptureCertSecret, common.OperatorNamespace()); err != nil {
 		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, render.PacketCaptureCertSecret, err)
+	}
+	// Watch for changes to the secrets associated with Prometheus.
+	if err = utils.AddSecretsWatch(c, render.PrometheusTLSSecretName, common.OperatorNamespace()); err != nil {
+		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, render.PrometheusTLSSecretName, err)
 	}
 
 	if err = utils.AddNetworkWatch(c); err != nil {
@@ -168,7 +172,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	// Copy the secret from the operator namespace to the guardian namespace if it is present.
 	tunnelSecret := &corev1.Secret{}
-	err = r.Client.Get(ctx, types.NamespacedName{Name: render.GuardianSecretName, Namespace: rmeta.OperatorNamespace()}, tunnelSecret)
+	err = r.Client.Get(ctx, types.NamespacedName{Name: render.GuardianSecretName, Namespace: common.OperatorNamespace()}, tunnelSecret)
 	if err != nil {
 		r.status.SetDegraded("Error retrieving secrets from guardian namespace", err.Error())
 		if !k8serrors.IsNotFound(err) {
@@ -179,7 +183,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	var packetCaptureServerCertSecret *corev1.Secret
 	packetCaptureServerCertSecret, err = utils.ValidateCertPair(r.Client,
-		rmeta.OperatorNamespace(),
+		common.OperatorNamespace(),
 		render.PacketCaptureCertSecret,
 		"", // We don't need the key.
 		corev1.TLSCertKey,
@@ -194,6 +198,18 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, nil
 	}
 
+	prometheusCertSecret, err := utils.ValidateCertPair(r.Client,
+		common.OperatorNamespace(),
+		render.PrometheusTLSSecretName,
+		"", // We don't need the key.
+		corev1.TLSCertKey,
+	)
+	if err != nil {
+		reqLogger.Error(err, fmt.Sprintf("failed to retrieve %s", render.PrometheusTLSSecretName))
+		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s", render.PrometheusTLSSecretName), err.Error())
+		return reconcile.Result{}, err
+	}
+
 	ch := utils.NewComponentHandler(log, r.Client, r.Scheme, managementClusterConnection)
 	component := render.Guardian(
 		managementClusterConnection.Spec.ManagementClusterAddr,
@@ -202,6 +218,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		instl,
 		tunnelSecret,
 		packetCaptureServerCertSecret,
+		prometheusCertSecret,
 	)
 
 	if err = imageset.ApplyImageSet(ctx, r.Client, variant, component); err != nil {

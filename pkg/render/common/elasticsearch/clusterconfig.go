@@ -18,11 +18,12 @@ import (
 	"fmt"
 	"strconv"
 
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/tigera/operator/pkg/common"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
 const (
@@ -104,7 +105,7 @@ func (c ClusterConfig) ConfigMap() *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ClusterConfigConfigMapName,
-			Namespace: rmeta.OperatorNamespace(),
+			Namespace: common.OperatorNamespace(),
 		},
 		Data: map[string]string{
 			"clusterName": c.clusterName,

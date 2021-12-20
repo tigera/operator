@@ -9,11 +9,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 )
 
@@ -26,7 +26,7 @@ func (r *ReconcileLogStorage) createEsMetrics(
 	ctx context.Context,
 	hdler utils.ComponentHandler,
 ) (reconcile.Result, bool, error) {
-	esMetricsSecret, err := utils.GetSecret(context.Background(), r.client, esmetrics.ElasticsearchMetricsSecret, rmeta.OperatorNamespace())
+	esMetricsSecret, err := utils.GetSecret(context.Background(), r.client, esmetrics.ElasticsearchMetricsSecret, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded("Failed to retrieve Elasticsearch metrics user secret.", err.Error())
 		return reconcile.Result{}, false, err

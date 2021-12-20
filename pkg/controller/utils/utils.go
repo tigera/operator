@@ -38,9 +38,9 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
 const (
@@ -264,7 +264,7 @@ func GetK8sServiceEndPoint(client client.Client) error {
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{
 		Name:      cmName,
-		Namespace: rmeta.OperatorNamespace(),
+		Namespace: common.OperatorNamespace(),
 	}
 	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
 		// If the configmap is unavailable, do not return error
@@ -282,7 +282,7 @@ func GetNetworkingPullSecrets(i *operatorv1.InstallationSpec, c client.Client) (
 	secrets := []*corev1.Secret{}
 	for _, ps := range i.ImagePullSecrets {
 		s := &corev1.Secret{}
-		err := c.Get(context.Background(), client.ObjectKey{Name: ps.Name, Namespace: rmeta.OperatorNamespace()}, s)
+		err := c.Get(context.Background(), client.ObjectKey{Name: ps.Name, Namespace: common.OperatorNamespace()}, s)
 		if err != nil {
 			return nil, err
 		}

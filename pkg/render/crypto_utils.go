@@ -26,12 +26,11 @@ import (
 	"strings"
 	"time"
 
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/openshift/library-go/pkg/crypto"
+	"github.com/tigera/operator/pkg/common"
 )
 
 // Voltron related constants.
@@ -50,7 +49,7 @@ func voltronTunnelSecret() *corev1.Secret {
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      VoltronTunnelSecretName,
-			Namespace: rmeta.OperatorNamespace(),
+			Namespace: common.OperatorNamespace(),
 		},
 		Data: map[string][]byte{
 			VoltronTunnelSecretCertName: []byte(cert),
@@ -65,7 +64,7 @@ func CreateDexTLSSecret(dexCommonName string) *corev1.Secret {
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      DexTLSSecretName,
-			Namespace: rmeta.OperatorNamespace(),
+			Namespace: common.OperatorNamespace(),
 		},
 		Type: corev1.SecretTypeTLS,
 		Data: map[string][]byte{
@@ -133,7 +132,7 @@ func CreateDexClientSecret() *corev1.Secret {
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tigera-dex",
-			Namespace: rmeta.OperatorNamespace(),
+			Namespace: common.OperatorNamespace(),
 		},
 		Data: map[string][]byte{
 			ClientSecretSecretField: []byte(generatePassword(24)),

@@ -47,7 +47,10 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.CalicoNetwork.LinuxDataplane).ToNot(BeNil())
 		Expect(*instance.Spec.CalicoNetwork.LinuxDataplane).To(Equal(operator.LinuxDataplaneIptables))
 		Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPEnabled))
+		Expect(*instance.Spec.ControlPlaneReplicas).To(Equal(int32(2)))
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+		Expect(instance.Spec.NonPrivileged).NotTo(BeNil())
+		Expect(*instance.Spec.NonPrivileged).To(Equal(operator.NonPrivilegedDisabled))
 	})
 
 	It("should properly fill defaults on an empty TigeraSecureEnterprise instance", func() {
@@ -68,7 +71,10 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.CalicoNetwork.LinuxDataplane).ToNot(BeNil())
 		Expect(*instance.Spec.CalicoNetwork.LinuxDataplane).To(Equal(operator.LinuxDataplaneIptables))
 		Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPEnabled))
+		Expect(*instance.Spec.ControlPlaneReplicas).To(Equal(int32(2)))
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+		Expect(instance.Spec.NonPrivileged).NotTo(BeNil())
+		Expect(*instance.Spec.NonPrivileged).To(Equal(operator.NonPrivilegedDisabled))
 	})
 
 	It("should not override custom configuration", func() {
@@ -78,15 +84,18 @@ var _ = Describe("Defaulting logic tests", func() {
 		var twentySeven int32 = 27
 		var oneTwoThree int32 = 123
 		var one intstr.IntOrString = intstr.FromInt(1)
+		var replicas int32 = 3
 
 		hpEnabled := operator.HostPortsEnabled
 		disabled := operator.BGPDisabled
 		miMode := operator.MultiInterfaceModeNone
 		dpIptables := operator.LinuxDataplaneIptables
+		nonPrivileged := operator.NonPrivilegedEnabled
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{
-				Variant:  operator.TigeraSecureEnterprise,
-				Registry: "test-reg/",
+				Variant:       operator.Calico,
+				NonPrivileged: &nonPrivileged,
+				Registry:      "test-reg/",
 				ImagePullSecrets: []v1.LocalObjectReference{
 					{
 						Name: "pullSecret1",
@@ -128,8 +137,9 @@ var _ = Describe("Defaulting logic tests", func() {
 					HostPorts:          &hpEnabled,
 					MultiInterfaceMode: &miMode,
 				},
-				NodeMetricsPort: &nodeMetricsPort,
-				FlexVolumePath:  "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
+				ControlPlaneReplicas: &replicas,
+				NodeMetricsPort:      &nodeMetricsPort,
+				FlexVolumePath:       "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
 				NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
 					Type: appsv1.RollingUpdateDaemonSetStrategyType,
 					RollingUpdate: &appsv1.RollingUpdateDaemonSet{
@@ -151,15 +161,18 @@ var _ = Describe("Defaulting logic tests", func() {
 		var false_ = false
 		var twentySeven int32 = 27
 		var one intstr.IntOrString = intstr.FromInt(1)
+		var replicas int32 = 3
 
 		disabled := operator.BGPDisabled
 		miMode := operator.MultiInterfaceModeNone
 		dpBPF := operator.LinuxDataplaneBPF
 		hpDisabled := operator.HostPortsDisabled
+		npDisabled := operator.NonPrivilegedDisabled
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{
-				Variant:  operator.TigeraSecureEnterprise,
-				Registry: "test-reg/",
+				Variant:       operator.TigeraSecureEnterprise,
+				NonPrivileged: &npDisabled,
+				Registry:      "test-reg/",
 				ImagePullSecrets: []v1.LocalObjectReference{
 					{
 						Name: "pullSecret1",
@@ -191,8 +204,9 @@ var _ = Describe("Defaulting logic tests", func() {
 					MultiInterfaceMode: &miMode,
 					HostPorts:          &hpDisabled, // Only one valid value in BPF mode.
 				},
-				NodeMetricsPort: &nodeMetricsPort,
-				FlexVolumePath:  "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
+				ControlPlaneReplicas: &replicas,
+				NodeMetricsPort:      &nodeMetricsPort,
+				FlexVolumePath:       "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
 				NodeUpdateStrategy: appsv1.DaemonSetUpdateStrategy{
 					Type: appsv1.RollingUpdateDaemonSetStrategyType,
 					RollingUpdate: &appsv1.RollingUpdateDaemonSet{

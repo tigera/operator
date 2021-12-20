@@ -19,8 +19,6 @@ import (
 	"fmt"
 	"time"
 
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -30,6 +28,7 @@ import (
 
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -62,7 +61,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) reconcile.Recon
 		provider: opts.DetectedProvider,
 		status:   status.New(mgr.GetClient(), "amazon-cloud-integration", opts.KubernetesVersion),
 	}
-	r.status.Run()
+	r.status.Run(opts.ShutdownContext)
 	return r
 }
 
@@ -86,7 +85,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("amazoncloudintegration-controller failed to watch Tigera network resource: %v", err)
 	}
 
-	if err = utils.AddSecretsWatch(c, render.AmazonCloudIntegrationCredentialName, rmeta.OperatorNamespace()); err != nil {
+	if err = utils.AddSecretsWatch(c, render.AmazonCloudIntegrationCredentialName, common.OperatorNamespace()); err != nil {
 		log.V(5).Info("amazoncloudintegration-controller failed to watch Secret", "err", err, "resource", render.AmazonCloudIntegrationCredentialName)
 		return fmt.Errorf("amazoncloudintegration-controller failed to watch the Secret resource(%s): %v", render.AmazonCloudIntegrationCredentialName, err)
 	}
@@ -229,7 +228,7 @@ func getAmazonCredential(client client.Client) (*render.AmazonCredential, error)
 	secret := &corev1.Secret{}
 	secretNamespacedName := types.NamespacedName{
 		Name:      render.AmazonCloudIntegrationCredentialName,
-		Namespace: rmeta.OperatorNamespace(),
+		Namespace: common.OperatorNamespace(),
 	}
 	if err := client.Get(context.Background(), secretNamespacedName, secret); err != nil {
 		return nil, fmt.Errorf("Failed to read secret %q: %s", render.AmazonCloudIntegrationCredentialName, err)

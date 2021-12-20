@@ -56,7 +56,7 @@ var log = logf.Log.WithName("status_manager")
 // degraded if it is running successfully but a configuration change has resulted in a configuration that cannot
 // be actioned.
 type StatusManager interface {
-	Run()
+	Run(ctx context.Context)
 	OnCRFound()
 	OnCRNotFound()
 	AddDaemonsets(dss []types.NamespacedName)
@@ -69,6 +69,7 @@ type StatusManager interface {
 	RemoveStatefulSets(sss ...types.NamespacedName)
 	RemoveCronJobs(cjs ...types.NamespacedName)
 	RemoveCertificateSigningRequests(name string)
+	SetWindowsUpgradeStatus(pending, inProgress, completed []string, err error)
 	SetDegraded(reason, msg string)
 	ClearDegraded()
 	IsAvailable() bool
@@ -85,6 +86,7 @@ type statusManager struct {
 	statefulsets              map[string]types.NamespacedName
 	cronjobs                  map[string]types.NamespacedName
 	certificatestatusrequests map[string]map[string]string
+	windowsNodeUpgrades       *windowsNodeUpgrades
 	lock                      sync.Mutex
 	enabled                   *bool
 	kubernetesVersion         *common.VersionInfo
@@ -93,6 +95,8 @@ type statusManager struct {
 	degraded               bool
 	explicitDegradedMsg    string
 	explicitDegradedReason string
+	// Track degraded state set by calicoWindowsUpgrader.
+	windowsUpgradeDegradedMsg string
 
 	// Keep track of currently calculated status.
 	progressing []string
@@ -113,6 +117,7 @@ func New(client client.Client, component string, kubernetesVersion *common.Versi
 		statefulsets:              make(map[string]types.NamespacedName),
 		cronjobs:                  make(map[string]types.NamespacedName),
 		certificatestatusrequests: make(map[string]map[string]string),
+		windowsNodeUpgrades:       newWindowsNodeUpgrades(),
 		kubernetesVersion:         kubernetesVersion,
 	}
 }
@@ -142,7 +147,7 @@ func (m *statusManager) updateStatus() {
 		}
 
 		if m.IsProgressing() {
-			m.setProgressing("Not all pods are ready", m.progressingMessage())
+			m.setProgressing("Not all resources are ready", m.progressingMessage())
 		} else {
 			m.clearProgressing()
 		}
@@ -173,7 +178,7 @@ func (m *statusManager) isExplicitlyDegraded() bool {
 }
 
 // Run starts the status manager state monitoring routine.
-func (m *statusManager) Run() {
+func (m *statusManager) Run(ctx context.Context) {
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
@@ -184,6 +189,9 @@ func (m *statusManager) Run() {
 			select {
 			case <-ticker.C:
 				continue
+			case <-ctx.Done():
+				log.WithName(m.component).Info("Status manager is stopping")
+				return
 			}
 		}
 	}()
@@ -272,6 +280,50 @@ func (m *statusManager) AddCertificateSigningRequests(name string, labels map[st
 	m.certificatestatusrequests[name] = labels
 }
 
+type windowsNodeUpgrades struct {
+	nodesPending    []string
+	nodesInProgress []string
+	nodesCompleted  []string
+}
+
+func newWindowsNodeUpgrades() *windowsNodeUpgrades {
+	return &windowsNodeUpgrades{
+		nodesPending:    []string{},
+		nodesInProgress: []string{},
+		nodesCompleted:  []string{},
+	}
+}
+
+func (w *windowsNodeUpgrades) progressingReason() string {
+	inProgress := len(w.nodesInProgress)
+	pending := len(w.nodesPending)
+	completed := len(w.nodesCompleted)
+	total := pending + inProgress + completed
+
+	if pending+inProgress == 0 {
+		return ""
+	}
+
+	return fmt.Sprintf("Waiting for Calico for Windows to be upgraded: %v/%v nodes have been upgraded, %v in-progress", completed, total, inProgress)
+}
+
+// SetWindowsUpgradeStatus tells the status manager to monitor the upgrade
+// status of the given Windows node upgrades.
+func (m *statusManager) SetWindowsUpgradeStatus(pending, inProgress, completed []string, err error) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	if err != nil {
+		m.windowsUpgradeDegradedMsg = err.Error()
+		return
+	}
+
+	m.windowsNodeUpgrades.nodesPending = pending
+	m.windowsNodeUpgrades.nodesInProgress = inProgress
+	m.windowsNodeUpgrades.nodesCompleted = completed
+	m.windowsUpgradeDegradedMsg = ""
+}
+
 // RemoveDaemonsets tells the status manager to stop monitoring the health of the given daemonsets
 func (m *statusManager) RemoveDaemonsets(dss ...types.NamespacedName) {
 	m.lock.Lock()
@@ -331,6 +383,7 @@ func (m *statusManager) ClearDegraded() {
 	m.degraded = false
 	m.explicitDegradedReason = ""
 	m.explicitDegradedMsg = ""
+	m.windowsUpgradeDegradedMsg = ""
 }
 
 // IsAvailable returns true if the component is available and false otherwise.
@@ -373,7 +426,9 @@ func (m *statusManager) IsDegraded() bool {
 
 	// Controllers can explicitly set us degraded, which can be set even before we tell the status manager that it
 	// should start monitoring resources.
-	if m.degraded {
+	// windowsUpgradeDegradedReason indicates an error has occurred with the
+	// Calico Windows upgrade.
+	if m.degraded || m.windowsUpgradeDegradedMsg != "" {
 		return true
 	}
 
@@ -400,14 +455,14 @@ func (m *statusManager) syncState() {
 		ds := &appsv1.DaemonSet{}
 		err := m.client.Get(context.TODO(), dsnn, ds)
 		if err != nil {
-			log.WithValues("error", err).Info("Error querying daemonset")
+			log.WithValues("reason", err).Info("Failed to query daemonset")
 			continue
 		}
 		if ds.Status.UpdatedNumberScheduled < ds.Status.DesiredNumberScheduled {
 			progressing = append(progressing, fmt.Sprintf("DaemonSet %q update is rolling out (%d out of %d updated)", dsnn.String(), ds.Status.UpdatedNumberScheduled, ds.Status.DesiredNumberScheduled))
 		} else if ds.Status.NumberUnavailable > 0 {
 			progressing = append(progressing, fmt.Sprintf("DaemonSet %q is not available (awaiting %d nodes)", dsnn.String(), ds.Status.NumberUnavailable))
-		} else if ds.Status.NumberAvailable == 0 {
+		} else if ds.Status.NumberAvailable == 0 && ds.Status.DesiredNumberScheduled != 0 {
 			progressing = append(progressing, fmt.Sprintf("DaemonSet %q is not yet scheduled on any nodes", dsnn.String()))
 		} else if ds.Generation > ds.Status.ObservedGeneration {
 			progressing = append(progressing, fmt.Sprintf("DaemonSet %q update is being processed (generation %d, observed generation %d)", dsnn.String(), ds.Generation, ds.Status.ObservedGeneration))
@@ -423,7 +478,7 @@ func (m *statusManager) syncState() {
 		dep := &appsv1.Deployment{}
 		err := m.client.Get(context.TODO(), depnn, dep)
 		if err != nil {
-			log.WithValues("error", err).Info("Error querying deployment")
+			log.WithValues("reason", err).Info("Failed to query deployment")
 			continue
 		}
 		if dep.Status.UnavailableReplicas > 0 {
@@ -444,7 +499,7 @@ func (m *statusManager) syncState() {
 		ss := &appsv1.StatefulSet{}
 		err := m.client.Get(context.TODO(), depnn, ss)
 		if err != nil {
-			log.WithValues("error", err).Info("Error querying statefulset")
+			log.WithValues("reason", err).Info("Failed to query statefulset")
 			continue
 		}
 		if *ss.Spec.Replicas != ss.Status.CurrentReplicas {
@@ -462,7 +517,7 @@ func (m *statusManager) syncState() {
 	for _, depnn := range m.cronjobs {
 		cj := &batch.CronJob{}
 		if err := m.client.Get(context.TODO(), depnn, cj); err != nil {
-			log.WithValues("error", err).Info("Error querying cronjobs")
+			log.WithValues("reason", err).Info("Failed to query cronjobs")
 			continue
 		}
 
@@ -470,7 +525,7 @@ func (m *statusManager) syncState() {
 		for _, jref := range cj.Status.Active {
 			j := &batchv1.Job{}
 			if err := m.client.Get(context.TODO(), types.NamespacedName{Namespace: jref.Namespace, Name: jref.Name}, j); err != nil {
-				log.WithValues("error", err).Info("couldn't query cronjob job")
+				log.WithValues("reason", err).Info("couldn't query cronjob job")
 				continue
 			}
 
@@ -493,6 +548,10 @@ func (m *statusManager) syncState() {
 		}
 	}
 
+	if reason := m.windowsNodeUpgrades.progressingReason(); reason != "" {
+		progressing = append(progressing, reason)
+	}
+
 	m.progressing = progressing
 	m.failing = failing
 	m.hasSynced = true
@@ -513,7 +572,7 @@ func (m *statusManager) removeTigeraStatus() bool {
 		ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: m.component}}
 		err := m.client.Delete(context.TODO(), ts)
 		if err != nil && !errors.IsNotFound(err) {
-			log.WithValues("error", err).Info("Failed to remove TigeraStatus", m.component)
+			log.WithValues("reason", err).Info("Failed to remove TigeraStatus", "component", m.component)
 		}
 		return true
 	}
@@ -564,7 +623,7 @@ func (m *statusManager) containerErrorMessage(p corev1.Pod, c corev1.ContainerSt
 	return ""
 }
 
-func (m *statusManager) set(conditions ...operator.TigeraStatusCondition) {
+func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondition) {
 	if m.enabled == nil || !*m.enabled {
 		// Never set any conditions unless the status manager is enabled.
 		return
@@ -574,7 +633,7 @@ func (m *statusManager) set(conditions ...operator.TigeraStatusCondition) {
 	err := m.client.Get(context.TODO(), types.NamespacedName{Name: m.component}, &ts)
 	isNotFound := errors.IsNotFound(err)
 	if err != nil && !isNotFound {
-		log.WithValues("error", err).Info("Failed to get TigeraStatus %q: %v", m.component, err)
+		log.WithValues("reason", err).Info("Failed to get TigeraStatus", "component", m.component)
 		return
 	}
 
@@ -615,10 +674,18 @@ func (m *statusManager) set(conditions ...operator.TigeraStatusCondition) {
 	// Update the object in the API, creating it if necessary.
 	if isNotFound {
 		if err = m.client.Create(context.TODO(), &ts); err != nil {
-			log.WithValues("error", err).Info("Failed to create tigera status")
+			log.WithValues("reason", err).Info("Failed to create tigera status")
 		}
-	} else if err = m.client.Status().Update(context.TODO(), &ts); err != nil {
-		log.WithValues("error", err).Info("Failed to update tigera status")
+	} else {
+		err = m.client.Status().Update(context.TODO(), &ts)
+		if err != nil {
+			if retry && errors.IsConflict(err) {
+				log.WithValues("reason", err).Info("update to tigera status conflicted, retrying")
+				m.set(false, conditions...)
+			} else {
+				log.WithValues("reason", err).Info("Failed to update tigera status")
+			}
+		}
 	}
 }
 
@@ -629,7 +696,7 @@ func (m *statusManager) setAvailable(reason, msg string) {
 	conditions := []operator.TigeraStatusCondition{
 		{Type: operator.ComponentAvailable, Status: operator.ConditionTrue, Reason: reason, Message: msg},
 	}
-	m.set(conditions...)
+	m.set(true, conditions...)
 }
 
 func (m *statusManager) setDegraded(reason, msg string) {
@@ -639,7 +706,7 @@ func (m *statusManager) setDegraded(reason, msg string) {
 	conditions := []operator.TigeraStatusCondition{
 		{Type: operator.ComponentDegraded, Status: operator.ConditionTrue, Reason: reason, Message: msg},
 	}
-	m.set(conditions...)
+	m.set(true, conditions...)
 }
 
 func (m *statusManager) setProgressing(reason, msg string) {
@@ -649,7 +716,7 @@ func (m *statusManager) setProgressing(reason, msg string) {
 	conditions := []operator.TigeraStatusCondition{
 		{Type: operator.ComponentProgressing, Status: operator.ConditionTrue, Reason: reason, Message: msg},
 	}
-	m.set(conditions...)
+	m.set(true, conditions...)
 }
 
 func (m *statusManager) clearDegraded() {
@@ -659,7 +726,7 @@ func (m *statusManager) clearDegraded() {
 	conditions := []operator.TigeraStatusCondition{
 		{Type: operator.ComponentDegraded, Status: operator.ConditionFalse},
 	}
-	m.set(conditions...)
+	m.set(true, conditions...)
 }
 
 func (m *statusManager) clearProgressing() {
@@ -669,7 +736,7 @@ func (m *statusManager) clearProgressing() {
 	conditions := []operator.TigeraStatusCondition{
 		{Type: operator.ComponentProgressing, Status: operator.ConditionFalse},
 	}
-	m.set(conditions...)
+	m.set(true, conditions...)
 }
 
 func (m *statusManager) clearAvailable() {
@@ -679,7 +746,7 @@ func (m *statusManager) clearAvailable() {
 	conditions := []operator.TigeraStatusCondition{
 		{Type: operator.ComponentAvailable, Status: operator.ConditionFalse},
 	}
-	m.set(conditions...)
+	m.set(true, conditions...)
 }
 
 func (m *statusManager) progressingMessage() string {
@@ -695,6 +762,9 @@ func (m *statusManager) degradedMessage() string {
 	if m.explicitDegradedMsg != "" {
 		msgs = append(msgs, m.explicitDegradedMsg)
 	}
+	if m.windowsUpgradeDegradedMsg != "" {
+		msgs = append(msgs, m.windowsUpgradeDegradedMsg)
+	}
 	msgs = append(msgs, m.failing...)
 	return strings.Join(msgs, "\n")
 }
@@ -705,6 +775,10 @@ func (m *statusManager) degradedReason() string {
 	reasons := []string{}
 	if m.explicitDegradedReason != "" {
 		reasons = append(reasons, m.explicitDegradedReason)
+	}
+	// Add a reason if we have a windows upgrade degraded msg.
+	if m.windowsUpgradeDegradedMsg != "" {
+		reasons = append(reasons, common.CalicoWindowsNodeUpgradeStatusErrorReason)
 	}
 	if len(m.failing) != 0 {
 		reasons = append(reasons, "Some pods are failing")

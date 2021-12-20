@@ -13,10 +13,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render/common/cloudconfig"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/logstorage/externalelasticsearch"
@@ -41,7 +41,7 @@ func (r *ReconcileLogStorage) esGatewayAddCloudModificationsToConfig(
 	c.ExternalKibanaDomain = cloudConfig.ExternalKibanaDomain()
 
 	if cloudConfig.EnableMTLS() {
-		c.ExternalCertsSecret, err = utils.GetSecret(ctx, r.client, esgateway.ExternalCertsSecret, rmeta.OperatorNamespace())
+		c.ExternalCertsSecret, err = utils.GetSecret(ctx, r.client, esgateway.ExternalCertsSecret, common.OperatorNamespace())
 		if err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Waiting for external Elasticsearch certs secret to be available", "")
@@ -197,7 +197,7 @@ func (r *ReconcileLogStorage) getCloudConfig(reqLogger logr.Logger, ctx context.
 }
 
 func addMultiTenancyWatches(c controller.Controller) error {
-	if err := utils.AddConfigMapWatch(c, cloudconfig.CloudConfigConfigMapName, rmeta.OperatorNamespace()); err != nil {
+	if err := utils.AddConfigMapWatch(c, cloudconfig.CloudConfigConfigMapName, common.OperatorNamespace()); err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch the ConfigMap resource: %w", err)
 	}
 	return nil

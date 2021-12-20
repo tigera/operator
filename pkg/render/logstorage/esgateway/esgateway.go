@@ -27,11 +27,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
@@ -71,7 +73,7 @@ func EsGateway(c *Config) render.Component {
 	secrets = append(secrets, certSecretsESCopy...)
 
 	// tigera-secure-es-http-certs-public, mounted by ES Gateway.
-	if c.EsInternalCertSecret != nil && c.EsInternalCertSecret.ObjectMeta.Namespace == rmeta.OperatorNamespace() {
+	if c.EsInternalCertSecret != nil && c.EsInternalCertSecret.ObjectMeta.Namespace == common.OperatorNamespace() {
 		secrets = append(secrets, secret.CopyToNamespace(render.ElasticsearchNamespace, c.EsInternalCertSecret)...)
 	}
 
@@ -85,6 +87,7 @@ func EsGateway(c *Config) render.Component {
 	}
 
 	secrets = append(secrets, c.KubeControllersUserSecrets...)
+
 	return &esGateway{
 		installation:         c.Installation,
 		pullSecrets:          c.PullSecrets,
@@ -219,7 +222,6 @@ func (e esGateway) esGatewayRoleBinding() *rbacv1.RoleBinding {
 }
 
 func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
-	replicas := int32(2)
 
 	elasticEndpoint := ElasticsearchHTTPSEndpoint
 	kibanaEndpoint := KibanaHTTPSEndpoint
@@ -366,6 +368,11 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 			},
 		},
 	}
+
+	if e.installation.ControlPlaneReplicas != nil && *e.installation.ControlPlaneReplicas > 1 {
+		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity(DeploymentName, render.ElasticsearchNamespace)
+	}
+
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -381,7 +388,7 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 			},
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": DeploymentName}},
 			Template: *podTemplate,
-			Replicas: &replicas,
+			Replicas: e.installation.ControlPlaneReplicas,
 		},
 	}
 }

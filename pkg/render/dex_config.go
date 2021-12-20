@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 
 	oprv1 "github.com/tigera/operator/api/v1"
@@ -496,7 +497,7 @@ func (d *dexConfig) CreateCertSecret() *corev1.Secret {
 	} else {
 		certBytes = d.tlsSecret.Data[corev1.TLSCertKey]
 	}
-	return CreateCertificateSecret(certBytes, DexCertSecretName, rmeta.OperatorNamespace())
+	return CreateCertificateSecret(certBytes, DexCertSecretName, common.OperatorNamespace())
 
 }
 

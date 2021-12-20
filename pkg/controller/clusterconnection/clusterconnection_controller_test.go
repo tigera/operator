@@ -18,9 +18,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/test"
 
 	"github.com/tigera/operator/pkg/controller/clusterconnection"
@@ -69,7 +69,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		mockStatus.On("AddStatefulSets", mock.Anything)
 		mockStatus.On("AddCronJobs", mock.Anything)
 		mockStatus.On("ClearDegraded", mock.Anything)
-		mockStatus.On("SetDegraded", mock.Anything)
+		mockStatus.On("SetDegraded", mock.Anything, mock.Anything)
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ReadyToMonitor")
 
@@ -84,7 +84,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      render.GuardianSecretName,
-				Namespace: rmeta.OperatorNamespace(),
+				Namespace: common.OperatorNamespace(),
 			},
 			Data: map[string][]byte{
 				"cert": []byte("foo"),
@@ -95,7 +95,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		pcSecret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      render.PacketCaptureCertSecret,
-				Namespace: rmeta.OperatorNamespace(),
+				Namespace: common.OperatorNamespace(),
 			},
 			Data: map[string][]byte{
 				"tls.crt": []byte("foo"),
@@ -103,6 +103,16 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 			},
 		}
 		c.Create(ctx, pcSecret)
+		c.Create(ctx, &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      render.PrometheusTLSSecretName,
+				Namespace: common.OperatorNamespace(),
+			},
+			Data: map[string][]byte{
+				"tls.crt": []byte("foo"),
+				"tls.key": []byte("bar"),
+			},
+		})
 
 		By("applying the required prerequisites")
 		// Create a ManagementClusterConnection in the k8s client.

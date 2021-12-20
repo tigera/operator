@@ -40,28 +40,15 @@ const (
 // typhaAutoscaler periodically lists the nodes and, if needed, scales the Typha deployment up/down.
 // Number of replicas should be at least (1 typha for every 200 nodes) + 1 but the number of typhas
 // cannot exceed the number of nodes+masters.
-// Nodes       Replicas
-//     1              1
-//     2              2
-//  <200              3
-//  >400              4
-//  >600              5
-//  >800              6
-// >1000              7
-//    .....
-// >2000              12
-//    .....
-// >3600             20
 type typhaAutoscaler struct {
-	client         kubernetes.Interface
-	syncPeriod     time.Duration
-	statusManager  status.StatusManager
-	triggerRunChan chan chan error
-	isDegradedChan chan chan bool
-	nodeInformer   cache.Controller
-	nodeIndexer    cache.Indexer
-	typhaInformer  cache.Controller
-	typhaIndexer   cache.Indexer
+	client            kubernetes.Interface
+	syncPeriod        time.Duration
+	statusManager     status.StatusManager
+	triggerRunChan    chan chan error
+	isDegradedChan    chan chan bool
+	nodeIndexInformer cache.SharedIndexInformer
+	typhaInformer     cache.Controller
+	typhaIndexer      cache.Indexer
 
 	// Number of currently running replicas.
 	activeReplicas int32
@@ -78,18 +65,15 @@ func typhaAutoscalerPeriod(syncPeriod time.Duration) typhaAutoscalerOption {
 
 // newTyphaAutoscaler creates a new Typha autoscaler, optionally applying any options to the default autoscaler instance.
 // The default sync period is 10 seconds.
-func newTyphaAutoscaler(cs kubernetes.Interface, nodeListWatch, typhaListWatch cache.ListerWatcher, statusManager status.StatusManager, options ...typhaAutoscalerOption) *typhaAutoscaler {
+func newTyphaAutoscaler(cs kubernetes.Interface, nodeIndexInformer cache.SharedIndexInformer, typhaListWatch cache.ListerWatcher, statusManager status.StatusManager, options ...typhaAutoscalerOption) *typhaAutoscaler {
 	ta := &typhaAutoscaler{
-		client:         cs,
-		statusManager:  statusManager,
-		syncPeriod:     defaultTyphaAutoscalerSyncPeriod,
-		triggerRunChan: make(chan chan error),
-		isDegradedChan: make(chan chan bool),
+		client:            cs,
+		statusManager:     statusManager,
+		syncPeriod:        defaultTyphaAutoscalerSyncPeriod,
+		triggerRunChan:    make(chan chan error),
+		isDegradedChan:    make(chan chan bool),
+		nodeIndexInformer: nodeIndexInformer,
 	}
-
-	// Create an informer to signal us when nodes are updated.
-	nodeHandlers := cache.ResourceEventHandlerFuncs{AddFunc: func(obj interface{}) {}}
-	ta.nodeIndexer, ta.nodeInformer = cache.NewIndexerInformer(nodeListWatch, &v1.Node{}, 0, nodeHandlers, cache.Indexers{})
 
 	// Configure an informer to monitor the active replicas.
 	typhaHandlers := cache.ResourceEventHandlerFuncs{
@@ -119,18 +103,17 @@ func newTyphaAutoscaler(cs kubernetes.Interface, nodeListWatch, typhaListWatch c
 // start starts the Typha autoscaler, updating the Typha deployment's replica count every sync period. The triggerRunChan
 // can be used to trigger an auto scale run immediately, while the isDegradedChan can be used to get the degraded status
 // of the last run. The triggerRun and isDegraded functions should be used instead of instead of access these channels directly.
-func (t *typhaAutoscaler) start() {
+func (t *typhaAutoscaler) start(ctx context.Context) {
 	go func() {
 		degraded := false
 		ticker := time.NewTicker(t.syncPeriod)
 		defer ticker.Stop()
 		typhaLog.Info("Starting typha autoscaler", "syncPeriod", t.syncPeriod)
 
-		// Start the informers and wait for them to sync.
-		stopCh := make(chan struct{})
-		go t.nodeInformer.Run(stopCh)
-		go t.typhaInformer.Run(stopCh)
-		for !t.nodeInformer.HasSynced() && !t.typhaInformer.HasSynced() {
+		// Start the informer.
+		go t.typhaInformer.Run(ctx.Done())
+		// Wait for the informers to sync.
+		for !t.nodeIndexInformer.HasSynced() || !t.typhaInformer.HasSynced() {
 			time.Sleep(100 * time.Millisecond)
 		}
 
@@ -170,6 +153,9 @@ func (t *typhaAutoscaler) start() {
 			case boolCh := <-t.isDegradedChan:
 				boolCh <- degraded
 				close(boolCh)
+			case <-ctx.Done():
+				typhaLog.Info("typha autoscaler shutting down")
+				return
 			}
 		}
 	}()
@@ -243,7 +229,7 @@ func (t *typhaAutoscaler) updateReplicas(expectedReplicas int32) error {
 func (t *typhaAutoscaler) getNodeCounts() (int, int, error) {
 	linuxNodes := 0
 	schedulable := 0
-	for _, obj := range t.nodeIndexer.List() {
+	for _, obj := range t.nodeIndexInformer.GetIndexer().List() {
 		n := obj.(*v1.Node)
 		if n.Spec.Unschedulable {
 			continue

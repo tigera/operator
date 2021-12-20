@@ -105,6 +105,11 @@ type InstallationSpec struct {
 	// +optional
 	ControlPlaneTolerations []v1.Toleration `json:"controlPlaneTolerations,omitempty"`
 
+	// ControlPlaneReplicas defines how many replicas of the control plane core components will be deployed.
+	// This field applies to all control plane components that support High Availability. Defaults to 2.
+	// +optional
+	ControlPlaneReplicas *int32 `json:"controlPlaneReplicas,omitempty"`
+
 	// NodeMetricsPort specifies which port calico/node serves prometheus metrics on. By default, metrics are not enabled.
 	// If specified, this overrides any FelixConfiguration resources which may exist. If omitted, then
 	// prometheus metrics may still be configured through FelixConfiguration.
@@ -136,6 +141,10 @@ type InstallationSpec struct {
 	// pods will be stuck during initialization.
 	// +optional
 	CertificateManagement *CertificateManagement `json:"certificateManagement,omitempty"`
+
+	// NonPrivileged configures Calico to be run in non-privileged containers as non-root users where possible.
+	// +optional
+	NonPrivileged *NonPrivilegedType `json:"nonPrivileged,omitempty"`
 }
 
 // TyphaAffinity allows configuration of node affinitiy characteristics for Typha pods.
@@ -210,6 +219,16 @@ type ProductVariant string
 var (
 	Calico                 ProductVariant = "Calico"
 	TigeraSecureEnterprise ProductVariant = "TigeraSecureEnterprise"
+)
+
+// NonPrivilegedType specifies whether Calico runs as permissioned or not
+//
+// One of: Enabled, Disabled
+type NonPrivilegedType string
+
+const (
+	NonPrivilegedEnabled  NonPrivilegedType = "Enabled"
+	NonPrivilegedDisabled NonPrivilegedType = "Disabled"
 )
 
 // ContainerIPForwardingType specifies whether the CNI config for container ip forwarding is enabled.

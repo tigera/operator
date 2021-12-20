@@ -98,7 +98,7 @@ endif
 
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=v0.63
+GO_BUILD_VER?=v0.65
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(ARCH)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./api -name '*.go')
@@ -641,7 +641,7 @@ deploy: manifests kustomize
 # Generate manifests e.g. CRD
 # Can also generate RBAC and webhooks but that is not enabled currently
 manifests: controller-gen
-	$(CONTROLLER_GEN) $(CRD_OPTIONS) paths="./api/..." output:crd:artifacts:config=config/crd/bases
+	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(CONTROLLER_GEN) $(CRD_OPTIONS) paths="./api/..." output:crd:artifacts:config=config/crd/bases'
 	for x in $$(find config/crd/bases/*); do sed -i -e '/creationTimestamp: null/d' $$x; done
 
 # Run go fmt against code
@@ -658,7 +658,9 @@ vet:
 
 # Generate code
 generate: $(BINDIR)/controller-gen
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."'
+	# Make sure the generated code won't cause a static-checks failure.
+	$(MAKE) fix
 
 GO_GET_CONTAINER=docker run --rm \
 		-v $(CURDIR)/$(BINDIR):/go/bin:rw \
@@ -678,8 +680,7 @@ $(BINDIR)/controller-gen:
 		set -e ;\
 		CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
 		cd $$CONTROLLER_GEN_TMP_DIR ;\
-		go mod init tmp ;\
-		go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.3.0'
+		CGO_ENABLED=0 go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.3.0'
 
 KUSTOMIZE=$(BINDIR)/kustomize
 # download kustomize if necessary
@@ -690,8 +691,7 @@ $(BINDIR)/kustomize:
 		set -e ;\
 		CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
 		cd $$CONTROLLER_GEN_TMP_DIR ;\
-		go mod init tmp ;\
-		go get sigs.k8s.io/kustomize/kustomize/v3@v3.5.4 '
+		CGO_ENABLED=0 go install sigs.k8s.io/kustomize/kustomize/v3@v3.5.4 '
 
 
 # Options for 'bundle-build'
@@ -770,3 +770,13 @@ test-calico-crds: $(BINDIR)/operator-$(ARCH)
 # fields won't necessarily be in the same order or indentation.
 test-enterprise-crds: $(BINDIR)/operator-$(ARCH)
 	$(BINDIR)/operator-$(ARCH) --print-enterprise-crds all >/dev/null 2>&1
+
+###############################################################################
+# go mod helpers
+###############################################################################
+mod-download:
+	-$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) go mod download'
+
+mod-tidy:
+	-$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) go mod tidy'
+

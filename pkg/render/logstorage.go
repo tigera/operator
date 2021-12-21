@@ -915,7 +915,8 @@ func (es elasticsearchComponent) nodeSets() []esv1.NodeSet {
 			// Each NodeSet needs a unique name, so just add the index as a suffix
 			nodeSet.Name = fmt.Sprintf("%s-%d", nodeSetName(pvcTemplate), i)
 			nodeSet.Count = int32(numNodes)
-
+			git
+			dsf
 			podTemplate := es.podTemplate()
 
 			// If SelectionAttributes is set that means that the user wants the Elasticsearch Nodes and Replicas
@@ -1222,8 +1223,8 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 					NodeSelector:       es.installation.ControlPlaneNodeSelector,
 					Tolerations:        es.installation.ControlPlaneTolerations,
 					Containers: []corev1.Container{{
-						Image: "gcr.io/unique-caldron-775/gpang/eck-operator:rene", ImagePullPolicy: "Always",
-						Name: "manager",
+						Image: es.esOperatorImage,
+						Name:  "manager",
 						// Verbosity level of logs. -2=Error, -1=Warn, 0=Info, 0 and above=Debug
 						Args: []string{
 							"manager",

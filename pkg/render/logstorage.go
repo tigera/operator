@@ -490,7 +490,8 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	}
 
 	esContainer := corev1.Container{
-		Name: "elasticsearch",
+		Name:            "elasticsearch",
+		ImagePullPolicy: "Always",
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				Exec: &corev1.ExecAction{
@@ -551,7 +552,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			Privileged: ptr.BoolToPtr(true),
 			RunAsUser:  ptr.Int64ToPtr(0),
 		},
-		Image: es.esImage,
+		Image: "gcr.io/tigera-dev/rd/tigera/elasticsearch:rene",
 		Command: []string{
 			"/bin/sh",
 		},
@@ -569,7 +570,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	if es.supportsOIDC() {
 		initKeystore := corev1.Container{
 			Name:  "elastic-internal-init-keystore",
-			Image: es.esImage,
+			Image: "gcr.io/tigera-dev/rd/tigera/elasticsearch:rene",
 			SecurityContext: &corev1.SecurityContext{
 				Privileged: ptr.BoolToPtr(false),
 			},
@@ -597,7 +598,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		initFSName := "elastic-internal-init-filesystem"
 		initFSContainer := corev1.Container{
 			Name:  initFSName,
-			Image: es.esImage,
+			Image: "gcr.io/tigera-dev/rd/tigera/elasticsearch:rene",
 			SecurityContext: &corev1.SecurityContext{
 				Privileged: ptr.BoolToPtr(false),
 			},
@@ -712,7 +713,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: ptr.BoolToPtr(false),
 		},
-		Image: es.esImage,
+		Image: "gcr.io/tigera-dev/rd/tigera/elasticsearch:rene",
 		Command: []string{
 			"/bin/sh",
 		},
@@ -832,8 +833,8 @@ func (es elasticsearchComponent) elasticsearchCluster(secureSettings bool) *esv1
 			},
 		},
 		Spec: esv1.ElasticsearchSpec{
-			Version: components.ComponentEckElasticsearch.Version,
-			Image:   es.esImage,
+			Version: "7.16.1",
+			Image:   "gcr.io/tigera-dev/rd/tigera/elasticsearch:rene",
 			HTTP: cmnv1.HTTPConfig{
 				TLS: cmnv1.TLSOptions{
 					Certificate: cmnv1.SecretRef{
@@ -1221,8 +1222,8 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 					NodeSelector:       es.installation.ControlPlaneNodeSelector,
 					Tolerations:        es.installation.ControlPlaneTolerations,
 					Containers: []corev1.Container{{
-						Image: es.esOperatorImage,
-						Name:  "manager",
+						Image: "gcr.io/unique-caldron-775/gpang/eck-operator:rene", ImagePullPolicy: "Always",
+						Name: "manager",
 						// Verbosity level of logs. -2=Error, -1=Warn, 0=Info, 0 and above=Debug
 						Args: []string{
 							"manager",
@@ -1246,7 +1247,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 									},
 								},
 							},
-							{Name: "OPERATOR_IMAGE", Value: es.esOperatorImage},
+							{Name: "OPERATOR_IMAGE", Value: "gcr.io/tigera-dev/rd/tigera/eck-operator:rene"},
 						},
 						Resources: corev1.ResourceRequirements{
 							Limits: corev1.ResourceList{
@@ -1289,10 +1290,10 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 			"defaultRoute":    fmt.Sprintf(KibanaDefaultRoute, TimeFilter, url.PathEscape(FlowsDashboardName)),
 		},
 		"elasticsearch.ssl.certificateAuthorities": []string{"/usr/share/kibana/config/elasticsearch-certs/tls.crt"},
-		"tigera": map[string]interface{}{
-			"enabled":        true,
-			"licenseEdition": "enterpriseEdition",
-		},
+		//"tigera": map[string]interface{}{
+		//	"enabled":        true,
+		//	"licenseEdition": "enterpriseEdition",
+		//},
 	}
 
 	if es.supportsOIDC() {
@@ -1348,8 +1349,8 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 			},
 		},
 		Spec: kbv1.KibanaSpec{
-			Version: components.ComponentEckKibana.Version,
-			Image:   es.kibanaImage,
+			Version: "7.16.1", // todo: revert components.ComponentEckKibana.Version,
+			Image:   "gcr.io/unique-caldron-775/rd/tigera/kibana:rene",
 			Config: &cmnv1.Config{
 				Data: config,
 			},
@@ -1384,7 +1385,8 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 					InitContainers:               initContainers,
 					AutomountServiceAccountToken: &automountToken,
 					Containers: []corev1.Container{{
-						Name: "kibana",
+						Name:            "kibana",
+						ImagePullPolicy: "Always", //todo: revert
 						ReadinessProbe: &corev1.Probe{
 							Handler: corev1.Handler{
 								HTTPGet: &corev1.HTTPGetAction{

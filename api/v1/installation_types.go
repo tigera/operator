@@ -368,6 +368,11 @@ type NodeAddressAutodetection struct {
 	// +optional
 	FirstFound *bool `json:"firstFound,omitempty"`
 
+	// Kubernetes configures Calico to detect node addresses based on the Kubernetes API.
+	// +optional
+	// +kubebuilder:validation:Enum=NodeInternalIP
+	Kubernetes *KubernetesAutodetectionMethod `json:"kubernetes,omitempty"`
+
 	// Interface enables IP auto-detection based on interfaces that match the given regex.
 	// +optional
 	Interface string `json:"interface,omitempty"`
@@ -386,6 +391,17 @@ type NodeAddressAutodetection struct {
 	// one of the provided CIDRs.
 	CIDRS []string `json:"cidrs,omitempty"`
 }
+
+// KubernetesAutodetectionMethod is a method of detecting an IP address based on the Kubernetes API.
+//
+// One of: NodeInternalIP
+type KubernetesAutodetectionMethod string
+
+const (
+	// NodeInternalIP detects a node IP using the first status.Addresses entry of the relevant IP family
+	// with type NodeInternalIP on the Kubernetes nodes API.
+	NodeInternalIP KubernetesAutodetectionMethod = "NodeInternalIP"
+)
 
 // EncapsulationType is the type of encapsulation to use on an IP pool.
 //

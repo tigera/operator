@@ -157,6 +157,12 @@ spec:
                         description: Interface enables IP auto-detection based on
                           interfaces that match the given regex.
                         type: string
+                      kubernetes:
+                        description: Kubernetes configures Calico to detect node addresses
+                          based on the Kubernetes API.
+                        enum:
+                        - NodeInternalIP
+                        type: string
                       skipInterface:
                         description: SkipInterface enables IP auto-detection based
                           on interfaces that do not match the given regex.
@@ -186,6 +192,12 @@ spec:
                       interface:
                         description: Interface enables IP auto-detection based on
                           interfaces that match the given regex.
+                        type: string
+                      kubernetes:
+                        description: Kubernetes configures Calico to detect node addresses
+                          based on the Kubernetes API.
+                        enum:
+                        - NodeInternalIP
                         type: string
                       skipInterface:
                         description: SkipInterface enables IP auto-detection based
@@ -888,6 +900,12 @@ spec:
                             description: Interface enables IP auto-detection based
                               on interfaces that match the given regex.
                             type: string
+                          kubernetes:
+                            description: Kubernetes configures Calico to detect node
+                              addresses based on the Kubernetes API.
+                            enum:
+                            - NodeInternalIP
+                            type: string
                           skipInterface:
                             description: SkipInterface enables IP auto-detection based
                               on interfaces that do not match the given regex.
@@ -918,6 +936,12 @@ spec:
                           interface:
                             description: Interface enables IP auto-detection based
                               on interfaces that match the given regex.
+                            type: string
+                          kubernetes:
+                            description: Kubernetes configures Calico to detect node
+                              addresses based on the Kubernetes API.
+                            enum:
+                            - NodeInternalIP
                             type: string
                           skipInterface:
                             description: SkipInterface enables IP auto-detection based

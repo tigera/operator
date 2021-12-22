@@ -34,7 +34,7 @@ components:
     image: tigera/es-gateway
     version: v3.10.0
   eck-kibana:
-    version: 7.16.1
+    version: 7.16.2
   dex:
     image: tigera/dex
     version: v3.10.0

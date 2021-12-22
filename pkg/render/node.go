@@ -1548,6 +1548,11 @@ func getAutodetectionMethod(ad *operatorv1.NodeAddressAutodetection) string {
 		if len(ad.CIDRS) != 0 {
 			return fmt.Sprintf("cidr=%s", strings.Join(ad.CIDRS, ","))
 		}
+		if ad.Kubernetes != nil {
+			if *ad.Kubernetes == operatorv1.NodeInternalIP {
+				return "kubernetes-internal-ip"
+			}
+		}
 	}
 	return ""
 }

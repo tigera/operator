@@ -655,7 +655,7 @@ func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondi
 	}
 
 	var ts operator.TigeraStatus
-	err := m.client.Get(context.TODO(), types.NamespacedName{Name: m.component}, &ts)
+	err := m.client.Get(context.TODO(), client.ObjectKey{Name: m.component}, &ts)
 	isNotFound := errors.IsNotFound(err)
 	if err != nil && !isNotFound {
 		log.WithValues("reason", err).Info("Failed to get TigeraStatus", "component", m.component)
@@ -663,6 +663,7 @@ func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondi
 	}
 
 	if isNotFound {
+		log.WithValues("reason", err).Info("TigeraStatus was not found", "component", m.component)
 		// Make a new one.
 		ts = operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: m.component}}
 	}
@@ -698,8 +699,9 @@ func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondi
 
 	// Update the object in the API, creating it if necessary.
 	if isNotFound {
-		if err = m.client.Create(context.TODO(), &ts); err != nil {
-			log.WithValues("reason", err).Info("Failed to create tigera status")
+		if err = m.client.Create(context.TODO(),
+			&operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: m.component}}); err != nil {
+			log.WithValues("reason", err, "orig", ts).Info("Failed to create tigera status")
 		}
 	} else {
 		err = m.client.Status().Update(context.TODO(), &ts)

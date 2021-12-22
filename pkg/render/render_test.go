@@ -113,8 +113,11 @@ func allCalicoComponents(
 		ClusterDomain:               clusterDomain,
 		MetricsPort:                 kubeControllersMetricsPort,
 	}
+	winCfg := &render.WindowsConfig{
+		Installation: cr,
+	}
 
-	return []render.Component{namespaces, secretsAndConfigMaps, render.Typha(typhaCfg), render.Node(nodeCfg), kubecontrollers.NewCalicoKubeControllers(kcCfg), render.Windows(cr)}, nil
+	return []render.Component{namespaces, secretsAndConfigMaps, render.Typha(typhaCfg), render.Node(nodeCfg), kubecontrollers.NewCalicoKubeControllers(kcCfg), render.Windows(winCfg)}, nil
 }
 
 var _ = Describe("Rendering tests", func() {

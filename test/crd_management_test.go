@@ -47,6 +47,7 @@ var _ = Describe("CRD management tests", func() {
 	var cancel context.CancelFunc
 	var npCRD *apiextenv1.CustomResourceDefinition
 	var scheme *runtime.Scheme
+	var operatorDone chan struct{}
 	BeforeEach(func() {
 		scheme = runtime.NewScheme()
 		err := apis.AddToScheme(scheme)
@@ -78,6 +79,19 @@ var _ = Describe("CRD management tests", func() {
 	})
 
 	AfterEach(func() {
+		defer func() {
+			cancel()
+			Eventually(func() error {
+				select {
+				case <-operatorDone:
+					return nil
+				default:
+					return fmt.Errorf("operator did not shutdown")
+				}
+			}, 60*time.Second).Should(BeNil())
+		}()
+		waitForProductTeardown(c)
+
 		// Clean up Calico data that might be left behind.
 		Eventually(func() error {
 			cs := kubernetes.NewForConfigOrDie(mgr.GetConfig())
@@ -102,20 +116,6 @@ var _ = Describe("CRD management tests", func() {
 			return nil
 		}, 30*time.Second, 1*time.Second).Should(BeNil())
 
-		// Validate the calico-system namespace is deleted using an unstructured type. This hits the API server
-		// directly instead of using the client cache. This should help with flaky tests.
-		Eventually(func() error {
-			u := &unstructured.Unstructured{}
-			u.SetGroupVersionKind(schema.GroupVersionKind{
-				Group:   "",
-				Version: "v1",
-				Kind:    "Namespace",
-			})
-
-			k := client.ObjectKey{Name: "calico-system"}
-			err := c.Get(context.Background(), k, u)
-			return err
-		}, 240*time.Second).ShouldNot(BeNil())
 		mgr = nil
 
 		_ = c.Delete(context.Background(), npCRD.DeepCopy())
@@ -174,29 +174,12 @@ var _ = Describe("CRD management tests", func() {
 		})
 		AfterEach(func() {
 			// Delete any CR that might have been created by the test.
-			instance := &operator.Installation{
-				TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
-				ObjectMeta: metav1.ObjectMeta{Name: "default"},
-			}
-			err := c.Delete(context.Background(), instance)
-			Expect(err).NotTo(HaveOccurred())
+			removeInstallResourceCR(c, "default", context.Background())
 		})
 
 		It("Should create CRD if it doesn't exist", func() {
 			c, shutdownContext, cancel, mgr = setupManager(ManageCRDsEnable)
-			ctx, cancel := context.WithCancel(context.TODO())
-			done := installResourceCRD(c, mgr, ctx, nil)
-			defer func() {
-				cancel()
-				Eventually(func() error {
-					select {
-					case <-done:
-						return nil
-					default:
-						return fmt.Errorf("operator did not shutdown")
-					}
-				}, 60*time.Second).Should(BeNil())
-			}()
+			operatorDone = installResourceCRD(c, mgr, shutdownContext, nil)
 
 			np := npCRD.DeepCopy()
 			By("Checking that the networkpolicies CRD is created")
@@ -228,30 +211,13 @@ var _ = Describe("CRD management tests", func() {
 			}, 60*time.Second, 1*time.Second).Should(BeNil())
 		})
 		AfterEach(func() {
-			cancel()
 			// Delete any CR that might have been created by the test.
-			instance := &operator.Installation{
-				TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
-				ObjectMeta: metav1.ObjectMeta{Name: "default"},
-			}
-			err := c.Delete(context.Background(), instance)
-			Expect(err).NotTo(HaveOccurred())
+			removeInstallResourceCR(c, "default", context.Background())
 		})
 
 		It("Should add tier to networkpolicy CRD", func() {
 			c, shutdownContext, cancel, mgr = setupManager(ManageCRDsEnable)
-			done := installResourceCRD(c, mgr, shutdownContext, &operator.InstallationSpec{Variant: operator.TigeraSecureEnterprise})
-			defer func() {
-				cancel()
-				Eventually(func() error {
-					select {
-					case <-done:
-						return nil
-					default:
-						return fmt.Errorf("operator did not shutdown")
-					}
-				}, 60*time.Second).Should(BeNil())
-			}()
+			operatorDone = installResourceCRD(c, mgr, shutdownContext, &operator.InstallationSpec{Variant: operator.TigeraSecureEnterprise})
 
 			By("Checking that the networkpolicies CRD is updated with tier")
 			Eventually(func() error {

@@ -56,6 +56,7 @@ const (
 	BGPLayoutPath                     = "/etc/calico/early-networking.yaml"
 	K8sSvcEndpointConfigMapName       = "kubernetes-services-endpoint"
 	nodeTerminationGracePeriodSeconds = 5
+	NodeFinalizer                     = "tigera.io/cni-protector"
 )
 
 var (
@@ -90,6 +91,9 @@ type NodeConfiguration struct {
 	NodeAppArmorProfile     string
 	BirdTemplates           map[string]string
 	NodeReporterMetricsPort int
+	// Indicates node is being terminated, so remove most resource but
+	// leave RBAC and SA to allow any CNI plugin calls to continue to function
+	Terminating bool
 
 	// BGPLayouts is returned by the rendering code after modifying its namespace
 	// so that it can be deployed into the cluster.
@@ -161,56 +165,67 @@ func (c *nodeComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
-	objsToCreate := []client.Object{
+	objs := []client.Object{
 		c.nodeServiceAccount(),
 		c.nodeRole(),
 		c.nodeRoleBinding(),
 	}
 
+	// These are objects to keep even when we're terminating
+	objsToKeep := []client.Object{}
+
+	if c.cfg.Terminating {
+		objsToKeep = objs
+		objs = []client.Object{}
+	}
+
 	if c.cfg.BGPLayouts != nil {
-		objsToCreate = append(objsToCreate, configmap.ToRuntimeObjects(configmap.CopyToNamespace(common.CalicoNamespace, c.cfg.BGPLayouts)...)...)
+		objs = append(objs, configmap.ToRuntimeObjects(configmap.CopyToNamespace(common.CalicoNamespace, c.cfg.BGPLayouts)...)...)
 	}
 
 	// Include secrets and config necessary for node and Typha to communicate. These are passed in to us as configuration,
 	// but need to be rendered into the correct namespace.
 	if c.cfg.TLS.CAConfigMap != nil {
-		objsToCreate = append(objsToCreate, configmap.ToRuntimeObjects(configmap.CopyToNamespace(common.CalicoNamespace, c.cfg.TLS.CAConfigMap)...)...)
+		objs = append(objs, configmap.ToRuntimeObjects(configmap.CopyToNamespace(common.CalicoNamespace, c.cfg.TLS.CAConfigMap)...)...)
 	}
 	if c.cfg.TLS.NodeSecret != nil {
-		objsToCreate = append(objsToCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.CalicoNamespace, c.cfg.TLS.NodeSecret)...)...)
+		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(common.CalicoNamespace, c.cfg.TLS.NodeSecret)...)...)
 	}
-	var objsToDelete []client.Object
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		// Include Service for exposing node metrics.
-		objsToCreate = append(objsToCreate, c.nodeMetricsService())
+		objs = append(objs, c.nodeMetricsService())
 	}
 
 	cniConfig := c.nodeCNIConfigMap()
 	if cniConfig != nil {
-		objsToCreate = append(objsToCreate, cniConfig)
+		objs = append(objs, cniConfig)
 	}
 
 	if btcm := c.birdTemplateConfigMap(); btcm != nil {
-		objsToCreate = append(objsToCreate, btcm)
+		objs = append(objs, btcm)
 	}
 
 	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderDockerEE {
-		objsToCreate = append(objsToCreate, c.clusterAdminClusterRoleBinding())
+		objs = append(objs, c.clusterAdminClusterRoleBinding())
 	}
 
 	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
-		objsToCreate = append(objsToCreate, c.nodePodSecurityPolicy())
+		objs = append(objs, c.nodePodSecurityPolicy())
 	}
 
-	objsToCreate = append(objsToCreate, c.nodeDaemonset(cniConfig))
+	objs = append(objs, c.nodeDaemonset(cniConfig))
 
 	if c.cfg.Installation.CertificateManagement != nil {
-		objsToCreate = append(objsToCreate, csrClusterRole())
-		objsToCreate = append(objsToCreate, CSRClusterRoleBinding("calico-node", common.CalicoNamespace))
+		objs = append(objs, csrClusterRole())
+		objs = append(objs, CSRClusterRoleBinding("calico-node", common.CalicoNamespace))
 	}
 
-	return objsToCreate, objsToDelete
+	if c.cfg.Terminating {
+		return objsToKeep, objs
+
+	}
+	return objs, nil
 }
 
 func (c *nodeComponent) Ready() bool {
@@ -219,22 +234,33 @@ func (c *nodeComponent) Ready() bool {
 
 // nodeServiceAccount creates the node's service account.
 func (c *nodeComponent) nodeServiceAccount() *corev1.ServiceAccount {
+	finalizer := []string{}
+	if !c.cfg.Terminating {
+		finalizer = []string{NodeFinalizer}
+	}
+
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "calico-node",
-			Namespace: common.CalicoNamespace,
+			Name:       "calico-node",
+			Namespace:  common.CalicoNamespace,
+			Finalizers: finalizer,
 		},
 	}
 }
 
 // nodeRoleBinding creates a clusterrolebinding giving the node service account the required permissions to operate.
 func (c *nodeComponent) nodeRoleBinding() *rbacv1.ClusterRoleBinding {
+	finalizer := []string{}
+	if !c.cfg.Terminating {
+		finalizer = []string{NodeFinalizer}
+	}
 	crb := &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   "calico-node",
-			Labels: map[string]string{},
+			Name:       "calico-node",
+			Labels:     map[string]string{},
+			Finalizers: finalizer,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
@@ -257,11 +283,16 @@ func (c *nodeComponent) nodeRoleBinding() *rbacv1.ClusterRoleBinding {
 
 // nodeRole creates the clusterrole containing policy rules that allow the node daemonset to operate normally.
 func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
+	finalizer := []string{}
+	if !c.cfg.Terminating {
+		finalizer = []string{NodeFinalizer}
+	}
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   "calico-node",
-			Labels: map[string]string{},
+			Name:       "calico-node",
+			Labels:     map[string]string{},
+			Finalizers: finalizer,
 		},
 
 		Rules: []rbacv1.PolicyRule{

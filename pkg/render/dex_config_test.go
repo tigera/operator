@@ -145,7 +145,7 @@ var _ = Describe("dex config tests", func() {
 		Expect(dexConfig.Issuer()).To(Equal(fmt.Sprintf("%s/dex", domain)))
 
 		Expect(dexConfig.RequiredVolumes()).To(ConsistOf(expectedVolumes))
-		Expect(dexConfig.RequiredEnv("")).To(ConsistOf(expectedEnv))
+		Expect(dexConfig.RequiredEnv("")).To(Equal(expectedEnv))
 		Expect(dexConfig.RequiredSecrets("tigera-operator")).To(ConsistOf(tlsSecret, dexSecret, secret))
 
 	},

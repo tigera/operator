@@ -370,7 +370,7 @@ type NodeAddressAutodetection struct {
 
 	// Kubernetes configures Calico to detect node addresses based on the Kubernetes API.
 	// +optional
-	// +kubebuilder:validation:Enum=InternalIP
+	// +kubebuilder:validation:Enum=NodeInternalIP
 	Kubernetes *KubernetesAutodetectionMethod `json:"kubernetes,omitempty"`
 
 	// Interface enables IP auto-detection based on interfaces that match the given regex.

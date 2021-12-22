@@ -58,7 +58,7 @@ var (
 	}
 
 	ComponentEckKibana = component{
-		Version: "7.16.1",
+		Version: "7.16.2",
 		Image:   "tigera/kibana",
 	}
 

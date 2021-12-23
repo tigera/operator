@@ -126,6 +126,62 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
+	It("should not allow VPP to be used with a variant other than Calico", func() {
+		vpp := operator.LinuxDataplaneVPP
+		en := operator.BGPEnabled
+		instance.Spec.CalicoNetwork.LinuxDataplane = &vpp
+		instance.Spec.CalicoNetwork.BGP = &en
+		instance.Spec.CNI.Type = operator.PluginCalico
+		err := validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+		instance.Spec.Variant = operator.TigeraSecureEnterprise
+		err = validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should not allow VPP to be used with a CNI other than Calico", func() {
+		vpp := operator.LinuxDataplaneVPP
+		en := operator.BGPEnabled
+		instance.Spec.CalicoNetwork.LinuxDataplane = &vpp
+		instance.Spec.CalicoNetwork.BGP = &en
+		instance.Spec.CNI.Type = operator.PluginAmazonVPC
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+		instance.Spec.CNI.Type = operator.PluginCalico
+		err = validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should not allow VPP to be used if BGP is not enabled", func() {
+		vpp := operator.LinuxDataplaneVPP
+		en := operator.BGPEnabled
+		dis := operator.BGPDisabled
+		instance.Spec.CalicoNetwork.LinuxDataplane = &vpp
+		instance.Spec.CNI.Type = operator.PluginCalico
+		instance.Spec.CalicoNetwork.BGP = &dis
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+		instance.Spec.CalicoNetwork.BGP = &en
+		err = validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should not allow HostPorts to be disabled with VPP", func() {
+		vpp := operator.LinuxDataplaneVPP
+		bgp := operator.BGPEnabled
+		en := operator.HostPortsEnabled
+		dis := operator.HostPortsDisabled
+		instance.Spec.CalicoNetwork.LinuxDataplane = &vpp
+		instance.Spec.CalicoNetwork.BGP = &bgp
+		instance.Spec.CNI.Type = operator.PluginCalico
+		instance.Spec.CalicoNetwork.HostPorts = &dis
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+		instance.Spec.CalicoNetwork.HostPorts = &en
+		err = validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 	It("should prevent IPIP if BGP is disabled", func() {
 		disabled := operator.BGPDisabled
 		instance.Spec.CalicoNetwork.BGP = &disabled

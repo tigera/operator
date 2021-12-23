@@ -588,18 +588,12 @@ func (c *complianceComponent) complianceServerClusterRole() *rbacv1.ClusterRole 
 				Resources: []string{"subjectaccessreviews"},
 				Verbs:     []string{"create"},
 			},
+			{
+				APIGroups: []string{"authentication.k8s.io"},
+				Resources: []string{"tokenreviews"},
+				Verbs:     []string{"create"},
+			},
 		},
-	}
-
-	if c.cfg.ManagementCluster != nil {
-		// For cross-cluster requests, an authentication review will be done for authenticating the compliance-server.
-		// Requests on behalf of the compliance-server will be sent to Voltron, where an authentication review will take
-		// place with its bearer token.
-		clusterRole.Rules = append(clusterRole.Rules, rbacv1.PolicyRule{
-			APIGroups: []string{"authentication.k8s.io"},
-			Resources: []string{"tokenreviews"},
-			Verbs:     []string{"create"},
-		})
 	}
 
 	if !c.cfg.Openshift {

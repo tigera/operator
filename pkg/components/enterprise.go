@@ -148,7 +148,7 @@ var (
 	}
 
 	ComponentPrometheus = component{
-		Version: "v2.17.2",
+		Version: "master",
 		Image:   "tigera/prometheus",
 	}
 

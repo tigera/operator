@@ -87,6 +87,9 @@ components:
   packetcapture-api:
     image: tigera/packetcapture-api
     version: master
+  prometheus:
+    image: tigera/prometheus
+    version: master
   tigera-prometheus-service:
     image: tigera/prometheus-service
     version: master
@@ -101,9 +104,6 @@ components:
   elasticsearch-operator:
     image: tigera/eck-operator
     version: 1.8.0
-  prometheus:
-    image: tigera/prometheus
-    version: v2.17.2
   alertmanager:
     image: tigera/alertmanager
     version: v0.20.0
@@ -113,5 +113,3 @@ components:
   envoy:
     image: tigera/envoy
     version: master
-
-

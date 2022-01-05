@@ -147,8 +147,13 @@ var (
 		Image:   "tigera/envoy",
 	}
 
+	ComponentCoreOSPrometheus = component{
+		Version: "v2.32.0",
+		Image:   "tigera/prometheus",
+	}
+
 	ComponentPrometheus = component{
-		Version: "v2.17.2",
+		Version: "release-calient-v3.11",
 		Image:   "tigera/prometheus",
 	}
 
@@ -157,8 +162,13 @@ var (
 		Image:   "tigera/prometheus-service",
 	}
 
+	ComponentCoreOSAlertmanager = component{
+		Version: "v0.23.0",
+		Image:   "tigera/alertmanager",
+	}
+
 	ComponentPrometheusAlertmanager = component{
-		Version: "v0.20.0",
+		Version: "release-calient-v3.11",
 		Image:   "tigera/alertmanager",
 	}
 
@@ -227,8 +237,10 @@ var (
 		ComponentPacketCapture,
 		ComponentL7Collector,
 		ComponentEnvoyProxy,
+		ComponentCoreOSPrometheus,
 		ComponentPrometheus,
 		ComponentTigeraPrometheusService,
+		ComponentCoreOSAlertmanager,
 		ComponentPrometheusAlertmanager,
 		ComponentQueryServer,
 		ComponentTigeraKubeControllers,

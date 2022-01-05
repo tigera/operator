@@ -182,6 +182,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				Expect(limits.Memory().String()).To(Equal("4Gi"))
 				Expect(resources.Cpu().String()).To(Equal("250m"))
 				Expect(resources.Memory().String()).To(Equal("4Gi"))
+				Expect(esContainer.Env[0].Value).To(Equal("-Xms2G -Xmx2G"))
 
 				//Check that the expected config made it's way to the Elastic CR
 				Expect(nodeSet.Config.Data).Should(Equal(map[string]interface{}{
@@ -785,8 +786,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					component := render.LogStorage(cfg)
 
 					createResources, _ := component.Objects()
-					podResource := getElasticsearch(createResources).Spec.NodeSets[0].PodTemplate.Spec.Containers[0].Resources
-					Expect(podResource).Should(Equal(res))
+					pod := getElasticsearch(createResources).Spec.NodeSets[0].PodTemplate.Spec.Containers[0]
+					Expect(pod.Resources).Should(Equal(res))
+					Expect(pod.Env[0].Value).To(Equal("-Xms1G -Xmx1G"))
 				})
 				It("sets default memory and cpu requirements in pod template", func() {
 					res := corev1.ResourceRequirements{
@@ -815,14 +817,15 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					component := render.LogStorage(cfg)
 
 					createResources, _ := component.Objects()
-					podResource := getElasticsearch(createResources).Spec.NodeSets[0].PodTemplate.Spec.Containers[0].Resources
-					Expect(podResource).Should(Equal(expectedRes))
+					pod := getElasticsearch(createResources).Spec.NodeSets[0].PodTemplate.Spec.Containers[0]
+					Expect(pod.Resources).Should(Equal(expectedRes))
+					Expect(pod.Env[0].Value).To(Equal("-Xms2G -Xmx2G"))
 				})
 				It("sets value of Limits to user's Requests when user's Limits is not set and default Limits is lesser than Requests", func() {
 					res := corev1.ResourceRequirements{
 						Requests: corev1.ResourceList{
 							"cpu":    resource.MustParse("3"),
-							"memory": resource.MustParse("2Gi"),
+							"memory": resource.MustParse("1Gi"),
 						},
 					}
 					expectedRes := corev1.ResourceRequirements{
@@ -832,7 +835,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 						Requests: corev1.ResourceList{
 							"cpu":    resource.MustParse("3"),
-							"memory": resource.MustParse("2Gi"),
+							"memory": resource.MustParse("1Gi"),
 						},
 					}
 					cfg.LogStorage.Spec.Nodes = &operatorv1.Nodes{
@@ -843,8 +846,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					component := render.LogStorage(cfg)
 
 					createResources, _ := component.Objects()
-					podResource := getElasticsearch(createResources).Spec.NodeSets[0].PodTemplate.Spec.Containers[0].Resources
-					Expect(podResource).Should(Equal(expectedRes))
+					pod := getElasticsearch(createResources).Spec.NodeSets[0].PodTemplate.Spec.Containers[0]
+					Expect(pod.Resources).Should(Equal(expectedRes))
+					Expect(pod.Env[0].Value).To(Equal("-Xms512M -Xmx512M"))
 				})
 				It("sets value of Requests to user's Limits when user's Requests is not set and default Requests is greater than Limits", func() {
 					res := corev1.ResourceRequirements{

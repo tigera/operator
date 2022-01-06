@@ -34,6 +34,7 @@ var defaultImages = map[string]string{
 	"typha":                   "calico/typha",
 	"eck-elasticsearch":       "tigera/elasticsearch",
 	"eck-kibana":              "tigera/kibana",
+	"po-prometheus":           "tigera/prometheus",
 	"guardian":                "tigera/guardian",
 	"tigera-cni":              "tigera/cni",
 	"key-cert-provisioner":    "tigera/key-cert-provisioner",

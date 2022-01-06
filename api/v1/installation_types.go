@@ -147,7 +147,7 @@ type InstallationSpec struct {
 	NonPrivileged *NonPrivilegedType `json:"nonPrivileged,omitempty"`
 }
 
-// TyphaAffinity allows configuration of node affinitiy characteristics for Typha pods.
+// TyphaAffinity allows configuration of node affinity characteristics for Typha pods.
 type TyphaAffinity struct {
 	// NodeAffinity describes node affinity scheduling rules for typha.
 	// +optional

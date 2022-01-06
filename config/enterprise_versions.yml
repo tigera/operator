@@ -87,9 +87,9 @@ components:
   packetcapture-api:
     image: tigera/packetcapture-api
     version: master
-  # po-prometheus holds the version of prometheus built for tigera/prometheus
+  # coreos-prometheus holds the version of prometheus built for tigera/prometheus
   # which prometheus operator uses to validate
-  po-prometheus:
+  coreos-prometheus:
     version: v2.32.0
   prometheus:
     image: tigera/prometheus

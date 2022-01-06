@@ -172,8 +172,8 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index .Components "po-prometheus" }}
-	ComponentPrometheusOperatorPrometheus = component{
+{{ with index .Components "coreos-prometheus" }}
+	ComponentCoreOSPrometheus = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}

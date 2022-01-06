@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 )
 
@@ -277,6 +278,13 @@ var _ = Describe("Defaulting logic tests", func() {
 		err := fillDefaults(instance)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(instance.Spec.Registry).To(Equal("test-reg/"))
+		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+
+		// But "UseDefault" should not be modified.
+		instance.Spec.Registry = components.UseDefault
+		err = fillDefaults(instance)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(instance.Spec.Registry).To(Equal(components.UseDefault))
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 	})
 

@@ -147,6 +147,11 @@ var (
 		Image:   "tigera/envoy",
 	}
 
+	ComponentPrometheusOperatorPrometheus = component{
+		Version: "v2.32.0",
+		Image:   "tigera/prometheus",
+	}
+
 	ComponentPrometheus = component{
 		Version: "master",
 		Image:   "tigera/prometheus",

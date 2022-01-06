@@ -172,6 +172,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "po-prometheus" }}
+	ComponentPrometheusOperatorPrometheus = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "prometheus" }}
 	ComponentPrometheus = component{
 		Version: "{{ .Version }}",

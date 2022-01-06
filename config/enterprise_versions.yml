@@ -35,11 +35,11 @@ components:
   es-gateway:
     image: tigera/es-gateway
     version: master
-  eck-kibana:
-    version: 7.16.2
   dex:
     image: tigera/dex
     version: master
+  eck-kibana:
+    version: 7.16.2
   kibana:
     image: tigera/kibana
     version: master
@@ -87,6 +87,8 @@ components:
   packetcapture-api:
     image: tigera/packetcapture-api
     version: master
+  po-prometheus:
+    version: v2.32.0
   prometheus:
     image: tigera/prometheus
     version: master

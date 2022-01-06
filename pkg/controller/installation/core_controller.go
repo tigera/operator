@@ -38,6 +38,7 @@ import (
 	"github.com/tigera/operator/pkg/active"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/installation/windows"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
@@ -395,8 +396,8 @@ func mergeAndFillDefaults(i *operator.Installation, o *configv1.Network, kubeadm
 // fillDefaults populates the default values onto an Installation object.
 func fillDefaults(instance *operator.Installation) error {
 	// Populate the instance with defaults for any fields not provided by the user.
-	if len(instance.Spec.Registry) != 0 && !strings.HasSuffix(instance.Spec.Registry, "/") {
-		// Make sure registry always ends with a slash.
+	if len(instance.Spec.Registry) != 0 && instance.Spec.Registry != components.UseDefault && !strings.HasSuffix(instance.Spec.Registry, "/") {
+		// Make sure registry, except for the special case "UseDefault", always ends with a slash.
 		instance.Spec.Registry = fmt.Sprintf("%s/", instance.Spec.Registry)
 	}
 

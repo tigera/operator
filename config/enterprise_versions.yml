@@ -35,11 +35,11 @@ components:
   es-gateway:
     image: tigera/es-gateway
     version: master
-  eck-kibana:
-    version: 7.16.2
   dex:
     image: tigera/dex
     version: master
+  eck-kibana:
+    version: 7.16.2
   kibana:
     image: tigera/kibana
     version: master
@@ -87,6 +87,13 @@ components:
   packetcapture-api:
     image: tigera/packetcapture-api
     version: master
+  # po-prometheus holds the version of prometheus built for tigera/prometheus
+  # which prometheus operator uses to validate
+  po-prometheus:
+    version: v2.32.0
+  prometheus:
+    image: tigera/prometheus
+    version: master
   tigera-prometheus-service:
     image: tigera/prometheus-service
     version: master
@@ -101,9 +108,6 @@ components:
   elasticsearch-operator:
     image: tigera/eck-operator
     version: 1.8.0
-  prometheus:
-    image: tigera/prometheus
-    version: v2.17.2
   alertmanager:
     image: tigera/alertmanager
     version: v0.20.0
@@ -113,5 +117,3 @@ components:
   envoy:
     image: tigera/envoy
     version: master
-
-

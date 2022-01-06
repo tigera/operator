@@ -48,8 +48,9 @@ func GetReference(c component, registry, imagePath, imagePrefix string, is *oper
 		case ComponentOperatorInit,
 			ComponentCSRInitContainer:
 			registry = InitRegistry
-		case ComponentPrometheus,
-			ComponentPrometheusAlertmanager:
+		case ComponentPrometheus:
+			registry = TigeraRegistry
+		case ComponentPrometheusAlertmanager:
 			registry = PrometheusRegistry
 		default:
 			registry = TigeraRegistry

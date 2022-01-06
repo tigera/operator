@@ -147,8 +147,13 @@ var (
 		Image:   "tigera/envoy",
 	}
 
+	ComponentCoreOSPrometheus = component{
+		Version: "v2.32.0",
+		Image:   "tigera/prometheus",
+	}
+
 	ComponentPrometheus = component{
-		Version: "v2.17.2",
+		Version: "master",
 		Image:   "tigera/prometheus",
 	}
 

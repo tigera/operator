@@ -304,6 +304,7 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	while ! KUBECONFIG=$(KUBECONFIG) $(BINDIR)/kubectl get serviceaccount default; do echo "Waiting for default serviceaccount to be created..."; sleep 2; done
 
 ## Deploy CRDs needed for UTs.  CRDs needed by ECK that we don't use are not deployed.
+## k create is used for prometheus as a workaround for https://github.com/prometheus-community/helm-charts/issues/1500
 deploy-crds: kubectl
 	@export KUBECONFIG=$(KUBECONFIG) && \
 		$(BINDIR)/kubectl apply -f pkg/crds/operator/ && \
@@ -311,7 +312,7 @@ deploy-crds: kubectl
 		$(BINDIR)/kubectl apply -f pkg/crds/enterprise/ && \
 		$(BINDIR)/kubectl apply -f deploy/crds/elastic/elasticsearch-crd.yaml && \
 		$(BINDIR)/kubectl apply -f deploy/crds/elastic/kibana-crd.yaml && \
-		$(BINDIR)/kubectl apply -f deploy/crds/prometheus
+		$(BINDIR)/kubectl create -f deploy/crds/prometheus
 
 create-tigera-operator-namespace: kubectl
 	KUBECONFIG=$(KUBECONFIG) $(BINDIR)/kubectl create ns tigera-operator

@@ -250,7 +250,7 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 			Image:            &mc.alertmanagerImage,
 			ImagePullSecrets: secret.GetReferenceList(mc.cfg.PullSecrets),
 			Replicas:         ptr.Int32ToPtr(3),
-			Version:          components.ComponentPrometheusAlertmanager.Version,
+			Version:          components.ComponentCoreOSPrometheusAlertmanager.Version,
 			Tolerations:      mc.cfg.Installation.ControlPlaneTolerations,
 			NodeSelector:     mc.cfg.Installation.ControlPlaneNodeSelector,
 		},
@@ -388,7 +388,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 			ListenLocal:            true,
 			ServiceMonitorSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"team": "network-operators"}},
 			PodMonitorSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"team": "network-operators"}},
-			Version:                components.ComponentPrometheus.Version,
+			Version:                components.ComponentCoreOSPrometheus.Version,
 			Retention:              "24h",
 			Resources:              corev1.ResourceRequirements{Requests: corev1.ResourceList{"memory": resource.MustParse("400Mi")}},
 			RuleSelector: &metav1.LabelSelector{MatchLabels: map[string]string{

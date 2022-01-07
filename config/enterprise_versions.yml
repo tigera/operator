@@ -94,6 +94,12 @@ components:
   prometheus:
     image: tigera/prometheus
     version: master
+  # coreos-prometheus holds the version of alertmanager built for tigera/alertmanager
+  coreos-alertmanager:
+    version: v2.32.0
+  alertmanager:
+    image: tigera/alertmanager
+    version: master
   tigera-prometheus-service:
     image: tigera/prometheus-service
     version: master
@@ -108,9 +114,6 @@ components:
   elasticsearch-operator:
     image: tigera/eck-operator
     version: 1.8.0
-  alertmanager:
-    image: tigera/alertmanager
-    version: v0.20.0
   l7-collector:
     image: tigera/l7-collector
     version: master

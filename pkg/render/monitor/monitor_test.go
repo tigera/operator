@@ -120,9 +120,9 @@ var _ = Describe("monitor rendering tests", func() {
 		alertmanagerObj, ok := rtest.GetResource(toCreate, monitor.CalicoNodeAlertmanager, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.AlertmanagersKind).(*monitoringv1.Alertmanager)
 		Expect(ok).To(BeTrue())
 		alertmanagerCom := components.ComponentPrometheusAlertmanager
-		Expect(*alertmanagerObj.Spec.Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", alertmanagerCom.Image, alertmanagerCom.Version)))
+		Expect(*alertmanagerObj.Spec.Image).To(Equal(fmt.Sprintf("gcr.io/unique-caldron-775/cnx//%s:%s", alertmanagerCom.Image, alertmanagerCom.Version)))
 		Expect(*alertmanagerObj.Spec.Replicas).To(Equal(int32(3)))
-		Expect(alertmanagerObj.Spec.Version).To(Equal(alertmanagerCom.Version))
+		Expect(alertmanagerObj.Spec.Version).To(Equal(components.ComponentCoreOSPrometheusAlertmanager.Version))
 
 		// Alertmanager Service
 		serviceObj, ok := rtest.GetResource(toCreate, "calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Service").(*corev1.Service)

@@ -162,8 +162,13 @@ var (
 		Image:   "tigera/prometheus-service",
 	}
 
+	ComponentCoreOSPrometheusAlertmanager = component{
+		Version: "v2.32.0",
+		Image:   "tigera/alertmanager",
+	}
+
 	ComponentPrometheusAlertmanager = component{
-		Version: "v0.20.0",
+		Version: "master",
 		Image:   "tigera/alertmanager",
 	}
 
@@ -232,8 +237,10 @@ var (
 		ComponentPacketCapture,
 		ComponentL7Collector,
 		ComponentEnvoyProxy,
+		ComponentCoreOSPrometheus,
 		ComponentPrometheus,
 		ComponentTigeraPrometheusService,
+		ComponentCoreOSPrometheusAlertmanager,
 		ComponentPrometheusAlertmanager,
 		ComponentQueryServer,
 		ComponentTigeraKubeControllers,

@@ -120,9 +120,9 @@ var _ = Describe("monitor rendering tests", func() {
 		alertmanagerObj, ok := rtest.GetResource(toCreate, monitor.CalicoNodeAlertmanager, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.AlertmanagersKind).(*monitoringv1.Alertmanager)
 		Expect(ok).To(BeTrue())
 		alertmanagerCom := components.ComponentPrometheusAlertmanager
-		Expect(*alertmanagerObj.Spec.Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", alertmanagerCom.Image, alertmanagerCom.Version)))
+		Expect(*alertmanagerObj.Spec.Image).To(Equal(fmt.Sprintf("gcr.io/unique-caldron-775/cnx/%s:%s", alertmanagerCom.Image, alertmanagerCom.Version)))
 		Expect(*alertmanagerObj.Spec.Replicas).To(Equal(int32(3)))
-		Expect(alertmanagerObj.Spec.Version).To(Equal(alertmanagerCom.Version))
+		Expect(alertmanagerObj.Spec.Version).To(Equal(components.ComponentCoreOSPrometheusAlertmanager.Version))
 
 		// Alertmanager Service
 		serviceObj, ok := rtest.GetResource(toCreate, "calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Service").(*corev1.Service)
@@ -144,11 +144,11 @@ var _ = Describe("monitor rendering tests", func() {
 		prometheusObj, ok := rtest.GetResource(toCreate, monitor.CalicoNodePrometheus, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind).(*monitoringv1.Prometheus)
 		Expect(ok).To(BeTrue())
 		prometheusCom := components.ComponentPrometheus
-		Expect(*prometheusObj.Spec.Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", prometheusCom.Image, prometheusCom.Version)))
+		Expect(*prometheusObj.Spec.Image).To(Equal(fmt.Sprintf("gcr.io/unique-caldron-775/cnx/%s:%s", prometheusCom.Image, prometheusCom.Version)))
 		Expect(prometheusObj.Spec.ServiceAccountName).To(Equal("prometheus"))
 		Expect(prometheusObj.Spec.ServiceMonitorSelector.MatchLabels["team"]).To(Equal("network-operators"))
 		Expect(prometheusObj.Spec.PodMonitorSelector.MatchLabels["team"]).To(Equal("network-operators"))
-		Expect(prometheusObj.Spec.Version).To(Equal(prometheusCom.Version))
+		Expect(prometheusObj.Spec.Version).To(Equal(components.ComponentCoreOSPrometheus.Version))
 		Expect(prometheusObj.Spec.Retention).To(Equal("24h"))
 		Expect(prometheusObj.Spec.Resources.Requests.Memory().Equal(resource.MustParse("400Mi"))).To(BeTrue())
 		Expect(prometheusObj.Spec.RuleSelector.MatchLabels["prometheus"]).To(Equal("calico-node-prometheus"))
@@ -396,7 +396,7 @@ var _ = Describe("monitor rendering tests", func() {
 		prometheusObj, ok := rtest.GetResource(toCreate, monitor.CalicoNodePrometheus, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind).(*monitoringv1.Prometheus)
 		Expect(ok).To(BeTrue())
 		prometheusCom := components.ComponentPrometheus
-		Expect(*prometheusObj.Spec.Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", prometheusCom.Image, prometheusCom.Version)))
+		Expect(*prometheusObj.Spec.Image).To(Equal(fmt.Sprintf("gcr.io/unique-caldron-775/cnx/%s:%s", prometheusCom.Image, prometheusCom.Version)))
 		Expect(prometheusObj.Spec.Containers).To(HaveLen(1))
 		proxy := prometheusObj.Spec.Containers[0]
 		Expect(proxy.Env).To(ConsistOf([]corev1.EnvVar{

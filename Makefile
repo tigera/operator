@@ -304,7 +304,7 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	while ! KUBECONFIG=$(KUBECONFIG) $(BINDIR)/kubectl get serviceaccount default; do echo "Waiting for default serviceaccount to be created..."; sleep 2; done
 
 ## Deploy CRDs needed for UTs.  CRDs needed by ECK that we don't use are not deployed.
-## k create is used for prometheus as a workaround for https://github.com/prometheus-community/helm-charts/issues/1500
+## kubectl create is used for prometheus as a workaround for https://github.com/prometheus-community/helm-charts/issues/1500
 deploy-crds: kubectl
 	@export KUBECONFIG=$(KUBECONFIG) && \
 		$(BINDIR)/kubectl apply -f pkg/crds/operator/ && \

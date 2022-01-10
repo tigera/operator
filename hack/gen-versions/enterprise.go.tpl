@@ -191,7 +191,7 @@ var (
 	}
 {{- end }}
 {{ with index .Components "coreos-alertmanager" }}
-	ComponentCoreOSPrometheusAlertmanager = component{
+	ComponentCoreOSAlertmanager = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
@@ -279,7 +279,7 @@ var (
 		ComponentCoreOSPrometheus,
 		ComponentPrometheus,
 		ComponentTigeraPrometheusService,
-		ComponentCoreOSPrometheusAlertmanager,
+		ComponentCoreOSAlertmanager,
 		ComponentPrometheusAlertmanager,
 		ComponentQueryServer,
 		ComponentTigeraKubeControllers,

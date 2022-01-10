@@ -250,7 +250,7 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 			Image:            &mc.alertmanagerImage,
 			ImagePullSecrets: secret.GetReferenceList(mc.cfg.PullSecrets),
 			Replicas:         ptr.Int32ToPtr(3),
-			Version:          components.ComponentCoreOSPrometheusAlertmanager.Version,
+			Version:          components.ComponentCoreOSAlertmanager.Version,
 			Tolerations:      mc.cfg.Installation.ControlPlaneTolerations,
 			NodeSelector:     mc.cfg.Installation.ControlPlaneNodeSelector,
 		},

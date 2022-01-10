@@ -87,14 +87,15 @@ components:
   packetcapture-api:
     image: tigera/packetcapture-api
     version: master
-  # coreos-prometheus holds the version of prometheus built for tigera/prometheus
-  # which prometheus operator uses to validate
+  # coreos-prometheus holds the version of prometheus built for tigera/prometheus,
+  # which prometheus operator uses to validate.
   coreos-prometheus:
     version: v2.32.0
   prometheus:
     image: tigera/prometheus
     version: master
-  # coreos-prometheus holds the version of alertmanager built for tigera/alertmanager
+  # coreos-prometheus holds the version of alertmanager built for tigera/alertmanager,
+  # which prometheus operator uses to validate.
   coreos-alertmanager:
     version: v2.32.0
   alertmanager:

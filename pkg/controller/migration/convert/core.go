@@ -305,7 +305,7 @@ func removeExpectedAnnotations(existing, ignoreWithValue map[string]string, toBe
 func handleNodeSelectors(c *components, install *operatorv1.Installation) error {
 	// check calico-node nodeSelectors
 	if c.node.Spec.Template.Spec.Affinity != nil {
-		if install.Spec.KubernetesProvider != operatorv1.ProviderAKS || !reflect.DeepEqual(c.node.Spec.Template.Spec.Affinity, &corev1.Affinity{
+		if !(install.Spec.KubernetesProvider == operatorv1.ProviderAKS && reflect.DeepEqual(c.node.Spec.Template.Spec.Affinity, &corev1.Affinity{
 			NodeAffinity: &corev1.NodeAffinity{
 				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
 					NodeSelectorTerms: []corev1.NodeSelectorTerm{{
@@ -317,7 +317,19 @@ func handleNodeSelectors(c *components, install *operatorv1.Installation) error 
 					}},
 				},
 			},
-		}) {
+		})) && !(install.Spec.KubernetesProvider == operatorv1.ProviderEKS && reflect.DeepEqual(c.node.Spec.Template.Spec.Affinity, &corev1.Affinity{
+			NodeAffinity: &corev1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+					NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+						MatchExpressions: []corev1.NodeSelectorRequirement{{
+							Key:      "eks.amazonaws.com/compute-type",
+							Operator: corev1.NodeSelectorOpNotIn,
+							Values:   []string{"fargate"},
+						}},
+					}},
+				},
+			},
+		})) {
 			return ErrIncompatibleCluster{
 				err:       "node affinity not supported for calico-node daemonset",
 				component: ComponentCalicoNode,

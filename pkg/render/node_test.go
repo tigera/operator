@@ -2055,6 +2055,28 @@ var _ = Describe("Node rendering tests", func() {
 			))
 		})
 	})
+	Describe("EKS", func() {
+		It("should avoid virtual fargate nodes", func() {
+			defaultInstance.KubernetesProvider = operatorv1.ProviderEKS
+			component := render.Node(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+			dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			Expect(dsResource).ToNot(BeNil())
+
+			// The DaemonSet should have the correct configuration.
+			ds := dsResource.(*appsv1.DaemonSet)
+			Expect(ds.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms).To(ContainElement(
+				corev1.NodeSelectorTerm{
+					MatchExpressions: []corev1.NodeSelectorRequirement{{
+						Key:      "eks.amazonaws.com/compute-type",
+						Operator: corev1.NodeSelectorOpNotIn,
+						Values:   []string{"fargate"},
+					}},
+				},
+			))
+		})
+	})
 	Describe("test IP auto detection", func() {
 		It("should support canReach", func() {
 			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil

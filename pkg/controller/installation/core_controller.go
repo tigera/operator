@@ -87,6 +87,32 @@ const (
 	CalicoFinalizer         = "tigera.io/operator-cleanup"
 )
 
+//// Node and Installation finalizer
+// There is a problem with tearing down the calico resources where removing the calico-node ClusterRoleBinding
+// will block the kube-controller pod from teminating because the CNI plugin no longer has permissions.
+// To ensure this problem does not happen we add a finalizer to the Installation resource and to the
+// calico-node ClusterRoleBinding, ClusterRole, and ServiceAccount.
+// The finalizer on the Installation resource is so that the controller knows that it is time to tear down
+// and cleanup. This also allows the Installation resource to remain while the controller cleans up.
+// The finalizer on the calico-node resources is to ensure those resources remain when the Installation
+// is deleted (has the DeletionTimestamp added) because kubernetes will start cleaning up the resources.
+//
+// When the Installation resource is not being deleted the core controller will add a finalizer to
+// the Installation CR and a separate finalizer to the calico-node ClusterRoleBinding, ClusterRole,
+// and ServiceAccount.
+//
+// When the Installation resource is being deleted (has a DeletionTimestamp) the following sequence is
+// expected:
+//   * While terminating a successful Reconcile will requeue with a 5 second time to ensure we keep
+//     checking if the resources have been cleaned up.
+//   1. The kubernetes system will begin cleaning up the installation resources.
+//   2. Core reconciliation will pass terminating to the kube-controller render, this will ensure
+//      the kube-controller resources are returned to be deleted.
+//   3. Once the kube-controller pod is terminated we will re-render the calico-node ClusterRoleBinding,
+//      ClusterRole, and ServiceAccount resources to remove the finalizers on them.
+//   4. Once the calico-node ClusterRoleBinding finalizer is removed we have cleaned up everything
+//      necessary so we can remove the Installation finalizer and we're done.
+
 var log = logf.Log.WithName("controller_installation")
 var openshiftNetworkConfig = "cluster"
 
@@ -748,6 +774,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	// See the section 'Node and Installation finalizer' at the top of this file for details.
 	if terminating {
 		// Keep the finalizer on the Installation until the ClusterRoleBinding for calico-node
 		// (and ClusterRole and ServiceAccount) is removed.
@@ -765,9 +792,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			}
 		}
 		if !found {
-			// We don't remove the finalizer from the ClusterRoleBinding until we're terminating
-			// and once we observe that it has been removed we know that the kube-controller pod
-			// has terminated so we can remove the finalizer so cleanup can continue.
 			reqLogger.Info("Removing installation finalizer")
 			removeInstallationFinalizer(instance)
 		}
@@ -1161,6 +1185,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	components = append(components, render.Typha(&typhaCfg))
 
+	// See the section 'Node and Installation finalizer' at the top of this file for terminating details.
 	nodeTerminating := false
 	if terminating {
 		// When terminating, after kube-controllers has terminated then
@@ -1176,7 +1201,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			return reconcile.Result{}, err
 		}
 		if len(l.Items) == 0 {
-			reqLogger.Info("calico-kube-controllers is gone")
+			reqLogger.Info("calico-kube-controllers is removed, calico-node RBAC resources can be removed")
 			nodeTerminating = true
 		}
 	}
@@ -1844,10 +1869,8 @@ func addCRDWatches(c controller.Controller, v operator.ProductVariant) error {
 }
 
 func setInstallationFinalizer(i *operator.Installation) {
-	if i.DeletionTimestamp == nil {
-		if !stringsutil.StringInSlice(CalicoFinalizer, i.GetFinalizers()) {
-			i.SetFinalizers(append(i.GetFinalizers(), CalicoFinalizer))
-		}
+	if !stringsutil.StringInSlice(CalicoFinalizer, i.GetFinalizers()) {
+		i.SetFinalizers(append(i.GetFinalizers(), CalicoFinalizer))
 	}
 }
 

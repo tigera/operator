@@ -91,8 +91,9 @@ type NodeConfiguration struct {
 	NodeAppArmorProfile     string
 	BirdTemplates           map[string]string
 	NodeReporterMetricsPort int
-	// Indicates node is being terminated, so remove most resource but
+	// Indicates node is being terminated, so remove most resources but
 	// leave RBAC and SA to allow any CNI plugin calls to continue to function
+	// For details on why this is needed see 'Node and Installation finalizer' in the core_controller.
 	Terminating bool
 
 	// BGPLayouts is returned by the rendering code after modifying its namespace

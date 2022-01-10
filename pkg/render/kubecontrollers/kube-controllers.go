@@ -73,6 +73,7 @@ type KubeControllersConfiguration struct {
 	ClusterDomain           string
 	MetricsPort             int
 
+	// For details on why this is needed see 'Node and Installation finalizer' in the core_controller.
 	Terminating bool
 
 	// Secrets - provided by the caller. Used to generate secrets in the destination

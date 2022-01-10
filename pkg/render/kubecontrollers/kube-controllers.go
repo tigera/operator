@@ -73,6 +73,9 @@ type KubeControllersConfiguration struct {
 	ClusterDomain           string
 	MetricsPort             int
 
+	// For details on why this is needed see 'Node and Installation finalizer' in the core_controller.
+	Terminating bool
+
 	// Secrets - provided by the caller. Used to generate secrets in the destination
 	// namespace to be returned by the rendered. Expected that the calling code
 	// take care to pass the same secret on each reconcile where possible.
@@ -240,6 +243,11 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 		objectsToCreate = append(objectsToCreate, c.prometheusService())
 	} else {
 		objectsToDelete = append(objectsToDelete, c.prometheusService())
+	}
+
+	if c.cfg.Terminating {
+		objectsToDelete = append(objectsToDelete, objectsToCreate...)
+		objectsToCreate = nil
 	}
 
 	return objectsToCreate, objectsToDelete

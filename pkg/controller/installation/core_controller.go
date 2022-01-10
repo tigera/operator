@@ -27,12 +27,34 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tigera/operator/pkg/render/kubecontrollers"
-
+	"github.com/elastic/cloud-on-k8s/pkg/utils/stringsutil"
+	"github.com/go-logr/logr"
+	configv1 "github.com/openshift/api/config/v1"
+	"github.com/openshift/library-go/pkg/crypto"
+	apps "k8s.io/api/apps/v1"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/active"
@@ -53,32 +75,8 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/tls"
-
-	configv1 "github.com/openshift/api/config/v1"
-	"github.com/openshift/library-go/pkg/crypto"
-
-	"github.com/go-logr/logr"
-	apps "k8s.io/api/apps/v1"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/intstr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const (
@@ -87,7 +85,34 @@ const (
 	// The default port used by calico/node to report Calico Enterprise internal metrics.
 	// This is separate from the calico/node prometheus metrics port, which is user configurable.
 	defaultNodeReporterPort = 9081
+	CalicoFinalizer         = "tigera.io/operator-cleanup"
 )
+
+//// Node and Installation finalizer
+// There is a problem with tearing down the calico resources where removing the calico-node ClusterRoleBinding
+// will block the kube-controller pod from teminating because the CNI plugin no longer has permissions.
+// To ensure this problem does not happen we add a finalizer to the Installation resource and to the
+// calico-node ClusterRoleBinding, ClusterRole, and ServiceAccount.
+// The finalizer on the Installation resource is so that the controller knows that it is time to tear down
+// and cleanup. This also allows the Installation resource to remain while the controller cleans up.
+// The finalizer on the calico-node resources is to ensure those resources remain when the Installation
+// is deleted (has the DeletionTimestamp added) because kubernetes will start cleaning up the resources.
+//
+// When the Installation resource is not being deleted the core controller will add a finalizer to
+// the Installation CR and a separate finalizer to the calico-node ClusterRoleBinding, ClusterRole,
+// and ServiceAccount.
+//
+// When the Installation resource is being deleted (has a DeletionTimestamp) the following sequence is
+// expected:
+//   * While terminating a successful Reconcile will requeue with a 5 second time to ensure we keep
+//     checking if the resources have been cleaned up.
+//   1. The kubernetes system will begin cleaning up the installation resources.
+//   2. Core reconciliation will pass terminating to the kube-controller render, this will ensure
+//      the kube-controller resources are returned to be deleted.
+//   3. Once the kube-controller pod is terminated we will re-render the calico-node ClusterRoleBinding,
+//      ClusterRole, and ServiceAccount resources to remove the finalizers on them.
+//   4. Once the calico-node ClusterRoleBinding finalizer is removed we have cleaned up everything
+//      necessary so we can remove the Installation finalizer and we're done.
 
 var log = logf.Log.WithName("controller_installation")
 var openshiftNetworkConfig = "cluster"
@@ -707,6 +732,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 	status := instance.Status
+	terminating := (instance.DeletionTimestamp != nil)
 	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
 
 	// Mark CR found so we can report converter problems via tigerastatus
@@ -747,6 +773,31 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if err := validateCustomResource(instance); err != nil {
 		r.SetDegraded("Invalid Installation provided", err, reqLogger)
 		return reconcile.Result{}, err
+	}
+
+	// See the section 'Node and Installation finalizer' at the top of this file for details.
+	if terminating {
+		// Keep the finalizer on the Installation until the ClusterRoleBinding for calico-node
+		// (and ClusterRole and ServiceAccount) is removed.
+		crb := rbacv1.ClusterRoleBinding{}
+		crbKey := types.NamespacedName{Name: "calico-node"}
+		err := r.client.Get(ctx, crbKey, &crb)
+		if err != nil && !apierrors.IsNotFound(err) {
+			r.SetDegraded("Unable to get ClusterRoleBinding", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		found := false
+		for _, x := range crb.Finalizers {
+			if x == render.NodeFinalizer {
+				found = true
+			}
+		}
+		if !found {
+			reqLogger.Info("Removing installation finalizer")
+			removeInstallationFinalizer(instance)
+		}
+	} else {
+		setInstallationFinalizer(instance)
 	}
 
 	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
@@ -1089,7 +1140,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Render namespaces for Calico.
 	components = append(components, render.Namespaces(namespaceCfg))
 
-	if newActiveCM != nil {
+	if newActiveCM != nil && !terminating {
 		log.Info("adding active configmap")
 		components = append(components, render.NewPassthrough(newActiveCM))
 	}
@@ -1135,6 +1186,26 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	components = append(components, render.Typha(&typhaCfg))
 
+	// See the section 'Node and Installation finalizer' at the top of this file for terminating details.
+	nodeTerminating := false
+	if terminating {
+		// When terminating, after kube-controllers has terminated then
+		// node can finish terminating by removing the finalizers on the ClusterRole,
+		// ClusterRoleBinding, and ServiceAccount.
+		l := corev1.PodList{}
+		err := r.client.List(ctx, &l,
+			client.MatchingLabels(map[string]string{
+				"k8s-app": kubecontrollers.KubeController}),
+			client.InNamespace(common.CalicoNamespace))
+		if err != nil {
+			r.SetDegraded("Failed to query for KubeController pods", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		if len(l.Items) == 0 {
+			reqLogger.Info("calico-kube-controllers is removed, calico-node RBAC resources can be removed")
+			nodeTerminating = true
+		}
+	}
 	// Build a configuration for rendering calico/node.
 	nodeCfg := render.NodeConfiguration{
 		K8sServiceEp:            k8sapi.Endpoint,
@@ -1148,6 +1219,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		BGPLayouts:              bgpLayout,
 		NodeAppArmorProfile:     nodeAppArmorProfile,
 		MigrateNamespaces:       needNsMigration,
+		Terminating:             nodeTerminating,
 	}
 	components = append(components, render.Node(&nodeCfg))
 
@@ -1160,10 +1232,15 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		ClusterDomain:               r.clusterDomain,
 		MetricsPort:                 kubeControllersMetricsPort,
 		ManagerInternalSecret:       managerInternalTLSSecret,
+		Terminating:                 terminating,
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 
-	components = append(components, render.Windows(&instance.Spec))
+	windowsCfg := render.WindowsConfig{
+		Installation: &instance.Spec,
+		Terminating:  terminating,
+	}
+	components = append(components, render.Windows(&windowsCfg))
 
 	imageSet, err := imageset.GetImageSet(ctx, r.client, instance.Spec.Variant)
 	if err != nil {
@@ -1300,6 +1377,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// This acts as a backstop to catch reconcile issues, and also makes sure we spot when
 	// things change that might not trigger a reconciliation.
 	reqLogger.V(1).Info("Finished reconciling network installation")
+	if terminating {
+		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
+	}
 	return reconcile.Result{RequeueAfter: 5 * time.Minute}, nil
 }
 
@@ -1787,4 +1867,16 @@ func addCRDWatches(c controller.Controller, v operator.ProductVariant) error {
 		}
 	}
 	return nil
+}
+
+func setInstallationFinalizer(i *operator.Installation) {
+	if !stringsutil.StringInSlice(CalicoFinalizer, i.GetFinalizers()) {
+		i.SetFinalizers(append(i.GetFinalizers(), CalicoFinalizer))
+	}
+}
+
+func removeInstallationFinalizer(i *operator.Installation) {
+	if stringsutil.StringInSlice(CalicoFinalizer, i.GetFinalizers()) {
+		i.SetFinalizers(stringsutil.RemoveStringInSlice(CalicoFinalizer, i.GetFinalizers()))
+	}
 }

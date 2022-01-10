@@ -35,6 +35,7 @@ func Namespaces(cfg *NamespaceConfiguration) Component {
 type NamespaceConfiguration struct {
 	Installation *operatorv1.InstallationSpec
 	PullSecrets  []*corev1.Secret
+	Terminating  bool
 }
 
 type namespaceComponent struct {
@@ -60,6 +61,10 @@ func (c *namespaceComponent) Objects() ([]client.Object, []client.Object) {
 	}
 	if len(c.cfg.PullSecrets) > 0 {
 		ns = append(ns, secret.ToRuntimeObjects(secret.CopyToNamespace(common.CalicoNamespace, c.cfg.PullSecrets...)...)...)
+	}
+
+	if c.cfg.Terminating {
+		return nil, ns
 	}
 
 	return ns, nil

@@ -678,6 +678,20 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 				},
 			},
 		}
+	} else if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderEKS {
+		affinity = &corev1.Affinity{
+			NodeAffinity: &corev1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+					NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+						MatchExpressions: []corev1.NodeSelectorRequirement{{
+							Key:      "eks.amazonaws.com/compute-type",
+							Operator: corev1.NodeSelectorOpNotIn,
+							Values:   []string{"fargate"},
+						}},
+					}},
+				},
+			},
+		}
 	}
 
 	// Determine the name to use for the calico/node daemonset. For mixed-mode, we run the enterprise DaemonSet

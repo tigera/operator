@@ -675,7 +675,7 @@ func (mc *monitorComponent) roleBinding() *rbacv1.RoleBinding {
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "tigera-operator",
+				Name:      common.OperatorServiceAccount(),
 				Namespace: common.OperatorNamespace(),
 			},
 		},

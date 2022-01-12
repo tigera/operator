@@ -704,6 +704,12 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		nodeSels = es.cfg.LogStorage.Spec.DataNodeSelector
 	}
 
+	// default to the controlPlaneAffinity unless DataAffinity is set
+	affinity := es.cfg.Installation.ControlPlaneAffinity
+	if es.cfg.LogStorage.Spec.DataAffinity != nil {
+		affinity = es.cfg.LogStorage.Spec.DataAffinity
+	}
+
 	podTemplate := corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Annotations: annotations,
@@ -712,6 +718,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			InitContainers:               initContainers,
 			Containers:                   []corev1.Container{esContainer},
 			ImagePullSecrets:             secret.GetReferenceList(es.cfg.PullSecrets),
+			Affinity:                     affinity,
 			NodeSelector:                 nodeSels,
 			Tolerations:                  es.cfg.Installation.ControlPlaneTolerations,
 			ServiceAccountName:           "tigera-elasticsearch",
@@ -1187,6 +1194,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 					ServiceAccountName: "elastic-operator",
 					ImagePullSecrets:   secret.GetReferenceList(es.cfg.PullSecrets),
 					HostNetwork:        false,
+					Affinity:           es.cfg.Installation.ControlPlaneAffinity,
 					NodeSelector:       es.cfg.Installation.ControlPlaneNodeSelector,
 					Tolerations:        es.cfg.Installation.ControlPlaneTolerations,
 					Containers: []corev1.Container{{
@@ -1360,6 +1368,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 				Spec: corev1.PodSpec{
 					ImagePullSecrets:             secret.GetReferenceList(es.cfg.PullSecrets),
 					ServiceAccountName:           "tigera-kibana",
+					Affinity:                     es.cfg.Installation.ControlPlaneAffinity,
 					NodeSelector:                 es.cfg.Installation.ControlPlaneNodeSelector,
 					Tolerations:                  es.cfg.Installation.ControlPlaneTolerations,
 					InitContainers:               initContainers,
@@ -1433,6 +1442,7 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
 							},
 						},
 						Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
+							Affinity:     es.cfg.Installation.ControlPlaneAffinity,
 							NodeSelector: es.cfg.Installation.ControlPlaneNodeSelector,
 							Tolerations:  es.cfg.Installation.ControlPlaneTolerations,
 							Containers: []corev1.Container{

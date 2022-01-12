@@ -296,6 +296,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 			Annotations: annotations,
 		},
 		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
+			Affinity:           c.cfg.Installation.ControlPlaneAffinity,
 			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 			ServiceAccountName: ManagerServiceAccount,
 			Tolerations:        c.managerTolerations(),

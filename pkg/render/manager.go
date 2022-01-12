@@ -86,8 +86,7 @@ const (
 
 var (
 	CloudManagerConfigOverrideName = "cloud-manager-config"
-	CloudPortalAPIURL              = ""
-	CloudAuth0OrgID                = ""
+	ManagerExtraEnv                = map[string]string{}
 )
 
 func Manager(
@@ -559,15 +558,26 @@ func setManagerCloudEnvs(envs []corev1.EnvVar) []corev1.EnvVar {
 		corev1.EnvVar{Name: "LICENSE_EDITION", Value: "cloudEdition"},
 	)
 
-	// enable cloud portal api if configmap is setting value.
-	// this allows us to run with portal integration disabled e.g. for external idp customers.
-	if CloudPortalAPIURL != "" {
-		envs = append(envs,
-			corev1.EnvVar{Name: "CNX_PORTAL_URL", Value: CloudPortalAPIURL},
-			corev1.EnvVar{Name: "ENABLE_PORTAL_SUPPORT", Value: "true"},
-			corev1.EnvVar{Name: "CNX_AUTH0_ORG_ID", Value: CloudAuth0OrgID},
-		)
+	for key, val := range ManagerExtraEnv {
+		if key == "portalAPIURL" {
+			// support legacy functionality where 'portalAPIURL' was a special field used to set
+			// the portal url and enable support.
+			envs = append(envs,
+				corev1.EnvVar{Name: "CNX_PORTAL_URL", Value: val},
+				corev1.EnvVar{Name: "ENABLE_PORTAL_SUPPORT", Value: "true"})
+			continue
+		}
+
+		if key == "auth0OrgID" {
+			// support legacy functionality where 'auth0OrgID' was a special field used to set
+			// the org ID
+			envs = append(envs, corev1.EnvVar{Name: "CNX_AUTH0_ORG_ID", Value: val})
+			continue
+		}
+
+		envs = append(envs, corev1.EnvVar{Name: key, Value: val})
 	}
+
 	return envs
 }
 

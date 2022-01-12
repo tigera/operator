@@ -500,8 +500,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			return reconcile.Result{}, fmt.Errorf("Failed to read cloud-manager-config ConfigMap: %s", err.Error())
 		}
 	} else {
-		render.CloudPortalAPIURL = mgrCfg.Data["portalAPIURL"]
-		render.CloudAuth0OrgID = mgrCfg.Data["auth0OrgID"]
+		render.ManagerExtraEnv = mgrCfg.Data
 	}
 
 	var packetCaptureServerCertSecret *corev1.Secret

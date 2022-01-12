@@ -520,31 +520,43 @@ define prep_local_crds
 	mkdir -p pkg/crds/$(dir)
 	mkdir -p .crds/$(dir)
 endef
-define fetch_crds 
+define fetch_crds
     $(eval project := $(1))
     $(eval branch := $(2))
     $(eval dir := $(3))
 	@echo "Fetching $(dir) CRDs from $(project) branch $(branch)"
-	git -C .crds/$(dir) clone git@github.com:$(project).git ./
-	git -C .crds/$(dir) fetch --all origin 2>&1 | grep -v -e "new branch" -e "new tag"
-	git -C .crds/$(dir) checkout -q $(branch)
+	git -C .crds/$(dir) clone --depth 1 --branch $(branch) --single-branch git@github.com:$(project).git ./
 endef
 define copy_crds
     $(eval dir := $(1))
-	@cp .crds/$(dir)/config/crd/* pkg/crds/$(dir)/ && echo "Copied $(dir) CRDs"
+	@cp .crds/$(dir)/libcalico-go/config/crd/* pkg/crds/$(dir)/ && echo "Copied $(dir) CRDs"
 endef
+
+# Alternative copies for enterprise v3.11.0, which still uses libcalico-go
+define fetch_crds_libcal
+    $(eval project := $(1))
+    $(eval branch := $(2))
+    $(eval dir := $(3))
+       @echo "Fetching $(dir) CRDs from $(project) branch $(branch)"
+       git -C .crds/$(dir) clone --depth 1 --branch $(branch) --single-branch git@github.com:$(project).git ./
+endef
+define copy_crds_libcal
+    $(eval dir := $(1))
+      @cp .crds/$(dir)/config/crd/* pkg/crds/$(dir)/ && echo "Copied $(dir) CRDs"
+endef
+
 
 .PHONY: read-libcalico-version read-libcalico-enterprise-version
 .PHONY: update-calico-crds update-enterprise-crds
 .PHONY: fetch-calico-crds fetch-enterprise-crds
 .PHONY: prepare-for-calico-crds prepare-for-enterprise-crds
 
-LIBCALICO?=projectcalico/libcalico-go
+CALICO?=projectcalico/calico
 read-libcalico-calico-version:
-	$(eval LIBCALICO_BRANCH := $(shell $(CONTAINERIZED) $(CALICO_BUILD) \
+	$(eval CALICO_BRANCH := $(shell $(CONTAINERIZED) $(CALICO_BUILD) \
 	bash -c '$(GIT_CONFIG_SSH) \
 	yq r config/calico_versions.yml components.libcalico-go.version'))
-	if [ -z "$(LIBCALICO_BRANCH)" ]; then echo "libcalico branch not defined"; exit 1; fi
+	if [ -z "$(CALICO_BRANCH)" ]; then echo "libcalico branch not defined"; exit 1; fi
 
 update-calico-crds: fetch-calico-crds
 	$(call copy_crds,"calico")
@@ -553,7 +565,7 @@ prepare-for-calico-crds:
 	$(call prep_local_crds,"calico")
 
 fetch-calico-crds: prepare-for-calico-crds read-libcalico-calico-version
-	$(call fetch_crds,$(LIBCALICO),$(LIBCALICO_BRANCH),"calico")
+	$(call fetch_crds,$(CALICO),$(CALICO_BRANCH),"calico")
 
 LIBCALICO_ENTERPRISE?=tigera/libcalico-go-private
 read-libcalico-enterprise-version:
@@ -563,13 +575,13 @@ read-libcalico-enterprise-version:
 	if [ -z "$(LIBCALICO_ENTERPRISE_BRANCH)" ]; then echo "libcalico enterprise branch not defined"; exit 1; fi
 
 update-enterprise-crds: fetch-enterprise-crds
-	$(call copy_crds,"enterprise")
+	$(call copy_crds_libcal,"enterprise")
 
 prepare-for-enterprise-crds:
 	$(call prep_local_crds,"enterprise")
 
 fetch-enterprise-crds: prepare-for-enterprise-crds  read-libcalico-enterprise-version
-	$(call fetch_crds,$(LIBCALICO_ENTERPRISE),$(LIBCALICO_ENTERPRISE_BRANCH),"enterprise")
+	$(call fetch_crds_libcal,$(LIBCALICO_ENTERPRISE),$(LIBCALICO_ENTERPRISE_BRANCH),"enterprise")
 
 .PHONY: prepull-image
 prepull-image:

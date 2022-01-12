@@ -1020,8 +1020,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	components := []render.Component{utils.NewKeyPairPassthrough(tigeraCA)} // This controller creates/removes the tigeraCA.
-	if (tigeraCA.Issued(typhaNodeTLS.NodeSecret) && tigeraCA.Issued(typhaNodeTLS.TyphaSecret)) ||
-		(typhaNodeTLS.NodeSecret.UseCertificateManagement() && typhaNodeTLS.NodeSecret.UseCertificateManagement()) {
+	if !typhaNodeTLS.NodeSecret.BYO() {                                     // if nodeSecret.BYO(), then typhaSecret is too and vice versa.
 		components = append(components, utils.NewKeyPairPassthrough(typhaNodeTLS.NodeSecret), utils.NewKeyPairPassthrough(typhaNodeTLS.NodeSecret))
 	}
 
@@ -1310,7 +1309,7 @@ func GetOrCreateTyphaNodeTLSConfig(cli client.Client, tigeraCA tls.TigeraCA) (*r
 				cn, uriSAN = string(data[render.CommonName]), string(data[render.URISAN])
 			}
 		}
-		if tigeraCA.Issued(keyPair) {
+		if !keyPair.BYO() {
 			cn = commonName
 		} else if cn == "" && uriSAN == "" {
 			errMsgs = append(errMsgs, fmt.Sprintf("CertPair for %s does not contain common-name or uri-san", secretName))
@@ -1321,9 +1320,9 @@ func GetOrCreateTyphaNodeTLSConfig(cli client.Client, tigeraCA tls.TigeraCA) (*r
 	typha, typhaCommonName, typhaURISAN := getKeyPair(render.TyphaTLSSecretName, render.TyphaCommonName)
 
 	// CA, typha, and node are all not set
-	allOperatorProvided := configMap == nil && tigeraCA.Issued(typha) && tigeraCA.Issued(node)
+	allOperatorProvided := configMap == nil && !typha.BYO() && !node.BYO()
 	// CA, typha, and node are all are set
-	allUserProvided := configMap != nil && !tigeraCA.Issued(typha) && !tigeraCA.Issued(node)
+	allUserProvided := configMap != nil && typha.BYO() && node.BYO()
 	// All CA, typha, and node must be set or not set.
 	if !(allUserProvided || allOperatorProvided) {
 		errMsgs = append(errMsgs, fmt.Sprintf("Typha-Node CA and Secrets should all be set or none set: configMap(%t) typha(%t) node(%t)", configMap != nil, typha != nil, node != nil))

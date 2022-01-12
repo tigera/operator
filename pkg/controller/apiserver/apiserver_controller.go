@@ -263,7 +263,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			tunnelCASecret, err = tigeraCA.GetKeyPair(r.client, render.VoltronTunnelSecretName, common.OperatorNamespace())
 			if errors.IsNotFound(err) {
 				// tunnelCASecret is a secret unaffected by the last two args (dnsNames and clusterDomain).
-				tunnelCASecret, err = utils.NewKeyPair(render.VoltronTunnelSecret(), nil, "")
+				tunnelCASecret, err = utils.NewKeyPair(tigeraCA, render.VoltronTunnelSecret(), nil, "")
 			}
 			if err != nil {
 				log.Error(err, "Unable to get or create the tunnel secret")
@@ -291,7 +291,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		return reconcile.Result{}, err
 	}
 	var components []render.Component
-	if tigeraCA.Issued(tlsSecret) || tlsSecret.UseCertificateManagement() {
+	if !tlsSecret.BYO() {
 		components = append(components, utils.NewKeyPairPassthrough(tlsSecret))
 	}
 	// Create a component handler to manage the rendered component.
@@ -333,7 +333,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			return reconcile.Result{}, err
 		}
 
-		if tigeraCA.Issued(packetCaptureCertSecret) || tlsSecret.UseCertificateManagement() {
+		if !tlsSecret.BYO() {
 			components = append(components, utils.NewKeyPairPassthrough(tlsSecret))
 		}
 

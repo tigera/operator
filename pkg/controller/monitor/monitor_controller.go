@@ -264,9 +264,8 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	// Render prometheus component
 	components := []render.Component{
 		monitor.Monitor(monitorCfg),
-		render.NewPassthrough(tlsSecret),
 	}
-	if tigeraCA.Issued(tlsSecret) || tlsSecret.UseCertificateManagement() {
+	if !tlsSecret.BYO() {
 		components = append(components, utils.NewKeyPairPassthrough(tlsSecret))
 	}
 	if createInOperatorNamespace {

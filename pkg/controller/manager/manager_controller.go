@@ -442,7 +442,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	var components []render.Component
-	if tigeraCA.Issued(tlsSecret) || tlsSecret.UseCertificateManagement() {
+	if !tlsSecret.BYO() {
 		components = append(components, utils.NewKeyPairPassthrough(tlsSecret))
 	}
 

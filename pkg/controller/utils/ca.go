@@ -182,6 +182,7 @@ func (ca *tigeraCA) GetOrCreateKeyPair(cli client.Client, secretName, secretName
 		createNew = true
 	}
 	kp := &keyPair{
+		tigeraCA: ca,
 		dnsNames: dnsNames,
 	}
 
@@ -258,7 +259,7 @@ func (ca *tigeraCA) GetCertificate(cli client.Client, secretName, secretNamespac
 	if x509Cert.NotAfter.Before(time.Now()) || x509Cert.NotBefore.After(time.Now()) {
 		return nil, fmt.Errorf("secret %s is not valid at this date", secretName)
 	}
-	return &keyPair{Certificate: x509Cert, secret: secret}, nil
+	return &keyPair{tigeraCA: ca, Certificate: x509Cert, secret: secret}, nil
 }
 
 // GetKeyPair returns an existing KeyPair. If the KeyPair is not found, a k8s.io NotFound error is returned.
@@ -286,6 +287,7 @@ func (ca *tigeraCA) GetKeyPair(cli client.Client, secretName, secretNamespace st
 		return nil, fmt.Errorf("secret %s is not valid at this date", secretName)
 	}
 	return &keyPair{
+		tigeraCA:    ca,
 		secret:      secret,
 		Certificate: certificate,
 	}, nil
@@ -303,11 +305,17 @@ type keyPair struct {
 	*operatorv1.CertificateManagement
 	dnsNames                 []string
 	useCertificateManagement bool
+	tigeraCA                 tls.TigeraCA
 }
 
 // UseCertificateManagement is true if this secret is not BYO and certificate management is used to provide the a pair to a pod.
 func (c *keyPair) UseCertificateManagement() bool {
 	return c.useCertificateManagement
+}
+
+// BYO returns true if this KeyPair was provided by the user. If BYO is true, UseCertificateManagement is false.
+func (c *keyPair) BYO() bool {
+	return c.useCertificateManagement == false && !c.tigeraCA.Issued(c)
 }
 
 func (c *keyPair) X509Certificate() *x509.Certificate {
@@ -324,12 +332,13 @@ func certificateManagementKeyPair(ca *tigeraCA, secretName, secretNamespace stri
 		CertificateManagement:    ca.CertificateManagement(),
 		useCertificateManagement: true,
 		dnsNames:                 dnsNames,
+		tigeraCA:                 ca,
 	}
 }
 
 // NewKeyPair returns  a KeyPair, which wraps a Secret object that contains a private key and a certificate. Whether certificate
 // management is configured or not, KeyPair returns the right InitContainer, Volumemount or Volume (when applicable).
-func NewKeyPair(secret *corev1.Secret, dnsNames []string, clusterDomain string) (tls.KeyPair, error) {
+func NewKeyPair(tigeraCA tls.TigeraCA, secret *corev1.Secret, dnsNames []string, clusterDomain string) (tls.KeyPair, error) {
 	certificate, err := parseCertificate(secret.Data[corev1.TLSCertKey])
 	if err != nil {
 		return nil, err
@@ -339,6 +348,7 @@ func NewKeyPair(secret *corev1.Secret, dnsNames []string, clusterDomain string) 
 		dnsNames:      dnsNames,
 		clusterDomain: clusterDomain,
 		Certificate:   certificate,
+		tigeraCA:      tigeraCA,
 	}, nil
 }
 

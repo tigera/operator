@@ -85,7 +85,10 @@ type TigeraCA interface {
 // KeyPair wraps a Secret object that contains a private key and a certificate. Whether CertificateManagement is
 // configured or not, KeyPair returns the right InitContainer, Volumemount or Volume (when applicable).
 type KeyPair interface {
+	//UseCertificateManagement returns true if this key pair was not user provided and certificate management has been configured.
 	UseCertificateManagement() bool
+	// BYO returns true if this KeyPair was provided by the user. If BYO is true, UseCertificateManagement is false.
+	BYO() bool
 	InitContainer(namespace, csrImage string) corev1.Container
 	VolumeMount(folder string) corev1.VolumeMount
 	Volume() corev1.Volume

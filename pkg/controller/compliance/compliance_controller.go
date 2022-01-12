@@ -349,7 +349,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	var components []render.Component
-	if tigeraCA.Issued(complianceServerCertSecret) || complianceServerCertSecret.UseCertificateManagement() {
+	if !complianceServerCertSecret.BYO() {
 		components = append(components, utils.NewKeyPairPassthrough(complianceServerCertSecret))
 	}
 

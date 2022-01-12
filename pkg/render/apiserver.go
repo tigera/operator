@@ -18,9 +18,16 @@ import (
 	"fmt"
 	"strings"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/ptr"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
+	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/tls"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -31,21 +38,11 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/controller/k8sapi"
-	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/ptr"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
 const (
-	apiServerPort           = 5443
-	queryServerPort         = 8080
-	APIServerSecretKeyName  = "apiserver.key"
-	APIServerSecretCertName = "apiserver.crt"
+	apiServerPort   = 5443
+	queryServerPort = 8080
 )
 
 // The following functions are helpers for determining resource names based on
@@ -79,34 +76,8 @@ func csrRolebindingName(v operatorv1.ProductVariant) string {
 }
 
 func APIServer(cfg *APIServerConfiguration) (Component, error) {
-
-	tlsSecrets := []*corev1.Secret{}
-	tlsHashAnnotations := make(map[string]string)
-
-	if cfg.Installation.CertificateManagement == nil {
-		tlsHashAnnotations[TlsSecretHashAnnotation] = rmeta.AnnotationHash(cfg.TLSKeyPair.Data)
-
-		copy := cfg.TLSKeyPair.DeepCopy()
-		copy.ObjectMeta = metav1.ObjectMeta{
-			Name:      ProjectCalicoApiServerTLSSecretName(cfg.Installation.Variant),
-			Namespace: rmeta.APIServerNamespace(cfg.Installation.Variant),
-		}
-		tlsSecrets = append(tlsSecrets, copy)
-	}
-
-	if cfg.ManagementCluster != nil {
-		if cfg.TunnelCASecret == nil {
-			cfg.TunnelCASecret = voltronTunnelSecret()
-			tlsSecrets = append(tlsSecrets, cfg.TunnelCASecret)
-		}
-		tlsSecrets = append(tlsSecrets, secret.CopyToNamespace(rmeta.APIServerNamespace(cfg.Installation.Variant), cfg.TunnelCASecret)...)
-		tlsHashAnnotations[voltronTunnelHashAnnotation] = rmeta.AnnotationHash(cfg.TunnelCASecret.Data)
-	}
-
 	return &apiServerComponent{
-		cfg:            cfg,
-		tlsSecrets:     tlsSecrets,
-		tlsAnnotations: tlsHashAnnotations,
+		cfg: cfg,
 	}, nil
 }
 
@@ -118,17 +89,15 @@ type APIServerConfiguration struct {
 	ManagementCluster           *operatorv1.ManagementCluster
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
 	AmazonCloudIntegration      *operatorv1.AmazonCloudIntegration
-	TLSKeyPair                  *corev1.Secret
+	TLSKeyPair                  tls.KeyPair
 	PullSecrets                 []*corev1.Secret
 	Openshift                   bool
-	TunnelCASecret              *corev1.Secret
+	TunnelCASecret              tls.KeyPair
 	ClusterDomain               string
 }
 
 type apiServerComponent struct {
 	cfg              *APIServerConfiguration
-	tlsSecrets       []*corev1.Secret
-	tlsAnnotations   map[string]string
 	isManagement     bool
 	apiServerImage   string
 	queryServerImage string
@@ -215,14 +184,19 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		c.apiServerDeployment(),
 		c.apiServerService(),
 	)
+	if c.isManagement {
+		namespacedObjects = append(namespacedObjects, c.cfg.TunnelCASecret.Secret(rmeta.APIServerNamespace(c.cfg.Installation.Variant)))
+	}
 
 	// Add in certificates for API server TLS.
-	if c.cfg.Installation.CertificateManagement == nil {
-		namespacedObjects = append(namespacedObjects, c.getTLSObjects()...)
-		globalObjects = append(globalObjects, c.apiServiceRegistration(c.cfg.TLSKeyPair.Data[APIServerSecretCertName]))
+	if !c.cfg.TLSKeyPair.UseCertificateManagement() {
+		namespacedObjects = append(namespacedObjects, c.cfg.TLSKeyPair.Secret(rmeta.APIServerNamespace(c.cfg.Installation.Variant)))
+		globalObjects = append(globalObjects, c.apiServiceRegistration(c.cfg.TLSKeyPair.Secret("").Data[corev1.TLSCertKey]))
+		objsToDelete = append(objsToDelete, CSRClusterRoleBinding(csrRolebindingName(c.cfg.Installation.Variant), rmeta.APIServerNamespace(c.cfg.Installation.Variant)))
 	} else {
 		namespacedObjects = append(namespacedObjects, c.apiServiceRegistration(c.cfg.Installation.CertificateManagement.CACert))
 		globalObjects = append(globalObjects, CSRClusterRoleBinding(csrRolebindingName(c.cfg.Installation.Variant), rmeta.APIServerNamespace(c.cfg.Installation.Variant)))
+		objsToDelete = append(objsToDelete, c.cfg.TLSKeyPair.Secret(rmeta.APIServerNamespace(c.cfg.Installation.Variant)))
 	}
 
 	// Global enterprise-only objects.
@@ -767,15 +741,15 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 	}
 
 	var initContainers []corev1.Container
-	if c.cfg.Installation.CertificateManagement != nil {
-		initContainers = append(initContainers, CreateCSRInitContainer(
-			c.cfg.Installation.CertificateManagement,
-			c.certSignReqImage,
-			ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant), TLSSecretCertName,
-			APIServerSecretKeyName,
-			APIServerSecretCertName,
-			dns.GetServiceDNSNames(ProjectCalicoApiServerServiceName(c.cfg.Installation.Variant), rmeta.APIServerNamespace(c.cfg.Installation.Variant), c.cfg.ClusterDomain),
-			rmeta.APIServerNamespace(c.cfg.Installation.Variant)))
+	if c.cfg.TLSKeyPair.UseCertificateManagement() {
+		initContainers = append(initContainers, c.cfg.TLSKeyPair.InitContainer(rmeta.APIServerNamespace(c.cfg.Installation.Variant), c.certSignReqImage))
+	}
+
+	annotations := map[string]string{
+		c.cfg.TLSKeyPair.HashAnnotationKey(): c.cfg.TLSKeyPair.HashAnnotationValue(),
+	}
+	if c.isManagement {
+		annotations[c.cfg.TunnelCASecret.HashAnnotationKey()] = c.cfg.TunnelCASecret.HashAnnotationValue()
 	}
 
 	d := &appsv1.Deployment{
@@ -802,7 +776,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 						"apiserver": "true",
 						"k8s-app":   name,
 					},
-					Annotations: c.tlsAnnotations,
+					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
 					DNSPolicy:          dnsPolicy,
@@ -846,25 +820,16 @@ func (c *apiServerComponent) hostNetwork() bool {
 
 // apiServerContainer creates the API server container.
 func (c *apiServerComponent) apiServerContainer() corev1.Container {
-	volumeMounts := []corev1.VolumeMount{}
+	volumeMounts := []corev1.VolumeMount{
+		c.cfg.TLSKeyPair.VolumeMount("/code/apiserver.local.config/certificates"),
+	}
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		if c.isManagement {
+			volumeMounts = append(volumeMounts, c.cfg.TunnelCASecret.VolumeMount("/code/apiserver.local.config/multicluster/certificates"))
+		}
 		volumeMounts = append(volumeMounts,
 			corev1.VolumeMount{Name: "tigera-audit-logs", MountPath: "/var/log/calico/audit"},
 			corev1.VolumeMount{Name: "tigera-audit-policy", MountPath: "/etc/tigera/audit"},
-		)
-	}
-
-	volumeMounts = append(volumeMounts,
-		corev1.VolumeMount{Name: ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant), MountPath: "/code/apiserver.local.config/certificates"},
-	)
-
-	if c.cfg.ManagementCluster != nil {
-		volumeMounts = append(volumeMounts,
-			corev1.VolumeMount{
-				Name:      VoltronTunnelSecretName,
-				MountPath: "/code/apiserver.local.config/multicluster/certificates",
-				ReadOnly:  true,
-			},
 		)
 	}
 
@@ -934,6 +899,8 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 func (c *apiServerComponent) startUpArgs() []string {
 	args := []string{
 		fmt.Sprintf("--secure-port=%d", apiServerPort),
+		"--tls-private-key-file=/code/apiserver.local.config/certificates/tls.key",
+		"--tls-cert-file=/code/apiserver.local.config/certificates/tls.crt",
 	}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
@@ -944,7 +911,10 @@ func (c *apiServerComponent) startUpArgs() []string {
 	}
 
 	if c.cfg.ManagementCluster != nil {
-		args = append(args, "--enable-managed-clusters-create-api=true")
+		args = append(args,
+			"--enable-managed-clusters-create-api=true",
+			"--set-managed-clusters-ca-cert=/code/apiserver.local.config/multicluster/certificates/tls.crt",
+			"--set-managed-clusters-ca-key=/code/apiserver.local.config/multicluster/certificates/tls.key")
 		if c.cfg.ManagementCluster.Spec.Address != "" {
 			args = append(args, fmt.Sprintf("--managementClusterAddr=%s", c.cfg.ManagementCluster.Spec.Address))
 		}
@@ -990,7 +960,9 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 
 // apiServerVolumes creates the volumes used by the API server deployment.
 func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
-	volumes := []corev1.Volume{}
+	volumes := []corev1.Volume{
+		c.cfg.TLSKeyPair.Volume(),
+	}
 	hostPathType := corev1.HostPathDirectoryOrCreate
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		volumes = append(volumes,
@@ -1032,13 +1004,6 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 		}
 	}
 
-	volumes = append(volumes,
-		corev1.Volume{
-			Name:         ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant),
-			VolumeSource: certificateVolumeSource(c.cfg.Installation.CertificateManagement, ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant)),
-		},
-	)
-
 	return volumes
 }
 
@@ -1048,15 +1013,6 @@ func (c *apiServerComponent) tolerations() []corev1.Toleration {
 		return rmeta.TolerateAll
 	}
 	return append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster)
-}
-
-func (c *apiServerComponent) getTLSObjects() []client.Object {
-	objs := []client.Object{}
-	for _, s := range c.tlsSecrets {
-		objs = append(objs, s)
-	}
-
-	return objs
 }
 
 // apiServerPodSecurityPolicy returns a PSP to create and a PSP to delete based on variant.

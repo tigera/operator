@@ -15,7 +15,6 @@
 package installation
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -28,7 +27,6 @@ import (
 	"time"
 
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
-
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
@@ -50,15 +48,11 @@ import (
 	"github.com/tigera/operator/pkg/crds"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
-	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/tls"
 
-	configv1 "github.com/openshift/api/config/v1"
-	"github.com/openshift/library-go/pkg/crypto"
-
 	"github.com/go-logr/logr"
+	configv1 "github.com/openshift/api/config/v1"
 	apps "k8s.io/api/apps/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -186,7 +180,7 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		return fmt.Errorf("tigera-installation-controller failed to watch secrets: %w", err)
 	}
 
-	for _, cm := range []string{render.BirdTemplatesConfigMapName, render.BGPLayoutConfigMapName, render.K8sSvcEndpointConfigMapName} {
+	for _, cm := range []string{render.BirdTemplatesConfigMapName, render.BGPLayoutConfigMapName, render.K8sSvcEndpointConfigMapName, render.TyphaCAConfigMapName} {
 		if err = utils.AddConfigMapWatch(c, cm, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", cm, err)
 		}
@@ -889,73 +883,26 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	var managerInternalTLSSecret *corev1.Secret
-	managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
-		common.CalicoNamespace,
-		render.ManagerInternalTLSSecretName,
-		render.ManagerInternalSecretKeyName,
-		render.ManagerInternalSecretCertName,
-	)
-
-	// Ensure that CA and TLS certificate for tigera-manager for internal
-	// traffic within the K8s cluster exists and has valid FQDN manager service
-	// names and localhost.
+	tigeraCA, err := utils.CreateTigeraCA(r.client, instance.Spec.CertificateManagement, r.clusterDomain)
+	if err != nil {
+		log.Error(err, "unable to create the Tigera CA")
+		r.status.SetDegraded("unable to create the Tigera CA", err.Error())
+		return reconcile.Result{}, err
+	}
+	var managerInternalTLSSecret tls.KeyPair
 	if instance.Spec.Variant == operator.TigeraSecureEnterprise && managementCluster != nil {
-		var err error
-		svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
-		svcDNSNames = append(svcDNSNames, render.ManagerServiceIP)
-		certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
-
-		managerInternalTLSSecret, _, err = utils.EnsureCertificateSecret(
-			render.ManagerInternalTLSSecretName, managerInternalTLSSecret, render.ManagerInternalSecretKeyName, render.ManagerInternalSecretCertName, certDur, svcDNSNames...,
-		)
-
+		managerInternalTLSSecret, err = tigeraCA.GetOrCreateKeyPair(r.client, render.ManagerInternalTLSSecretName, common.CalicoNamespace, append(dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain), render.ManagerServiceIP))
 		if err != nil {
 			r.status.SetDegraded(fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err.Error())
 			return reconcile.Result{}, err
 		}
 	}
 
-	var typhaNodeTLS *render.TyphaNodeTLS
-	// Object to be rendered by the passthrough component
-	var objs []client.Object
-	if instance.Spec.CertificateManagement == nil {
-		// First, attempt to load TLS secrets from the cluster, if any exist.
-		typhaNodeTLS, err = r.GetTyphaNodeTLSConfig()
-		if err != nil {
-			log.Error(err, "Error with Typha/Felix secrets")
-			r.SetDegraded("Error with Typha/Felix secrets", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		if typhaNodeTLS.CAConfigMap == nil || typhaNodeTLS.TyphaSecret == nil || typhaNodeTLS.NodeSecret == nil {
-			// Unable to find at least one necessary bit of TLS config. Generate new ones ourselves.
-			typhaNodeTLS, err = CreateNewTyphaNodeTLS()
-			if err != nil {
-				log.Error(err, "Error generating Typha/Felix secrets")
-				r.SetDegraded("Error generating Typha/Felix secrets", err, reqLogger)
-				return reconcile.Result{}, err
-			}
-
-			objs = append(objs, typhaNodeTLS.CAConfigMap, typhaNodeTLS.NodeSecret, typhaNodeTLS.TyphaSecret)
-		}
-
-	} else {
-		// Use CSR-based certificate signing.
-		typhaNodeTLS = &render.TyphaNodeTLS{
-			CAConfigMap: &corev1.ConfigMap{
-				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.TyphaCAConfigMapName,
-					Namespace: common.OperatorNamespace(),
-				},
-				Data: map[string]string{
-					render.TyphaCABundleName: string(instance.Spec.CertificateManagement.CACert),
-				},
-			},
-		}
-
-		objs = append(objs, typhaNodeTLS.CAConfigMap)
+	typhaNodeTLS, err := GetOrCreateTyphaNodeTLSConfig(r.client, tigeraCA)
+	if err != nil {
+		log.Error(err, "Error with Typha/Felix secrets")
+		r.SetDegraded("Error with Typha/Felix secrets", err, reqLogger)
+		return reconcile.Result{}, err
 	}
 
 	birdTemplates, err := getBirdTemplates(r.client)
@@ -1072,12 +1019,17 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		nodeAppArmorProfile = val
 	}
 
-	components := []render.Component{}
+	components := []render.Component{utils.NewKeyPairPassthrough(tigeraCA)} // This controller creates/removes the tigeraCA.
+	if (tigeraCA.Issued(typhaNodeTLS.NodeSecret) && tigeraCA.Issued(typhaNodeTLS.TyphaSecret)) ||
+		(typhaNodeTLS.NodeSecret.UseCertificateManagement() && typhaNodeTLS.NodeSecret.UseCertificateManagement()) {
+		components = append(components, utils.NewKeyPairPassthrough(typhaNodeTLS.NodeSecret), utils.NewKeyPairPassthrough(typhaNodeTLS.NodeSecret))
+	}
 
+	var objs []client.Object
 	// Create a passthrough component for the simple purpose of caching generated resources in the tigera-operator namespace.
 	// We store TLS secrets and config to be fetched on future reconcile iterations.
 	if managerInternalTLSSecret != nil {
-		objs = append(objs, managerInternalTLSSecret)
+		objs = append(objs, managerInternalTLSSecret.Secret(common.OperatorNamespace()))
 	}
 	operatorComponent := render.NewPassthrough(objs...)
 	components = append(components, operatorComponent)
@@ -1330,86 +1282,87 @@ func (r *ReconcileInstallation) SetDegraded(reason string, err error, log logr.L
 	r.status.SetDegraded(reason, err.Error())
 }
 
-// GetTyphaNodeTLSConfig reads and validates the CA ConfigMap and Secrets for
+// GetOrCreateTyphaNodeTLSConfig reads and validates the CA ConfigMap and Secrets for
 // Typha and Felix configuration. It returns the validated resources or error
 // if there was one.
-func (r *ReconcileInstallation) GetTyphaNodeTLSConfig() (*render.TyphaNodeTLS, error) {
+func GetOrCreateTyphaNodeTLSConfig(cli client.Client, tigeraCA tls.TigeraCA) (*render.TyphaNodeTLS, error) {
 	// accumulate all the error messages so all problems with the certs
 	// and CA are reported.
 	errMsgs := []string{}
-	ca, err := r.validateTyphaCAConfigMap()
+	configMap, err := validateTyphaCAConfigMap(cli)
 	if err != nil {
 		errMsgs = append(errMsgs, fmt.Sprintf("CA for Typha is invalid: %s", err))
 	}
-
-	node, err := utils.ValidateCertPair(
-		r.client,
-		common.OperatorNamespace(),
-		render.NodeTLSSecretName,
-		render.TLSSecretKeyName,
-		render.TLSSecretCertName,
-	)
-	if err != nil {
-		errMsgs = append(errMsgs, fmt.Sprintf("CertPair for Felix is invalid: %s", err))
-	} else if node != nil {
-		if node.Data != nil {
-			// We need the CommonName, URISAN, or both to be set
-			_, okCN := node.Data[render.CommonName]
-			_, okUS := node.Data[render.URISAN]
-			if !(okCN || okUS) {
-				errMsgs = append(errMsgs, fmt.Sprintf("CertPair for Felix does not contain common-name or uri-san"))
+	getKeyPair := func(secretName, commonName string) (keyPair tls.KeyPair, cn string, uriSAN string) {
+		keyPair, err = tigeraCA.GetKeyPair(cli, secretName, common.OperatorNamespace())
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				keyPair, err = tigeraCA.GetOrCreateKeyPair(cli, secretName, common.OperatorNamespace(), []string{commonName})
+				if err != nil {
+					errMsgs = append(errMsgs, err.Error())
+				}
+			} else {
+				errMsgs = append(errMsgs, fmt.Sprintf("CertPair for %s is invalid: %v", secretName, err))
+			}
+		} else {
+			data := keyPair.Secret(common.OperatorNamespace()).Data
+			if data != nil {
+				cn, uriSAN = string(data[render.CommonName]), string(data[render.URISAN])
 			}
 		}
-	}
-
-	typha, err := utils.ValidateCertPair(
-		r.client,
-		common.OperatorNamespace(),
-		render.TyphaTLSSecretName,
-		render.TLSSecretKeyName,
-		render.TLSSecretCertName,
-	)
-	if err != nil {
-		errMsgs = append(errMsgs, fmt.Sprintf("CertPair for Typha is invalid: %s", err))
-	} else if typha != nil {
-		if typha.Data != nil {
-			// We need the CommonName, URISAN, or both to be set
-			_, okCN := typha.Data[render.CommonName]
-			_, okUS := typha.Data[render.URISAN]
-			if !(okCN || okUS) {
-				errMsgs = append(errMsgs, fmt.Sprintf("CertPair for Typha does not contain common-name or uri-san"))
-			}
+		if tigeraCA.Issued(keyPair) {
+			cn = commonName
+		} else if cn == "" && uriSAN == "" {
+			errMsgs = append(errMsgs, fmt.Sprintf("CertPair for %s does not contain common-name or uri-san", secretName))
 		}
+		return
 	}
+	node, nodeCommonName, nodeURISAN := getKeyPair(render.NodeTLSSecretName, render.FelixCommonName)
+	typha, typhaCommonName, typhaURISAN := getKeyPair(render.TyphaTLSSecretName, render.TyphaCommonName)
 
 	// CA, typha, and node are all not set
-	allNil := (ca == nil && typha == nil && node == nil)
+	allOperatorProvided := configMap == nil && tigeraCA.Issued(typha) && tigeraCA.Issued(node)
 	// CA, typha, and node are all are set
-	allSet := (ca != nil && typha != nil && node != nil)
+	allUserProvided := configMap != nil && !tigeraCA.Issued(typha) && !tigeraCA.Issued(node)
 	// All CA, typha, and node must be set or not set.
-	if !(allNil || allSet) {
-		errMsgs = append(errMsgs, fmt.Sprintf("Typha-Node CA and Secrets should all be set or none set: ca(%t) typha(%t) node(%t)", ca != nil, typha != nil, node != nil))
+	if !(allUserProvided || allOperatorProvided) {
+		errMsgs = append(errMsgs, fmt.Sprintf("Typha-Node CA and Secrets should all be set or none set: configMap(%t) typha(%t) node(%t)", configMap != nil, typha != nil, node != nil))
 		errMsgs = append(errMsgs, "If not providing custom CA and certs, feel free to remove them from the operator namespace, they will be recreated")
 	}
 
-	// TODO: We could make sure both TLS Secrets were signed by the CA
+	trustedBundle, err := utils.CreateTrustedBundle(tigeraCA, node, typha)
+	if err != nil {
+		errMsgs = append(errMsgs, "Unable to create a trusted certificate bundle")
+	}
+	if configMap != nil {
+		// TODO: We could make sure both TLS Secrets were signed by the CA
+		trustedBundle.AddPEM(render.TyphaCAConfigMapName, []byte(configMap.Data[render.TyphaCABundleName]))
+	}
 
 	if len(errMsgs) != 0 {
 		return nil, fmt.Errorf(strings.Join(errMsgs, ";"))
 	}
-	return &render.TyphaNodeTLS{CAConfigMap: ca, TyphaSecret: typha, NodeSecret: node}, nil
+	return &render.TyphaNodeTLS{
+		TrustedBundle:   trustedBundle,
+		TyphaSecret:     typha,
+		TyphaCommonName: typhaCommonName,
+		TyphaURISAN:     typhaURISAN,
+		NodeSecret:      node,
+		NodeCommonName:  nodeCommonName,
+		NodeURISAN:      nodeURISAN,
+	}, nil
 }
 
 // validateTyphaCAConfigMap reads the Typha CA config map from the Operator
 // namespace and validates that it has a CA Bundle. It returns the validated
 // ConfigMap or an error.
-func (r *ReconcileInstallation) validateTyphaCAConfigMap() (*corev1.ConfigMap, error) {
+func validateTyphaCAConfigMap(cli client.Client) (*corev1.ConfigMap, error) {
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{
 		Name:      render.TyphaCAConfigMapName,
 		Namespace: common.OperatorNamespace(),
 	}
-	err := r.client.Get(context.Background(), cmNamespacedName, cm)
+	err := cli.Get(context.Background(), cmNamespacedName, cm)
 	if err != nil {
 		// If the reason for the error is not found then that is acceptable
 		// so return valid in that case.
@@ -1529,67 +1482,6 @@ func (r *ReconcileInstallation) updateCRDs(ctx context.Context, variant operator
 		return err
 	}
 	return nil
-}
-
-func CreateNewTyphaNodeTLS() (*render.TyphaNodeTLS, error) {
-	// Make CA
-	ca, err := tls.MakeCA(fmt.Sprintf("%s@%d", rmeta.TigeraOperatorCAIssuerPrefix, time.Now().Unix()))
-	if err != nil {
-		return nil, err
-	}
-	crtContent := &bytes.Buffer{}
-	keyContent := &bytes.Buffer{}
-	if err := ca.Config.WriteCertConfig(crtContent, keyContent); err != nil {
-		return nil, err
-	}
-
-	tntls := render.TyphaNodeTLS{}
-
-	// Take CA cert and create ConfigMap
-	data := make(map[string]string)
-	data[render.TyphaCABundleName] = crtContent.String()
-	tntls.CAConfigMap = &corev1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      render.TyphaCAConfigMapName,
-			Namespace: common.OperatorNamespace(),
-		},
-		Data: data,
-	}
-
-	// Create TLS Secret for Felix using ca from above
-	tntls.NodeSecret, err = secret.CreateTLSSecret(ca,
-		render.NodeTLSSecretName,
-		common.OperatorNamespace(),
-		render.TLSSecretKeyName,
-		render.TLSSecretCertName,
-		rmeta.DefaultCertificateDuration,
-		[]crypto.CertificateExtensionFunc{tls.SetClientAuth},
-		render.FelixCommonName)
-	if err != nil {
-		return nil, err
-	}
-
-	// Set the CommonName used to create cert
-	tntls.NodeSecret.Data[render.CommonName] = []byte(render.FelixCommonName)
-
-	// Create TLS Secret for Felix using ca from above
-	tntls.TyphaSecret, err = secret.CreateTLSSecret(ca,
-		render.TyphaTLSSecretName,
-		common.OperatorNamespace(),
-		render.TLSSecretKeyName,
-		render.TLSSecretCertName,
-		rmeta.DefaultCertificateDuration,
-		[]crypto.CertificateExtensionFunc{tls.SetServerAuth},
-		render.TyphaCommonName)
-	if err != nil {
-		return nil, err
-	}
-
-	// Set the CommonName used to create cert
-	tntls.TyphaSecret.Data[render.CommonName] = []byte(render.TyphaCommonName)
-
-	return &tntls, nil
 }
 
 func getConfigMap(client client.Client, cmName string) (*corev1.ConfigMap, error) {

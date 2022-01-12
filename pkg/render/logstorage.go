@@ -74,7 +74,6 @@ const (
 	KibanaPublicCertSecret   = "tigera-secure-es-gateway-http-certs-public"
 	KibanaInternalCertSecret = "tigera-secure-kb-http-certs-public"
 	TigeraKibanaCertSecret   = "tigera-secure-kibana-cert"
-	KibanaDefaultCertPath    = "/etc/ssl/kibana/ca.pem"
 	KibanaBasePath           = "tigera-kibana"
 	KibanaServiceName        = "tigera-secure-kb-http"
 	KibanaDefaultRoute       = "/app/kibana#/dashboards?%s&title=%s"

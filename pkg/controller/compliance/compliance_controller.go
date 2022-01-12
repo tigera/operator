@@ -19,9 +19,6 @@ import (
 	"fmt"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/kubernetes"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -31,10 +28,11 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/tls"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -116,7 +114,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 			relasticsearch.PublicCertSecret, render.ElasticsearchComplianceBenchmarkerUserSecret,
 			render.ElasticsearchComplianceControllerUserSecret, render.ElasticsearchComplianceReporterUserSecret,
 			render.ElasticsearchComplianceSnapshotterUserSecret, render.ElasticsearchComplianceServerUserSecret,
-			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, render.DexCertSecretName} {
+			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, render.DexCertSecretName, tls.TigeraCASecretName} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("compliance-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
 			}
@@ -289,50 +287,44 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	var managerInternalTLSSecret *corev1.Secret
+	tigeraCA, err := utils.CreateTigeraCA(r.client, network.CertificateManagement, r.clusterDomain)
+	if err != nil {
+		log.Error(err, "unable to create the Tigera CA")
+		r.status.SetDegraded("unable to create the Tigera CA", err.Error())
+		return reconcile.Result{}, err
+	}
+	var managerInternalTLSSecret tls.Certificate
 	if managementCluster != nil {
-		managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
-			common.OperatorNamespace(),
-			render.ManagerInternalTLSSecretName,
-			render.ManagerInternalSecretKeyName,
-			render.ManagerInternalSecretCertName,
-		)
+		managerInternalTLSSecret, err = tigeraCA.GetCertificate(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
 		if err != nil {
-			log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", render.ManagerInternalSecretCertName))
-			r.status.SetDegraded(fmt.Sprintf("failed to retrieve / validate  %s", render.ManagerInternalSecretKeyName), err.Error())
+			log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", render.ManagerInternalTLSSecretName))
+			r.status.SetDegraded(fmt.Sprintf("failed to retrieve / validate  %s", render.ManagerInternalTLSSecretName), err.Error())
 			return reconcile.Result{}, err
 		}
 	}
+	trustedBundle, err := utils.CreateTrustedBundle(tigeraCA, managerInternalTLSSecret)
+	if err != nil {
+		log.Error(err, "unable to create a trusted cert bundle")
+		r.status.SetDegraded("unable to create a trusted cert bundle", err.Error())
+		return reconcile.Result{}, err
+	}
 
-	var complianceServerCertSecret *corev1.Secret
-	operatorManagedComplianceSecret := true
+	complianceServerCertSecret, err := tigeraCA.GetOrCreateKeyPair(
+		r.client,
+		render.ComplianceServerCertSecret,
+		common.OperatorNamespace(),
+		dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, r.clusterDomain))
+	if err != nil {
+		log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", render.ComplianceServerCertSecret))
+		r.status.SetDegraded(fmt.Sprintf("failed to retrieve / validate  %s", render.ComplianceServerCertSecret), err.Error())
+		return reconcile.Result{}, err
+	}
+
 	if network.CertificateManagement == nil {
-		complianceServerCertSecret, err = utils.ValidateCertPair(r.client,
-			common.OperatorNamespace(),
-			render.ComplianceServerCertSecret,
-			corev1.TLSPrivateKeyKey,
-			corev1.TLSCertKey,
-		)
-		if err != nil {
-			log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", render.ComplianceServerCertSecret))
-			r.status.SetDegraded(fmt.Sprintf("failed to retrieve / validate  %s", render.ComplianceServerCertSecret), err.Error())
-			return reconcile.Result{}, err
-		}
-
-		// Create the cert if doesn't exist. If the cert exists, check that the cert
-		// has the expected DNS names. If the cert doesn't and the cert is managed by the
-		// operator, the cert is recreated and returned. If the invalid cert is supplied by
-		// the user, set the component degraded.
-
-		complianceServerCertSecret, operatorManagedComplianceSecret, err = utils.EnsureCertificateSecret(
-			render.ComplianceServerCertSecret, complianceServerCertSecret, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, r.clusterDomain)...,
-		)
-		if err != nil {
-			r.status.SetDegraded(fmt.Sprintf("Error ensuring compliance TLS certificate %q exists and has valid DNS names", render.ComplianceServerCertSecret), err.Error())
-			return reconcile.Result{}, err
-		}
+		r.status.RemoveCertificateSigningRequests(render.ComplianceNamespace)
 	} else {
-		complianceServerCertSecret = render.CreateCertificateSecret(network.CertificateManagement.CACert, render.ComplianceServerCertSecret, common.OperatorNamespace())
+		// Monitor pending CSRs for the TigeraStatus
+		r.status.AddCertificateSigningRequests(render.ComplianceNamespace, map[string]string{"k8s-app": render.ComplianceNamespace})
 	}
 
 	// Fetch the Authentication spec. If present, we use to configure user authentication.
@@ -357,8 +349,8 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	var components []render.Component
-	if operatorManagedComplianceSecret {
-		components = append(components, render.NewPassthrough(complianceServerCertSecret))
+	if tigeraCA.Issued(complianceServerCertSecret) || complianceServerCertSecret.UseCertificateManagement() {
+		components = append(components, utils.NewKeyPairPassthrough(complianceServerCertSecret))
 	}
 
 	reqLogger.V(3).Info("rendering components")
@@ -366,7 +358,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	complianceCfg := &render.ComplianceConfiguration{
 		ESSecrets:                   esSecrets,
-		ManagerInternalTLSSecret:    managerInternalTLSSecret,
+		TrustedBundle:               trustedBundle,
 		Installation:                network,
 		ComplianceServerCertSecret:  complianceServerCertSecret,
 		ESClusterConfig:             esClusterConfig,

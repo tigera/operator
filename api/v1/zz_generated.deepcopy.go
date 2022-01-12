@@ -1028,6 +1028,18 @@ func (in *InstallationSpec) DeepCopyInto(out *InstallationSpec) {
 		*out = new(TyphaAffinity)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.TyphaNodeSelector != nil {
+		in, out := &in.TyphaNodeSelector, &out.TyphaNodeSelector
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
+	}
+	if in.ControlPlaneAffinity != nil {
+		in, out := &in.ControlPlaneAffinity, &out.ControlPlaneAffinity
+		*out = new(corev1.Affinity)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.ControlPlaneNodeSelector != nil {
 		in, out := &in.ControlPlaneNodeSelector, &out.ControlPlaneNodeSelector
 		*out = make(map[string]string, len(*in))
@@ -1074,6 +1086,18 @@ func (in *InstallationSpec) DeepCopyInto(out *InstallationSpec) {
 		in, out := &in.NonPrivileged, &out.NonPrivileged
 		*out = new(NonPrivilegedType)
 		**out = **in
+	}
+	if in.DaemonSetAffinity != nil {
+		in, out := &in.DaemonSetAffinity, &out.DaemonSetAffinity
+		*out = new(corev1.Affinity)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.DaemonSetNodeSelector != nil {
+		in, out := &in.DaemonSetNodeSelector, &out.DaemonSetNodeSelector
+		*out = make(map[string]string, len(*in))
+		for key, val := range *in {
+			(*out)[key] = val
+		}
 	}
 }
 
@@ -1452,6 +1476,11 @@ func (in *LogStorageSpec) DeepCopyInto(out *LogStorageSpec) {
 	if in.Retention != nil {
 		in, out := &in.Retention, &out.Retention
 		*out = new(Retention)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.DataAffinity != nil {
+		in, out := &in.DataAffinity, &out.DataAffinity
+		*out = new(corev1.Affinity)
 		(*in).DeepCopyInto(*out)
 	}
 	if in.DataNodeSelector != nil {

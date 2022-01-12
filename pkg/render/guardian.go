@@ -219,6 +219,7 @@ func (c *GuardianComponent) deployment() client.Object {
 					},
 				},
 				Spec: corev1.PodSpec{
+					Affinity:           c.cfg.Installation.ControlPlaneAffinity,
 					NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 					ServiceAccountName: GuardianServiceAccountName,
 					Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster, rmeta.TolerateCriticalAddonsOnly),

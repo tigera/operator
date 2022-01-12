@@ -427,6 +427,7 @@ func (c *typhaComponent) typhaDeployment() *appsv1.Deployment {
 				Spec: corev1.PodSpec{
 					Tolerations:                   tolerations,
 					Affinity:                      c.affinity(),
+					NodeSelector:                  c.cfg.Installation.TyphaNodeSelector,
 					ImagePullSecrets:              c.cfg.Installation.ImagePullSecrets,
 					ServiceAccountName:            TyphaServiceAccountName,
 					TerminationGracePeriodSeconds: &terminationGracePeriod,

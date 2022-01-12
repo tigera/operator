@@ -806,6 +806,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 				},
 				Spec: corev1.PodSpec{
 					DNSPolicy:          dnsPolicy,
+					Affinity:           c.cfg.Installation.ControlPlaneAffinity,
 					NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 					HostNetwork:        hostNetwork,
 					ServiceAccountName: serviceAccountName(c.cfg.Installation.Variant),

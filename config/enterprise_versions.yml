@@ -35,16 +35,16 @@ components:
   es-gateway:
     image: tigera/es-gateway
     version: v3.11.1
-  eck-kibana:
-    version: 7.11.2
   dex:
     image: tigera/dex
     version: v3.11.1
+  eck-kibana:
+    version: 7.16.2
   kibana:
     image: tigera/kibana
     version: v3.11.1
   eck-elasticsearch:
-    version: 7.11.2
+    version: 7.16.2
   elasticsearch:
     image: tigera/elasticsearch
     version: v3.11.1
@@ -87,6 +87,20 @@ components:
   packetcapture-api:
     image: tigera/packetcapture-api
     version: v3.11.1
+  # coreos-prometheus holds the version of prometheus built for tigera/prometheus,
+  # which prometheus operator uses to validate.
+  coreos-prometheus:
+    version: v2.32.0
+  prometheus:
+    image: tigera/prometheus
+    version: release-calient-v3.11
+  # coreos-prometheus holds the version of alertmanager built for tigera/alertmanager,
+  # which prometheus operator uses to validate.
+  coreos-alertmanager:
+    version: v0.23.0
+  alertmanager:
+    image: tigera/alertmanager
+    version: release-calient-v3.11
   tigera-prometheus-service:
     image: tigera/prometheus-service
     version: v3.11.1
@@ -101,17 +115,9 @@ components:
   elasticsearch-operator:
     image: tigera/eck-operator
     version: 1.8.0
-  prometheus:
-    image: tigera/prometheus
-    version: v2.17.2
-  alertmanager:
-    image: tigera/alertmanager
-    version: v0.20.0
   l7-collector:
     image: tigera/l7-collector
     version: v3.11.1
   envoy:
     image: tigera/envoy
     version: v3.11.1
-
-

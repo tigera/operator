@@ -25,6 +25,7 @@ import (
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
+	"github.com/elastic/cloud-on-k8s/pkg/controller/common/annotation"
 	"gopkg.in/inf.v0"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -731,7 +732,7 @@ func (es elasticsearchComponent) elasticsearchCluster(secureSettings bool) *esv1
 			Name:      ElasticsearchName,
 			Namespace: ElasticsearchNamespace,
 			Annotations: map[string]string{
-				"common.k8s.elastic.co/controller-version": components.ComponentElasticsearchOperator.Version,
+				annotation.ControllerVersionAnnotation: components.ComponentECKElasticsearchOperator.Version,
 			},
 		},
 		Spec: esv1.ElasticsearchSpec{
@@ -1325,7 +1326,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 				"k8s-app": KibanaName,
 			},
 			Annotations: map[string]string{
-				"common.k8s.elastic.co/controller-version": components.ComponentElasticsearchOperator.Version,
+				annotation.ControllerVersionAnnotation: components.ComponentECKElasticsearchOperator.Version,
 			},
 		},
 		Spec: kbv1.KibanaSpec{

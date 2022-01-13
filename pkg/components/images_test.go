@@ -30,7 +30,7 @@ var _ = Describe("test GetReference", func() {
 			Expect(GetReference(ComponentTigeraNode, "", "", "", nil)).To(Equal(TigeraRegistry + "tigera/cnx-node:" + ComponentTigeraNode.Version))
 		})
 		It("should render an ECK image correctly", func() {
-			Expect(GetReference(ComponentElasticsearchOperator, "", "", "", nil)).To(Equal("quay.io/tigera/eck-operator:" + ComponentElasticsearchOperator.Version))
+			Expect(GetReference(ComponentElasticsearchOperator, "", "", "", nil)).To(Equal("gcr.io/unique-caldron-775/cnx/tigera/eck-operator:" + ComponentElasticsearchOperator.Version))
 		})
 		It("should render an operator init image correctly", func() {
 			Expect(GetReference(ComponentOperatorInit, "", "", "", nil)).To(Equal(InitRegistry + "tigera/operator:" + ComponentOperatorInit.Version))
@@ -46,7 +46,7 @@ var _ = Describe("test GetReference", func() {
 			Expect(GetReference(ComponentTigeraNode, ud, ud, "", nil)).To(Equal(TigeraRegistry + "tigera/cnx-node:" + ComponentTigeraNode.Version))
 		})
 		It("should render an ECK image correctly", func() {
-			Expect(GetReference(ComponentElasticsearchOperator, ud, ud, "", nil)).To(Equal("quay.io/tigera/eck-operator:" + ComponentElasticsearchOperator.Version))
+			Expect(GetReference(ComponentElasticsearchOperator, ud, ud, "", nil)).To(Equal("gcr.io/unique-caldron-775/cnx/tigera/eck-operator:" + ComponentElasticsearchOperator.Version))
 		})
 		It("should render an operator init image correctly", func() {
 			Expect(GetReference(ComponentOperatorInit, ud, ud, "", nil)).To(Equal(InitRegistry + "tigera/operator:" + ComponentOperatorInit.Version))
@@ -94,7 +94,7 @@ var _ = Describe("test GetReference", func() {
 			Expect(GetReference(ComponentTigeraNode, "", "userpath", "", nil)).To(Equal(TigeraRegistry + "userpath/cnx-node:" + ComponentTigeraNode.Version))
 		})
 		It("should render an ECK image correctly", func() {
-			Expect(GetReference(ComponentElasticsearchOperator, "", "userpath", "", nil)).To(Equal("quay.io/userpath/eck-operator:" + ComponentElasticsearchOperator.Version))
+			Expect(GetReference(ComponentElasticsearchOperator, "", "userpath", "", nil)).To(Equal("gcr.io/unique-caldron-775/cnx/userpath/eck-operator:" + ComponentElasticsearchOperator.Version))
 		})
 		It("should render an operator init image correctly", func() {
 			Expect(GetReference(ComponentOperatorInit, "", "userpath", "", nil)).To(Equal(InitRegistry + "userpath/operator:" + ComponentOperatorInit.Version))

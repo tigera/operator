@@ -72,8 +72,13 @@ var (
 		Image:   "tigera/elasticsearch",
 	}
 
-	ComponentElasticsearchOperator = component{
+	ComponentECKElasticsearchOperator = component{
 		Version: "1.8.0",
+		Image:   "tigera/eck-operator",
+	}
+
+	ComponentElasticsearchOperator = component{
+		Version: "master",
 		Image:   "tigera/eck-operator",
 	}
 
@@ -223,6 +228,7 @@ var (
 		ComponentEckKibana,
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,
+		ComponentECKElasticsearchOperator,
 		ComponentElasticsearchOperator,
 		ComponentEsCurator,
 		ComponentEsProxy,

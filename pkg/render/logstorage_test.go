@@ -191,6 +191,22 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					"node.ingest":                 "true",
 					"cluster.max_shards_per_node": 10000,
 				}))
+				resultECK := rtest.GetResource(createResources, render.ECKOperatorName, render.ECKOperatorNamespace,
+					"apps", "v1", "StatefulSet").(*appsv1.StatefulSet)
+				Expect(resultECK.Spec.Template.Spec.Containers[0].Args).To(ConsistOf([]string{
+					"manager",
+					"--namespaces=tigera-elasticsearch,tigera-kibana",
+					"--log-verbosity=0",
+					"--metrics-port=0",
+					"--container-registry=testregistry.com/",
+					"--max-concurrent-reconciles=3",
+					"--ca-cert-validity=8760h",
+					"--ca-cert-rotate-before=24h",
+					"--cert-validity=8760h",
+					"--cert-rotate-before=24h",
+					"--enable-webhook=false",
+					"--manage-webhook-certs=false",
+				}))
 			})
 			It("should render an elasticsearchComponent and delete the Elasticsearch and Kibana ExternalService", func() {
 				expectedCreateResources := []resourceTestObj{

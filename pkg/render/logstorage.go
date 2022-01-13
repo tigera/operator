@@ -1195,6 +1195,7 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 						// Verbosity level of logs. -2=Error, -1=Warn, 0=Info, 0 and above=Debug
 						Args: []string{
 							"manager",
+							"--namespaces=tigera-elasticsearch,tigera-kibana",
 							"--log-verbosity=0",
 							"--metrics-port=0",
 							"--container-registry=" + es.cfg.Installation.Registry,

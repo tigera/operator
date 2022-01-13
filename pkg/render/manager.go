@@ -647,10 +647,10 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 	}
 
 	env := []corev1.EnvVar{
-		{Name: "ELASTIC_LICENSE_TYPE", Value: string(c.cfg.ESLicenseType)},
+		{Name: "ELASTIC_LICENSE_TYPE", Value: string(c.esLicenseType)},
 		// The ELASTIC_VERSION flag is used to set the kbn-version for a browser redirect.
 		{Name: "ELASTIC_VERSION", Value: components.ComponentEckKibana.Version},
-		{Name: "ELASTIC_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
+		{Name: "ELASTIC_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.clusterDomain)},
 	}
 
 	if c.keyValidatorConfig != nil {

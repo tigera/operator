@@ -1276,13 +1276,19 @@ func (es elasticsearchComponent) kibanaServiceAccount() *corev1.ServiceAccount {
 }
 
 func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
+	server := map[string]interface{}{
+		"basePath":        fmt.Sprintf("/%s", KibanaBasePath),
+		"rewriteBasePath": true,
+		"defaultRoute":    fmt.Sprintf(KibanaDefaultRoute, TimeFilter, url.PathEscape(FlowsDashboardName)),
+	}
+
+	if es.DexCfg != nil && es.DexCfg.BaseURL() != "" {
+		server["publicBaseUrl"] = fmt.Sprintf("%s/tigera-kibana", es.DexCfg.BaseURL())
+	}
+
 	config := map[string]interface{}{
-		"server": map[string]interface{}{
-			"basePath":        fmt.Sprintf("/%s", KibanaBasePath),
-			"rewriteBasePath": true,
-			"defaultRoute":    fmt.Sprintf(KibanaDefaultRoute, TimeFilter, url.PathEscape(FlowsDashboardName)),
-		},
 		"elasticsearch.ssl.certificateAuthorities": []string{"/usr/share/kibana/config/elasticsearch-certs/tls.crt"},
+		"server": server,
 		"tigera": map[string]interface{}{
 			"enabled":        true,
 			"licenseEdition": "enterpriseEdition",

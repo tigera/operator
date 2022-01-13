@@ -1058,6 +1058,16 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 		},
 	}
 
+	// benchmarker needs an extra host path volume mount for GKE for CIS benchmarks
+	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderGKE {
+		volMounts = append(volMounts, corev1.VolumeMount{Name: "home-kubernetes", MountPath: "/home/kubernetes", ReadOnly: true})
+
+		vols = append(vols, corev1.Volume{
+			Name:         "home-kubernetes",
+			VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/home/kubernetes"}},
+		} )
+	}
+
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "compliance-benchmarker",

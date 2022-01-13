@@ -1282,8 +1282,8 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 		"defaultRoute":    fmt.Sprintf(KibanaDefaultRoute, TimeFilter, url.PathEscape(FlowsDashboardName)),
 	}
 
-	if es.cfg.DexCfg != nil && es.cfg.DexCfg.BaseURL() != "" {
-		server["publicBaseUrl"] = fmt.Sprintf("%s/tigera-kibana", es.cfg.DexCfg.BaseURL())
+	if es.DexCfg != nil && es.DexCfg.BaseURL() != "" {
+		server["publicBaseUrl"] = fmt.Sprintf("%s/tigera-kibana", es.DexCfg.BaseURL())
 	}
 
 	config := map[string]interface{}{

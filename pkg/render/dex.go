@@ -236,6 +236,7 @@ func (c *dexComponent) deployment() client.Object {
 					Annotations: c.cfg.DexConfig.RequiredAnnotations(),
 				},
 				Spec: corev1.PodSpec{
+					Affinity:           c.cfg.Installation.ControlPlaneAffinity,
 					NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 					ServiceAccountName: DexObjectName,
 					Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster),

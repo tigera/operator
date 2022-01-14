@@ -42,6 +42,11 @@ type LogStorageSpec struct {
 	// +optional
 	StorageClassName string `json:"storageClassName,omitempty"`
 
+	// DataAffinity allows configuration of the affinity characteristics for Elasticsearch to provide more control over
+	// where Elasticsearch will run. The contents of DataAffinity will be added to the PodSpec of the Elasticsearch nodes.
+	// +optional
+	DataAffinity *corev1.Affinity `json:"dataAffinity,omitempty"`
+
 	// DataNodeSelector gives you more control over the node that Elasticsearch will run on. The contents of DataNodeSelector will
 	// be added to the PodSpec of the Elasticsearch nodes. For the pod to be eligible to run on a node, the node must have
 	// each of the indicated key-value pairs as labels as well as access to the specified StorageClassName.

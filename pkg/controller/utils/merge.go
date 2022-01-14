@@ -79,6 +79,11 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		inst.CalicoNetwork = mergeCalicoNetwork(inst.CalicoNetwork, override.CalicoNetwork)
 	}
 
+	switch compareFields(inst.ControlPlaneAffinity, override.ControlPlaneAffinity) {
+	case BOnlySet, Different:
+		inst.ControlPlaneAffinity = override.ControlPlaneAffinity
+	}
+
 	switch compareFields(inst.ControlPlaneNodeSelector, override.ControlPlaneNodeSelector) {
 	case BOnlySet, Different:
 		inst.ControlPlaneNodeSelector = make(map[string]string, len(override.ControlPlaneNodeSelector))
@@ -129,6 +134,14 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		inst.TyphaAffinity = override.TyphaAffinity
 	}
 
+	switch compareFields(inst.TyphaNodeSelector, override.TyphaNodeSelector) {
+	case BOnlySet, Different:
+		inst.TyphaNodeSelector = make(map[string]string, len(override.TyphaNodeSelector))
+		for key, val := range override.TyphaNodeSelector {
+			inst.TyphaNodeSelector[key] = val
+		}
+	}
+
 	switch compareFields(inst.CertificateManagement, override.CertificateManagement) {
 	case BOnlySet:
 		inst.CertificateManagement = override.CertificateManagement.DeepCopy()
@@ -139,6 +152,19 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 	switch compareFields(inst.NonPrivileged, override.NonPrivileged) {
 	case BOnlySet, Different:
 		inst.NonPrivileged = override.NonPrivileged
+	}
+
+	switch compareFields(inst.DaemonSetAffinity, override.DaemonSetAffinity) {
+	case BOnlySet, Different:
+		inst.DaemonSetAffinity = override.DaemonSetAffinity
+	}
+
+	switch compareFields(inst.DaemonSetNodeSelector, override.DaemonSetNodeSelector) {
+	case BOnlySet, Different:
+		inst.DaemonSetNodeSelector = make(map[string]string, len(override.DaemonSetNodeSelector))
+		for key, val := range override.DaemonSetNodeSelector {
+			inst.DaemonSetNodeSelector[key] = val
+		}
 	}
 
 	return inst

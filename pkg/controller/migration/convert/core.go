@@ -305,38 +305,36 @@ func removeExpectedAnnotations(existing, ignoreWithValue map[string]string, toBe
 func handleNodeSelectors(c *components, install *operatorv1.Installation) error {
 	// check calico-node nodeSelectors
 	if c.node.Spec.Template.Spec.Affinity != nil {
-		if install.Spec.KubernetesProvider != operatorv1.ProviderAKS || !reflect.DeepEqual(c.node.Spec.Template.Spec.Affinity, &corev1.Affinity{
-			NodeAffinity: &corev1.NodeAffinity{
-				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
-					NodeSelectorTerms: []corev1.NodeSelectorTerm{{
-						MatchExpressions: []corev1.NodeSelectorRequirement{{
-							Key:      "type",
-							Operator: corev1.NodeSelectorOpNotIn,
-							Values:   []string{"virtual-kubelet"},
-						}},
-					}},
-				},
-			},
-		}) {
-			return ErrIncompatibleCluster{
-				err:       "node affinity not supported for calico-node daemonset",
-				component: ComponentCalicoNode,
-				fix:       "remove the affinity",
+		var err error
+		if install.Spec.KubernetesProvider == operatorv1.ProviderAKS {
+			if aksErr := checkAKSAffinity(c.node.Spec.Template.Spec.Affinity); aksErr != nil {
+				err = aksErr
 			}
 		}
+
+		if install.Spec.KubernetesProvider == operatorv1.ProviderEKS {
+			if eksErr := checkAKSAffinity(c.node.Spec.Template.Spec.Affinity); eksErr != nil {
+				err = eksErr
+			}
+		}
+
+		if err != nil {
+			return ErrIncompatibleCluster{
+				err:       err.Error(),
+				component: ComponentCalicoNode,
+				fix:       "add the appropriate affinity",
+			}
+		}
+
+		// Migrate the node affinity
+		install.Spec.DaemonSetAffinity = c.node.Spec.Template.Spec.Affinity
 	}
 	nodeSel := removeOSNodeSelectors(c.node.Spec.Template.Spec.NodeSelector)
 	if _, ok := nodeSel["projectcalico.org/operator-node-migration"]; ok {
 		delete(nodeSel, "projectcalico.org/operator-node-migration")
 	}
 	if len(nodeSel) > 0 {
-		// raise error unless the only nodeSelector is the  calico-node migration nodeSelector
-		return ErrIncompatibleCluster{
-			err:       fmt.Sprintf("unsupported nodeSelector for calico-node daemonset: %v", nodeSel),
-			component: ComponentCalicoNode,
-			fix:       "remove the nodeSelector",
-		}
-
+		install.Spec.DaemonSetNodeSelector = nodeSel
 	}
 
 	// check typha nodeSelectors
@@ -366,22 +364,14 @@ func handleNodeSelectors(c *components, install *operatorv1.Installation) error 
 			}
 		}
 		if nodeSel := removeOSNodeSelectors(c.typha.Spec.Template.Spec.NodeSelector); len(nodeSel) != 0 {
-			return ErrIncompatibleCluster{
-				err:       fmt.Sprintf("invalid nodeSelector for typha deployment: %v", nodeSel),
-				component: ComponentTypha,
-				fix:       "remove the nodeSelector",
-			}
+			install.Spec.TyphaNodeSelector = nodeSel
 		}
 	}
 
 	// check kube-controllers nodeSelectors
 	if c.kubeControllers != nil {
 		if c.kubeControllers.Spec.Template.Spec.Affinity != nil {
-			return ErrIncompatibleCluster{
-				err:       "node affinity not supported for kube-controller deployment",
-				component: ComponentKubeControllers,
-				fix:       "remove the affinity",
-			}
+			install.Spec.ControlPlaneAffinity = c.kubeControllers.Spec.Template.Spec.Affinity
 		}
 
 		// kube-controllers nodeSelector is unique in that we do have an API for setting it's nodeSelectors.
@@ -406,6 +396,36 @@ func removeOSNodeSelectors(existing map[string]string) map[string]string {
 	}
 
 	return nodeSel
+}
+
+func checkAKSAffinity(affinity *corev1.Affinity) error {
+	for _, term := range affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms {
+		for _, matchExp := range term.MatchExpressions {
+			if matchExp.Key == "type" && matchExp.Operator == corev1.NodeSelectorOpNotIn {
+				for _, val := range matchExp.Values {
+					if val == "virtual-kubelet" {
+						return nil
+					}
+				}
+			}
+		}
+	}
+	return fmt.Errorf("calico-node affinity must include a node selector matching expression that requires that 'type' is not 'virtual-kubelet' during scheduling, but is ignored during execution")
+}
+
+func checkEKSAffinity(affinity *corev1.Affinity) error {
+	for _, term := range affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms {
+		for _, matchExp := range term.MatchExpressions {
+			if matchExp.Key == "eks.amazonaws.com/compute-type" && matchExp.Operator == corev1.NodeSelectorOpNotIn {
+				for _, val := range matchExp.Values {
+					if val == "fargate" {
+						return nil
+					}
+				}
+			}
+		}
+	}
+	return fmt.Errorf("calico-node affinity must include a node selector matching expression that requires that 'eks.amazonaws.com/compute-type' is not 'fargate' during scheduling, but is ignored during execution")
 }
 
 // handleFelixNodeMetrics is a migration handler which detects custom prometheus settings for felix and

@@ -109,9 +109,9 @@ var _ = Describe("core handler", func() {
 
 	Context("nodeSelector", func() {
 		TestNodeSelectors := func(f func(map[string]string)) {
-			It("should error for unexpected nodeSelectors", func() {
+			It("should not error for unexpected nodeSelectors", func() {
 				f(map[string]string{"foo": "bar"})
-				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
 			})
 			It("should not error for beta.kubernetes.io/os=linux nodeSelector", func() {
 				f(map[string]string{"beta.kubernetes.io/os": "linux"})
@@ -121,16 +121,9 @@ var _ = Describe("core handler", func() {
 				f(map[string]string{"kubernetes.io/os": "linux"})
 				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
 			})
-			It("should error for other kubernetes.io/os nodeSelectors", func() {
+			It("should not error for other kubernetes.io/os nodeSelectors", func() {
 				f(map[string]string{"kubernetes.io/os": "windows"})
-				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
-			})
-			It("should still error even if a valid and invalid nodeselector are set", func() {
-				f(map[string]string{
-					"kubernetes.io/os": "linux",
-					"foo":              "bar",
-				})
-				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
 			})
 			It("should not panic for nil nodeselectors", func() {
 				f(nil)
@@ -148,16 +141,31 @@ var _ = Describe("core handler", func() {
 				}
 				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
 			})
-			It("should error if a nodeSelector is set alongside the migration nodeSelector", func() {
+			It("should not error if a nodeSelector is set alongside the migration nodeSelector", func() {
 				comps.node.Spec.Template.Spec.NodeSelector = map[string]string{
 					"foo": "bar",
 					"projectcalico.org/operator-node-migration": "pre-operator",
 				}
-				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.DaemonSetNodeSelector).To(Equal(map[string]string{"foo": "bar"}))
 			})
-			It("should error for unexpected affinities", func() {
-				comps.node.Spec.Template.Spec.Affinity = &v1.Affinity{}
-				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
+			It("should not error for calico-node daemonset affinities", func() {
+				affinity := &v1.Affinity{
+					NodeAffinity: &v1.NodeAffinity{
+						RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+							NodeSelectorTerms: []v1.NodeSelectorTerm{{
+								MatchExpressions: []v1.NodeSelectorRequirement{{
+									Key:      "cluster-name",
+									Operator: v1.NodeSelectorOpIn,
+									Values:   []string{"test-cluster"},
+								}},
+							}},
+						},
+					},
+				}
+				comps.node.Spec.Template.Spec.Affinity = affinity
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.DaemonSetAffinity).To(Equal(affinity))
 			})
 			It("shouldn't error for aks affinity on aks", func() {
 				comps.node.Spec.Template.Spec.Affinity = &v1.Affinity{
@@ -256,6 +264,15 @@ var _ = Describe("core handler", func() {
 					Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
 				})
 			})
+
+			Context("node selectors", func() {
+				It("should not error if node selectors are set", func() {
+					sels := map[string]string{"foo": "bar"}
+					comps.typha.Spec.Template.Spec.NodeSelector = sels
+					Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+					Expect(i.Spec.TyphaNodeSelector).To(Equal(sels))
+				})
+			})
 		})
 
 		// kube-controllers has a configurable nodeSelector which should
@@ -278,9 +295,29 @@ var _ = Describe("core handler", func() {
 				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
 				Expect(i.Spec.ControlPlaneNodeSelector).To(Equal(map[string]string{"kubernetes.io/os": "windows"}))
 			})
+
 			It("should not set nodeSelector if none is set", func() {
 				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
 				Expect(i.Spec.ControlPlaneNodeSelector).To(BeNil())
+			})
+
+			It("should carry forward affinity if it is set", func() {
+				affinity := &v1.Affinity{
+					NodeAffinity: &v1.NodeAffinity{
+						RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+							NodeSelectorTerms: []v1.NodeSelectorTerm{{
+								MatchExpressions: []v1.NodeSelectorRequirement{{
+									Key:      "cluster-name",
+									Operator: v1.NodeSelectorOpIn,
+									Values:   []string{"test-cluster"},
+								}},
+							}},
+						},
+					},
+				}
+				comps.kubeControllers.Spec.Template.Spec.Affinity = affinity
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.ControlPlaneAffinity).To(Equal(affinity))
 			})
 		})
 	})
@@ -415,18 +452,18 @@ var _ = Describe("core handler", func() {
 				})
 				It("should not error if no tolerations set", func() {
 					setTolerations([]v1.Toleration{})
-					Expect(handleCore(&comps, i)).NotTo(HaveOccurred())
+					Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
 				})
 				It("should not error if missing just one toleration", func() {
 					setTolerations(existingTolerations[0 : len(existingTolerations)-1])
-					Expect(handleCore(&comps, i)).NotTo(HaveOccurred())
+					Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
 				})
 				It("should not error if additional toleration exists", func() {
 					setTolerations(append(existingTolerations, v1.Toleration{
 						Key:    "foo",
 						Effect: "bar",
 					}))
-					Expect(handleCore(&comps, i)).NotTo(HaveOccurred())
+					Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
 				})
 			}
 			Describe("calico-node", func() {

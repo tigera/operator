@@ -680,6 +680,12 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 		}
 	}
 
+	// Override all affinity changes if daemonset affinity is set. The above affinity settings
+	// dependent upon the provider are validated separately.
+	if c.cfg.Installation.DaemonSetAffinity != nil {
+		affinity = c.cfg.Installation.DaemonSetAffinity
+	}
+
 	// Determine the name to use for the calico/node daemonset. For mixed-mode, we run the enterprise DaemonSet
 	// with its own name so as to not conflict.
 	ds := appsv1.DaemonSet{
@@ -700,6 +706,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 				Spec: corev1.PodSpec{
 					Tolerations:                   rmeta.TolerateAll,
 					Affinity:                      affinity,
+					NodeSelector:                  c.cfg.Installation.DaemonSetNodeSelector,
 					ImagePullSecrets:              c.cfg.Installation.ImagePullSecrets,
 					ServiceAccountName:            "calico-node",
 					TerminationGracePeriodSeconds: &terminationGracePeriod,

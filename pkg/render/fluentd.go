@@ -423,7 +423,8 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 			Annotations: annots,
 		},
 		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
-			NodeSelector:                  map[string]string{},
+			Affinity:                      c.cfg.Installation.DaemonSetAffinity,
+			NodeSelector:                  c.cfg.Installation.DaemonSetNodeSelector,
 			Tolerations:                   c.tolerations(),
 			ImagePullSecrets:              secret.GetReferenceList(c.cfg.PullSecrets),
 			TerminationGracePeriodSeconds: &terminationGracePeriod,

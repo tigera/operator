@@ -23,6 +23,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // validateCustomResource validates that the given custom resource is correct. This
@@ -361,6 +362,22 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		}
 	}
 
+	// Verify that daemonset affinity ensures that they are not run on virtual nodes (AKS) or fargate nodes (EKS).
+	if instance.Spec.DaemonSetAffinity != nil {
+		// Check that an expression that excludes virtual nodes exists for AKS deployments
+		if instance.Spec.KubernetesProvider == operatorv1.ProviderAKS {
+			if err := validateAKSAffinity(instance.Spec.DaemonSetAffinity); err != nil {
+				return err
+			}
+		}
+		// Check that an expression that excludes fargate nodes exists for EKS deployments
+		if instance.Spec.KubernetesProvider == operatorv1.ProviderEKS {
+			if err := validateEKSAffinity(instance.Spec.DaemonSetAffinity); err != nil {
+				return err
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -416,4 +433,34 @@ func validateHostPorts(hp *operatorv1.HostPortsType) error {
 	}
 
 	return nil
+}
+
+func validateAKSAffinity(affinity *corev1.Affinity) error {
+	for _, term := range affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms {
+		for _, matchExp := range term.MatchExpressions {
+			if matchExp.Key == "type" && matchExp.Operator == corev1.NodeSelectorOpNotIn {
+				for _, val := range matchExp.Values {
+					if val == "virtual-kubelet" {
+						return nil
+					}
+				}
+			}
+		}
+	}
+	return fmt.Errorf("when spec.KubernetesProvider is set to AKS, spec.DaemonSetAffinity must include a node affinity with a node selector matching expression that requires that 'type' is not 'virtual-kubelet' during scheduling, but ignores during execution")
+}
+
+func validateEKSAffinity(affinity *corev1.Affinity) error {
+	for _, term := range affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms {
+		for _, matchExp := range term.MatchExpressions {
+			if matchExp.Key == "eks.amazonaws.com/compute-type" && matchExp.Operator == corev1.NodeSelectorOpNotIn {
+				for _, val := range matchExp.Values {
+					if val == "fargate" {
+						return nil
+					}
+				}
+			}
+		}
+	}
+	return fmt.Errorf("when spec.KubernetesProvider is set to EKS, spec.DaemonSetAffinity must include a node affinity with a node selector matching expression that requires that 'eks.amazonaws.com/compute-type' is not 'fargate' during scheduling, but ignores during execution")
 }

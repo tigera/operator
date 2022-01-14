@@ -151,6 +151,45 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		Expect(rtest.GetResource(resources, "tigera-critical-pods", "tigera-fluentd", "", "v1", "ResourceQuota")).ToNot(BeNil())
 	})
 
+	It("should render with the daemonset affinity", func() {
+		cfg.Installation.DaemonSetAffinity = &corev1.Affinity{
+			NodeAffinity: &corev1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+					NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+						MatchExpressions: []corev1.NodeSelectorRequirement{{
+							Key:      "cluster-name",
+							Operator: corev1.NodeSelectorOpIn,
+							Values:   []string{"test-cluster"},
+						}},
+					}},
+				},
+			},
+		}
+		component := render.Fluentd(cfg)
+		resources, _ := component.Objects()
+		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		Expect(ds.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms).To(ContainElement(
+			corev1.NodeSelectorTerm{
+				MatchExpressions: []corev1.NodeSelectorRequirement{{
+					Key:      "cluster-name",
+					Operator: corev1.NodeSelectorOpIn,
+					Values:   []string{"test-cluster"},
+				}},
+			},
+		))
+	})
+
+	It("should render with the daemonset node selectors", func() {
+		cfg.Installation.DaemonSetNodeSelector = map[string]string{"nodeSelector": "test"}
+		component := render.Fluentd(cfg)
+		resources, _ := component.Objects()
+		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		nodeSel := ds.Spec.Template.Spec.NodeSelector
+		Expect(nodeSel).ToNot(BeNil())
+		Expect(nodeSel).To(HaveLen(1))
+		Expect(nodeSel["nodeSelector"]).To(Equal("test"))
+	})
+
 	It("should render for Windows nodes", func() {
 		expectedResources := []struct {
 			name    string

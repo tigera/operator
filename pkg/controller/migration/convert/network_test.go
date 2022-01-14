@@ -411,6 +411,7 @@ var _ = Describe("Convert network tests", func() {
 				},
 				Entry("subnet in ipam section", `"subnet": "usePodCidr"`),
 				Entry("subnet in ranges section under ipam", `"ranges": [[{ "subnet": "usePodCidr" }]]`),
+				Entry("dual-stack subnets in ranges section", `"ranges": [[{ "subnet": "usePodCidr" }], [{ "subnet": "usePodCidrIPv6" }]]`),
 			)
 		})
 

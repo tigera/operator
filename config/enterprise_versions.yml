@@ -114,7 +114,7 @@ components:
   # quay.io/tigera so all enterprise images come from the same repository and org.
   elasticsearch-operator:
     image: tigera/eck-operator
-    version: master
+    version: release-calient-v3.11
   eck-elasticsearch-operator:
     version: 1.8.0
   l7-collector:

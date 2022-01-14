@@ -95,6 +95,16 @@ type InstallationSpec struct {
 	// +optional
 	TyphaAffinity *TyphaAffinity `json:"typhaAffinity,omitempty"`
 
+	// TyphaNodeSelector is used to select the nodes on which to run Typha pods.
+	// +optional
+	TyphaNodeSelector map[string]string `json:"typhaNodeSelector,omitempty"`
+
+	// ControlPlaneAffinity allows configuration of node affinity characteristics for Calico
+	// components scheduled on control plane nodes. This is globally applied to all resources created
+	// by the operator excluding daemonsets.
+	// +optional
+	ControlPlaneAffinity *v1.Affinity `json:"controlPlaneAffinity,omitempty"`
+
 	// ControlPlaneNodeSelector is used to select control plane nodes on which to run Calico
 	// components. This is globally applied to all resources created by the operator excluding daemonsets.
 	// +optional
@@ -145,6 +155,15 @@ type InstallationSpec struct {
 	// NonPrivileged configures Calico to be run in non-privileged containers as non-root users where possible.
 	// +optional
 	NonPrivileged *NonPrivilegedType `json:"nonPrivileged,omitempty"`
+
+	// DaemonsetAffinity allows configuration of node affinity characteristics for all Calico daemonsets (i.e. calico-node).
+	// In EKS this defaults to avoiding Fargate nodes. In AKS this defaults to avoiding virtual nodes.
+	// +optional
+	DaemonSetAffinity *v1.Affinity `json:"daemonSetAffinity,omitempty"`
+
+	// DaemonsetNodeSelector is used to select nodes on which to run all Calico daemonsets (i.e. calico-node).
+	// +optional
+	DaemonSetNodeSelector map[string]string `json:"daemonSetNodeSelector,omitempty"`
 }
 
 // TyphaAffinity allows configuration of node affinitiy characteristics for Typha pods.

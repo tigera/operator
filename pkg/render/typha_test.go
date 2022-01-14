@@ -276,6 +276,19 @@ var _ = Describe("Typha rendering tests", func() {
 		Expect(na).To(Equal(rst))
 	})
 
+	It("should render typha node selectors when set by user", func() {
+		installation.TyphaNodeSelector = map[string]string{"nodeSelector": "test"}
+		component := render.Typha(&cfg)
+		resources, _ := component.Objects()
+		dResource := rtest.GetResource(resources, "calico-typha", "calico-system", "apps", "v1", "Deployment")
+		Expect(dResource).ToNot(BeNil())
+		d := dResource.(*appsv1.Deployment)
+		nodeSel := d.Spec.Template.Spec.NodeSelector
+		Expect(nodeSel).ToNot(BeNil())
+		Expect(nodeSel).To(HaveLen(1))
+		Expect(nodeSel["nodeSelector"]).To(Equal("test"))
+	})
+
 	It("should render all resources when certificate management is enabled", func() {
 		installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: []byte("<ca>"), SignerName: "a.b/c"}
 		expectedResources := []struct {

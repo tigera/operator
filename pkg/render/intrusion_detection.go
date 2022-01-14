@@ -154,6 +154,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 		},
 		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
 			Tolerations:      c.cfg.Installation.ControlPlaneTolerations,
+			Affinity:         c.cfg.Installation.ControlPlaneAffinity,
 			NodeSelector:     c.cfg.Installation.ControlPlaneNodeSelector,
 			RestartPolicy:    corev1.RestartPolicyOnFailure,
 			ImagePullSecrets: secret.GetReferenceList(c.cfg.PullSecrets),
@@ -470,6 +471,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 		},
 		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
 			Tolerations:        c.cfg.Installation.ControlPlaneTolerations,
+			Affinity:           c.cfg.Installation.ControlPlaneAffinity,
 			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 			ServiceAccountName: "intrusion-detection-controller",
 			ImagePullSecrets:   ps,

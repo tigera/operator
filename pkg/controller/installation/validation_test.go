@@ -325,6 +325,76 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
+	It("should not allow daemonset affinities that do not exclude virtual nodes when run with AKS", func() {
+		instance.Spec.KubernetesProvider = operator.ProviderAKS
+		instance.Spec.DaemonSetAffinity = &v1.Affinity{
+			NodeAffinity: &v1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+					NodeSelectorTerms: []v1.NodeSelectorTerm{{
+						MatchExpressions: []v1.NodeSelectorRequirement{{
+							Key:      "cluster-name",
+							Operator: v1.NodeSelectorOpIn,
+							Values:   []string{"test-cluster"},
+						}},
+					}},
+				},
+			},
+		}
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+
+		instance.Spec.DaemonSetAffinity = &v1.Affinity{
+			NodeAffinity: &v1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+					NodeSelectorTerms: []v1.NodeSelectorTerm{{
+						MatchExpressions: []v1.NodeSelectorRequirement{{
+							Key:      "type",
+							Operator: v1.NodeSelectorOpNotIn,
+							Values:   []string{"virtual-kubelet"},
+						}},
+					}},
+				},
+			},
+		}
+		err = validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should not allow daemonset affinities that do not exclude fargate nodes when run with EKS", func() {
+		instance.Spec.KubernetesProvider = operator.ProviderEKS
+		instance.Spec.DaemonSetAffinity = &v1.Affinity{
+			NodeAffinity: &v1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+					NodeSelectorTerms: []v1.NodeSelectorTerm{{
+						MatchExpressions: []v1.NodeSelectorRequirement{{
+							Key:      "type",
+							Operator: v1.NodeSelectorOpIn,
+							Values:   []string{"virtual-kubelet"},
+						}},
+					}},
+				},
+			},
+		}
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+
+		instance.Spec.DaemonSetAffinity = &v1.Affinity{
+			NodeAffinity: &v1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+					NodeSelectorTerms: []v1.NodeSelectorTerm{{
+						MatchExpressions: []v1.NodeSelectorRequirement{{
+							Key:      "eks.amazonaws.com/compute-type",
+							Operator: v1.NodeSelectorOpNotIn,
+							Values:   []string{"fargate"},
+						}},
+					}},
+				},
+			},
+		}
+		err = validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 	Describe("validate Calico CNI plugin Type", func() {
 		DescribeTable("test invalid IPAM",
 			func(ipam operator.IPAMPluginType) {

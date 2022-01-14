@@ -372,6 +372,40 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(dpComplianceController.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("foo", "bar"))
 			Expect(complianceSnapshotter.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("foo", "bar"))
 		})
+
+		It("should apply daemonSetAffinity", func() {
+			_, _, _, _, complianceBenchmarker := renderCompliance(&operatorv1.InstallationSpec{
+				DaemonSetAffinity: &corev1.Affinity{
+					NodeAffinity: &corev1.NodeAffinity{
+						RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+							NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+								MatchExpressions: []corev1.NodeSelectorRequirement{{
+									Key:      "fiz",
+									Operator: corev1.NodeSelectorOpIn,
+									Values:   []string{"baz"},
+								}},
+							}},
+						},
+					},
+				},
+			})
+			Expect(complianceBenchmarker.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms).To(ContainElement(
+				corev1.NodeSelectorTerm{
+					MatchExpressions: []corev1.NodeSelectorRequirement{{
+						Key:      "fiz",
+						Operator: corev1.NodeSelectorOpIn,
+						Values:   []string{"baz"},
+					}},
+				},
+			))
+		})
+
+		It("should apply daemonSetNodeSelectors", func() {
+			_, _, _, _, complianceBenchmarker := renderCompliance(&operatorv1.InstallationSpec{
+				DaemonSetNodeSelector: map[string]string{"fiz": "baz"},
+			})
+			Expect(complianceBenchmarker.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("fiz", "baz"))
+		})
 	})
 
 	Context("Certificate management enabled", func() {

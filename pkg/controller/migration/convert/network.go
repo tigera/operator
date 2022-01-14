@@ -264,15 +264,19 @@ func subhandleHostLocalIPAM(netBackend string, ipamcfg cni.HostLocalIPAMConfig, 
 	switch len(ipamcfg.Ranges) {
 	case 0:
 	case 1:
-		switch len(ipamcfg.Ranges[0]) {
-		case 0:
-		case 1:
-			invalidFields = append(invalidFields, checkRange("ranges.", ipamcfg.Ranges[0][0])...)
-		default:
-			invalidFields = append(invalidFields, "only zero or one range is valid in the ranges field")
+		fallthrough
+	case 2:
+		for _, r := range ipamcfg.Ranges {
+			switch len(r) {
+			case 0:
+			case 1:
+				invalidFields = append(invalidFields, checkRange("ranges.", ipamcfg.Ranges[0][0])...)
+			default:
+				invalidFields = append(invalidFields, "only zero or one range is valid in the ranges field")
+			}
 		}
 	default:
-		invalidFields = append(invalidFields, "only zero or one range is valid in the ranges field")
+		invalidFields = append(invalidFields, "only zero, one, or two ranges are valid in the ranges field")
 	}
 
 	if len(invalidFields) > 0 {
@@ -290,7 +294,7 @@ func subhandleHostLocalIPAM(netBackend string, ipamcfg cni.HostLocalIPAMConfig, 
 func checkRange(prefix string, r cni.Range) []string {
 	bf := []string{}
 	if r.Subnet != "" {
-		if r.Subnet != "usePodCidr" {
+		if r.Subnet != "usePodCidr" && r.Subnet != "usePodCidrIPv6" {
 			bf = append(bf, prefix+"subnet has invalid value "+r.Subnet)
 		}
 	}

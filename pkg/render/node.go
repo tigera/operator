@@ -560,7 +560,19 @@ func (c *nodeComponent) getCalicoIPAM() string {
 }
 
 func buildHostLocalIPAM(cns *operatorv1.CalicoNetworkSpec) string {
-	return `{ "type": "host-local", "subnet": "usePodCidr"}`
+	v6 := GetIPv6Pool(cns.IPPools) != nil
+	v4 := GetIPv6Pool(cns.IPPools) != nil
+
+	if v4 && v6 {
+		// Dual-stack
+		return `{ "type": "host-local", "ranges": [[{"subnet": "usePodCidr"}],[{"subnet": "usePodCidrIPv6"}]]}`
+	} else if v6 {
+		// Single-stack v6
+		return `{ "type": "host-local", "subnet": "usePodCidrIPv6"}`
+	} else {
+		// Single-stack v4
+		return `{ "type": "host-local", "subnet": "usePodCidr"}`
+	}
 }
 
 func (c *nodeComponent) birdTemplateConfigMap() *corev1.ConfigMap {

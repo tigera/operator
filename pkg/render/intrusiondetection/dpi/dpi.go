@@ -16,13 +16,12 @@ package dpi
 
 import (
 	"fmt"
+	"strings"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/pkg/render/common/configmap"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/meta"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -48,9 +47,7 @@ const (
 type DPIConfig struct {
 	IntrusionDetection *operatorv1.IntrusionDetection
 	Installation       *operatorv1.InstallationSpec
-	NodeTLSSecret      *corev1.Secret
-	TyphaTLSSecret     *corev1.Secret
-	TyphaCAConfigMap   *corev1.ConfigMap
+	TyphaNodeTLS       *render.TyphaNodeTLS
 	PullSecrets        []*corev1.Secret
 	Openshift          bool
 	HasNoLicense       bool
@@ -65,11 +62,13 @@ func DPI(cfg *DPIConfig) render.Component {
 }
 
 type dpiComponent struct {
-	cfg      *DPIConfig
-	dpiImage string
+	cfg              *DPIConfig
+	dpiImage         string
+	certSignReqImage string
 }
 
 func (d *dpiComponent) ResolveImages(is *operatorv1.ImageSet) error {
+	var errMsgs []string
 	var err error
 	d.dpiImage, err = components.GetReference(
 		components.ComponentDeepPacketInspection,
@@ -78,39 +77,52 @@ func (d *dpiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		d.cfg.Installation.ImagePrefix,
 		is)
 	if err != nil {
-		return err
+		errMsgs = append(errMsgs, err.Error())
+	}
+	if d.cfg.Installation.CertificateManagement != nil {
+		d.certSignReqImage, err = render.ResolveCSRInitImage(d.cfg.Installation, is)
+		if err != nil {
+			errMsgs = append(errMsgs, err.Error())
+		}
+	}
+	if len(errMsgs) != 0 {
+		return fmt.Errorf(strings.Join(errMsgs, ","))
 	}
 	return nil
 }
 
 func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
-	var commonObjs []client.Object
+	var toCreate, toDelete []client.Object
 
 	nsObj := []client.Object{render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider)}
 
 	if d.cfg.HasNoDPIResource || d.cfg.HasNoLicense {
 		// create empty secrets and configMap when resource needs to be deleted.
-		commonObjs = append(commonObjs, &corev1.Secret{
+		toCreate = append(toCreate, &corev1.Secret{
 			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: render.NodeTLSSecretName, Namespace: DeepPacketInspectionNamespace}})
-		commonObjs = append(commonObjs, &corev1.Secret{
+		toCreate = append(toCreate, &corev1.Secret{
 			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: render.TyphaTLSSecretName, Namespace: DeepPacketInspectionNamespace}})
-		commonObjs = append(commonObjs, &corev1.Secret{
+		toCreate = append(toCreate, &corev1.Secret{
 			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: DeepPacketInspectionNamespace}})
-		commonObjs = append(commonObjs, &corev1.ConfigMap{
+		toCreate = append(toCreate, &corev1.ConfigMap{
 			TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: render.TyphaCAConfigMapName, Namespace: DeepPacketInspectionNamespace}})
 	} else {
-		commonObjs = append(commonObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.NodeTLSSecret)...)...)
-		commonObjs = append(commonObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.TyphaTLSSecret)...)...)
-		commonObjs = append(commonObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.ESSecrets...)...)...)
-		commonObjs = append(commonObjs, configmap.ToRuntimeObjects(configmap.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.TyphaCAConfigMap)...)...)
+		if d.cfg.TyphaNodeTLS.NodeSecret.UseCertificateManagement() {
+			toCreate = append(toCreate, render.CSRClusterRoleBinding(DeepPacketInspectionName, DeepPacketInspectionNamespace))
+			toDelete = append(toDelete, d.cfg.TyphaNodeTLS.NodeSecret.Secret(DeepPacketInspectionNamespace))
+		} else {
+			toCreate = append(toCreate, d.cfg.TyphaNodeTLS.NodeSecret.Secret(DeepPacketInspectionNamespace))
+			toDelete = append(toDelete, render.CSRClusterRoleBinding(DeepPacketInspectionName, DeepPacketInspectionNamespace))
+		}
+		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.ESSecrets...)...)...)
 	}
 
-	commonObjs = append(commonObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.PullSecrets...)...)...)
-	commonObjs = append(commonObjs,
+	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.PullSecrets...)...)...)
+	toCreate = append(toCreate,
 		d.dpiServiceAccount(),
 		d.dpiClusterRole(),
 		d.dpiClusterRoleBinding(),
@@ -118,12 +130,12 @@ func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 	)
 
 	if d.cfg.HasNoLicense {
-		return nil, append(nsObj, commonObjs...)
+		return nil, append(nsObj, toCreate...)
 	}
 	if d.cfg.HasNoDPIResource {
-		return nsObj, commonObjs
+		return nsObj, toCreate
 	}
-	return append(nsObj, commonObjs...), nil
+	return append(nsObj, toCreate...), toDelete
 }
 
 func (d *dpiComponent) Ready() bool {
@@ -136,6 +148,10 @@ func (d *dpiComponent) SupportedOSType() meta.OSType {
 
 func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 	var terminationGracePeriod int64 = 0
+	var initContainers []corev1.Container
+	if d.cfg.TyphaNodeTLS.NodeSecret.UseCertificateManagement() {
+		initContainers = append(initContainers, d.cfg.TyphaNodeTLS.NodeSecret.InitContainer(DeepPacketInspectionNamespace, d.certSignReqImage))
+	}
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
@@ -151,9 +167,10 @@ func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 			TerminationGracePeriodSeconds: &terminationGracePeriod,
 			HostNetwork:                   true,
 			// Adjust DNS policy so we can access in-cluster services.
-			DNSPolicy:  corev1.DNSClusterFirstWithHostNet,
-			Containers: []corev1.Container{d.dpiContainer()},
-			Volumes:    d.dpiVolumes(),
+			DNSPolicy:      corev1.DNSClusterFirstWithHostNet,
+			InitContainers: initContainers,
+			Containers:     []corev1.Container{d.dpiContainer()},
+			Volumes:        d.dpiVolumes(),
 		}),
 	}, d.cfg.ESClusterConfig, d.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 	return &appsv1.DaemonSet{
@@ -195,29 +212,11 @@ func (d *dpiComponent) dpiContainer() corev1.Container {
 }
 
 func (d *dpiComponent) dpiVolumes() []corev1.Volume {
-	var defaultMode int32 = 420
 	dirOrCreate := corev1.HostPathDirectoryOrCreate
 
 	return []corev1.Volume{
-		{
-			Name: "typha-ca",
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: render.TyphaCAConfigMapName,
-					},
-				},
-			},
-		},
-		{
-			Name: "node-certs",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName:  render.NodeTLSSecretName,
-					DefaultMode: &defaultMode,
-				},
-			},
-		},
+		d.cfg.TyphaNodeTLS.TrustedBundle.Volume(),
+		d.cfg.TyphaNodeTLS.NodeSecret.Volume(),
 		{
 			Name: "log-snort-alters",
 			VolumeSource: corev1.VolumeSource{
@@ -231,25 +230,6 @@ func (d *dpiComponent) dpiVolumes() []corev1.Volume {
 }
 
 func (d *dpiComponent) dpiEnvVars() []corev1.EnvVar {
-	var cnEnv corev1.EnvVar
-	if d.cfg.Installation.CertificateManagement != nil {
-		cnEnv = corev1.EnvVar{
-			Name: "DPI_TYPHACN", Value: render.TyphaCommonName,
-		}
-	} else {
-		cnEnv = corev1.EnvVar{
-			Name: "DPI_TYPHACN", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.CommonName,
-					Optional: ptr.BoolToPtr(true),
-				},
-			},
-		}
-	}
-
 	return []corev1.EnvVar{
 		{
 			Name: "DPI_NODENAME",
@@ -259,26 +239,20 @@ func (d *dpiComponent) dpiEnvVars() []corev1.EnvVar {
 		},
 		{Name: "DPI_TYPHAK8SNAMESPACE", Value: common.CalicoNamespace},
 		{Name: "DPI_TYPHAK8SSERVICENAME", Value: render.TyphaServiceName},
-		{Name: "DPI_TYPHACAFILE", Value: "/typha-ca/caBundle"},
-		{Name: "DPI_TYPHACERTFILE", Value: fmt.Sprintf("/node-certs/%s", render.TLSSecretCertName)},
-		{Name: "DPI_TYPHAKEYFILE", Value: fmt.Sprintf("/node-certs/%s", render.TLSSecretKeyName)},
+		{Name: "DPI_TYPHACAFILE", Value: d.cfg.TyphaNodeTLS.TrustedBundle.MountPath()},
+		{Name: "DPI_TYPHACERTFILE", Value: render.TLSCertMountPath},
+		{Name: "DPI_TYPHAKEYFILE", Value: render.TLSKeyMountPath},
 		// We need at least the CN or URISAN set, we depend on the validation
 		// done by the core_controller that the Secret will have one.
-		cnEnv,
-		{Name: "DPI_TYPHAURISAN", ValueFrom: &corev1.EnvVarSource{
-			SecretKeyRef: &corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: render.TyphaTLSSecretName,
-				},
-				Key:      render.URISAN,
-				Optional: ptr.BoolToPtr(true),
-			},
-		}},
+		{Name: "DPI_FELIX_TYPHACN", Value: d.cfg.TyphaNodeTLS.TyphaCommonName},
+		{Name: "DPI_FELIX_TYPHAURISAN", Value: d.cfg.TyphaNodeTLS.TyphaURISAN},
 	}
 }
 
 func (d *dpiComponent) dpiVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
+		d.cfg.TyphaNodeTLS.TrustedBundle.VolumeMount(),
+		d.cfg.TyphaNodeTLS.NodeSecret.VolumeMount(render.TLSMountPathBase),
 		{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
 		{MountPath: "/node-certs", Name: "node-certs", ReadOnly: true},
 		{MountPath: "/var/log/calico/snort-alerts", Name: "log-snort-alters"},
@@ -389,9 +363,7 @@ func (d *dpiComponent) dpiAnnotations() map[string]string {
 	if d.cfg.HasNoDPIResource || d.cfg.HasNoLicense {
 		return nil
 	}
-	return map[string]string{
-		render.TyphaCAHashAnnotation:   rmeta.AnnotationHash(d.cfg.TyphaCAConfigMap.Data),
-		render.NodeCertHashAnnotation:  rmeta.AnnotationHash(d.cfg.NodeTLSSecret.Data),
-		render.TyphaCertHashAnnotation: rmeta.AnnotationHash(d.cfg.TyphaTLSSecret.Data),
-	}
+	annotations := d.cfg.TyphaNodeTLS.TrustedBundle.HashAnnotations()
+	annotations[d.cfg.TyphaNodeTLS.NodeSecret.HashAnnotationKey()] = d.cfg.TyphaNodeTLS.NodeSecret.HashAnnotationValue()
+	return annotations
 }

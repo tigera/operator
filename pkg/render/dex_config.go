@@ -222,7 +222,7 @@ func (d *dexBaseCfg) RedirectURIs() []string {
 	return redirectURIs
 }
 
-func (d *dexBaseCfg) RequiredConfigMaps(namespace string) []*corev1.ConfigMap {
+func (d *dexBaseCfg) RequiredConfigMaps(string) []*corev1.ConfigMap {
 	return nil
 }
 
@@ -323,7 +323,7 @@ func (d *DexKeyValidatorConfig) RequiredEnv(prefix string) []corev1.EnvVar {
 }
 
 // Append variables that are necessary for using the dex authenticator.
-func (d *dexRelyingPartyConfig) RequiredEnv(prefix string) []corev1.EnvVar {
+func (d *dexRelyingPartyConfig) RequiredEnv(string) []corev1.EnvVar {
 	return nil
 }
 
@@ -350,7 +350,7 @@ func (d *dexConfig) RequiredEnv(string) []corev1.EnvVar {
 
 func (d *dexConfig) RequiredVolumes() []corev1.Volume {
 
-	tlsVolumeSource := certificateVolumeSource(d.certificateManagement, DexTLSSecretName)
+	tlsVolumeSource := CertificateVolumeSource(d.certificateManagement, DexTLSSecretName)
 	defaultMode := int32(420)
 	volumes := []corev1.Volume{
 		{

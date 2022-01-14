@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -558,7 +559,17 @@ func setManagerCloudEnvs(envs []corev1.EnvVar) []corev1.EnvVar {
 		corev1.EnvVar{Name: "LICENSE_EDITION", Value: "cloudEdition"},
 	)
 
-	for key, val := range ManagerExtraEnv {
+	// move extra env vars into Manager, but sort them alphabetically first,
+	// otherwise, since map iteration is random, they'll be added to the env vars in a random order,
+	// which will cause another reconciliation event when Manager is updated.
+	sortedKeys := []string{}
+	for k := range ManagerExtraEnv {
+		sortedKeys = append(sortedKeys, k)
+	}
+	sort.Strings(sortedKeys)
+
+	for _, key := range sortedKeys {
+		val := ManagerExtraEnv[key]
 		if key == "portalAPIURL" {
 			// support legacy functionality where 'portalAPIURL' was a special field used to set
 			// the portal url and enable support.

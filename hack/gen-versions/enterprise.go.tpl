@@ -82,6 +82,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "eck-elasticsearch-operator" }}
+	ComponentECKElasticsearchOperator = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "elasticsearch-operator" }}
 	ComponentElasticsearchOperator = component{
 		Version: "{{ .Version }}",
@@ -262,6 +268,7 @@ var (
 		ComponentEckKibana,
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,
+		ComponentECKElasticsearchOperator,
 		ComponentElasticsearchOperator,
 		ComponentEsCurator,
 		ComponentEsProxy,

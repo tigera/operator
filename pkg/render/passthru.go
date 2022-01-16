@@ -10,10 +10,15 @@ func NewPassthrough(objs ...client.Object) Component {
 	return &passthroughComponent{objs: objs}
 }
 
+func NewDeletionPassthrough(objsToDelete ...client.Object) Component {
+	return &passthroughComponent{objsToDelete: objsToDelete}
+}
+
 // passthroughComponent is an implementation of a Component that simply passes back
 // the objects it was given unmodified.
 type passthroughComponent struct {
-	objs []client.Object
+	objs         []client.Object
+	objsToDelete []client.Object
 }
 
 // ResolveImages should call components.GetReference for all images that the Component
@@ -29,14 +34,17 @@ func (p *passthroughComponent) ResolveImages(is *operatorv1.ImageSet) error {
 func (p *passthroughComponent) Objects() (objsToCreate []client.Object, objsToDelete []client.Object) {
 	// Filter out nil objects. This makes it easier for the calling code, so we don't need to duplicate
 	// this filtering logic in all the controllers that user this component.
-	objs := []client.Object{}
 	for _, o := range p.objs {
-		if o == nil {
-			continue
+		if o != nil {
+			objsToCreate = append(objsToCreate, o)
 		}
-		objs = append(objs, o)
 	}
-	return objs, nil
+	for _, o := range p.objsToDelete {
+		if o != nil {
+			objsToDelete = append(objsToDelete, o)
+		}
+	}
+	return
 }
 
 // Ready returns true if the component is ready to be created.

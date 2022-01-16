@@ -19,6 +19,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -26,34 +27,42 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/onsi/gomega/gstruct"
+
 	"github.com/openshift/library-go/pkg/crypto"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/render"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/podaffinity"
+	rtest "github.com/tigera/operator/pkg/render/common/test"
+	tls2 "github.com/tigera/operator/pkg/tls"
+	"github.com/tigera/operator/test"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/controller/k8sapi"
-	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/render"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/podaffinity"
-	"github.com/tigera/operator/pkg/render/common/secret"
-	rtest "github.com/tigera/operator/pkg/render/common/test"
-	"github.com/tigera/operator/pkg/render/testutils"
-	"github.com/tigera/operator/test"
 )
 
 var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
-	var instance *operatorv1.InstallationSpec
-	var managementCluster = &operatorv1.ManagementCluster{Spec: operatorv1.ManagementClusterSpec{Address: "example.com:1234"}}
-	var replicas int32
-	var cfg *render.APIServerConfiguration
+	var (
+		instance          *operatorv1.InstallationSpec
+		managementCluster = &operatorv1.ManagementCluster{Spec: operatorv1.ManagementClusterSpec{Address: "example.com:1234"}}
+		replicas          int32
+		cfg               *render.APIServerConfiguration
+		tunnelKeyPair     tls2.KeyPair
+		dnsNames          []string
+		cli               client.Client
+	)
 
 	BeforeEach(func() {
 		instance = &operatorv1.InstallationSpec{
@@ -61,25 +70,23 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			Registry:             "testregistry.com/",
 			Variant:              operatorv1.TigeraSecureEnterprise,
 		}
-
-		tlsKeyPair, err := secret.CreateTLSSecret(nil,
-			render.ProjectCalicoApiServerTLSSecretName(instance.Variant),
-			common.OperatorNamespace(),
-			render.APIServerSecretKeyName,
-			render.APIServerSecretCertName,
-			rmeta.DefaultCertificateDuration,
-			nil,
-			dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(instance.Variant), rmeta.APIServerNamespace(instance.Variant), dns.DefaultClusterDomain)...,
-		)
-		Expect(err).ShouldNot(HaveOccurred())
-
+		dnsNames = dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(instance.Variant), rmeta.APIServerNamespace(instance.Variant), clusterDomain)
+		scheme := runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
+		tigeraCA, err := utils.CreateTigeraCA(cli, nil, clusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+		kp, err := tigeraCA.GetOrCreateKeyPair(cli, render.ProjectCalicoApiServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
+		Expect(err).NotTo(HaveOccurred())
+		tunnelKeyPair, err = utils.NewKeyPair(nil, render.VoltronTunnelSecret(), []string{""}, "")
+		Expect(err).NotTo(HaveOccurred())
 		replicas = 2
 		cfg = &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sapi.ServiceEndpoint{},
 			Installation:       instance,
-			TLSKeyPair:         tlsKeyPair,
 			Openshift:          openshift,
 			ClusterDomain:      dns.DefaultClusterDomain,
+			TLSKeyPair:         kp,
 		}
 	})
 
@@ -117,19 +124,10 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
-
-		var err error
-		cfg.TLSKeyPair, err = secret.CreateTLSSecret(nil,
-			render.ProjectCalicoApiServerTLSSecretName(cfg.Installation.Variant),
-			common.OperatorNamespace(),
-			render.APIServerSecretKeyName,
-			render.APIServerSecretCertName,
-			rmeta.DefaultCertificateDuration,
-			nil,
-			dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(cfg.Installation.Variant), rmeta.APIServerNamespace(cfg.Installation.Variant), clusterDomain)...,
-		)
-		Expect(err).ShouldNot(HaveOccurred())
-
+		dnsNames := dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(instance.Variant), rmeta.APIServerNamespace(instance.Variant), clusterDomain)
+		kp, err := utils.NewKeyPair(nil, rtest.CreateCertSecret(render.ProjectCalicoApiServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames...), []string{""}, "")
+		Expect(err).NotTo(HaveOccurred())
+		cfg.TLSKeyPair = kp
 		// APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool
 		cfg.ClusterDomain = clusterDomain
 		component, err := render.APIServer(cfg)
@@ -171,7 +169,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		expectedDNSNames := dns.GetServiceDNSNames("tigera-api", "tigera-system", clusterDomain)
 		tigeraCert, ok := rtest.GetResource(resources, "tigera-apiserver-certs", "tigera-system", "", "v1", "Secret").(*corev1.Secret)
 		Expect(ok).To(BeTrue(), "Expected v1.Secret")
-		test.VerifyCert(tigeraCert, "apiserver.key", "apiserver.crt", expectedDNSNames...)
+		test.VerifyCert(tigeraCert, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, expectedDNSNames...)
 
 		apiService, ok := rtest.GetResource(resources, "v3.projectcalico.org", "", "apiregistration.k8s.io", "v1", "APIService").(*apiregv1.APIService)
 		Expect(ok).To(BeTrue(), "Expected v1.APIService")
@@ -208,6 +206,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		expectedArgs := []string{
 			"--secure-port=5443",
+			"--tls-private-key-file=/code/apiserver.local.config/certificates/tls.key",
+			"--tls-cert-file=/code/apiserver.local.config/certificates/tls.crt",
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
 			"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
 		}
@@ -218,10 +218,10 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(d.Spec.Template.Spec.Containers[0].Env[0].ValueFrom).To(BeNil())
 
 		Expect(len(d.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
-		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/var/log/calico/audit"))
-		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("tigera-audit-logs"))
-		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal("/etc/tigera/audit"))
-		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal("tigera-audit-policy"))
+		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/code/apiserver.local.config/certificates"))
+		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("tigera-apiserver-certs"))
+		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal("/var/log/calico/audit"))
+		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal("tigera-audit-logs"))
 
 		Expect(d.Spec.Template.Spec.Containers[0].LivenessProbe.HTTPGet.Path).To(Equal("/version"))
 		Expect(d.Spec.Template.Spec.Containers[0].LivenessProbe.HTTPGet.Port.String()).To(BeEquivalentTo("5443"))
@@ -257,14 +257,17 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.PeriodSeconds).To(BeEquivalentTo(10))
 
 		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(3))
-		Expect(d.Spec.Template.Spec.Volumes[0].Name).To(Equal("tigera-audit-logs"))
-		Expect(d.Spec.Template.Spec.Volumes[0].HostPath.Path).To(Equal("/var/log/calico/audit"))
-		Expect(*d.Spec.Template.Spec.Volumes[0].HostPath.Type).To(BeEquivalentTo("DirectoryOrCreate"))
-		Expect(d.Spec.Template.Spec.Volumes[1].Name).To(Equal("tigera-audit-policy"))
-		Expect(d.Spec.Template.Spec.Volumes[1].ConfigMap.Name).To(Equal("tigera-audit-policy"))
-		Expect(d.Spec.Template.Spec.Volumes[1].ConfigMap.Items[0].Key).To(Equal("config"))
-		Expect(d.Spec.Template.Spec.Volumes[1].ConfigMap.Items[0].Path).To(Equal("policy.conf"))
-		Expect(len(d.Spec.Template.Spec.Volumes[1].ConfigMap.Items)).To(Equal(1))
+
+		Expect(d.Spec.Template.Spec.Volumes[0].Name).To(Equal("tigera-apiserver-certs"))
+		Expect(d.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal("tigera-apiserver-certs"))
+		Expect(d.Spec.Template.Spec.Volumes[1].Name).To(Equal("tigera-audit-logs"))
+		Expect(d.Spec.Template.Spec.Volumes[1].HostPath.Path).To(Equal("/var/log/calico/audit"))
+		Expect(*d.Spec.Template.Spec.Volumes[1].HostPath.Type).To(BeEquivalentTo("DirectoryOrCreate"))
+		Expect(d.Spec.Template.Spec.Volumes[2].Name).To(Equal("tigera-audit-policy"))
+		Expect(d.Spec.Template.Spec.Volumes[2].ConfigMap.Name).To(Equal("tigera-audit-policy"))
+		Expect(d.Spec.Template.Spec.Volumes[2].ConfigMap.Items[0].Key).To(Equal("config"))
+		Expect(d.Spec.Template.Spec.Volumes[2].ConfigMap.Items[0].Path).To(Equal("policy.conf"))
+		Expect(len(d.Spec.Template.Spec.Volumes[2].ConfigMap.Items)).To(Equal(1))
 
 		clusterRole := rtest.GetResource(resources, "tigera-network-admin", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(clusterRole.Rules).To(ConsistOf(networkAdminPolicyRules))
@@ -596,6 +599,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 	It("should render an API server with custom configuration with MCM enabled at startup", func() {
 		cfg.ManagementCluster = managementCluster
+		cfg.TunnelCASecret = tunnelKeyPair
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -640,7 +644,6 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			{name: "tigera-apiserver-delegate-auth", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "tigera-apiserver-certs", ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
-			{name: render.VoltronTunnelSecretName, ns: common.OperatorNamespace(), group: "", version: "v1", kind: "Secret"},
 			{name: render.VoltronTunnelSecretName, ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
 			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1", kind: "APIService"},
 			{name: "tigera-apiserver", ns: "tigera-system", group: "apps", version: "v1", kind: "Deployment"},
@@ -652,19 +655,17 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
-		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		i := 0
 		for _, expectedRes := range expectedResources {
 			rtest.ExpectResourceInList(resources, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
+		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		By("Validating the newly created tunnel secret")
 		// Use the x509 package to validate that the cert was signed with the privatekey
-		operatorTunnelSec := rtest.GetResource(resources, render.VoltronTunnelSecretName, common.OperatorNamespace(), "", "v1", "Secret")
 		apiServerTunnelSec := rtest.GetResource(resources, render.VoltronTunnelSecretName, "tigera-system", "", "v1", "Secret")
-		validateTunnelSecret(operatorTunnelSec.(*corev1.Secret))
 		validateTunnelSecret(apiServerTunnelSec.(*corev1.Secret))
 
 		dep := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment")
@@ -673,9 +674,13 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		By("Validating startup args")
 		expectedArgs := []string{
 			"--secure-port=5443",
+			"--tls-private-key-file=/code/apiserver.local.config/certificates/tls.key",
+			"--tls-cert-file=/code/apiserver.local.config/certificates/tls.crt",
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
 			"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
 			"--enable-managed-clusters-create-api=true",
+			"--set-managed-clusters-ca-cert=/code/apiserver.local.config/multicluster/certificates/tls.crt",
+			"--set-managed-clusters-ca-key=/code/apiserver.local.config/multicluster/certificates/tls.key",
 			"--managementClusterAddr=example.com:1234",
 		}
 		Expect((dep.(*appsv1.Deployment)).Spec.Template.Spec.Containers[0].Args).To(ConsistOf(expectedArgs))
@@ -683,7 +688,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 	It("should render an API server with custom configuration with MCM enabled at restart", func() {
 		cfg.ManagementCluster = managementCluster
-		cfg.TunnelCASecret = &testutils.VoltronTunnelSecret
+		cfg.TunnelCASecret = tunnelKeyPair
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -753,16 +758,25 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		By("Validating startup args")
 		expectedArgs := []string{
 			"--secure-port=5443",
+			"--tls-private-key-file=/code/apiserver.local.config/certificates/tls.key",
+			"--tls-cert-file=/code/apiserver.local.config/certificates/tls.crt",
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
 			"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
 			"--enable-managed-clusters-create-api=true",
+			"--set-managed-clusters-ca-cert=/code/apiserver.local.config/multicluster/certificates/tls.crt",
+			"--set-managed-clusters-ca-key=/code/apiserver.local.config/multicluster/certificates/tls.key",
 			"--managementClusterAddr=example.com:1234",
 		}
 		Expect((dep.(*appsv1.Deployment)).Spec.Template.Spec.Containers[0].Args).To(ConsistOf(expectedArgs))
 	})
 
 	It("should add an init container if certificate management is enabled", func() {
-		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c"}
+		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c", CACert: cfg.TLSKeyPair.Secret("").Data[corev1.TLSCertKey]}
+		tigeraCA, err := utils.CreateTigeraCA(cli, cfg.Installation.CertificateManagement, clusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+		kp, err := tigeraCA.GetOrCreateKeyPair(cli, render.ProjectCalicoApiServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
+		cfg.TLSKeyPair = kp
+		Expect(err).NotTo(HaveOccurred())
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
@@ -872,8 +886,8 @@ func verifyAPIService(service *apiregv1.APIService, enterprise bool, clusterDoma
 func validateTunnelSecret(voltronSecret *corev1.Secret) {
 	var newCert *x509.Certificate
 
-	cert := voltronSecret.Data["cert"]
-	key := voltronSecret.Data["key"]
+	cert := voltronSecret.Data[corev1.TLSCertKey]
+	key := voltronSecret.Data[corev1.TLSPrivateKeyKey]
 	_, err := tls.X509KeyPair(cert, key)
 	Expect(err).ShouldNot(HaveOccurred())
 
@@ -1116,22 +1130,15 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			Variant:              operatorv1.Calico,
 		}
 
-		tlsKeyPair, err := secret.CreateTLSSecret(nil,
-			render.ProjectCalicoApiServerTLSSecretName(instance.Variant),
-			common.OperatorNamespace(),
-			render.APIServerSecretKeyName,
-			render.APIServerSecretCertName,
-			rmeta.DefaultCertificateDuration,
-			nil,
-			dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(instance.Variant), rmeta.APIServerNamespace(instance.Variant), dns.DefaultClusterDomain)...,
-		)
+		kp, err := utils.NewKeyPair(nil, rtest.CreateCertSecret(render.ProjectCalicoApiServerTLSSecretName(instance.Variant), common.OperatorNamespace(), clusterDomain), []string{""}, "")
+		Expect(err).NotTo(HaveOccurred())
 		Expect(err).ShouldNot(HaveOccurred())
 
 		replicas = 2
 		cfg = &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sapi.ServiceEndpoint{},
 			Installation:       instance,
-			TLSKeyPair:         tlsKeyPair,
+			TLSKeyPair:         kp,
 			Openshift:          openshift,
 			ClusterDomain:      dns.DefaultClusterDomain,
 		}
@@ -1163,16 +1170,6 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		}
 
 		var err error
-		cfg.TLSKeyPair, err = secret.CreateTLSSecret(nil,
-			render.ProjectCalicoApiServerTLSSecretName(cfg.Installation.Variant),
-			common.OperatorNamespace(),
-			render.APIServerSecretKeyName,
-			render.APIServerSecretCertName,
-			rmeta.DefaultCertificateDuration,
-			nil,
-			dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(cfg.Installation.Variant), rmeta.APIServerNamespace(cfg.Installation.Variant), clusterDomain)...,
-		)
-		Expect(err).ShouldNot(HaveOccurred())
 
 		// APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool
 		cfg.ClusterDomain = clusterDomain
@@ -1199,7 +1196,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		expectedDNSNames := dns.GetServiceDNSNames("calico-api", "calico-apiserver", clusterDomain)
 		tigeraCert, ok := rtest.GetResource(resources, "calico-apiserver-certs", "calico-apiserver", "", "v1", "Secret").(*corev1.Secret)
 		Expect(ok).To(BeTrue(), "Expected v1.Secret")
-		test.VerifyCert(tigeraCert, "apiserver.key", "apiserver.crt", expectedDNSNames...)
+		test.VerifyCert(tigeraCert, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, expectedDNSNames...)
 
 		apiService, ok := rtest.GetResource(resources, "v3.projectcalico.org", "", "apiregistration.k8s.io", "v1", "APIService").(*apiregv1.APIService)
 		Expect(ok).To(BeTrue(), "Expected v1.APIService")

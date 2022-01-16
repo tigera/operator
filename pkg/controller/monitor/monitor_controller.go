@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/tigera/operator/pkg/dns"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/tls"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -119,6 +119,10 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("monitor-controller failed to watch secret: %w", err)
 	}
 
+	if err = utils.AddSecretsWatch(c, tls.TigeraCASecretName, common.OperatorNamespace()); err != nil {
+		return fmt.Errorf("monitor-controller failed to watch secret: %w", err)
+	}
+
 	err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("monitor-controller failed to watch resource: %w", err)
@@ -201,44 +205,24 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
-	var tlsSecret *corev1.Secret
-	if install.CertificateManagement == nil {
-		// Check that if the apiserver cert pair secret exists that it is valid (has key and cert fields)
-		// If it does not exist then this function still returns true
-		tlsSecret, err = utils.ValidateCertPair(r.client,
-			common.OperatorNamespace(),
-			monitor.PrometheusTLSSecretName,
-			corev1.TLSPrivateKeyKey,
-			corev1.TLSCertKey,
-		)
-		if err != nil {
-			log.Error(err, "Invalid TLS Cert")
-			r.status.SetDegraded("Error validating TLS certificate", err.Error())
-			return reconcile.Result{}, err
-		}
+	tigeraCA, err := utils.CreateTigeraCA(r.client, install.CertificateManagement, r.clusterDomain)
+	if err != nil {
+		log.Error(err, "unable to create the Tigera CA")
+		r.status.SetDegraded("unable to create the Tigera CA", err.Error())
+		return reconcile.Result{}, err
+	}
+	tlsSecret, err := tigeraCA.GetOrCreateKeyPair(r.client, monitor.PrometheusTLSSecretName, common.OperatorNamespace(), dns.GetServiceDNSNames(monitor.PrometheusHTTPAPIServiceName, common.TigeraPrometheusNamespace, r.clusterDomain))
+	if err != nil {
+		log.Error(err, "Error creating TLS certificate")
+		r.status.SetDegraded("Error creating TLS certificate", err.Error())
+		return reconcile.Result{}, err
+	}
 
-		if tlsSecret == nil {
-			svcDNSNames := dns.GetServiceDNSNames(monitor.PrometheusHTTPAPIServiceName, common.TigeraPrometheusNamespace, r.clusterDomain)
-			tlsSecret, err = rsecret.CreateTLSSecret(nil,
-				monitor.PrometheusTLSSecretName,
-				common.OperatorNamespace(),
-				corev1.TLSPrivateKeyKey,
-				corev1.TLSCertKey,
-				rmeta.DefaultCertificateDuration,
-				nil,
-				svcDNSNames...,
-			)
-			if err != nil {
-				log.Error(err, "Error creating TLS certificate")
-				r.status.SetDegraded("Error creating TLS certificate", err.Error())
-				return reconcile.Result{}, err
-			}
-		}
-
-		r.status.RemoveCertificateSigningRequests(common.TigeraPrometheusNamespace)
-	} else {
+	if install.CertificateManagement != nil {
 		// Monitor pending CSRs for the TigeraStatus
 		r.status.AddCertificateSigningRequests(common.TigeraPrometheusNamespace, map[string]string{"k8s-app": common.TigeraPrometheusNamespace})
+	} else {
+		r.status.RemoveCertificateSigningRequests(common.TigeraPrometheusNamespace)
 	}
 
 	// Fetch the Authentication spec. If present, we use to configure user authentication.
@@ -280,7 +264,9 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	// Render prometheus component
 	components := []render.Component{
 		monitor.Monitor(monitorCfg),
-		render.NewPassthrough(tlsSecret),
+	}
+	if !tlsSecret.BYO() {
+		components = append(components, utils.NewKeyPairPassthrough(tlsSecret))
 	}
 	if createInOperatorNamespace {
 		components = append(components, render.NewPassthrough(alertmanagerConfigSecret))

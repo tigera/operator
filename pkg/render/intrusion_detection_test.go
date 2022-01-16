@@ -18,16 +18,18 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
-	"github.com/tigera/operator/pkg/render/testutils"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 var (
@@ -40,21 +42,27 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 	var cfg *render.IntrusionDetectionConfiguration
 
 	BeforeEach(func() {
+		scheme := runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
+		tigeraCA, err := utils.CreateTigeraCA(cli, nil, clusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+		bundle, err := utils.CreateTrustedBundle(tigeraCA)
+		Expect(err).NotTo(HaveOccurred())
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
 		cfg = &render.IntrusionDetectionConfiguration{
-			KibanaCertSecret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}},
-			Installation:     &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
-			ESClusterConfig:  relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1),
-			ClusterDomain:    dns.DefaultClusterDomain,
-			ESLicenseType:    render.ElasticsearchLicenseTypeUnknown,
-			ManagedCluster:   notManagedCluster,
+			TrustedCertBundle: bundle,
+			Installation:      &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
+			ESClusterConfig:   relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1),
+			ClusterDomain:     dns.DefaultClusterDomain,
+			ESLicenseType:     render.ElasticsearchLicenseTypeUnknown,
+			ManagedCluster:    notManagedCluster,
 		}
 	})
 
 	It("should render all resources for a default configuration", func() {
 		cfg.Openshift = notOpenshift
-		cfg.ManagerInternalTLSSecret = &testutils.InternalManagerTLSSecret
 		component := render.IntrusionDetection(cfg)
 		resources, _ := component.Objects()
 

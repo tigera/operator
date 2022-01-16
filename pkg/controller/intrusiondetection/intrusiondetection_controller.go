@@ -20,9 +20,9 @@ import (
 	"time"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/logcollector"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -31,6 +31,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
+	"github.com/tigera/operator/pkg/tls"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -38,7 +39,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -146,6 +146,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		render.ManagerInternalTLSSecretName,
 		render.NodeTLSSecretName,
 		render.TyphaTLSSecretName,
+		tls.TigeraCASecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
@@ -320,8 +321,14 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	kibanaPublicCertSecret := &corev1.Secret{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.KibanaPublicCertSecret, Namespace: common.OperatorNamespace()}, kibanaPublicCertSecret); err != nil {
+	tigeraCA, err := utils.CreateTigeraCA(r.client, network.CertificateManagement, r.clusterDomain)
+	if err != nil {
+		log.Error(err, "unable to create the Tigera CA")
+		r.status.SetDegraded("unable to create the Tigera CA", err.Error())
+		return reconcile.Result{}, err
+	}
+	kibanaPublicCertSecret, err := tigeraCA.GetCertificate(r.client, render.KibanaPublicCertSecret, common.OperatorNamespace())
+	if err != nil {
 		reqLogger.Error(err, "Failed to read Kibana public cert secret")
 		r.status.SetDegraded("Failed to read Kibana public cert secret", err.Error())
 		return reconcile.Result{}, err
@@ -334,24 +341,29 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	var esLicenseType render.ElasticsearchLicenseType
-	var managerInternalTLSSecret *corev1.Secret
+	trustedCerts := []tls.Certificate{kibanaPublicCertSecret}
+
 	if managementClusterConnection == nil {
 		if esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger); err != nil {
 			r.status.SetDegraded("Failed to get Elasticsearch license", err.Error())
 			return reconcile.Result{}, err
 		}
 
-		managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
-			common.OperatorNamespace(),
-			render.ManagerInternalTLSSecretName,
-			render.ManagerInternalSecretCertName,
-			render.ManagerInternalSecretKeyName,
-		)
-		if err != nil {
-			log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", render.ManagerInternalSecretCertName))
-			r.status.SetDegraded(fmt.Sprintf("failed to retrieve / validate  %s", render.ManagerInternalSecretKeyName), err.Error())
+		managerInternalTLSSecret, err := tigeraCA.GetCertificate(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
+		if err != nil && !errors.IsNotFound(err) {
+			log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", render.ManagerInternalTLSSecretName))
+			r.status.SetDegraded(fmt.Sprintf("failed to retrieve / validate  %s", render.ManagerInternalTLSSecretName), err.Error())
 			return reconcile.Result{}, err
 		}
+
+		trustedCerts = append(trustedCerts, managerInternalTLSSecret)
+	}
+
+	trustedCertBundle, err := utils.CreateTrustedBundle(tigeraCA, trustedCerts...)
+	if err != nil {
+		reqLogger.Error(err, "failed to create trusted certificate bundle %s")
+		r.status.SetDegraded("failed to create trusted certificate bundle %s", err.Error())
+		return reconcile.Result{}, err
 	}
 
 	// Create a component handler to manage the rendered component.
@@ -361,18 +373,17 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	// Render the desired objects from the CRD and create or update them.
 	var hasNoLicense = !utils.IsFeatureActive(license, common.ThreatDefenseFeature)
 	intrusionDetectionCfg := &render.IntrusionDetectionConfiguration{
-		LogCollector:             lc,
-		ESSecrets:                esSecrets,
-		KibanaCertSecret:         kibanaPublicCertSecret,
-		Installation:             network,
-		ESClusterConfig:          esClusterConfig,
-		PullSecrets:              pullSecrets,
-		Openshift:                r.provider == operatorv1.ProviderOpenShift,
-		ClusterDomain:            r.clusterDomain,
-		ESLicenseType:            esLicenseType,
-		ManagedCluster:           managementClusterConnection != nil,
-		HasNoLicense:             hasNoLicense,
-		ManagerInternalTLSSecret: managerInternalTLSSecret,
+		LogCollector:      lc,
+		ESSecrets:         esSecrets,
+		Installation:      network,
+		ESClusterConfig:   esClusterConfig,
+		PullSecrets:       pullSecrets,
+		Openshift:         r.provider == operatorv1.ProviderOpenShift,
+		ClusterDomain:     r.clusterDomain,
+		ESLicenseType:     esLicenseType,
+		ManagedCluster:    managementClusterConnection != nil,
+		HasNoLicense:      hasNoLicense,
+		TrustedCertBundle: trustedCertBundle,
 	}
 	component := render.IntrusionDetection(intrusionDetectionCfg)
 
@@ -387,53 +398,23 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	var typhaTLSSecret, nodeTLSSecret *corev1.Secret
-	typhaCAConfigMap := &corev1.ConfigMap{}
+	typhaNodeTLS, err := installation.GetOrCreateTyphaNodeTLSConfig(r.client, tigeraCA)
+	if err != nil {
+		log.Error(err, "Error with Typha/Felix secrets")
+		r.status.SetDegraded("Error with Typha/Felix secrets", err.Error())
+		return reconcile.Result{}, err
+	}
 	dpiList := &v3.DeepPacketInspectionList{}
 	if err := r.client.List(ctx, dpiList); err != nil {
 		r.status.SetDegraded("Failed to retrieve DeepPacketInspection resource", err.Error())
 		return reconcile.Result{}, err
 	}
 	hasNoDPIResource := len(dpiList.Items) == 0
-	if !hasNoDPIResource {
-		nodeTLSSecret, err = utils.GetSecret(ctx, r.client, render.NodeTLSSecretName, common.OperatorNamespace())
-		if err != nil {
-			reqLogger.Error(err, fmt.Sprintf("Failed to retrieve %s secret", render.NodeTLSSecretName))
-			r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s secret", render.NodeTLSSecretName), err.Error())
-			return reconcile.Result{}, err
-		}
-		if nodeTLSSecret == nil {
-			reqLogger.Error(err, fmt.Sprintf("Waiting for %s secrets to be available", render.NodeTLSSecretName))
-			r.status.SetDegraded(fmt.Sprintf("Waiting for %s secrets to be available", render.NodeTLSSecretName), "")
-			return reconcile.Result{}, err
-		}
-
-		typhaTLSSecret, err = utils.GetSecret(ctx, r.client, render.TyphaTLSSecretName, common.OperatorNamespace())
-		if err != nil {
-			reqLogger.Error(err, fmt.Sprintf("Failed to retrieve %s secret", render.TyphaTLSSecretName))
-			r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s secret", render.TyphaTLSSecretName), err.Error())
-			return reconcile.Result{}, err
-		}
-		if typhaTLSSecret == nil {
-			reqLogger.Error(err, fmt.Sprintf("Waiting for %s secrets to be available", render.TyphaTLSSecretName))
-			r.status.SetDegraded(fmt.Sprintf("Waiting for %s secrets to be available", render.TyphaTLSSecretName), "")
-			return reconcile.Result{}, err
-		}
-
-		err = r.client.Get(ctx, types.NamespacedName{Name: render.TyphaCAConfigMapName, Namespace: common.OperatorNamespace()}, typhaCAConfigMap)
-		if err != nil {
-			reqLogger.Error(err, fmt.Sprintf("Failed to retrieve %s configmap", render.TyphaCAConfigMapName))
-			r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s configmap", render.TyphaCAConfigMapName), err.Error())
-			return reconcile.Result{}, err
-		}
-	}
 
 	dpiComponent := dpi.DPI(&dpi.DPIConfig{
 		IntrusionDetection: instance,
 		Installation:       network,
-		NodeTLSSecret:      nodeTLSSecret,
-		TyphaTLSSecret:     typhaTLSSecret,
-		TyphaCAConfigMap:   typhaCAConfigMap,
+		TyphaNodeTLS:       typhaNodeTLS,
 		PullSecrets:        pullSecrets,
 		Openshift:          r.provider == operatorv1.ProviderOpenShift,
 		HasNoLicense:       hasNoLicense,

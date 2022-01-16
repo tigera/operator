@@ -32,8 +32,8 @@ var InternalManagerTLSSecret = corev1.Secret{
 		Namespace: common.OperatorNamespace(),
 	},
 	Data: map[string][]byte{
-		"cert": []byte("cert"),
-		"key":  []byte("key"),
+		corev1.TLSCertKey:       []byte("cert"),
+		corev1.TLSPrivateKeyKey: []byte("key"),
 	},
 }
 
@@ -47,8 +47,8 @@ var ElasticsearchSecret = corev1.Secret{
 		Namespace: common.OperatorNamespace(),
 	},
 	Data: map[string][]byte{
-		"cert": []byte("cert"),
-		"key":  []byte("key"),
+		corev1.TLSCertKey:       []byte("cert"),
+		corev1.TLSPrivateKeyKey: []byte("key"),
 	},
 }
 
@@ -77,8 +77,8 @@ var KibanaSecret = corev1.Secret{
 		Namespace: common.OperatorNamespace(),
 	},
 	Data: map[string][]byte{
-		"cert": []byte("cert"),
-		"key":  []byte("key"),
+		corev1.TLSCertKey:       []byte("cert"),
+		corev1.TLSPrivateKeyKey: []byte("key"),
 	},
 }
 var VoltronTunnelSecret = corev1.Secret{
@@ -91,7 +91,7 @@ var VoltronTunnelSecret = corev1.Secret{
 		Namespace: common.OperatorNamespace(),
 	},
 	Data: map[string][]byte{
-		render.VoltronTunnelSecretCertName: []byte("cert"),
-		render.VoltronTunnelSecretKeyName:  []byte("key"),
+		corev1.TLSCertKey:       []byte("cert"),
+		corev1.TLSPrivateKeyKey: []byte("key"),
 	},
 }

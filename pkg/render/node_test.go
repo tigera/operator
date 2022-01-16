@@ -16,6 +16,10 @@ package render_test
 
 import (
 	"fmt"
+	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/controller/utils"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"strings"
 
 	. "github.com/onsi/ginkgo"
@@ -78,22 +82,13 @@ var _ = Describe("Node rendering tests", func() {
 				},
 			},
 		}
-
+		scheme := runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
+		tigeraCA, err := utils.CreateTigeraCA(cli, nil, clusterDomain)
+		Expect(err).NotTo(HaveOccurred())
 		// Create a dummy secret to pass as input.
-		typhaNodeTLS = &render.TyphaNodeTLS{
-			CAConfigMap: &corev1.ConfigMap{},
-			TyphaSecret: &corev1.Secret{},
-			NodeSecret:  &corev1.Secret{},
-		}
-		typhaNodeTLS.NodeSecret.Name = "node-certs"
-		typhaNodeTLS.NodeSecret.Namespace = "tigera-operator"
-		typhaNodeTLS.NodeSecret.Kind = "Secret"
-		typhaNodeTLS.NodeSecret.APIVersion = "v1"
-
-		typhaNodeTLS.CAConfigMap.Name = "typha-node-ca"
-		typhaNodeTLS.CAConfigMap.Namespace = "tigera-operator"
-		typhaNodeTLS.CAConfigMap.Kind = "ConfigMap"
-		typhaNodeTLS.CAConfigMap.APIVersion = "v1"
+		typhaNodeTLS = getTyphaNodeTLS(cli, tigeraCA)
 
 		// Dummy service endpoint for k8s API.
 		k8sServiceEp = k8sapi.ServiceEndpoint{}
@@ -229,8 +224,8 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
-			{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretCertName)},
-			{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretKeyName)},
+			{Name: "FELIX_TYPHACERTFILE", Value: "/felix-certs/tls.crt"},
+			{Name: "FELIX_TYPHAKEYFILE", Value: "/felix-certs/tls.key"},
 			{Name: "FELIX_TYPHACN", ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -473,8 +468,8 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
-			{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretCertName)},
-			{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretKeyName)},
+			{Name: "FELIX_TYPHACERTFILE", Value: "/felix-certs/tls.crt"},
+			{Name: "FELIX_TYPHAKEYFILE", Value: "/felix-certs/tls.key"},
 			{Name: "FELIX_TYPHACN", ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -715,8 +710,8 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
-			{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretCertName)},
-			{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretKeyName)},
+			{Name: "FELIX_TYPHACERTFILE", Value: "/felix-certs/tls.crt"},
+			{Name: "FELIX_TYPHAKEYFILE", Value: "/felix-certs/tls.key"},
 			{Name: "FELIX_TYPHACN", ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -1017,8 +1012,8 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
-			{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretCertName)},
-			{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretKeyName)},
+			{Name: "FELIX_TYPHACERTFILE", Value: "/felix-certs/tls.crt"},
+			{Name: "FELIX_TYPHAKEYFILE", Value: "/felix-certs/tls.key"},
 			{Name: "FELIX_TYPHACN", ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -1197,8 +1192,8 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
-			{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretCertName)},
-			{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretKeyName)},
+			{Name: "FELIX_TYPHACERTFILE", Value: "/felix-certs/tls.crt"},
+			{Name: "FELIX_TYPHAKEYFILE", Value: "/felix-certs/tls.key"},
 			{Name: "FELIX_TYPHACN", ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -1465,8 +1460,8 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
-			{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretCertName)},
-			{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretKeyName)},
+			{Name: "FELIX_TYPHACERTFILE", Value: "/felix-certs/tls.crt"},
+			{Name: "FELIX_TYPHAKEYFILE", Value: "/felix-certs/tls.key"},
 			{Name: "FELIX_TYPHACN", ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -1642,8 +1637,8 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
-			{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretCertName)},
-			{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretKeyName)},
+			{Name: "FELIX_TYPHACERTFILE", Value: "/felix-certs/tls.crt"},
+			{Name: "FELIX_TYPHAKEYFILE", Value: "/felix-certs/tls.key"},
 			{Name: "FELIX_TYPHACN", ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -1830,8 +1825,8 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
-			{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretCertName)},
-			{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretKeyName)},
+			{Name: "FELIX_TYPHACERTFILE", Value: "/felix-certs/tls.crt"},
+			{Name: "FELIX_TYPHAKEYFILE", Value: "/felix-certs/tls.key"},
 			{Name: "FELIX_TYPHACN", ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -1931,8 +1926,8 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
-			{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretCertName)},
-			{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretKeyName)},
+			{Name: "FELIX_TYPHACERTFILE", Value: "/felix-certs/tls.crt"},
+			{Name: "FELIX_TYPHAKEYFILE", Value: "/felix-certs/tls.key"},
 			{Name: "FELIX_TYPHACN", ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -2836,8 +2831,8 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
-			{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretCertName)},
-			{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretKeyName)},
+			{Name: "FELIX_TYPHACERTFILE", Value: "/felix-certs/tls.crt"},
+			{Name: "FELIX_TYPHAKEYFILE", Value: "/felix-certs/tls.key"},
 			{Name: "FELIX_TYPHACN", ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{

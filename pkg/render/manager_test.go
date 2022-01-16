@@ -17,6 +17,11 @@ package render_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/tls"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -36,7 +41,7 @@ import (
 	"github.com/tigera/operator/pkg/render/testutils"
 )
 
-var _ = Describe("Tigera Secure Manager rendering tests", func() {
+var _ = FDescribe("Tigera Secure Manager rendering tests", func() {
 	oidcEnvVar := corev1.EnvVar{
 		Name:      "CNX_WEB_OIDC_AUTHORITY",
 		Value:     "",
@@ -44,7 +49,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	}
 	var replicas int32 = 2
 	installation := &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas}
-	const expectedResourcesNumber = 11
+	const expectedResourcesNumber = 9
 
 	expectedDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
 	expectedDNSNames = append(expectedDNSNames, "localhost")
@@ -64,13 +69,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{name: render.ManagerServiceAccount, ns: render.ManagerNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: render.ManagerClusterRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: render.ManagerClusterRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: render.ManagerTLSSecretName, ns: render.ManagerNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-manager", ns: render.ManagerNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "tigera-manager", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
-			{name: render.ComplianceServerCertSecret, ns: render.ManagerNamespace, group: "", version: "v1", kind: "Secret"},
-			{name: render.PacketCaptureCertSecret, ns: render.ManagerNamespace, group: "", version: "v1", kind: "Secret"},
-			{name: render.PrometheusTLSSecretName, ns: render.ManagerNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: tls.TrustedCertConfigMapName, ns: render.ManagerNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: "tigera-manager", ns: render.ManagerNamespace, group: "apps", version: "v1", kind: "Deployment"},
+			{name: render.ManagerTLSSecretName, ns: render.ManagerNamespace, group: "", version: "v1", kind: "Secret"},
 		}
 
 		i := 0
@@ -78,7 +81,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
-		Expect(len(resources)).To(Equal(expectedResourcesNumber))
+		Expect(resources).To(HaveLen(expectedResourcesNumber))
 
 		deployment := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(deployment.Spec.Template.Spec.Containers[0].Image).Should(Equal(components.TigeraRegistry + "tigera/cnx-manager:" + components.ComponentManager.Version))
@@ -91,29 +94,19 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(esProxy.VolumeMounts[0].MountPath).To(Equal("/etc/ssl/elastic/"))
 
 		var voltron = deployment.Spec.Template.Spec.Containers[2]
-		Expect(len(voltron.VolumeMounts)).To(Equal(5))
+		Expect(len(voltron.VolumeMounts)).To(Equal(3))
 		Expect(voltron.VolumeMounts[0].Name).To(Equal(render.ManagerTLSSecretName))
 		Expect(voltron.VolumeMounts[0].MountPath).To(Equal("/certs/https"))
 		Expect(voltron.VolumeMounts[1].Name).To(Equal(render.KibanaPublicCertSecret))
 		Expect(voltron.VolumeMounts[1].MountPath).To(Equal("/certs/kibana"))
-		Expect(voltron.VolumeMounts[2].Name).To(Equal(render.ComplianceServerCertSecret))
-		Expect(voltron.VolumeMounts[2].MountPath).To(Equal("/certs/compliance"))
-		Expect(voltron.VolumeMounts[3].Name).To(Equal(render.PacketCaptureCertSecret))
-		Expect(voltron.VolumeMounts[3].MountPath).To(Equal("/certs/packetcapture"))
-		Expect(voltron.VolumeMounts[4].Name).To(Equal(render.PrometheusTLSSecretName))
-		Expect(voltron.VolumeMounts[4].MountPath).To(Equal("/certs/prometheus"))
+		Expect(voltron.VolumeMounts[2].Name).To(Equal(tls.TrustedCertConfigMapName))
+		Expect(voltron.VolumeMounts[2].MountPath).To(Equal(tls.TrustedCertVolumeMountPath))
 
-		Expect(len(deployment.Spec.Template.Spec.Volumes)).To(Equal(6))
+		Expect(len(deployment.Spec.Template.Spec.Volumes)).To(Equal(4))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ManagerTLSSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ManagerTLSSecretName))
-		Expect(deployment.Spec.Template.Spec.Volumes[1].Name).To(Equal(render.KibanaPublicCertSecret))
-		Expect(deployment.Spec.Template.Spec.Volumes[1].Secret.SecretName).To(Equal(render.KibanaPublicCertSecret))
-		Expect(deployment.Spec.Template.Spec.Volumes[2].Name).To(Equal(render.ComplianceServerCertSecret))
-		Expect(deployment.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal(render.ComplianceServerCertSecret))
-		Expect(deployment.Spec.Template.Spec.Volumes[3].Name).To(Equal(render.PacketCaptureCertSecret))
-		Expect(deployment.Spec.Template.Spec.Volumes[3].Secret.SecretName).To(Equal(render.PacketCaptureCertSecret))
-		Expect(deployment.Spec.Template.Spec.Volumes[4].Name).To(Equal(render.PrometheusTLSSecretName))
-		Expect(deployment.Spec.Template.Spec.Volumes[4].Secret.SecretName).To(Equal(render.PrometheusTLSSecretName))
+		Expect(deployment.Spec.Template.Spec.Volumes[1].Name).To(Equal(tls.TrustedCertConfigMapName))
+		Expect(deployment.Spec.Template.Spec.Volumes[1].VolumeSource.ConfigMap.Name).To(Equal(tls.TrustedCertConfigMapName))
 		Expect(deployment.Spec.Template.Spec.Volumes[5].Name).To(Equal("elastic-ca-cert-volume"))
 		Expect(deployment.Spec.Template.Spec.Volumes[5].Secret.SecretName).To(Equal(relasticsearch.PublicCertSecret))
 	})
@@ -407,18 +400,32 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		}))
 	})
 
+	var kp tls.KeyPair
+	var bundle tls.TrustedBundle
+
+	BeforeEach(func() {
+		var err error
+		kp, err = utils.NewKeyPair(nil, rtest.CreateCertSecret(render.ManagerTLSSecretName, common.OperatorNamespace(), render.ManagerTLSSecretName), []string{""}, "")
+		Expect(err).NotTo(HaveOccurred())
+		scheme := runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
+		tigeraCA, err := utils.CreateTigeraCA(cli, nil, clusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+		bundle, err = utils.CreateTrustedBundle(tigeraCA)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 	// renderManager passes in as few parameters as possible to render.Manager without it
 	// panicing. It accepts variations on the installspec for testing purposes.
 	renderManager := func(i *operatorv1.InstallationSpec) *appsv1.Deployment {
 		cfg := &render.ManagerConfiguration{
-			ComplianceServerCertSecret:    rtest.CreateCertSecret(render.ComplianceServerCertSecret, common.OperatorNamespace()),
-			PacketCaptureServerCertSecret: rtest.CreateCertSecret(render.PacketCaptureCertSecret, common.OperatorNamespace()),
-			PrometheusCertSecret:          rtest.CreateCertSecret(render.PrometheusTLSSecretName, common.OperatorNamespace()),
-			ESClusterConfig:               &relasticsearch.ClusterConfig{},
-			TLSKeyPair:                    rtest.CreateCertSecret(render.ManagerTLSSecretName, common.OperatorNamespace()),
-			Installation:                  i,
-			ESLicenseType:                 render.ElasticsearchLicenseTypeUnknown,
-			Replicas:                      &replicas,
+			TrustedCertBundle: bundle,
+			ESClusterConfig:   &relasticsearch.ClusterConfig{},
+			TLSKeyPair:        kp,
+			Installation:      i,
+			ESLicenseType:     render.ElasticsearchLicenseTypeUnknown,
+			Replicas:          &replicas,
 		}
 		component, err := render.Manager(cfg)
 		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
@@ -544,32 +551,38 @@ func renderObjects(oidc bool, managementCluster *operatorv1.ManagementCluster, i
 	}
 
 	var tunnelSecret *corev1.Secret
-	var internalTraffic *corev1.Secret
+	var internalTraffic tls.KeyPair
+	scheme := runtime.NewScheme()
+	Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+	cli := fake.NewClientBuilder().WithScheme(scheme).Build()
+	tigeraCA, err := utils.CreateTigeraCA(cli, nil, clusterDomain)
+	Expect(err).NotTo(HaveOccurred())
+	bundle, err := utils.CreateTrustedBundle(tigeraCA)
+	Expect(err).NotTo(HaveOccurred())
+
 	if managementCluster != nil {
 		tunnelSecret = &testutils.VoltronTunnelSecret
-		internalTraffic = &testutils.InternalManagerTLSSecret
+		internalTraffic, err = tigeraCA.GetOrCreateKeyPair(cli, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
 	}
-	var managerTLS *corev1.Secret
+	var managerTLS tls.KeyPair
 	if includeManagerTLSSecret {
-		managerTLS = rtest.CreateCertSecret(render.ManagerTLSSecretName, common.OperatorNamespace())
+		managerTLS, err = utils.NewKeyPair(nil, rtest.CreateCertSecret(render.ManagerTLSSecretName, common.OperatorNamespace(), render.ManagerTLSSecretName), []string{""}, "")
+		Expect(err).NotTo(HaveOccurred())
 	}
 
 	esConfigMap := relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
-
 	cfg := &render.ManagerConfiguration{
-		KeyValidatorConfig:            dexCfg,
-		ComplianceServerCertSecret:    rtest.CreateCertSecret(render.ComplianceServerCertSecret, common.OperatorNamespace()),
-		PacketCaptureServerCertSecret: rtest.CreateCertSecret(render.PacketCaptureCertSecret, common.OperatorNamespace()),
-		PrometheusCertSecret:          rtest.CreateCertSecret(render.PrometheusTLSSecretName, common.OperatorNamespace()),
-		ESClusterConfig:               esConfigMap,
-		TLSKeyPair:                    managerTLS,
-		Installation:                  installation,
-		ManagementCluster:             managementCluster,
-		TunnelSecret:                  tunnelSecret,
-		InternalTrafficSecret:         internalTraffic,
-		ClusterDomain:                 dns.DefaultClusterDomain,
-		ESLicenseType:                 render.ElasticsearchLicenseTypeEnterpriseTrial,
-		Replicas:                      installation.ControlPlaneReplicas,
+		KeyValidatorConfig:    dexCfg,
+		TrustedCertBundle:     bundle,
+		ESClusterConfig:       esConfigMap,
+		TLSKeyPair:            managerTLS,
+		Installation:          installation,
+		ManagementCluster:     managementCluster,
+		TunnelSecret:          tunnelSecret,
+		InternalTrafficSecret: internalTraffic,
+		ClusterDomain:         dns.DefaultClusterDomain,
+		ESLicenseType:         render.ElasticsearchLicenseTypeEnterpriseTrial,
+		Replicas:              installation.ControlPlaneReplicas,
 	}
 	component, err := render.Manager(cfg)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)

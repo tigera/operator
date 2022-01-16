@@ -18,15 +18,14 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	glog "log"
-	"reflect"
-
-	"github.com/tigera/operator/pkg/render/kubecontrollers"
-
-	rtest "github.com/tigera/operator/pkg/render/common/test"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/tigera/operator/pkg/apis"
+	"k8s.io/apimachinery/pkg/runtime"
+	glog "log"
+	"reflect"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,9 +36,15 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
+	"github.com/tigera/operator/pkg/tls"
 )
+
+const clusterDomain = "cluster.local"
 
 // allCalicoComponents takes the given configuration and returns all the components
 // associated with installing Calico's core, similar to how the core_controller behaves.
@@ -50,7 +55,7 @@ func allCalicoComponents(
 	managementClusterConnection *operatorv1.ManagementClusterConnection,
 	pullSecrets []*corev1.Secret,
 	typhaNodeTLS *render.TyphaNodeTLS,
-	managerInternalTLSSecret *corev1.Secret,
+	managerInternalTLSSecret tls.KeyPair,
 	bt map[string]string,
 	p operatorv1.Provider,
 	aci *operatorv1.AmazonCloudIntegration,
@@ -66,22 +71,22 @@ func allCalicoComponents(
 	namespaces := render.Namespaces(&render.NamespaceConfiguration{Installation: cr, PullSecrets: pullSecrets})
 
 	objs := []client.Object{}
-	if typhaNodeTLS.CAConfigMap != nil {
-		objs = append(objs, typhaNodeTLS.CAConfigMap)
+	if typhaNodeTLS.TrustedBundle != nil {
+		objs = append(objs, typhaNodeTLS.TrustedBundle.ConfigMap(common.OperatorNamespace()))
 	}
 	if bgpLayout != nil {
 		objs = append(objs, bgpLayout)
 	}
-	if typhaNodeTLS.NodeSecret != nil {
-		objs = append(objs, typhaNodeTLS.NodeSecret)
-	}
 	if typhaNodeTLS.TyphaSecret != nil {
-		objs = append(objs, typhaNodeTLS.TyphaSecret)
+		objs = append(objs, typhaNodeTLS.TyphaSecret.Secret(common.OperatorNamespace()))
+	}
+	if typhaNodeTLS.NodeSecret != nil {
+		objs = append(objs, typhaNodeTLS.NodeSecret.Secret(common.OperatorNamespace()))
 	}
 	if managerInternalTLSSecret != nil {
-		objs = append(objs, managerInternalTLSSecret)
+		objs = append(objs, managerInternalTLSSecret.Secret(common.OperatorNamespace()))
 	}
-	secretsAndConfigMaps := render.NewPassthrough(objs...)
+	secretsAndConfigMaps := render.NewPassthrough()
 
 	nodeCfg := &render.NodeConfiguration{
 		K8sServiceEp:            k8sServiceEp,
@@ -147,32 +152,14 @@ var _ = Describe("Rendering tests", func() {
 				},
 			},
 		}
-
-		nodeSecret := corev1.Secret{}
-		nodeSecret.Name = render.NodeTLSSecretName
-		nodeSecret.Namespace = common.OperatorNamespace()
-		nodeSecret.Data = map[string][]byte{"k": []byte("v")}
-		nodeSecret.Kind = "Secret"
-		nodeSecret.APIVersion = "v1"
-
-		typhaSecret := corev1.Secret{}
-		typhaSecret.Name = render.TyphaTLSSecretName
-		typhaSecret.Namespace = common.OperatorNamespace()
-		typhaSecret.Data = map[string][]byte{"k": []byte("v")}
-		typhaSecret.Kind = "Secret"
-		typhaSecret.APIVersion = "v1"
-
+		scheme := runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
+		tigeraCA, err := utils.CreateTigeraCA(cli, nil, clusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+		typhaNodeTLS = getTyphaNodeTLS(cli, tigeraCA)
 		logWriter = bufio.NewWriter(&logBuffer)
 		render.SetTestLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(logWriter)))
-		typhaNodeTLS = &render.TyphaNodeTLS{
-			CAConfigMap: &corev1.ConfigMap{Data: map[string]string{}},
-			TyphaSecret: &typhaSecret,
-			NodeSecret:  &nodeSecret,
-		}
-		typhaNodeTLS.CAConfigMap.Name = render.TyphaCAConfigMapName
-		typhaNodeTLS.CAConfigMap.Namespace = common.OperatorNamespace()
-		typhaNodeTLS.CAConfigMap.Kind = "ConfigMap"
-		typhaNodeTLS.CAConfigMap.APIVersion = "v1"
 	})
 
 	AfterEach(func() {
@@ -224,7 +211,9 @@ var _ = Describe("Rendering tests", func() {
 				Name: render.ManagerInternalTLSSecretName, Namespace: common.OperatorNamespace(),
 			},
 		}
-		c, err := allCalicoComponents(k8sServiceEp, instance, &operatorv1.ManagementCluster{}, nil, nil, typhaNodeTLS, internalManagerTLSSecret, nil, operatorv1.ProviderNone, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
+		internalManagerKeyPair, err := utils.NewKeyPair(nil, internalManagerTLSSecret, []string{render.FelixCommonName}, clusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+		c, err := allCalicoComponents(k8sServiceEp, instance, &operatorv1.ManagementCluster{}, nil, nil, typhaNodeTLS, internalManagerKeyPair, nil, operatorv1.ProviderNone, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 
 		expectedResources := []struct {
@@ -420,6 +409,24 @@ var _ = Describe("Rendering tests", func() {
 		Expect(cn.Spec.Template.Spec.PriorityClassName).To(Equal("system-cluster-critical"))
 	})
 })
+
+func getTyphaNodeTLS(cli client.Client, tigeraCA tls.TigeraCA) *render.TyphaNodeTLS {
+	nodeKeyPair, err := tigeraCA.GetOrCreateKeyPair(cli, render.NodeTLSSecretName, common.OperatorNamespace(), []string{render.FelixCommonName})
+	Expect(err).NotTo(HaveOccurred())
+
+	typhaKeyPair, err := tigeraCA.GetOrCreateKeyPair(cli, render.TyphaTLSSecretName, common.OperatorNamespace(), []string{render.FelixCommonName})
+	Expect(err).NotTo(HaveOccurred())
+
+	trustedBundle, err := utils.CreateTrustedBundle(tigeraCA, nodeKeyPair, typhaKeyPair)
+	Expect(err).NotTo(HaveOccurred())
+
+	typhaNodeTLS := &render.TyphaNodeTLS{
+		TyphaSecret:   typhaKeyPair,
+		NodeSecret:    nodeKeyPair,
+		TrustedBundle: trustedBundle,
+	}
+	return typhaNodeTLS
+}
 
 func componentCount(components []render.Component) int {
 	count := 0

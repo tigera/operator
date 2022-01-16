@@ -15,10 +15,13 @@
 package test
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
-
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/tls"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -151,7 +154,12 @@ func ExpectEnv(env []v1.EnvVar, key, value string) {
 	Expect(false).To(BeTrue(), fmt.Sprintf("Missing expected environment variable %s", key))
 }
 
-func CreateCertSecret(name, namespace string) *corev1.Secret {
+func CreateCertSecret(name, namespace string, dnsNames ...string) *corev1.Secret {
+	cryptoCA, _ := tls.MakeCA(rmeta.TigeraOperatorCAIssuerPrefix)
+	cfg, _ := cryptoCA.MakeServerCertForDuration(sets.NewString(dnsNames...), rmeta.DefaultCertificateDuration, tls.SetServerAuth, tls.SetClientAuth)
+	keyContent, crtContent := &bytes.Buffer{}, &bytes.Buffer{}
+	cfg.WriteCertConfig(crtContent, keyContent)
+
 	return &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -159,8 +167,8 @@ func CreateCertSecret(name, namespace string) *corev1.Secret {
 			Namespace: namespace,
 		},
 		Data: map[string][]byte{
-			"tls.crt": []byte("crt"),
-			"tls.key": []byte("crt"),
+			corev1.TLSPrivateKeyKey: keyContent.Bytes(),
+			corev1.TLSCertKey:       crtContent.Bytes(),
 		},
 	}
 }

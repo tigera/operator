@@ -19,6 +19,8 @@ package utils_test
 
 import (
 	"context"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -39,7 +41,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-var _ = FDescribe("Test TigeraCA suite", func() { //todo: revert
+var _ = Describe("Test TigeraCA suite", func() {
 
 	const (
 		appSecretName  = "my-app-tls"
@@ -305,29 +307,47 @@ var _ = FDescribe("Test TigeraCA suite", func() { //todo: revert
 	Describe("test TrustedBundle interface", func() {
 
 		It("should add a pem block for each certificate", func() {
-			By("creating the secrets in the datastore")
+			By("creating four secrets in the datastore")
 			keyPair, err := tigeraCA.GetOrCreateKeyPair(cli, appSecretName, appNs, appDNSNames)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cli.Create(ctx, keyPair.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			keyPair2, err := tigeraCA.GetOrCreateKeyPair(cli, appSecretName2, appNs, appDNSNames)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cli.Create(ctx, keyPair2.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			Expect(err).NotTo(HaveOccurred())
+			byoSecret.Name, byoSecret.Namespace = "byo-secret", common.OperatorNamespace()
+			Expect(cli.Create(ctx, byoSecret)).NotTo(HaveOccurred())
+			Expect(err).NotTo(HaveOccurred())
+			legacySecret.Name, legacySecret.Namespace = "legacy-secret", common.OperatorNamespace()
+			Expect(cli.Create(ctx, legacySecret)).NotTo(HaveOccurred())
+			Expect(err).NotTo(HaveOccurred())
 
-			By("creating and validating the certificates")
+			By("creating and validating the four certificates")
 			cert, err := tigeraCA.GetCertificate(cli, appSecretName, common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
 			cert2, err := tigeraCA.GetCertificate(cli, appSecretName2, common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
+			byo, err := tigeraCA.GetCertificate(cli, byoSecret.Name, common.OperatorNamespace())
+			Expect(err).NotTo(HaveOccurred())
+			legacy, err := tigeraCA.GetCertificate(cli, legacySecret.Name, common.OperatorNamespace())
+			Expect(err).NotTo(HaveOccurred())
+
 			Expect(cert.HashAnnotationKey()).To(Equal("hash.operator.tigera.io/my-app-tls"))
 			Expect(cert.HashAnnotationValue()).NotTo(BeEmpty())
 			Expect(cert.HashAnnotationValue()).NotTo(Equal(cert2.HashAnnotationValue()))
-			Expect(err).NotTo(HaveOccurred())
+			Expect(tigeraCA.Issued(cert)).To(BeTrue())
 			Expect(cert2.HashAnnotationKey()).To(Equal("hash.operator.tigera.io/my-app-tls-2"))
 			Expect(cert2.HashAnnotationValue()).NotTo(BeEmpty())
-			Expect(tigeraCA.Issued(cert))
+			Expect(tigeraCA.Issued(cert2)).To(BeTrue())
+			Expect(byo.HashAnnotationKey()).To(Equal("hash.operator.tigera.io/byo-secret"))
+			Expect(byo.HashAnnotationValue()).NotTo(BeEmpty())
+			Expect(tigeraCA.Issued(byo)).To(BeFalse())
+			Expect(legacy.HashAnnotationKey()).To(Equal("hash.operator.tigera.io/legacy-secret"))
+			Expect(legacy.HashAnnotationValue()).NotTo(BeEmpty())
+			Expect(tigeraCA.Issued(legacy)).To(BeFalse())
 
 			By("creating and validating a trusted certificate bundle")
-			trustedBundle, err := utils.CreateTrustedBundle(tigeraCA, cert, cert2)
+			trustedBundle, err := utils.CreateTrustedBundle(tigeraCA, cert, cert2, byo, legacy)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(trustedBundle.Volume()).To(Equal(corev1.Volume{
 				Name: tls.TrustedCertConfigMapName,
@@ -342,9 +362,21 @@ var _ = FDescribe("Test TigeraCA suite", func() { //todo: revert
 				MountPath: tls.TrustedCertVolumeMountPath,
 				ReadOnly:  true,
 			}))
-			Expect(trustedBundle.MountPath()).To(Equal(tls.TrustedCertVolumeMountPath))
-			Expect(trustedBundle.ConfigMap(appNs)).To(Equal(corev1.ConfigMap{}))
+			Expect(trustedBundle.MountPath()).To(Equal(tls.TrustedCertBundleMountPath))
+			configMap := trustedBundle.ConfigMap(appNs)
+			Expect(configMap.ObjectMeta).To(Equal(metav1.ObjectMeta{Name: tls.TrustedCertConfigMapName, Namespace: appNs}))
+			Expect(configMap.TypeMeta).To(Equal(metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}))
+			By("counting the number of pem blocks in the configmap")
+			bundle := configMap.Data[tls.TrustedCertConfigMapKeyName]
+			numBlocks := strings.Count(bundle, "certificate name:")
+			// While we have the ca + 4 certs, we expect 3 cert blocks (+ 2):
+			// - the tigeraCA: this covers for all certs signed by the ca
+			// - the byo block (+ its ca block)
+			// - the legacy block (+ its ca block)
+			Expect(numBlocks).To(Equal(3))
+			Expect(trustedBundle.HashAnnotations()).To(HaveKey("hash.operator.tigera.io/tigera-ca-private"))
+			Expect(trustedBundle.HashAnnotations()).To(HaveKey("hash.operator.tigera.io/byo-secret"))
+			Expect(trustedBundle.HashAnnotations()).To(HaveKey("hash.operator.tigera.io/legacy-secret"))
 		})
 	})
-
 })

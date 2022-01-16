@@ -18,35 +18,46 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
-	"github.com/tigera/operator/pkg/render/testutils"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 var _ = Describe("compliance rendering tests", func() {
 	ns := "tigera-compliance"
 	rbac := "rbac.authorization.k8s.io"
 	clusterDomain := dns.DefaultClusterDomain
-	complianceServerCertSecret := rtest.CreateCertSecret(render.ComplianceServerCertSecret, common.OperatorNamespace())
 	var cfg *render.ComplianceConfiguration
 
 	BeforeEach(func() {
+		secret, err := utils.NewKeyPair(nil, rtest.CreateCertSecret(render.GuardianSecretName, common.OperatorNamespace(), render.GuardianSecretName), []string{""}, "")
+		Expect(err).NotTo(HaveOccurred())
+		scheme := runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
+		tigeraCA, err := utils.CreateTigeraCA(cli, nil, clusterDomain)
+		bundle, err := utils.CreateTrustedBundle(tigeraCA)
+		Expect(err).NotTo(HaveOccurred())
 		cfg = &render.ComplianceConfiguration{
 			Installation: &operatorv1.InstallationSpec{
 				KubernetesProvider: operatorv1.ProviderNone,
 				Registry:           "testregistry.com/",
 			},
-			ComplianceServerCertSecret: complianceServerCertSecret,
+			ComplianceServerCertSecret: secret,
 			ESClusterConfig:            relasticsearch.NewClusterConfig("cluster", 1, 1, 1),
 			Openshift:                  notOpenshift,
 			ClusterDomain:              clusterDomain,
+			TrustedBundle:              bundle,
 		}
 	})
 
@@ -151,7 +162,6 @@ var _ = Describe("compliance rendering tests", func() {
 
 	Context("Management cluster", func() {
 		It("should render all resources for a default configuration", func() {
-			cfg.ManagerInternalTLSSecret = &testutils.InternalManagerTLSSecret
 			cfg.ManagementCluster = &operatorv1.ManagementCluster{}
 			component, err := render.Compliance(cfg)
 			Expect(err).ShouldNot(HaveOccurred())

@@ -294,6 +294,9 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	if !tlsSecret.BYO() {
 		components = append(components, utils.NewKeyPairPassthrough(tlsSecret))
 	}
+	if !tunnelCASecret.BYO() {
+		components = append(components, utils.NewKeyPairPassthrough(tunnelCASecret))
+	}
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 

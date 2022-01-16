@@ -35,7 +35,7 @@ func CreateTrustedBundle(ca tls.TigeraCA, certificates ...tls.Certificate) (tls.
 		if cert != nil {
 			annotations[cert.HashAnnotationKey()] = cert.HashAnnotationValue()
 			secret := cert.Secret("")
-			_, err := pem.WriteString(fmt.Sprintf("# secret: %s\n%s\n\n", secret.Name, string(secret.Data[corev1.TLSCertKey])))
+			_, err := pem.WriteString(fmt.Sprintf("# certificate name: %s\n%s\n\n", secret.Name, string(secret.Data[corev1.TLSCertKey])))
 			if err != nil {
 				return err
 			}
@@ -397,7 +397,7 @@ func (c *keyPair) HashAnnotationValue() string {
 	if c.CertificateManagement != nil {
 		return ""
 	}
-	return (*c.Certificate.SerialNumber).String()
+	return rmeta.AnnotationHash(c.Certificate.SubjectKeyId)
 }
 
 func (c *keyPair) Volume() corev1.Volume {

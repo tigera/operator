@@ -124,7 +124,6 @@ func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
 	if c.cfg.TLS.TyphaSecret.UseCertificateManagement() {
 		objs = append(objs, CSRClusterRoleBinding("calico-typha", common.CalicoNamespace))
 		toDelete = append(toDelete, c.cfg.TLS.TyphaSecret.Secret(common.CalicoNamespace))
-
 	} else {
 		objs = append(objs, c.cfg.TLS.TyphaSecret.Secret(common.CalicoNamespace))
 		toDelete = append(toDelete, CSRClusterRoleBinding("calico-typha", common.CalicoNamespace))

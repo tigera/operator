@@ -16,6 +16,8 @@ package render_test
 
 import (
 	"fmt"
+	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/tls"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -40,18 +42,13 @@ import (
 
 var _ = Describe("Rendering tests for PacketCapture API component", func() {
 
-	// Certificate secret
-	var secret = &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      render.PacketCaptureCertSecret,
-			Namespace: common.OperatorNamespace(),
-		},
-		Data: map[string][]byte{
-			"tls.crt": []byte("foo"),
-			"tls.key": []byte("bar"),
-		},
-	}
+	var secret tls.KeyPair
+	BeforeEach(func() {
+		var err error
+		secret, err = utils.NewKeyPair(nil, rtest.CreateCertSecret(render.ComplianceServerCertSecret, common.OperatorNamespace(), render.ComplianceServerCertSecret), []string{""}, "")
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 	// Pull secret
 	var pullSecrets = []*corev1.Secret{{
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},

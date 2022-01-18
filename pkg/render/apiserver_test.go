@@ -960,7 +960,6 @@ var (
 		{
 			APIGroups:     []string{"projectcalico.org"},
 			Resources:     []string{"tiers"},
-			ResourceNames: []string{"default"},
 			Verbs:         []string{"get"},
 		},
 		{

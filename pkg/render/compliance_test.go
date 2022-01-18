@@ -436,4 +436,60 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(csrInitContainer.Name).To(Equal(render.CSRInitContainerName))
 		})
 	})
+
+	Context("Render Benchmarker", func() {
+
+		It("should render benchmarker properly for non GKE environments", func() {
+			cfg.Installation.KubernetesProvider = operatorv1.ProviderNone
+			component, err := render.Compliance(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+			resources, _ := component.Objects()
+
+			var dsBenchMarker = rtest.GetResource(resources, "compliance-benchmarker", ns, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+			volumeMounts := dsBenchMarker.Spec.Template.Spec.Containers[0].VolumeMounts
+
+			Expect(len(volumeMounts)).To(Equal(6))
+
+			Expect(volumeMounts[0].Name).To(Equal("var-lib-etcd"))
+			Expect(volumeMounts[0].MountPath).To(Equal("/var/lib/etcd"))
+			Expect(volumeMounts[1].Name).To(Equal("var-lib-kubelet"))
+			Expect(volumeMounts[1].MountPath).To(Equal("/var/lib/kubelet"))
+			Expect(volumeMounts[2].Name).To(Equal("etc-systemd"))
+			Expect(volumeMounts[2].MountPath).To(Equal("/etc/systemd"))
+			Expect(volumeMounts[3].Name).To(Equal("etc-kubernetes"))
+			Expect(volumeMounts[3].MountPath).To(Equal("/etc/kubernetes"))
+			Expect(volumeMounts[4].Name).To(Equal("usr-bin"))
+			Expect(volumeMounts[4].MountPath).To(Equal("/usr/local/bin"))
+			Expect(volumeMounts[5].Name).To(Equal("elastic-ca-cert-volume"))
+			Expect(volumeMounts[5].MountPath).To(Equal("/etc/ssl/elastic/"))
+		})
+
+		It("should render benchmarker properly for GKE environments", func() {
+			cfg.Installation.KubernetesProvider = operatorv1.ProviderGKE
+			component, err := render.Compliance(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+			resources, _ := component.Objects()
+
+			var dsBenchMarker = rtest.GetResource(resources, "compliance-benchmarker", ns, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+			volumeMounts := dsBenchMarker.Spec.Template.Spec.Containers[0].VolumeMounts
+
+			Expect(len(volumeMounts)).To(Equal(7))
+
+			Expect(volumeMounts[0].Name).To(Equal("var-lib-etcd"))
+			Expect(volumeMounts[0].MountPath).To(Equal("/var/lib/etcd"))
+			Expect(volumeMounts[1].Name).To(Equal("var-lib-kubelet"))
+			Expect(volumeMounts[1].MountPath).To(Equal("/var/lib/kubelet"))
+			Expect(volumeMounts[2].Name).To(Equal("etc-systemd"))
+			Expect(volumeMounts[2].MountPath).To(Equal("/etc/systemd"))
+			Expect(volumeMounts[3].Name).To(Equal("etc-kubernetes"))
+			Expect(volumeMounts[3].MountPath).To(Equal("/etc/kubernetes"))
+			Expect(volumeMounts[4].Name).To(Equal("usr-bin"))
+			Expect(volumeMounts[4].MountPath).To(Equal("/usr/local/bin"))
+			Expect(volumeMounts[5].Name).To(Equal("home-kubernetes"))
+			Expect(volumeMounts[5].MountPath).To(Equal("/home/kubernetes"))
+			Expect(volumeMounts[6].Name).To(Equal("elastic-ca-cert-volume"))
+			Expect(volumeMounts[6].MountPath).To(Equal("/etc/ssl/elastic/"))
+		})
+	})
+
 })

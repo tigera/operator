@@ -494,10 +494,10 @@ func (c *typhaComponent) typhaEnvVars() []corev1.EnvVar {
 	// We need at least the CN or URISAN set, we depend on the validation
 	// done by the core_controller that the Secret will have one.
 	if c.cfg.TLS.TyphaCommonName != "" {
-		typhaEnv = append(typhaEnv, corev1.EnvVar{Name: "TYPHA_TYPHACN", Value: c.cfg.TLS.TyphaCommonName})
+		typhaEnv = append(typhaEnv, corev1.EnvVar{Name: "TYPHA_CLIENTCN", Value: c.cfg.TLS.NodeCommonName})
 	}
 	if c.cfg.TLS.TyphaURISAN != "" {
-		typhaEnv = append(typhaEnv, corev1.EnvVar{Name: "TYPHA_TYPHAURISAN", Value: c.cfg.TLS.TyphaURISAN})
+		typhaEnv = append(typhaEnv, corev1.EnvVar{Name: "TYPHA_CLIENTURISAN", Value: c.cfg.TLS.NodeURISAN})
 	}
 
 	switch c.cfg.Installation.CNI.Type {

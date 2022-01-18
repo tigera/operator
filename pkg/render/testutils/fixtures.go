@@ -22,21 +22,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var InternalManagerTLSSecret = corev1.Secret{
-	TypeMeta: metav1.TypeMeta{
-		Kind:       "Secret",
-		APIVersion: "v1",
-	},
-	ObjectMeta: metav1.ObjectMeta{
-		Name:      render.ManagerInternalTLSSecretName,
-		Namespace: common.OperatorNamespace(),
-	},
-	Data: map[string][]byte{
-		corev1.TLSCertKey:       []byte("cert"),
-		corev1.TLSPrivateKeyKey: []byte("key"),
-	},
-}
-
 var ElasticsearchSecret = corev1.Secret{
 	TypeMeta: metav1.TypeMeta{
 		Kind:       "Secret",
@@ -67,20 +52,6 @@ var KubeControllersUserSecret = corev1.Secret{
 	},
 }
 
-var KibanaSecret = corev1.Secret{
-	TypeMeta: metav1.TypeMeta{
-		Kind:       "Secret",
-		APIVersion: "v1",
-	},
-	ObjectMeta: metav1.ObjectMeta{
-		Name:      render.TigeraKibanaCertSecret,
-		Namespace: common.OperatorNamespace(),
-	},
-	Data: map[string][]byte{
-		corev1.TLSCertKey:       []byte("cert"),
-		corev1.TLSPrivateKeyKey: []byte("key"),
-	},
-}
 var VoltronTunnelSecret = corev1.Secret{
 	TypeMeta: metav1.TypeMeta{
 		Kind:       "Secret",

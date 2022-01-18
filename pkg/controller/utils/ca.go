@@ -35,7 +35,7 @@ func CreateTrustedBundle(ca tls.TigeraCA, certificates ...tls.Certificate) (tls.
 		if cert != nil {
 			annotations[cert.HashAnnotationKey()] = cert.HashAnnotationValue()
 			secret := cert.Secret("")
-			_, err := pem.WriteString(fmt.Sprintf("# secret: %s\n%s\n\n", secret.Name, string(secret.Data[corev1.TLSCertKey])))
+			_, err := pem.WriteString(fmt.Sprintf("# certificate name: %s\n%s\n\n", secret.Name, string(secret.Data[corev1.TLSCertKey])))
 			if err != nil {
 				return err
 			}
@@ -170,6 +170,10 @@ func CreateTigeraCA(cli client.Client, certificateManagement *operatorv1.Certifi
 // GetOrCreateKeyPair returns a KeyPair. If one exists, some checks are performed. Otherwise, a new KeyPair is created.
 func (ca *tigeraCA) GetOrCreateKeyPair(cli client.Client, secretName, secretNamespace string, dnsNames []string) (tls.KeyPair, error) {
 	secret := &corev1.Secret{}
+	kp := &keyPair{
+		tigeraCA: ca,
+		dnsNames: dnsNames,
+	}
 	err := cli.Get(context.Background(), types.NamespacedName{
 		Name:      secretName,
 		Namespace: secretNamespace,
@@ -180,35 +184,34 @@ func (ca *tigeraCA) GetOrCreateKeyPair(cli client.Client, secretName, secretName
 			return nil, err
 		}
 		createNew = true
-	}
-	kp := &keyPair{
-		tigeraCA: ca,
-		dnsNames: dnsNames,
-	}
-
-	if !createNew {
+	} else {
 		err = standardizeFields(secret)
 		if err != nil {
-			return nil, err
-		}
-		err = SecretHasExpectedDNSNames(secret, corev1.TLSCertKey, dnsNames)
-		if err == ErrInvalidCertDNSNames {
-			return nil, fmt.Errorf("secret %s has invalid DNS names, the expected names are: %v", secretName, dnsNames)
-		} else if err != nil {
 			return nil, err
 		}
 		kp.Certificate, err = parseCertificate(secret.Data[corev1.TLSCertKey])
 		if err != nil {
 			return nil, err
 		}
+		err = SecretHasExpectedDNSNames(secret, corev1.TLSCertKey, dnsNames)
+		if err == ErrInvalidCertDNSNames {
+			if strings.HasPrefix(kp.Certificate.Issuer.CommonName, rmeta.TigeraOperatorCAIssuerPrefix) && !ca.Issued(kp) {
+				createNew = true
+			} else {
+				log.V(3).Info("secret %s has invalid DNS names, the expected names are: %v", secretName, dnsNames)
+			}
+		} else if err != nil {
+			return nil, err
+		}
 		invalid := kp.Certificate.NotAfter.Before(time.Now()) || kp.Certificate.NotBefore.After(time.Now())
-
 		if invalid && !strings.HasPrefix(kp.Certificate.Issuer.CommonName, rmeta.TigeraOperatorCAIssuerPrefix) {
 			return nil, fmt.Errorf("secret %s is invalid", secretName)
 		}
 		// Create a new secret if the secret has invalid or has been signed by an older instance of TigeraCA.
-		createNew = invalid || kp.Certificate.Issuer.CommonName == rmeta.TigeraOperatorCAIssuerPrefix && !ca.Issued(kp)
-	} else {
+		createNew = createNew || invalid
+	}
+
+	if createNew {
 		if ca.keyPair.CertificateManagement != nil {
 			return certificateManagementKeyPair(ca, secretName, secretNamespace, dnsNames), nil
 		}
@@ -397,7 +400,7 @@ func (c *keyPair) HashAnnotationValue() string {
 	if c.CertificateManagement != nil {
 		return ""
 	}
-	return (*c.Certificate.SerialNumber).String()
+	return rmeta.AnnotationHash(c.Certificate.SubjectKeyId)
 }
 
 func (c *keyPair) Volume() corev1.Volume {

@@ -44,7 +44,6 @@ import (
 const (
 	BirdTemplatesConfigMapName        = "bird-templates"
 	birdTemplateHashAnnotation        = "hash.operator.tigera.io/bird-templates"
-	NodeCertHashAnnotation            = "hash.operator.tigera.io/node-cert"
 	nodeCniConfigAnnotation           = "hash.operator.tigera.io/cni-config"
 	bgpLayoutHashAnnotation           = "hash.operator.tigera.io/bgp-layout"
 	CSRLabelCalicoSystem              = "calico-system"
@@ -1125,11 +1124,14 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		{Name: "FELIX_TYPHACAFILE", Value: c.cfg.TLS.TrustedBundle.MountPath()},
 		{Name: "FELIX_TYPHACERTFILE", Value: TLSCertMountPath},
 		{Name: "FELIX_TYPHAKEYFILE", Value: TLSKeyMountPath},
-
-		// We need at least the CN or URISAN set, we depend on the validation
-		// done by the core_controller that the Secret will have one.
-		{Name: "FELIX_TYPHACN", Value: c.cfg.TLS.TyphaCommonName},
-		{Name: "FELIX_TYPHAURISAN", Value: c.cfg.TLS.TyphaURISAN},
+	}
+	// We need at least the CN or URISAN set, we depend on the validation
+	// done by the core_controller that the Secret will have one.
+	if c.cfg.TLS.TyphaCommonName != "" {
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_TYPHACN", Value: c.cfg.TLS.TyphaCommonName})
+	}
+	if c.cfg.TLS.TyphaURISAN != "" {
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_TYPHAURISAN", Value: c.cfg.TLS.TyphaURISAN})
 	}
 
 	if c.cfg.Installation.CNI != nil && c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {

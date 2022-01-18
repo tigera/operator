@@ -18,35 +18,50 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
-	"github.com/tigera/operator/pkg/render/testutils"
+	"github.com/tigera/operator/pkg/tls"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 var _ = Describe("compliance rendering tests", func() {
 	ns := "tigera-compliance"
 	rbac := "rbac.authorization.k8s.io"
 	clusterDomain := dns.DefaultClusterDomain
-	complianceServerCertSecret := rtest.CreateCertSecret(render.ComplianceServerCertSecret, common.OperatorNamespace())
 	var cfg *render.ComplianceConfiguration
+	var cli client.Client
 
 	BeforeEach(func() {
+		scheme := runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
+		tigeraCA, err := utils.CreateTigeraCA(cli, nil, clusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+		bundle, err := utils.CreateTrustedBundle(tigeraCA)
+		Expect(err).NotTo(HaveOccurred())
+		secret, err := tigeraCA.GetOrCreateKeyPair(cli, render.ComplianceServerCertSecret, common.OperatorNamespace(), []string{""})
+		Expect(err).NotTo(HaveOccurred())
 		cfg = &render.ComplianceConfiguration{
 			Installation: &operatorv1.InstallationSpec{
 				KubernetesProvider: operatorv1.ProviderNone,
 				Registry:           "testregistry.com/",
 			},
-			ComplianceServerCertSecret: complianceServerCertSecret,
+			ComplianceServerCertSecret: secret,
 			ESClusterConfig:            relasticsearch.NewClusterConfig("cluster", 1, 1, 1),
 			Openshift:                  notOpenshift,
 			ClusterDomain:              clusterDomain,
+			TrustedBundle:              bundle,
 		}
 	})
 
@@ -89,10 +104,11 @@ var _ = Describe("compliance rendering tests", func() {
 				{"cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
-				{render.ComplianceServerCertSecret, "tigera-compliance", "", "v1", "Secret"},
+				{tls.TrustedCertConfigMapName, "tigera-compliance", "", "v1", "ConfigMap"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
 				{"compliance", ns, "", "v1", "Service"},
 				{"compliance-server", ns, "apps", "v1", "Deployment"},
+				{render.ComplianceServerCertSecret, "tigera-compliance", "", "v1", "Secret"},
 				{"compliance-benchmarker", "", "policy", "v1beta1", "PodSecurityPolicy"},
 				{"compliance-controller", "", "policy", "v1beta1", "PodSecurityPolicy"},
 				{"compliance-reporter", "", "policy", "v1beta1", "PodSecurityPolicy"},
@@ -151,7 +167,6 @@ var _ = Describe("compliance rendering tests", func() {
 
 	Context("Management cluster", func() {
 		It("should render all resources for a default configuration", func() {
-			cfg.ManagerInternalTLSSecret = &testutils.InternalManagerTLSSecret
 			cfg.ManagementCluster = &operatorv1.ManagementCluster{}
 			component, err := render.Compliance(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -189,11 +204,11 @@ var _ = Describe("compliance rendering tests", func() {
 				{"cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
-				{render.ManagerInternalTLSSecretName, "tigera-compliance", "", "v1", "Secret"},
-				{render.ComplianceServerCertSecret, "tigera-compliance", "", "v1", "Secret"},
+				{tls.TrustedCertConfigMapName, "tigera-compliance", "", "v1", "ConfigMap"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
 				{"compliance", ns, "", "v1", "Service"},
 				{"compliance-server", ns, "apps", "v1", "Deployment"},
+				{render.ComplianceServerCertSecret, "tigera-compliance", "", "v1", "Secret"},
 				{"compliance-benchmarker", "", "policy", "v1beta1", "PodSecurityPolicy"},
 				{"compliance-controller", "", "policy", "v1beta1", "PodSecurityPolicy"},
 				{"compliance-reporter", "", "policy", "v1beta1", "PodSecurityPolicy"},
@@ -215,18 +230,18 @@ var _ = Describe("compliance rendering tests", func() {
 			var dpComplianceServer = rtest.GetResource(resources, "compliance-server", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
 
 			Expect(len(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
-			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("tls"))
-			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/code/apiserver.local.config/certificates"))
-			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal(render.ManagerInternalTLSSecretName))
-			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal("/manager-tls"))
+			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(tls.TrustedCertConfigMapName))
+			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal(tls.TrustedCertVolumeMountPath))
+			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal(render.ComplianceServerCertSecret))
+			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal("/etc/ssl/tigera-compliance-server-tls/"))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[2].Name).To(Equal("elastic-ca-cert-volume"))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[2].MountPath).To(Equal("/etc/ssl/elastic/"))
 
 			Expect(len(dpComplianceServer.Spec.Template.Spec.Volumes)).To(Equal(3))
-			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[0].Name).To(Equal("tls"))
+			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ComplianceServerCertSecret))
 			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ComplianceServerCertSecret))
-			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[1].Name).To(Equal(render.ManagerInternalTLSSecretName))
-			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[1].Secret.SecretName).To(Equal(render.ManagerInternalTLSSecretName))
+			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[1].Name).To(Equal(tls.TrustedCertConfigMapName))
+			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[1].ConfigMap.Name).To(Equal(tls.TrustedCertConfigMapName))
 			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[2].Name).To(Equal("elastic-ca-cert-volume"))
 			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal(relasticsearch.PublicCertSecret))
 
@@ -299,6 +314,7 @@ var _ = Describe("compliance rendering tests", func() {
 				{"cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
+				{tls.TrustedCertConfigMapName, "tigera-compliance", "", "v1", "ConfigMap"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
 				{"compliance-benchmarker", "", "policy", "v1beta1", "PodSecurityPolicy"},
 				{"compliance-controller", "", "policy", "v1beta1", "PodSecurityPolicy"},
@@ -376,7 +392,13 @@ var _ = Describe("compliance rendering tests", func() {
 
 	Context("Certificate management enabled", func() {
 		It("should render init containers and volume changes", func() {
-			cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{}
+			ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
+			cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
+			cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: cert}
+			tigeraCA, err := utils.CreateTigeraCA(cli, cfg.Installation.CertificateManagement, clusterDomain)
+			complianceTLS, err := tigeraCA.GetOrCreateKeyPair(cli, render.ComplianceServerCertSecret, common.OperatorNamespace(), []string{""})
+			Expect(err).NotTo(HaveOccurred())
+			cfg.ComplianceServerCertSecret = complianceTLS
 			component, err := render.Compliance(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
@@ -413,7 +435,7 @@ var _ = Describe("compliance rendering tests", func() {
 				{"cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
-				{render.ComplianceServerCertSecret, ns, "", "v1", "Secret"},
+				{tls.TrustedCertConfigMapName, "tigera-compliance", "", "v1", "ConfigMap"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
 				{"compliance", ns, "", "v1", "Service"},
 				{"compliance-server", ns, "apps", "v1", "Deployment"},

@@ -1021,7 +1021,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	components := []render.Component{utils.NewKeyPairPassthrough(tigeraCA)} // This controller creates/removes the tigeraCA.
 	if !typhaNodeTLS.NodeSecret.BYO() {                                     // if nodeSecret.BYO(), then typhaSecret is too and vice versa.
-		components = append(components, utils.NewKeyPairPassthrough(typhaNodeTLS.NodeSecret), utils.NewKeyPairPassthrough(typhaNodeTLS.NodeSecret))
+		components = append(components, utils.NewKeyPairPassthrough(typhaNodeTLS.NodeSecret), utils.NewKeyPairPassthrough(typhaNodeTLS.TyphaSecret))
 	}
 
 	var objs []client.Object

@@ -124,7 +124,6 @@ func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
 	if c.cfg.TLS.TyphaSecret.UseCertificateManagement() {
 		objs = append(objs, CSRClusterRoleBinding("calico-typha", common.CalicoNamespace))
 		toDelete = append(toDelete, c.cfg.TLS.TyphaSecret.Secret(common.CalicoNamespace))
-
 	} else {
 		objs = append(objs, c.cfg.TLS.TyphaSecret.Secret(common.CalicoNamespace))
 		toDelete = append(toDelete, CSRClusterRoleBinding("calico-typha", common.CalicoNamespace))
@@ -491,10 +490,14 @@ func (c *typhaComponent) typhaEnvVars() []corev1.EnvVar {
 		{Name: "TYPHA_CAFILE", Value: c.cfg.TLS.TrustedBundle.MountPath()},
 		{Name: "TYPHA_SERVERCERTFILE", Value: TLSCertMountPath},
 		{Name: "TYPHA_SERVERKEYFILE", Value: TLSKeyMountPath},
-		// We need at least the CN or URISAN set, we depend on the validation
-		// done by the core_controller that the Secret will have one.
-		{Name: "TYPHA_CLIENTCN", Value: c.cfg.TLS.NodeCommonName},
-		{Name: "TYPHA_CLIENTURISAN", Value: c.cfg.TLS.NodeURISAN},
+	}
+	// We need at least the CN or URISAN set, we depend on the validation
+	// done by the core_controller that the Secret will have one.
+	if c.cfg.TLS.TyphaCommonName != "" {
+		typhaEnv = append(typhaEnv, corev1.EnvVar{Name: "TYPHA_TYPHACN", Value: c.cfg.TLS.TyphaCommonName})
+	}
+	if c.cfg.TLS.TyphaURISAN != "" {
+		typhaEnv = append(typhaEnv, corev1.EnvVar{Name: "TYPHA_TYPHAURISAN", Value: c.cfg.TLS.TyphaURISAN})
 	}
 
 	switch c.cfg.Installation.CNI.Type {

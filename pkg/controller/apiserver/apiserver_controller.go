@@ -294,6 +294,9 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	if !tlsSecret.BYO() {
 		components = append(components, utils.NewKeyPairPassthrough(tlsSecret))
 	}
+	if tunnelCASecret != nil && !tunnelCASecret.BYO() {
+		components = append(components, utils.NewKeyPairPassthrough(tunnelCASecret))
+	}
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -311,7 +314,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		PullSecrets:                 pullSecrets,
 		Openshift:                   r.provider == operatorv1.ProviderOpenShift,
 		TunnelCASecret:              tunnelCASecret,
-		ClusterDomain:               r.clusterDomain,
 	}
 
 	component, err := render.APIServer(&apiServerCfg)
@@ -333,8 +335,8 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			return reconcile.Result{}, err
 		}
 
-		if !tlsSecret.BYO() {
-			components = append(components, utils.NewKeyPairPassthrough(tlsSecret))
+		if !packetCaptureCertSecret.BYO() {
+			components = append(components, utils.NewKeyPairPassthrough(packetCaptureCertSecret))
 		}
 
 		// Fetch the Authentication spec. If present, we use to configure user authentication.

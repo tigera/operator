@@ -43,6 +43,9 @@ import (
 const (
 	apiServerPort   = 5443
 	queryServerPort = 8080
+
+	auditLogsVolumeName   = "tigera-audit-logs"
+	auditPolicyVolumeName = "tigera-audit-policy"
 )
 
 // The following functions are helpers for determining resource names based on
@@ -93,12 +96,10 @@ type APIServerConfiguration struct {
 	PullSecrets                 []*corev1.Secret
 	Openshift                   bool
 	TunnelCASecret              tls.KeyPair
-	ClusterDomain               string
 }
 
 type apiServerComponent struct {
 	cfg              *APIServerConfiguration
-	isManagement     bool
 	apiServerImage   string
 	queryServerImage string
 	certSignReqImage string
@@ -184,7 +185,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		c.apiServerDeployment(),
 		c.apiServerService(),
 	)
-	if c.isManagement {
+	if c.cfg.ManagementCluster != nil {
 		namespacedObjects = append(namespacedObjects, c.cfg.TunnelCASecret.Secret(rmeta.APIServerNamespace(c.cfg.Installation.Variant)))
 	}
 
@@ -748,7 +749,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 	annotations := map[string]string{
 		c.cfg.TLSKeyPair.HashAnnotationKey(): c.cfg.TLSKeyPair.HashAnnotationValue(),
 	}
-	if c.isManagement {
+	if c.cfg.ManagementCluster != nil {
 		annotations[c.cfg.TunnelCASecret.HashAnnotationKey()] = c.cfg.TunnelCASecret.HashAnnotationValue()
 	}
 
@@ -824,12 +825,12 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		c.cfg.TLSKeyPair.VolumeMount("/code/apiserver.local.config/certificates"),
 	}
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		if c.isManagement {
+		if c.cfg.ManagementCluster != nil {
 			volumeMounts = append(volumeMounts, c.cfg.TunnelCASecret.VolumeMount("/code/apiserver.local.config/multicluster/certificates"))
 		}
 		volumeMounts = append(volumeMounts,
-			corev1.VolumeMount{Name: "tigera-audit-logs", MountPath: "/var/log/calico/audit"},
-			corev1.VolumeMount{Name: "tigera-audit-policy", MountPath: "/etc/tigera/audit"},
+			corev1.VolumeMount{Name: auditLogsVolumeName, MountPath: "/var/log/calico/audit"},
+			corev1.VolumeMount{Name: auditPolicyVolumeName, MountPath: "/etc/tigera/audit"},
 		)
 	}
 
@@ -967,7 +968,7 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		volumes = append(volumes,
 			corev1.Volume{
-				Name: "tigera-audit-logs",
+				Name: auditLogsVolumeName,
 				VolumeSource: corev1.VolumeSource{
 					HostPath: &corev1.HostPathVolumeSource{
 						Path: "/var/log/calico/audit",
@@ -976,10 +977,10 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 				},
 			},
 			corev1.Volume{
-				Name: "tigera-audit-policy",
+				Name: auditPolicyVolumeName,
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{Name: "tigera-audit-policy"},
+						LocalObjectReference: corev1.LocalObjectReference{Name: auditPolicyVolumeName},
 						Items: []corev1.KeyToPath{
 							{
 								Key:  "config",
@@ -1589,7 +1590,7 @@ rules:
 		ObjectMeta: metav1.ObjectMeta{
 			// This object is for Enterprise only, so pass it explicitly.
 			Namespace: rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise),
-			Name:      "tigera-audit-policy",
+			Name:      auditPolicyVolumeName,
 		},
 		Data: map[string]string{
 			"config": defaultAuditPolicy,

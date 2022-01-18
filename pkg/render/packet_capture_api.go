@@ -47,8 +47,7 @@ const (
 	PacketCaptureDeploymentName         = PacketCaptureName
 	PacketCaptureServiceName            = PacketCaptureName
 
-	PacketCaptureCertSecret        = "tigera-packetcapture-server-tls"
-	PacketCaptureTLSHashAnnotation = "hash.operator.tigera.io/packetcapture-certificate"
+	PacketCaptureCertSecret = "tigera-packetcapture-server-tls"
 )
 
 // PacketCaptureApiConfiguration contains all the config information needed to render the component.

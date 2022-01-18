@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/tigera/operator/pkg/tls"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -388,7 +389,9 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			r.typhaAutoscaler.start(ctx)
 			r.calicoWindowsUpgrader.Start(ctx)
-
+			ca, err := tls.MakeCA("test")
+			Expect(err).NotTo(HaveOccurred())
+			cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 			// We start off with a 'standard' installation, with nothing special
 			Expect(c.Create(
 				ctx,
@@ -397,7 +400,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					Spec: operator.InstallationSpec{
 						Variant:               operator.TigeraSecureEnterprise,
 						Registry:              "some.registry.org/",
-						CertificateManagement: &operator.CertificateManagement{},
+						CertificateManagement: &operator.CertificateManagement{CACert: cert},
 					},
 					Status: operator.InstallationStatus{
 						Variant: operator.TigeraSecureEnterprise,
@@ -783,7 +786,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
 			dnsNames = append(dnsNames, "localhost")
 			Expect(test.GetResource(c, internalManagerTLSSecret)).To(BeNil())
-			test.VerifyCert(internalManagerTLSSecret, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, dnsNames...)
+			test.VerifyCert(internalManagerTLSSecret, dnsNames...)
 
 		})
 
@@ -802,7 +805,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
 			dnsNames = append(dnsNames, "localhost")
 			Expect(test.GetResource(c, internalManagerTLSSecret)).To(BeNil())
-			test.VerifyCert(internalManagerTLSSecret, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, dnsNames...)
+			test.VerifyCert(internalManagerTLSSecret, dnsNames...)
 		})
 
 		It("should create node and typha TLS cert secrets if not provided and add OwnerReference to those", func() {
@@ -813,7 +816,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			secret := &corev1.Secret{}
 			cfgMap := &corev1.ConfigMap{}
 
-			Expect(c.Get(ctx, client.ObjectKey{Name: render.TyphaCAConfigMapName, Namespace: common.OperatorNamespace()}, cfgMap)).ShouldNot(HaveOccurred())
+			Expect(c.Get(ctx, client.ObjectKey{Name: tls.TrustedCertConfigMapName, Namespace: common.CalicoNamespace}, cfgMap)).ShouldNot(HaveOccurred())
 			Expect(cfgMap.GetOwnerReferences()).To(HaveLen(1))
 
 			Expect(c.Get(ctx, client.ObjectKey{Name: render.NodeTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
@@ -844,16 +847,16 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(c.Create(ctx, caConfigMap)).NotTo(HaveOccurred())
 
 			nodeSecret, err := secret.CreateTLSSecret(testCA,
-				render.NodeTLSSecretName, common.OperatorNamespace(), render.TLSSecretKeyName,
-				render.TLSSecretCertName, rmeta.DefaultCertificateDuration, nil, render.FelixCommonName,
+				render.NodeTLSSecretName, common.OperatorNamespace(), "key.key",
+				"cert.crt", rmeta.DefaultCertificateDuration, nil, render.FelixCommonName,
 			)
 			nodeSecret.Data[render.CommonName] = []byte(render.FelixCommonName)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(c.Create(ctx, nodeSecret)).NotTo(HaveOccurred())
 
 			typhaSecret, err := secret.CreateTLSSecret(testCA,
-				render.TyphaTLSSecretName, common.OperatorNamespace(), render.TLSSecretKeyName,
-				render.TLSSecretCertName, rmeta.DefaultCertificateDuration, nil, render.TyphaCommonName,
+				render.TyphaTLSSecretName, common.OperatorNamespace(), "key.key",
+				"cert.crt", rmeta.DefaultCertificateDuration, nil, render.TyphaCommonName,
 			)
 			typhaSecret.Data[render.CommonName] = []byte(render.TyphaCommonName)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -968,14 +971,16 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			r.typhaAutoscaler.start(ctx)
 			r.calicoWindowsUpgrader.Start(ctx)
-
+			ca, err := tls.MakeCA("test")
+			Expect(err).NotTo(HaveOccurred())
+			cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 			// We start off with a 'standard' installation, with nothing special
 			cr = &operator.Installation{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 				Spec: operator.InstallationSpec{
 					Variant:               operator.TigeraSecureEnterprise,
 					Registry:              "some.registry.org/",
-					CertificateManagement: &operator.CertificateManagement{},
+					CertificateManagement: &operator.CertificateManagement{CACert: cert},
 				},
 			}
 		})

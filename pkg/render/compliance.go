@@ -190,7 +190,7 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 
 	var objsToDelete []client.Object
 	// Compliance server is only for Standalone or Management clusters
-	if c.cfg.ManagementClusterConnection != nil {
+	if c.cfg.ManagementClusterConnection == nil {
 		complianceObjs = append(complianceObjs,
 			c.complianceServerClusterRole(),
 			c.complianceServerService(),
@@ -198,13 +198,13 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 		)
 		if c.cfg.ComplianceServerCertSecret.UseCertificateManagement() {
 			complianceObjs = append(complianceObjs, CSRClusterRoleBinding("tigera-compliance-server", ComplianceNamespace))
+			objsToDelete = append(objsToDelete, c.cfg.ComplianceServerCertSecret.Secret(ComplianceNamespace))
 		} else {
 			complianceObjs = append(complianceObjs, c.cfg.ComplianceServerCertSecret.Secret(ComplianceNamespace))
+			objsToDelete = append(objsToDelete, CSRClusterRoleBinding("tigera-compliance-server", ComplianceNamespace))
 		}
 	} else {
-		objsToDelete = append(objsToDelete, CSRClusterRoleBinding("tigera-compliance-server", ComplianceNamespace))
 		objsToDelete = append(objsToDelete, c.complianceServerDeployment())
-		objsToDelete = append(objsToDelete, c.cfg.ComplianceServerCertSecret.Secret(ComplianceNamespace))
 		if c.cfg.ManagementClusterConnection != nil { // This is a managed cluster
 			complianceObjs = append(complianceObjs,
 				c.complianceServerManagedClusterRole(),

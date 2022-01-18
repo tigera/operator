@@ -230,7 +230,7 @@ func (d *dpiComponent) dpiVolumes() []corev1.Volume {
 }
 
 func (d *dpiComponent) dpiEnvVars() []corev1.EnvVar {
-	return []corev1.EnvVar{
+	env := []corev1.EnvVar{
 		{
 			Name: "DPI_NODENAME",
 			ValueFrom: &corev1.EnvVarSource{
@@ -242,11 +242,16 @@ func (d *dpiComponent) dpiEnvVars() []corev1.EnvVar {
 		{Name: "DPI_TYPHACAFILE", Value: d.cfg.TyphaNodeTLS.TrustedBundle.MountPath()},
 		{Name: "DPI_TYPHACERTFILE", Value: render.TLSCertMountPath},
 		{Name: "DPI_TYPHAKEYFILE", Value: render.TLSKeyMountPath},
-		// We need at least the CN or URISAN set, we depend on the validation
-		// done by the core_controller that the Secret will have one.
-		{Name: "DPI_FELIX_TYPHACN", Value: d.cfg.TyphaNodeTLS.TyphaCommonName},
-		{Name: "DPI_FELIX_TYPHAURISAN", Value: d.cfg.TyphaNodeTLS.TyphaURISAN},
 	}
+	// We need at least the CN or URISAN set, we depend on the validation
+	// done by the core_controller that the Secret will have one.
+	if d.cfg.TyphaNodeTLS.TyphaCommonName != "" {
+		env = append(env, corev1.EnvVar{Name: "DPI_FELIX_TYPHACN", Value: d.cfg.TyphaNodeTLS.TyphaCommonName})
+	}
+	if d.cfg.TyphaNodeTLS.TyphaURISAN != "" {
+		env = append(env, corev1.EnvVar{Name: "DPI_FELIX_TYPHAURISAN", Value: d.cfg.TyphaNodeTLS.TyphaURISAN})
+	}
+	return env
 }
 
 func (d *dpiComponent) dpiVolumeMounts() []corev1.VolumeMount {

@@ -18,18 +18,23 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
+	"github.com/tigera/operator/pkg/tls"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 var (
@@ -93,11 +98,11 @@ var (
 
 	expectedVolumes = []corev1.Volume{
 		{
-			Name: "typha-ca",
+			Name: tls.TrustedCertConfigMapName,
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: render.TyphaCAConfigMapName,
+						Name: tls.TrustedCertConfigMapName,
 					}}},
 		},
 		{
@@ -131,7 +136,7 @@ var (
 	}
 
 	expectedVolumeMounts = []corev1.VolumeMount{
-		{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
+		{MountPath: tls.TrustedCertVolumeMountPath, Name: tls.TrustedCertConfigMapName, ReadOnly: true},
 		{MountPath: "/node-certs", Name: "node-certs", ReadOnly: true},
 		{
 			MountPath: "/etc/ssl/elastic/", Name: "elastic-ca-cert-volume",
@@ -140,12 +145,6 @@ var (
 			MountPath: "/var/log/calico/snort-alerts", Name: "log-snort-alters",
 		},
 	}
-
-	typhaCAConfigMap = &corev1.ConfigMap{TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: render.TyphaCAConfigMapName}}
-
-	typhaTLSSecret = &corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: render.TyphaTLSSecretName}}
-
-	nodeTLSSecret = &corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: render.NodeTLSSecretName}}
 
 	esConfigMap = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 
@@ -164,13 +163,35 @@ type resourceTestObj struct {
 
 var _ = Describe("DPI rendering tests", func() {
 
+	var (
+		clusterDomain = "cluster.local"
+		typhaNodeTLS  *render.TyphaNodeTLS
+	)
+
+	BeforeEach(func() {
+		scheme := runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
+		tigeraCA, err := utils.CreateTigeraCA(cli, nil, clusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+		nodeKeyPair, err := tigeraCA.GetOrCreateKeyPair(cli, render.NodeTLSSecretName, common.OperatorNamespace(), []string{render.FelixCommonName})
+		Expect(err).NotTo(HaveOccurred())
+		typhaKeyPair, err := tigeraCA.GetOrCreateKeyPair(cli, render.TyphaTLSSecretName, common.OperatorNamespace(), []string{render.FelixCommonName})
+		Expect(err).NotTo(HaveOccurred())
+		trustedBundle, err := utils.CreateTrustedBundle(tigeraCA, nodeKeyPair, typhaKeyPair)
+		Expect(err).NotTo(HaveOccurred())
+		typhaNodeTLS = &render.TyphaNodeTLS{
+			TyphaSecret:   typhaKeyPair,
+			NodeSecret:    nodeKeyPair,
+			TrustedBundle: trustedBundle,
+		}
+	})
+
 	It("should render all resources for deep packet inspection with default resource requirements", func() {
 		component := dpi.DPI(&dpi.DPIConfig{
 			IntrusionDetection: ids,
 			Installation:       &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
-			NodeTLSSecret:      nodeTLSSecret,
-			TyphaTLSSecret:     typhaTLSSecret,
-			TyphaCAConfigMap:   typhaCAConfigMap,
+			TyphaNodeTLS:       typhaNodeTLS,
 			PullSecrets:        pullSecrets,
 			Openshift:          false,
 			HasNoLicense:       false,
@@ -184,9 +205,8 @@ var _ = Describe("DPI rendering tests", func() {
 
 		expectedResources := []resourceTestObj{
 			{name: dpi.DeepPacketInspectionNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: tls.TrustedCertConfigMapName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: render.NodeTLSSecretName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
-			{name: render.TyphaTLSSecretName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
-			{name: render.TyphaCAConfigMapName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: "pull-secret", ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
@@ -228,9 +248,7 @@ var _ = Describe("DPI rendering tests", func() {
 		component := dpi.DPI(&dpi.DPIConfig{
 			IntrusionDetection: ids2,
 			Installation:       &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
-			NodeTLSSecret:      nodeTLSSecret,
-			TyphaTLSSecret:     typhaTLSSecret,
-			TyphaCAConfigMap:   typhaCAConfigMap,
+			TyphaNodeTLS:       typhaNodeTLS,
 			PullSecrets:        pullSecrets,
 			Openshift:          true,
 			HasNoLicense:       false,
@@ -244,9 +262,8 @@ var _ = Describe("DPI rendering tests", func() {
 
 		expectedResources := []resourceTestObj{
 			{name: dpi.DeepPacketInspectionNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: tls.TrustedCertConfigMapName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: render.NodeTLSSecretName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
-			{name: render.TyphaTLSSecretName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
-			{name: render.TyphaCAConfigMapName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: "pull-secret", ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
@@ -274,9 +291,7 @@ var _ = Describe("DPI rendering tests", func() {
 		component := dpi.DPI(&dpi.DPIConfig{
 			IntrusionDetection: ids,
 			Installation:       &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
-			NodeTLSSecret:      nodeTLSSecret,
-			TyphaTLSSecret:     typhaTLSSecret,
-			TyphaCAConfigMap:   typhaCAConfigMap,
+			TyphaNodeTLS:       typhaNodeTLS,
 			PullSecrets:        pullSecrets,
 			Openshift:          false,
 			HasNoLicense:       true,
@@ -289,10 +304,9 @@ var _ = Describe("DPI rendering tests", func() {
 		createResources, deleteResource := component.Objects()
 		expectedResources := []resourceTestObj{
 			{name: dpi.DeepPacketInspectionNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: tls.TrustedCertConfigMapName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: render.NodeTLSSecretName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
-			{name: render.TyphaTLSSecretName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: relasticsearch.PublicCertSecret, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
-			{name: render.TyphaCAConfigMapName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: "pull-secret", ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
@@ -312,9 +326,7 @@ var _ = Describe("DPI rendering tests", func() {
 		component := dpi.DPI(&dpi.DPIConfig{
 			IntrusionDetection: ids,
 			Installation:       &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
-			NodeTLSSecret:      nil,
-			TyphaTLSSecret:     nil,
-			TyphaCAConfigMap:   nil,
+			TyphaNodeTLS:       typhaNodeTLS,
 			PullSecrets:        pullSecrets,
 			Openshift:          false,
 			HasNoLicense:       false,
@@ -325,16 +337,16 @@ var _ = Describe("DPI rendering tests", func() {
 		})
 		createResources, deleteResource := component.Objects()
 		expectedResources := []resourceTestObj{
+			{name: tls.TrustedCertConfigMapName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: render.NodeTLSSecretName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
-			{name: render.TyphaTLSSecretName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: relasticsearch.PublicCertSecret, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
-			{name: render.TyphaCAConfigMapName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: "pull-secret", ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
+
 		expectedCreateResources := []resourceTestObj{
 			{name: dpi.DeepPacketInspectionNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
 		}
@@ -365,9 +377,8 @@ func validateDPIComponents(resources []client.Object, openshift bool) {
 	Expect(dpiClusterRoleBinding.Subjects).Should(BeEquivalentTo(expectedCRB.Subjects))
 
 	dpiDaemonSet := rtest.GetResource(resources, dpi.DeepPacketInspectionName, dpi.DeepPacketInspectionNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
-	Expect(dpiDaemonSet.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/typha-ca"))
-	Expect(dpiDaemonSet.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/node-cert"))
-	Expect(dpiDaemonSet.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/typha-cert"))
+	Expect(dpiDaemonSet.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/tigera-ca-private"))
+	Expect(dpiDaemonSet.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/node-certs"))
 
 	Expect(dpiDaemonSet.Spec.Template.Spec.Volumes).To(ContainElements(expectedVolumes))
 	Expect(dpiDaemonSet.Spec.Template.Spec.HostNetwork).Should(BeTrue())

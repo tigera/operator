@@ -17,6 +17,8 @@ package apiserver
 import (
 	"context"
 	"fmt"
+	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/tls"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -31,10 +33,10 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/test"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -47,11 +49,15 @@ import (
 var _ = Describe("apiserver controller tests", func() {
 
 	var (
-		cli        client.Client
-		scheme     *runtime.Scheme
-		ctx        context.Context
-		mockStatus *status.MockStatus
-		variant    operatorv1.ProductVariant
+		cli                   client.Client
+		scheme                *runtime.Scheme
+		ctx                   context.Context
+		mockStatus            *status.MockStatus
+		variant               operatorv1.ProductVariant
+		certificateManagement *operatorv1.CertificateManagement
+		tigeraCA              tls.TigeraCA
+		apiSecret             tls.KeyPair
+		packetCaptureSecret   tls.KeyPair
 	)
 
 	BeforeEach(func() {
@@ -63,6 +69,17 @@ var _ = Describe("apiserver controller tests", func() {
 
 		ctx = context.Background()
 		cli = fake.NewFakeClientWithScheme(scheme)
+
+		ca, err := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
+		Expect(err).NotTo(HaveOccurred())
+		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
+		certificateManagement = &operatorv1.CertificateManagement{CACert: cert}
+		tigeraCA, err = utils.CreateTigeraCA(cli, nil, dns.DefaultClusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+		apiSecret, err = tigeraCA.GetOrCreateKeyPair(cli, "tigera-apiserver-certs", common.OperatorNamespace(), dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(operatorv1.TigeraSecureEnterprise), "tigera-system", dns.DefaultClusterDomain))
+		Expect(err).NotTo(HaveOccurred())
+		packetCaptureSecret, err = tigeraCA.GetOrCreateKeyPair(cli, render.PacketCaptureCertSecret, common.OperatorNamespace(), dns.GetServiceDNSNames(render.PacketCaptureServiceName, render.PacketCaptureNamespace, dns.DefaultClusterDomain))
+		Expect(err).NotTo(HaveOccurred())
 
 		// Set up a mock status
 		mockStatus = &status.MockStatus{}
@@ -82,7 +99,7 @@ var _ = Describe("apiserver controller tests", func() {
 
 	Context("verify reconciliation", func() {
 		It("should use builtin images", func() {
-			setUpApiServerInstallation(cli, ctx, variant, &operatorv1.CertificateManagement{})
+			setUpApiServerInstallation(cli, ctx, variant, certificateManagement)
 
 			r := ReconcileAPIServer{
 				client:          cli,
@@ -151,11 +168,11 @@ var _ = Describe("apiserver controller tests", func() {
 					Namespace: "tigera-operator",
 				},
 			}
-			Expect(test.GetResource(cli, &pcSecret)).To(BeNil())
+			Expect(test.GetResource(cli, &pcSecret)).To(HaveOccurred()) // Since certificate management is enabled.
 			Expect(pcSecret).NotTo(BeNil())
 		})
 		It("should use images from imageset", func() {
-			setUpApiServerInstallation(cli, ctx, variant, &operatorv1.CertificateManagement{})
+			setUpApiServerInstallation(cli, ctx, variant, certificateManagement)
 
 			Expect(cli.Create(ctx, &operatorv1.ImageSet{
 				ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
@@ -234,7 +251,7 @@ var _ = Describe("apiserver controller tests", func() {
 					Namespace: "tigera-operator",
 				},
 			}
-			Expect(test.GetResource(cli, &pcSecret)).To(BeNil())
+			Expect(test.GetResource(cli, &pcSecret)).To(HaveOccurred()) // Since certificate management is enabled.
 			Expect(pcSecret).NotTo(BeNil())
 		})
 
@@ -243,35 +260,27 @@ var _ = Describe("apiserver controller tests", func() {
 
 			secretName := render.ProjectCalicoApiServerTLSSecretName(variant)
 
-			testCA := test.MakeTestCA("apiserver-test")
-			apiSecret, err := secret.CreateTLSSecret(testCA,
-				secretName, common.OperatorNamespace(), render.APIServerSecretKeyName, render.APIServerSecretCertName,
-				rmeta.DefaultCertificateDuration, nil, "tigera-api", "tigera-system", dns.DefaultClusterDomain,
-			)
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(cli.Create(ctx, apiSecret)).ShouldNot(HaveOccurred())
+			Expect(cli.Create(ctx, apiSecret.Secret(common.OperatorNamespace()))).ShouldNot(HaveOccurred())
 
-			packetCaptureSecret, err := secret.CreateTLSSecret(testCA,
-				render.PacketCaptureCertSecret, common.OperatorNamespace(), v1.TLSPrivateKeyKey, v1.TLSCertKey,
-				rmeta.DefaultCertificateDuration, nil, dns.GetServiceDNSNames(render.PacketCaptureServiceName, render.PacketCaptureNamespace, dns.DefaultClusterDomain)...,
-			)
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(cli.Create(ctx, packetCaptureSecret)).ShouldNot(HaveOccurred())
+			Expect(cli.Create(ctx, packetCaptureSecret.Secret(common.OperatorNamespace()))).ShouldNot(HaveOccurred())
 
 			r := ReconcileAPIServer{
-				client:   cli,
-				scheme:   scheme,
-				provider: operatorv1.ProviderNone,
-				status:   mockStatus,
+				client:        cli,
+				scheme:        scheme,
+				provider:      operatorv1.ProviderNone,
+				status:        mockStatus,
+				clusterDomain: dns.DefaultClusterDomain,
 			}
-			_, err = r.Reconcile(ctx, reconcile.Request{})
+			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
-			Expect(cli.Get(ctx, client.ObjectKey{Namespace: common.OperatorNamespace(), Name: secretName}, apiSecret)).ShouldNot(HaveOccurred())
-			Expect(apiSecret.GetOwnerReferences()).To(HaveLen(0))
+			apiSecret2 := &corev1.Secret{}
+			Expect(cli.Get(ctx, client.ObjectKey{Namespace: common.OperatorNamespace(), Name: secretName}, apiSecret2)).ShouldNot(HaveOccurred())
+			Expect(apiSecret2.GetOwnerReferences()).To(HaveLen(0))
 
-			Expect(cli.Get(ctx, client.ObjectKey{Namespace: common.OperatorNamespace(), Name: render.PacketCaptureCertSecret}, packetCaptureSecret)).ShouldNot(HaveOccurred())
-			Expect(packetCaptureSecret.GetOwnerReferences()).To(HaveLen(0))
+			packetCaptureSecret2 := &corev1.Secret{}
+			Expect(cli.Get(ctx, client.ObjectKey{Namespace: common.OperatorNamespace(), Name: render.PacketCaptureCertSecret}, packetCaptureSecret2)).ShouldNot(HaveOccurred())
+			Expect(packetCaptureSecret2.GetOwnerReferences()).To(HaveLen(0))
 		})
 
 		It("should add OwnerReference apiserver and packetcapture TLS cert operator managed secrets", func() {

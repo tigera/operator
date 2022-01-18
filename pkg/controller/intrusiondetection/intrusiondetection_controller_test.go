@@ -17,6 +17,7 @@ package intrusiondetection
 import (
 	"context"
 	"fmt"
+	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -126,22 +127,10 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
 
 		Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      relasticsearch.PublicCertSecret,
-				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.ElasticsearchIntrusionDetectionUserSecret,
-				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.ElasticsearchADJobUserSecret,
-				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.ElasticsearchPerformanceHotspotsUserSecret,
-				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, rtest.CreateCertSecret(relasticsearch.PublicCertSecret, common.OperatorNamespace(), render.GuardianSecretName)))
+		Expect(c.Create(ctx, rtest.CreateCertSecret(render.ElasticsearchIntrusionDetectionUserSecret, common.OperatorNamespace(), render.GuardianSecretName)))
+		Expect(c.Create(ctx, rtest.CreateCertSecret(render.ElasticsearchADJobUserSecret, common.OperatorNamespace(), render.GuardianSecretName)))
+		Expect(c.Create(ctx, rtest.CreateCertSecret(render.ElasticsearchPerformanceHotspotsUserSecret, common.OperatorNamespace(), render.GuardianSecretName)))
 		Expect(c.Create(ctx, &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      render.ECKLicenseConfigMapName,
@@ -151,21 +140,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		})).NotTo(HaveOccurred())
 
 		Expect(c.Create(ctx, &v3.DeepPacketInspection{ObjectMeta: metav1.ObjectMeta{Name: "test-dpi", Namespace: "test-dpi-ns"}})).ShouldNot(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.NodeTLSSecretName,
-				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.TyphaTLSSecretName,
-				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.TyphaCAConfigMapName,
-				Namespace: "tigera-operator",
-			},
-			Data: map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterpriseTrial)},
-		})).NotTo(HaveOccurred())
 
 		// Apply the intrusiondetection CR to the fake cluster.
 		Expect(c.Create(ctx, &operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())

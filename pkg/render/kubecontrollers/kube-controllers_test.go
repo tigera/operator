@@ -16,6 +16,11 @@ package kubecontrollers_test
 
 import (
 	"fmt"
+	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/tls"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
@@ -86,6 +91,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		{Name: "ES_CA_CERT", Value: "/etc/ssl/elastic/ca.pem"},
 		{Name: "ES_CURATOR_BACKEND_CERT", Value: "/etc/ssl/elastic/ca.pem"},
 	}
+	var internalManagerTLSSecret tls.KeyPair
 
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
@@ -108,6 +114,13 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			ClusterDomain: dns.DefaultClusterDomain,
 			MetricsPort:   9094,
 		}
+		scheme := runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
+		tigeraCA, err := utils.CreateTigeraCA(cli, nil, dns.DefaultClusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+		internalManagerTLSSecret, err = tigeraCA.GetOrCreateKeyPair(cli, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
+		Expect(err).NotTo(HaveOccurred())
 
 	})
 
@@ -182,7 +195,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}
 
 		instance.Variant = operatorv1.TigeraSecureEnterprise
-		cfg.ManagerInternalSecret = &testutils.InternalManagerTLSSecret
+		cfg.ManagerInternalSecret = internalManagerTLSSecret
 		cfg.MetricsPort = 9094
 
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
@@ -240,7 +253,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cfg.LogStorageExists = true
 		cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
 		cfg.ElasticsearchSecret = &testutils.ElasticsearchSecret
-		cfg.ManagerInternalSecret = &testutils.InternalManagerTLSSecret
+		cfg.ManagerInternalSecret = internalManagerTLSSecret
 		cfg.MetricsPort = 9094
 		cfg.EnabledESOIDCWorkaround = true
 
@@ -302,7 +315,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		// Override configuration to match expected Enterprise config.
 		instance.Variant = operatorv1.TigeraSecureEnterprise
 		cfg.ManagementCluster = &operatorv1.ManagementCluster{}
-		cfg.ManagerInternalSecret = &testutils.InternalManagerTLSSecret
+		cfg.ManagerInternalSecret = internalManagerTLSSecret
 		cfg.MetricsPort = 9094
 
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
@@ -361,7 +374,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cfg.ManagementCluster = &operatorv1.ManagementCluster{}
 		cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
 		cfg.ElasticsearchSecret = &testutils.ElasticsearchSecret
-		cfg.ManagerInternalSecret = &testutils.InternalManagerTLSSecret
+		cfg.ManagerInternalSecret = internalManagerTLSSecret
 		cfg.MetricsPort = 9094
 		cfg.EnabledESOIDCWorkaround = true
 
@@ -498,7 +511,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cfg.ManagementCluster = &operatorv1.ManagementCluster{}
 		cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
 		cfg.ElasticsearchSecret = &testutils.ElasticsearchSecret
-		cfg.ManagerInternalSecret = &testutils.InternalManagerTLSSecret
+		cfg.ManagerInternalSecret = internalManagerTLSSecret
 		cfg.MetricsPort = 9094
 		cfg.EnabledESOIDCWorkaround = true
 		cfg.Authentication = &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{
@@ -539,7 +552,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			cfg.ManagementCluster = &operatorv1.ManagementCluster{}
 			cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
 			cfg.ElasticsearchSecret = &testutils.ElasticsearchSecret
-			cfg.ManagerInternalSecret = &testutils.InternalManagerTLSSecret
+			cfg.ManagerInternalSecret = internalManagerTLSSecret
 			cfg.MetricsPort = 9094
 			cfg.EnabledESOIDCWorkaround = true
 			component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)

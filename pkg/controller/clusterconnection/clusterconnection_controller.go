@@ -24,12 +24,11 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/tls"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -57,10 +56,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, p operatorv1.Provider, opts options.AddOptions) reconcile.Reconciler {
 	c := &ReconcileConnection{
-		Client:   cli,
-		Scheme:   schema,
-		Provider: p,
-		status:   statusMgr,
+		Client:        cli,
+		Scheme:        schema,
+		Provider:      p,
+		status:        statusMgr,
+		clusterDomain: opts.ClusterDomain,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
@@ -100,6 +100,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, render.PrometheusTLSSecretName, err)
 	}
 
+	if err = utils.AddSecretsWatch(c, tls.TigeraCASecretName, common.OperatorNamespace()); err != nil {
+		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, tls.TigeraCASecretName, err)
+	}
+
 	if err = utils.AddNetworkWatch(c); err != nil {
 		return fmt.Errorf("%s failed to watch Network resource: %w", controllerName, err)
 	}
@@ -116,10 +120,11 @@ var _ reconcile.Reconciler = &ReconcileConnection{}
 
 // ReconcileConnection reconciles a ManagementClusterConnection object
 type ReconcileConnection struct {
-	Client   client.Client
-	Scheme   *runtime.Scheme
-	Provider operatorv1.Provider
-	status   status.StatusManager
+	Client        client.Client
+	Scheme        *runtime.Scheme
+	Provider      operatorv1.Provider
+	status        status.StatusManager
+	clusterDomain string
 }
 
 // Reconcile reads that state of the cluster for a ManagementClusterConnection object and makes changes based on the
@@ -170,9 +175,15 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return result, err
 	}
 
+	tigeraCA, err := utils.CreateTigeraCA(r.Client, instl.CertificateManagement, r.clusterDomain)
+	if err != nil {
+		log.Error(err, "unable to create the Tigera CA")
+		r.status.SetDegraded("unable to create the Tigera CA", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	// Copy the secret from the operator namespace to the guardian namespace if it is present.
-	tunnelSecret := &corev1.Secret{}
-	err = r.Client.Get(ctx, types.NamespacedName{Name: render.GuardianSecretName, Namespace: common.OperatorNamespace()}, tunnelSecret)
+	tunnelSecret, err := tigeraCA.GetKeyPair(r.Client, render.GuardianSecretName, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded("Error retrieving secrets from guardian namespace", err.Error())
 		if !k8serrors.IsNotFound(err) {
@@ -181,44 +192,35 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return result, err
 	}
 
-	var packetCaptureServerCertSecret *corev1.Secret
-	packetCaptureServerCertSecret, err = utils.ValidateCertPair(r.Client,
-		common.OperatorNamespace(),
-		render.PacketCaptureCertSecret,
-		"", // We don't need the key.
-		corev1.TLSCertKey,
-	)
-	if err != nil {
-		reqLogger.Error(err, fmt.Sprintf("failed to retrieve %s", render.PacketCaptureCertSecret))
-		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s", render.PacketCaptureCertSecret), err.Error())
-		return reconcile.Result{}, err
-	} else if packetCaptureServerCertSecret == nil {
-		reqLogger.Info(fmt.Sprintf("Waiting for secret '%s' to become available", render.PacketCaptureCertSecret))
-		r.status.SetDegraded(fmt.Sprintf("Waiting for secret '%s' to become available", render.PacketCaptureCertSecret), "")
-		return reconcile.Result{}, nil
+	var trustedCerts []tls.Certificate
+	for _, secretName := range []string{render.PacketCaptureCertSecret, render.PrometheusTLSSecretName} {
+		secret, err := tigeraCA.GetCertificate(r.Client, secretName, common.OperatorNamespace())
+		if err != nil {
+			reqLogger.Error(err, fmt.Sprintf("failed to retrieve %s", secretName))
+			r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s", secretName), err.Error())
+			return reconcile.Result{}, err
+		} else if secret == nil {
+			reqLogger.Info(fmt.Sprintf("Waiting for secret '%s' to become available", secretName))
+			r.status.SetDegraded(fmt.Sprintf("Waiting for secret '%s' to become available", secretName), "")
+			return reconcile.Result{}, nil
+		}
+		trustedCerts = append(trustedCerts, secret)
 	}
-
-	prometheusCertSecret, err := utils.ValidateCertPair(r.Client,
-		common.OperatorNamespace(),
-		render.PrometheusTLSSecretName,
-		"", // We don't need the key.
-		corev1.TLSCertKey,
-	)
+	trustedCertBundle, err := utils.CreateTrustedBundle(tigeraCA, trustedCerts...)
 	if err != nil {
-		reqLogger.Error(err, fmt.Sprintf("failed to retrieve %s", render.PrometheusTLSSecretName))
-		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s", render.PrometheusTLSSecretName), err.Error())
+		reqLogger.Error(err, "failed to create trusted certificate bundle %s")
+		r.status.SetDegraded("failed to create trusted certificate bundle %s", err.Error())
 		return reconcile.Result{}, err
 	}
 
 	ch := utils.NewComponentHandler(log, r.Client, r.Scheme, managementClusterConnection)
 	guardianCfg := &render.GuardianConfiguration{
-		URL:                  managementClusterConnection.Spec.ManagementClusterAddr,
-		PullSecrets:          pullSecrets,
-		Openshift:            r.Provider == operatorv1.ProviderOpenShift,
-		Installation:         instl,
-		TunnelSecret:         tunnelSecret,
-		PacketCaptureSecret:  packetCaptureServerCertSecret,
-		PrometheusCertSecret: prometheusCertSecret,
+		URL:               managementClusterConnection.Spec.ManagementClusterAddr,
+		PullSecrets:       pullSecrets,
+		Openshift:         r.Provider == operatorv1.ProviderOpenShift,
+		Installation:      instl,
+		TunnelSecret:      tunnelSecret,
+		TrustedCertBundle: trustedCertBundle,
 	}
 	component := render.Guardian(guardianCfg)
 

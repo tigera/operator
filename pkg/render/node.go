@@ -21,7 +21,16 @@ import (
 	"strconv"
 	"strings"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/ptr"
+	"github.com/tigera/operator/pkg/render/common/configmap"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
+	"github.com/tigera/operator/pkg/tls"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -30,23 +39,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/controller/k8sapi"
-	"github.com/tigera/operator/pkg/controller/migration"
-	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/render/common/configmap"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
-	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
 const (
 	BirdTemplatesConfigMapName        = "bird-templates"
 	birdTemplateHashAnnotation        = "hash.operator.tigera.io/bird-templates"
-	NodeCertHashAnnotation            = "hash.operator.tigera.io/node-cert"
 	nodeCniConfigAnnotation           = "hash.operator.tigera.io/cni-config"
 	bgpLayoutHashAnnotation           = "hash.operator.tigera.io/bgp-layout"
 	CSRLabelCalicoSystem              = "calico-system"
@@ -63,16 +60,21 @@ var (
 	// This is currently not intended to be user configurable.
 	nodeBGPReporterPort int32 = 9900
 
+	TLSMountPathBase  = "/tls/"
+	TLSKeyMountPath   = fmt.Sprintf("%s%s", TLSMountPathBase, corev1.TLSPrivateKeyKey)
+	TLSCertMountPath  = fmt.Sprintf("%s%s", TLSMountPathBase, corev1.TLSCertKey)
 	NodeTLSSecretName = "node-certs"
-	TLSSecretCertName = "cert.crt"
-	TLSSecretKeyName  = "key.key"
 )
 
 // TyphaNodeTLS holds configuration for Node and Typha to establish TLS.
 type TyphaNodeTLS struct {
-	CAConfigMap *corev1.ConfigMap
-	TyphaSecret *corev1.Secret
-	NodeSecret  *corev1.Secret
+	TrustedBundle   tls.TrustedBundle
+	TyphaSecret     tls.KeyPair
+	TyphaCommonName string
+	TyphaURISAN     string
+	NodeSecret      tls.KeyPair
+	NodeCommonName  string
+	NodeURISAN      string
 }
 
 // NodeConfiguration is the public API used to provide information to the render code to
@@ -165,20 +167,13 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 		c.nodeServiceAccount(),
 		c.nodeRole(),
 		c.nodeRoleBinding(),
+		c.cfg.TLS.TrustedBundle.ConfigMap(common.CalicoNamespace),
 	}
 
 	if c.cfg.BGPLayouts != nil {
 		objsToCreate = append(objsToCreate, configmap.ToRuntimeObjects(configmap.CopyToNamespace(common.CalicoNamespace, c.cfg.BGPLayouts)...)...)
 	}
 
-	// Include secrets and config necessary for node and Typha to communicate. These are passed in to us as configuration,
-	// but need to be rendered into the correct namespace.
-	if c.cfg.TLS.CAConfigMap != nil {
-		objsToCreate = append(objsToCreate, configmap.ToRuntimeObjects(configmap.CopyToNamespace(common.CalicoNamespace, c.cfg.TLS.CAConfigMap)...)...)
-	}
-	if c.cfg.TLS.NodeSecret != nil {
-		objsToCreate = append(objsToCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.CalicoNamespace, c.cfg.TLS.NodeSecret)...)...)
-	}
 	var objsToDelete []client.Object
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
@@ -205,11 +200,20 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 
 	objsToCreate = append(objsToCreate, c.nodeDaemonset(cniConfig))
 
+	// This controller creates the cluster role for any pod in the cluster that requires certificate management.
 	if c.cfg.Installation.CertificateManagement != nil {
 		objsToCreate = append(objsToCreate, csrClusterRole())
-		objsToCreate = append(objsToCreate, CSRClusterRoleBinding("calico-node", common.CalicoNamespace))
+	} else {
+		objsToDelete = append(objsToDelete, csrClusterRole())
 	}
 
+	if c.cfg.TLS.NodeSecret.UseCertificateManagement() {
+		objsToCreate = append(objsToCreate, CSRClusterRoleBinding("calico-node", common.CalicoNamespace))
+		objsToDelete = append(objsToDelete, c.cfg.TLS.NodeSecret.Secret(common.CalicoNamespace))
+	} else {
+		objsToDelete = append(objsToDelete, CSRClusterRoleBinding("calico-node", common.CalicoNamespace))
+		objsToCreate = append(objsToCreate, c.cfg.TLS.NodeSecret.Secret(common.CalicoNamespace))
+	}
 	return objsToCreate, objsToDelete
 }
 
@@ -559,7 +563,7 @@ func (c *nodeComponent) getCalicoIPAM() string {
 	)
 }
 
-func buildHostLocalIPAM(cns *operatorv1.CalicoNetworkSpec) string {
+func buildHostLocalIPAM(*operatorv1.CalicoNetworkSpec) string {
 	return `{ "type": "host-local", "subnet": "usePodCidr"}`
 }
 
@@ -612,24 +616,13 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 	var terminationGracePeriod int64 = nodeTerminationGracePeriodSeconds
 	var initContainers []corev1.Container
 
-	annotations := make(map[string]string)
+	annotations := c.cfg.TLS.TrustedBundle.HashAnnotations()
 	if len(c.cfg.BirdTemplates) != 0 {
 		annotations[birdTemplateHashAnnotation] = rmeta.AnnotationHash(c.cfg.BirdTemplates)
 	}
 
-	annotations[TyphaCAHashAnnotation] = rmeta.AnnotationHash(c.cfg.TLS.CAConfigMap.Data)
-	if c.cfg.Installation.CertificateManagement == nil {
-		annotations[NodeCertHashAnnotation] = rmeta.AnnotationHash(c.cfg.TLS.NodeSecret.Data)
-	} else {
-		initContainers = append(initContainers, CreateCSRInitContainer(
-			c.cfg.Installation.CertificateManagement,
-			c.certSignReqImage,
-			"felix-certs",
-			FelixCommonName,
-			TLSSecretKeyName,
-			TLSSecretCertName,
-			dns.GetServiceDNSNames(common.NodeDaemonSetName, common.CalicoNamespace, c.cfg.ClusterDomain),
-			CSRLabelCalicoSystem))
+	if c.cfg.TLS.NodeSecret.UseCertificateManagement() {
+		initContainers = append(initContainers, c.cfg.TLS.NodeSecret.InitContainer(common.CalicoNamespace, c.certSignReqImage))
 	}
 
 	if cniCfgMap != nil {
@@ -758,20 +751,8 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 		{Name: "lib-modules", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/lib/modules"}}},
 		{Name: "xtables-lock", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
 		{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
-		{
-			Name: "typha-ca",
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: TyphaCAConfigMapName,
-					},
-				},
-			},
-		},
-		{
-			Name:         "felix-certs",
-			VolumeSource: certificateVolumeSource(c.cfg.Installation.CertificateManagement, NodeTLSSecretName),
-		},
+		c.cfg.TLS.TrustedBundle.Volume(),
+		c.cfg.TLS.NodeSecret.Volume(),
 	}
 
 	if c.runAsNonPrivileged() {
@@ -1028,8 +1009,8 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 		{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
 		{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
 		{MountPath: "/var/run/nodeagent", Name: "policysync"},
-		{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
-		{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
+		c.cfg.TLS.TrustedBundle.VolumeMount(),
+		c.cfg.TLS.NodeSecret.VolumeMount(TLSMountPathBase),
 	}
 	if c.runAsNonPrivileged() {
 		nodeVolumeMounts = append(nodeVolumeMounts,
@@ -1119,25 +1100,6 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		clusterType = clusterType + ",bgp"
 	}
 
-	var cnEnv corev1.EnvVar
-	if c.cfg.Installation.CertificateManagement != nil {
-		cnEnv = corev1.EnvVar{
-			Name: "FELIX_TYPHACN", Value: TyphaCommonName,
-		}
-	} else {
-		cnEnv = corev1.EnvVar{
-			Name: "FELIX_TYPHACN", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: TyphaTLSSecretName,
-					},
-					Key:      CommonName,
-					Optional: ptr.BoolToPtr(true),
-				},
-			},
-		}
-	}
-
 	nodeEnv := []corev1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "WAIT_FOR_DATASTORE", Value: "true"},
@@ -1159,22 +1121,17 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		},
 		{Name: "FELIX_TYPHAK8SNAMESPACE", Value: common.CalicoNamespace},
 		{Name: "FELIX_TYPHAK8SSERVICENAME", Value: TyphaServiceName},
-		{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
-		{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", TLSSecretCertName)},
-		{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", TLSSecretKeyName)},
-
-		// We need at least the CN or URISAN set, we depend on the validation
-		// done by the core_controller that the Secret will have one.
-		cnEnv,
-		{Name: "FELIX_TYPHAURISAN", ValueFrom: &corev1.EnvVarSource{
-			SecretKeyRef: &corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: TyphaTLSSecretName,
-				},
-				Key:      URISAN,
-				Optional: ptr.BoolToPtr(true),
-			},
-		}},
+		{Name: "FELIX_TYPHACAFILE", Value: c.cfg.TLS.TrustedBundle.MountPath()},
+		{Name: "FELIX_TYPHACERTFILE", Value: TLSCertMountPath},
+		{Name: "FELIX_TYPHAKEYFILE", Value: TLSKeyMountPath},
+	}
+	// We need at least the CN or URISAN set, we depend on the validation
+	// done by the core_controller that the Secret will have one.
+	if c.cfg.TLS.TyphaCommonName != "" {
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_TYPHACN", Value: c.cfg.TLS.TyphaCommonName})
+	}
+	if c.cfg.TLS.TyphaURISAN != "" {
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_TYPHAURISAN", Value: c.cfg.TLS.TyphaURISAN})
 	}
 
 	if c.cfg.Installation.CNI != nil && c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {

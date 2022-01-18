@@ -16,6 +16,11 @@ package monitor_test
 
 import (
 	"fmt"
+	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/tls"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -49,16 +54,23 @@ var _ = Describe("monitor rendering tests", func() {
 	}
 
 	var cfg *monitor.Config
+	var prometheusKeyPair tls.KeyPair
 
 	BeforeEach(func() {
+
+		scheme := runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
+		tigeraCA, err := utils.CreateTigeraCA(cli, nil, dns.DefaultClusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+		prometheusKeyPair, err = tigeraCA.GetOrCreateKeyPair(cli, monitor.PrometheusTLSSecretName, common.OperatorNamespace(), []string{render.FelixCommonName})
+		Expect(err).NotTo(HaveOccurred())
 		cfg = &monitor.Config{
 			Installation: &operatorv1.InstallationSpec{},
 			PullSecrets: []*corev1.Secret{
 				{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 			},
-			TLSSecret: &corev1.Secret{
-				TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{Name: monitor.PrometheusTLSSecretName, Namespace: common.OperatorNamespace()}},
+			TLSSecret:                prometheusKeyPair,
 			AlertmanagerConfigSecret: defaultAlertmanagerConfigSecret,
 			ClusterDomain:            "example.org",
 		}
@@ -82,7 +94,6 @@ var _ = Describe("monitor rendering tests", func() {
 			{"tigera-prometheus-role-binding", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding"},
 			{"tigera-pull-secret", common.TigeraPrometheusNamespace, "", "", ""},
 			{"alertmanager-calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Secret"},
-			{monitor.PrometheusTLSSecretName, common.TigeraPrometheusNamespace, "", "v1", "Secret"},
 			{"calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Service"},
 			{"calico-node-alertmanager", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.AlertmanagersKind},
 			{"prometheus", common.TigeraPrometheusNamespace, "", "v1", "ServiceAccount"},
@@ -96,6 +107,7 @@ var _ = Describe("monitor rendering tests", func() {
 			{"prometheus-http-api", common.TigeraPrometheusNamespace, "", "v1", "Service"},
 			{name: monitor.TigeraPrometheusObjectName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: monitor.TigeraPrometheusObjectName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{monitor.PrometheusTLSSecretName, common.TigeraPrometheusNamespace, "", "v1", "Secret"},
 		}
 
 		Expect(len(toCreate)).To(Equal(len(expectedResources)))
@@ -105,7 +117,7 @@ var _ = Describe("monitor rendering tests", func() {
 			rtest.ExpectResource(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 
-		Expect(toDelete).To(HaveLen(1))
+		Expect(toDelete).To(HaveLen(2))
 
 		obj := toDelete[0]
 		rtest.ExpectResource(obj, "elasticearch-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind)
@@ -336,18 +348,7 @@ var _ = Describe("monitor rendering tests", func() {
 			},
 			dns.DefaultClusterDomain)
 		cfg.KeyValidatorConfig = dexCfg
-		cfg.TLSSecret = &corev1.Secret{
-			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      monitor.PrometheusTLSSecretName,
-				Namespace: common.OperatorNamespace(),
-			},
-			Type: corev1.SecretTypeTLS,
-			Data: map[string][]byte{
-				corev1.TLSCertKey:       []byte("cert"),
-				corev1.TLSPrivateKeyKey: []byte("key"),
-			},
-		}
+		cfg.TLSSecret = prometheusKeyPair
 		component := monitor.Monitor(cfg)
 
 		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
@@ -366,7 +367,6 @@ var _ = Describe("monitor rendering tests", func() {
 			{"tigera-prometheus-role-binding", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding"},
 			{"tigera-pull-secret", common.TigeraPrometheusNamespace, "", "", ""},
 			{"alertmanager-calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Secret"},
-			{monitor.PrometheusTLSSecretName, common.TigeraPrometheusNamespace, "", "v1", "Secret"},
 			{"calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Service"},
 			{"calico-node-alertmanager", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.AlertmanagersKind},
 			{"prometheus", common.TigeraPrometheusNamespace, "", "v1", "ServiceAccount"},
@@ -381,6 +381,7 @@ var _ = Describe("monitor rendering tests", func() {
 			{monitor.TigeraPrometheusObjectName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
 			{monitor.TigeraPrometheusObjectName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
 			{name: "tigera-dex-tls", ns: common.TigeraPrometheusNamespace, group: "", version: "v1", kind: "Secret"},
+			{monitor.PrometheusTLSSecretName, common.TigeraPrometheusNamespace, "", "v1", "Secret"},
 		}
 
 		Expect(len(toCreate)).To(Equal(len(expectedResources)))
@@ -390,7 +391,7 @@ var _ = Describe("monitor rendering tests", func() {
 			rtest.ExpectResource(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 
-		Expect(toDelete).To(HaveLen(1))
+		Expect(toDelete).To(HaveLen(2))
 
 		// Prometheus
 		prometheusObj, ok := rtest.GetResource(toCreate, monitor.CalicoNodePrometheus, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind).(*monitoringv1.Prometheus)
@@ -412,7 +413,7 @@ var _ = Describe("monitor rendering tests", func() {
 			},
 			{
 				Name:      "TLS_SECRET_HASH_ANNOTATION",
-				Value:     "f09a0e0667b55a79c84a46b17ff28e4683cd072f",
+				Value:     prometheusKeyPair.HashAnnotationValue(),
 				ValueFrom: nil,
 			},
 			{

@@ -94,23 +94,21 @@ func (d *dpiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 	var toCreate, toDelete []client.Object
 
-	nsObj := []client.Object{render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider)}
+	nsObj := []client.Object{
+		render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider),
+	}
 
 	if d.cfg.HasNoDPIResource || d.cfg.HasNoLicense {
 		// create empty secrets and configMap when resource needs to be deleted.
+		toCreate = append(toCreate, d.cfg.TyphaNodeTLS.TrustedBundle.ConfigMap(DeepPacketInspectionNamespace))
 		toCreate = append(toCreate, &corev1.Secret{
 			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: render.NodeTLSSecretName, Namespace: DeepPacketInspectionNamespace}})
 		toCreate = append(toCreate, &corev1.Secret{
 			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: render.TyphaTLSSecretName, Namespace: DeepPacketInspectionNamespace}})
-		toCreate = append(toCreate, &corev1.Secret{
-			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: DeepPacketInspectionNamespace}})
-		toCreate = append(toCreate, &corev1.ConfigMap{
-			TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: render.TyphaCAConfigMapName, Namespace: DeepPacketInspectionNamespace}})
 	} else {
+		toCreate = append(toCreate, d.cfg.TyphaNodeTLS.TrustedBundle.ConfigMap(DeepPacketInspectionNamespace))
 		if d.cfg.TyphaNodeTLS.NodeSecret.UseCertificateManagement() {
 			toCreate = append(toCreate, render.CSRClusterRoleBinding(DeepPacketInspectionName, DeepPacketInspectionNamespace))
 			toDelete = append(toDelete, d.cfg.TyphaNodeTLS.NodeSecret.Secret(DeepPacketInspectionNamespace))
@@ -130,10 +128,10 @@ func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 	)
 
 	if d.cfg.HasNoLicense {
-		return nil, append(nsObj, toCreate...)
+		return nil, append(append(nsObj, toCreate...), toDelete...)
 	}
 	if d.cfg.HasNoDPIResource {
-		return nsObj, toCreate
+		return nsObj, append(toCreate, toDelete...)
 	}
 	return append(nsObj, toCreate...), toDelete
 }
@@ -246,10 +244,10 @@ func (d *dpiComponent) dpiEnvVars() []corev1.EnvVar {
 	// We need at least the CN or URISAN set, we depend on the validation
 	// done by the core_controller that the Secret will have one.
 	if d.cfg.TyphaNodeTLS.TyphaCommonName != "" {
-		env = append(env, corev1.EnvVar{Name: "DPI_FELIX_TYPHACN", Value: d.cfg.TyphaNodeTLS.TyphaCommonName})
+		env = append(env, corev1.EnvVar{Name: "DPI_TYPHACN", Value: d.cfg.TyphaNodeTLS.TyphaCommonName})
 	}
 	if d.cfg.TyphaNodeTLS.TyphaURISAN != "" {
-		env = append(env, corev1.EnvVar{Name: "DPI_FELIX_TYPHAURISAN", Value: d.cfg.TyphaNodeTLS.TyphaURISAN})
+		env = append(env, corev1.EnvVar{Name: "DPI_TYPHAURISAN", Value: d.cfg.TyphaNodeTLS.TyphaURISAN})
 	}
 	return env
 }
@@ -258,8 +256,6 @@ func (d *dpiComponent) dpiVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
 		d.cfg.TyphaNodeTLS.TrustedBundle.VolumeMount(),
 		d.cfg.TyphaNodeTLS.NodeSecret.VolumeMount(render.TLSMountPathBase),
-		{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
-		{MountPath: "/node-certs", Name: "node-certs", ReadOnly: true},
 		{MountPath: "/var/log/calico/snort-alerts", Name: "log-snort-alters"},
 	}
 }

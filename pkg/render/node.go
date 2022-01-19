@@ -1290,6 +1290,15 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_WIREGUARDMTU", Value: wireguardMtu})
 	}
 
+	// If host-local IPAM is in use, we need to configure calico/node to use the Kubernetes pod CIDR.
+	cni := c.cfg.Installation.CNI
+	if cni != nil && cni.IPAM != nil && cni.IPAM.Type == operatorv1.IPAMPluginHostLocal {
+		nodeEnv = append(nodeEnv, corev1.EnvVar{
+			Name:  "USE_POD_CIDR",
+			Value: "true",
+		})
+	}
+
 	// Configure whether or not BGP should be enabled.
 	if !bgpEnabled(c.cfg.Installation) {
 		if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {

@@ -393,6 +393,26 @@ var _ = Describe("Installation validation tests", func() {
 				err := validateCustomResource(instance)
 				Expect(err).NotTo(HaveOccurred())
 			})
+
+			It("With dual-stack enabled", func() {
+				instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+					{
+						CIDR:          "192.168.0.0/24",
+						Encapsulation: operator.EncapsulationNone,
+						NATOutgoing:   operator.NATOutgoingEnabled,
+						NodeSelector:  "all()",
+					},
+					{
+						CIDR:          "fe80:00::00/64",
+						Encapsulation: operator.EncapsulationNone,
+						NATOutgoing:   operator.NATOutgoingEnabled,
+						NodeSelector:  "all()",
+					},
+				}
+				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+				err := validateCustomResource(instance)
+				Expect(err).NotTo(HaveOccurred())
+			})
 		})
 	})
 	Describe("validate non-calico CNI plugin Type", func() {

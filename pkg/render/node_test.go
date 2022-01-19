@@ -2595,6 +2595,56 @@ var _ = Describe("Node rendering tests", func() {
 }`))
 	})
 
+	It("should render cni config with host-local (dual-stack)", func() {
+		defaultInstance.CNI.IPAM.Type = operatorv1.IPAMPluginHostLocal
+		defaultInstance.CalicoNetwork.IPPools = []operatorv1.IPPool{
+			{
+				CIDR:          "192.168.0.0/24",
+				Encapsulation: operatorv1.EncapsulationNone,
+				NATOutgoing:   operatorv1.NATOutgoingEnabled,
+				NodeSelector:  "all()",
+			},
+			{
+				CIDR:          "fe80:00::00/64",
+				Encapsulation: operatorv1.EncapsulationNone,
+				NATOutgoing:   operatorv1.NATOutgoingEnabled,
+				NodeSelector:  "all()",
+			},
+		}
+		component := render.Node(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(defaultNumExpectedResources))
+
+		// Should render the correct resources.
+		cniCmResource := rtest.GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
+		Expect(cniCmResource).ToNot(BeNil())
+		cniCm := cniCmResource.(*corev1.ConfigMap)
+		Expect(cniCm.Data["config"]).To(MatchJSON(`{
+  "name": "k8s-pod-network",
+  "cniVersion": "0.3.1",
+  "plugins": [
+    {
+      "type": "calico",
+      "datastore_type": "kubernetes",
+      "mtu": 0,
+      "nodename_file_optional": false,
+      "log_level": "Info",
+      "log_file_path": "/var/log/calico/cni/cni.log",
+      "ipam": {
+          "type": "host-local",
+	  "ranges": [[{"subnet": "usePodCidr"}], [{"subnet": "usePodCidrIPv6"}]]
+      },
+      "container_settings": { "allow_ip_forwarding": false },
+      "policy": { "type": "k8s" },
+      "kubernetes": { "kubeconfig": "__KUBECONFIG_FILEPATH__" }
+    },
+    {"type": "bandwidth", "capabilities": {"bandwidth": true}},
+    {"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}
+  ]
+}`))
+	})
+
 	It("should render cni config with k8s endpoint", func() {
 		k8sServiceEp.Host = "k8shost"
 		k8sServiceEp.Port = "1234"

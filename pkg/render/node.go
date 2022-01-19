@@ -560,7 +560,19 @@ func (c *nodeComponent) getCalicoIPAM() string {
 }
 
 func buildHostLocalIPAM(cns *operatorv1.CalicoNetworkSpec) string {
-	return `{ "type": "host-local", "subnet": "usePodCidr"}`
+	v6 := GetIPv6Pool(cns.IPPools) != nil
+	v4 := GetIPv6Pool(cns.IPPools) != nil
+
+	if v4 && v6 {
+		// Dual-stack
+		return `{ "type": "host-local", "ranges": [[{"subnet": "usePodCidr"}],[{"subnet": "usePodCidrIPv6"}]]}`
+	} else if v6 {
+		// Single-stack v6
+		return `{ "type": "host-local", "subnet": "usePodCidrIPv6"}`
+	} else {
+		// Single-stack v4
+		return `{ "type": "host-local", "subnet": "usePodCidr"}`
+	}
 }
 
 func (c *nodeComponent) birdTemplateConfigMap() *corev1.ConfigMap {
@@ -1290,6 +1302,15 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		wireguardMtu := strconv.Itoa(int(*mtu))
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_VXLANMTU", Value: vxlanMtu})
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_WIREGUARDMTU", Value: wireguardMtu})
+	}
+
+	// If host-local IPAM is in use, we need to configure calico/node to use the Kubernetes pod CIDR.
+	cni := c.cfg.Installation.CNI
+	if cni != nil && cni.IPAM != nil && cni.IPAM.Type == operatorv1.IPAMPluginHostLocal {
+		nodeEnv = append(nodeEnv, corev1.EnvVar{
+			Name:  "USE_POD_CIDR",
+			Value: "true",
+		})
 	}
 
 	// Configure whether or not BGP should be enabled.

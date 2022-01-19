@@ -22,16 +22,25 @@ import (
 
 // ApplicationLayerSpec defines the desired state of ApplicationLayer
 type ApplicationLayerSpec struct {
+	// Specification for WAF (Web Application Firewall).
+	WafSettings *WafSpec `json:"wafSettings,omitempty"`
 	// Specification for application layer (L7) log collection.
 	LogCollection *LogCollectionSpec `json:"logCollection,omitempty"`
 }
 
 type LogCollectionStatusType string
+type WafStatusType bool
 
 const (
+	WafDisabled             WafStatusType           = false
+	WafEnabled              WafStatusType           = true
 	L7LogCollectionDisabled LogCollectionStatusType = "Disabled"
 	L7LogCollectionEnabled  LogCollectionStatusType = "Enabled"
 )
+
+type WafSpec struct {
+	EnableFirewall *WafStatusType `json:"enableFirewall,omitempty"`
+}
 
 type LogCollectionSpec struct {
 

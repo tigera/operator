@@ -2757,7 +2757,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(passed).To(Equal(true))
 	})
 
-	It("should render when configured to use cloude routes with host-local", func() {
+	It("should render when configured to use cloud routes with host-local", func() {
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -2864,6 +2864,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator"},
 			{Name: "IP", Value: "autodetect"},
+			{Name: "USE_POD_CIDR", Value: "true"},
 			{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
 			{Name: "IP6", Value: "none"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},

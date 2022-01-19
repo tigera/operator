@@ -918,10 +918,9 @@ var (
 			Verbs: []string{"get", "create"},
 		},
 		{
-			APIGroups:     []string{"projectcalico.org"},
-			Resources:     []string{"tiers"},
-			ResourceNames: []string{"default"},
-			Verbs:         []string{"get"},
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"tiers"},
+			Verbs:     []string{"get"},
 		},
 		{
 			APIGroups: []string{"projectcalico.org"},

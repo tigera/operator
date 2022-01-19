@@ -18,8 +18,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tigera/operator/pkg/ptr"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -33,10 +31,8 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
-	"github.com/tigera/operator/pkg/dns"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
-	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
 const (
@@ -46,8 +42,6 @@ const (
 	TyphaServiceAccountName       = "calico-typha"
 	AppLabelName                  = "k8s-app"
 	TyphaPort               int32 = 5473
-	TyphaCAHashAnnotation         = "hash.operator.tigera.io/typha-ca"
-	TyphaCertHashAnnotation       = "hash.operator.tigera.io/typha-cert"
 )
 
 var (
@@ -122,22 +116,23 @@ func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
 		c.typhaPodDisruptionBudget(),
 	}
 
-	if c.cfg.TLS.TyphaSecret != nil {
-		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(common.CalicoNamespace, c.cfg.TLS.TyphaSecret)...)...)
-	}
-
 	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
 		objs = append(objs, c.typhaPodSecurityPolicy())
 	}
 
-	if c.cfg.Installation.CertificateManagement != nil {
+	var toDelete []client.Object
+	if c.cfg.TLS.TyphaSecret.UseCertificateManagement() {
 		objs = append(objs, CSRClusterRoleBinding("calico-typha", common.CalicoNamespace))
+		toDelete = append(toDelete, c.cfg.TLS.TyphaSecret.Secret(common.CalicoNamespace))
+	} else {
+		objs = append(objs, c.cfg.TLS.TyphaSecret.Secret(common.CalicoNamespace))
+		toDelete = append(toDelete, CSRClusterRoleBinding("calico-typha", common.CalicoNamespace))
 	}
 
 	// Add deployment last, as it may depend on the creation of previous objects in the list.
 	objs = append(objs, c.typhaDeployment())
 
-	return objs, nil
+	return objs, toDelete
 }
 
 func (c *typhaComponent) typhaPodDisruptionBudget() *policyv1beta1.PodDisruptionBudget {
@@ -367,21 +362,11 @@ func (c *typhaComponent) typhaDeployment() *appsv1.Deployment {
 	maxUnavailable := intstr.FromInt(1)
 	maxSurge := intstr.FromString("25%")
 
+	annotations := c.cfg.TLS.TrustedBundle.HashAnnotations()
+	annotations[c.cfg.TLS.TyphaSecret.HashAnnotationKey()] = c.cfg.TLS.TyphaSecret.HashAnnotationValue()
 	var initContainers []corev1.Container
-	annotations := make(map[string]string)
-	annotations[TyphaCAHashAnnotation] = rmeta.AnnotationHash(c.cfg.TLS.CAConfigMap.Data)
-	if c.cfg.Installation.CertificateManagement == nil {
-		annotations[TyphaCertHashAnnotation] = rmeta.AnnotationHash(c.cfg.TLS.TyphaSecret.Data)
-	} else {
-		initContainers = append(initContainers, CreateCSRInitContainer(
-			c.cfg.Installation.CertificateManagement,
-			c.certSignReqImage,
-			"typha-certs",
-			TyphaCommonName,
-			TLSSecretKeyName,
-			TLSSecretCertName,
-			dns.GetServiceDNSNames(TyphaServiceName, common.CalicoNamespace, c.cfg.ClusterDomain),
-			CSRLabelCalicoSystem))
+	if c.cfg.TLS.TyphaSecret.UseCertificateManagement() {
+		initContainers = append(initContainers, c.cfg.TLS.TyphaSecret.InitContainer(common.CalicoNamespace, c.certSignReqImage))
 	}
 
 	// Include annotation for prometheus scraping configuration.
@@ -447,34 +432,18 @@ func (c *typhaComponent) typhaDeployment() *appsv1.Deployment {
 
 // volumes creates the typha's volumes.
 func (c *typhaComponent) volumes() []corev1.Volume {
-	volumes := []corev1.Volume{
-		{
-			Name: "typha-ca",
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: TyphaCAConfigMapName,
-					},
-				},
-			},
-		},
-		{
-			Name:         "typha-certs",
-			VolumeSource: certificateVolumeSource(c.cfg.Installation.CertificateManagement, TyphaTLSSecretName),
-		},
+	return []corev1.Volume{
+		c.cfg.TLS.TrustedBundle.Volume(),
+		c.cfg.TLS.TyphaSecret.Volume(),
 	}
-
-	return volumes
 }
 
 // typhaVolumeMounts creates the typha's volume mounts.
 func (c *typhaComponent) typhaVolumeMounts() []corev1.VolumeMount {
-	volumeMounts := []corev1.VolumeMount{
-		{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
-		{MountPath: "/typha-certs", Name: "typha-certs", ReadOnly: true},
+	return []corev1.VolumeMount{
+		c.cfg.TLS.TrustedBundle.VolumeMount(),
+		c.cfg.TLS.TyphaSecret.VolumeMount(TLSMountPathBase),
 	}
-
-	return volumeMounts
 }
 
 func (c *typhaComponent) typhaPorts() []corev1.ContainerPort {
@@ -510,25 +479,6 @@ func (c *typhaComponent) typhaResources() corev1.ResourceRequirements {
 
 // typhaEnvVars creates the typha's envvars.
 func (c *typhaComponent) typhaEnvVars() []corev1.EnvVar {
-	var cnEnv corev1.EnvVar
-	if c.cfg.Installation.CertificateManagement != nil {
-		cnEnv = corev1.EnvVar{
-			Name: "TYPHA_CLIENTCN", Value: FelixCommonName,
-		}
-	} else {
-		cnEnv = corev1.EnvVar{
-			Name: "TYPHA_CLIENTCN", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: NodeTLSSecretName,
-					},
-					Key:      CommonName,
-					Optional: ptr.BoolToPtr(true),
-				},
-			},
-		}
-	}
-
 	typhaEnv := []corev1.EnvVar{
 		{Name: "TYPHA_LOGSEVERITYSCREEN", Value: "info"},
 		{Name: "TYPHA_LOGFILEPATH", Value: "none"},
@@ -537,21 +487,17 @@ func (c *typhaComponent) typhaEnvVars() []corev1.EnvVar {
 		{Name: "TYPHA_DATASTORETYPE", Value: "kubernetes"},
 		{Name: "TYPHA_HEALTHENABLED", Value: "true"},
 		{Name: "TYPHA_K8SNAMESPACE", Value: common.CalicoNamespace},
-		{Name: "TYPHA_CAFILE", Value: "/typha-ca/caBundle"},
-		{Name: "TYPHA_SERVERCERTFILE", Value: fmt.Sprintf("/typha-certs/%s", TLSSecretCertName)},
-		{Name: "TYPHA_SERVERKEYFILE", Value: fmt.Sprintf("/typha-certs/%s", TLSSecretKeyName)},
-		// We need at least the CN or URISAN set, we depend on the validation
-		// done by the core_controller that the Secret will have one.
-		cnEnv,
-		{Name: "TYPHA_CLIENTURISAN", ValueFrom: &corev1.EnvVarSource{
-			SecretKeyRef: &corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: NodeTLSSecretName,
-				},
-				Key:      URISAN,
-				Optional: ptr.BoolToPtr(true),
-			},
-		}},
+		{Name: "TYPHA_CAFILE", Value: c.cfg.TLS.TrustedBundle.MountPath()},
+		{Name: "TYPHA_SERVERCERTFILE", Value: TLSCertMountPath},
+		{Name: "TYPHA_SERVERKEYFILE", Value: TLSKeyMountPath},
+	}
+	// We need at least the CN or URISAN set, we depend on the validation
+	// done by the core_controller that the Secret will have one.
+	if c.cfg.TLS.TyphaCommonName != "" {
+		typhaEnv = append(typhaEnv, corev1.EnvVar{Name: "TYPHA_CLIENTCN", Value: c.cfg.TLS.NodeCommonName})
+	}
+	if c.cfg.TLS.TyphaURISAN != "" {
+		typhaEnv = append(typhaEnv, corev1.EnvVar{Name: "TYPHA_CLIENTURISAN", Value: c.cfg.TLS.NodeURISAN})
 	}
 
 	switch c.cfg.Installation.CNI.Type {

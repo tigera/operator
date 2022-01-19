@@ -77,6 +77,7 @@ var _ = Describe("Compliance controller tests", func() {
 		mockStatus.On("RemoveDeployments", mock.Anything).Return()
 		mockStatus.On("RemoveDaemonsets", mock.Anything).Return()
 		mockStatus.On("AddStatefulSets", mock.Anything).Return()
+		mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
 		mockStatus.On("AddCronJobs", mock.Anything)
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("OnCRFound").Return()

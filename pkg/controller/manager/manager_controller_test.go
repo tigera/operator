@@ -17,6 +17,8 @@ package manager
 import (
 	"context"
 	"fmt"
+	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/tls"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -95,6 +97,8 @@ var _ = Describe("Manager controller tests", func() {
 			mockStatus.On("AddDaemonsets", mock.Anything).Return()
 			mockStatus.On("AddDeployments", mock.Anything).Return()
 			mockStatus.On("AddStatefulSets", mock.Anything).Return()
+			mockStatus.On("AddCertificateSigningRequests", mock.Anything).Return()
+			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
 			mockStatus.On("AddCronJobs", mock.Anything)
 			mockStatus.On("IsAvailable").Return(true)
 			mockStatus.On("OnCRFound").Return()
@@ -161,39 +165,9 @@ var _ = Describe("Manager controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ElasticsearchManagerUserSecret,
 					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.ComplianceServerCertSecret,
-					Namespace: common.OperatorNamespace(),
-				},
-				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-				Data: map[string][]byte{
-					"tls.crt": []byte("crt"),
-					"tls.key": []byte("crt"),
-				},
-			})).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.PacketCaptureCertSecret,
-					Namespace: common.OperatorNamespace(),
-				},
-				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-				Data: map[string][]byte{
-					"tls.crt": []byte("crt"),
-					"tls.key": []byte("crt"),
-				},
-			})).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.PrometheusTLSSecretName,
-					Namespace: common.OperatorNamespace(),
-				},
-				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-				Data: map[string][]byte{
-					"tls.crt": []byte("crt"),
-					"tls.key": []byte("crt"),
-				},
-			})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, rtest.CreateCertSecret(render.ComplianceServerCertSecret, common.OperatorNamespace(), render.PacketCaptureCertSecret)))
+			Expect(c.Create(ctx, rtest.CreateCertSecret(render.PacketCaptureCertSecret, common.OperatorNamespace(), render.PacketCaptureCertSecret)))
+			Expect(c.Create(ctx, rtest.CreateCertSecret(render.PrometheusTLSSecretName, common.OperatorNamespace(), render.PrometheusTLSSecretName)))
 			Expect(c.Create(ctx, &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ECKLicenseConfigMapName,
@@ -216,8 +190,7 @@ var _ = Describe("Manager controller tests", func() {
 		It("should render a new manager cert if existing cert has invalid DNS names and the cert is operator managed", func() {
 			// Create a manager cert managed by the operator.
 			oldCert, err := secret.CreateTLSSecret(
-				nil, render.ManagerTLSSecretName, common.OperatorNamespace(), render.ManagerSecretKeyName,
-				render.ManagerSecretCertName, rmeta.DefaultCertificateDuration, nil, "tigera-manager.tigera-manager.svc")
+				nil, render.ManagerTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, nil, "tigera-manager.tigera-manager.svc")
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(c.Create(ctx, oldCert)).NotTo(HaveOccurred())
 
@@ -227,10 +200,10 @@ var _ = Describe("Manager controller tests", func() {
 			secret := &corev1.Secret{}
 			// Verify that certs now have expected DNS names.
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
-			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, expectedDNSNames...)
+			test.VerifyCert(secret, expectedDNSNames...)
 
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
-			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, expectedDNSNames...)
+			test.VerifyCert(secret, expectedDNSNames...)
 		})
 
 		It("should reconcile if user supplied a manager TLS cert", func() {
@@ -238,8 +211,7 @@ var _ = Describe("Manager controller tests", func() {
 			dnsNames := []string{"manager.example.com", "192.168.10.22"}
 			testCA := test.MakeTestCA("manager-test")
 			userSecret, err := secret.CreateTLSSecret(
-				testCA, render.ManagerTLSSecretName, common.OperatorNamespace(), render.ManagerSecretKeyName,
-				render.ManagerSecretCertName, rmeta.DefaultCertificateDuration, nil, dnsNames...)
+				testCA, render.ManagerTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, nil, dnsNames...)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(c.Create(ctx, userSecret)).NotTo(HaveOccurred())
 
@@ -270,8 +242,7 @@ var _ = Describe("Manager controller tests", func() {
 			dnsNames := []string{"manager.example.com", "192.168.10.22"}
 			testCA := test.MakeTestCA("manager-test")
 			userSecret, err := secret.CreateTLSSecret(
-				testCA, render.ManagerTLSSecretName, common.OperatorNamespace(), render.ManagerSecretKeyName,
-				render.ManagerSecretCertName, rmeta.DefaultCertificateDuration, nil, dnsNames...)
+				testCA, render.ManagerTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, nil, dnsNames...)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(c.Create(ctx, userSecret)).NotTo(HaveOccurred())
 
@@ -296,24 +267,23 @@ var _ = Describe("Manager controller tests", func() {
 			// Verify that the operator managed cert secrets exist. These cert
 			// secrets should have the manager service DNS names plus localhost only.
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
-			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, expectedDNSNames...)
+			test.VerifyCert(secret, expectedDNSNames...)
 
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
-			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, expectedDNSNames...)
+			test.VerifyCert(secret, expectedDNSNames...)
 
 			// Create a custom manager cert secret.
 			dnsNames := []string{"manager.example.com", "192.168.10.22"}
 			testCA := test.MakeTestCA("manager-test")
 			customSecret, err := rsecret.CreateTLSSecret(
-				testCA, render.ManagerTLSSecretName, common.OperatorNamespace(), render.ManagerSecretKeyName,
-				render.ManagerSecretCertName, rmeta.DefaultCertificateDuration, nil, dnsNames...)
+				testCA, render.ManagerTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, nil, dnsNames...)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			// Update the existing operator managed cert secret with bytes from
 			// the custom manager cert secret.
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
-			secret.Data[render.ManagerSecretCertName] = customSecret.Data[render.ManagerSecretCertName]
-			secret.Data[render.ManagerSecretKeyName] = customSecret.Data[render.ManagerSecretKeyName]
+			secret.Data[corev1.TLSCertKey] = customSecret.Data[corev1.TLSCertKey]
+			secret.Data[corev1.TLSPrivateKeyKey] = customSecret.Data[corev1.TLSPrivateKeyKey]
 			Expect(c.Update(ctx, secret)).NotTo(HaveOccurred())
 
 			_, err = r.Reconcile(ctx, reconcile.Request{})
@@ -322,10 +292,10 @@ var _ = Describe("Manager controller tests", func() {
 			// Verify that the existing certs have changed - check that the
 			// certs have the DNS names in the user-supplied cert.
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
-			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, dnsNames...)
+			test.VerifyCert(secret, dnsNames...)
 
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
-			test.VerifyCert(secret, render.ManagerSecretKeyName, render.ManagerSecretCertName, dnsNames...)
+			test.VerifyCert(secret, dnsNames...)
 		})
 
 		DescribeTable("test combinations with certificate management and BYO tls", func(certificateManagementEnabled, byoTLS, expectDegraded bool) {
@@ -333,15 +303,16 @@ var _ = Describe("Manager controller tests", func() {
 				dnsNames := []string{"manager.example.com", "192.168.10.22"}
 				testCA := test.MakeTestCA("manager-test")
 				userSecret, err := secret.CreateTLSSecret(
-					testCA, render.ManagerTLSSecretName, common.OperatorNamespace(), render.ManagerSecretKeyName,
-					render.ManagerSecretCertName, rmeta.DefaultCertificateDuration, nil, dnsNames...)
+					testCA, render.ManagerTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, nil, dnsNames...)
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(c.Create(ctx, userSecret)).NotTo(HaveOccurred())
 			}
 			if certificateManagementEnabled {
+				ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
+				cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 				installation := &operatorv1.Installation{}
 				Expect(c.Get(ctx, types.NamespacedName{Name: "default", Namespace: ""}, installation))
-				installation.Spec.CertificateManagement = &operatorv1.CertificateManagement{}
+				installation.Spec.CertificateManagement = &operatorv1.CertificateManagement{CACert: cert}
 				Expect(c.Update(ctx, installation)).NotTo(HaveOccurred())
 			}
 			if expectDegraded {
@@ -354,7 +325,7 @@ var _ = Describe("Manager controller tests", func() {
 				deploy := &appsv1.Deployment{}
 				Expect(c.Get(ctx, types.NamespacedName{Name: "tigera-manager", Namespace: render.ManagerNamespace}, deploy)).ShouldNot(HaveOccurred())
 
-				if certificateManagementEnabled {
+				if certificateManagementEnabled && !byoTLS {
 					Expect(deploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 				} else {
 					Expect(deploy.Spec.Template.Spec.InitContainers).To(HaveLen(0))
@@ -364,7 +335,7 @@ var _ = Describe("Manager controller tests", func() {
 			Entry("Regular flow", false, false, false),
 			Entry("Certificate management flow", true, false, false),
 			Entry("Self provided TLS", false, true, false),
-			Entry("Self provided TLS & certificate management", true, true, true))
+			Entry("Self provided TLS & certificate management", true, true, false))
 	})
 
 	Context("image reconciliation", func() {
@@ -453,28 +424,8 @@ var _ = Describe("Manager controller tests", func() {
 					"tls.key": []byte("crt"),
 				},
 			})).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.PacketCaptureCertSecret,
-					Namespace: common.OperatorNamespace(),
-				},
-				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-				Data: map[string][]byte{
-					"tls.crt": []byte("crt"),
-					"tls.key": []byte("crt"),
-				},
-			})).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.PrometheusTLSSecretName,
-					Namespace: common.OperatorNamespace(),
-				},
-				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-				Data: map[string][]byte{
-					"tls.crt": []byte("crt"),
-					"tls.key": []byte("crt"),
-				},
-			})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, rtest.CreateCertSecret(render.PacketCaptureCertSecret, common.OperatorNamespace(), render.PacketCaptureCertSecret)))
+			Expect(c.Create(ctx, rtest.CreateCertSecret(render.PrometheusTLSSecretName, common.OperatorNamespace(), render.PrometheusTLSSecretName)))
 			Expect(c.Create(ctx, &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ECKLicenseConfigMapName,
@@ -493,6 +444,7 @@ var _ = Describe("Manager controller tests", func() {
 			r.licenseAPIReady.MarkAsReady()
 		})
 		It("should use builtin images", func() {
+			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -525,6 +477,7 @@ var _ = Describe("Manager controller tests", func() {
 					components.ComponentManagerProxy.Version)))
 		})
 		It("should use images from imageset", func() {
+			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
 			Expect(c.Create(ctx, &operatorv1.ImageSet{
 				ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
 				Spec: operatorv1.ImageSetSpec{

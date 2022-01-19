@@ -35,6 +35,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/url"
 )
 
@@ -57,18 +58,17 @@ func IntrusionDetection(cfg *IntrusionDetectionConfiguration) Component {
 
 // IntrusionDetectionConfiguration contains all the config information needed to render the component.
 type IntrusionDetectionConfiguration struct {
-	LogCollector             *operatorv1.LogCollector
-	ESSecrets                []*corev1.Secret
-	KibanaCertSecret         *corev1.Secret
-	Installation             *operatorv1.InstallationSpec
-	ESClusterConfig          *relasticsearch.ClusterConfig
-	PullSecrets              []*corev1.Secret
-	Openshift                bool
-	ClusterDomain            string
-	ESLicenseType            ElasticsearchLicenseType
-	ManagedCluster           bool
-	HasNoLicense             bool
-	ManagerInternalTLSSecret *corev1.Secret
+	LogCollector      *operatorv1.LogCollector
+	ESSecrets         []*corev1.Secret
+	Installation      *operatorv1.InstallationSpec
+	ESClusterConfig   *relasticsearch.ClusterConfig
+	PullSecrets       []*corev1.Secret
+	Openshift         bool
+	ClusterDomain     string
+	ESLicenseType     ElasticsearchLicenseType
+	ManagedCluster    bool
+	HasNoLicense      bool
+	TrustedCertBundle tls.TrustedBundle
 }
 
 type intrusionDetectionComponent struct {
@@ -81,7 +81,7 @@ func (c *intrusionDetectionComponent) ResolveImages(is *operatorv1.ImageSet) err
 	reg := c.cfg.Installation.Registry
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
-	errMsgs := []string{}
+	var errMsgs []string
 	var err error
 	if !c.cfg.ManagedCluster {
 		c.jobInstallerImage, err = components.GetReference(components.ComponentElasticTseeInstaller, reg, path, prefix, is)
@@ -106,28 +106,24 @@ func (c *intrusionDetectionComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Object) {
-	objs := []client.Object{CreateNamespace(IntrusionDetectionNamespace, c.cfg.Installation.KubernetesProvider)}
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(IntrusionDetectionNamespace, c.cfg.PullSecrets...)...)...)
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(IntrusionDetectionNamespace, c.cfg.ESSecrets...)...)...)
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(IntrusionDetectionNamespace, c.cfg.KibanaCertSecret)...)...)
-
-	if c.cfg.ManagerInternalTLSSecret != nil {
-		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(IntrusionDetectionNamespace, c.cfg.ManagerInternalTLSSecret)...)...)
-	}
-
-	objs = append(objs, c.intrusionDetectionServiceAccount(),
+	objs := []client.Object{
+		CreateNamespace(IntrusionDetectionNamespace, c.cfg.Installation.KubernetesProvider),
+		c.intrusionDetectionServiceAccount(),
 		c.intrusionDetectionJobServiceAccount(),
 		c.intrusionDetectionClusterRole(),
 		c.intrusionDetectionClusterRoleBinding(),
 		c.intrusionDetectionRole(),
 		c.intrusionDetectionRoleBinding(),
-		c.intrusionDetectionDeployment())
+		c.intrusionDetectionDeployment(),
+		c.cfg.TrustedCertBundle.ConfigMap(IntrusionDetectionNamespace),
+	}
+	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(IntrusionDetectionNamespace, c.cfg.PullSecrets...)...)...)
+	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(IntrusionDetectionNamespace, c.cfg.ESSecrets...)...)...)
+	objs = append(objs, c.globalAlertTemplates()...)
 
 	if !c.cfg.ManagedCluster {
 		objs = append(objs, c.intrusionDetectionElasticsearchJob())
 	}
-
-	objs = append(objs, c.globalAlertTemplates()...)
 
 	if !c.cfg.Openshift {
 		objs = append(objs,
@@ -161,17 +157,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 				relasticsearch.ContainerDecorate(c.intrusionDetectionJobContainer(), c.cfg.ESClusterConfig.ClusterName(),
 					ElasticsearchIntrusionDetectionJobUserSecret, c.cfg.ClusterDomain, rmeta.OSTypeLinux),
 			},
-			Volumes: []corev1.Volume{{
-				Name: "kibana-ca-cert-volume",
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						SecretName: KibanaPublicCertSecret,
-						Items: []corev1.KeyToPath{
-							{Key: "tls.crt", Path: "ca.pem"},
-						},
-					},
-				},
-			}},
+			Volumes:            []corev1.Volume{c.cfg.TrustedCertBundle.Volume()},
 			ServiceAccountName: IntrusionDetectionInstallerJobName,
 		}),
 	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
@@ -228,17 +214,14 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() corev1.Co
 			},
 			{
 				Name:  "KB_CA_CERT",
-				Value: KibanaDefaultCertPath,
+				Value: c.cfg.TrustedCertBundle.MountPath(),
 			},
 			{
 				Name:  "CLUSTER_NAME",
 				Value: c.cfg.ESClusterConfig.ClusterName(),
 			},
 		},
-		VolumeMounts: []corev1.VolumeMount{{
-			Name:      "kibana-ca-cert-volume",
-			MountPath: "/etc/ssl/kibana/",
-		}},
+		VolumeMounts: []corev1.VolumeMount{c.cfg.TrustedCertBundle.VolumeMount()},
 	}
 }
 
@@ -404,15 +387,16 @@ func (c *intrusionDetectionComponent) intrusionDetectionDeployment() *appsv1.Dep
 }
 
 func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplateSpec {
-	defaultMode := int32(420)
-	ps := []corev1.LocalObjectReference{}
+	var ps []corev1.LocalObjectReference
 	for _, x := range c.cfg.PullSecrets {
 		ps = append(ps, corev1.LocalObjectReference{Name: x.Name})
 	}
 
 	// If syslog forwarding is enabled then set the necessary hostpath volume to write
 	// logs for Fluentd to access.
-	volumes := []corev1.Volume{}
+	volumes := []corev1.Volume{
+		c.cfg.TrustedCertBundle.Volume(),
+	}
 	if c.syslogForwardingIsEnabled() {
 		dirOrCreate := corev1.HostPathDirectoryOrCreate
 		volumes = []corev1.Volume{
@@ -426,25 +410,6 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 				},
 			},
 		}
-	}
-
-	if c.cfg.ManagerInternalTLSSecret != nil {
-		volumes = append(volumes,
-			corev1.Volume{
-				Name: ManagerInternalTLSSecretName,
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						DefaultMode: &defaultMode,
-						SecretName:  ManagerInternalTLSSecretName,
-						Items: []corev1.KeyToPath{
-							{
-								Key:  "cert",
-								Path: "cert",
-							},
-						},
-					},
-				},
-			})
 	}
 
 	container := relasticsearch.ContainerDecorateIndexCreator(
@@ -487,13 +452,19 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 			Name:  "CLUSTER_NAME",
 			Value: c.cfg.ESClusterConfig.ClusterName(),
 		},
+		{
+			Name:  "MULTI_CLUSTER_FORWARDING_CA",
+			Value: c.cfg.ESClusterConfig.ClusterName(),
+		},
 	}
 
 	privileged := false
 
 	// If syslog forwarding is enabled then set the necessary ENV var and volume mount to
 	// write logs for Fluentd.
-	volumeMounts := []corev1.VolumeMount{}
+	volumeMounts := []corev1.VolumeMount{
+		c.cfg.TrustedCertBundle.VolumeMount(),
+	}
 	if c.syslogForwardingIsEnabled() {
 		envs = append(envs,
 			corev1.EnvVar{Name: "IDS_ENABLE_EVENT_FORWARDING", Value: "true"},
@@ -504,14 +475,6 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 		if c.cfg.Openshift {
 			privileged = true
 		}
-	}
-
-	if c.cfg.ManagerInternalTLSSecret != nil {
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name:      ManagerInternalTLSSecretName,
-			MountPath: "/manager-tls",
-			ReadOnly:  true,
-		})
 	}
 
 	return corev1.Container{
@@ -866,10 +829,5 @@ func (c *intrusionDetectionComponent) intrusionDetectionPSPClusterRoleBinding() 
 }
 
 func (c *intrusionDetectionComponent) intrusionDetectionAnnotations() map[string]string {
-	if c.cfg.ManagerInternalTLSSecret != nil {
-		return map[string]string{
-			ManagerInternalTLSHashAnnotation: rmeta.AnnotationHash(c.cfg.ManagerInternalTLSSecret.Data),
-		}
-	}
-	return nil
+	return c.cfg.TrustedCertBundle.HashAnnotations()
 }

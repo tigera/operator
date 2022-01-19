@@ -16,6 +16,11 @@ package render_test
 
 import (
 	"fmt"
+	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/tls"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -40,18 +45,18 @@ import (
 
 var _ = Describe("Rendering tests for PacketCapture API component", func() {
 
-	// Certificate secret
-	var secret = &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      render.PacketCaptureCertSecret,
-			Namespace: common.OperatorNamespace(),
-		},
-		Data: map[string][]byte{
-			"tls.crt": []byte("foo"),
-			"tls.key": []byte("bar"),
-		},
-	}
+	var secret tls.KeyPair
+	var cli client.Client
+	BeforeEach(func() {
+		scheme := runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
+		tigeraCA, err := utils.CreateTigeraCA(cli, nil, clusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+		secret, err = tigeraCA.GetOrCreateKeyPair(cli, render.PacketCaptureCertSecret, common.OperatorNamespace(), []string{""})
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 	// Pull secret
 	var pullSecrets = []*corev1.Secret{{
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
@@ -89,7 +94,6 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		var resources = []expectedResource{
 			{name: render.PacketCaptureNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: "pull-secret", ns: render.PacketCaptureNamespace, group: "", version: "v1", kind: "Secret"},
-			{name: render.PacketCaptureCertSecret, ns: render.PacketCaptureNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: render.PacketCaptureServiceAccountName, ns: render.PacketCaptureNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: render.PacketCaptureClusterRoleName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: render.PacketCaptureClusterRoleBindingName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -106,6 +110,8 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 
 		if useCSR {
 			resources = append(resources, expectedResource{"tigera-packetcapture:csr-creator", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"})
+		} else {
+			resources = append(resources, expectedResource{name: render.PacketCaptureCertSecret, ns: render.PacketCaptureNamespace, group: "", version: "v1", kind: "Secret"})
 		}
 
 		return resources
@@ -288,7 +294,9 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		Expect(deployment.Spec.Template.Spec.Volumes).To(ConsistOf(expectedVolumes(useCSR, enableOIDC)))
 
 		// Check annotations
-		Expect(deployment.Spec.Template.Annotations).To(HaveKeyWithValue(render.PacketCaptureTLSHashAnnotation, Not(BeEmpty())))
+		if !useCSR {
+			Expect(deployment.Spec.Template.Annotations).To(HaveKeyWithValue("hash.operator.tigera.io/tigera-packetcapture-server-tls", Not(BeEmpty())))
+		}
 
 		// Check permissions
 		clusterRole := rtest.GetResource(resources, render.PacketCaptureClusterRoleName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
@@ -359,8 +367,14 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 	})
 
 	It("should render all resources for an installation with certificate management", func() {
-		var resources = renderPacketCapture(operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{}}, nil)
+		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
+		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
+		installation := operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{CACert: cert}}
+		tigeraCA, err := utils.CreateTigeraCA(cli, installation.CertificateManagement, clusterDomain)
+		secret, err = tigeraCA.GetOrCreateKeyPair(cli, render.PacketCaptureCertSecret, common.OperatorNamespace(), []string{""})
+		Expect(err).NotTo(HaveOccurred())
 
+		var resources = renderPacketCapture(installation, nil)
 		checkPacketCaptureResources(resources, true, false)
 	})
 

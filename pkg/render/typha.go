@@ -571,6 +571,15 @@ func (c *typhaComponent) typhaEnvVars() []corev1.EnvVar {
 		}
 	}
 
+	// If host-local IPAM is in use, we need to configure typha to use the Kubernetes pod CIDR.
+	cni := c.cfg.Installation.CNI
+	if cni != nil && cni.IPAM != nil && cni.IPAM.Type == operatorv1.IPAMPluginHostLocal {
+		typhaEnv = append(typhaEnv, corev1.EnvVar{
+			Name:  "USE_POD_CIDR",
+			Value: "true",
+		})
+	}
+
 	typhaEnv = append(typhaEnv, GetTigeraSecurityGroupEnvVariables(c.cfg.AmazonCloudIntegration)...)
 	typhaEnv = append(typhaEnv, c.cfg.K8sServiceEp.EnvVars(true, c.cfg.Installation.KubernetesProvider)...)
 

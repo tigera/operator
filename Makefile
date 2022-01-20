@@ -532,7 +532,7 @@ define fetch_crds
 endef
 define copy_crds
     $(eval dir := $(1))
-	@cp .crds/$(dir)/config/crd/* pkg/crds/$(dir)/ && echo "Copied $(dir) CRDs"
+	@cp .crds/$(dir)/libcalico-go/config/crd/* pkg/crds/$(dir)/ && echo "Copied $(dir) CRDs"
 endef
 
 .PHONY: read-libcalico-version read-libcalico-enterprise-version
@@ -540,12 +540,12 @@ endef
 .PHONY: fetch-calico-crds fetch-enterprise-crds
 .PHONY: prepare-for-calico-crds prepare-for-enterprise-crds
 
-LIBCALICO?=projectcalico/libcalico-go
+CALICO?=projectcalico/calico
 read-libcalico-calico-version:
-	$(eval LIBCALICO_BRANCH := $(shell $(CONTAINERIZED) $(CALICO_BUILD) \
+	$(eval CALICO_BRANCH := $(shell $(CONTAINERIZED) $(CALICO_BUILD) \
 	bash -c '$(GIT_CONFIG_SSH) \
 	yq r config/calico_versions.yml components.libcalico-go.version'))
-	if [ -z "$(LIBCALICO_BRANCH)" ]; then echo "libcalico branch not defined"; exit 1; fi
+	if [ -z "$(CALICO_BRANCH)" ]; then echo "libcalico branch not defined"; exit 1; fi
 
 update-calico-crds: fetch-calico-crds
 	$(call copy_crds,"calico")
@@ -554,14 +554,14 @@ prepare-for-calico-crds:
 	$(call prep_local_crds,"calico")
 
 fetch-calico-crds: prepare-for-calico-crds read-libcalico-calico-version
-	$(call fetch_crds,$(LIBCALICO),$(LIBCALICO_BRANCH),"calico")
+	$(call fetch_crds,$(CALICO),$(CALICO_BRANCH),"calico")
 
-LIBCALICO_ENTERPRISE?=tigera/libcalico-go-private
+CALICO_ENTERPRISE?=tigera/calico-private
 read-libcalico-enterprise-version:
-	$(eval LIBCALICO_ENTERPRISE_BRANCH := $(shell $(CONTAINERIZED) $(CALICO_BUILD) \
+	$(eval CALICO_ENTERPRISE_BRANCH := $(shell $(CONTAINERIZED) $(CALICO_BUILD) \
 	bash -c '$(GIT_CONFIG_SSH) \
 	yq r config/enterprise_versions.yml components.libcalico-go.version'))
-	if [ -z "$(LIBCALICO_ENTERPRISE_BRANCH)" ]; then echo "libcalico enterprise branch not defined"; exit 1; fi
+	if [ -z "$(CALICO_ENTERPRISE_BRANCH)" ]; then echo "libcalico enterprise branch not defined"; exit 1; fi
 
 update-enterprise-crds: fetch-enterprise-crds
 	$(call copy_crds,"enterprise")
@@ -570,7 +570,7 @@ prepare-for-enterprise-crds:
 	$(call prep_local_crds,"enterprise")
 
 fetch-enterprise-crds: prepare-for-enterprise-crds  read-libcalico-enterprise-version
-	$(call fetch_crds,$(LIBCALICO_ENTERPRISE),$(LIBCALICO_ENTERPRISE_BRANCH),"enterprise")
+	$(call fetch_crds,$(CALICO_ENTERPRISE),$(CALICO_ENTERPRISE_BRANCH),"enterprise")
 
 .PHONY: prepull-image
 prepull-image:

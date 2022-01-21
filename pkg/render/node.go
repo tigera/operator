@@ -561,7 +561,7 @@ func (c *nodeComponent) getCalicoIPAM() string {
 
 func buildHostLocalIPAM(cns *operatorv1.CalicoNetworkSpec) string {
 	v6 := GetIPv6Pool(cns.IPPools) != nil
-	v4 := GetIPv6Pool(cns.IPPools) != nil
+	v4 := GetIPv4Pool(cns.IPPools) != nil
 
 	if v4 && v6 {
 		// Dual-stack

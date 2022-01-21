@@ -1335,12 +1335,11 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			},
 			Verbs: []string{"get", "create"},
 		},
-		// Access to policies in the default tier
+		// Access to policies in all tiers
 		{
-			APIGroups:     []string{"projectcalico.org"},
-			Resources:     []string{"tiers"},
-			ResourceNames: []string{"default"},
-			Verbs:         []string{"get"},
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"tiers"},
+			Verbs:     []string{"get"},
 		},
 		// List and download the reports in the Tigera Secure manager.
 		{

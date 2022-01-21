@@ -35,14 +35,6 @@ spec:
           spec:
             description: ApplicationLayerSpec defines the desired state of ApplicationLayer
             properties:
-              wafSettings:
-                description: Specification for ModSecurity Web Application Firewall (WAF).
-                properties:
-                  enableFirewall:
-                    description: This setting enables or disables ModSecurity Web Application Firewall.
-                      Allowed values are "True" or "False". Default value is "False".
-                    type: boolean
-                type: object
               logCollection:
                 description: Specification for application layer (L7) log collection.
                 properties:
@@ -62,6 +54,12 @@ spec:
                       limits. Default: -1'
                     format: int64
                     type: integer
+                type: object
+              wafSettings:
+                description: Specification for WAF (Web Application Firewall).
+                properties:
+                  enableFirewall:
+                    type: boolean
                 type: object
             type: object
           status:

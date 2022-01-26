@@ -145,9 +145,13 @@ func (m *statusManager) updateStatus() {
 		return
 	}
 
-	if m.removeTigeraStatus() {
+	if m.enabled != nil && !*m.enabled {
+		// This status manager is explicitly disabled, because the controller has called OnCRNotFound.
+		// Remove any TigeraStatus object that had previously been created, and skip updating the status.
+		m.removeTigeraStatus()
 		return
 	}
+	// This status manager is enabled. Perform a sync.
 
 	// Unless we've been given an explicit degraded reason we are not ready to start reporting statuses until
 	// ReadyToMonitor has been called by the owner of the status manager. This means there's no point in syncing
@@ -581,27 +585,24 @@ func (m *statusManager) isInitialized() bool {
 	return m.enabled != nil
 }
 
-// removeTigeraStatus returns true and removes the status displayed in TigeraStatus if corresponding CR not found
-func (m *statusManager) removeTigeraStatus() bool {
+// removeTigeraStatus status displayed in TigeraStatus if corresponding controller's CR is not found
+func (m *statusManager) removeTigeraStatus() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	if !m.crExists {
 		// No CR to delete, so short-circuit.
-		return true
+		return
 	}
-	if m.enabled != nil && !*m.enabled {
-		// Status manager is explicitly disabled. Delete the TigeraStatus CR if it exists.
-		ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: m.component}}
-		err := m.client.Delete(context.TODO(), ts)
-		if err != nil && !errors.IsNotFound(err) {
-			log.WithValues("reason", err).Info("Failed to remove TigeraStatus", "component", m.component)
-		} else {
-			// CR no longer exists.
-			m.crExists = false
-		}
-		return true
+
+	// Status manager is explicitly disabled. Delete the TigeraStatus CR if it exists.
+	ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: m.component}}
+	err := m.client.Delete(context.TODO(), ts)
+	if err != nil && !errors.IsNotFound(err) {
+		log.WithValues("reason", err).Info("Failed to remove TigeraStatus", "component", m.component)
+	} else {
+		// CR no longer exists.
+		m.crExists = false
 	}
-	return false
 }
 
 // podsFailing takes a selector and returns if any of the pods that match it are failing. Failing pods are defined

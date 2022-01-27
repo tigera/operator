@@ -59,6 +59,12 @@ func handleFelixVars(c *components) error {
 			return err
 		}
 
+		// FelixConfig's default for IptablesBackend is auto and the FelixConfig does not support
+		// auto as a value so nothing to do with this case.
+		if env.Name == "FELIX_IPTABLESBACKEND" && strings.ToLower(fval) == "auto" {
+			continue
+		}
+
 		// downcase and remove FELIX_ prefix
 		key := strings.ToLower(strings.TrimPrefix(env.Name, "FELIX_"))
 		pp, err := patchFromVal(key, *fval)

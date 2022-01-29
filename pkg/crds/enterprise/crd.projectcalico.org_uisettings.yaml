@@ -216,8 +216,6 @@ spec:
                       This never splits pods which represent a true microservice which
                       has ingress and egress connections.
                     type: boolean
-                required:
-                - expandPorts
                 type: object
             required:
             - description

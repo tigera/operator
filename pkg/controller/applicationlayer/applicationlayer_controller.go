@@ -30,7 +30,6 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -160,7 +159,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	applicationLayer, err := getApplicationLayer(ctx, r.client)
 
 	if err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			reqLogger.Info("ApplicationLayer object not found")
@@ -198,7 +197,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	variant, installation, err := utils.GetInstallation(ctx, r.client)
 
 	if err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			reqLogger.Error(err, "Installation not found")
 			r.status.SetDegraded("Installation not found", err.Error())
 			return reconcile.Result{}, nil
@@ -327,9 +326,9 @@ func getUserDefinedCoreRuleset(ctx context.Context, cli client.Client) (*corev1.
 			Name:      applicationlayer.ModSecurityRulesetConfigMapName,
 		},
 		ruleset,
-	); err != nil && !errors.IsNotFound(err) {
+	); err != nil && !apierrors.IsNotFound(err) {
 		return nil, err
-	} else if errors.IsNotFound(err) {
+	} else if apierrors.IsNotFound(err) {
 		return createDefaultCoreRuleset(ctx, cli)
 	}
 

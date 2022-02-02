@@ -41,17 +41,19 @@ import (
 )
 
 const (
-	AppSecDaemonsetName      = "l7-log-collector"
-	L7CollectorContainerName = "l7-collector"
-	ProxyContainerName       = "envoy-proxy"
-	EnvoyLogsVolumeName      = "envoy-logs"
-	FelixSync                = "felix-sync"
-	EnvoyConfigMapName       = "envoy-config"
-	EnvoyConfigMapKey        = "envoy-config.yaml"
-	APLName                  = "application-layer"
-	DikastesSync             = "dikastes-sync"
-	DikastesContainerName    = "dikastes"
-	CalicoLogs               = "var-log-calico"
+	APLName                         = "application-layer"
+	AppSecDaemonsetName             = "l7-log-collector"
+	L7CollectorContainerName        = "l7-collector"
+	ProxyContainerName              = "envoy-proxy"
+	EnvoyLogsVolumeName             = "envoy-logs"
+	EnvoyConfigMapName              = "envoy-config"
+	EnvoyConfigMapKey               = "envoy-config.yaml"
+	FelixSync                       = "felix-sync"
+	DikastesSyncVolumeName          = "dikastes-sync"
+	DikastesContainerName           = "dikastes"
+	ModSecurityRulesetVolumeName    = "owasp-ruleset"
+	ModSecurityRulesetConfigMapName = "owasp-ruleset-config"
+	CalicoLogsVolumeName            = "var-log-calico"
 )
 
 func ApplicationLayer(
@@ -249,14 +251,16 @@ func (c *component) containers() []corev1.Container {
 				"server",
 				"--dial", "/var/run/felix/nodeagent/socket",
 				"--listen", "/var/run/dikastes/dikastes.sock",
+				"--rules", "/etc/waf",
 			},
 			Env: []corev1.EnvVar{
 				{Name: "LOG_LEVEL", Value: "Info"},
 			},
 			VolumeMounts: []corev1.VolumeMount{
 				{Name: FelixSync, MountPath: "/var/run/felix"},
-				{Name: DikastesSync, MountPath: "/var/run/dikastes"},
-				{Name: CalicoLogs, MountPath: "/var/log/calico"},
+				{Name: DikastesSyncVolumeName, MountPath: "/var/run/dikastes"},
+				{Name: CalicoLogsVolumeName, MountPath: "/var/log/calico"},
+				{Name: ModSecurityRulesetVolumeName, MountPath: "/etc/waf", ReadOnly: true},
 			},
 			SecurityContext: &corev1.SecurityContext{
 				Privileged: ptr.BoolToPtr(true),
@@ -336,7 +340,7 @@ func (c *component) volumes() []corev1.Volume {
 		// WAF logs need HostPath volume - logs to be consumed by fluentd.
 		hostPathDirectoryOrCreate := corev1.HostPathDirectoryOrCreate
 		volumes = append(volumes, corev1.Volume{
-			Name: CalicoLogs,
+			Name: CalicoLogsVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				HostPath: &corev1.HostPathVolumeSource{
 					Path: "/var/log/calico",
@@ -347,9 +351,21 @@ func (c *component) volumes() []corev1.Volume {
 
 		// Needed for Dikastes' authz check server.
 		volumes = append(volumes, corev1.Volume{
-			Name: DikastesSync,
+			Name: DikastesSyncVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		})
+
+		// Needed for ModSecurity library - contains rule set.
+		volumes = append(volumes, corev1.Volume{
+			Name: ModSecurityRulesetVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: ModSecurityRulesetConfigMapName,
+					},
+				},
 			},
 		})
 	}
@@ -366,7 +382,7 @@ func (c *component) proxyVolMounts() []corev1.VolumeMount {
 	if c.config.WafEnabled {
 		volumes = append(volumes,
 			corev1.VolumeMount{
-				Name:      DikastesSync,
+				Name:      DikastesSyncVolumeName,
 				MountPath: "/var/run/dikastes",
 			},
 		)

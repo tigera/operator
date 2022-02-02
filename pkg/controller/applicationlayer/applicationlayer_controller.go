@@ -32,6 +32,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -319,8 +320,36 @@ func validateApplicationLayer(al *operatorv1.ApplicationLayer) error {
 func getUserDefinedCoreRuleset(ctx context.Context, cli client.Client) (*corev1.ConfigMap, error) {
 	ruleset := new(corev1.ConfigMap)
 
-	// get config map from the operator namespace
-	// create a new one if it doesn't exist
+	if err := cli.Get(
+		ctx,
+		types.NamespacedName{
+			Namespace: common.OperatorNamespace(),
+			Name:      applicationlayer.ModSecurityRulesetConfigMapName,
+		},
+		ruleset,
+	); err != nil && !errors.IsNotFound(err) {
+		return nil, err
+	} else if errors.IsNotFound(err) {
+		return createDefaultCoreRuleset(ctx, cli)
+	}
+
+	return ruleset, nil
+}
+
+func createDefaultCoreRuleset(ctx context.Context, cli client.Client) (*corev1.ConfigMap, error) {
+	ruleset := &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      applicationlayer.ModSecurityRulesetConfigMapName,
+			Namespace: common.OperatorNamespace(),
+			Labels:    map[string]string{},
+		},
+		Data: map[string]string{}, // <--- CSR definitions
+	}
+
+	if err := cli.Create(ctx, ruleset); err != nil {
+		return nil, err
+	}
 
 	return ruleset, nil
 }

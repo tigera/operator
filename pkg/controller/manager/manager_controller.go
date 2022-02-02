@@ -118,7 +118,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret,
 			render.ElasticsearchManagerUserSecret, render.KibanaPublicCertSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureCertSecret,
-			render.ManagerInternalTLSSecretName, render.DexCertSecretName,
+			render.ManagerInternalTLSSecretName, render.DexCertSecretName, render.PrometheusTLSSecretName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("manager-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
@@ -275,42 +275,35 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	// If the manager TLS secret exists, check whether it is managed by the
 	// operator.
-	certOperatorManaged := true
-	if tlsSecret != nil {
-		issuer, err := utils.GetCertificateIssuer(tlsSecret.Data[render.ManagerInternalSecretCertName])
+	var operatorManagedCertSecret bool
+	if installation.CertificateManagement == nil {
+		// We use EnsureCertificateSecret to ensure a secret exists, creating one if one is not passed in.
+		// It also ensures the secret passed has the proper DNS names if the secret is operator managed.
+
+		svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
+		svcDNSNames = append(svcDNSNames, "localhost")
+		certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
+		tlsSecret, operatorManagedCertSecret, err = utils.EnsureCertificateSecret(
+			render.ManagerTLSSecretName, tlsSecret, render.ManagerSecretKeyName, render.ManagerSecretCertName, certDur, svcDNSNames...,
+		)
+
+		if err != nil {
+			r.status.SetDegraded(fmt.Sprintf("Error ensuring manager TLS certificate %q exists and has valid DNS names", render.ManagerTLSSecretName), err.Error())
+			return reconcile.Result{}, err
+		}
+
+	} else if tlsSecret != nil {
+		operatorManagedCertSecret, err = utils.IsCertOperatorIssued(tlsSecret.Data[render.ManagerInternalSecretCertName])
 		if err != nil {
 			r.status.SetDegraded(fmt.Sprintf("Error checking if manager TLS certificate is operator managed"), err.Error())
 			return reconcile.Result{}, err
 		}
-		certOperatorManaged = utils.IsOperatorIssued(issuer)
-	}
 
-	if installation.CertificateManagement == nil {
-		// If the secret does not exist, then create one.
-		// If the secret exists but is operator managed, then check that it has the
-		// right DNS names and update it if necessary.
-		if tlsSecret == nil || certOperatorManaged {
-			// Create the cert if doesn't exist. If the cert exists, check that the cert
-			// has the expected DNS names. If the cert doesn't exist, the cert is recreated and returned.
-			// Note that validation of DNS names is not required for a user-provided manager TLS secret.
-			svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
-			svcDNSNames = append(svcDNSNames, "localhost")
-			certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
-			tlsSecret, err = utils.EnsureCertificateSecret(
-				render.ManagerTLSSecretName, tlsSecret, render.ManagerSecretKeyName, render.ManagerSecretCertName, certDur, svcDNSNames...,
-			)
-
-			if err != nil {
-				r.status.SetDegraded(fmt.Sprintf("Error ensuring manager TLS certificate %q exists and has valid DNS names", render.ManagerTLSSecretName), err.Error())
-				return reconcile.Result{}, err
-			}
+		if !operatorManagedCertSecret {
+			err := fmt.Errorf("user provided secret %s/%s is not supported when certificate management is enabled", render.ManagerNamespace, render.ManagerTLSSecretName)
+			r.status.SetDegraded("Invalid certificate configuration", err.Error())
+			return reconcile.Result{}, err
 		}
-	} else if !certOperatorManaged {
-		err := fmt.Errorf("user provided secret %s/%s is not supported when certificate management is enabled", render.ManagerNamespace, render.ManagerTLSSecretName)
-		r.status.SetDegraded("Invalid certificate configuration", err.Error())
-		return reconcile.Result{}, err
-	} else {
-		tlsSecret = nil
 	}
 
 	var installCompliance = utils.IsFeatureActive(license, common.ComplianceFeature)
@@ -490,6 +483,23 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, nil
 	}
 
+	prometheusCertSecret, err := utils.ValidateCertPair(r.client,
+		common.OperatorNamespace(),
+		render.PrometheusTLSSecretName,
+		"", // We don't need the key.
+		corev1.TLSCertKey,
+	)
+	if err != nil {
+		reqLogger.Error(err, fmt.Sprintf("failed to retrieve %s", render.PrometheusTLSSecretName))
+		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s", render.PrometheusTLSSecretName), err.Error())
+		return reconcile.Result{}, err
+	}
+
+	var components []render.Component
+	if tlsSecret != nil && operatorManagedCertSecret {
+		components = append(components, render.NewPassthrough(tlsSecret))
+	}
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -501,25 +511,28 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		replicas = &mcmReplicas
 	}
 
+	managerCfg := &render.ManagerConfiguration{
+		KeyValidatorConfig:            keyValidatorConfig,
+		ESSecrets:                     esSecrets,
+		KibanaSecrets:                 []*corev1.Secret{kibanaPublicCertSecret},
+		ComplianceServerCertSecret:    complianceServerCertSecret,
+		PacketCaptureServerCertSecret: packetCaptureServerCertSecret,
+		PrometheusCertSecret:          prometheusCertSecret,
+		ESClusterConfig:               esClusterConfig,
+		TLSKeyPair:                    tlsSecret,
+		PullSecrets:                   pullSecrets,
+		Openshift:                     r.provider == operatorv1.ProviderOpenShift,
+		Installation:                  installation,
+		ManagementCluster:             managementCluster,
+		TunnelSecret:                  tunnelSecret,
+		InternalTrafficSecret:         internalTrafficSecret,
+		ClusterDomain:                 r.clusterDomain,
+		ESLicenseType:                 elasticLicenseType,
+		Replicas:                      replicas,
+	}
+
 	// Render the desired objects from the CRD and create or update them.
-	component, err := render.Manager(
-		keyValidatorConfig,
-		esSecrets,
-		[]*corev1.Secret{kibanaPublicCertSecret},
-		complianceServerCertSecret,
-		packetCaptureServerCertSecret,
-		esClusterConfig,
-		tlsSecret,
-		pullSecrets,
-		r.provider == operatorv1.ProviderOpenShift,
-		installation,
-		managementCluster,
-		tunnelSecret,
-		internalTrafficSecret,
-		r.clusterDomain,
-		elasticLicenseType,
-		replicas,
-	)
+	component, err := render.Manager(managerCfg)
 	if err != nil {
 		log.Error(err, "Error rendering Manager")
 		r.status.SetDegraded("Error rendering Manager", err.Error())
@@ -532,9 +545,12 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	if err := handler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
-		r.status.SetDegraded("Error creating / updating resource", err.Error())
-		return reconcile.Result{}, err
+	components = append(components, component)
+	for _, component := range components {
+		if err := handler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+			r.status.SetDegraded("Error creating / updating resource", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	// Clear the degraded bit if we've reached this far.

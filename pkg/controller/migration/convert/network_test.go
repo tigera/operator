@@ -367,7 +367,7 @@ var _ = Describe("Convert network tests", func() {
 					_, err := Convert(ctx, c)
 					Expect(err).To(HaveOccurred())
 				},
-				Entry("ranges", `"ranges": [[{ "subnet": "usePodCidr" }],[{ "subnet": "2001:db8::/96" }]]`),
+				Entry("unsupported ranges", `"ranges": [[{ "subnet": "usePodCidr" }],[{ "subnet": "2001:db8::/96" }]]`),
 				Entry("routes", `"routes": [{ "dst": "0.0.0.0/0" },{ "dst": "2001:db8::/96" }]`),
 				Entry("dataDir", `"dataDir": "/some/path/i/think/would/be/here"`),
 				Entry("unknown field", `"unknownField": "something"`),
@@ -411,6 +411,7 @@ var _ = Describe("Convert network tests", func() {
 				},
 				Entry("subnet in ipam section", `"subnet": "usePodCidr"`),
 				Entry("subnet in ranges section under ipam", `"ranges": [[{ "subnet": "usePodCidr" }]]`),
+				Entry("dual-stack subnets in ranges section", `"ranges": [[{ "subnet": "usePodCidr" }], [{ "subnet": "usePodCidrIPv6" }]]`),
 			)
 		})
 

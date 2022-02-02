@@ -30,6 +30,14 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
+// createLogStorage Is called by Reconcile() in the Logstorage controller to render its components
+//
+// It returns 4 values:
+// A reconcile.Result to be returned by Reconcile() if the 'proceed' bool is false or if there is an error,
+// a 'proceed' bool indicating if the Reconcile function should proceed with the reconcile process,
+// a 'finalizerCleanup' bool indicating if it's safe to remove the LogStorage finalizer (only on deletion and after
+// kibana and elasticsearch components were successfully removed), and lastly,
+// an error if there was any or nil otherwise
 func (r *ReconcileLogStorage) createLogStorage(
 	ls *operatorv1.LogStorage,
 	install *operatorv1.InstallationSpec,
@@ -47,10 +55,12 @@ func (r *ReconcileLogStorage) createLogStorage(
 	hdler utils.ComponentHandler,
 	reqLogger logr.Logger,
 	ctx context.Context,
-) (reconcile.Result, bool, error) {
+) (reconcile.Result, bool, bool, error) {
 	var esInternalCertSecret, esCertSecret *corev1.Secret
-	var kibanaSecrets []*corev1.Secret
+	var kbCertSecret, kbInternalCertSecret *corev1.Secret
+	var kbOperatorManagedCertSecret bool
 	var err error
+	finalizerCleanup := false
 
 	if managementClusterConnection == nil {
 		// Check if there is a StorageClass available to run Elasticsearch on.
@@ -59,23 +69,23 @@ func (r *ReconcileLogStorage) createLogStorage(
 				err := fmt.Errorf("couldn't find storage class %s, this must be provided", ls.Spec.StorageClassName)
 				reqLogger.Error(err, err.Error())
 				r.status.SetDegraded("Failed to get storage class", err.Error())
-				return reconcile.Result{}, false, nil
+				return reconcile.Result{}, false, finalizerCleanup, nil
 			}
 			reqLogger.Error(err, "Failed to get storage class")
 			r.status.SetDegraded("Failed to get storage class", err.Error())
-			return reconcile.Result{}, false, err
+			return reconcile.Result{}, false, finalizerCleanup, err
 		}
 
 		if esCertSecret, esInternalCertSecret, err = r.getElasticsearchCertificateSecrets(ctx, install); err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Failed to create Elasticsearch secrets", err.Error())
-			return reconcile.Result{}, false, err
+			return reconcile.Result{}, false, finalizerCleanup, err
 		}
 
-		if kibanaSecrets, err = r.kibanaInternalSecrets(ctx, install); err != nil {
+		if kbCertSecret, kbOperatorManagedCertSecret, kbInternalCertSecret, err = r.kibanaInternalSecrets(ctx, install); err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Failed to create kibana secrets", err.Error())
-			return reconcile.Result{}, false, err
+			return reconcile.Result{}, false, finalizerCleanup, err
 		}
 	}
 
@@ -83,20 +93,20 @@ func (r *ReconcileLogStorage) createLogStorage(
 	if err != nil {
 		reqLogger.Error(err, err.Error())
 		r.status.SetDegraded("An error occurred trying to retrieve Elasticsearch", err.Error())
-		return reconcile.Result{}, false, err
+		return reconcile.Result{}, false, finalizerCleanup, err
 	}
 
 	kibana, err := r.getKibana(ctx)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
 		r.status.SetDegraded("An error occurred trying to retrieve Kibana", err.Error())
-		return reconcile.Result{}, false, err
+		return reconcile.Result{}, false, finalizerCleanup, err
 	}
 
 	// If Authentication spec present, we use it to configure dex as an authentication proxy.
 	if authentication != nil && authentication.Status.State != operatorv1.TigeraStatusReady {
 		r.status.SetDegraded("Authentication is not ready", fmt.Sprintf("authentication status: %s", authentication.Status.State))
-		return reconcile.Result{}, false, nil
+		return reconcile.Result{}, false, finalizerCleanup, nil
 	}
 
 	var dexCfg render.DexRelyingPartyConfig
@@ -106,62 +116,87 @@ func (r *ReconcileLogStorage) createLogStorage(
 		dexCertSecret = &corev1.Secret{}
 		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexCertSecretName, Namespace: common.OperatorNamespace()}, dexCertSecret); err != nil {
 			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
-			return reconcile.Result{}, false, err
+			return reconcile.Result{}, false, finalizerCleanup, err
 		}
 
 		dexSecret := &corev1.Secret{}
 		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexObjectName, Namespace: common.OperatorNamespace()}, dexSecret); err != nil {
 			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
-			return reconcile.Result{}, false, err
+			return reconcile.Result{}, false, finalizerCleanup, err
 		}
 		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexCertSecret, dexSecret, r.clusterDomain)
 	}
 
-	component := render.LogStorage(
-		ls,
-		install,
-		managementCluster,
-		managementClusterConnection,
-		elasticsearch,
-		kibana,
-		clusterConfig,
-		[]*corev1.Secret{esCertSecret, esInternalCertSecret, esAdminUserSecret},
-		kibanaSecrets,
-		pullSecrets,
-		r.provider,
-		curatorSecrets,
-		esService,
-		kbService,
-		r.clusterDomain,
-		dexCfg,
-		esLicenseType,
-	)
+	var components []render.Component
+
+	logStorageCfg := &render.ElasticsearchConfiguration{
+		LogStorage:                  ls,
+		Installation:                install,
+		ManagementCluster:           managementCluster,
+		ManagementClusterConnection: managementClusterConnection,
+		Elasticsearch:               elasticsearch,
+		Kibana:                      kibana,
+		ClusterConfig:               clusterConfig,
+		ElasticsearchSecrets:        []*corev1.Secret{esCertSecret, esAdminUserSecret},
+		KibanaCertSecret:            kbCertSecret,
+		KibanaInternalCertSecret:    kbInternalCertSecret,
+		PullSecrets:                 pullSecrets,
+		Provider:                    r.provider,
+		CuratorSecrets:              curatorSecrets,
+		ESService:                   esService,
+		KbService:                   kbService,
+		ClusterDomain:               r.clusterDomain,
+		DexCfg:                      dexCfg,
+		ElasticLicenseType:          esLicenseType,
+	}
+
+	component := render.LogStorage(logStorageCfg)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
 		reqLogger.Error(err, "Error with images from ImageSet")
 		r.status.SetDegraded("Error with images from ImageSet", err.Error())
-		return reconcile.Result{}, false, err
+		return reconcile.Result{}, false, finalizerCleanup, err
 	}
 
-	if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
-		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Error creating / updating resource", err.Error())
-		return reconcile.Result{}, false, err
+	components = append(components, component)
+
+	var passThroughSecrets []client.Object
+	if kbCertSecret != nil && kbOperatorManagedCertSecret {
+		passThroughSecrets = append(passThroughSecrets, kbCertSecret)
+	}
+	if esInternalCertSecret != nil {
+		passThroughSecrets = append(passThroughSecrets, esInternalCertSecret)
+	}
+
+	if len(passThroughSecrets) > 0 {
+		components = append(components, render.NewPassthrough(passThroughSecrets...))
+	}
+
+	for _, component := range components {
+		if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+			reqLogger.Error(err, err.Error())
+			r.status.SetDegraded("Error creating / updating resource", err.Error())
+			return reconcile.Result{}, false, finalizerCleanup, err
+		}
+	}
+
+	if ls != nil && ls.DeletionTimestamp != nil && elasticsearch == nil && kibana == nil {
+		finalizerCleanup = true
 	}
 
 	if managementClusterConnection == nil {
 		if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
 			r.status.SetDegraded("Waiting for Elasticsearch cluster to be operational", "")
-			return reconcile.Result{}, false, nil
+			return reconcile.Result{}, false, finalizerCleanup, nil
 		}
 
 		if kibana == nil || kibana.Status.AssociationStatus != cmnv1.AssociationEstablished {
 			r.status.SetDegraded("Waiting for Kibana cluster to be operational", "")
-			return reconcile.Result{}, false, nil
+			return reconcile.Result{}, false, finalizerCleanup, nil
 		}
 	}
 
-	return reconcile.Result{}, true, nil
+	return reconcile.Result{}, true, finalizerCleanup, nil
 }
 
 func (r *ReconcileLogStorage) validateLogStorage(curatorSecrets []*corev1.Secret, esLicenseType render.ElasticsearchLicenseType, reqLogger logr.Logger, ctx context.Context) (reconcile.Result, bool, error) {

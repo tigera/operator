@@ -68,6 +68,10 @@ func (m *MockStatus) RemoveCertificateSigningRequests(label string) {
 	m.Called(label)
 }
 
+func (m *MockStatus) SetWindowsUpgradeStatus(pending, inProgress, completed []string, err error) {
+	m.Called(pending, inProgress, completed, err)
+}
+
 func (m *MockStatus) SetDegraded(reason, msg string) {
 	m.Called(reason, msg)
 }
@@ -86,4 +90,16 @@ func (m *MockStatus) IsProgressing() bool {
 
 func (m *MockStatus) IsDegraded() bool {
 	return m.Called().Bool(0)
+}
+
+func (m *MockStatus) WasCalled(method string, arguments ...interface{}) bool {
+	for _, call := range m.Calls {
+		if call.Method == method {
+			_, diffCount := call.Arguments.Diff(arguments)
+			if diffCount == 0 {
+				return true
+			}
+		}
+	}
+	return false
 }

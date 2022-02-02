@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	"github.com/elastic/cloud-on-k8s/pkg/utils/stringsutil"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	logstoragecommon "github.com/tigera/operator/pkg/controller/logstorage/common"
@@ -55,6 +56,7 @@ var log = logf.Log.WithName("controller_logstorage")
 const (
 	defaultEckOperatorMemorySetting  = "512Mi"
 	DefaultElasticsearchStorageClass = "tigera-elasticsearch"
+	LogStorageFinalizer              = "tigera.io/eck-cleanup"
 )
 
 // Add creates a new LogStorage Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -196,22 +198,6 @@ type ReconcileLogStorage struct {
 	clusterDomain string
 }
 
-func GetLogStorage(ctx context.Context, cli client.Client) (*operatorv1.LogStorage, error) {
-	instance := &operatorv1.LogStorage{}
-	err := cli.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
-	if err != nil {
-		return nil, err
-	}
-
-	fillDefaults(instance)
-
-	if err := validateComponentResources(&instance.Spec); err != nil {
-		return nil, err
-	}
-
-	return instance, nil
-}
-
 // fillDefaults populates the default values onto an LogStorage object.
 func fillDefaults(opr *operatorv1.LogStorage) {
 	if opr.Spec.Retention == nil {
@@ -285,6 +271,14 @@ func validateComponentResources(spec *operatorv1.LogStorageSpec) error {
 	return nil
 }
 
+func setLogStorageFinalizer(ls *operatorv1.LogStorage) {
+	if ls.DeletionTimestamp == nil {
+		if !stringsutil.StringInSlice(LogStorageFinalizer, ls.GetFinalizers()) {
+			ls.SetFinalizers(append(ls.GetFinalizers(), LogStorageFinalizer))
+		}
+	}
+}
+
 // Reconcile reads that state of the cluster for a LogStorage object and makes changes based on the state read
 // and what is in the LogStorage.Spec
 // Note:
@@ -294,7 +288,10 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling LogStorage")
 
-	ls, err := GetLogStorage(ctx, r.client)
+	var preDefaultPatchFrom client.Patch
+
+	ls := &operatorv1.LogStorage{}
+	err := r.client.Get(ctx, utils.DefaultTSEEInstanceKey, ls)
 	if err != nil {
 		// Not finding the LogStorage CR is not an error, as a Managed cluster will not have this CR available but
 		// there are still "LogStorage" related items that need to be set up
@@ -302,9 +299,29 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			r.status.SetDegraded("An error occurred while querying LogStorage", err.Error())
 			return reconcile.Result{}, err
 		}
+		ls = nil
 		r.status.OnCRNotFound()
 	} else {
 		r.status.OnCRFound()
+
+		//create predefaultpatch
+		preDefaultPatchFrom = client.MergeFrom(ls.DeepCopy())
+
+		fillDefaults(ls)
+		err = validateComponentResources(&ls.Spec)
+		if err != nil {
+			r.status.SetDegraded("An error occurred while validating LogStorage", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		setLogStorageFinalizer(ls)
+
+		// Write the logstorage back to the datastore
+		if err = r.client.Patch(ctx, ls, preDefaultPatchFrom); err != nil {
+			log.Error(err, "Failed to write defaults")
+			r.status.SetDegraded("Failed to write defaults", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	variant, install, err := utils.GetInstallation(context.Background(), r.client)
@@ -427,7 +444,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	result, proceed, err := r.createLogStorage(
+	result, proceed, finalizerCleanup, err := r.createLogStorage(
 		ls,
 		install,
 		variant,
@@ -445,6 +462,18 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		reqLogger,
 		ctx,
 	)
+
+	if ls != nil && ls.DeletionTimestamp != nil && finalizerCleanup == true {
+		ls.SetFinalizers(stringsutil.RemoveStringInSlice(LogStorageFinalizer, ls.GetFinalizers()))
+
+		// Write the logstorage back to the datastore
+		if patchErr := r.client.Patch(ctx, ls, preDefaultPatchFrom); patchErr != nil {
+			reqLogger.Error(patchErr, "Error patching the log-storage")
+			r.status.SetDegraded("Error patching the log-storage", patchErr.Error())
+			return reconcile.Result{}, patchErr
+		}
+	}
+
 	if err != nil || !proceed {
 		return result, err
 	}
@@ -502,7 +531,10 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 
 	r.status.ClearDegraded()
 
-	if ls != nil {
+	// Since we don't re poll for the object we need to make sure the object wouldn't have been deleted on the patch
+	// that may have removed the finalizers.
+	// TODO We may want to just return if we remove the finalizers from the LogStorage object.
+	if ls != nil && (ls.DeletionTimestamp == nil || len(ls.GetFinalizers()) > 0) {
 		ls.Status.State = operatorv1.TigeraStatusReady
 		if err := r.client.Status().Update(ctx, ls); err != nil {
 			reqLogger.Error(err, fmt.Sprintf("Error updating the log-storage status %s", operatorv1.TigeraStatusReady))
@@ -516,46 +548,45 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 
 // getElasticsearchCertificateSecrets retrieves Elasticsearch certificate secrets needed for Elasticsearch to run or for
 // ES gateway to communicate with Elasticsearch. The order of the secrets returned are:
-// 1) The certificate secret needed for Elasticsearch (in the Elasticsearch namespace). If the user didn't create this it is
-//    created.
+// 1) The internal certificate secret needed for Elasticsearch (in the Elasticsearch namespace)
 // 2) The certificate mounted by ES gateway to connect to Elasticsearch.
 func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Context, instl *operatorv1.InstallationSpec) (*corev1.Secret, *corev1.Secret, error) {
-	var esKeyCert, certSecret *corev1.Secret
+	var esPublicSecret *corev1.Secret
 	svcDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
 
 	// Get the secret - might be nil
-	esKeyCert, err := utils.GetSecret(ctx, r.client, render.TigeraElasticsearchInternalCertSecret, render.ElasticsearchNamespace)
+	esSecret, err := utils.GetSecret(ctx, r.client, render.TigeraElasticsearchInternalCertSecret, render.ElasticsearchNamespace)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	// Ensure that cert is valid.
-	esKeyCert, err = utils.EnsureCertificateSecret(render.TigeraElasticsearchInternalCertSecret, esKeyCert, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, svcDNSNames...)
+	esSecret, _, err = utils.EnsureCertificateSecret(render.TigeraElasticsearchInternalCertSecret, esSecret, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, svcDNSNames...)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	// Override the Operator namespace set by utils.EnsureCertificateSecret.
-	esKeyCert.Namespace = render.ElasticsearchNamespace
+	esSecret.Namespace = render.ElasticsearchNamespace
 
 	// If Certificate management is enabled, we only want to trust the CA cert and let the init container handle private key generation.
 	if instl.CertificateManagement != nil {
-		esKeyCert.Data[corev1.TLSCertKey] = instl.CertificateManagement.CACert
-		certSecret = render.CreateCertificateSecret(instl.CertificateManagement.CACert, relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
+		esSecret.Data[corev1.TLSCertKey] = instl.CertificateManagement.CACert
+		esPublicSecret = render.CreateCertificateSecret(instl.CertificateManagement.CACert, relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
 	} else {
 		// Get the internal public cert secret - might be nil.
-		certSecret, err = utils.GetSecret(ctx, r.client, relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
+		esPublicSecret, err = utils.GetSecret(ctx, r.client, relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
 		if err != nil {
 			return nil, nil, err
 		}
 
-		if certSecret != nil {
+		if esPublicSecret != nil {
 			// When the provided certificate secret (secret) is managed by the operator we need to check if the secret that
 			// Elasticsearch creates from that given secret (internalSecret) has the expected DNS name. If it doesn't, delete the
 			// public secret so it can get recreated.
-			err = utils.SecretHasExpectedDNSNames(certSecret, corev1.TLSCertKey, svcDNSNames)
+			err = utils.SecretHasExpectedDNSNames(esPublicSecret, corev1.TLSCertKey, svcDNSNames)
 			if err == utils.ErrInvalidCertDNSNames {
-				if err := logstoragecommon.DeleteInvalidECKManagedPublicCertSecret(ctx, certSecret, r.client, log); err != nil {
+				if err := logstoragecommon.DeleteInvalidECKManagedPublicCertSecret(ctx, esPublicSecret, r.client, log); err != nil {
 					return nil, nil, err
 				}
 			}
@@ -563,69 +594,66 @@ func (r *ReconcileLogStorage) getElasticsearchCertificateSecrets(ctx context.Con
 			// TODO: Understand why this is needed. This is creating a secret that it is expected will be created
 			// by the ECK operator but the understanding is that this is an optimization. Ideally this can be
 			// removed and we can count on the ECK operator to do what is expected.
-			certSecret = render.CreateCertificateSecret(esKeyCert.Data[corev1.TLSCertKey], relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
+			esPublicSecret = render.CreateCertificateSecret(esSecret.Data[corev1.TLSCertKey], relasticsearch.InternalCertSecret, render.ElasticsearchNamespace)
 		}
 	}
 
-	return esKeyCert, certSecret, err
+	return esSecret, esPublicSecret, err
 }
 
-func (r *ReconcileLogStorage) kibanaInternalSecrets(ctx context.Context, instl *operatorv1.InstallationSpec) ([]*corev1.Secret, error) {
+// kibanaInternalSecrets Get the operator kibana secret and kibana's public secret if it has valid DNS names
+// The first returned value (*corev1.Secret) is the kibana TLS certificate secret in the operator namespace
+// The second returned value (bool) is true if the kibana TLS certificate secret in the operator namespace is managed
+// by the operator (it could be user-supplied prior to 3.9)
+// The third returned value (*corev1.Secret) is the kibana public TLS certificate secret in the kibana namespace (this secret is created by ECK)
+// The fourth returned value (error) is nil if both secrets exists and are valid, if not an error is returned
+func (r *ReconcileLogStorage) kibanaInternalSecrets(ctx context.Context, instl *operatorv1.InstallationSpec) (*corev1.Secret, bool, *corev1.Secret, error) {
 
-	var secrets []*corev1.Secret
 	svcDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
+	operatorManaged := false
 
 	// Get the secret - might be nil
 	secret, err := utils.GetSecret(ctx, r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace())
 	if err != nil {
-		return nil, err
+		return nil, operatorManaged, nil, err
 	}
 
 	// Ensure that cert is valid.
-	secret, err = utils.EnsureCertificateSecret(render.TigeraKibanaCertSecret, secret, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, svcDNSNames...)
+	secret, operatorManaged, err = utils.EnsureCertificateSecret(render.TigeraKibanaCertSecret, secret, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, svcDNSNames...)
 	if err != nil {
-		return nil, err
+		return nil, operatorManaged, nil, err
 	}
 
 	if instl.CertificateManagement != nil {
-		return []*corev1.Secret{
-			secret,
-			rsecret.CopyToNamespace(render.KibanaNamespace, secret)[0],
-			render.CreateCertificateSecret(instl.CertificateManagement.CACert, relasticsearch.InternalCertSecret, render.KibanaNamespace),
-			render.CreateCertificateSecret(instl.CertificateManagement.CACert, render.KibanaInternalCertSecret, common.OperatorNamespace()),
-		}, nil
+		return secret, operatorManaged, nil, nil
 	}
-
-	secrets = append(secrets, secret, rsecret.CopyToNamespace(render.KibanaNamespace, secret)[0])
 
 	// Get the pub secret - might be nil
 	internalSecret, err := utils.GetSecret(ctx, r.client, render.KibanaInternalCertSecret, render.KibanaNamespace)
 	if err != nil {
-		return nil, err
+		return nil, operatorManaged, nil, err
 	}
 
 	if internalSecret == nil {
 		log.Info(fmt.Sprintf("Internal cert secret %q not found yet", render.KibanaInternalCertSecret))
-		return secrets, nil
+		return secret, operatorManaged, nil, nil
 	}
 
 	issuer, err := utils.GetCertificateIssuer(secret.Data[corev1.TLSCertKey])
 	if err != nil {
-		return nil, err
+		return nil, operatorManaged, nil, err
 	}
 
 	if utils.IsOperatorIssued(issuer) {
 		err = utils.SecretHasExpectedDNSNames(internalSecret, corev1.TLSCertKey, svcDNSNames)
 		if err == utils.ErrInvalidCertDNSNames {
 			if err := logstoragecommon.DeleteInvalidECKManagedPublicCertSecret(ctx, internalSecret, r.client, log); err != nil {
-				return nil, err
+				return nil, operatorManaged, nil, err
 			}
 		}
 	}
-	// If the cert was not deleted, copy the valid cert to operator namespace.
-	secrets = append(secrets, rsecret.CopyToNamespace(common.OperatorNamespace(), internalSecret)...)
 
-	return secrets, nil
+	return secret, operatorManaged, internalSecret, nil
 }
 
 func (r *ReconcileLogStorage) getElasticsearch(ctx context.Context) (*esv1.Elasticsearch, error) {

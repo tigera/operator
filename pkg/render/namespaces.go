@@ -25,16 +25,21 @@ import (
 	"github.com/tigera/operator/pkg/common"
 )
 
-func Namespaces(installation *operatorv1.InstallationSpec, pullSecrets []*corev1.Secret) Component {
+func Namespaces(cfg *NamespaceConfiguration) Component {
 	return &namespaceComponent{
-		installation: installation,
-		pullSecrets:  pullSecrets,
+		cfg: cfg,
 	}
 }
 
+// NamespaceConfiguration contains all the config information needed to render the component.
+type NamespaceConfiguration struct {
+	Installation *operatorv1.InstallationSpec
+	PullSecrets  []*corev1.Secret
+	Terminating  bool
+}
+
 type namespaceComponent struct {
-	installation *operatorv1.InstallationSpec
-	pullSecrets  []*corev1.Secret
+	cfg *NamespaceConfiguration
 }
 
 func (c *namespaceComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -48,14 +53,18 @@ func (c *namespaceComponent) SupportedOSType() rmeta.OSType {
 
 func (c *namespaceComponent) Objects() ([]client.Object, []client.Object) {
 	ns := []client.Object{
-		CreateNamespace(common.CalicoNamespace, c.installation.KubernetesProvider),
+		CreateNamespace(common.CalicoNamespace, c.cfg.Installation.KubernetesProvider),
 	}
-	if c.installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		// We need to always have ns tigera-dex even when the Authentication CR is not present, so policies can be added to this namespace.
-		ns = append(ns, CreateNamespace(DexObjectName, c.installation.KubernetesProvider))
+		ns = append(ns, CreateNamespace(DexObjectName, c.cfg.Installation.KubernetesProvider))
 	}
-	if len(c.pullSecrets) > 0 {
-		ns = append(ns, secret.ToRuntimeObjects(secret.CopyToNamespace(common.CalicoNamespace, c.pullSecrets...)...)...)
+	if len(c.cfg.PullSecrets) > 0 {
+		ns = append(ns, secret.ToRuntimeObjects(secret.CopyToNamespace(common.CalicoNamespace, c.cfg.PullSecrets...)...)...)
+	}
+
+	if c.cfg.Terminating {
+		return nil, ns
 	}
 
 	return ns, nil

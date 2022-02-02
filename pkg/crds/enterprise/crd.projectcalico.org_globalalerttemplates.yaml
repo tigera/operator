@@ -56,6 +56,21 @@ spec:
                 type: string
               severity:
                 type: integer
+              substitutions:
+                items:
+                  description: GlobalAlertSubstitution substitutes for the variables
+                    in the set operators of a Query.
+                  properties:
+                    name:
+                      type: string
+                    values:
+                      items:
+                        type: string
+                      type: array
+                  required:
+                  - name
+                  type: object
+                type: array
               summary:
                 type: string
               threshold:

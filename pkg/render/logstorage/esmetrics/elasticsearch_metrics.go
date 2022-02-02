@@ -34,40 +34,32 @@ const (
 	ElasticsearchMetricsSecret = "tigera-ee-elasticsearch-metrics-elasticsearch-access"
 )
 
-func ElasticsearchMetrics(
-	installation *operatorv1.InstallationSpec,
-	pullSecrets []*corev1.Secret,
-	esConfig *relasticsearch.ClusterConfig,
-	esMetricsCredsSecret *corev1.Secret,
-	esCertSecret *corev1.Secret,
-	clusterDomain string,
-) render.Component {
+func ElasticsearchMetrics(cfg *Config) render.Component {
 	return &elasticsearchMetrics{
-		installation:         installation,
-		pullSecrets:          pullSecrets,
-		esConfig:             esConfig,
-		esMetricsCredsSecret: esMetricsCredsSecret,
-		esCertSecret:         esCertSecret,
-		clusterDomain:        clusterDomain,
+		cfg: cfg,
 	}
 }
 
+type Config struct {
+	Installation         *operatorv1.InstallationSpec
+	PullSecrets          []*corev1.Secret
+	ESConfig             *relasticsearch.ClusterConfig
+	ESMetricsCredsSecret *corev1.Secret
+	ESCertSecret         *corev1.Secret
+	ClusterDomain        string
+}
+
 type elasticsearchMetrics struct {
-	installation         *operatorv1.InstallationSpec
-	pullSecrets          []*corev1.Secret
-	esMetricsImage       string
-	esMetricsCredsSecret *corev1.Secret
-	esCertSecret         *corev1.Secret
-	esConfig             *relasticsearch.ClusterConfig
-	clusterDomain        string
+	cfg            *Config
+	esMetricsImage string
 }
 
 func (e *elasticsearchMetrics) ResolveImages(is *operatorv1.ImageSet) error {
 	var err error
 
-	reg := e.installation.Registry
-	path := e.installation.ImagePath
-	prefix := e.installation.ImagePrefix
+	reg := e.cfg.Installation.Registry
+	path := e.cfg.Installation.ImagePath
+	prefix := e.cfg.Installation.ImagePrefix
 
 	e.esMetricsImage, err = components.GetReference(components.ComponentElasticsearchMetrics, reg, path, prefix, is)
 
@@ -76,7 +68,7 @@ func (e *elasticsearchMetrics) ResolveImages(is *operatorv1.ImageSet) error {
 
 func (e *elasticsearchMetrics) Objects() (objsToCreate, objsToDelete []client.Object) {
 	toCreate := secret.ToRuntimeObjects(
-		secret.CopyToNamespace(render.ElasticsearchNamespace, e.esMetricsCredsSecret)...,
+		secret.CopyToNamespace(render.ElasticsearchNamespace, e.cfg.ESMetricsCredsSecret)...,
 	)
 	toCreate = append(toCreate, e.metricsService(), e.metricsDeployment())
 
@@ -137,9 +129,9 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 					},
 				},
 				Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
-					Tolerations:      e.installation.ControlPlaneTolerations,
-					NodeSelector:     e.installation.ControlPlaneNodeSelector,
-					ImagePullSecrets: secret.GetReferenceList(e.pullSecrets),
+					Tolerations:      e.cfg.Installation.ControlPlaneTolerations,
+					NodeSelector:     e.cfg.Installation.ControlPlaneNodeSelector,
+					ImagePullSecrets: secret.GetReferenceList(e.cfg.PullSecrets),
 					Containers: []corev1.Container{
 						relasticsearch.ContainerDecorate(
 							corev1.Container{
@@ -151,11 +143,11 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 									"--es.timeout=30s", "--es.ca=$(ELASTIC_CA)", "--web.listen-address=:9081",
 									"--web.telemetry-path=/metrics"},
 							}, render.DefaultElasticsearchClusterName, ElasticsearchMetricsSecret,
-							e.clusterDomain, e.SupportedOSType(),
+							e.cfg.ClusterDomain, e.SupportedOSType(),
 						),
 					},
 				}),
-			}, e.esConfig, []*corev1.Secret{e.esMetricsCredsSecret, e.esCertSecret}).(*corev1.PodTemplateSpec),
+			}, e.cfg.ESConfig, []*corev1.Secret{e.cfg.ESMetricsCredsSecret, e.cfg.ESCertSecret}).(*corev1.PodTemplateSpec),
 		},
 	}
 }

@@ -362,6 +362,12 @@ spec:
                   pattern: ^.*
                   x-kubernetes-int-or-string: true
                 type: array
+              logDebugFilenameRegex:
+                description: LogDebugFilenameRegex controls which source code files
+                  have their Debug log output included in the logs. Only logs from
+                  files with names that match the given regular expression are included.  The
+                  filter only applies to Debug level logs.
+                type: string
               logFilePath:
                 description: 'LogFilePath is the full path to the Felix log. Set to
                   none to disable file logging. [Default: /var/log/calico/felix.log]'
@@ -552,6 +558,10 @@ spec:
               wireguardInterfaceName:
                 description: 'WireguardInterfaceName specifies the name to use for
                   the Wireguard interface. [Default: wg.calico]'
+                type: string
+              wireguardKeepAlive:
+                description: 'WireguardKeepAlive controls Wireguard PersistentKeepalive
+                  option. Set 0 to disable. [Default: 0]'
                 type: string
               wireguardListeningPort:
                 description: 'WireguardListeningPort controls the listening port used

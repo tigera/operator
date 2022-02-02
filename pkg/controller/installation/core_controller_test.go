@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2021 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,8 +15,10 @@
 package installation
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -26,7 +28,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	kfake "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -43,6 +47,7 @@ import (
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/installation/windows"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
@@ -354,20 +359,35 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
 
+			// Create the indexer and informer shared by the typhaAutoscaler and
+			// calicoWindowsUpgrader.
+			nlw := test.NewNodeListWatch(cs)
+			nodeIndexInformer := cache.NewSharedIndexInformer(nlw, &corev1.Node{}, 0, cache.Indexers{})
+
+			go nodeIndexInformer.Run(ctx.Done())
+			for nodeIndexInformer.HasSynced() {
+				time.Sleep(100 * time.Millisecond)
+			}
+
+			syncPeriodOption := windows.CalicoWindowsUpgraderSyncPeriod(2 * time.Second)
+
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
-				config:               nil, // there is no fake for config
-				client:               c,
-				scheme:               scheme,
-				autoDetectedProvider: operator.ProviderNone,
-				status:               mockStatus,
-				typhaAutoscaler:      newTyphaAutoscaler(cs, nodeListWatch{cs}, typhaListWatch{cs}, mockStatus),
-				namespaceMigration:   &fakeNamespaceMigration{},
-				amazonCRDExists:      true,
-				enterpriseCRDsExist:  true,
-				migrationChecked:     true,
+				config:                nil, // there is no fake for config
+				client:                c,
+				scheme:                scheme,
+				autoDetectedProvider:  operator.ProviderNone,
+				status:                mockStatus,
+				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexInformer, test.NewTyphaListWatch(cs), mockStatus),
+				calicoWindowsUpgrader: windows.NewCalicoWindowsUpgrader(cs, c, nodeIndexInformer, mockStatus, syncPeriodOption),
+				namespaceMigration:    &fakeNamespaceMigration{},
+				amazonCRDExists:       true,
+				enterpriseCRDsExist:   true,
+				migrationChecked:      true,
 			}
+
 			r.typhaAutoscaler.start(ctx)
+			r.calicoWindowsUpgrader.Start(ctx)
 
 			// We start off with a 'standard' installation, with nothing special
 			Expect(c.Create(
@@ -482,6 +502,7 @@ var _ = Describe("Testing core-controller installation", func() {
 						{Image: "tigera/cni", Digest: "sha256:tigeracnihash"},
 						{Image: "calico/pod2daemon-flexvol", Digest: "sha256:calicoflexvolhash"},
 						{Image: "tigera/key-cert-provisioner", Digest: "sha256:calicocsrinithash"},
+						{Image: "tigera/calico-windows-upgrade", Digest: "sha256:calicowindowshash"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -684,29 +705,43 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("AddCertificateSigningRequests", mock.Anything)
 			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
+			mockStatus.On("SetWindowsUpgradeStatus", mock.Anything, mock.Anything, mock.Anything, nil)
+
+			// Create the indexer and informer shared by the typhaAutoscaler and
+			// calicoWindowsUpgrader.
+			nlw := test.NewNodeListWatch(cs)
+			nodeIndexInformer := cache.NewSharedIndexInformer(nlw, &corev1.Node{}, 0, cache.Indexers{})
+
+			go nodeIndexInformer.Run(ctx.Done())
+			for nodeIndexInformer.HasSynced() {
+				time.Sleep(100 * time.Millisecond)
+			}
+
+			syncPeriodOption := windows.CalicoWindowsUpgraderSyncPeriod(2 * time.Second)
 
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
-				config:               nil, // there is no fake for config
-				client:               c,
-				scheme:               scheme,
-				autoDetectedProvider: operator.ProviderNone,
-				status:               mockStatus,
-				typhaAutoscaler:      newTyphaAutoscaler(cs, nodeListWatch{cs}, typhaListWatch{cs}, mockStatus),
-				namespaceMigration:   &fakeNamespaceMigration{},
-				amazonCRDExists:      true,
-				enterpriseCRDsExist:  true,
-				migrationChecked:     true,
-				clusterDomain:        dns.DefaultClusterDomain,
+				config:                nil, // there is no fake for config
+				client:                c,
+				scheme:                scheme,
+				autoDetectedProvider:  operator.ProviderNone,
+				status:                mockStatus,
+				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexInformer, test.NewTyphaListWatch(cs), mockStatus),
+				calicoWindowsUpgrader: windows.NewCalicoWindowsUpgrader(cs, c, nodeIndexInformer, mockStatus, syncPeriodOption),
+				namespaceMigration:    &fakeNamespaceMigration{},
+				amazonCRDExists:       true,
+				enterpriseCRDsExist:   true,
+				migrationChecked:      true,
+				clusterDomain:         dns.DefaultClusterDomain,
 			}
 			r.typhaAutoscaler.start(ctx)
+			r.calicoWindowsUpgrader.Start(ctx)
 
 			cr = &operator.Installation{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 				Spec: operator.InstallationSpec{
-					Variant:               operator.TigeraSecureEnterprise,
-					Registry:              "some.registry.org/",
-					CertificateManagement: &operator.CertificateManagement{},
+					Variant:  operator.TigeraSecureEnterprise,
+					Registry: "some.registry.org/",
 				},
 				Status: operator.InstallationStatus{
 					Variant: operator.TigeraSecureEnterprise,
@@ -768,6 +803,70 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(test.GetResource(c, internalManagerTLSSecret)).To(BeNil())
 			test.VerifyCert(internalManagerTLSSecret, render.ManagerInternalSecretKeyName, render.ManagerInternalSecretCertName, dnsNames...)
 		})
+
+		It("should create node and typha TLS cert secrets if not provided and add OwnerReference to those", func() {
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			secret := &corev1.Secret{}
+			cfgMap := &corev1.ConfigMap{}
+
+			Expect(c.Get(ctx, client.ObjectKey{Name: render.TyphaCAConfigMapName, Namespace: common.OperatorNamespace()}, cfgMap)).ShouldNot(HaveOccurred())
+			Expect(cfgMap.GetOwnerReferences()).To(HaveLen(1))
+
+			Expect(c.Get(ctx, client.ObjectKey{Name: render.NodeTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
+			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
+
+			Expect(c.Get(ctx, client.ObjectKey{Name: render.TyphaTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
+			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
+		})
+
+		It("should not add OwnerReference to user supplied node and typha certs", func() {
+
+			testCA := test.MakeTestCA("core-test")
+			crtContent := &bytes.Buffer{}
+			keyContent := &bytes.Buffer{}
+			Expect(testCA.Config.WriteCertConfig(crtContent, keyContent)).NotTo(HaveOccurred())
+
+			// Take CA cert and create ConfigMap
+			caConfigMap := &corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.TyphaCAConfigMapName,
+					Namespace: common.OperatorNamespace(),
+				},
+				Data: map[string]string{
+					render.TyphaCABundleName: crtContent.String(),
+				},
+			}
+			Expect(c.Create(ctx, caConfigMap)).NotTo(HaveOccurred())
+
+			nodeSecret, err := secret.CreateTLSSecret(testCA,
+				render.NodeTLSSecretName, common.OperatorNamespace(), render.TLSSecretKeyName,
+				render.TLSSecretCertName, rmeta.DefaultCertificateDuration, nil, render.FelixCommonName,
+			)
+			nodeSecret.Data[render.CommonName] = []byte(render.FelixCommonName)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(c.Create(ctx, nodeSecret)).NotTo(HaveOccurred())
+
+			typhaSecret, err := secret.CreateTLSSecret(testCA,
+				render.TyphaTLSSecretName, common.OperatorNamespace(), render.TLSSecretKeyName,
+				render.TLSSecretCertName, rmeta.DefaultCertificateDuration, nil, render.TyphaCommonName,
+			)
+			typhaSecret.Data[render.CommonName] = []byte(render.TyphaCommonName)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(c.Create(ctx, typhaSecret)).NotTo(HaveOccurred())
+
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(test.GetResource(c, nodeSecret)).To(BeNil())
+			Expect(nodeSecret.GetOwnerReferences()).To(HaveLen(0))
+
+			Expect(test.GetResource(c, typhaSecret)).To(BeNil())
+			Expect(typhaSecret.GetOwnerReferences()).To(HaveLen(0))
+		})
 	})
 	Context("Reconcile tests", func() {
 		var c client.Client
@@ -804,6 +903,22 @@ var _ = Describe("Testing core-controller installation", func() {
 					},
 					Spec: corev1.NodeSpec{},
 				},
+				&corev1.Node{
+					TypeMeta: metav1.TypeMeta{},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:   "node2",
+						Labels: map[string]string{"kubernetes.io/os": "linux"},
+					},
+					Spec: corev1.NodeSpec{},
+				},
+				&corev1.Node{
+					TypeMeta: metav1.TypeMeta{},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:   "node3",
+						Labels: map[string]string{"kubernetes.io/os": "linux"},
+					},
+					Spec: corev1.NodeSpec{},
+				},
 				&appsv1.Deployment{
 					TypeMeta:   metav1.TypeMeta{},
 					ObjectMeta: metav1.ObjectMeta{Name: "calico-typha", Namespace: "calico-system"},
@@ -812,33 +927,46 @@ var _ = Describe("Testing core-controller installation", func() {
 			}
 			cs = kfake.NewSimpleClientset(objs...)
 
-			// Create an object we can use throughout the test to do the compliance reconcile loops.
+			// Create an object we can use throughout the test to do the core reconcile loops.
 			mockStatus = &status.MockStatus{}
 			mockStatus.On("AddDaemonsets", mock.Anything).Return()
 			mockStatus.On("AddDeployments", mock.Anything).Return()
-			mockStatus.On("AddStatefulSets", mock.Anything).Return()
-			mockStatus.On("AddCronJobs", mock.Anything)
 			mockStatus.On("IsAvailable").Return(true)
 			mockStatus.On("OnCRFound").Return()
 			mockStatus.On("ClearDegraded")
 			mockStatus.On("AddCertificateSigningRequests", mock.Anything)
-			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
+
+			// Create the indexer and informer shared by the typhaAutoscaler and
+			// calicoWindowsUpgrader.
+			nlw := test.NewNodeListWatch(cs)
+
+			nodeIndexInformer := cache.NewSharedIndexInformer(nlw, &corev1.Node{}, 0, cache.Indexers{})
+
+			go nodeIndexInformer.Run(ctx.Done())
+			for nodeIndexInformer.HasSynced() {
+				time.Sleep(100 * time.Millisecond)
+			}
+
+			syncPeriodOption := windows.CalicoWindowsUpgraderSyncPeriod(2 * time.Second)
 
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
-				config:               nil, // there is no fake for config
-				client:               c,
-				scheme:               scheme,
-				autoDetectedProvider: operator.ProviderNone,
-				status:               mockStatus,
-				typhaAutoscaler:      newTyphaAutoscaler(cs, nodeListWatch{cs}, typhaListWatch{cs}, mockStatus),
-				namespaceMigration:   &fakeNamespaceMigration{},
-				amazonCRDExists:      true,
-				enterpriseCRDsExist:  true,
-				migrationChecked:     true,
+				config:                nil, // there is no fake for config
+				client:                c,
+				scheme:                scheme,
+				autoDetectedProvider:  operator.ProviderNone,
+				status:                mockStatus,
+				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexInformer, test.NewTyphaListWatch(cs), mockStatus),
+				calicoWindowsUpgrader: windows.NewCalicoWindowsUpgrader(cs, c, nodeIndexInformer, mockStatus, syncPeriodOption),
+				namespaceMigration:    &fakeNamespaceMigration{},
+				amazonCRDExists:       true,
+				enterpriseCRDsExist:   true,
+				migrationChecked:      true,
 			}
+
 			r.typhaAutoscaler.start(ctx)
+			r.calicoWindowsUpgrader.Start(ctx)
 
 			// We start off with a 'standard' installation, with nothing special
 			cr = &operator.Installation{
@@ -956,6 +1084,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			}
 			Expect(test.GetResource(c, &rq)).To(BeNil())
 		})
+
 		It("should Reconcile with no active operator ConfigMap", func() {
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -1043,6 +1172,67 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(test.GetResource(c, &cm)).To(BeNil())
 			Expect(cm.Data["active-namespace"]).To(Equal("tigera-operator"))
 			Expect(cm.Data).To(HaveKey("extra-dummy"))
+		})
+
+		Context("calicoWindowsUpgrader", func() {
+			BeforeEach(func() {
+				// calicoWindowsUpgrader only upgrades nodes on AKS.
+				cr.Spec.KubernetesProvider = operator.ProviderAKS
+			})
+
+			It("should do nothing if node is up to date", func() {
+				cr.Spec.Variant = operator.TigeraSecureEnterprise
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				// Create node with current Enterprise version.
+				n1 := test.CreateWindowsNode(cs, "windows1", cr.Spec.Variant, components.ComponentTigeraWindows.Version)
+
+				mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{}, []string{"windows1"}, nil)
+
+				// Node is up to date and should not have changed.
+				Consistently(func() error {
+					return test.AssertNodesUnchanged(cs, n1)
+				}, 10*time.Second, 100*time.Millisecond).Should(BeNil())
+			})
+
+			It("should trigger upgrade of out-of-date Calico Windows nodes", func() {
+				// Set variant to Calico and set maxUnavailable to 2.
+				cr.Spec.Variant = operator.TigeraSecureEnterprise
+				two := intstr.FromInt(2)
+				cr.Spec.NodeUpdateStrategy = appsv1.DaemonSetUpdateStrategy{
+					RollingUpdate: &appsv1.RollingUpdateDaemonSet{
+						MaxUnavailable: &two,
+					},
+				}
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				// Create two nodes that should be upgraded to the latest Enterprise version
+				// - n1 is running Calico
+				// - n2 is running an older Enterprise version
+				n1 := test.CreateWindowsNode(cs, "windows1", operator.Calico, "v3.21.999")
+				n2 := test.CreateWindowsNode(cs, "windows2", operator.TigeraSecureEnterprise, "v3.11.999")
+
+				mockStatus.On("SetWindowsUpgradeStatus", mock.Anything, mock.Anything, mock.Anything, nil)
+
+				// Ensure that outdated nodes have the new label and taint.
+				Eventually(func() error {
+					return test.AssertNodesHadUpgradeTriggered(cs, n1, n2)
+				}, 10*time.Second).Should(BeNil())
+
+				Eventually(func() bool {
+					return mockStatus.WasCalled("SetWindowsUpgradeStatus", mock.Anything, mock.Anything, mock.Anything, nil)
+				}, 5*time.Second).Should(BeTrue())
+
+				mockStatus.AssertExpectations(GinkgoT())
+
+				Consistently(func() error {
+					return test.AssertNodesHadUpgradeTriggered(cs, n1, n2)
+				}, 10*time.Second).Should(BeNil())
+			})
 		})
 	})
 })

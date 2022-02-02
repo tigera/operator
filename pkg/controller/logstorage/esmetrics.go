@@ -46,7 +46,15 @@ func (r *ReconcileLogStorage) createEsMetrics(
 		return reconcile.Result{}, false, nil
 	}
 
-	esMetricsComponent := esmetrics.ElasticsearchMetrics(install, pullSecrets, clusterConfig, esMetricsSecret, publicCertSecretESCopy, r.clusterDomain)
+	esMetricsCfg := &esmetrics.Config{
+		Installation:         install,
+		PullSecrets:          pullSecrets,
+		ESConfig:             clusterConfig,
+		ESMetricsCredsSecret: esMetricsSecret,
+		ESCertSecret:         publicCertSecretESCopy,
+		ClusterDomain:        r.clusterDomain,
+	}
+	esMetricsComponent := esmetrics.ElasticsearchMetrics(esMetricsCfg)
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, esMetricsComponent); err != nil {
 		reqLogger.Error(err, "Error with images from ImageSet")
 		r.status.SetDegraded("Error with images from ImageSet", err.Error())

@@ -12,8 +12,8 @@ import (
 
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type patch struct {
@@ -29,7 +29,7 @@ func (s *patches) Type() types.PatchType {
 	return types.JSONPatchType
 }
 
-func (s *patches) Data(obj runtime.Object) ([]byte, error) {
+func (s *patches) Data(obj client.Object) ([]byte, error) {
 	return json.Marshal(s)
 }
 
@@ -57,6 +57,12 @@ func handleFelixVars(c *components) error {
 		fval, err := c.node.getEnv(ctx, c.client, containerCalicoNode, env.Name)
 		if err != nil {
 			return err
+		}
+
+		// FelixConfig's default for IptablesBackend is auto and the FelixConfig does not support
+		// auto as a value so nothing to do with this case.
+		if env.Name == "FELIX_IPTABLESBACKEND" && strings.ToLower(*fval) == "auto" {
+			continue
 		}
 
 		// downcase and remove FELIX_ prefix

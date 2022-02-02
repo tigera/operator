@@ -32,13 +32,13 @@ type InstallationSpec struct {
 	// +kubebuilder:validation:Enum=Calico;TigeraSecureEnterprise
 	Variant ProductVariant `json:"variant,omitempty"`
 
-	// Registry is the default Docker registry used for component Docker images. If specified,
-	// all images will be pulled from this registry. If not specified then the default registries
-	// will be used. A special case value, UseDefault, is supported to explicitly specify
-	// the default registries will be used.
+	// Registry is the default Docker registry used for component Docker images.
+	// If specified then the given value must end with a slash character (`/`) and all images will be pulled from this registry.
+	// If not specified then the default registries will be used. A special case value, UseDefault, is
+	// supported to explicitly specify the default registries will be used.
 	//
 	// Image format:
-	//    `<registry>/<imagePath>/<imagePrefix><imageName>:<image-tag>`
+	//    `<registry><imagePath>/<imagePrefix><imageName>:<image-tag>`
 	//
 	// This option allows configuring the `<registry>` portion of the above format.
 	// +optional
@@ -51,7 +51,7 @@ type InstallationSpec struct {
 	// image path will be used for each image.
 	//
 	// Image format:
-	//    `<registry>/<imagePath>/<imagePrefix><imageName>:<image-tag>`
+	//    `<registry><imagePath>/<imagePrefix><imageName>:<image-tag>`
 	//
 	// This option allows configuring the `<imagePath>` portion of the above format.
 	// +optional
@@ -64,7 +64,7 @@ type InstallationSpec struct {
 	// image prefix will be used for each image.
 	//
 	// Image format:
-	//    `<registry>/<imagePath>/<imagePrefix><imageName>:<image-tag>`
+	//    `<registry><imagePath>/<imagePrefix><imageName>:<image-tag>`
 	//
 	// This option allows configuring the `<imagePrefix>` portion of the above format.
 	// +optional
@@ -302,6 +302,7 @@ type LinuxDataplaneOption string
 const (
 	LinuxDataplaneIptables LinuxDataplaneOption = "Iptables"
 	LinuxDataplaneBPF      LinuxDataplaneOption = "BPF"
+	LinuxDataplaneVPP      LinuxDataplaneOption = "VPP"
 )
 
 // CalicoNetworkSpec specifies configuration options for Calico provided pod networking.
@@ -311,7 +312,7 @@ type CalicoNetworkSpec struct {
 	// If not specified, iptables mode is used.
 	// Default: Iptables
 	// +optional
-	// +kubebuilder:validation:Enum=Iptables;BPF
+	// +kubebuilder:validation:Enum=Iptables;BPF;VPP
 	LinuxDataplane *LinuxDataplaneOption `json:"linuxDataplane,omitempty"`
 
 	// BGP configures whether or not to enable Calico's BGP capabilities.
@@ -368,6 +369,11 @@ type NodeAddressAutodetection struct {
 	// +optional
 	FirstFound *bool `json:"firstFound,omitempty"`
 
+	// Kubernetes configures Calico to detect node addresses based on the Kubernetes API.
+	// +optional
+	// +kubebuilder:validation:Enum=NodeInternalIP
+	Kubernetes *KubernetesAutodetectionMethod `json:"kubernetes,omitempty"`
+
 	// Interface enables IP auto-detection based on interfaces that match the given regex.
 	// +optional
 	Interface string `json:"interface,omitempty"`
@@ -386,6 +392,17 @@ type NodeAddressAutodetection struct {
 	// one of the provided CIDRs.
 	CIDRS []string `json:"cidrs,omitempty"`
 }
+
+// KubernetesAutodetectionMethod is a method of detecting an IP address based on the Kubernetes API.
+//
+// One of: NodeInternalIP
+type KubernetesAutodetectionMethod string
+
+const (
+	// NodeInternalIP detects a node IP using the first status.Addresses entry of the relevant IP family
+	// with type NodeInternalIP on the Kubernetes nodes API.
+	NodeInternalIP KubernetesAutodetectionMethod = "NodeInternalIP"
+)
 
 // EncapsulationType is the type of encapsulation to use on an IP pool.
 //

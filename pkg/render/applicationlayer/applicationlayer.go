@@ -138,7 +138,6 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	c.config.envoyConfigMap = c.envoyL7ConfigMap()
 	objs = append(objs, c.serviceAccount())
 	objs = append(objs, c.config.envoyConfigMap)
-	objs = append(objs, c.modSecurityConfigMap())
 	objs = append(objs, c.daemonset())
 
 	if c.config.Installation.KubernetesProvider == operatorv1.ProviderDockerEE {
@@ -148,6 +147,11 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	// If we're running on openshift, we need to add in an SCC.
 	if c.config.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
 		objs = append(objs, c.securityContextConstraints())
+	}
+
+	// If Web Application Firewall is enabled, we need WAF ruleset config map present.
+	if c.config.WafEnabled && c.config.ModSecurityConfigMap != nil {
+		objs = append(objs, c.modSecurityConfigMap())
 	}
 
 	// Delete all the objects if L7 features (log/WAF) are not enabled.
@@ -401,8 +405,15 @@ func (c *component) collectorVolMounts() []corev1.VolumeMount {
 }
 
 func (c *component) modSecurityConfigMap() *corev1.ConfigMap {
-	// this config map should be a copy of the config map present in c.config - it is already validated
-	return nil
+	return &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ModSecurityRulesetConfigMapName,
+			Namespace: common.CalicoNamespace,
+			Labels:    map[string]string{},
+		},
+		Data: c.config.ModSecurityConfigMap.Data,
+	}
 }
 
 //go:embed envoy-config.yaml.template

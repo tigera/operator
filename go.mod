@@ -39,6 +39,8 @@ replace (
 	//github.com/googleapis/gnostic => github.com/googleapis/gnostic v0.5.1
 	github.com/operator-framework/operator-sdk => github.com/operator-framework/operator-sdk v1.0.1
 
+	github.com/tigera/api => github.com/freecaykes/api v0.0.0-20220201212129-281c51cc19ae
+
 	k8s.io/api => k8s.io/api v0.21.7
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.21.7
 	k8s.io/apimachinery => k8s.io/apimachinery v0.21.7

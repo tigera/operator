@@ -317,13 +317,27 @@ func validateApplicationLayer(al *operatorv1.ApplicationLayer) error {
 }
 
 func getUserDefinedCoreRuleset(ctx context.Context, cli client.Client) (*corev1.ConfigMap, error) {
+	ruleset := new(corev1.ConfigMap)
+
 	// get config map from the operator namespace
 	// create a new one if it doesn't exist
-	return nil, nil
+
+	return ruleset, nil
 }
 
 func validateUserDefinedCoreRuleset(cm *corev1.ConfigMap) error {
-	// validate the cm as per WAF docs
+
+	requiredFiles := []string{
+		"modsecdefault.conf",
+		"crs-setup.conf",
+	}
+
+	for _, f := range requiredFiles {
+		if _, ok := cm.Data[f]; !ok {
+			return fmt.Errorf("file must be found in Web Application Firewall rule set: %s", f)
+		}
+	}
+
 	return nil
 }
 

@@ -412,7 +412,8 @@ func (c *component) modSecurityConfigMap() *corev1.ConfigMap {
 			Namespace: common.CalicoNamespace,
 			Labels:    map[string]string{},
 		},
-		Data: c.config.ModSecurityConfigMap.Data,
+		Data:       c.config.ModSecurityConfigMap.Data,
+		BinaryData: c.config.envoyConfigMap.BinaryData,
 	}
 }
 

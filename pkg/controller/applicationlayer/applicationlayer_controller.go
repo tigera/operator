@@ -105,8 +105,12 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("applicationlayer-controller failed to watch Tigera network resource: %v", err)
 	}
 
-	// Watch configmaps created for envoy.
-	for _, configMapName := range []string{applicationlayer.EnvoyConfigMapName} {
+	// Watch configmaps created for envoy and dikastes:
+	maps := []string{
+		applicationlayer.EnvoyConfigMapName,
+		applicationlayer.ModSecurityRulesetConfigMapName,
+	}
+	for _, configMapName := range maps {
 		if err = utils.AddConfigMapWatch(c, configMapName, common.CalicoNamespace); err != nil {
 			return fmt.Errorf("applicationlayer-controller failed to watch ConfigMap %s: %v", configMapName, err)
 		}
@@ -221,6 +225,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		PullSecrets:            pullSecrets,
 		Installation:           installation,
 		OsType:                 rmeta.OSTypeLinux,
+		WafEnabled:             r.isWafEnabled(applicationLayer.Spec.WafSettings),
 		LogsEnabled:            r.isLogsCollectionEnabled(lcSpec),
 		LogRequestsPerInterval: lcSpec.LogRequestsPerInterval,
 		LogIntervalSeconds:     lcSpec.LogIntervalSeconds,
@@ -277,12 +282,10 @@ func updateApplicationLayerWithDefaults(al *operatorv1.ApplicationLayer) {
 
 // validateApplicationLayer validates ApplicationLayer
 func validateApplicationLayer(al *operatorv1.ApplicationLayer) error {
-	lcSpec := al.Spec.LogCollection
 
-	// If ApplicationLayer spec exists then LogCollection should be set.
-	// TODO: when we will have multiple features in future this should change to at least one feature being set
-	if lcSpec == nil {
-		return fmt.Errorf("missing required LogCollection spec in applicationLayer")
+	// If ApplicationLayer spec exists then one of its features should be set.
+	if al.Spec.LogCollection == nil && al.Spec.WafSettings == nil {
+		return fmt.Errorf("ApplicationLayer is not configured")
 	}
 
 	return nil
@@ -303,6 +306,10 @@ func (r *ReconcileApplicationLayer) isLogsCollectionEnabled(l7Spec *operatorv1.L
 	return l7Spec != nil && l7Spec.CollectLogs != nil && *l7Spec.CollectLogs == operatorv1.L7LogCollectionEnabled
 }
 
+func (r *ReconcileApplicationLayer) isWafEnabled(wafSpec *operatorv1.WafSpec) bool {
+	return wafSpec != nil && wafSpec.EnableFirewall != nil && *wafSpec.EnableFirewall == operatorv1.WafEnabled
+}
+
 // patchFelixTproxyMode takes all application layer specs as arguments and patches felix config.
 // If at least one of the specs requires TPROXYMode as "Enabled" it'll be patched as "Enabled" otherwise it is "Disabled".
 func (r *ReconcileApplicationLayer) patchFelixTproxyMode(ctx context.Context, al *operatorv1.ApplicationLayer) error {
@@ -318,7 +325,7 @@ func (r *ReconcileApplicationLayer) patchFelixTproxyMode(ctx context.Context, al
 	var tproxyMode crdv1.TPROXYModeOption
 	patchFrom := client.MergeFrom(fc.DeepCopy())
 
-	if al != nil && r.isLogsCollectionEnabled(al.Spec.LogCollection) {
+	if al != nil && (r.isLogsCollectionEnabled(al.Spec.LogCollection) || r.isWafEnabled(al.Spec.WafSettings)) {
 		tproxyMode = crdv1.TPROXYModeOptionEnabled
 	} else {
 		tproxyMode = crdv1.TPROXYModeOptionDisabled

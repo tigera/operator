@@ -105,8 +105,12 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("applicationlayer-controller failed to watch Tigera network resource: %v", err)
 	}
 
-	// Watch configmaps created for envoy.
-	for _, configMapName := range []string{applicationlayer.EnvoyConfigMapName} {
+	// Watch configmaps created for envoy and dikastes:
+	maps := []string{
+		applicationlayer.EnvoyConfigMapName,
+		applicationlayer.ModSecurityRulesetConfigMapName,
+	}
+	for _, configMapName := range maps {
 		if err = utils.AddConfigMapWatch(c, configMapName, common.CalicoNamespace); err != nil {
 			return fmt.Errorf("applicationlayer-controller failed to watch ConfigMap %s: %v", configMapName, err)
 		}

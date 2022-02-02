@@ -29,6 +29,7 @@ import (
 	"github.com/tigera/operator/pkg/render/applicationlayer"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -105,7 +106,16 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("applicationlayer-controller failed to watch Tigera network resource: %v", err)
 	}
 
-	// Watch configmaps created for envoy and dikastes:
+	// Watch for configmap changes in tigera-operator namespace; the cm contains ruleset for ModSecurity library:
+	err = utils.AddConfigMapWatch(c, applicationlayer.ModSecurityRulesetConfigMapName, common.OperatorNamespace())
+	if err != nil {
+		return fmt.Errorf(
+			"applicationlayer-controller failed to watch ConfigMap %s: %v",
+			applicationlayer.ModSecurityRulesetConfigMapName, err,
+		)
+	}
+
+	// Watch configmaps created for envoy and dikastes in calico-system namespace:
 	maps := []string{
 		applicationlayer.EnvoyConfigMapName,
 		applicationlayer.ModSecurityRulesetConfigMapName,
@@ -220,6 +230,20 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		return reconcile.Result{}, err
 	}
 
+	var userDefinedCoreRuleSet *corev1.ConfigMap = nil
+	if r.isWafEnabled(applicationLayer.Spec.WafSettings) {
+		if userDefinedCoreRuleSet, err = getUserDefinedCoreRuleset(ctx, r.client); err != nil {
+			reqLogger.Error(err, "Error getting Web Application Firewall ModSecurity rule set")
+			r.status.SetDegraded("Error getting Web Application Firewall ModSecurity rule set", err.Error())
+			return reconcile.Result{}, err
+		}
+		if err = validateUserDefinedCoreRuleset(userDefinedCoreRuleSet); err != nil {
+			reqLogger.Error(err, "Error validating Web Application Firewall ModSecurity rule set")
+			r.status.SetDegraded("Error validating Web Application Firewall ModSecurity rule set", err.Error())
+			return reconcile.Result{}, err
+		}
+	}
+
 	lcSpec := applicationLayer.Spec.LogCollection
 	config := &applicationlayer.Config{
 		PullSecrets:            pullSecrets,
@@ -229,6 +253,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		LogsEnabled:            r.isLogsCollectionEnabled(lcSpec),
 		LogRequestsPerInterval: lcSpec.LogRequestsPerInterval,
 		LogIntervalSeconds:     lcSpec.LogIntervalSeconds,
+		ModSecurityConfigMap:   userDefinedCoreRuleSet,
 	}
 	component := applicationlayer.ApplicationLayer(config)
 
@@ -288,6 +313,17 @@ func validateApplicationLayer(al *operatorv1.ApplicationLayer) error {
 		return fmt.Errorf("ApplicationLayer is not configured")
 	}
 
+	return nil
+}
+
+func getUserDefinedCoreRuleset(ctx context.Context, cli client.Client) (*corev1.ConfigMap, error) {
+	// get config map from the operator namespace
+	// create a new one if it doesn't exist
+	return nil, nil
+}
+
+func validateUserDefinedCoreRuleset(cm *corev1.ConfigMap) error {
+	// validate the cm as per WAF docs
 	return nil
 }
 

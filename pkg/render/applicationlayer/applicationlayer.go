@@ -76,7 +76,8 @@ type Config struct {
 	OsType       rmeta.OSType
 
 	// Optional config for WAF.
-	WafEnabled bool
+	WafEnabled           bool
+	ModSecurityConfigMap *corev1.ConfigMap
 
 	// Optional config for L7 logs.
 	LogsEnabled            bool
@@ -137,6 +138,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	c.config.envoyConfigMap = c.envoyL7ConfigMap()
 	objs = append(objs, c.serviceAccount())
 	objs = append(objs, c.config.envoyConfigMap)
+	objs = append(objs, c.modSecurityConfigMap())
 	objs = append(objs, c.daemonset())
 
 	if c.config.Installation.KubernetesProvider == operatorv1.ProviderDockerEE {
@@ -396,6 +398,11 @@ func (c *component) collectorVolMounts() []corev1.VolumeMount {
 		{Name: EnvoyLogsVolumeName, MountPath: "/tmp/"},
 		{Name: FelixSync, MountPath: "/var/run/felix"},
 	}
+}
+
+func (c *component) modSecurityConfigMap() *corev1.ConfigMap {
+	// this config map should be a copy of the config map present in c.config - it is already validated
+	return nil
 }
 
 //go:embed envoy-config.yaml.template

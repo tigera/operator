@@ -110,6 +110,7 @@ func (e *elasticsearchMetrics) Objects() (objsToCreate, objsToDelete []client.Ob
 
 func (e elasticsearchMetrics) serviceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ElasticsearchMetricsName,
 			Namespace: render.ElasticsearchNamespace,
@@ -127,6 +128,7 @@ func (e *elasticsearchMetrics) SupportedOSType() rmeta.OSType {
 
 func (e *elasticsearchMetrics) metricsService() *corev1.Service {
 	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ElasticsearchMetricsName,
 			Namespace: render.ElasticsearchNamespace,
@@ -215,7 +217,7 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 										ReadOnly:  true,
 									},
 									{
-										Name:      e.cfg.TrustedBundle.Name,
+										Name:      render.PrometheusCABundle,
 										MountPath: "/ca",
 										ReadOnly:  true,
 									},
@@ -230,10 +232,10 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 							VolumeSource: render.CertificateVolumeSource(e.cfg.Installation.CertificateManagement, ElasticsearchMetricsServerTLSSecret),
 						},
 						{
-							Name: e.cfg.TrustedBundle.Name,
+							Name: render.PrometheusCABundle,
 							VolumeSource: corev1.VolumeSource{
 								ConfigMap: &corev1.ConfigMapVolumeSource{
-									LocalObjectReference: corev1.LocalObjectReference{Name: e.cfg.TrustedBundle.Name},
+									LocalObjectReference: corev1.LocalObjectReference{Name: render.PrometheusCABundle},
 								},
 							},
 						},

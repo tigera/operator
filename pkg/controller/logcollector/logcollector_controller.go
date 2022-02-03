@@ -318,7 +318,11 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 
 	var fluentdPrometheusTLS *corev1.Secret
 	trustedBundle, err := utils.GetPrometheusCertificateBundle(ctx, r.client, render.LogCollectorNamespace, installation.CertificateManagement)
-	if err != nil {
+	if trustedBundle == nil {
+		r.status.SetDegraded("Waiting for the prometheus client secret to become available", "")
+		err = fmt.Errorf("waiting for the prometheus client secret to become available")
+		return reconcile.Result{}, nil
+	} else if err != nil {
 		log.Error(err, "Unable to create a metrics certificate bundle")
 		r.status.SetDegraded("Unable to create a metrics certificate bundle", err.Error())
 		return reconcile.Result{}, err

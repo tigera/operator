@@ -61,6 +61,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-fluentd", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
@@ -166,6 +167,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "fluentd-node-windows", ns: "tigera-fluentd", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
 			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
@@ -269,6 +271,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "log-collector-s3-credentials", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -336,6 +339,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-fluentd", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
@@ -432,6 +436,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "logcollector-splunk-credentials", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
 			{name: "logcollector-splunk-public-certificate", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
@@ -518,6 +523,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "logcollector-splunk-credentials", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -591,6 +597,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "fluentd-filters", ns: "tigera-fluentd", group: "", version: "v1", kind: "ConfigMap"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -631,6 +638,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "eks-log-forwarder", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "eks-log-forwarder", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "eks-log-forwarder", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},

@@ -53,6 +53,7 @@ const (
 	DikastesContainerName           = "dikastes"
 	ModSecurityRulesetVolumeName    = "owasp-ruleset"
 	ModSecurityRulesetConfigMapName = "owasp-ruleset-config"
+	ModSecurityRulesetAnnotation    = "owasp"
 	CalicoLogsVolumeName            = "var-log-calico"
 )
 
@@ -174,6 +175,10 @@ func (c *component) daemonset() *appsv1.DaemonSet {
 
 	if c.config.envoyConfigMap != nil {
 		annots[EnvoyConfigMapName] = rmeta.AnnotationHash(c.config.envoyConfigMap)
+	}
+
+	if c.config.ModSecurityConfigMap != nil {
+		annots[ModSecurityRulesetAnnotation] = rmeta.AnnotationHash(c.config.ModSecurityConfigMap.Data)
 	}
 
 	podTemplate := corev1.PodTemplateSpec{

@@ -343,7 +343,7 @@ func createDefaultCoreRuleset(ctx context.Context, cli client.Client) (*corev1.C
 			Namespace: common.OperatorNamespace(),
 			Labels:    map[string]string{},
 		},
-		Data: map[string]string{}, // <--- CSR definitions
+		Data: map[string]string{}, // <--- CRS definitions - huh???
 	}
 
 	if err := cli.Create(ctx, ruleset); err != nil {

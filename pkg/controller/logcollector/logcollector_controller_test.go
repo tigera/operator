@@ -20,18 +20,20 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/stretchr/testify/mock"
-	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/test"
 
+	"github.com/stretchr/testify/mock"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/test"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -72,6 +74,7 @@ var _ = Describe("LogCollector controller tests", func() {
 			mockStatus.On("AddDeployments", mock.Anything).Return()
 			mockStatus.On("AddStatefulSets", mock.Anything).Return()
 			mockStatus.On("AddCronJobs", mock.Anything)
+			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
 			mockStatus.On("IsAvailable").Return(true)
 			mockStatus.On("OnCRFound").Return()
 			mockStatus.On("ClearDegraded")
@@ -127,6 +130,7 @@ var _ = Describe("LogCollector controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ElasticsearchEksLogForwarderUserSecret,
 					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, rtest.CreateCertSecret(monitor.PrometheusClientTLSSecretName, common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 			// Apply the logcollector CR to the fake cluster.
 			Expect(c.Create(ctx, &operatorv1.LogCollector{

@@ -460,7 +460,7 @@ func (c *typhaComponent) volumes() []corev1.Volume {
 		},
 		{
 			Name:         "typha-certs",
-			VolumeSource: certificateVolumeSource(c.cfg.Installation.CertificateManagement, TyphaTLSSecretName),
+			VolumeSource: CertificateVolumeSource(c.cfg.Installation.CertificateManagement, TyphaTLSSecretName),
 		},
 	}
 

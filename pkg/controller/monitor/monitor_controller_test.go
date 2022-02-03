@@ -38,6 +38,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/monitor"
 )
 
@@ -100,6 +101,7 @@ var _ = Describe("Monitor controller tests", func() {
 			TypeMeta:   metav1.TypeMeta{Kind: "Monitor", APIVersion: "operator.tigera.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 		})).NotTo(HaveOccurred())
+		Expect(cli.Create(ctx, render.CreateCertificateConfigMap("test", render.TyphaCAConfigMapName, common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 		// Mark that the watch for prometheus resources was successful
 		r.prometheusReady.MarkAsReady()

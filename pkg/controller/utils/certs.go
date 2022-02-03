@@ -21,13 +21,18 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 
+	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/monitor"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -152,4 +157,35 @@ func SecretHasExpectedDNSNames(secret *corev1.Secret, certKeyName string, expect
 		return nil
 	}
 	return ErrInvalidCertDNSNames
+}
+
+// GetPrometheusCertificateBundle creates a configmap with a bundle for prometheus mTLS.
+func GetPrometheusCertificateBundle(ctx context.Context, cli client.Client, namespace string, certificateManagement *operator.CertificateManagement, extraPems ...[]byte) (*corev1.ConfigMap, error) {
+	var pem strings.Builder
+	prometheusTLS := &corev1.Secret{}
+	err := cli.Get(ctx, types.NamespacedName{Name: monitor.PrometheusClientTLSSecretName, Namespace: common.OperatorNamespace()}, prometheusTLS)
+	if apierrors.IsNotFound(err) {
+		if certificateManagement == nil {
+			return nil, nil
+		}
+	} else if err != nil {
+		return nil, err
+	} else {
+		if _, ok := prometheusTLS.Data[corev1.TLSCertKey]; !ok {
+			return nil, fmt.Errorf("secret %s/%s must contain field %s", common.OperatorNamespace(), monitor.PrometheusClientTLSSecretName, corev1.TLSCertKey)
+		}
+		pem.WriteString(string(prometheusTLS.Data[corev1.TLSCertKey]))
+	}
+
+	if certificateManagement != nil {
+		// Append the CA to the pem
+		pem.WriteString("\n\n")
+		pem.Write(certificateManagement.CACert)
+	}
+	for _, extraPem := range extraPems {
+		pem.WriteString("\n\n")
+		pem.Write(extraPem)
+	}
+
+	return render.CreateCertificateConfigMap(pem.String(), render.PrometheusCABundle, namespace), nil
 }

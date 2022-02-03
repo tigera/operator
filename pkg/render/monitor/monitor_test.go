@@ -56,7 +56,7 @@ var _ = Describe("monitor rendering tests", func() {
 			PullSecrets: []*corev1.Secret{
 				{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 			},
-			TLSSecret: &corev1.Secret{
+			ServerTLSSecret: &corev1.Secret{
 				TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{Name: monitor.PrometheusTLSSecretName, Namespace: common.OperatorNamespace()}},
 			AlertmanagerConfigSecret: defaultAlertmanagerConfigSecret,
@@ -336,7 +336,7 @@ var _ = Describe("monitor rendering tests", func() {
 			},
 			dns.DefaultClusterDomain)
 		cfg.KeyValidatorConfig = dexCfg
-		cfg.TLSSecret = &corev1.Secret{
+		cfg.ServerTLSSecret = &corev1.Secret{
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      monitor.PrometheusTLSSecretName,

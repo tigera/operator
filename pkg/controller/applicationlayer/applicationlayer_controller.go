@@ -16,6 +16,7 @@ package applicationlayer
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"time"
 
@@ -343,7 +344,15 @@ func createDefaultCoreRuleset(ctx context.Context, cli client.Client) (*corev1.C
 			Namespace: common.OperatorNamespace(),
 			Labels:    map[string]string{},
 		},
-		Data: map[string]string{}, // <--- CRS definitions - huh???
+		Data: make(map[string]string),
+	}
+
+	for filename, dataBase64 := range applicationlayer.ModsecurityCoreRuleSet {
+		if data, err := base64.StdEncoding.DecodeString(dataBase64); err == nil {
+			ruleset.Data[filename] = string(data)
+		} else {
+			return nil, err
+		}
 	}
 
 	if err := cli.Create(ctx, ruleset); err != nil {

@@ -57,6 +57,12 @@ const (
 	K8sSvcEndpointConfigMapName       = "kubernetes-services-endpoint"
 	nodeTerminationGracePeriodSeconds = 5
 	NodeFinalizer                     = "tigera.io/cni-protector"
+
+	CalicoNodeMetricsService          = "calico-node-metrics"
+	NodePrometheusTLSServerSecret     = "calico-node-prometheus-server-tls"
+	NodePrometheusTLSServerAnnotation = "hash.operator.tigera.io/calico-node-prometheus-server-tls"
+	PrometheusCABundle                = "tigera-prometheus-metrics-ca-bundle"
+	PrometheusCABundleAnnotation      = "hash.operator.tigera.io/tigera-prometheus-metrics-ca-bundle"
 )
 
 var (
@@ -94,7 +100,9 @@ type NodeConfiguration struct {
 	// Indicates node is being terminated, so remove most resources but
 	// leave RBAC and SA to allow any CNI plugin calls to continue to function
 	// For details on why this is needed see 'Node and Installation finalizer' in the core_controller.
-	Terminating bool
+	Terminating               bool
+	PrometheusServerTLS       *corev1.Secret
+	PrometheusMetricsCABundle *corev1.ConfigMap
 
 	// BGPLayouts is returned by the rendering code after modifying its namespace
 	// so that it can be deployed into the cluster.
@@ -222,11 +230,21 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, CSRClusterRoleBinding("calico-node", common.CalicoNamespace))
 	}
 
+	var objsToDelete []client.Object
+	if c.cfg.PrometheusServerTLS != nil {
+		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(common.CalicoNamespace, c.cfg.PrometheusServerTLS)...)...)
+	} else {
+		objsToDelete = append(objsToDelete, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: NodePrometheusTLSServerSecret, Namespace: common.CalicoNamespace}})
+	}
+
+	if c.cfg.PrometheusMetricsCABundle != nil {
+		objs = append(objs, c.cfg.PrometheusMetricsCABundle)
+	}
 	if c.cfg.Terminating {
-		return objsToKeep, objs
+		return objsToKeep, append(objs, objsToDelete...)
 
 	}
-	return objs, nil
+	return objs, objsToDelete
 }
 
 func (c *nodeComponent) Ready() bool {
@@ -660,6 +678,12 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 	if len(c.cfg.BirdTemplates) != 0 {
 		annotations[birdTemplateHashAnnotation] = rmeta.AnnotationHash(c.cfg.BirdTemplates)
 	}
+	if c.cfg.PrometheusServerTLS != nil {
+		annotations[NodePrometheusTLSServerAnnotation] = rmeta.AnnotationHash(c.cfg.PrometheusServerTLS.Data)
+	}
+	if c.cfg.PrometheusMetricsCABundle != nil {
+		annotations[PrometheusCABundleAnnotation] = rmeta.AnnotationHash(c.cfg.PrometheusMetricsCABundle.Data)
+	}
 
 	annotations[TyphaCAHashAnnotation] = rmeta.AnnotationHash(c.cfg.TLS.CAConfigMap.Data)
 	if c.cfg.Installation.CertificateManagement == nil {
@@ -674,6 +698,19 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 			TLSSecretCertName,
 			dns.GetServiceDNSNames(common.NodeDaemonSetName, common.CalicoNamespace, c.cfg.ClusterDomain),
 			CSRLabelCalicoSystem))
+		if c.cfg.PrometheusMetricsCABundle != nil { // If this bundle is present, it means we want to create a mTLS certificate.
+			prometheusInit := CreateCSRInitContainer(
+				c.cfg.Installation.CertificateManagement,
+				c.certSignReqImage,
+				NodePrometheusTLSServerSecret,
+				NodePrometheusTLSServerSecret,
+				corev1.TLSPrivateKeyKey,
+				corev1.TLSCertKey,
+				dns.GetServiceDNSNames(CalicoNodeMetricsService, common.CalicoNamespace, c.cfg.ClusterDomain),
+				CSRLabelCalicoSystem)
+			prometheusInit.Name = fmt.Sprintf("%s-%s", CalicoNodeMetricsService, prometheusInit.Name)
+			initContainers = append(initContainers, prometheusInit)
+		}
 	}
 
 	if cniCfgMap != nil {
@@ -828,7 +865,7 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 		},
 		{
 			Name:         "felix-certs",
-			VolumeSource: certificateVolumeSource(c.cfg.Installation.CertificateManagement, NodeTLSSecretName),
+			VolumeSource: CertificateVolumeSource(c.cfg.Installation.CertificateManagement, NodeTLSSecretName),
 		},
 	}
 
@@ -914,6 +951,19 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 						},
 					},
 				},
+			})
+	}
+	if c.cfg.PrometheusMetricsCABundle != nil {
+		volumes = append(volumes,
+			corev1.Volume{Name: c.cfg.PrometheusMetricsCABundle.Name,
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{Name: c.cfg.PrometheusMetricsCABundle.Name},
+					},
+				},
+			},
+			corev1.Volume{Name: NodePrometheusTLSServerSecret,
+				VolumeSource: CertificateVolumeSource(c.cfg.Installation.CertificateManagement, NodePrometheusTLSServerSecret),
 			})
 	}
 
@@ -1151,7 +1201,20 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 				SubPath:   BGPLayoutConfigMapKey,
 			})
 	}
-
+	if c.cfg.PrometheusMetricsCABundle != nil {
+		nodeVolumeMounts = append(nodeVolumeMounts,
+			corev1.VolumeMount{
+				Name:      c.cfg.PrometheusMetricsCABundle.Name,
+				MountPath: fmt.Sprintf("/%s", c.cfg.PrometheusMetricsCABundle.Name),
+				ReadOnly:  true,
+			},
+			corev1.VolumeMount{
+				Name:      NodePrometheusTLSServerSecret,
+				MountPath: fmt.Sprintf("/%s", NodePrometheusTLSServerSecret),
+				ReadOnly:  true,
+			},
+		)
+	}
 	return nodeVolumeMounts
 }
 
@@ -1430,6 +1493,13 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 			extraNodeEnv = append(extraNodeEnv, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
 		}
 
+		if c.cfg.PrometheusMetricsCABundle != nil {
+			extraNodeEnv = append(extraNodeEnv,
+				corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERCERTFILE", Value: fmt.Sprintf("/%s/%s", NodePrometheusTLSServerSecret, corev1.TLSCertKey)},
+				corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERKEYFILE", Value: fmt.Sprintf("/%s/%s", NodePrometheusTLSServerSecret, corev1.TLSPrivateKeyKey)},
+				corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERCAFILE", Value: fmt.Sprintf("/%s/%s", c.cfg.PrometheusMetricsCABundle.Name, corev1.TLSCertKey)},
+			)
+		}
 		nodeEnv = append(nodeEnv, extraNodeEnv...)
 	}
 
@@ -1559,7 +1629,7 @@ func (c *nodeComponent) nodeMetricsService() *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "calico-node-metrics",
+			Name:      CalicoNodeMetricsService,
 			Namespace: common.CalicoNamespace,
 			Labels:    map[string]string{"k8s-app": "calico-node"},
 		},

@@ -788,7 +788,7 @@ func (c *complianceComponent) complianceServerVolumeMounts() []corev1.VolumeMoun
 func (c *complianceComponent) complianceServerVolumes() []corev1.Volume {
 	defaultMode := int32(420)
 
-	serverVolumeSource := certificateVolumeSource(c.cfg.Installation.CertificateManagement, ComplianceServerCertSecret)
+	serverVolumeSource := CertificateVolumeSource(c.cfg.Installation.CertificateManagement, ComplianceServerCertSecret)
 	if c.cfg.Installation.CertificateManagement == nil {
 		serverVolumeSource.Secret.Items = []corev1.KeyToPath{
 			{

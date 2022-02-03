@@ -322,7 +322,7 @@ func (pc *packetCaptureApiComponent) healthProbe() *corev1.Probe {
 func (pc *packetCaptureApiComponent) volumes() []corev1.Volume {
 	var volumes = []corev1.Volume{{
 		Name:         PacketCaptureCertSecret,
-		VolumeSource: certificateVolumeSource(pc.cfg.Installation.CertificateManagement, PacketCaptureCertSecret),
+		VolumeSource: CertificateVolumeSource(pc.cfg.Installation.CertificateManagement, PacketCaptureCertSecret),
 	}}
 
 	if pc.cfg.KeyValidatorConfig != nil {

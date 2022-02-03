@@ -232,7 +232,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	}
 
 	var userDefinedCoreRuleSet *corev1.ConfigMap = nil
-	if r.isWafEnabled(applicationLayer.Spec.WafSettings) {
+	if r.isWafEnabled(&applicationLayer.Spec) {
 		if userDefinedCoreRuleSet, err = getUserDefinedCoreRuleset(ctx, r.client); err != nil {
 			reqLogger.Error(err, "Error getting Web Application Firewall ModSecurity rule set")
 			r.status.SetDegraded("Error getting Web Application Firewall ModSecurity rule set", err.Error())
@@ -250,7 +250,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		PullSecrets:            pullSecrets,
 		Installation:           installation,
 		OsType:                 rmeta.OSTypeLinux,
-		WafEnabled:             r.isWafEnabled(applicationLayer.Spec.WafSettings),
+		WafEnabled:             r.isWafEnabled(&applicationLayer.Spec),
 		LogsEnabled:            r.isLogsCollectionEnabled(lcSpec),
 		LogRequestsPerInterval: lcSpec.LogRequestsPerInterval,
 		LogIntervalSeconds:     lcSpec.LogIntervalSeconds,
@@ -310,7 +310,7 @@ func updateApplicationLayerWithDefaults(al *operatorv1.ApplicationLayer) {
 func validateApplicationLayer(al *operatorv1.ApplicationLayer) error {
 
 	// If ApplicationLayer spec exists then one of its features should be set.
-	if al.Spec.LogCollection == nil && al.Spec.WafSettings == nil {
+	if al.Spec.LogCollection == nil && al.Spec.WebApplicationFirewall == nil {
 		return fmt.Errorf("ApplicationLayer is not configured")
 	}
 
@@ -393,8 +393,9 @@ func (r *ReconcileApplicationLayer) isLogsCollectionEnabled(l7Spec *operatorv1.L
 	return l7Spec != nil && l7Spec.CollectLogs != nil && *l7Spec.CollectLogs == operatorv1.L7LogCollectionEnabled
 }
 
-func (r *ReconcileApplicationLayer) isWafEnabled(wafSpec *operatorv1.WafSpec) bool {
-	return wafSpec != nil && wafSpec.EnableFirewall != nil && *wafSpec.EnableFirewall == operatorv1.WafEnabled
+func (r *ReconcileApplicationLayer) isWafEnabled(applicationLayerSpec *operatorv1.ApplicationLayerSpec) bool {
+	return applicationLayerSpec.WebApplicationFirewall != nil &&
+		*applicationLayerSpec.WebApplicationFirewall == operatorv1.WafEnabled
 }
 
 // patchFelixTproxyMode takes all application layer specs as arguments and patches felix config.
@@ -412,7 +413,7 @@ func (r *ReconcileApplicationLayer) patchFelixTproxyMode(ctx context.Context, al
 	var tproxyMode crdv1.TPROXYModeOption
 	patchFrom := client.MergeFrom(fc.DeepCopy())
 
-	if al != nil && (r.isLogsCollectionEnabled(al.Spec.LogCollection) || r.isWafEnabled(al.Spec.WafSettings)) {
+	if al != nil && (r.isLogsCollectionEnabled(al.Spec.LogCollection) || r.isWafEnabled(&al.Spec)) {
 		tproxyMode = crdv1.TPROXYModeOptionEnabled
 	} else {
 		tproxyMode = crdv1.TPROXYModeOptionDisabled

@@ -1,6 +1,6 @@
 static_resources:
   listeners:
-    - name: inbound
+    - name: services
       transparent: true
       address:
         socket_address:
@@ -16,7 +16,7 @@ static_resources:
         - name: envoy.filters.listener.original_src
           typed_config:
             "@type": type.googleapis.com/envoy.extensions.filters.listener.original_src.v3.OriginalSrc
-      filter_chains:
+      filter_chains: &filter_chains
         - filter_chain_match:
             transport_protocol: tls
           filters:
@@ -166,6 +166,24 @@ static_resources:
                         downstream_local_address : "%DOWNSTREAM_LOCAL_ADDRESS%"
                         domain: "%REQ(HOST?:AUTHORITY)%"
                         upstream_local_address: "%UPSTREAM_LOCAL_ADDRESS%"
+    - name: nodeports
+      transparent: true
+      address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 16002 # must be services port + 1
+      listener_filters:
+        - name: envoy.filters.listener.tls_inspector
+          typed_config: {}
+        - name: envoy.filters.listener.http_inspector
+          typed_config: {}
+        - name: envoy.filters.listener.original_dst
+          typed_config: {}
+        - name: envoy.filters.listener.original_src
+          typed_config:
+            "@type": type.googleapis.com/envoy.extensions.filters.listener.original_src.v3.OriginalSrc
+            mark: 0x4000 # must be the same as the mark resulting from kube-proxy's masq bit
+      filter_chains: *filter_chains
   clusters:
     - name: original_dst_cluster
       type: ORIGINAL_DST

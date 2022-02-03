@@ -142,7 +142,7 @@ func CSRClusterRoleBinding(name, namespace string) *rbacv1.ClusterRoleBinding {
 	return crb
 }
 
-func certificateVolumeSource(certificateManagement *operatorv1.CertificateManagement, secretName string) corev1.VolumeSource {
+func CertificateVolumeSource(certificateManagement *operatorv1.CertificateManagement, secretName string) corev1.VolumeSource {
 	var defaultMode int32 = 420
 	if certificateManagement != nil {
 		return corev1.VolumeSource{

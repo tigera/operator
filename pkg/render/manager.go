@@ -353,7 +353,7 @@ func (c *managerComponent) managerVolumes() []corev1.Volume {
 	if c.cfg.Installation.CertificateManagement != nil {
 		certificateManagement = c.cfg.Installation.CertificateManagement
 	}
-	tlsVolumeSource := certificateVolumeSource(certificateManagement, ManagerTLSSecretName)
+	tlsVolumeSource := CertificateVolumeSource(certificateManagement, ManagerTLSSecretName)
 	v := []corev1.Volume{
 		{
 			Name:         ManagerTLSSecretName,

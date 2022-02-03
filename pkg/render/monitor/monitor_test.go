@@ -56,9 +56,15 @@ var _ = Describe("monitor rendering tests", func() {
 			PullSecrets: []*corev1.Secret{
 				{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 			},
-			TLSSecret: &corev1.Secret{
+			ServerTLSSecret: &corev1.Secret{
 				TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{Name: monitor.PrometheusTLSSecretName, Namespace: common.OperatorNamespace()}},
+			ClientTLSSecret: &corev1.Secret{
+				TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: monitor.PrometheusClientTLSSecretName, Namespace: common.OperatorNamespace()}},
+			TrustedCertBundle: &corev1.ConfigMap{
+				TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: render.PrometheusCABundle, Namespace: common.TigeraPrometheusNamespace}},
 			AlertmanagerConfigSecret: defaultAlertmanagerConfigSecret,
 			ClusterDomain:            "example.org",
 		}
@@ -78,11 +84,13 @@ var _ = Describe("monitor rendering tests", func() {
 			kind    string
 		}{
 			{"tigera-prometheus", "", "", "v1", "Namespace"},
+			{render.PrometheusCABundle, common.TigeraPrometheusNamespace, "", "v1", "ConfigMap"},
 			{"tigera-prometheus-role", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "Role"},
 			{"tigera-prometheus-role-binding", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding"},
 			{"tigera-pull-secret", common.TigeraPrometheusNamespace, "", "", ""},
 			{"alertmanager-calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Secret"},
 			{monitor.PrometheusTLSSecretName, common.TigeraPrometheusNamespace, "", "v1", "Secret"},
+			{monitor.PrometheusClientTLSSecretName, common.TigeraPrometheusNamespace, "", "v1", "Secret"},
 			{"calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Service"},
 			{"calico-node-alertmanager", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.AlertmanagersKind},
 			{"prometheus", common.TigeraPrometheusNamespace, "", "v1", "ServiceAccount"},
@@ -92,7 +100,7 @@ var _ = Describe("monitor rendering tests", func() {
 			{"tigera-prometheus-dp-rate", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusRuleKind},
 			{"calico-node-monitor", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
 			{"elasticsearch-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
-			{"fluentd-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PodMonitorsKind},
+			{"fluentd-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
 			{"prometheus-http-api", common.TigeraPrometheusNamespace, "", "v1", "Service"},
 			{name: monitor.TigeraPrometheusObjectName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: monitor.TigeraPrometheusObjectName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -105,7 +113,7 @@ var _ = Describe("monitor rendering tests", func() {
 			rtest.ExpectResource(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 
-		Expect(toDelete).To(HaveLen(1))
+		Expect(toDelete).To(HaveLen(2))
 
 		obj := toDelete[0]
 		rtest.ExpectResource(obj, "elasticearch-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind)
@@ -215,19 +223,19 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(prometheusServiceObj.Spec.Ports[0].TargetPort).To(Equal(intstr.FromInt(9095)))
 
 		// PodMonitor
-		podmonitorObj, ok := rtest.GetResource(toCreate, monitor.FluentdMetrics, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PodMonitorsKind).(*monitoringv1.PodMonitor)
+		servicemonitorObj, ok := rtest.GetResource(toCreate, monitor.FluentdMetrics, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind).(*monitoringv1.ServiceMonitor)
 		Expect(ok).To(BeTrue())
-		Expect(podmonitorObj.ObjectMeta.Labels).To(HaveLen(1))
-		Expect(podmonitorObj.ObjectMeta.Labels["team"]).To(Equal("network-operators"))
-		Expect(podmonitorObj.Spec.Selector.MatchLabels).To(HaveLen(1))
-		Expect(podmonitorObj.Spec.Selector.MatchLabels["k8s-app"]).To(Equal("fluentd-node"))
-		Expect(podmonitorObj.Spec.NamespaceSelector.MatchNames).To(HaveLen(1))
-		Expect(podmonitorObj.Spec.NamespaceSelector.MatchNames[0]).To(Equal("tigera-fluentd"))
-		Expect(podmonitorObj.Spec.PodMetricsEndpoints).To(HaveLen(1))
-		Expect(podmonitorObj.Spec.PodMetricsEndpoints[0].HonorLabels).To(BeTrue())
-		Expect(podmonitorObj.Spec.PodMetricsEndpoints[0].Interval).To(Equal("5s"))
-		Expect(podmonitorObj.Spec.PodMetricsEndpoints[0].Port).To(Equal("metrics-port"))
-		Expect(podmonitorObj.Spec.PodMetricsEndpoints[0].ScrapeTimeout).To(Equal("5s"))
+		Expect(servicemonitorObj.ObjectMeta.Labels).To(HaveLen(1))
+		Expect(servicemonitorObj.ObjectMeta.Labels["team"]).To(Equal("network-operators"))
+		Expect(servicemonitorObj.Spec.Selector.MatchLabels).To(HaveLen(1))
+		Expect(servicemonitorObj.Spec.Selector.MatchLabels["k8s-app"]).To(Equal("fluentd-node"))
+		Expect(servicemonitorObj.Spec.NamespaceSelector.MatchNames).To(HaveLen(1))
+		Expect(servicemonitorObj.Spec.NamespaceSelector.MatchNames[0]).To(Equal("tigera-fluentd"))
+		Expect(servicemonitorObj.Spec.Endpoints).To(HaveLen(1))
+		Expect(servicemonitorObj.Spec.Endpoints[0].HonorLabels).To(BeTrue())
+		Expect(servicemonitorObj.Spec.Endpoints[0].Interval).To(Equal("5s"))
+		Expect(servicemonitorObj.Spec.Endpoints[0].Port).To(Equal("fluentd-metrics-port"))
+		Expect(servicemonitorObj.Spec.Endpoints[0].ScrapeTimeout).To(Equal("5s"))
 
 		// PrometheusRule
 		prometheusruleObj, ok := rtest.GetResource(toCreate, monitor.TigeraPrometheusDPRate, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusRuleKind).(*monitoringv1.PrometheusRule)
@@ -245,7 +253,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Annotations["description"]).To(Equal("{{$labels.instance}} with calico-node pod {{$labels.pod}} has been denying packets at a fast rate {{$labels.sourceIp}} by policy {{$labels.policy}}."))
 
 		// ServiceMonitor
-		servicemonitorObj, ok := rtest.GetResource(toCreate, monitor.CalicoNodeMonitor, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind).(*monitoringv1.ServiceMonitor)
+		servicemonitorObj, ok = rtest.GetResource(toCreate, monitor.CalicoNodeMonitor, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind).(*monitoringv1.ServiceMonitor)
 		Expect(ok).To(BeTrue())
 		Expect(servicemonitorObj.ObjectMeta.Labels).To(HaveLen(1))
 		Expect(servicemonitorObj.ObjectMeta.Labels["team"]).To(Equal("network-operators"))
@@ -336,7 +344,7 @@ var _ = Describe("monitor rendering tests", func() {
 			},
 			dns.DefaultClusterDomain)
 		cfg.KeyValidatorConfig = dexCfg
-		cfg.TLSSecret = &corev1.Secret{
+		cfg.ServerTLSSecret = &corev1.Secret{
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      monitor.PrometheusTLSSecretName,
@@ -362,11 +370,13 @@ var _ = Describe("monitor rendering tests", func() {
 			kind    string
 		}{
 			{"tigera-prometheus", "", "", "v1", "Namespace"},
+			{render.PrometheusCABundle, common.TigeraPrometheusNamespace, "", "v1", "ConfigMap"},
 			{"tigera-prometheus-role", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "Role"},
 			{"tigera-prometheus-role-binding", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding"},
 			{"tigera-pull-secret", common.TigeraPrometheusNamespace, "", "", ""},
 			{"alertmanager-calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Secret"},
 			{monitor.PrometheusTLSSecretName, common.TigeraPrometheusNamespace, "", "v1", "Secret"},
+			{monitor.PrometheusClientTLSSecretName, common.TigeraPrometheusNamespace, "", "v1", "Secret"},
 			{"calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Service"},
 			{"calico-node-alertmanager", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.AlertmanagersKind},
 			{"prometheus", common.TigeraPrometheusNamespace, "", "v1", "ServiceAccount"},
@@ -376,7 +386,7 @@ var _ = Describe("monitor rendering tests", func() {
 			{"tigera-prometheus-dp-rate", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusRuleKind},
 			{"calico-node-monitor", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
 			{"elasticsearch-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
-			{"fluentd-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PodMonitorsKind},
+			{"fluentd-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
 			{"prometheus-http-api", common.TigeraPrometheusNamespace, "", "v1", "Service"},
 			{monitor.TigeraPrometheusObjectName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
 			{monitor.TigeraPrometheusObjectName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
@@ -390,7 +400,7 @@ var _ = Describe("monitor rendering tests", func() {
 			rtest.ExpectResource(obj, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 
-		Expect(toDelete).To(HaveLen(1))
+		Expect(toDelete).To(HaveLen(2))
 
 		// Prometheus
 		prometheusObj, ok := rtest.GetResource(toCreate, monitor.CalicoNodePrometheus, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind).(*monitoringv1.Prometheus)
@@ -411,8 +421,18 @@ var _ = Describe("monitor rendering tests", func() {
 				ValueFrom: nil,
 			},
 			{
-				Name:      "TLS_SECRET_HASH_ANNOTATION",
+				Name:      "TLS_SERVER_SECRET_HASH_ANNOTATION",
 				Value:     "f09a0e0667b55a79c84a46b17ff28e4683cd072f",
+				ValueFrom: nil,
+			},
+			{
+				Name:      "TLS_CLIENT_SECRET_HASH_ANNOTATION",
+				Value:     "0e6ae3fec848d64b4647532abed2256acca56b85",
+				ValueFrom: nil,
+			},
+			{
+				Name:      "TLS_CA_BUNDLE_HASH_ANNOTATION",
+				Value:     "0e6ae3fec848d64b4647532abed2256acca56b85",
 				ValueFrom: nil,
 			},
 			{

@@ -289,6 +289,11 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 			return fmt.Errorf("tigera-installation-controller failed to watch secret '%s' in '%s' namespace: %w", render.ManagerInternalTLSSecretName, common.OperatorNamespace(), err)
 		}
 
+		// Watch the internal manager TLS secret in the calico namespace, where it's copied for kube-controllers.
+		if err = utils.AddSecretsWatch(c, "calico-node-prometheus-tls", common.TigeraPrometheusNamespace); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch secret '%s' in '%s' namespace: %w", render.ManagerInternalTLSSecretName, common.OperatorNamespace(), err)
+		}
+
 		//watch for change to primary resource LogCollector
 		err = c.Watch(&source.Kind{Type: &operator.LogCollector{}}, &handler.EnqueueRequestForObject{})
 		if err != nil {
@@ -1089,6 +1094,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Here, we'll check the default felixconfiguration to see if the user is specifying
 	// a non-default port, and use that value if they are.
 	nodeReporterMetricsPort := defaultNodeReporterPort
+	var metricsBundle *corev1.ConfigMap
+	var nodePrometheusTLS *corev1.Secret
 	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
 
 		// Determine the port to use for nodeReporter metrics.
@@ -1099,6 +1106,48 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if nodeReporterMetricsPort == 0 {
 			err := errors.New("felixConfiguration prometheusReporterPort=0 not supported")
 			r.SetDegraded("invalid metrics port", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		nodePrometheusTLS, err = utils.ValidateCertPair(r.client,
+			common.OperatorNamespace(),
+			render.NodePrometheusTLSServerSecret,
+			corev1.TLSPrivateKeyKey,
+			corev1.TLSCertKey,
+		)
+		if err != nil {
+			log.Error(err, "Invalid TLS Cert")
+			r.status.SetDegraded("Error validating TLS certificate", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		var pems [][]byte
+		if instance.Spec.CertificateManagement == nil {
+			if nodePrometheusTLS == nil {
+				dnsNames := dns.GetServiceDNSNames(render.CalicoNodeMetricsService, common.CalicoNamespace, r.clusterDomain)
+				nodePrometheusTLS, err = secret.CreateTLSSecret(nil,
+					render.NodePrometheusTLSServerSecret,
+					common.OperatorNamespace(),
+					corev1.TLSPrivateKeyKey,
+					corev1.TLSCertKey,
+					rmeta.DefaultCertificateDuration,
+					[]crypto.CertificateExtensionFunc{tls.SetServerAuth, tls.SetClientAuth},
+					dnsNames...,
+				)
+				if err != nil {
+					log.Error(err, "Error creating TLS certificate")
+					r.status.SetDegraded("Error creating TLS certificate", err.Error())
+					return reconcile.Result{}, err
+				}
+			}
+			// Let the metrics server trust itself, so the health check does not fail.
+			pems = append(pems, nodePrometheusTLS.Data[corev1.TLSCertKey])
+		}
+
+		metricsBundle, err = utils.GetPrometheusCertificateBundle(ctx, r.client, common.CalicoNamespace, instance.Spec.CertificateManagement, pems...)
+		if err != nil {
+			log.Error(err, "Unable to create a metrics certificate bundle")
+			r.status.SetDegraded("Unable to create a metrics certificate bundle", err.Error())
 			return reconcile.Result{}, err
 		}
 	}
@@ -1208,18 +1257,20 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	// Build a configuration for rendering calico/node.
 	nodeCfg := render.NodeConfiguration{
-		K8sServiceEp:            k8sapi.Endpoint,
-		Installation:            &instance.Spec,
-		AmazonCloudIntegration:  aci,
-		LogCollector:            logCollector,
-		BirdTemplates:           birdTemplates,
-		TLS:                     typhaNodeTLS,
-		ClusterDomain:           r.clusterDomain,
-		NodeReporterMetricsPort: nodeReporterMetricsPort,
-		BGPLayouts:              bgpLayout,
-		NodeAppArmorProfile:     nodeAppArmorProfile,
-		MigrateNamespaces:       needNsMigration,
-		Terminating:             nodeTerminating,
+		K8sServiceEp:              k8sapi.Endpoint,
+		Installation:              &instance.Spec,
+		AmazonCloudIntegration:    aci,
+		LogCollector:              logCollector,
+		BirdTemplates:             birdTemplates,
+		TLS:                       typhaNodeTLS,
+		ClusterDomain:             r.clusterDomain,
+		NodeReporterMetricsPort:   nodeReporterMetricsPort,
+		BGPLayouts:                bgpLayout,
+		NodeAppArmorProfile:       nodeAppArmorProfile,
+		MigrateNamespaces:         needNsMigration,
+		Terminating:               nodeTerminating,
+		PrometheusServerTLS:       nodePrometheusTLS,
+		PrometheusMetricsCABundle: metricsBundle,
 	}
 	components = append(components, render.Node(&nodeCfg))
 
@@ -1241,6 +1292,17 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		Terminating:  terminating,
 	}
 	components = append(components, render.Windows(&windowsCfg))
+
+	if nodePrometheusTLS != nil {
+		oprIssued, err := utils.IsCertOperatorIssued(nodePrometheusTLS.Data[corev1.TLSCertKey])
+		if err != nil {
+			reqLogger.Error(err, "Error checking certificate issuer")
+			r.status.SetDegraded("Error checking certificate issuer", err.Error())
+		}
+		if oprIssued {
+			components = append(components, render.NewPassthrough(nodePrometheusTLS))
+		}
+	}
 
 	imageSet, err := imageset.GetImageSet(ctx, r.client, instance.Spec.Variant)
 	if err != nil {

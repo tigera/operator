@@ -86,6 +86,11 @@ spec:
                 required:
                 - nodes
                 type: object
+              user:
+                description: The user associated with these settings. This is filled
+                  in by the APIServer on a create request if the owning group is filtered
+                  by user. Cannot be modified.
+                type: string
               view:
                 description: View data. One of View, Layer or Dashboard should be
                   specified.

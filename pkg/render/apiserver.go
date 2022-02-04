@@ -18,10 +18,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tigera/operator/pkg/render/common/podaffinity"
-	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
@@ -32,12 +28,17 @@ import (
 	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/ptr"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/podaffinity"
+	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
@@ -240,6 +241,10 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		c.tieredPolicyPassthruClusterRolebinding(),
 		c.uiSettingsPassthruClusterRole(),
 		c.uiSettingsPassthruClusterRolebinding(),
+		c.clusterWideSettingsGroup(),
+		c.userSpecificSettingsGroup(),
+		c.clusterWideTigeraLayer(),
+		c.clusterWideDefaultView(),
 	}
 
 	// Namespaced enterprise-only objects.
@@ -1333,7 +1338,6 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 				"stagednetworkpolicies",
 				"tier.stagednetworkpolicies",
 				"stagedkubernetesnetworkpolicies",
-				"uisettingsgroup/data",
 			},
 			Verbs: []string{"watch", "list"},
 		},
@@ -1402,6 +1406,27 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			Resources: []string{"authorizationreviews"},
 			Verbs:     []string{"create"},
 		},
+		// User can:
+		// - read UISettings in the cluster-settings group
+		// - read and write UISettings in the user-settings group
+		{
+			APIGroups:     []string{"projectcalico.org"},
+			Resources:     []string{"uisettingsgroups"},
+			Verbs:         []string{"get"},
+			ResourceNames: []string{"cluster-settings", "user-settings"},
+		},
+		{
+			APIGroups:     []string{"projectcalico.org"},
+			Resources:     []string{"uisettingsgroups/data"},
+			Verbs:         []string{"get", "list", "watch"},
+			ResourceNames: []string{"cluster-settings"},
+		},
+		{
+			APIGroups:     []string{"projectcalico.org"},
+			Resources:     []string{"uisettingsgroups/data"},
+			Verbs:         []string{"*"},
+			ResourceNames: []string{"user-settings"},
+		},
 	}
 
 	// Privileges for lma.tigera.io have no effect on managed clusters.
@@ -1457,7 +1482,6 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 				"networksets",
 				"managedclusters",
 				"packetcaptures",
-				"uisettingsgroup/data",
 			},
 			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
 		},
@@ -1527,6 +1551,21 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"authorizationreviews"},
 			Verbs:     []string{"create"},
+		},
+		// User can:
+		// - read and write UISettings in the cluster-settings group, and rename the group
+		// - read and write UISettings in the user-settings group, and rename the group
+		{
+			APIGroups:     []string{"projectcalico.org"},
+			Resources:     []string{"uisettingsgroups"},
+			Verbs:         []string{"get", "patch", "update"},
+			ResourceNames: []string{"cluster-settings", "user-settings"},
+		},
+		{
+			APIGroups:     []string{"projectcalico.org"},
+			Resources:     []string{"uisettingsgroups/data"},
+			Verbs:         []string{"*"},
+			ResourceNames: []string{"cluster-settings", "user-settings"},
 		},
 	}
 
@@ -1683,6 +1722,106 @@ rules:
 		},
 		Data: map[string]string{
 			"config": defaultAuditPolicy,
+		},
+	}
+}
+
+// clusterWideSettingsGroup returns a UISettingsGroup with the description "cluster-wide settings"
+//
+// Calico Enterprise only
+func (c *apiServerComponent) clusterWideSettingsGroup() *v3.UISettingsGroup {
+	return &v3.UISettingsGroup{
+		TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cluster-settings",
+		},
+		Spec: v3.UISettingsGroupSpec{
+			Description: "cluster-wide settings",
+		},
+	}
+}
+
+// userSpecificSettingsGroup returns a UISettingsGroup with the description "user settings"
+//
+// Calico Enterprise only
+func (c *apiServerComponent) userSpecificSettingsGroup() *v3.UISettingsGroup {
+	return &v3.UISettingsGroup{
+		TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "user-settings",
+		},
+		Spec: v3.UISettingsGroupSpec{
+			Description: "user settings",
+			FilterType:  v3.FilterTypeUser,
+		},
+	}
+}
+
+// clusterWideTigeraLayer returns a UISettings layer belonging to the cluster-wide settings group that contains all of
+// the tigera namespaces.
+//
+// Calico Enterprise only
+func (c *apiServerComponent) clusterWideTigeraLayer() *v3.UISettings {
+	namespaces := []string{
+		"tigera-compliance",
+		"tigera-dex",
+		"tigera-dpi",
+		"tigera-eck-operator",
+		"tigera-elasticsearch",
+		"tigera-fluentd",
+		"tigera-guardian",
+		"tigera-intrusion-detection",
+		"tigera-kibana",
+		"tigera-manager",
+		"tigera-operator",
+		"tigera-packetcapture",
+		"tigera-prometheus",
+		"tigera-system",
+		"calico-system",
+	}
+	nodes := make([]v3.UIGraphNode, len(namespaces))
+	for i := range namespaces {
+		ns := namespaces[i]
+		nodes[i] = v3.UIGraphNode{
+			ID:   "namespace/" + ns,
+			Type: "namespace",
+			Name: ns,
+		}
+	}
+
+	return &v3.UISettings{
+		TypeMeta: metav1.TypeMeta{Kind: "UISettings", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cluster-settings.layer.tigera-infrastructure",
+		},
+		Spec: v3.UISettingsSpec{
+			Group:       "cluster-settings",
+			Description: "tigera infrastructure",
+			Layer: &v3.UIGraphLayer{
+				Nodes: nodes,
+			},
+		},
+	}
+}
+
+// clusterWideDefaultView returns a UISettings view belonging to the cluster-wide settings group that shows everything
+// and uses the tigera-infrastructure layer..
+//
+// Calico Enterprise only
+func (c *apiServerComponent) clusterWideDefaultView() *v3.UISettings {
+	return &v3.UISettings{
+		TypeMeta: metav1.TypeMeta{Kind: "UISettings", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cluster-settings.view.default",
+		},
+		Spec: v3.UISettingsSpec{
+			Group:       "cluster-settings",
+			Description: "default",
+			View: &v3.UIGraphView{
+				Layers: []string{
+					"cluster-settings.layer.tigera-infrastructure",
+				},
+			},
 		},
 	}
 }

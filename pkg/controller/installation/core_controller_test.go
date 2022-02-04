@@ -471,7 +471,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentTigeraNode.Image,
 					components.ComponentTigeraNode.Version)))
-			Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(3))
+			Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(4))
 			fv := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver")
 			Expect(fv).ToNot(BeNil())
 			Expect(fv.Image).To(Equal(
@@ -487,6 +487,12 @@ var _ = Describe("Testing core-controller installation", func() {
 			csrinit = test.GetContainer(ds.Spec.Template.Spec.InitContainers, render.CSRInitContainerName)
 			Expect(csrinit).ToNot(BeNil())
 			Expect(csrinit.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentCSRInitContainer.Image,
+					components.ComponentCSRInitContainer.Version)))
+			csrinit2 := test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-%s", render.CalicoNodeMetricsService, render.CSRInitContainerName))
+			Expect(csrinit2).ToNot(BeNil())
+			Expect(csrinit2.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentCSRInitContainer.Image,
 					components.ComponentCSRInitContainer.Version)))
@@ -564,7 +570,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentTigeraNode.Image,
 					"sha256:tigeracnxnodehash")))
-			Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(3))
+			Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(4))
 			fv := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver")
 			Expect(fv).ToNot(BeNil())
 			Expect(fv.Image).To(Equal(
@@ -580,6 +586,12 @@ var _ = Describe("Testing core-controller installation", func() {
 			csrinit = test.GetContainer(ds.Spec.Template.Spec.InitContainers, render.CSRInitContainerName)
 			Expect(csrinit).ToNot(BeNil())
 			Expect(csrinit.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentCSRInitContainer.Image,
+					"sha256:calicocsrinithash")))
+			csrinit2 := test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-%s", render.CalicoNodeMetricsService, render.CSRInitContainerName))
+			Expect(csrinit2).ToNot(BeNil())
+			Expect(csrinit2.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentCSRInitContainer.Image,
 					"sha256:calicocsrinithash")))

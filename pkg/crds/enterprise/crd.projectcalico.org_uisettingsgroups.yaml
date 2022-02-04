@@ -52,6 +52,21 @@ spec:
                   and groups that can access the   storefront set of applications
                   - "user" if these settings are accessible to only a single user'
                 type: string
+              filterType:
+                description: The type of filter to use when listing and watching the
+                  UISettings associated with this group. If set to None a List/watch
+                  of UISettings in this group will return all UISettings. If set to
+                  User a list/watch of UISettings in this group will return only UISettings
+                  created by the user making the request. For settings groups that
+                  are specific to users and where multiple users may access the settings
+                  in this group we recommend setting this to "User" to avoid cluttering
+                  up the UI with settings for other users. Note this is only a filter.
+                  Full lockdown of UISettings for specific users should be handled
+                  using appropriate RBAC.
+                enum:
+                - None
+                - User
+                type: string
             required:
             - description
             type: object

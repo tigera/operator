@@ -350,7 +350,7 @@ func (d *dexConfig) RequiredEnv(string) []corev1.EnvVar {
 
 func (d *dexConfig) RequiredVolumes() []corev1.Volume {
 
-	tlsVolumeSource := certificateVolumeSource(d.certificateManagement, DexTLSSecretName)
+	tlsVolumeSource := CertificateVolumeSource(d.certificateManagement, DexTLSSecretName)
 	defaultMode := int32(420)
 	volumes := []corev1.Volume{
 		{

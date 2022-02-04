@@ -74,6 +74,13 @@ func addServiceMonitorElasticsearchWatch(c controller.Controller) error {
 	})
 }
 
+func addServiceMonitorFluentdWatch(c controller.Controller) error {
+	return utils.AddNamespacedWatch(c, &monitoringv1.ServiceMonitor{
+		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: monitor.MonitoringAPIVersion},
+		ObjectMeta: metav1.ObjectMeta{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace},
+	})
+}
+
 func addWatch(c controller.Controller) error {
 	var err error
 	if err = addAlertmanagerWatch(c); err != nil {
@@ -96,8 +103,8 @@ func addWatch(c controller.Controller) error {
 		return fmt.Errorf("failed to watch ServiceMonitor elasticsearch-metrics resource: %w", err)
 	}
 
-	if err = addPodMonitorWatch(c); err != nil {
-		return fmt.Errorf("failed to watch PodMonitor resource: %w", err)
+	if err = addServiceMonitorFluentdWatch(c); err != nil {
+		return fmt.Errorf("failed to watch ServiceMonitor fluentd-metrics resource: %w", err)
 	}
 
 	if err = utils.AddSecretsWatch(c, monitor.AlertmanagerConfigSecret, common.OperatorNamespace()); err != nil {

@@ -27,12 +27,33 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tigera/operator/pkg/render/kubecontrollers"
-
+	"github.com/go-logr/logr"
+	configv1 "github.com/openshift/api/config/v1"
+	"github.com/openshift/library-go/pkg/crypto"
+	apps "k8s.io/api/apps/v1"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/active"
@@ -53,32 +74,8 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/tls"
-
-	configv1 "github.com/openshift/api/config/v1"
-	"github.com/openshift/library-go/pkg/crypto"
-
-	"github.com/go-logr/logr"
-	apps "k8s.io/api/apps/v1"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/intstr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const (
@@ -261,6 +258,11 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 
 		// Watch the internal manager TLS secret in the calico namespace, where it's copied for kube-controllers.
 		if err = utils.AddSecretsWatch(c, render.ManagerInternalTLSSecretName, common.CalicoNamespace); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch secret '%s' in '%s' namespace: %w", render.ManagerInternalTLSSecretName, common.OperatorNamespace(), err)
+		}
+
+		// Watch the internal manager TLS secret in the calico namespace, where it's copied for kube-controllers.
+		if err = utils.AddSecretsWatch(c, "calico-node-prometheus-tls", common.TigeraPrometheusNamespace); err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch secret '%s' in '%s' namespace: %w", render.ManagerInternalTLSSecretName, common.OperatorNamespace(), err)
 		}
 
@@ -1038,6 +1040,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Here, we'll check the default felixconfiguration to see if the user is specifying
 	// a non-default port, and use that value if they are.
 	nodeReporterMetricsPort := defaultNodeReporterPort
+	var metricsBundle *corev1.ConfigMap
+	var nodePrometheusTLS *corev1.Secret
 	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
 
 		// Determine the port to use for nodeReporter metrics.
@@ -1048,6 +1052,48 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if nodeReporterMetricsPort == 0 {
 			err := errors.New("felixConfiguration prometheusReporterPort=0 not supported")
 			r.SetDegraded("invalid metrics port", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		nodePrometheusTLS, err = utils.ValidateCertPair(r.client,
+			common.OperatorNamespace(),
+			render.NodePrometheusTLSServerSecret,
+			corev1.TLSPrivateKeyKey,
+			corev1.TLSCertKey,
+		)
+		if err != nil {
+			log.Error(err, "Invalid TLS Cert")
+			r.status.SetDegraded("Error validating TLS certificate", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		var pems [][]byte
+		if instance.Spec.CertificateManagement == nil {
+			if nodePrometheusTLS == nil {
+				dnsNames := dns.GetServiceDNSNames(render.CalicoNodeMetricsService, common.CalicoNamespace, r.clusterDomain)
+				nodePrometheusTLS, err = secret.CreateTLSSecret(nil,
+					render.NodePrometheusTLSServerSecret,
+					common.OperatorNamespace(),
+					corev1.TLSPrivateKeyKey,
+					corev1.TLSCertKey,
+					rmeta.DefaultCertificateDuration,
+					[]crypto.CertificateExtensionFunc{tls.SetServerAuth, tls.SetClientAuth},
+					dnsNames...,
+				)
+				if err != nil {
+					log.Error(err, "Error creating TLS certificate")
+					r.status.SetDegraded("Error creating TLS certificate", err.Error())
+					return reconcile.Result{}, err
+				}
+			}
+			// Let the metrics server trust itself, so the health check does not fail.
+			pems = append(pems, nodePrometheusTLS.Data[corev1.TLSCertKey])
+		}
+
+		metricsBundle, err = utils.GetPrometheusCertificateBundle(ctx, r.client, common.CalicoNamespace, instance.Spec.CertificateManagement, pems...)
+		if err != nil {
+			log.Error(err, "Unable to create a metrics certificate bundle")
+			r.status.SetDegraded("Unable to create a metrics certificate bundle", err.Error())
 			return reconcile.Result{}, err
 		}
 	}
@@ -1137,17 +1183,19 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Build a configuration for rendering calico/node.
 	nodeCfg := render.NodeConfiguration{
-		K8sServiceEp:            k8sapi.Endpoint,
-		Installation:            &instance.Spec,
-		AmazonCloudIntegration:  aci,
-		LogCollector:            logCollector,
-		BirdTemplates:           birdTemplates,
-		TLS:                     typhaNodeTLS,
-		ClusterDomain:           r.clusterDomain,
-		NodeReporterMetricsPort: nodeReporterMetricsPort,
-		BGPLayouts:              bgpLayout,
-		NodeAppArmorProfile:     nodeAppArmorProfile,
-		MigrateNamespaces:       needNsMigration,
+		K8sServiceEp:              k8sapi.Endpoint,
+		Installation:              &instance.Spec,
+		AmazonCloudIntegration:    aci,
+		LogCollector:              logCollector,
+		BirdTemplates:             birdTemplates,
+		TLS:                       typhaNodeTLS,
+		ClusterDomain:             r.clusterDomain,
+		NodeReporterMetricsPort:   nodeReporterMetricsPort,
+		BGPLayouts:                bgpLayout,
+		NodeAppArmorProfile:       nodeAppArmorProfile,
+		MigrateNamespaces:         needNsMigration,
+		PrometheusServerTLS:       nodePrometheusTLS,
+		PrometheusMetricsCABundle: metricsBundle,
 	}
 	components = append(components, render.Node(&nodeCfg))
 
@@ -1164,6 +1212,17 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 
 	components = append(components, render.Windows(&instance.Spec))
+
+	if nodePrometheusTLS != nil {
+		oprIssued, err := utils.IsCertOperatorIssued(nodePrometheusTLS.Data[corev1.TLSCertKey])
+		if err != nil {
+			reqLogger.Error(err, "Error checking certificate issuer")
+			r.status.SetDegraded("Error checking certificate issuer", err.Error())
+		}
+		if oprIssued {
+			components = append(components, render.NewPassthrough(nodePrometheusTLS))
+		}
+	}
 
 	imageSet, err := imageset.GetImageSet(ctx, r.client, instance.Spec.Variant)
 	if err != nil {

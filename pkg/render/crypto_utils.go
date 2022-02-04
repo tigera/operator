@@ -153,3 +153,17 @@ func CreateCertificateSecret(caPem []byte, secretName string, namespace string) 
 		},
 	}
 }
+
+// CreateCertificateConfigMap is a convenience method for creating a configmap that contains only a ca or cert to trust.
+func CreateCertificateConfigMap(caPem string, secretName string, namespace string) *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretName,
+			Namespace: namespace,
+		},
+		Data: map[string]string{
+			corev1.TLSCertKey: caPem,
+		},
+	}
+}

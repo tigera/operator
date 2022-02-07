@@ -55,7 +55,7 @@ const (
 	DikastesContainerName            = "dikastes"
 	ModSecurityRulesetVolumeName     = "owasp-ruleset"
 	ModSecurityRulesetConfigMapName  = "owasp-ruleset-config"
-	modSecurityRulesetHashAnnotation = "hash.operator.tigera.io/mod-security"
+	ModSecurityRulesetHashAnnotation = "hash.operator.tigera.io/mod-security"
 	CalicoLogsVolumeName             = "var-log-calico"
 )
 
@@ -180,7 +180,7 @@ func (c *component) daemonset() *appsv1.DaemonSet {
 	}
 
 	if c.config.ModSecurityConfigMap != nil {
-		annots[modSecurityRulesetHashAnnotation] = rmeta.AnnotationHash(c.config.ModSecurityConfigMap.Data)
+		annots[ModSecurityRulesetHashAnnotation] = rmeta.AnnotationHash(c.config.ModSecurityConfigMap.Data)
 	}
 
 	podTemplate := corev1.PodTemplateSpec{

@@ -24,19 +24,19 @@ import (
 type ApplicationLayerSpec struct {
 	// WebApplicationFirewall controls whether or not ModSecurity enforcement is enabled for the cluster.
 	// When enabled, Services may opt-in to having ingress traffic examed by ModSecurity.
-	WebApplicationFirewall *WebApplicationStatusType `json:"webApplicationFirewall,omitempty"`
+	WebApplicationFirewall *WAFStatusType `json:"webApplicationFirewall,omitempty"`
 	// Specification for application layer (L7) log collection.
 	LogCollection *LogCollectionSpec `json:"logCollection,omitempty"`
 }
 
 type LogCollectionStatusType string
-type WebApplicationStatusType string
+type WAFStatusType string
 
 const (
-	WafDisabled             WebApplicationStatusType = "Disabled"
-	WafEnabled              WebApplicationStatusType = "Enabled"
-	L7LogCollectionDisabled LogCollectionStatusType  = "Disabled"
-	L7LogCollectionEnabled  LogCollectionStatusType  = "Enabled"
+	WafDisabled             WAFStatusType           = "Disabled"
+	WafEnabled              WAFStatusType           = "Enabled"
+	L7LogCollectionDisabled LogCollectionStatusType = "Disabled"
+	L7LogCollectionEnabled  LogCollectionStatusType = "Enabled"
 )
 
 type LogCollectionSpec struct {

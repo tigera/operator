@@ -44,7 +44,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	}
 	var replicas int32 = 2
 	installation := &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas}
-	const expectedResourcesNumber = 11
+	const expectedResourcesNumber = 15
 
 	expectedDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
 	expectedDNSNames = append(expectedDNSNames, "localhost")
@@ -71,6 +71,10 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{name: render.PacketCaptureCertSecret, ns: render.ManagerNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: render.PrometheusTLSSecretName, ns: render.ManagerNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-manager", ns: render.ManagerNamespace, group: "apps", version: "v1", kind: "Deployment"},
+			{name: "cluster-settings", ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
+			{name: "user-settings", ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
+			{name: "cluster-settings.layer.tigera-infrastructure", ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
+			{name: "cluster-settings.view.default", ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
 		}
 
 		i := 0
@@ -257,6 +261,10 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{name: render.PacketCaptureCertSecret, ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},
 			{name: render.PrometheusTLSSecretName, ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-manager", ns: "tigera-manager", group: "apps", version: "v1", kind: "Deployment"},
+			{name: "cluster-settings", ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
+			{name: "user-settings", ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
+			{name: "cluster-settings.layer.tigera-infrastructure", ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
+			{name: "cluster-settings.view.default", ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
 		}
 
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -474,6 +482,10 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{name: render.PrometheusTLSSecretName, ns: render.ManagerNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-manager", ns: render.ManagerNamespace, group: "apps", version: "v1", kind: "Deployment"},
 			{"tigera-manager:csr-creator", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
+			{name: "cluster-settings", ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
+			{name: "user-settings", ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
+			{name: "cluster-settings.layer.tigera-infrastructure", ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
+			{name: "cluster-settings.view.default", ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
 		}
 
 		Expect(resources).To(HaveLen(len(expectedResources)))

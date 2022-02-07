@@ -262,5 +262,6 @@ var (
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
 		ComponentTigeraWindows,
+		ComponentDikastes,
 	}
 )

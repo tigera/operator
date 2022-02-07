@@ -233,7 +233,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 
 	var userDefinedCoreRuleSet *corev1.ConfigMap = nil
 	if r.isWAFEnabled(&applicationLayer.Spec) {
-		if userDefinedCoreRuleSet, err = getUserDefinedCoreRuleset(ctx, r.client); err != nil {
+		if userDefinedCoreRuleSet, err = getModSecurityRuleset(ctx, r.client); err != nil {
 			reqLogger.Error(err, "Error getting Web Application Firewall ModSecurity rule set")
 			r.status.SetDegraded("Error getting Web Application Firewall ModSecurity rule set", err.Error())
 			return reconcile.Result{}, err
@@ -317,7 +317,11 @@ func validateApplicationLayer(al *operatorv1.ApplicationLayer) error {
 	return nil
 }
 
-func getUserDefinedCoreRuleset(ctx context.Context, cli client.Client) (*corev1.ConfigMap, error) {
+// getModSecurityRuleset returns 'owasp-ruleset-config' ConfigMap from calico-operator namespace
+// the ConfigMap meant to contains rule set files for ModSecurity library.
+// if the ConfigMap does not exist it will be created and it will be populated
+// with OWASP provided Core Rule Set (cloned from https://github.com/coreruleset/coreruleset/).
+func getModSecurityRuleset(ctx context.Context, cli client.Client) (*corev1.ConfigMap, error) {
 	ruleset := new(corev1.ConfigMap)
 
 	if err := cli.Get(

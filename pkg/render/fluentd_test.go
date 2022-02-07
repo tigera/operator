@@ -17,16 +17,18 @@ package render_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
-	rbacv1 "k8s.io/api/rbac/v1"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 )
 
 var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
@@ -45,6 +47,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			Installation: &operatorv1.InstallationSpec{
 				KubernetesProvider: operatorv1.ProviderNone,
 			},
+			TLS:           rtest.CreateCertSecret(render.FluentdPrometheusTLSSecretName, common.OperatorNamespace()),
+			TrustedBundle: render.CreateCertificateConfigMap("test", render.PrometheusCABundle, render.LogCollectorNamespace),
 		}
 	})
 
@@ -57,6 +61,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-fluentd", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
@@ -64,6 +69,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
 			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: render.PrometheusCABundle, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: render.FluentdPrometheusTLSSecretName, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Secret"},
 		}
 
 		// Should render the correct resources.
@@ -160,6 +167,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "fluentd-node-windows", ns: "tigera-fluentd", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
 			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
@@ -167,6 +175,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		cfg.OSType = rmeta.OSTypeWindows
+		cfg.TrustedBundle = nil
+		cfg.TLS = nil
 		// Should render the correct resources.
 		component := render.Fluentd(cfg)
 		resources, _ := component.Objects()
@@ -261,6 +271,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "log-collector-s3-credentials", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -269,6 +280,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
 			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: render.PrometheusCABundle, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: render.FluentdPrometheusTLSSecretName, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Secret"},
 		}
 
 		// Should render the correct resources.
@@ -326,6 +339,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-fluentd", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
@@ -333,6 +347,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
 			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: render.PrometheusCABundle, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: render.FluentdPrometheusTLSSecretName, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Secret"},
 		}
 
 		var ps int32 = 180
@@ -360,7 +376,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(2))
+		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(4))
 		envs := ds.Spec.Template.Spec.Containers[0].Env
 
 		expectedEnvs := []struct {
@@ -420,6 +436,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "logcollector-splunk-credentials", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
 			{name: "logcollector-splunk-public-certificate", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
@@ -429,6 +446,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
 			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: render.PrometheusCABundle, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: render.FluentdPrometheusTLSSecretName, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Secret"},
 		}
 
 		// Should render the correct resources.
@@ -444,7 +463,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(3))
+		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(5))
 
 		var volnames []string
 		for _, vol := range ds.Spec.Template.Spec.Volumes {
@@ -504,6 +523,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "logcollector-splunk-credentials", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -512,6 +532,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
 			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: render.PrometheusCABundle, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: render.FluentdPrometheusTLSSecretName, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Secret"},
 		}
 
 		// Should render the correct resources.
@@ -575,6 +597,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "fluentd-filters", ns: "tigera-fluentd", group: "", version: "v1", kind: "ConfigMap"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -583,6 +606,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
 			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: render.PrometheusCABundle, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: render.FluentdPrometheusTLSSecretName, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Secret"},
 		}
 
 		// Should render the correct resources.
@@ -613,6 +638,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			kind    string
 		}{
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "eks-log-forwarder", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "eks-log-forwarder", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "eks-log-forwarder", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
@@ -627,6 +653,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			// Daemonset
 			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: render.PrometheusCABundle, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: render.FluentdPrometheusTLSSecretName, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Secret"},
 		}
 
 		fetchInterval := int32(900)

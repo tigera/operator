@@ -17,6 +17,7 @@ package logstorage
 import (
 	"context"
 	"fmt"
+	"github.com/tigera/operator/pkg/render/monitor"
 	"reflect"
 
 	. "github.com/onsi/ginkgo"
@@ -116,6 +117,10 @@ var _ = Describe("LogStorage controller", func() {
 
 		ctx = context.Background()
 		cli = fake.NewFakeClientWithScheme(scheme)
+		Expect(cli.Create(ctx, &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Namespace: common.OperatorNamespace(), Name: monitor.PrometheusClientTLSSecretName},
+			Data:       map[string][]byte{corev1.TLSCertKey: []byte("cert")},
+		})).ShouldNot(HaveOccurred())
 	})
 	Context("Reconcile", func() {
 		Context("Check default logstorage settings", func() {

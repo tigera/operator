@@ -1036,7 +1036,7 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 	volumes = append(volumes,
 		corev1.Volume{
 			Name:         ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant),
-			VolumeSource: certificateVolumeSource(c.cfg.Installation.CertificateManagement, ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant)),
+			VolumeSource: CertificateVolumeSource(c.cfg.Installation.CertificateManagement, ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant)),
 		},
 	)
 

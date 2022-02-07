@@ -3,7 +3,6 @@ kind: ApplicationLayer
 metadata:
   name: tigera-secure
 spec:
-  wafSettings:
-    enableFirewall: False
   logCollection:
     collectLogs: Disabled
+  webApplicationFireawall: Disabled

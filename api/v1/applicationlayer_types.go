@@ -22,7 +22,8 @@ import (
 
 // ApplicationLayerSpec defines the desired state of ApplicationLayer
 type ApplicationLayerSpec struct {
-	// Specification for WAF (Web Application Firewall).
+	// WebApplicationFirewall controls whether or not ModSecurity enforcement is enabled for the cluster.
+	// When enabled, Services may opt-in to having ingress traffic examed by ModSecurity.
 	WebApplicationFirewall *WebApplicationStatusType `json:"webApplicationFirewall,omitempty"`
 	// Specification for application layer (L7) log collection.
 	LogCollection *LogCollectionSpec `json:"logCollection,omitempty"`

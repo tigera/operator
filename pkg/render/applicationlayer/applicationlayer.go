@@ -150,7 +150,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	}
 
 	// If Web Application Firewall is enabled, we need WAF ruleset config map present.
-	if c.config.WafEnabled && c.config.ModSecurityConfigMap != nil {
+	if c.config.WafEnabled {
 		objs = append(objs, c.modSecurityConfigMap())
 	}
 
@@ -414,7 +414,7 @@ func (c *component) modSecurityConfigMap() *corev1.ConfigMap {
 			Labels:    map[string]string{},
 		},
 		Data:       c.config.ModSecurityConfigMap.Data,
-		BinaryData: c.config.envoyConfigMap.BinaryData,
+		BinaryData: c.config.ModSecurityConfigMap.BinaryData,
 	}
 }
 

@@ -154,11 +154,6 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, c.modSecurityConfigMap())
 	}
 
-	// Delete all the objects if L7 features (log/WAF) are not enabled.
-	if !c.config.LogsEnabled && !c.config.WafEnabled {
-		return nil, objs
-	}
-
 	return objs, nil
 }
 

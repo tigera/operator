@@ -328,7 +328,7 @@ func (in *ApplicationLayerSpec) DeepCopyInto(out *ApplicationLayerSpec) {
 	*out = *in
 	if in.WebApplicationFirewall != nil {
 		in, out := &in.WebApplicationFirewall, &out.WebApplicationFirewall
-		*out = new(WebApplicationStatusType)
+		*out = new(WAFStatusType)
 		**out = **in
 	}
 	if in.LogCollection != nil {

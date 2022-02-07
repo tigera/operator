@@ -44,7 +44,7 @@ import (
 
 const (
 	APLName                          = "application-layer"
-	AppSecDaemonsetName              = "l7-log-collector"
+	ApplicationLayerDaemonsetName    = "l7-log-collector"
 	L7CollectorContainerName         = "l7-collector"
 	ProxyContainerName               = "envoy-proxy"
 	EnvoyLogsVolumeName              = "envoy-logs"
@@ -186,7 +186,7 @@ func (c *component) daemonset() *appsv1.DaemonSet {
 	podTemplate := corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: map[string]string{
-				"k8s-app": AppSecDaemonsetName,
+				"k8s-app": ApplicationLayerDaemonsetName,
 			},
 			Annotations: annots,
 		},
@@ -206,11 +206,11 @@ func (c *component) daemonset() *appsv1.DaemonSet {
 	return &appsv1.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      AppSecDaemonsetName,
+			Name:      ApplicationLayerDaemonsetName,
 			Namespace: common.CalicoNamespace,
 		},
 		Spec: appsv1.DaemonSetSpec{
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": AppSecDaemonsetName}},
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": ApplicationLayerDaemonsetName}},
 			Template: podTemplate,
 			UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
 				RollingUpdate: &appsv1.RollingUpdateDaemonSet{

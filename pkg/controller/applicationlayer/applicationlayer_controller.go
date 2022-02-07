@@ -342,7 +342,6 @@ func createDefaultCoreRuleset(ctx context.Context, cli client.Client) (*corev1.C
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      applicationlayer.ModSecurityRulesetConfigMapName,
 			Namespace: common.OperatorNamespace(),
-			Labels:    map[string]string{},
 		},
 		Data: make(map[string]string),
 	}

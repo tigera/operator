@@ -379,24 +379,15 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 // getCertificateBundle creates a configmap with a bundle for mTLS with other components.
 func getCertificateBundle(ctx context.Context, cli client.Client, cm *operatorv1.CertificateManagement) (*corev1.ConfigMap, error) {
 	pem := strings.Builder{}
-	addPem := func(secretName string) error {
+	for _, secretName := range []string{render.NodePrometheusTLSServerSecret, render.FluentdPrometheusTLSSecretName, esmetrics.ElasticsearchMetricsServerTLSSecret} {
 		secret := &corev1.Secret{}
 		err := cli.Get(ctx, types.NamespacedName{Name: secretName, Namespace: common.OperatorNamespace()}, secret)
-		if errors.IsNotFound(err) {
-			if cm == nil {
-				return err
-			}
-		} else if err != nil {
-			return err
-		} else {
+		if err == nil {
 			pem.WriteString(fmt.Sprintf("\n\n# %v\n", secretName))
 			pem.Write(secret.Data[corev1.TLSCertKey])
+		} else if !errors.IsNotFound(err) {
+			return nil, err
 		}
-		return err
-	}
-
-	for _, secret := range []string{render.NodePrometheusTLSServerSecret, render.FluentdPrometheusTLSSecretName, esmetrics.ElasticsearchMetricsServerTLSSecret} {
-		addPem(secret)
 	}
 	if cm != nil {
 		pem.WriteString("\n\n# Certificate management CA cert\n")

@@ -258,7 +258,7 @@ func (c *component) containers() []corev1.Container {
 				"server",
 				"--dial", "/var/run/felix/nodeagent/socket",
 				"--listen", "/var/run/dikastes/dikastes.sock",
-				"--rules", "/etc/waf",
+				"--rules", "/etc/modsecurity-ruleset",
 			},
 			Env: []corev1.EnvVar{
 				{Name: "LOG_LEVEL", Value: "Info"},
@@ -267,7 +267,7 @@ func (c *component) containers() []corev1.Container {
 				{Name: FelixSync, MountPath: "/var/run/felix"},
 				{Name: DikastesSyncVolumeName, MountPath: "/var/run/dikastes"},
 				{Name: CalicoLogsVolumeName, MountPath: "/var/log/calico"},
-				{Name: ModSecurityRulesetVolumeName, MountPath: "/etc/waf", ReadOnly: true},
+				{Name: ModSecurityRulesetVolumeName, MountPath: "/etc/modsecurity-ruleset", ReadOnly: true},
 			},
 			SecurityContext: &corev1.SecurityContext{
 				Privileged: ptr.BoolToPtr(true),

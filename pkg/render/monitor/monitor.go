@@ -654,6 +654,9 @@ func (mc *monitorComponent) serviceMonitorElasticsearch() *monitoringv1.ServiceM
 	}
 }
 
+// serviceMonitorFluentd creates a service monitor to make Prometheus watch Fluentd. Previously, a pod monitor was used.
+// However, the pod monitor does not have all the tls configuration options that we need, namely reading them from the
+// file system, as opposed to getting them from watching kubernetes secrets.
 func (mc *monitorComponent) serviceMonitorFluentd() *monitoringv1.ServiceMonitor {
 	return &monitoringv1.ServiceMonitor{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: MonitoringAPIVersion},

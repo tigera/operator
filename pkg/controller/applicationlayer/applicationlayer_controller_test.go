@@ -130,7 +130,7 @@ var _ = Describe("Application layer controller tests", func() {
 			ds := appsv1.DaemonSet{
 				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      applicationlayer.AppSecDaemonsetName,
+					Name:      applicationlayer.ApplicationLayerDaemonsetName,
 					Namespace: common.CalicoNamespace,
 				},
 			}

@@ -5,3 +5,4 @@ metadata:
 spec:
   logCollection:
     collectLogs: Disabled
+  webApplicationFireawall: Disabled

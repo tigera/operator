@@ -12,13 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:generate go run gen.go
+
 package applicationlayer
 
 import (
+	"bytes"
 	_ "embed"
 	"fmt"
 	"strconv"
 	"strings"
+	"text/template"
 
 	ocsv1 "github.com/openshift/api/security/v1"
 
@@ -39,14 +43,20 @@ import (
 )
 
 const (
-	L7LogCollectorDeamonsetName = "l7-log-collector"
-	L7CollectorContainerName    = "l7-collector"
-	ProxyContainerName          = "envoy-proxy"
-	EnvoyLogsVolumeName         = "envoy-logs"
-	FelixSync                   = "felix-sync"
-	EnvoyConfigMapName          = "envoy-config"
-	EnvoyConfigMapKey           = "envoy-config.yaml"
-	APLName                     = "application-layer"
+	APLName                          = "application-layer"
+	AppSecDaemonsetName              = "l7-log-collector"
+	L7CollectorContainerName         = "l7-collector"
+	ProxyContainerName               = "envoy-proxy"
+	EnvoyLogsVolumeName              = "envoy-logs"
+	EnvoyConfigMapName               = "envoy-config"
+	EnvoyConfigMapKey                = "envoy-config.yaml"
+	FelixSync                        = "felix-sync"
+	DikastesSyncVolumeName           = "dikastes-sync"
+	DikastesContainerName            = "dikastes"
+	ModSecurityRulesetVolumeName     = "owasp-ruleset"
+	ModSecurityRulesetConfigMapName  = "owasp-ruleset-config"
+	ModSecurityRulesetHashAnnotation = "hash.operator.tigera.io/mod-security"
+	CalicoLogsVolumeName             = "var-log-calico"
 )
 
 func ApplicationLayer(
@@ -68,7 +78,11 @@ type Config struct {
 	Installation *operatorv1.InstallationSpec
 	OsType       rmeta.OSType
 
-	// Optional config.
+	// Optional config for WAF.
+	WafEnabled           bool
+	ModSecurityConfigMap *corev1.ConfigMap
+
+	// Optional config for L7 logs.
 	LogsEnabled            bool
 	LogRequestsPerInterval *int64
 	LogIntervalSeconds     *int64
@@ -76,6 +90,7 @@ type Config struct {
 	// Calculated internal fields.
 	proxyImage     string
 	collectorImage string
+	dikastesImage  string
 	envoyConfigMap *corev1.ConfigMap
 }
 
@@ -85,7 +100,7 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := c.config.Installation.ImagePrefix
 
 	if c.config.OsType != c.SupportedOSType() {
-		return fmt.Errorf("l7 log collection is supported only on %s", c.SupportedOSType())
+		return fmt.Errorf("layer 7 features are supported only on %s", c.SupportedOSType())
 	}
 
 	var err error
@@ -96,7 +111,14 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
+
 	c.config.collectorImage, err = components.GetReference(components.ComponentL7Collector, reg, path, prefix, is)
+
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	c.config.dikastesImage, err = components.GetReference(components.ComponentDikastes, reg, path, prefix, is)
 
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
@@ -130,8 +152,13 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, c.securityContextConstraints())
 	}
 
-	// Delete all the objects if logs are not enabled.
-	if !c.config.LogsEnabled {
+	// If Web Application Firewall is enabled, we need WAF ruleset config map present.
+	if c.config.WafEnabled && c.config.ModSecurityConfigMap != nil {
+		objs = append(objs, c.modSecurityConfigMap())
+	}
+
+	// Delete all the objects if L7 features (log/WAF) are not enabled.
+	if !c.config.LogsEnabled && !c.config.WafEnabled {
 		return nil, objs
 	}
 
@@ -152,10 +179,14 @@ func (c *component) daemonset() *appsv1.DaemonSet {
 		annots[EnvoyConfigMapName] = rmeta.AnnotationHash(c.config.envoyConfigMap)
 	}
 
+	if c.config.ModSecurityConfigMap != nil {
+		annots[ModSecurityRulesetHashAnnotation] = rmeta.AnnotationHash(c.config.ModSecurityConfigMap.Data)
+	}
+
 	podTemplate := corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: map[string]string{
-				"k8s-app": L7LogCollectorDeamonsetName,
+				"k8s-app": AppSecDaemonsetName,
 			},
 			Annotations: annots,
 		},
@@ -175,11 +206,11 @@ func (c *component) daemonset() *appsv1.DaemonSet {
 	return &appsv1.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      L7LogCollectorDeamonsetName,
+			Name:      AppSecDaemonsetName,
 			Namespace: common.CalicoNamespace,
 		},
 		Spec: appsv1.DaemonSetSpec{
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": L7LogCollectorDeamonsetName}},
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": AppSecDaemonsetName}},
 			Template: podTemplate,
 			UpdateStrategy: appsv1.DaemonSetUpdateStrategy{
 				RollingUpdate: &appsv1.RollingUpdateDaemonSet{
@@ -214,13 +245,44 @@ func (c *component) containers() []corev1.Container {
 	}
 	containers = append(containers, proxy)
 
-	collector := corev1.Container{
-		Name:         L7CollectorContainerName,
-		Image:        c.config.collectorImage,
-		Env:          c.collectorEnv(),
-		VolumeMounts: c.collectorVolMounts(),
+	if c.config.LogsEnabled { // Log collection specific container
+		collector := corev1.Container{
+			Name:         L7CollectorContainerName,
+			Image:        c.config.collectorImage,
+			Env:          c.collectorEnv(),
+			VolumeMounts: c.collectorVolMounts(),
+		}
+		containers = append(containers, collector)
 	}
-	containers = append(containers, collector)
+
+	if c.config.WafEnabled { // Web Application Firewall (WAF) specific container
+		dikastes := corev1.Container{
+			Name:  DikastesContainerName,
+			Image: c.config.dikastesImage,
+			Command: []string{
+				"/dikastes",
+				"server",
+				"--dial", "/var/run/felix/nodeagent/socket",
+				"--listen", "/var/run/dikastes/dikastes.sock",
+				"--rules", "/etc/waf",
+			},
+			Env: []corev1.EnvVar{
+				{Name: "LOG_LEVEL", Value: "Info"},
+			},
+			VolumeMounts: []corev1.VolumeMount{
+				{Name: FelixSync, MountPath: "/var/run/felix"},
+				{Name: DikastesSyncVolumeName, MountPath: "/var/run/dikastes"},
+				{Name: CalicoLogsVolumeName, MountPath: "/var/log/calico"},
+				{Name: ModSecurityRulesetVolumeName, MountPath: "/etc/waf", ReadOnly: true},
+			},
+			SecurityContext: &corev1.SecurityContext{
+				Privileged: ptr.BoolToPtr(true),
+				RunAsUser:  ptr.Int64ToPtr(0),
+				RunAsGroup: ptr.Int64ToPtr(0),
+			},
+		}
+		containers = append(containers, dikastes)
+	}
 
 	return containers
 }
@@ -286,6 +348,41 @@ func (c *component) volumes() []corev1.Volume {
 		},
 	})
 
+	if c.config.WafEnabled { // Web Application Firewall specific volumes:
+
+		// WAF logs need HostPath volume - logs to be consumed by fluentd.
+		hostPathDirectoryOrCreate := corev1.HostPathDirectoryOrCreate
+		volumes = append(volumes, corev1.Volume{
+			Name: CalicoLogsVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: "/var/log/calico",
+					Type: &hostPathDirectoryOrCreate,
+				},
+			},
+		})
+
+		// Needed for Dikastes' authz check server.
+		volumes = append(volumes, corev1.Volume{
+			Name: DikastesSyncVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		})
+
+		// Needed for ModSecurity library - contains rule set.
+		volumes = append(volumes, corev1.Volume{
+			Name: ModSecurityRulesetVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: ModSecurityRulesetConfigMapName,
+					},
+				},
+			},
+		})
+	}
+
 	return volumes
 }
 
@@ -293,6 +390,15 @@ func (c *component) proxyVolMounts() []corev1.VolumeMount {
 	volumes := []corev1.VolumeMount{
 		{Name: EnvoyConfigMapName, MountPath: "/etc/envoy"},
 		{Name: EnvoyLogsVolumeName, MountPath: "/tmp/"},
+	}
+
+	if c.config.WafEnabled {
+		volumes = append(volumes,
+			corev1.VolumeMount{
+				Name:      DikastesSyncVolumeName,
+				MountPath: "/var/run/dikastes",
+			},
+		)
 	}
 
 	return volumes
@@ -305,10 +411,36 @@ func (c *component) collectorVolMounts() []corev1.VolumeMount {
 	}
 }
 
-//go:embed envoy-config.yaml
-var config string
+func (c *component) modSecurityConfigMap() *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ModSecurityRulesetConfigMapName,
+			Namespace: common.CalicoNamespace,
+			Labels:    map[string]string{},
+		},
+		Data:       c.config.ModSecurityConfigMap.Data,
+		BinaryData: c.config.envoyConfigMap.BinaryData,
+	}
+}
+
+//go:embed envoy-config.yaml.template
+var envoyConfigTemplate string
 
 func (c *component) envoyL7ConfigMap() *corev1.ConfigMap {
+
+	var config bytes.Buffer
+
+	tpl, err := template.New("envoyConfigTemplate").Parse(envoyConfigTemplate)
+	if err != nil {
+		return nil
+	}
+
+	err = tpl.Execute(&config, c.config)
+	if err != nil {
+		return nil
+	}
+
 	return &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -317,7 +449,7 @@ func (c *component) envoyL7ConfigMap() *corev1.ConfigMap {
 			Labels:    map[string]string{},
 		},
 		Data: map[string]string{
-			EnvoyConfigMapKey: config,
+			EnvoyConfigMapKey: config.String(),
 		},
 	}
 }

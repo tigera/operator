@@ -55,6 +55,9 @@ spec:
                     format: int64
                     type: integer
                 type: object
+              webApplicationFirewall:
+                description: Specification for WAF (Web Application Firewall).
+                type: string
             type: object
           status:
             description: ApplicationLayerStatus defines the observed state of ApplicationLayer

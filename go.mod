@@ -36,14 +36,16 @@ require (
 
 replace (
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v13.3.2+incompatible // Required by OLM
-	//github.com/googleapis/gnostic => github.com/googleapis/gnostic v0.5.1
 	github.com/operator-framework/operator-sdk => github.com/operator-framework/operator-sdk v1.0.1
+
+	// Scanners flag anything less than v0.3.6 as having a CVE.
+	golang.org/x/text => golang.org/x/text v0.3.7
 
 	k8s.io/api => k8s.io/api v0.21.7
 	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.21.7
 	k8s.io/apimachinery => k8s.io/apimachinery v0.21.7
 	k8s.io/apiserver => k8s.io/apiserver v0.21.7
-	k8s.io/client-go => k8s.io/client-go v0.21.7 // Required by prometheus-operator
+	k8s.io/client-go => k8s.io/client-go v0.21.7
 	k8s.io/klog => k8s.io/klog v1.0.0
 	k8s.io/klog/v2 => k8s.io/klog/v2 v2.1.0
 	sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.9.7

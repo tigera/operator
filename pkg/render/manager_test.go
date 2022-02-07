@@ -474,6 +474,10 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{name: render.PrometheusTLSSecretName, ns: render.ManagerNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-manager", ns: render.ManagerNamespace, group: "apps", version: "v1", kind: "Deployment"},
 			{"tigera-manager:csr-creator", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
+			{name: "cluster-settings", ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
+			{name: "user-settings", ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
+			{name: "cluster-settings.layer.tigera-infrastructure", ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
+			{name: "cluster-settings.view.default", ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
 		}
 
 		Expect(resources).To(HaveLen(len(expectedResources)))

@@ -118,10 +118,6 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "cluster-settings", ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
-			{name: "user-settings", ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
-			{name: "cluster-settings.layer.tigera-infrastructure", ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
-			{name: "cluster-settings.view.default", ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
 		}
 
 		var err error

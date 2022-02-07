@@ -43,20 +43,20 @@ import (
 )
 
 const (
-	APLName                         = "application-layer"
-	AppSecDaemonsetName             = "l7-log-collector"
-	L7CollectorContainerName        = "l7-collector"
-	ProxyContainerName              = "envoy-proxy"
-	EnvoyLogsVolumeName             = "envoy-logs"
-	EnvoyConfigMapName              = "envoy-config"
-	EnvoyConfigMapKey               = "envoy-config.yaml"
-	FelixSync                       = "felix-sync"
-	DikastesSyncVolumeName          = "dikastes-sync"
-	DikastesContainerName           = "dikastes"
-	ModSecurityRulesetVolumeName    = "owasp-ruleset"
-	ModSecurityRulesetConfigMapName = "owasp-ruleset-config"
-	ModSecurityRulesetAnnotation    = "owasp"
-	CalicoLogsVolumeName            = "var-log-calico"
+	APLName                          = "application-layer"
+	AppSecDaemonsetName              = "l7-log-collector"
+	L7CollectorContainerName         = "l7-collector"
+	ProxyContainerName               = "envoy-proxy"
+	EnvoyLogsVolumeName              = "envoy-logs"
+	EnvoyConfigMapName               = "envoy-config"
+	EnvoyConfigMapKey                = "envoy-config.yaml"
+	FelixSync                        = "felix-sync"
+	DikastesSyncVolumeName           = "dikastes-sync"
+	DikastesContainerName            = "dikastes"
+	ModSecurityRulesetVolumeName     = "owasp-ruleset"
+	ModSecurityRulesetConfigMapName  = "owasp-ruleset-config"
+	modSecurityRulesetHashAnnotation = "hash.operator.tigera.io/mod-security"
+	CalicoLogsVolumeName             = "var-log-calico"
 )
 
 func ApplicationLayer(
@@ -180,7 +180,7 @@ func (c *component) daemonset() *appsv1.DaemonSet {
 	}
 
 	if c.config.ModSecurityConfigMap != nil {
-		annots[ModSecurityRulesetAnnotation] = rmeta.AnnotationHash(c.config.ModSecurityConfigMap.Data)
+		annots[modSecurityRulesetHashAnnotation] = rmeta.AnnotationHash(c.config.ModSecurityConfigMap.Data)
 	}
 
 	podTemplate := corev1.PodTemplateSpec{

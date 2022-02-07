@@ -232,7 +232,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	}
 
 	var userDefinedCoreRuleSet *corev1.ConfigMap = nil
-	if r.isWafEnabled(&applicationLayer.Spec) {
+	if r.isWAFEnabled(&applicationLayer.Spec) {
 		if userDefinedCoreRuleSet, err = getUserDefinedCoreRuleset(ctx, r.client); err != nil {
 			reqLogger.Error(err, "Error getting Web Application Firewall ModSecurity rule set")
 			r.status.SetDegraded("Error getting Web Application Firewall ModSecurity rule set", err.Error())
@@ -250,7 +250,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		PullSecrets:            pullSecrets,
 		Installation:           installation,
 		OsType:                 rmeta.OSTypeLinux,
-		WafEnabled:             r.isWafEnabled(&applicationLayer.Spec),
+		WafEnabled:             r.isWAFEnabled(&applicationLayer.Spec),
 		LogsEnabled:            r.isLogsCollectionEnabled(lcSpec),
 		LogRequestsPerInterval: lcSpec.LogRequestsPerInterval,
 		LogIntervalSeconds:     lcSpec.LogIntervalSeconds,
@@ -392,7 +392,7 @@ func (r *ReconcileApplicationLayer) isLogsCollectionEnabled(l7Spec *operatorv1.L
 	return l7Spec != nil && l7Spec.CollectLogs != nil && *l7Spec.CollectLogs == operatorv1.L7LogCollectionEnabled
 }
 
-func (r *ReconcileApplicationLayer) isWafEnabled(applicationLayerSpec *operatorv1.ApplicationLayerSpec) bool {
+func (r *ReconcileApplicationLayer) isWAFEnabled(applicationLayerSpec *operatorv1.ApplicationLayerSpec) bool {
 	return applicationLayerSpec.WebApplicationFirewall != nil &&
 		*applicationLayerSpec.WebApplicationFirewall == operatorv1.WafEnabled
 }
@@ -412,7 +412,7 @@ func (r *ReconcileApplicationLayer) patchFelixTproxyMode(ctx context.Context, al
 	var tproxyMode crdv1.TPROXYModeOption
 	patchFrom := client.MergeFrom(fc.DeepCopy())
 
-	if al != nil && (r.isLogsCollectionEnabled(al.Spec.LogCollection) || r.isWafEnabled(&al.Spec)) {
+	if al != nil && (r.isLogsCollectionEnabled(al.Spec.LogCollection) || r.isWAFEnabled(&al.Spec)) {
 		tproxyMode = crdv1.TPROXYModeOptionEnabled
 	} else {
 		tproxyMode = crdv1.TPROXYModeOptionDisabled

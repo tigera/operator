@@ -33,8 +33,8 @@ type LogCollectionStatusType string
 type WAFStatusType string
 
 const (
-	WafDisabled             WAFStatusType           = "Disabled"
-	WafEnabled              WAFStatusType           = "Enabled"
+	WAFDisabled             WAFStatusType           = "Disabled"
+	WAFEnabled              WAFStatusType           = "Enabled"
 	L7LogCollectionDisabled LogCollectionStatusType = "Disabled"
 	L7LogCollectionEnabled  LogCollectionStatusType = "Enabled"
 )

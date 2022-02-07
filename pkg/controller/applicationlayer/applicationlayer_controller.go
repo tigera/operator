@@ -394,7 +394,7 @@ func (r *ReconcileApplicationLayer) isLogsCollectionEnabled(l7Spec *operatorv1.L
 
 func (r *ReconcileApplicationLayer) isWAFEnabled(applicationLayerSpec *operatorv1.ApplicationLayerSpec) bool {
 	return applicationLayerSpec.WebApplicationFirewall != nil &&
-		*applicationLayerSpec.WebApplicationFirewall == operatorv1.WafEnabled
+		*applicationLayerSpec.WebApplicationFirewall == operatorv1.WAFEnabled
 }
 
 // patchFelixTproxyMode takes all application layer specs as arguments and patches felix config.

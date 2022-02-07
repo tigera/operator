@@ -237,7 +237,8 @@ func (c *component) containers() []corev1.Container {
 	}
 	containers = append(containers, proxy)
 
-	if c.config.LogsEnabled { // Log collection specific container
+	if c.config.LogsEnabled {
+		// Log collection specific container
 		collector := corev1.Container{
 			Name:         L7CollectorContainerName,
 			Image:        c.config.collectorImage,
@@ -247,7 +248,8 @@ func (c *component) containers() []corev1.Container {
 		containers = append(containers, collector)
 	}
 
-	if c.config.WafEnabled { // Web Application Firewall (WAF) specific container
+	if c.config.WafEnabled {
+		// Web Application Firewall (WAF) specific container
 		dikastes := corev1.Container{
 			Name:  DikastesContainerName,
 			Image: c.config.dikastesImage,

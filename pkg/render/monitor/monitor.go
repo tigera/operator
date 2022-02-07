@@ -38,11 +38,11 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 )
 
 const (
-	MonitoringAPIVersion = "monitoring.coreos.com/v1"
-
+	MonitoringAPIVersion        = "monitoring.coreos.com/v1"
 	CalicoNodeAlertmanager      = "calico-node-alertmanager"
 	CalicoNodeMonitor           = "calico-node-monitor"
 	CalicoNodePrometheus        = "calico-node-prometheus"
@@ -58,6 +58,7 @@ const (
 	PrometheusDefaultPort           = 9090
 	PrometheusProxyPort             = 9095
 	PrometheusTLSSecretName         = "calico-node-prometheus-tls"
+	PrometheusClientTLSSecretName   = "calico-node-prometheus-client-tls"
 	calicoNodePrometheusServiceName = "calico-node-prometheus"
 
 	tigeraPrometheusServiceHealthEndpoint = "/health"
@@ -70,15 +71,21 @@ const (
 func Monitor(cfg *Config) render.Component {
 	var tlsSecrets []*corev1.Secret
 	var tlsHash string
+	var clientTLSHash string
 	if cfg.Installation.CertificateManagement == nil {
-		tlsSecrets = []*corev1.Secret{secret.CopyToNamespace(common.TigeraPrometheusNamespace, cfg.TLSSecret)[0]}
-		tlsHash = rmeta.AnnotationHash(cfg.TLSSecret.Data)
+		tlsSecrets = []*corev1.Secret{
+			secret.CopyToNamespace(common.TigeraPrometheusNamespace, cfg.ServerTLSSecret)[0],
+			secret.CopyToNamespace(common.TigeraPrometheusNamespace, cfg.ClientTLSSecret)[0],
+		}
+		tlsHash = rmeta.AnnotationHash(cfg.ServerTLSSecret.Data)
+		clientTLSHash = rmeta.AnnotationHash(cfg.ClientTLSSecret.Data)
 	}
 
 	return &monitorComponent{
-		cfg:        cfg,
-		tlsSecrets: tlsSecrets,
-		tlsHash:    tlsHash,
+		cfg:           cfg,
+		tlsSecrets:    tlsSecrets,
+		tlsHash:       tlsHash,
+		clientTLSHash: clientTLSHash,
 	}
 }
 
@@ -88,8 +95,10 @@ type Config struct {
 	PullSecrets              []*corev1.Secret
 	AlertmanagerConfigSecret *corev1.Secret
 	KeyValidatorConfig       authentication.KeyValidatorConfig
-	TLSSecret                *corev1.Secret
+	ServerTLSSecret          *corev1.Secret
+	ClientTLSSecret          *corev1.Secret
 	ClusterDomain            string
+	TrustedCertBundle        *corev1.ConfigMap
 }
 
 type monitorComponent struct {
@@ -100,6 +109,7 @@ type monitorComponent struct {
 	csrImage               string
 	tlsSecrets             []*corev1.Secret
 	tlsHash                string
+	clientTLSHash          string
 }
 
 func (mc *monitorComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -145,6 +155,7 @@ func (mc *monitorComponent) SupportedOSType() rmeta.OSType {
 func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 	toCreate := []client.Object{
 		render.CreateNamespace(common.TigeraPrometheusNamespace, mc.cfg.Installation.KubernetesProvider),
+		mc.cfg.TrustedCertBundle,
 	}
 
 	// Create role and role bindings first.
@@ -156,9 +167,17 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 
 	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.cfg.PullSecrets...)...)...)
 	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.cfg.AlertmanagerConfigSecret)...)...)
+
+	// This is to delete a service that had been released in v3.8 with a typo in the name.
+	// TODO Remove the toDelete object after we drop support for v3.8.
+	toDelete := []client.Object{
+		mc.serviceMonitorElasicsearchToDelete(),
+	}
 	if mc.cfg.Installation.CertificateManagement == nil {
 		toCreate = append(toCreate, secret.ToRuntimeObjects(mc.tlsSecrets...)...)
+		toDelete = append(toDelete, render.CSRClusterRoleBinding(prometheusServiceAccountName, common.TigeraPrometheusNamespace))
 	} else {
+		toDelete = append(toDelete, secret.ToRuntimeObjects(mc.tlsSecrets...)...)
 		toCreate = append(toCreate, render.CSRClusterRoleBinding(prometheusServiceAccountName, common.TigeraPrometheusNamespace))
 	}
 	toCreate = append(toCreate,
@@ -171,7 +190,7 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		mc.prometheusRule(),
 		mc.serviceMonitorCalicoNode(),
 		mc.serviceMonitorElasticsearch(),
-		mc.podMonitor(),
+		mc.serviceMonitorFluentd(),
 		mc.prometheusHTTPAPIService(),
 		mc.clusterRole(),
 		mc.clusterRoleBinding(),
@@ -180,12 +199,6 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 	if mc.cfg.KeyValidatorConfig != nil {
 		toCreate = append(toCreate, secret.ToRuntimeObjects(mc.cfg.KeyValidatorConfig.RequiredSecrets(common.TigeraPrometheusNamespace)...)...)
 		toCreate = append(toCreate, configmap.ToRuntimeObjects(mc.cfg.KeyValidatorConfig.RequiredConfigMaps(common.TigeraPrometheusNamespace)...)...)
-	}
-
-	// This is to delete a service that had been released in v3.8 with a typo in the name.
-	// TODO Remove the toDelete object after we drop support for v3.8.
-	toDelete := []client.Object{
-		mc.serviceMonitorElasicsearchToDelete(),
 	}
 
 	return toCreate, toDelete
@@ -281,14 +294,20 @@ func (mc *monitorComponent) alertmanagerService() *corev1.Service {
 }
 
 func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
-	certVolume := corev1.Volume{
-		Name: PrometheusTLSSecretName,
-	}
-
 	var initContainers []corev1.Container
 	if mc.cfg.Installation.CertificateManagement != nil {
 		svcDNSNames := dns.GetServiceDNSNames(PrometheusHTTPAPIServiceName, common.TigeraPrometheusNamespace, mc.cfg.ClusterDomain)
-
+		clientInit := render.CreateCSRInitContainer(
+			mc.cfg.Installation.CertificateManagement,
+			mc.csrImage,
+			PrometheusClientTLSSecretName,
+			PrometheusHTTPAPIServiceName,
+			corev1.TLSPrivateKeyKey,
+			corev1.TLSCertKey,
+			[]string{PrometheusClientTLSSecretName},
+			common.TigeraPrometheusNamespace)
+		// Make sure the names are not identical for the two init containers.
+		clientInit.Name = fmt.Sprintf("%s-%s", PrometheusClientTLSSecretName, clientInit.Name)
 		initContainers = append(initContainers, render.CreateCSRInitContainer(
 			mc.cfg.Installation.CertificateManagement,
 			mc.csrImage,
@@ -297,18 +316,27 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 			corev1.TLSPrivateKeyKey,
 			corev1.TLSCertKey,
 			svcDNSNames,
-			common.TigeraPrometheusNamespace))
+			common.TigeraPrometheusNamespace),
+			clientInit)
 
-		certVolume.VolumeSource = corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}
-	} else {
-		certVolume.VolumeSource = corev1.VolumeSource{
-			Secret: &corev1.SecretVolumeSource{
-				SecretName: PrometheusTLSSecretName,
-			},
-		}
 	}
 	volumes := []corev1.Volume{
-		certVolume,
+		{
+			Name:         PrometheusTLSSecretName,
+			VolumeSource: render.CertificateVolumeSource(mc.cfg.Installation.CertificateManagement, PrometheusTLSSecretName),
+		},
+		{
+			Name:         PrometheusClientTLSSecretName,
+			VolumeSource: render.CertificateVolumeSource(mc.cfg.Installation.CertificateManagement, PrometheusClientTLSSecretName),
+		},
+		{
+			Name: mc.cfg.TrustedCertBundle.Name,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: mc.cfg.TrustedCertBundle.Name},
+				},
+			},
+		},
 	}
 	env := []corev1.EnvVar{
 		{
@@ -321,8 +349,18 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		},
 		{
 			// No other way to annotate this pod.
-			Name:  "TLS_SECRET_HASH_ANNOTATION",
+			Name:  "TLS_SERVER_SECRET_HASH_ANNOTATION",
 			Value: mc.tlsHash,
+		},
+		{
+			// No other way to annotate this pod.
+			Name:  "TLS_CLIENT_SECRET_HASH_ANNOTATION",
+			Value: mc.clientTLSHash,
+		},
+		{
+			// No other way to annotate this pod.
+			Name:  "TLS_CA_BUNDLE_HASH_ANNOTATION",
+			Value: rmeta.AnnotationHash(mc.cfg.TrustedCertBundle.Data),
 		},
 	}
 
@@ -330,6 +368,16 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		{
 			Name:      PrometheusTLSSecretName,
 			MountPath: "/tls",
+			ReadOnly:  true,
+		},
+		{
+			Name:      PrometheusClientTLSSecretName,
+			MountPath: "/client-tls",
+			ReadOnly:  true,
+		},
+		{
+			Name:      mc.cfg.TrustedCertBundle.Name,
+			MountPath: fmt.Sprintf("/%s", mc.cfg.TrustedCertBundle.Name),
 			ReadOnly:  true,
 		},
 	}
@@ -351,6 +399,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 			ImagePullSecrets:   secret.GetReferenceList(mc.cfg.PullSecrets),
 			ServiceAccountName: prometheusServiceAccountName,
 			Volumes:            volumes,
+			VolumeMounts:       volumeMounts,
 			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				{
@@ -504,29 +553,6 @@ func (mc *monitorComponent) prometheusHTTPAPIService() *corev1.Service {
 	}
 }
 
-func (mc *monitorComponent) podMonitor() *monitoringv1.PodMonitor {
-	return &monitoringv1.PodMonitor{
-		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PodMonitorsKind, APIVersion: MonitoringAPIVersion},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      FluentdMetrics,
-			Namespace: common.TigeraPrometheusNamespace,
-			Labels:    map[string]string{"team": "network-operators"},
-		},
-		Spec: monitoringv1.PodMonitorSpec{
-			Selector:          metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "fluentd-node"}},
-			NamespaceSelector: monitoringv1.NamespaceSelector{MatchNames: []string{"tigera-fluentd"}},
-			PodMetricsEndpoints: []monitoringv1.PodMetricsEndpoint{
-				{
-					HonorLabels:   true,
-					Interval:      "5s",
-					Port:          "metrics-port",
-					ScrapeTimeout: "5s",
-				},
-			},
-		},
-	}
-}
-
 func (mc *monitorComponent) prometheusRule() *monitoringv1.PrometheusRule {
 	return &monitoringv1.PrometheusRule{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PrometheusRuleKind, APIVersion: MonitoringAPIVersion},
@@ -576,14 +602,29 @@ func (mc *monitorComponent) serviceMonitorCalicoNode() *monitoringv1.ServiceMoni
 					Interval:      "5s",
 					Port:          "calico-metrics-port",
 					ScrapeTimeout: "5s",
+					Scheme:        "https",
+					TLSConfig:     mc.tlsConfig(render.CalicoNodeMetricsService),
 				},
 				{
 					HonorLabels:   true,
 					Interval:      "5s",
 					Port:          "calico-bgp-metrics-port",
 					ScrapeTimeout: "5s",
+					Scheme:        "https",
+					TLSConfig:     mc.tlsConfig(render.CalicoNodeMetricsService),
 				},
 			},
+		},
+	}
+}
+
+func (mc *monitorComponent) tlsConfig(serverName string) *monitoringv1.TLSConfig {
+	return &monitoringv1.TLSConfig{
+		KeyFile:  fmt.Sprintf("/client-tls/%s", corev1.TLSPrivateKeyKey),
+		CertFile: fmt.Sprintf("/client-tls/%s", corev1.TLSCertKey),
+		CAFile:   fmt.Sprintf("/%s/%s", mc.cfg.TrustedCertBundle.Name, corev1.ServiceAccountRootCAKey),
+		SafeTLSConfig: monitoringv1.SafeTLSConfig{
+			ServerName: serverName,
 		},
 	}
 }
@@ -605,6 +646,36 @@ func (mc *monitorComponent) serviceMonitorElasticsearch() *monitoringv1.ServiceM
 					Interval:      "5s",
 					Port:          "metrics-port",
 					ScrapeTimeout: "5s",
+					Scheme:        "https",
+					TLSConfig:     mc.tlsConfig(esmetrics.ElasticsearchMetricsName),
+				},
+			},
+		},
+	}
+}
+
+// serviceMonitorFluentd creates a service monitor to make Prometheus watch Fluentd. Previously, a pod monitor was used.
+// However, the pod monitor does not have all the tls configuration options that we need, namely reading them from the
+// file system, as opposed to getting them from watching kubernetes secrets.
+func (mc *monitorComponent) serviceMonitorFluentd() *monitoringv1.ServiceMonitor {
+	return &monitoringv1.ServiceMonitor{
+		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: MonitoringAPIVersion},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      render.FluentdMetricsService,
+			Namespace: common.TigeraPrometheusNamespace,
+			Labels:    map[string]string{"team": "network-operators"},
+		},
+		Spec: monitoringv1.ServiceMonitorSpec{
+			Selector:          metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "fluentd-node"}},
+			NamespaceSelector: monitoringv1.NamespaceSelector{MatchNames: []string{render.LogCollectorNamespace}},
+			Endpoints: []monitoringv1.Endpoint{
+				{
+					HonorLabels:   true,
+					Interval:      "5s",
+					Port:          render.FluentdMetricsPort,
+					ScrapeTimeout: "5s",
+					Scheme:        "https",
+					TLSConfig:     mc.tlsConfig(render.FluentdPrometheusTLSSecretName),
 				},
 			},
 		},

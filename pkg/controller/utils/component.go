@@ -38,6 +38,8 @@ import (
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -91,9 +93,16 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 		if !ok {
 			return fmt.Errorf("Object is not ObjectMetaAccessor")
 		}
-		if c.cr != nil {
-			if err := controllerutil.SetControllerReference(c.cr, om.GetObjectMeta(), c.scheme); err != nil {
-				return err
+
+		// Add owner ref for controller owned resources,
+		switch obj.(type) {
+		case *v3.UISettings:
+			// Never add controller ref for UISettings since these are always GCd through the UISettingsGroup.
+		default:
+			if c.cr != nil {
+				if err := controllerutil.SetControllerReference(c.cr, om.GetObjectMeta(), c.scheme); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -308,6 +317,18 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 		dsa.Spec.ElasticsearchRef = csa.Spec.ElasticsearchRef
 		dsa.Status = csa.Status
 		return dsa
+	case *v3.UISettings:
+		// Only update if the spec has changed
+		cui := current.(*v3.UISettings)
+		dui := desired.(*v3.UISettings)
+		if reflect.DeepEqual(cui.Spec, dui.Spec) {
+			return cui
+		}
+
+		// UISettings are always owned by the group, so never modify the OwnerReferences that are returned by the
+		// APIServer.
+		dui.SetOwnerReferences(cui.GetOwnerReferences())
+		return dui
 	default:
 		// Default to just using the desired state, with an updated RV.
 		return desired

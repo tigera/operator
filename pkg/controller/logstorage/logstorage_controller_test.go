@@ -17,8 +17,9 @@ package logstorage
 import (
 	"context"
 	"fmt"
-	"github.com/tigera/operator/pkg/render/monitor"
 	"reflect"
+
+	"github.com/tigera/operator/pkg/render/monitor"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"

@@ -948,9 +948,13 @@ func (c *managerComponent) clusterWideDefaultView() *v3.UISettings {
 			Group:       "cluster-settings",
 			Description: "Default",
 			View: &v3.UIGraphView{
-				Layers: []string{
-					"cluster-settings.layer.tigera-infrastructure",
-				},
+				Nodes: []v3.UIGraphNodeView{{
+					UIGraphNode: v3.UIGraphNode{
+						ID:   "layer/cluster-settings.layer.tigera-infrastructure",
+						Type: "layer",
+						Name: "cluster-settings.layer.tigera-infrastructure",
+					},
+				}},
 			},
 		},
 	}

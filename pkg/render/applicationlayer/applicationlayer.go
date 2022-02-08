@@ -428,7 +428,6 @@ func (c *component) modSecurityConfigMap() *corev1.ConfigMap {
 var envoyConfigTemplate string
 
 func (c *component) envoyL7ConfigMap() *corev1.ConfigMap {
-
 	var config bytes.Buffer
 
 	tpl, err := template.New("envoyConfigTemplate").Parse(envoyConfigTemplate)

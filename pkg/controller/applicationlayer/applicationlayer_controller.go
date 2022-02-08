@@ -348,11 +348,11 @@ func (r *ReconcileApplicationLayer) getModSecurityRuleSet(ctx context.Context) (
 		return nil, false, err
 	}
 
-	if ruleset, err := getDefaultCoreRuleset(ctx); err == nil {
-		return ruleset, true, nil
-	} else {
+	ruleset, err := getDefaultCoreRuleset(ctx)
+	if err != nil {
 		return nil, false, err
 	}
+	return ruleset, true, nil
 }
 
 func getDefaultCoreRuleset(ctx context.Context) (*corev1.ConfigMap, error) {
@@ -377,7 +377,6 @@ func getDefaultCoreRuleset(ctx context.Context) (*corev1.ConfigMap, error) {
 }
 
 func validateModSecurityRuleSet(cm *corev1.ConfigMap) error {
-
 	requiredFiles := []string{
 		"modsecdefault.conf",
 		"crs-setup.conf",

@@ -139,9 +139,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 
 	// If Web Application Firewall is enabled, we need WAF ruleset ConfigMap present.
 	if c.config.WafEnabled {
-		// the first ConfigMap exists within the calico-operator namespace and stays as provided in config
-		objs = append(objs, c.config.ModSecurityConfigMap)
-		// the second ConfigMap is a copy of the provided configuration into the calico-system namespace
+		// this ConfigMap is a copy of the provided configuration from the operator namespace into the calico-system namespace
 		objs = append(objs, c.modSecurityConfigMap())
 	}
 

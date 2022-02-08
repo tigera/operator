@@ -27,6 +27,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/applicationlayer"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
@@ -231,9 +232,10 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		return reconcile.Result{}, err
 	}
 
+	var passthroughModSecurityRuleSet bool
 	var modSecurityRuleSet *corev1.ConfigMap
 	if r.isWAFEnabled(&applicationLayer.Spec) {
-		if modSecurityRuleSet, err = r.getModSecurityRuleSet(ctx); err != nil {
+		if modSecurityRuleSet, passthroughModSecurityRuleSet, err = r.getModSecurityRuleSet(ctx); err != nil {
 			reqLogger.Error(err, "Error getting Web Application Firewall ModSecurity rule set")
 			r.status.SetDegraded("Error getting Web Application Firewall ModSecurity rule set", err.Error())
 			return reconcile.Result{}, err
@@ -264,6 +266,15 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		reqLogger.Error(err, "Error with images from ImageSet")
 		r.status.SetDegraded("Error with images from ImageSet", err.Error())
 		return reconcile.Result{}, err
+	}
+
+	if passthroughModSecurityRuleSet {
+		err = ch.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(modSecurityRuleSet), r.status)
+		if err != nil {
+			reqLogger.Error(err, "Error creating / updating resource")
+			r.status.SetDegraded("Error creating / updating resource", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	// TODO: when there are more ApplicationLayer options then it will need to be restructured, as each of the
@@ -321,7 +332,7 @@ func validateApplicationLayer(al *operatorv1.ApplicationLayer) error {
 // The ConfigMap is meant to contain rule set files for ModSecurity library.
 // If the ConfigMap does not exist a ConfigMap with OWASP provided Core Rule Set will be returned.
 // The rule set was cloned from https://github.com/coreruleset/coreruleset/
-func (r *ReconcileApplicationLayer) getModSecurityRuleSet(ctx context.Context) (*corev1.ConfigMap, error) {
+func (r *ReconcileApplicationLayer) getModSecurityRuleSet(ctx context.Context) (*corev1.ConfigMap, bool, error) {
 	ruleset := new(corev1.ConfigMap)
 
 	if err := r.client.Get(
@@ -331,13 +342,17 @@ func (r *ReconcileApplicationLayer) getModSecurityRuleSet(ctx context.Context) (
 			Name:      applicationlayer.ModSecurityRulesetConfigMapName,
 		},
 		ruleset,
-	); err != nil && !apierrors.IsNotFound(err) {
-		return nil, err
-	} else if apierrors.IsNotFound(err) {
-		return getDefaultCoreRuleset(ctx)
+	); err == nil {
+		return ruleset, false, nil
+	} else if !apierrors.IsNotFound(err) {
+		return nil, false, err
 	}
 
-	return ruleset, nil
+	if ruleset, err := getDefaultCoreRuleset(ctx); err == nil {
+		return ruleset, true, nil
+	} else {
+		return nil, false, err
+	}
 }
 
 func getDefaultCoreRuleset(ctx context.Context) (*corev1.ConfigMap, error) {

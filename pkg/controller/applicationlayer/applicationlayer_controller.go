@@ -231,14 +231,14 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		return reconcile.Result{}, err
 	}
 
-	var userDefinedCoreRuleSet *corev1.ConfigMap = nil
+	var userDefinedCoreRuleSet *corev1.ConfigMap
 	if r.isWAFEnabled(&applicationLayer.Spec) {
-		if userDefinedCoreRuleSet, err = getModSecurityRuleset(ctx, r.client); err != nil {
+		if userDefinedCoreRuleSet, err = r.getModSecurityRuleSet(ctx); err != nil {
 			reqLogger.Error(err, "Error getting Web Application Firewall ModSecurity rule set")
 			r.status.SetDegraded("Error getting Web Application Firewall ModSecurity rule set", err.Error())
 			return reconcile.Result{}, err
 		}
-		if err = validateUserDefinedCoreRuleset(userDefinedCoreRuleSet); err != nil {
+		if err = validateModSecurityRuleSet(userDefinedCoreRuleSet); err != nil {
 			reqLogger.Error(err, "Error validating Web Application Firewall ModSecurity rule set")
 			r.status.SetDegraded("Error validating Web Application Firewall ModSecurity rule set", err.Error())
 			return reconcile.Result{}, err
@@ -317,14 +317,14 @@ func validateApplicationLayer(al *operatorv1.ApplicationLayer) error {
 	return nil
 }
 
-// getModSecurityRuleset returns 'owasp-ruleset-config' ConfigMap from calico-operator namespace
-// the ConfigMap meant to contains rule set files for ModSecurity library.
-// if the ConfigMap does not exist it will be created and it will be populated
-// with OWASP provided Core Rule Set (cloned from https://github.com/coreruleset/coreruleset/).
-func getModSecurityRuleset(ctx context.Context, cli client.Client) (*corev1.ConfigMap, error) {
+// getModSecurityRuleSet returns 'owasp-ruleset-config' ConfigMap from calico-operator namespace.
+// The ConfigMap is meant to contain rule set files for ModSecurity library.
+// If the ConfigMap does not exist a ConfigMap with OWASP provided Core Rule Set will be returned.
+// The rule set was cloned from https://github.com/coreruleset/coreruleset/
+func (r *ReconcileApplicationLayer) getModSecurityRuleSet(ctx context.Context) (*corev1.ConfigMap, error) {
 	ruleset := new(corev1.ConfigMap)
 
-	if err := cli.Get(
+	if err := r.client.Get(
 		ctx,
 		types.NamespacedName{
 			Namespace: common.OperatorNamespace(),
@@ -334,13 +334,13 @@ func getModSecurityRuleset(ctx context.Context, cli client.Client) (*corev1.Conf
 	); err != nil && !apierrors.IsNotFound(err) {
 		return nil, err
 	} else if apierrors.IsNotFound(err) {
-		return createDefaultCoreRuleset(ctx, cli)
+		return getDefaultCoreRuleset(ctx)
 	}
 
 	return ruleset, nil
 }
 
-func createDefaultCoreRuleset(ctx context.Context, cli client.Client) (*corev1.ConfigMap, error) {
+func getDefaultCoreRuleset(ctx context.Context) (*corev1.ConfigMap, error) {
 	ruleset := &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -358,14 +358,10 @@ func createDefaultCoreRuleset(ctx context.Context, cli client.Client) (*corev1.C
 		}
 	}
 
-	if err := cli.Create(ctx, ruleset); err != nil {
-		return nil, err
-	}
-
 	return ruleset, nil
 }
 
-func validateUserDefinedCoreRuleset(cm *corev1.ConfigMap) error {
+func validateModSecurityRuleSet(cm *corev1.ConfigMap) error {
 
 	requiredFiles := []string{
 		"modsecdefault.conf",

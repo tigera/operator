@@ -135,9 +135,21 @@ func (c *component) SupportedOSType() rmeta.OSType {
 func (c *component) Objects() ([]client.Object, []client.Object) {
 	var objs []client.Object
 	// If l7spec is provided render the required objects.
-	c.config.envoyConfigMap = c.envoyL7ConfigMap()
 	objs = append(objs, c.serviceAccount())
+
+	// If Web Application Firewall is enabled, we need WAF ruleset ConfigMap present.
+	if c.config.WafEnabled {
+		// the first ConfigMap exists within the calico-operator namespace and stays as provided in config
+		objs = append(objs, c.config.ModSecurityConfigMap)
+		// the second ConfigMap is a copy of the provided configuration into the calico-system namespace
+		objs = append(objs, c.modSecurityConfigMap())
+	}
+
+	// Envoy configuration
+	c.config.envoyConfigMap = c.envoyL7ConfigMap()
 	objs = append(objs, c.config.envoyConfigMap)
+
+	// Envoy & Dikastes Daemonset
 	objs = append(objs, c.daemonset())
 
 	if c.config.Installation.KubernetesProvider == operatorv1.ProviderDockerEE {
@@ -147,11 +159,6 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	// If we're running on openshift, we need to add in an SCC.
 	if c.config.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
 		objs = append(objs, c.securityContextConstraints())
-	}
-
-	// If Web Application Firewall is enabled, we need WAF ruleset config map present.
-	if c.config.WafEnabled {
-		objs = append(objs, c.modSecurityConfigMap())
 	}
 
 	return objs, nil

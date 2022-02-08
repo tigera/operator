@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	"github.com/tigera/operator/pkg/common"
 
 	apps "k8s.io/api/apps/v1"
@@ -211,6 +213,56 @@ var _ = Describe("Component handler tests", func() {
 		ns = &v1.Namespace{}
 		c.Get(ctx, nsKey, ns)
 		Expect(ns.GetAnnotations()).To(Equal(expectedAnnotations))
+	})
+
+	It("merges UISettings leaving owners unchanged", func() {
+		fc := &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs: []client.Object{&v3.UISettings{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test.test-settings",
+					OwnerReferences: []metav1.OwnerReference{{
+						APIVersion: "projectcalico.org/v3",
+						Kind:       "UISettingsGroup",
+						Name:       "owner",
+						UID:        "abcde",
+					}},
+				},
+				Spec: v3.UISettingsSpec{
+					Group:       "test",
+					Description: "just a test",
+					Layer: &v3.UIGraphLayer{
+						Nodes: []v3.UIGraphNode{},
+					},
+				},
+			}},
+		}
+
+		err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).To(BeNil())
+
+		By("checking that the UISettings is created and ownerref is not modified")
+		uiKey := client.ObjectKey{
+			Name: "test.test-settings",
+		}
+		ui := &v3.UISettings{}
+		c.Get(ctx, uiKey, ui)
+		Expect(ui.OwnerReferences).To(HaveLen(1))
+		Expect(ui.OwnerReferences[0].Name).To(Equal("owner"))
+
+		By("overwriting the description and updating the owner.")
+		ui.Spec.Description = "another test"
+		ui.OwnerReferences[0].Name = "differentowner"
+		fc.objs = []client.Object{ui}
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).To(BeNil())
+
+		By("checking that the uisettings is updated with description, but ownerref is not modified")
+		ui = &v3.UISettings{}
+		c.Get(ctx, uiKey, ui)
+		Expect(ui.OwnerReferences).To(HaveLen(1))
+		Expect(ui.OwnerReferences[0].Name).To(Equal("owner"))
+		Expect(ui.Spec.Description).To(Equal("another test"))
 	})
 
 	It("merges labels and reconciles only operator added labels", func() {

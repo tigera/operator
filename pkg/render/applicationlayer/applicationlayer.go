@@ -53,9 +53,9 @@ const (
 	FelixSync                        = "felix-sync"
 	DikastesSyncVolumeName           = "dikastes-sync"
 	DikastesContainerName            = "dikastes"
-	ModSecurityRulesetVolumeName     = "owasp-ruleset"
-	ModSecurityRulesetConfigMapName  = "owasp-ruleset-config"
-	ModSecurityRulesetHashAnnotation = "hash.operator.tigera.io/mod-security"
+	ModSecurityRulesetVolumeName     = "modsecurity-ruleset"
+	ModSecurityRulesetConfigMapName  = "modsecurity-ruleset"
+	ModSecurityRulesetHashAnnotation = "hash.operator.tigera.io/modsecurity-ruleset"
 	CalicoLogsVolumeName             = "var-log-calico"
 )
 

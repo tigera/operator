@@ -311,7 +311,7 @@ func validateApplicationLayer(al *operatorv1.ApplicationLayer) error {
 
 	// If ApplicationLayer spec exists then one of its features should be set.
 	if al.Spec.LogCollection == nil && al.Spec.WebApplicationFirewall == nil {
-		return fmt.Errorf("At least one of webApplicationFirewall or locCollector must be specified on ApplicationLayer resource")
+		return fmt.Errorf("At least one of webApplicationFirewall or logCollector must be specified on ApplicationLayer resource")
 	}
 
 	return nil

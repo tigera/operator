@@ -231,14 +231,14 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		return reconcile.Result{}, err
 	}
 
-	var userDefinedCoreRuleSet *corev1.ConfigMap
+	var modSecurityRuleSet *corev1.ConfigMap
 	if r.isWAFEnabled(&applicationLayer.Spec) {
-		if userDefinedCoreRuleSet, err = r.getModSecurityRuleSet(ctx); err != nil {
+		if modSecurityRuleSet, err = r.getModSecurityRuleSet(ctx); err != nil {
 			reqLogger.Error(err, "Error getting Web Application Firewall ModSecurity rule set")
 			r.status.SetDegraded("Error getting Web Application Firewall ModSecurity rule set", err.Error())
 			return reconcile.Result{}, err
 		}
-		if err = validateModSecurityRuleSet(userDefinedCoreRuleSet); err != nil {
+		if err = validateModSecurityRuleSet(modSecurityRuleSet); err != nil {
 			reqLogger.Error(err, "Error validating Web Application Firewall ModSecurity rule set")
 			r.status.SetDegraded("Error validating Web Application Firewall ModSecurity rule set", err.Error())
 			return reconcile.Result{}, err
@@ -254,7 +254,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		LogsEnabled:            r.isLogsCollectionEnabled(lcSpec),
 		LogRequestsPerInterval: lcSpec.LogRequestsPerInterval,
 		LogIntervalSeconds:     lcSpec.LogIntervalSeconds,
-		ModSecurityConfigMap:   userDefinedCoreRuleSet,
+		ModSecurityConfigMap:   modSecurityRuleSet,
 	}
 	component := applicationlayer.ApplicationLayer(config)
 

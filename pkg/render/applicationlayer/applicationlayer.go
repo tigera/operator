@@ -79,7 +79,7 @@ type Config struct {
 	OsType       rmeta.OSType
 
 	// Optional config for WAF.
-	WafEnabled           bool
+	WAFEnabled           bool
 	ModSecurityConfigMap *corev1.ConfigMap
 
 	// Optional config for L7 logs.
@@ -138,7 +138,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, c.serviceAccount())
 
 	// If Web Application Firewall is enabled, we need WAF ruleset ConfigMap present.
-	if c.config.WafEnabled {
+	if c.config.WAFEnabled {
 		// this ConfigMap is a copy of the provided configuration from the operator namespace into the calico-system namespace
 		objs = append(objs, c.modSecurityConfigMap())
 	}
@@ -253,7 +253,7 @@ func (c *component) containers() []corev1.Container {
 		containers = append(containers, collector)
 	}
 
-	if c.config.WafEnabled {
+	if c.config.WAFEnabled {
 		// Web Application Firewall (WAF) specific container
 		dikastes := corev1.Container{
 			Name:  DikastesContainerName,
@@ -347,7 +347,7 @@ func (c *component) volumes() []corev1.Volume {
 		},
 	})
 
-	if c.config.WafEnabled {
+	if c.config.WAFEnabled {
 		// Web Application Firewall specific volumes.
 
 		// WAF logs need HostPath volume - logs to be consumed by fluentd.
@@ -392,7 +392,7 @@ func (c *component) proxyVolMounts() []corev1.VolumeMount {
 		{Name: EnvoyLogsVolumeName, MountPath: "/tmp/"},
 	}
 
-	if c.config.WafEnabled {
+	if c.config.WAFEnabled {
 		volumes = append(volumes,
 			corev1.VolumeMount{
 				Name:      DikastesSyncVolumeName,

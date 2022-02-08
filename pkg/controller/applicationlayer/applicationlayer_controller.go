@@ -252,7 +252,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		PullSecrets:            pullSecrets,
 		Installation:           installation,
 		OsType:                 rmeta.OSTypeLinux,
-		WafEnabled:             r.isWAFEnabled(&applicationLayer.Spec),
+		WAFEnabled:             r.isWAFEnabled(&applicationLayer.Spec),
 		LogsEnabled:            r.isLogsCollectionEnabled(lcSpec),
 		LogRequestsPerInterval: lcSpec.LogRequestsPerInterval,
 		LogIntervalSeconds:     lcSpec.LogIntervalSeconds,

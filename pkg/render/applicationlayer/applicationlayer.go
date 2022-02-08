@@ -349,7 +349,8 @@ func (c *component) volumes() []corev1.Volume {
 		},
 	})
 
-	if c.config.WafEnabled { // Web Application Firewall specific volumes:
+	if c.config.WafEnabled {
+		// Web Application Firewall specific volumes.
 
 		// WAF logs need HostPath volume - logs to be consumed by fluentd.
 		hostPathDirectoryOrCreate := corev1.HostPathDirectoryOrCreate

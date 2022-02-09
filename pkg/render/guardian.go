@@ -97,6 +97,10 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		managerServiceAccount(),
 		managerClusterRole(false, true, c.cfg.Openshift),
 		managerClusterRoleBinding(),
+		managerClusterWideSettingsGroup(),
+		managerUserSpecificSettingsGroup(),
+		managerClusterWideTigeraLayer(),
+		managerClusterWideDefaultView(),
 	)
 	if c.cfg.PrometheusCertSecret != nil {
 		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(GuardianNamespace, c.cfg.PrometheusCertSecret)...)...)

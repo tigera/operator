@@ -83,6 +83,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		status:          status.New(mgr.GetClient(), "compliance", opts.KubernetesVersion),
 		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
+		elasticExternal: opts.ElasticExternal,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -160,6 +161,7 @@ type ReconcileCompliance struct {
 	status          status.StatusManager
 	clusterDomain   string
 	licenseAPIReady *utils.ReadyFlag
+	elasticExternal bool
 }
 
 func GetCompliance(ctx context.Context, cli client.Client) (*operatorv1.Compliance, error) {
@@ -361,6 +363,23 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		components = append(components, render.NewPassthrough(complianceServerCertSecret))
 	}
 
+	tenantId := ""
+	if r.elasticExternal {
+		cloudConfig, err := utils.GetCloudConfig(ctx, r.client)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				reqLogger.Info("Failed to retrieve External Elasticsearch config map")
+				r.status.SetDegraded("Failed to retrieve External Elasticsearch config map", err.Error())
+				return reconcile.Result{}, nil
+			}
+			reqLogger.Error(err, err.Error())
+			r.status.SetDegraded("Unable to read External Elasticsearch config map", err.Error())
+			return reconcile.Result{}, err
+		}
+
+		tenantId = cloudConfig.TenantId()
+	}
+
 	reqLogger.V(3).Info("rendering components")
 	var hasNoLicense = !utils.IsFeatureActive(license, common.ComplianceFeature)
 	openshift := r.provider == operatorv1.ProviderOpenShift
@@ -377,6 +396,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		KeyValidatorConfig:          keyValidatorConfig,
 		ClusterDomain:               r.clusterDomain,
 		HasNoLicense:                hasNoLicense,
+		TenantID:                    tenantId,
 	}
 	// Render the desired objects from the CRD and create or update them.
 	component, err := render.Compliance(complianceCfg)

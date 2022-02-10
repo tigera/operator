@@ -45,7 +45,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		cfg = &render.IntrusionDetectionConfiguration{
 			KibanaCertSecret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraKibanaCertSecret}},
 			Installation:     &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
-			ESClusterConfig:  relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1),
+			ESClusterConfig:  relasticsearch.NewClusterConfig("tenant_id.clusterTestName", 1, 1, 1),
 			ClusterDomain:    dns.DefaultClusterDomain,
 			ESLicenseType:    render.ElasticsearchLicenseTypeUnknown,
 			ManagedCluster:   notManagedCluster,
@@ -105,10 +105,10 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		idji := rtest.GetResource(resources, "intrusion-detection-es-job-installer", render.IntrusionDetectionNamespace, "batch", "v1", "Job").(*batchv1.Job)
 		Expect(idc.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
+			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "tenant_id.clusterTestName"},
 		))
 		Expect(idji.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
+			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "tenant_id.clusterTestName"},
 		))
 		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(render.ManagerInternalTLSSecretName))
 		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/manager-tls"))

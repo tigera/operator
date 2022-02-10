@@ -92,7 +92,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(voltron.Image).Should(Equal(components.TigeraRegistry + "tigera/voltron:" + components.ComponentManagerProxy.Version))
 
 		Expect(esProxy.Env).Should(ContainElements(
-			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
+			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "tenant_id.clusterTestName"},
 		))
 		Expect(len(esProxy.VolumeMounts)).To(Equal(1))
 		Expect(esProxy.VolumeMounts[0].Name).To(Equal("elastic-ca-cert-volume"))
@@ -563,7 +563,7 @@ func renderObjects(oidc bool, managementCluster *operatorv1.ManagementCluster, i
 		managerTLS = rtest.CreateCertSecret(render.ManagerTLSSecretName, common.OperatorNamespace())
 	}
 
-	esConfigMap := relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
+	esConfigMap := relasticsearch.NewClusterConfig("tenant_id.clusterTestName", 1, 1, 1)
 
 	cfg := &render.ManagerConfiguration{
 		KeyValidatorConfig:            dexCfg,

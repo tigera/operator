@@ -178,12 +178,6 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index .Components "dikastes" }}
-	ComponentDikastes = component{
-		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
-	}
-{{- end }}
 {{ with index .Components "coreos-prometheus" }}
 	ComponentCoreOSPrometheus = component{
 		Version: "{{ .Version }}",
@@ -303,6 +297,5 @@ var (
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
 		ComponentTigeraWindows,
-		ComponentDikastes,
 	}
 )

@@ -16,7 +16,6 @@ package applicationlayer
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"time"
 
@@ -27,13 +26,11 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
-	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/applicationlayer"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
-	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -108,21 +105,8 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("applicationlayer-controller failed to watch Tigera network resource: %v", err)
 	}
 
-	// Watch for configmap changes in tigera-operator namespace; the cm contains ruleset for ModSecurity library:
-	err = utils.AddConfigMapWatch(c, applicationlayer.ModSecurityRulesetConfigMapName, common.OperatorNamespace())
-	if err != nil {
-		return fmt.Errorf(
-			"applicationlayer-controller failed to watch ConfigMap %s: %v",
-			applicationlayer.ModSecurityRulesetConfigMapName, err,
-		)
-	}
-
-	// Watch configmaps created for envoy and dikastes in calico-system namespace:
-	maps := []string{
-		applicationlayer.EnvoyConfigMapName,
-		applicationlayer.ModSecurityRulesetConfigMapName,
-	}
-	for _, configMapName := range maps {
+	// Watch configmaps created for envoy.
+	for _, configMapName := range []string{applicationlayer.EnvoyConfigMapName} {
 		if err = utils.AddConfigMapWatch(c, configMapName, common.CalicoNamespace); err != nil {
 			return fmt.Errorf("applicationlayer-controller failed to watch ConfigMap %s: %v", configMapName, err)
 		}
@@ -161,7 +145,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	applicationLayer, err := getApplicationLayer(ctx, r.client)
 
 	if err != nil {
-		if apierrors.IsNotFound(err) {
+		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			reqLogger.Info("ApplicationLayer object not found")
@@ -199,7 +183,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	variant, installation, err := utils.GetInstallation(ctx, r.client)
 
 	if err != nil {
-		if apierrors.IsNotFound(err) {
+		if errors.IsNotFound(err) {
 			reqLogger.Error(err, "Installation not found")
 			r.status.SetDegraded("Installation not found", err.Error())
 			return reconcile.Result{}, nil
@@ -232,31 +216,14 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		return reconcile.Result{}, err
 	}
 
-	var passthroughModSecurityRuleSet bool
-	var modSecurityRuleSet *corev1.ConfigMap
-	if r.isWAFEnabled(&applicationLayer.Spec) {
-		if modSecurityRuleSet, passthroughModSecurityRuleSet, err = r.getModSecurityRuleSet(ctx); err != nil {
-			reqLogger.Error(err, "Error getting Web Application Firewall ModSecurity rule set")
-			r.status.SetDegraded("Error getting Web Application Firewall ModSecurity rule set", err.Error())
-			return reconcile.Result{}, err
-		}
-		if err = validateModSecurityRuleSet(modSecurityRuleSet); err != nil {
-			reqLogger.Error(err, "Error validating Web Application Firewall ModSecurity rule set")
-			r.status.SetDegraded("Error validating Web Application Firewall ModSecurity rule set", err.Error())
-			return reconcile.Result{}, err
-		}
-	}
-
 	lcSpec := applicationLayer.Spec.LogCollection
 	config := &applicationlayer.Config{
 		PullSecrets:            pullSecrets,
 		Installation:           installation,
 		OsType:                 rmeta.OSTypeLinux,
-		WAFEnabled:             r.isWAFEnabled(&applicationLayer.Spec),
 		LogsEnabled:            r.isLogsCollectionEnabled(lcSpec),
 		LogRequestsPerInterval: lcSpec.LogRequestsPerInterval,
 		LogIntervalSeconds:     lcSpec.LogIntervalSeconds,
-		ModSecurityConfigMap:   modSecurityRuleSet,
 	}
 	component := applicationlayer.ApplicationLayer(config)
 
@@ -266,15 +233,6 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		reqLogger.Error(err, "Error with images from ImageSet")
 		r.status.SetDegraded("Error with images from ImageSet", err.Error())
 		return reconcile.Result{}, err
-	}
-
-	if passthroughModSecurityRuleSet {
-		err = ch.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(modSecurityRuleSet), r.status)
-		if err != nil {
-			reqLogger.Error(err, "Error creating / updating resource")
-			r.status.SetDegraded("Error creating / updating resource", err.Error())
-			return reconcile.Result{}, err
-		}
 	}
 
 	// TODO: when there are more ApplicationLayer options then it will need to be restructured, as each of the
@@ -319,73 +277,12 @@ func updateApplicationLayerWithDefaults(al *operatorv1.ApplicationLayer) {
 
 // validateApplicationLayer validates ApplicationLayer
 func validateApplicationLayer(al *operatorv1.ApplicationLayer) error {
+	lcSpec := al.Spec.LogCollection
 
-	// If ApplicationLayer spec exists then one of its features should be set.
-	if al.Spec.LogCollection == nil && al.Spec.WebApplicationFirewall == nil {
-		return fmt.Errorf("at least one of webApplicationFirewall or logCollector must be specified on ApplicationLayer resource")
-	}
-
-	return nil
-}
-
-// getModSecurityRuleSet returns 'owasp-ruleset-config' ConfigMap from calico-operator namespace.
-// The ConfigMap is meant to contain rule set files for ModSecurity library.
-// If the ConfigMap does not exist a ConfigMap with OWASP provided Core Rule Set will be returned.
-// The rule set was cloned from https://github.com/coreruleset/coreruleset/
-func (r *ReconcileApplicationLayer) getModSecurityRuleSet(ctx context.Context) (*corev1.ConfigMap, bool, error) {
-	ruleset := new(corev1.ConfigMap)
-
-	if err := r.client.Get(
-		ctx,
-		types.NamespacedName{
-			Namespace: common.OperatorNamespace(),
-			Name:      applicationlayer.ModSecurityRulesetConfigMapName,
-		},
-		ruleset,
-	); err == nil {
-		return ruleset, false, nil
-	} else if !apierrors.IsNotFound(err) {
-		return nil, false, err
-	}
-
-	ruleset, err := getDefaultCoreRuleset(ctx)
-	if err != nil {
-		return nil, false, err
-	}
-	return ruleset, true, nil
-}
-
-func getDefaultCoreRuleset(ctx context.Context) (*corev1.ConfigMap, error) {
-	ruleset := &corev1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      applicationlayer.ModSecurityRulesetConfigMapName,
-			Namespace: common.OperatorNamespace(),
-		},
-		Data: make(map[string]string),
-	}
-
-	for filename, dataBase64 := range applicationlayer.ModsecurityCoreRuleSet {
-		if data, err := base64.StdEncoding.DecodeString(dataBase64); err == nil {
-			ruleset.Data[filename] = string(data)
-		} else {
-			return nil, err
-		}
-	}
-
-	return ruleset, nil
-}
-
-func validateModSecurityRuleSet(cm *corev1.ConfigMap) error {
-	requiredFiles := []string{
-		"modsecdefault.conf",
-		"crs-setup.conf",
-	}
-
-	for _, f := range requiredFiles {
-		if _, ok := cm.Data[f]; !ok {
-			return fmt.Errorf("file must be found in Web Application Firewall rule set: %s", f)
-		}
+	// If ApplicationLayer spec exists then LogCollection should be set.
+	// TODO: when we will have multiple features in future this should change to at least one feature being set
+	if lcSpec == nil {
+		return fmt.Errorf("missing required LogCollection spec in applicationLayer")
 	}
 
 	return nil
@@ -406,11 +303,6 @@ func (r *ReconcileApplicationLayer) isLogsCollectionEnabled(l7Spec *operatorv1.L
 	return l7Spec != nil && l7Spec.CollectLogs != nil && *l7Spec.CollectLogs == operatorv1.L7LogCollectionEnabled
 }
 
-func (r *ReconcileApplicationLayer) isWAFEnabled(applicationLayerSpec *operatorv1.ApplicationLayerSpec) bool {
-	return applicationLayerSpec.WebApplicationFirewall != nil &&
-		*applicationLayerSpec.WebApplicationFirewall == operatorv1.WAFEnabled
-}
-
 // patchFelixTproxyMode takes all application layer specs as arguments and patches felix config.
 // If at least one of the specs requires TPROXYMode as "Enabled" it'll be patched as "Enabled" otherwise it is "Disabled".
 func (r *ReconcileApplicationLayer) patchFelixTproxyMode(ctx context.Context, al *operatorv1.ApplicationLayer) error {
@@ -426,7 +318,7 @@ func (r *ReconcileApplicationLayer) patchFelixTproxyMode(ctx context.Context, al
 	var tproxyMode crdv1.TPROXYModeOption
 	patchFrom := client.MergeFrom(fc.DeepCopy())
 
-	if al != nil && (r.isLogsCollectionEnabled(al.Spec.LogCollection) || r.isWAFEnabled(&al.Spec)) {
+	if al != nil && r.isLogsCollectionEnabled(al.Spec.LogCollection) {
 		tproxyMode = crdv1.TPROXYModeOptionEnabled
 	} else {
 		tproxyMode = crdv1.TPROXYModeOptionDisabled

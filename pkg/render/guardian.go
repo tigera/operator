@@ -44,38 +44,32 @@ const (
 	GuardianSecretName             = "tigera-managed-cluster-connection"
 )
 
-func Guardian(
-	url string,
-	pullSecrets []*corev1.Secret,
-	openshift bool,
-	installation *operatorv1.InstallationSpec,
-	tunnelSecret *corev1.Secret,
-	packetCaptureSecret *corev1.Secret,
-) Component {
+func Guardian(cfg *GuardianConfiguration) Component {
 	return &GuardianComponent{
-		url:                 url,
-		pullSecrets:         pullSecrets,
-		openshift:           openshift,
-		installation:        installation,
-		tunnelSecret:        tunnelSecret,
-		packetCaptureSecret: packetCaptureSecret,
+		cfg: cfg,
 	}
 }
 
+// GuardianConfiguration contains all the config information needed to render the component.
+type GuardianConfiguration struct {
+	URL                  string
+	PullSecrets          []*corev1.Secret
+	Openshift            bool
+	Installation         *operatorv1.InstallationSpec
+	TunnelSecret         *corev1.Secret
+	PacketCaptureSecret  *corev1.Secret
+	PrometheusCertSecret *corev1.Secret
+}
+
 type GuardianComponent struct {
-	url                 string
-	pullSecrets         []*corev1.Secret
-	openshift           bool
-	installation        *operatorv1.InstallationSpec
-	tunnelSecret        *corev1.Secret
-	packetCaptureSecret *corev1.Secret
-	image               string
+	cfg   *GuardianConfiguration
+	image string
 }
 
 func (c *GuardianComponent) ResolveImages(is *operatorv1.ImageSet) error {
-	reg := c.installation.Registry
-	path := c.installation.ImagePath
-	prefix := c.installation.ImagePrefix
+	reg := c.cfg.Installation.Registry
+	path := c.cfg.Installation.ImagePath
+	prefix := c.cfg.Installation.ImagePrefix
 	var err error
 	c.image, err = components.GetReference(components.ComponentGuardian, reg, path, prefix, is)
 	return err
@@ -87,23 +81,30 @@ func (c *GuardianComponent) SupportedOSType() rmeta.OSType {
 
 func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
-		CreateNamespace(GuardianNamespace, c.installation.KubernetesProvider),
+		CreateNamespace(GuardianNamespace, c.cfg.Installation.KubernetesProvider),
 	}
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(GuardianNamespace, c.pullSecrets...)...)...)
+	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(GuardianNamespace, c.cfg.PullSecrets...)...)...)
 	objs = append(objs,
 		c.serviceAccount(),
 		c.clusterRole(),
 		c.clusterRoleBinding(),
 		c.deployment(),
 		c.service(),
-		secret.CopyToNamespace(GuardianNamespace, c.tunnelSecret)[0],
-		secret.CopyToNamespace(GuardianNamespace, c.packetCaptureSecret)[0],
+		secret.CopyToNamespace(GuardianNamespace, c.cfg.TunnelSecret)[0],
+		secret.CopyToNamespace(GuardianNamespace, c.cfg.PacketCaptureSecret)[0],
 		// Add tigera-manager service account for impersonation
-		CreateNamespace(ManagerNamespace, c.installation.KubernetesProvider),
+		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider),
 		managerServiceAccount(),
-		managerClusterRole(false, true, c.openshift),
+		managerClusterRole(false, true, c.cfg.Openshift),
 		managerClusterRoleBinding(),
+		managerClusterWideSettingsGroup(),
+		managerUserSpecificSettingsGroup(),
+		managerClusterWideTigeraLayer(),
+		managerClusterWideDefaultView(),
 	)
+	if c.cfg.PrometheusCertSecret != nil {
+		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(GuardianNamespace, c.cfg.PrometheusCertSecret)...)...)
+	}
 
 	return objs, nil
 }
@@ -165,15 +166,6 @@ func (c *GuardianComponent) clusterRole() client.Object {
 				Resources: []string{"users", "groups", "serviceaccounts"},
 				Verbs:     []string{"impersonate"},
 			},
-			{
-				// Guardian forwards its token when sending the request to other services
-				// PacketCapture will authenticate the token from the request and check if impersonation is allowed
-				// AuthenticationReview API can authenticate a bearer token from the request if the token can create
-				// authenticationreviews
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"authenticationreviews"},
-				Verbs:     []string{"create"},
-			},
 		},
 	}
 }
@@ -231,10 +223,10 @@ func (c *GuardianComponent) deployment() client.Object {
 					},
 				},
 				Spec: corev1.PodSpec{
-					NodeSelector:       c.installation.ControlPlaneNodeSelector,
+					NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 					ServiceAccountName: GuardianServiceAccountName,
-					Tolerations:        append(c.installation.ControlPlaneTolerations, rmeta.TolerateMaster, rmeta.TolerateCriticalAddonsOnly),
-					ImagePullSecrets:   secret.GetReferenceList(c.pullSecrets),
+					Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster, rmeta.TolerateCriticalAddonsOnly),
+					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					Containers:         c.container(),
 					Volumes:            c.volumes(),
 				},
@@ -244,7 +236,7 @@ func (c *GuardianComponent) deployment() client.Object {
 }
 
 func (c *GuardianComponent) volumes() []corev1.Volume {
-	return []corev1.Volume{
+	volumes := []corev1.Volume{
 		{
 			Name: GuardianVolumeName,
 			VolumeSource: corev1.VolumeSource{
@@ -266,6 +258,18 @@ func (c *GuardianComponent) volumes() []corev1.Volume {
 			},
 		},
 	}
+	if c.cfg.PrometheusCertSecret != nil {
+		volumes = append(volumes, corev1.Volume{
+			Name: PrometheusTLSSecretName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+
+					SecretName: PrometheusTLSSecretName,
+				},
+			},
+		})
+	}
+	return volumes
 }
 
 func (c *GuardianComponent) container() []corev1.Container {
@@ -276,7 +280,7 @@ func (c *GuardianComponent) container() []corev1.Container {
 			Env: []corev1.EnvVar{
 				{Name: "GUARDIAN_PORT", Value: "9443"},
 				{Name: "GUARDIAN_LOGLEVEL", Value: "INFO"},
-				{Name: "GUARDIAN_VOLTRON_URL", Value: c.url},
+				{Name: "GUARDIAN_VOLTRON_URL", Value: c.cfg.URL},
 			},
 			VolumeMounts: c.volumeMounts(),
 			LivenessProbe: &corev1.Probe{
@@ -305,7 +309,7 @@ func (c *GuardianComponent) container() []corev1.Container {
 }
 
 func (c *GuardianComponent) volumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{
+	mounts := []corev1.VolumeMount{
 		{
 			Name:      GuardianVolumeName,
 			MountPath: "/certs/",
@@ -317,12 +321,20 @@ func (c *GuardianComponent) volumeMounts() []corev1.VolumeMount {
 			ReadOnly:  true,
 		},
 	}
+	if c.cfg.PrometheusCertSecret != nil {
+		mounts = append(mounts, corev1.VolumeMount{Name: PrometheusTLSSecretName, MountPath: "/certs/prometheus", ReadOnly: true})
+	}
+
+	return mounts
 }
 
 func (c *GuardianComponent) annotations() map[string]string {
 	var annotations = make(map[string]string)
 
-	annotations[PacketCaptureTLSHashAnnotation] = rmeta.AnnotationHash(c.packetCaptureSecret.Data)
+	annotations[PacketCaptureTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.PacketCaptureSecret.Data)
 
+	if c.cfg.PrometheusCertSecret != nil {
+		annotations[prometheusTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.PrometheusCertSecret.Data)
+	}
 	return annotations
 }

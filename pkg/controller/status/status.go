@@ -69,6 +69,7 @@ type StatusManager interface {
 	RemoveStatefulSets(sss ...types.NamespacedName)
 	RemoveCronJobs(cjs ...types.NamespacedName)
 	RemoveCertificateSigningRequests(name string)
+	SetWindowsUpgradeStatus(pending, inProgress, completed []string, err error)
 	SetDegraded(reason, msg string)
 	ClearDegraded()
 	IsAvailable() bool
@@ -85,6 +86,7 @@ type statusManager struct {
 	statefulsets              map[string]types.NamespacedName
 	cronjobs                  map[string]types.NamespacedName
 	certificatestatusrequests map[string]map[string]string
+	windowsNodeUpgrades       *windowsNodeUpgrades
 	lock                      sync.Mutex
 	enabled                   *bool
 	kubernetesVersion         *common.VersionInfo
@@ -93,6 +95,8 @@ type statusManager struct {
 	degraded               bool
 	explicitDegradedMsg    string
 	explicitDegradedReason string
+	// Track degraded state set by calicoWindowsUpgrader.
+	windowsUpgradeDegradedMsg string
 
 	// Keep track of currently calculated status.
 	progressing []string
@@ -102,9 +106,25 @@ type statusManager struct {
 	// if there are any, and report statuses based on the state of those resources.
 	readyToMonitor bool
 	hasSynced      bool
+
+	// crExists tracks whether the status manager believes the CR to exist or not. It's used
+	// to determine whether we need to call Delete() on the object, without sending unnecessary
+	// get/delete calls to the API server.
+	crExists bool
 }
 
 func New(client client.Client, component string, kubernetesVersion *common.VersionInfo) StatusManager {
+	// Best-effort initialization of CR status by checking for its existence.
+	crExists := true
+	ts := &operator.TigeraStatus{}
+	err := client.Get(context.TODO(), types.NamespacedName{Name: component}, ts)
+	if err != nil && errors.IsNotFound(err) {
+		// CR doesn't exist. If we hit any other type of error, we'll assume the CR does
+		// exist. This may result in one unnecessary delete call if the resource in fact doesn't exist,
+		// but we can't assume the object has been deleted without hard evidence.
+		crExists = false
+	}
+
 	return &statusManager{
 		client:                    client,
 		component:                 component,
@@ -113,7 +133,9 @@ func New(client client.Client, component string, kubernetesVersion *common.Versi
 		statefulsets:              make(map[string]types.NamespacedName),
 		cronjobs:                  make(map[string]types.NamespacedName),
 		certificatestatusrequests: make(map[string]map[string]string),
+		windowsNodeUpgrades:       newWindowsNodeUpgrades(),
 		kubernetesVersion:         kubernetesVersion,
+		crExists:                  crExists,
 	}
 }
 
@@ -123,9 +145,13 @@ func (m *statusManager) updateStatus() {
 		return
 	}
 
-	if m.removeTigeraStatus() {
+	if m.enabled != nil && !*m.enabled {
+		// This status manager is explicitly disabled, because the controller has called OnCRNotFound.
+		// Remove any TigeraStatus object that had previously been created, and skip updating the status.
+		m.removeTigeraStatus()
 		return
 	}
+	// This status manager is enabled. Perform a sync.
 
 	// Unless we've been given an explicit degraded reason we are not ready to start reporting statuses until
 	// ReadyToMonitor has been called by the owner of the status manager. This means there's no point in syncing
@@ -142,7 +168,7 @@ func (m *statusManager) updateStatus() {
 		}
 
 		if m.IsProgressing() {
-			m.setProgressing("Not all pods are ready", m.progressingMessage())
+			m.setProgressing("Not all resources are ready", m.progressingMessage())
 		} else {
 			m.clearProgressing()
 		}
@@ -275,6 +301,50 @@ func (m *statusManager) AddCertificateSigningRequests(name string, labels map[st
 	m.certificatestatusrequests[name] = labels
 }
 
+type windowsNodeUpgrades struct {
+	nodesPending    []string
+	nodesInProgress []string
+	nodesCompleted  []string
+}
+
+func newWindowsNodeUpgrades() *windowsNodeUpgrades {
+	return &windowsNodeUpgrades{
+		nodesPending:    []string{},
+		nodesInProgress: []string{},
+		nodesCompleted:  []string{},
+	}
+}
+
+func (w *windowsNodeUpgrades) progressingReason() string {
+	inProgress := len(w.nodesInProgress)
+	pending := len(w.nodesPending)
+	completed := len(w.nodesCompleted)
+	total := pending + inProgress + completed
+
+	if pending+inProgress == 0 {
+		return ""
+	}
+
+	return fmt.Sprintf("Waiting for Calico for Windows to be upgraded: %v/%v nodes have been upgraded, %v in-progress", completed, total, inProgress)
+}
+
+// SetWindowsUpgradeStatus tells the status manager to monitor the upgrade
+// status of the given Windows node upgrades.
+func (m *statusManager) SetWindowsUpgradeStatus(pending, inProgress, completed []string, err error) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	if err != nil {
+		m.windowsUpgradeDegradedMsg = err.Error()
+		return
+	}
+
+	m.windowsNodeUpgrades.nodesPending = pending
+	m.windowsNodeUpgrades.nodesInProgress = inProgress
+	m.windowsNodeUpgrades.nodesCompleted = completed
+	m.windowsUpgradeDegradedMsg = ""
+}
+
 // RemoveDaemonsets tells the status manager to stop monitoring the health of the given daemonsets
 func (m *statusManager) RemoveDaemonsets(dss ...types.NamespacedName) {
 	m.lock.Lock()
@@ -334,6 +404,7 @@ func (m *statusManager) ClearDegraded() {
 	m.degraded = false
 	m.explicitDegradedReason = ""
 	m.explicitDegradedMsg = ""
+	m.windowsUpgradeDegradedMsg = ""
 }
 
 // IsAvailable returns true if the component is available and false otherwise.
@@ -376,7 +447,9 @@ func (m *statusManager) IsDegraded() bool {
 
 	// Controllers can explicitly set us degraded, which can be set even before we tell the status manager that it
 	// should start monitoring resources.
-	if m.degraded {
+	// windowsUpgradeDegradedReason indicates an error has occurred with the
+	// Calico Windows upgrade.
+	if m.degraded || m.windowsUpgradeDegradedMsg != "" {
 		return true
 	}
 
@@ -410,7 +483,7 @@ func (m *statusManager) syncState() {
 			progressing = append(progressing, fmt.Sprintf("DaemonSet %q update is rolling out (%d out of %d updated)", dsnn.String(), ds.Status.UpdatedNumberScheduled, ds.Status.DesiredNumberScheduled))
 		} else if ds.Status.NumberUnavailable > 0 {
 			progressing = append(progressing, fmt.Sprintf("DaemonSet %q is not available (awaiting %d nodes)", dsnn.String(), ds.Status.NumberUnavailable))
-		} else if ds.Status.NumberAvailable == 0 {
+		} else if ds.Status.NumberAvailable == 0 && ds.Status.DesiredNumberScheduled != 0 {
 			progressing = append(progressing, fmt.Sprintf("DaemonSet %q is not yet scheduled on any nodes", dsnn.String()))
 		} else if ds.Generation > ds.Status.ObservedGeneration {
 			progressing = append(progressing, fmt.Sprintf("DaemonSet %q update is being processed (generation %d, observed generation %d)", dsnn.String(), ds.Generation, ds.Status.ObservedGeneration))
@@ -496,6 +569,10 @@ func (m *statusManager) syncState() {
 		}
 	}
 
+	if reason := m.windowsNodeUpgrades.progressingReason(); reason != "" {
+		progressing = append(progressing, reason)
+	}
+
 	m.progressing = progressing
 	m.failing = failing
 	m.hasSynced = true
@@ -508,19 +585,24 @@ func (m *statusManager) isInitialized() bool {
 	return m.enabled != nil
 }
 
-// removeTigeraStatus returns true and removes the status displayed in TigeraStatus if corresponding CR not found
-func (m *statusManager) removeTigeraStatus() bool {
+// removeTigeraStatus removes the TigeraStatus object controlled by this status manager, if it exists.
+func (m *statusManager) removeTigeraStatus() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	if m.enabled != nil && !*m.enabled {
-		ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: m.component}}
-		err := m.client.Delete(context.TODO(), ts)
-		if err != nil && !errors.IsNotFound(err) {
-			log.WithValues("reason", err).Info("Failed to remove TigeraStatus", "component", m.component)
-		}
-		return true
+	if !m.crExists {
+		// No CR to delete, so short-circuit.
+		return
 	}
-	return false
+
+	// Status manager is explicitly disabled. Delete the TigeraStatus CR if it exists.
+	ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: m.component}}
+	err := m.client.Delete(context.TODO(), ts)
+	if err != nil && !errors.IsNotFound(err) {
+		log.WithValues("reason", err).Info("Failed to remove TigeraStatus", "component", m.component)
+	} else {
+		// CR no longer exists.
+		m.crExists = false
+	}
 }
 
 // podsFailing takes a selector and returns if any of the pods that match it are failing. Failing pods are defined
@@ -631,6 +713,7 @@ func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondi
 			}
 		}
 	}
+	m.crExists = true
 }
 
 func (m *statusManager) setAvailable(reason, msg string) {
@@ -706,6 +789,9 @@ func (m *statusManager) degradedMessage() string {
 	if m.explicitDegradedMsg != "" {
 		msgs = append(msgs, m.explicitDegradedMsg)
 	}
+	if m.windowsUpgradeDegradedMsg != "" {
+		msgs = append(msgs, m.windowsUpgradeDegradedMsg)
+	}
 	msgs = append(msgs, m.failing...)
 	return strings.Join(msgs, "\n")
 }
@@ -716,6 +802,10 @@ func (m *statusManager) degradedReason() string {
 	reasons := []string{}
 	if m.explicitDegradedReason != "" {
 		reasons = append(reasons, m.explicitDegradedReason)
+	}
+	// Add a reason if we have a windows upgrade degraded msg.
+	if m.windowsUpgradeDegradedMsg != "" {
+		reasons = append(reasons, common.CalicoWindowsNodeUpgradeStatusErrorReason)
 	}
 	if len(m.failing) != 0 {
 		reasons = append(reasons, "Some pods are failing")

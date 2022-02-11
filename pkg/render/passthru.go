@@ -6,7 +6,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func NewPassthrough(objs []client.Object) Component {
+func NewPassthrough(objs ...client.Object) Component {
 	return &passthroughComponent{objs: objs}
 }
 

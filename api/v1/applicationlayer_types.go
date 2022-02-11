@@ -22,13 +22,19 @@ import (
 
 // ApplicationLayerSpec defines the desired state of ApplicationLayer
 type ApplicationLayerSpec struct {
+	// WebApplicationFirewall controls whether or not ModSecurity enforcement is enabled for the cluster.
+	// When enabled, Services may opt-in to having ingress traffic examed by ModSecurity.
+	WebApplicationFirewall *WAFStatusType `json:"webApplicationFirewall,omitempty"`
 	// Specification for application layer (L7) log collection.
 	LogCollection *LogCollectionSpec `json:"logCollection,omitempty"`
 }
 
 type LogCollectionStatusType string
+type WAFStatusType string
 
 const (
+	WAFDisabled             WAFStatusType           = "Disabled"
+	WAFEnabled              WAFStatusType           = "Enabled"
 	L7LogCollectionDisabled LogCollectionStatusType = "Disabled"
 	L7LogCollectionEnabled  LogCollectionStatusType = "Enabled"
 )
@@ -43,7 +49,6 @@ type LogCollectionSpec struct {
 	// Interval in seconds for sending L7 log information for processing.
 	// +optional
 	// Default: 5 sec
-	// +kubebuilder:validation:Minimum:=1
 	LogIntervalSeconds *int64 `json:"logIntervalSeconds,omitempty"`
 
 	// Maximum number of unique L7 logs that are sent LogIntervalSeconds.

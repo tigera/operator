@@ -2055,6 +2055,28 @@ var _ = Describe("Node rendering tests", func() {
 			))
 		})
 	})
+	Describe("EKS", func() {
+		It("should avoid virtual fargate nodes", func() {
+			defaultInstance.KubernetesProvider = operatorv1.ProviderEKS
+			component := render.Node(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+			dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			Expect(dsResource).ToNot(BeNil())
+
+			// The DaemonSet should have the correct configuration.
+			ds := dsResource.(*appsv1.DaemonSet)
+			Expect(ds.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms).To(ContainElement(
+				corev1.NodeSelectorTerm{
+					MatchExpressions: []corev1.NodeSelectorRequirement{{
+						Key:      "eks.amazonaws.com/compute-type",
+						Operator: corev1.NodeSelectorOpNotIn,
+						Values:   []string{"fargate"},
+					}},
+				},
+			))
+		})
+	})
 	Describe("test IP auto detection", func() {
 		It("should support canReach", func() {
 			defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4.FirstFound = nil
@@ -2573,6 +2595,100 @@ var _ = Describe("Node rendering tests", func() {
 }`))
 	})
 
+	It("should render cni config with host-local (dual-stack)", func() {
+		defaultInstance.CNI.IPAM.Type = operatorv1.IPAMPluginHostLocal
+		defaultInstance.CalicoNetwork.IPPools = []operatorv1.IPPool{
+			{
+				CIDR:          "192.168.0.0/24",
+				Encapsulation: operatorv1.EncapsulationNone,
+				NATOutgoing:   operatorv1.NATOutgoingEnabled,
+				NodeSelector:  "all()",
+			},
+			{
+				CIDR:          "fe80:00::00/64",
+				Encapsulation: operatorv1.EncapsulationNone,
+				NATOutgoing:   operatorv1.NATOutgoingEnabled,
+				NodeSelector:  "all()",
+			},
+		}
+		component := render.Node(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(defaultNumExpectedResources))
+
+		// Should render the correct resources.
+		cniCmResource := rtest.GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
+		Expect(cniCmResource).ToNot(BeNil())
+		cniCm := cniCmResource.(*corev1.ConfigMap)
+		Expect(cniCm.Data["config"]).To(MatchJSON(`{
+  "name": "k8s-pod-network",
+  "cniVersion": "0.3.1",
+  "plugins": [
+    {
+      "type": "calico",
+      "datastore_type": "kubernetes",
+      "mtu": 0,
+      "nodename_file_optional": false,
+      "log_level": "Info",
+      "log_file_path": "/var/log/calico/cni/cni.log",
+      "ipam": {
+          "type": "host-local",
+	  "ranges": [[{"subnet": "usePodCidr"}], [{"subnet": "usePodCidrIPv6"}]]
+      },
+      "container_settings": { "allow_ip_forwarding": false },
+      "policy": { "type": "k8s" },
+      "kubernetes": { "kubeconfig": "__KUBECONFIG_FILEPATH__" }
+    },
+    {"type": "bandwidth", "capabilities": {"bandwidth": true}},
+    {"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}
+  ]
+}`))
+	})
+
+	It("should render cni config with host-local (v6-only)", func() {
+		defaultInstance.CNI.IPAM.Type = operatorv1.IPAMPluginHostLocal
+		defaultInstance.CalicoNetwork.IPPools = []operatorv1.IPPool{
+			{
+				CIDR:          "fe80:00::00/64",
+				Encapsulation: operatorv1.EncapsulationNone,
+				NATOutgoing:   operatorv1.NATOutgoingEnabled,
+				NodeSelector:  "all()",
+			},
+		}
+		component := render.Node(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(defaultNumExpectedResources))
+
+		// Should render the correct resources.
+		cniCmResource := rtest.GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
+		Expect(cniCmResource).ToNot(BeNil())
+		cniCm := cniCmResource.(*corev1.ConfigMap)
+		Expect(cniCm.Data["config"]).To(MatchJSON(`{
+  "name": "k8s-pod-network",
+  "cniVersion": "0.3.1",
+  "plugins": [
+    {
+      "type": "calico",
+      "datastore_type": "kubernetes",
+      "mtu": 0,
+      "nodename_file_optional": false,
+      "log_level": "Info",
+      "log_file_path": "/var/log/calico/cni/cni.log",
+      "ipam": {
+          "type": "host-local",
+          "subnet" : "usePodCidrIPv6"
+      },
+      "container_settings": { "allow_ip_forwarding": false },
+      "policy": { "type": "k8s" },
+      "kubernetes": { "kubeconfig": "__KUBECONFIG_FILEPATH__" }
+    },
+    {"type": "bandwidth", "capabilities": {"bandwidth": true}},
+    {"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}
+  ]
+}`))
+	})
+
 	It("should render cni config with k8s endpoint", func() {
 		k8sServiceEp.Host = "k8shost"
 		k8sServiceEp.Port = "1234"
@@ -2707,7 +2823,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(passed).To(Equal(true))
 	})
 
-	It("should render when configured to use cloude routes with host-local", func() {
+	It("should render when configured to use cloud routes with host-local", func() {
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -2814,6 +2930,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator"},
 			{Name: "IP", Value: "autodetect"},
+			{Name: "USE_POD_CIDR", Value: "true"},
 			{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
 			{Name: "IP6", Value: "none"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},

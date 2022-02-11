@@ -56,12 +56,12 @@ var (
 	}
 
 	ComponentEckElasticsearch = component{
-		Version: "7.11.2",
+		Version: "7.16.2",
 		Image:   "tigera/elasticsearch",
 	}
 
 	ComponentEckKibana = component{
-		Version: "7.11.2",
+		Version: "7.16.2",
 		Image:   "tigera/kibana",
 	}
 
@@ -75,8 +75,13 @@ var (
 		Image:   "tigera/elasticsearch",
 	}
 
+	ComponentECKElasticsearchOperator = component{
+		Version: "1.8.0",
+		Image:   "tigera/eck-operator",
+	}
+
 	ComponentElasticsearchOperator = component{
-		Version: "1.7.1",
+		Version: "master",
 		Image:   "tigera/eck-operator",
 	}
 
@@ -155,8 +160,18 @@ var (
 		Image:   "tigera/envoy",
 	}
 
+	ComponentDikastes = component{
+		Version: "master",
+		Image:   "tigera/app-policy",
+	}
+
+	ComponentCoreOSPrometheus = component{
+		Version: "v2.32.0",
+		Image:   "tigera/prometheus",
+	}
+
 	ComponentPrometheus = component{
-		Version: "v2.17.2",
+		Version: "master",
 		Image:   "tigera/prometheus",
 	}
 
@@ -165,8 +180,13 @@ var (
 		Image:   "tigera/prometheus-service",
 	}
 
+	ComponentCoreOSAlertmanager = component{
+		Version: "v0.23.0",
+		Image:   "tigera/alertmanager",
+	}
+
 	ComponentPrometheusAlertmanager = component{
-		Version: "v0.20.0",
+		Version: "master",
 		Image:   "tigera/alertmanager",
 	}
 
@@ -205,6 +225,10 @@ var (
 		Image:   "tigera/elasticsearch-metrics",
 	}
 
+	ComponentTigeraWindows = component{
+		Version: "master",
+		Image:   "tigera/calico-windows-upgrade",
+	}
 	EnterpriseComponents = []component{
 		ComponentAPIServer,
 		ComponentComplianceBenchmarker,
@@ -217,6 +241,7 @@ var (
 		ComponentEckKibana,
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,
+		ComponentECKElasticsearchOperator,
 		ComponentElasticsearchOperator,
 		ComponentEsCurator,
 		ComponentEsProxy,
@@ -232,8 +257,10 @@ var (
 		ComponentPacketCapture,
 		ComponentL7Collector,
 		ComponentEnvoyProxy,
+		ComponentCoreOSPrometheus,
 		ComponentPrometheus,
 		ComponentTigeraPrometheusService,
+		ComponentCoreOSAlertmanager,
 		ComponentPrometheusAlertmanager,
 		ComponentQueryServer,
 		ComponentTigeraKubeControllers,
@@ -243,5 +270,7 @@ var (
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
+		ComponentTigeraWindows,
+		ComponentDikastes,
 	}
 )

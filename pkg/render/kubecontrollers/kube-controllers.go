@@ -73,6 +73,9 @@ type KubeControllersConfiguration struct {
 	ClusterDomain           string
 	MetricsPort             int
 
+	// For details on why this is needed see 'Node and Installation finalizer' in the core_controller.
+	Terminating bool
+
 	// Secrets - provided by the caller. Used to generate secrets in the destination
 	// namespace to be returned by the rendered. Expected that the calling code
 	// take care to pass the same secret on each reconcile where possible.
@@ -242,6 +245,11 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 		objectsToDelete = append(objectsToDelete, c.prometheusService())
 	}
 
+	if c.cfg.Terminating {
+		objectsToDelete = append(objectsToDelete, objectsToCreate...)
+		objectsToCreate = nil
+	}
+
 	return objectsToCreate, objectsToDelete
 }
 
@@ -332,7 +340,7 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 			// Needed to validate the license
 			APIGroups: []string{"crd.projectcalico.org"},
 			Resources: []string{"licensekeys"},
-			Verbs:     []string{"get"},
+			Verbs:     []string{"get", "watch"},
 		},
 		{
 			APIGroups: []string{"projectcalico.org"},
@@ -349,17 +357,6 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 			Resources: []string{"deeppacketinspections/status"},
 			Verbs:     []string{"update"},
 		},
-	}
-
-	if cfg.ManagementCluster != nil {
-		// For cross-cluster requests an authentication review will be done for authenticating the kube-controllers.
-		// Requests on behalf of the kube-controllers will be sent to Voltron, where an authentication review will
-		// take place with its bearer token.
-		rules = append(rules, rbacv1.PolicyRule{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"authenticationreviews"},
-			Verbs:     []string{"create"},
-		})
 	}
 
 	if cfg.ManagementClusterConnection != nil {

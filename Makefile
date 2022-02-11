@@ -98,7 +98,7 @@ endif
 
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=v0.59
+GO_BUILD_VER?=v0.65
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(ARCH)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./api -name '*.go')
@@ -151,7 +151,7 @@ PUSH_IMAGE_PREFIXES+=$(RELEASE_PREFIXES)
 endif
 
 # remove from the list to push to manifest any registries that do not support multi-arch
-EXCLUDE_MANIFEST_REGISTRIES?=
+EXCLUDE_MANIFEST_REGISTRIES?=""
 PUSH_MANIFEST_IMAGE_PREFIXES=$(PUSH_IMAGE_PREFIXES:$(EXCLUDE_MANIFEST_REGISTRIES)%=)
 PUSH_NONMANIFEST_IMAGE_PREFIXES=$(filter-out $(PUSH_MANIFEST_IMAGE_PREFIXES),$(PUSH_IMAGE_PREFIXES))
 
@@ -285,25 +285,26 @@ run-uts:
 
 ## Create a local kind dual stack cluster.
 KUBECONFIG?=./kubeconfig.yaml
-K8S_VERSION?=v1.18.6
+K8S_VERSION?=v1.21.2
 cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	# First make sure any previous cluster is deleted
 	make cluster-destroy
-	
+
 	# Create a kind cluster.
 	$(BINDIR)/kind create cluster \
 	        --config ./deploy/kind-config.yaml \
 	        --kubeconfig $(KUBECONFIG) \
 	        --image kindest/node:$(K8S_VERSION)
-	
+
 	./deploy/scripts/ipv6_kind_cluster_update.sh
 	# Deploy resources needed in test env.
 	$(MAKE) deploy-crds
-	
+
 	# Wait for controller manager to be running and healthy.
 	while ! KUBECONFIG=$(KUBECONFIG) $(BINDIR)/kubectl get serviceaccount default; do echo "Waiting for default serviceaccount to be created..."; sleep 2; done
 
 ## Deploy CRDs needed for UTs.  CRDs needed by ECK that we don't use are not deployed.
+## kubectl create is used for prometheus as a workaround for https://github.com/prometheus-community/helm-charts/issues/1500
 deploy-crds: kubectl
 	@export KUBECONFIG=$(KUBECONFIG) && \
 		$(BINDIR)/kubectl apply -f pkg/crds/operator/ && \
@@ -311,7 +312,7 @@ deploy-crds: kubectl
 		$(BINDIR)/kubectl apply -f pkg/crds/enterprise/ && \
 		$(BINDIR)/kubectl apply -f deploy/crds/elastic/elasticsearch-crd.yaml && \
 		$(BINDIR)/kubectl apply -f deploy/crds/elastic/kibana-crd.yaml && \
-		$(BINDIR)/kubectl apply -f deploy/crds/prometheus
+		$(BINDIR)/kubectl create -f deploy/crds/prometheus
 
 create-tigera-operator-namespace: kubectl
 	KUBECONFIG=$(KUBECONFIG) $(BINDIR)/kubectl create ns tigera-operator
@@ -520,18 +521,16 @@ define prep_local_crds
 	mkdir -p pkg/crds/$(dir)
 	mkdir -p .crds/$(dir)
 endef
-define fetch_crds 
+define fetch_crds
     $(eval project := $(1))
     $(eval branch := $(2))
     $(eval dir := $(3))
 	@echo "Fetching $(dir) CRDs from $(project) branch $(branch)"
-	git -C .crds/$(dir) clone git@github.com:$(project).git ./
-	git -C .crds/$(dir) fetch --all origin 2>&1 | grep -v -e "new branch" -e "new tag"
-	git -C .crds/$(dir) checkout -q $(branch)
+	git -C .crds/$(dir) clone --depth 1 --branch $(branch) --single-branch git@github.com:$(project).git ./
 endef
 define copy_crds
     $(eval dir := $(1))
-	@cp .crds/$(dir)/config/crd/* pkg/crds/$(dir)/ && echo "Copied $(dir) CRDs"
+	@cp .crds/$(dir)/libcalico-go/config/crd/* pkg/crds/$(dir)/ && echo "Copied $(dir) CRDs"
 endef
 
 .PHONY: read-libcalico-version read-libcalico-enterprise-version
@@ -539,12 +538,12 @@ endef
 .PHONY: fetch-calico-crds fetch-enterprise-crds
 .PHONY: prepare-for-calico-crds prepare-for-enterprise-crds
 
-LIBCALICO?=projectcalico/libcalico-go
+CALICO?=projectcalico/calico
 read-libcalico-calico-version:
-	$(eval LIBCALICO_BRANCH := $(shell $(CONTAINERIZED) $(CALICO_BUILD) \
+	$(eval CALICO_BRANCH := $(shell $(CONTAINERIZED) $(CALICO_BUILD) \
 	bash -c '$(GIT_CONFIG_SSH) \
 	yq r config/calico_versions.yml components.libcalico-go.version'))
-	if [ -z "$(LIBCALICO_BRANCH)" ]; then echo "libcalico branch not defined"; exit 1; fi
+	if [ -z "$(CALICO_BRANCH)" ]; then echo "libcalico branch not defined"; exit 1; fi
 
 update-calico-crds: fetch-calico-crds
 	$(call copy_crds,"calico")
@@ -553,14 +552,14 @@ prepare-for-calico-crds:
 	$(call prep_local_crds,"calico")
 
 fetch-calico-crds: prepare-for-calico-crds read-libcalico-calico-version
-	$(call fetch_crds,$(LIBCALICO),$(LIBCALICO_BRANCH),"calico")
+	$(call fetch_crds,$(CALICO),$(CALICO_BRANCH),"calico")
 
-LIBCALICO_ENTERPRISE?=tigera/libcalico-go-private
+CALICO_ENTERPRISE?=tigera/calico-private
 read-libcalico-enterprise-version:
-	$(eval LIBCALICO_ENTERPRISE_BRANCH := $(shell $(CONTAINERIZED) $(CALICO_BUILD) \
+	$(eval CALICO_ENTERPRISE_BRANCH := $(shell $(CONTAINERIZED) $(CALICO_BUILD) \
 	bash -c '$(GIT_CONFIG_SSH) \
 	yq r config/enterprise_versions.yml components.libcalico-go.version'))
-	if [ -z "$(LIBCALICO_ENTERPRISE_BRANCH)" ]; then echo "libcalico enterprise branch not defined"; exit 1; fi
+	if [ -z "$(CALICO_ENTERPRISE_BRANCH)" ]; then echo "libcalico enterprise branch not defined"; exit 1; fi
 
 update-enterprise-crds: fetch-enterprise-crds
 	$(call copy_crds,"enterprise")
@@ -569,7 +568,7 @@ prepare-for-enterprise-crds:
 	$(call prep_local_crds,"enterprise")
 
 fetch-enterprise-crds: prepare-for-enterprise-crds  read-libcalico-enterprise-version
-	$(call fetch_crds,$(LIBCALICO_ENTERPRISE),$(LIBCALICO_ENTERPRISE_BRANCH),"enterprise")
+	$(call fetch_crds,$(CALICO_ENTERPRISE),$(CALICO_ENTERPRISE_BRANCH),"enterprise")
 
 .PHONY: prepull-image
 prepull-image:

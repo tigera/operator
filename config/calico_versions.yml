@@ -15,3 +15,5 @@ components:
     version: master
   calico/apiserver:
     version: master
+  calico/windows-upgrade:
+    version: master

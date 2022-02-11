@@ -43,6 +43,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
+	"github.com/tigera/operator/pkg/render/common/secret"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/test"
@@ -51,8 +52,8 @@ import (
 var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	var instance *operatorv1.InstallationSpec
 	var managementCluster = &operatorv1.ManagementCluster{Spec: operatorv1.ManagementClusterSpec{Address: "example.com:1234"}}
-	var k8sServiceEp k8sapi.ServiceEndpoint
 	var replicas int32
+	var cfg *render.APIServerConfiguration
 
 	BeforeEach(func() {
 		instance = &operatorv1.InstallationSpec{
@@ -60,8 +61,26 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			Registry:             "testregistry.com/",
 			Variant:              operatorv1.TigeraSecureEnterprise,
 		}
-		k8sServiceEp = k8sapi.ServiceEndpoint{}
+
+		tlsKeyPair, err := secret.CreateTLSSecret(nil,
+			render.ProjectCalicoApiServerTLSSecretName(instance.Variant),
+			common.OperatorNamespace(),
+			render.APIServerSecretKeyName,
+			render.APIServerSecretCertName,
+			rmeta.DefaultCertificateDuration,
+			nil,
+			dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(instance.Variant), rmeta.APIServerNamespace(instance.Variant), dns.DefaultClusterDomain)...,
+		)
+		Expect(err).ShouldNot(HaveOccurred())
+
 		replicas = 2
+		cfg = &render.APIServerConfiguration{
+			K8SServiceEndpoint: k8sapi.ServiceEndpoint{},
+			Installation:       instance,
+			TLSKeyPair:         tlsKeyPair,
+			Openshift:          openshift,
+			ClusterDomain:      dns.DefaultClusterDomain,
+		}
 	})
 
 	DescribeTable("should render an API server with default configuration", func(clusterDomain string) {
@@ -81,25 +100,41 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			{name: "calico-apiserver-access-calico-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-apiserver-delegate-auth", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "tigera-apiserver-certs", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-apiserver-certs", ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
 			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1", kind: "APIService"},
 			{name: "tigera-apiserver", ns: "tigera-system", group: "apps", version: "v1", kind: "Deployment"},
 			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
 			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
+		var err error
+		cfg.TLSKeyPair, err = secret.CreateTLSSecret(nil,
+			render.ProjectCalicoApiServerTLSSecretName(cfg.Installation.Variant),
+			common.OperatorNamespace(),
+			render.APIServerSecretKeyName,
+			render.APIServerSecretCertName,
+			rmeta.DefaultCertificateDuration,
+			nil,
+			dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(cfg.Installation.Variant), rmeta.APIServerNamespace(cfg.Installation.Variant), clusterDomain)...,
+		)
+		Expect(err).ShouldNot(HaveOccurred())
+
 		// APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool
-		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, clusterDomain)
+		cfg.ClusterDomain = clusterDomain
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 
@@ -136,10 +171,6 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(meta.GetAnnotations()).NotTo(ContainElement("openshift.io/node-selector"))
 
 		expectedDNSNames := dns.GetServiceDNSNames("tigera-api", "tigera-system", clusterDomain)
-		operatorCert, ok := rtest.GetResource(resources, "tigera-apiserver-certs", "tigera-operator", "", "v1", "Secret").(*corev1.Secret)
-		Expect(ok).To(BeTrue(), "Expected v1.Secret")
-		test.VerifyCert(operatorCert, "apiserver.key", "apiserver.crt", expectedDNSNames...)
-
 		tigeraCert, ok := rtest.GetResource(resources, "tigera-apiserver-certs", "tigera-system", "", "v1", "Secret").(*corev1.Secret)
 		Expect(ok).To(BeTrue(), "Expected v1.Secret")
 		test.VerifyCert(tigeraCert, "apiserver.key", "apiserver.crt", expectedDNSNames...)
@@ -268,24 +299,27 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			{name: "calico-apiserver-access-calico-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-apiserver-delegate-auth", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "tigera-apiserver-certs", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-apiserver-certs", ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
 			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1", kind: "APIService"},
 			{name: "tigera-apiserver", ns: "tigera-system", group: "apps", version: "v1", kind: "Deployment"},
 			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
 			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
-		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -318,24 +352,27 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			{name: "calico-apiserver-access-calico-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-apiserver-delegate-auth", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "tigera-apiserver-certs", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-apiserver-certs", ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
 			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1", kind: "APIService"},
 			{name: "tigera-apiserver", ns: "tigera-system", group: "apps", version: "v1", kind: "Deployment"},
 			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
 			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
-		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -353,6 +390,20 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		crb := rtest.GetResource(resources, "tigera-tier-getter", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 		Expect(crb.RoleRef.Kind).To(Equal("ClusterRole"))
 		Expect(crb.RoleRef.Name).To(Equal("tigera-tier-getter"))
+		Expect(len(crb.Subjects)).To(Equal(1))
+		Expect(crb.Subjects[0].Kind).To(Equal("User"))
+		Expect(crb.Subjects[0].Name).To(Equal("system:kube-controller-manager"))
+
+		cr = rtest.GetResource(resources, "tigera-uisettingsgroup-getter", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(len(cr.Rules)).To(Equal(1))
+		Expect(len(cr.Rules[0].Resources)).To(Equal(1))
+		Expect(cr.Rules[0].Resources[0]).To(Equal("uisettingsgroups"))
+		Expect(len(cr.Rules[0].Verbs)).To(Equal(1))
+		Expect(cr.Rules[0].Verbs[0]).To(Equal("get"))
+
+		crb = rtest.GetResource(resources, "tigera-uisettingsgroup-getter", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+		Expect(crb.RoleRef.Kind).To(Equal("ClusterRole"))
+		Expect(crb.RoleRef.Name).To(Equal("tigera-uisettingsgroup-getter"))
 		Expect(len(crb.Subjects)).To(Equal(1))
 		Expect(crb.Subjects[0].Kind).To(Equal("User"))
 		Expect(crb.Subjects[0].Name).To(Equal("system:kube-controller-manager"))
@@ -375,25 +426,28 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			{name: "calico-apiserver-access-calico-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-apiserver-delegate-auth", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "tigera-apiserver-certs", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-apiserver-certs", ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
 			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1", kind: "APIService"},
 			{name: "tigera-apiserver", ns: "tigera-system", group: "apps", version: "v1", kind: "Deployment"},
 			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
 			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
-		instance.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
-		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		cfg.Installation.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -411,8 +465,9 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			Value:    "bar",
 			Effect:   corev1.TaintEffectNoExecute,
 		}
-		instance.ControlPlaneTolerations = []corev1.Toleration{tol}
-		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		cfg.Installation.ControlPlaneTolerations = []corev1.Toleration{tol}
+
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 		d := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -436,24 +491,27 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			{name: "calico-apiserver-access-calico-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-apiserver-delegate-auth", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "tigera-apiserver-certs", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-apiserver-certs", ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
 			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1", kind: "APIService"},
 			{name: "tigera-apiserver", ns: "tigera-system", group: "apps", version: "v1", kind: "Deployment"},
 			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
 			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 		}
 
-		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -481,13 +539,13 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	It("should set TIGERA_*_SECURITY_GROUP variables on queryserver when AmazonCloudIntegration is defined", func() {
-		aci := &operatorv1.AmazonCloudIntegration{
+		cfg.AmazonCloudIntegration = &operatorv1.AmazonCloudIntegration{
 			Spec: operatorv1.AmazonCloudIntegrationSpec{
 				NodeSecurityGroupIDs: []string{"sg-nodeid", "sg-masterid"},
 				PodSecurityGroupID:   "sg-podsgid",
 			},
 		}
-		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, aci, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -511,10 +569,10 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	It("should set KUBERENETES_SERVICE_... variables if host networked", func() {
-		k8sServiceEp.Host = "k8shost"
-		k8sServiceEp.Port = "1234"
-
-		component, err := render.APIServer(k8sServiceEp, instance, true, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		cfg.K8SServiceEndpoint.Host = "k8shost"
+		cfg.K8SServiceEndpoint.Port = "1234"
+		cfg.ForceHostNetwork = true
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -527,11 +585,11 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	It("should not set KUBERENETES_SERVICE_... variables if not host networked on Docker EE with proxy.local", func() {
-		k8sServiceEp.Host = "proxy.local"
-		k8sServiceEp.Port = "1234"
-		instance.KubernetesProvider = operatorv1.ProviderDockerEE
+		cfg.K8SServiceEndpoint.Host = "proxy.local"
+		cfg.K8SServiceEndpoint.Port = "1234"
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderDockerEE
 
-		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -544,11 +602,11 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	It("should set KUBERENETES_SERVICE_... variables if not host networked on Docker EE with non-proxy address", func() {
-		k8sServiceEp.Host = "k8shost"
-		k8sServiceEp.Port = "1234"
-		instance.KubernetesProvider = operatorv1.ProviderDockerEE
+		cfg.K8SServiceEndpoint.Host = "k8shost"
+		cfg.K8SServiceEndpoint.Port = "1234"
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderDockerEE
 
-		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -561,7 +619,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	It("should render an API server with custom configuration with MCM enabled at startup", func() {
-		component, err := render.APIServer(k8sServiceEp, instance, false, managementCluster, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		cfg.ManagementCluster = managementCluster
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 
@@ -598,11 +657,12 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			{name: "calico-apiserver-access-calico-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-apiserver-delegate-auth", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "tigera-apiserver-certs", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-apiserver-certs", ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
 			{name: render.VoltronTunnelSecretName, ns: common.OperatorNamespace(), group: "", version: "v1", kind: "Secret"},
 			{name: render.VoltronTunnelSecretName, ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
@@ -611,6 +671,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
 			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
@@ -646,7 +708,9 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	It("should render an API server with custom configuration with MCM enabled at restart", func() {
-		component, err := render.APIServer(k8sServiceEp, instance, false, managementCluster, nil, nil, nil, nil, openshift, &testutils.VoltronTunnelSecret, dns.DefaultClusterDomain)
+		cfg.ManagementCluster = managementCluster
+		cfg.TunnelCASecret = &testutils.VoltronTunnelSecret
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 
@@ -683,11 +747,12 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			{name: "calico-apiserver-access-calico-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-apiserver-delegate-auth", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "tigera-apiserver-certs", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-apiserver-certs", ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
 			{name: render.VoltronTunnelSecretName, ns: "tigera-system", group: "", version: "v1", kind: "Secret"},
 			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1", kind: "APIService"},
@@ -695,6 +760,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
 			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
@@ -723,8 +790,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	It("should add an init container if certificate management is enabled", func() {
-		instance.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c"}
-		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c"}
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 		expectedResources := []struct {
@@ -743,6 +810,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			{name: "calico-apiserver-access-calico-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-apiserver-delegate-auth", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -753,6 +822,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
 			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
@@ -776,9 +847,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 	It("should not render PodAffinity when ControlPlaneReplicas is 1", func() {
 		var replicas int32 = 1
-		instance.ControlPlaneReplicas = &replicas
-
-		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		cfg.Installation.ControlPlaneReplicas = &replicas
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -789,9 +859,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 	It("should render PodAffinity when ControlPlaneReplicas is greater than 1", func() {
 		var replicas int32 = 2
-		instance.ControlPlaneReplicas = &replicas
-
-		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		cfg.Installation.ControlPlaneReplicas = &replicas
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -897,11 +966,11 @@ var (
 		{
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"packetcaptures/files"},
-			Verbs:     []string{"get", "delete"},
+			Verbs:     []string{"get"},
 		},
 		{
 			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"packetcaptureslist"},
+			Resources: []string{"packetcaptures"},
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
@@ -918,10 +987,9 @@ var (
 			Verbs: []string{"get", "create"},
 		},
 		{
-			APIGroups:     []string{"projectcalico.org"},
-			Resources:     []string{"tiers"},
-			ResourceNames: []string{"default"},
-			Verbs:         []string{"get"},
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"tiers"},
+			Verbs:     []string{"get"},
 		},
 		{
 			APIGroups: []string{"projectcalico.org"},
@@ -951,8 +1019,26 @@ var (
 		},
 		{
 			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"authenticationreviews", "authorizationreviews"},
+			Resources: []string{"authorizationreviews"},
 			Verbs:     []string{"create"},
+		},
+		{
+			APIGroups:     []string{"projectcalico.org"},
+			Resources:     []string{"uisettingsgroups"},
+			Verbs:         []string{"get"},
+			ResourceNames: []string{"cluster-settings", "user-settings"},
+		},
+		{
+			APIGroups:     []string{"projectcalico.org"},
+			Resources:     []string{"uisettingsgroups/data"},
+			Verbs:         []string{"get", "list", "watch"},
+			ResourceNames: []string{"cluster-settings"},
+		},
+		{
+			APIGroups:     []string{"projectcalico.org"},
+			Resources:     []string{"uisettingsgroups/data"},
+			Verbs:         []string{"*"},
+			ResourceNames: []string{"user-settings"},
 		},
 		{
 			APIGroups: []string{"lma.tigera.io"},
@@ -992,11 +1078,6 @@ var (
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"packetcaptures/files"},
 			Verbs:     []string{"get", "delete"},
-		},
-		{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"packetcaptureslist"},
-			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
 			APIGroups: []string{""},
@@ -1049,8 +1130,20 @@ var (
 		},
 		{
 			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"authenticationreviews", "authorizationreviews"},
+			Resources: []string{"authorizationreviews"},
 			Verbs:     []string{"create"},
+		},
+		{
+			APIGroups:     []string{"projectcalico.org"},
+			Resources:     []string{"uisettingsgroups"},
+			Verbs:         []string{"get", "patch", "update"},
+			ResourceNames: []string{"cluster-settings", "user-settings"},
+		},
+		{
+			APIGroups:     []string{"projectcalico.org"},
+			Resources:     []string{"uisettingsgroups/data"},
+			Verbs:         []string{"*"},
+			ResourceNames: []string{"cluster-settings", "user-settings"},
 		},
 		{
 			APIGroups: []string{"lma.tigera.io"},
@@ -1065,8 +1158,8 @@ var (
 
 var _ = Describe("API server rendering tests (Calico)", func() {
 	var instance *operatorv1.InstallationSpec
-	var k8sServiceEp k8sapi.ServiceEndpoint
 	var replicas int32
+	var cfg *render.APIServerConfiguration
 
 	BeforeEach(func() {
 		instance = &operatorv1.InstallationSpec{
@@ -1074,8 +1167,26 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			Registry:             "testregistry.com/",
 			Variant:              operatorv1.Calico,
 		}
-		k8sServiceEp = k8sapi.ServiceEndpoint{}
+
+		tlsKeyPair, err := secret.CreateTLSSecret(nil,
+			render.ProjectCalicoApiServerTLSSecretName(instance.Variant),
+			common.OperatorNamespace(),
+			render.APIServerSecretKeyName,
+			render.APIServerSecretCertName,
+			rmeta.DefaultCertificateDuration,
+			nil,
+			dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(instance.Variant), rmeta.APIServerNamespace(instance.Variant), dns.DefaultClusterDomain)...,
+		)
+		Expect(err).ShouldNot(HaveOccurred())
+
 		replicas = 2
+		cfg = &render.APIServerConfiguration{
+			K8SServiceEndpoint: k8sapi.ServiceEndpoint{},
+			Installation:       instance,
+			TLSKeyPair:         tlsKeyPair,
+			Openshift:          openshift,
+			ClusterDomain:      dns.DefaultClusterDomain,
+		}
 	})
 
 	DescribeTable("should render an API server with default configuration", func(clusterDomain string) {
@@ -1094,7 +1205,6 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			{name: "calico-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "calico-apiserver-delegate-auth", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "calico-apiserver-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "calico-apiserver-certs", ns: "tigera-operator", group: "", version: "v1", kind: "Secret"},
 			{name: "calico-apiserver-certs", ns: "calico-apiserver", group: "", version: "v1", kind: "Secret"},
 			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1", kind: "APIService"},
 			{name: "calico-apiserver", ns: "calico-apiserver", group: "apps", version: "v1", kind: "Deployment"},
@@ -1104,8 +1214,21 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			{name: "allow-apiserver", ns: "calico-apiserver", group: "networking.k8s.io", version: "v1", kind: "NetworkPolicy"},
 		}
 
+		var err error
+		cfg.TLSKeyPair, err = secret.CreateTLSSecret(nil,
+			render.ProjectCalicoApiServerTLSSecretName(cfg.Installation.Variant),
+			common.OperatorNamespace(),
+			render.APIServerSecretKeyName,
+			render.APIServerSecretCertName,
+			rmeta.DefaultCertificateDuration,
+			nil,
+			dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(cfg.Installation.Variant), rmeta.APIServerNamespace(cfg.Installation.Variant), clusterDomain)...,
+		)
+		Expect(err).ShouldNot(HaveOccurred())
+
 		// APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool
-		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, clusterDomain)
+		cfg.ClusterDomain = clusterDomain
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 
@@ -1126,10 +1249,6 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(meta.GetAnnotations()).NotTo(ContainElement("openshift.io/node-selector"))
 
 		expectedDNSNames := dns.GetServiceDNSNames("calico-api", "calico-apiserver", clusterDomain)
-		operatorCert, ok := rtest.GetResource(resources, "calico-apiserver-certs", "tigera-operator", "", "v1", "Secret").(*corev1.Secret)
-		Expect(ok).To(BeTrue(), "Expected v1.Secret")
-		test.VerifyCert(operatorCert, "apiserver.key", "apiserver.crt", expectedDNSNames...)
-
 		tigeraCert, ok := rtest.GetResource(resources, "calico-apiserver-certs", "calico-apiserver", "", "v1", "Secret").(*corev1.Secret)
 		Expect(ok).To(BeTrue(), "Expected v1.Secret")
 		test.VerifyCert(tigeraCert, "apiserver.key", "apiserver.crt", expectedDNSNames...)
@@ -1211,7 +1330,6 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-extension-apiserver-auth-access"}, TypeMeta: metav1.TypeMeta{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "ClusterRoleBinding"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver-delegate-auth"}, TypeMeta: metav1.TypeMeta{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "ClusterRoleBinding"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver-auth-reader", Namespace: "kube-system"}, TypeMeta: metav1.TypeMeta{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "RoleBinding"}},
-			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver-certs", Namespace: "tigera-operator"}, TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"}},
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver-certs", Namespace: "calico-apiserver"}, TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"}},
 			&apiregv1.APIService{ObjectMeta: metav1.ObjectMeta{Name: "v3.projectcalico.org"}, TypeMeta: metav1.TypeMeta{APIVersion: "apiregistration.k8s.io/v1", Kind: "APIService"}},
 			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "calico-apiserver"}, TypeMeta: metav1.TypeMeta{APIVersion: "apps/v1", Kind: "Deployment"}},
@@ -1221,7 +1339,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			&netv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-apiserver", Namespace: "calico-apiserver"}, TypeMeta: metav1.TypeMeta{APIVersion: "networking.k8s.io/v1", Kind: "NetworkPolicy"}},
 		}
 
-		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -1249,8 +1367,8 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 	})
 
 	It("should include a ControlPlaneNodeSelector when specified", func() {
-		instance.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
-		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		cfg.Installation.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -1265,8 +1383,8 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			Value:    "bar",
 			Effect:   corev1.TaintEffectNoExecute,
 		}
-		instance.ControlPlaneTolerations = []corev1.Toleration{tol}
-		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		cfg.Installation.ControlPlaneTolerations = []corev1.Toleration{tol}
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 		d := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -1274,11 +1392,12 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 	})
 
 	It("should set KUBERNETES_SERVICE_... variables if host networked", func() {
-		k8sServiceEp.Host = "k8shost"
-		k8sServiceEp.Port = "1234"
-		instance.KubernetesProvider = operatorv1.ProviderDockerEE
+		cfg.K8SServiceEndpoint.Host = "k8shost"
+		cfg.K8SServiceEndpoint.Port = "1234"
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderDockerEE
+		cfg.ForceHostNetwork = true
 
-		component, err := render.APIServer(k8sServiceEp, instance, true, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -1291,11 +1410,11 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 	})
 
 	It("should not set KUBERNETES_SERVICE_... variables if Docker EE using proxy.local", func() {
-		k8sServiceEp.Host = "proxy.local"
-		k8sServiceEp.Port = "1234"
-		instance.KubernetesProvider = operatorv1.ProviderDockerEE
+		cfg.K8SServiceEndpoint.Host = "proxy.local"
+		cfg.K8SServiceEndpoint.Port = "1234"
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderDockerEE
 
-		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -1308,11 +1427,11 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 	})
 
 	It("should not set KUBERNETES_SERVICE_... variables if Docker EE using non-proxy address", func() {
-		k8sServiceEp.Host = "k8shost"
-		k8sServiceEp.Port = "1234"
-		instance.KubernetesProvider = operatorv1.ProviderDockerEE
+		cfg.K8SServiceEndpoint.Host = "k8shost"
+		cfg.K8SServiceEndpoint.Port = "1234"
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderDockerEE
 
-		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -1326,9 +1445,9 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 
 	It("should not render PodAffinity when ControlPlaneReplicas is 1", func() {
 		var replicas int32 = 1
-		instance.ControlPlaneReplicas = &replicas
+		cfg.Installation.ControlPlaneReplicas = &replicas
 
-		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
@@ -1339,9 +1458,9 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 
 	It("should render PodAffinity when ControlPlaneReplicas is greater than 1", func() {
 		var replicas int32 = 2
-		instance.ControlPlaneReplicas = &replicas
+		cfg.Installation.ControlPlaneReplicas = &replicas
 
-		component, err := render.APIServer(k8sServiceEp, instance, false, nil, nil, nil, nil, nil, openshift, nil, dns.DefaultClusterDomain)
+		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 

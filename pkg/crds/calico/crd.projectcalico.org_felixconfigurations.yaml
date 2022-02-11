@@ -362,6 +362,12 @@ spec:
                   pattern: ^.*
                   x-kubernetes-int-or-string: true
                 type: array
+              logDebugFilenameRegex:
+                description: LogDebugFilenameRegex controls which source code files
+                  have their Debug log output included in the logs. Only logs from
+                  files with names that match the given regular expression are included.  The
+                  filter only applies to Debug level logs.
+                type: string
               logFilePath:
                 description: 'LogFilePath is the full path to the Felix log. Set to
                   none to disable file logging. [Default: /var/log/calico/felix.log]'
@@ -491,9 +497,9 @@ spec:
                   routes. - CalicoIPAM: the default - use IPAM data to construct routes.'
                 type: string
               routeTableRange:
-                description: Calico programs additional Linux route tables for various
-                  purposes.  RouteTableRange specifies the indices of the route tables
-                  that Calico should use.
+                description: Deprecated in favor of RouteTableRanges. Calico programs
+                  additional Linux route tables for various purposes. RouteTableRange
+                  specifies the indices of the route tables that Calico should use.
                 properties:
                   max:
                     type: integer
@@ -503,6 +509,21 @@ spec:
                 - max
                 - min
                 type: object
+              routeTableRanges:
+                description: Calico programs additional Linux route tables for various
+                  purposes. RouteTableRanges specifies a set of table index ranges
+                  that Calico should use. Deprecates`RouteTableRange`, overrides `RouteTableRange`.
+                items:
+                  properties:
+                    max:
+                      type: integer
+                    min:
+                      type: integer
+                  required:
+                  - max
+                  - min
+                  type: object
+                type: array
               serviceLoopPrevention:
                 description: 'When service IP advertisement is enabled, prevent routing
                   loops to service IPs that are not in use, by dropping or rejecting
@@ -552,6 +573,10 @@ spec:
               wireguardInterfaceName:
                 description: 'WireguardInterfaceName specifies the name to use for
                   the Wireguard interface. [Default: wg.calico]'
+                type: string
+              wireguardKeepAlive:
+                description: 'WireguardKeepAlive controls Wireguard PersistentKeepalive
+                  option. Set 0 to disable. [Default: 0]'
                 type: string
               wireguardListeningPort:
                 description: 'WireguardListeningPort controls the listening port used

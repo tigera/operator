@@ -47,7 +47,7 @@ type PrimitivesStruct struct {
 	BoolPtr    *bool
 }
 
-var _ = FDescribe("StructDefaulter", func() {
+var _ = Describe("StructDefaulter", func() {
 	It("returns an error if it doesn't have an implementation for an interface", func() {
 		defaulter := NewNonZeroStructDefaulter()
 		strct := struct {

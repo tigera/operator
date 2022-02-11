@@ -16,6 +16,7 @@ package status
 
 import (
 	"context"
+	"fmt"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -88,11 +89,17 @@ var _ = Describe("Status reporting tests", func() {
 		})
 
 		It("existing status is removed after CR query attempt", func() {
+			// Convince the status manager that its CR has previously existed.
+			sm.crExists = true
 			ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: "test-component"}}
 			err := client.Create(context.TODO(), ts)
 			Expect(err).NotTo(HaveOccurred())
+
+			// Simulate the controller failing to find its CR.
 			sm.OnCRNotFound()
 			sm.updateStatus()
+
+			// Expect the status manager to have cleaned up the tigera status CR.
 			stat := &operator.TigeraStatus{}
 			err = client.Get(context.TODO(), types.NamespacedName{Name: "test-component"}, stat)
 			Expect(err).To(HaveOccurred())
@@ -428,5 +435,54 @@ var _ = Describe("Status reporting tests", func() {
 					{ObjectMeta: metav1.ObjectMeta{Name: "csr2", Labels: labels}},
 				}, false, true),
 		)
+		Context("Windows upgrade", func() {
+			BeforeEach(func() {
+				sm.ReadyToMonitor()
+			})
+			It("should be able to set and clear its own degraded status", func() {
+				sm.ClearDegraded()
+
+				// Calling SetWindowsUpgradeStatus with an error should result
+				// in a degraded status.
+				sm.SetWindowsUpgradeStatus(nil, nil, nil, fmt.Errorf("an error"))
+				Expect(sm.IsDegraded()).To(Equal(true))
+
+				// calicoWindowsUpgrader sets status indicating a successful
+				// run.
+				sm.SetWindowsUpgradeStatus([]string{"n1", "n2", "n3"}, []string{}, []string{}, nil)
+				Expect(sm.IsDegraded()).To(Equal(false))
+			})
+
+			It("should be able to clear degraded", func() {
+				sm.SetWindowsUpgradeStatus(nil, nil, nil, fmt.Errorf("an error"))
+				Expect(sm.IsDegraded()).To(Equal(true))
+
+				sm.ClearDegraded()
+				Expect(sm.IsDegraded()).To(Equal(false))
+			})
+
+			It("should report the windows node upgrade status", func() {
+				sm.SetWindowsUpgradeStatus([]string{"n1", "n2", "n3"}, []string{}, []string{}, nil)
+				Expect(sm.windowsNodeUpgrades.progressingReason()).To(Equal("Waiting for Calico for Windows to be upgraded: 0/3 nodes have been upgraded, 0 in-progress"))
+
+				sm.SetWindowsUpgradeStatus([]string{"n2", "n3"}, []string{"n1"}, []string{}, nil)
+				Expect(sm.windowsNodeUpgrades.progressingReason()).To(Equal("Waiting for Calico for Windows to be upgraded: 0/3 nodes have been upgraded, 1 in-progress"))
+
+				sm.SetWindowsUpgradeStatus([]string{"n3"}, []string{"n1", "n2"}, []string{}, nil)
+				Expect(sm.windowsNodeUpgrades.progressingReason()).To(Equal("Waiting for Calico for Windows to be upgraded: 0/3 nodes have been upgraded, 2 in-progress"))
+
+				sm.SetWindowsUpgradeStatus([]string{"n3"}, []string{"n2"}, []string{"n1"}, nil)
+				Expect(sm.windowsNodeUpgrades.progressingReason()).To(Equal("Waiting for Calico for Windows to be upgraded: 1/3 nodes have been upgraded, 1 in-progress"))
+
+				sm.SetWindowsUpgradeStatus([]string{"n3"}, []string{}, []string{"n1", "n2"}, nil)
+				Expect(sm.windowsNodeUpgrades.progressingReason()).To(Equal("Waiting for Calico for Windows to be upgraded: 2/3 nodes have been upgraded, 0 in-progress"))
+
+				sm.SetWindowsUpgradeStatus([]string{}, []string{"n3"}, []string{"n1", "n2"}, nil)
+				Expect(sm.windowsNodeUpgrades.progressingReason()).To(Equal("Waiting for Calico for Windows to be upgraded: 2/3 nodes have been upgraded, 1 in-progress"))
+
+				sm.SetWindowsUpgradeStatus([]string{}, []string{}, []string{"n1", "n2", "n3"}, nil)
+				Expect(sm.windowsNodeUpgrades.progressingReason()).To(Equal(""))
+			})
+		})
 	})
 })

@@ -921,7 +921,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionADJobsPodTemplate() []cl
 
 func (c *intrusionDetectionComponent) getBaseIntrusionDetectionADJobPodTemplate(podTemplateName string) corev1.PodTemplate {
 	privileged := false
-	if c.openshift {
+	if c.cfg.Openshift {
 		privileged = true
 	}
 
@@ -957,10 +957,10 @@ func (c *intrusionDetectionComponent) getBaseIntrusionDetectionADJobPodTemplate(
 					},
 				},
 				DNSPolicy:          corev1.DNSClusterFirst,
-				ImagePullSecrets:   secret.GetReferenceList(c.pullSecrets),
+				ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 				RestartPolicy:      corev1.RestartPolicyOnFailure,
 				ServiceAccountName: IntrusionDetectionInstallerJobName,
-				Tolerations:        append(c.installation.ControlPlaneTolerations, rmeta.TolerateMaster),
+				Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster),
 				Containers: []corev1.Container{
 					{
 						Name:  "adjobs",
@@ -972,7 +972,7 @@ func (c *intrusionDetectionComponent) getBaseIntrusionDetectionADJobPodTemplate(
 							{
 								Name: "ELASTIC_HOST",
 								// static index 2 refres to - <svc_name>.<ns>.svc format
-								Value: dns.GetServiceDNSNames(ESGatewayServiceName, ElasticsearchNamespace, c.clusterDomain)[2],
+								Value: dns.GetServiceDNSNames(ESGatewayServiceName, ElasticsearchNamespace, c.cfg.ClusterDomain)[2],
 							},
 							{
 								Name:  "ELASTIC_PORT",
@@ -1003,7 +1003,7 @@ func (c *intrusionDetectionComponent) getBaseIntrusionDetectionADJobPodTemplate(
 				// ensures the AD pods are all deployed on the same node before a model storage cache is deployed (todo)
 				//  - without a model storage, models created by training jobs are stored on disk suceeeding detection jobs
 				//    need to read the models such that all pods running the AD containers need to run on the same node
-				NodeSelector: c.installation.ControlPlaneNodeSelector,
+				NodeSelector: c.cfg.Installation.ControlPlaneNodeSelector,
 			},
 		},
 	}

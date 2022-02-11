@@ -43,9 +43,10 @@ func GetReference(c component, registry, imagePath, imagePrefix string, is *oper
 			ComponentWindows:
 
 			registry = CalicoRegistry
-		case ComponentOperatorInit,
-			ComponentCSRInitContainer:
+		case ComponentOperatorInit:
 			registry = InitRegistry
+		case ComponentCSRInitContainer:
+			registry = CSRInitRegistry
 		default:
 			registry = TigeraRegistry
 		}

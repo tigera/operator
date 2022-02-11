@@ -55,6 +55,11 @@ spec:
                     format: int64
                     type: integer
                 type: object
+              webApplicationFirewall:
+                description: WebApplicationFirewall controls whether or not ModSecurity
+                  enforcement is enabled for the cluster. When enabled, Services may
+                  opt-in to having ingress traffic examed by ModSecurity.
+                type: string
             type: object
           status:
             description: ApplicationLayerStatus defines the observed state of ApplicationLayer

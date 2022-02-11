@@ -960,18 +960,17 @@ var (
 				"stagednetworkpolicies",
 				"tier.stagednetworkpolicies",
 				"stagedkubernetesnetworkpolicies",
-				"uisettingsgroup/data",
 			},
 			Verbs: []string{"watch", "list"},
 		},
 		{
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"packetcaptures/files"},
-			Verbs:     []string{"get", "delete"},
+			Verbs:     []string{"get"},
 		},
 		{
 			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"packetcaptureslist"},
+			Resources: []string{"packetcaptures"},
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
@@ -1024,6 +1023,24 @@ var (
 			Verbs:     []string{"create"},
 		},
 		{
+			APIGroups:     []string{"projectcalico.org"},
+			Resources:     []string{"uisettingsgroups"},
+			Verbs:         []string{"get"},
+			ResourceNames: []string{"cluster-settings", "user-settings"},
+		},
+		{
+			APIGroups:     []string{"projectcalico.org"},
+			Resources:     []string{"uisettingsgroups/data"},
+			Verbs:         []string{"get", "list", "watch"},
+			ResourceNames: []string{"cluster-settings"},
+		},
+		{
+			APIGroups:     []string{"projectcalico.org"},
+			Resources:     []string{"uisettingsgroups/data"},
+			Verbs:         []string{"*"},
+			ResourceNames: []string{"user-settings"},
+		},
+		{
 			APIGroups: []string{"lma.tigera.io"},
 			Resources: []string{"*"},
 			ResourceNames: []string{
@@ -1054,7 +1071,6 @@ var (
 				"networksets",
 				"managedclusters",
 				"packetcaptures",
-				"uisettingsgroup/data",
 			},
 			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
 		},
@@ -1062,11 +1078,6 @@ var (
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"packetcaptures/files"},
 			Verbs:     []string{"get", "delete"},
-		},
-		{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"packetcaptureslist"},
-			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
 			APIGroups: []string{""},
@@ -1121,6 +1132,18 @@ var (
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"authorizationreviews"},
 			Verbs:     []string{"create"},
+		},
+		{
+			APIGroups:     []string{"projectcalico.org"},
+			Resources:     []string{"uisettingsgroups"},
+			Verbs:         []string{"get", "patch", "update"},
+			ResourceNames: []string{"cluster-settings", "user-settings"},
+		},
+		{
+			APIGroups:     []string{"projectcalico.org"},
+			Resources:     []string{"uisettingsgroups/data"},
+			Verbs:         []string{"*"},
+			ResourceNames: []string{"cluster-settings", "user-settings"},
 		},
 		{
 			APIGroups: []string{"lma.tigera.io"},

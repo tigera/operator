@@ -15,6 +15,11 @@
 package esmetrics
 
 import (
+	"fmt"
+	"strings"
+
+	"github.com/tigera/operator/pkg/dns"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,7 +36,9 @@ import (
 )
 
 const (
-	ElasticsearchMetricsSecret = "tigera-ee-elasticsearch-metrics-elasticsearch-access"
+	ElasticsearchMetricsSecret          = "tigera-ee-elasticsearch-metrics-elasticsearch-access"
+	ElasticsearchMetricsServerTLSSecret = "tigera-ee-elasticsearch-metrics-tls"
+	ElasticsearchMetricsName            = "tigera-elasticsearch-metrics"
 )
 
 func ElasticsearchMetrics(cfg *Config) render.Component {
@@ -47,11 +54,14 @@ type Config struct {
 	ESMetricsCredsSecret *corev1.Secret
 	ESCertSecret         *corev1.Secret
 	ClusterDomain        string
+	ServerTLS            *corev1.Secret
+	TrustedBundle        *corev1.ConfigMap
 }
 
 type elasticsearchMetrics struct {
 	cfg            *Config
 	esMetricsImage string
+	csrImage       string
 }
 
 func (e *elasticsearchMetrics) ResolveImages(is *operatorv1.ImageSet) error {
@@ -61,7 +71,23 @@ func (e *elasticsearchMetrics) ResolveImages(is *operatorv1.ImageSet) error {
 	path := e.cfg.Installation.ImagePath
 	prefix := e.cfg.Installation.ImagePrefix
 
+	var errMsgs []string
+
 	e.esMetricsImage, err = components.GetReference(components.ComponentElasticsearchMetrics, reg, path, prefix, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	if e.cfg.Installation.CertificateManagement != nil {
+		e.csrImage, err = render.ResolveCSRInitImage(e.cfg.Installation, is)
+		if err != nil {
+			errMsgs = append(errMsgs, err.Error())
+		}
+	}
+
+	if len(errMsgs) != 0 {
+		return fmt.Errorf(strings.Join(errMsgs, ","))
+	}
 
 	return err
 }
@@ -70,9 +96,27 @@ func (e *elasticsearchMetrics) Objects() (objsToCreate, objsToDelete []client.Ob
 	toCreate := secret.ToRuntimeObjects(
 		secret.CopyToNamespace(render.ElasticsearchNamespace, e.cfg.ESMetricsCredsSecret)...,
 	)
-	toCreate = append(toCreate, e.metricsService(), e.metricsDeployment())
+	toCreate = append(toCreate, e.metricsService(), e.metricsDeployment(), e.cfg.TrustedBundle, e.serviceAccount())
 
-	return toCreate, nil
+	if e.cfg.Installation.CertificateManagement == nil {
+		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(render.ElasticsearchNamespace, e.cfg.ServerTLS)...)...)
+		objsToDelete = append(objsToDelete, render.CSRClusterRoleBinding(ElasticsearchMetricsName, render.ElasticsearchNamespace))
+	} else {
+		objsToDelete = append(objsToDelete, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: ElasticsearchMetricsServerTLSSecret, Namespace: render.ElasticsearchNamespace}})
+		toCreate = append(toCreate, render.CSRClusterRoleBinding(ElasticsearchMetricsName, render.ElasticsearchNamespace))
+	}
+
+	return toCreate, objsToDelete
+}
+
+func (e elasticsearchMetrics) serviceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ElasticsearchMetricsName,
+			Namespace: render.ElasticsearchNamespace,
+		},
+	}
 }
 
 func (e *elasticsearchMetrics) Ready() bool {
@@ -85,16 +129,17 @@ func (e *elasticsearchMetrics) SupportedOSType() rmeta.OSType {
 
 func (e *elasticsearchMetrics) metricsService() *corev1.Service {
 	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-elasticsearch-metrics",
+			Name:      ElasticsearchMetricsName,
 			Namespace: render.ElasticsearchNamespace,
 			Labels: map[string]string{
-				"k8s-app": "tigera-elasticsearch-metrics",
+				"k8s-app": ElasticsearchMetricsName,
 			},
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{
-				"k8s-app": "tigera-elasticsearch-metrics",
+				"k8s-app": ElasticsearchMetricsName,
 			},
 			Ports: []corev1.ServicePort{
 				{
@@ -109,42 +154,92 @@ func (e *elasticsearchMetrics) metricsService() *corev1.Service {
 }
 
 func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
+	var initContainers []corev1.Container
+
+	annotations := map[string]string{
+		"k8s-app":                           ElasticsearchMetricsName,
+		render.PrometheusCABundleAnnotation: rmeta.AnnotationHash(e.cfg.TrustedBundle.Data),
+	}
+	if e.cfg.Installation.CertificateManagement != nil {
+		initContainers = append(initContainers,
+			render.CreateCSRInitContainer(
+				e.cfg.Installation.CertificateManagement,
+				e.csrImage,
+				ElasticsearchMetricsServerTLSSecret,
+				ElasticsearchMetricsServerTLSSecret,
+				corev1.TLSPrivateKeyKey,
+				corev1.TLSCertKey,
+				dns.GetServiceDNSNames(ElasticsearchMetricsName, render.ElasticsearchNamespace, e.cfg.ClusterDomain),
+				render.ElasticsearchNamespace),
+		)
+	}
+
+	if e.cfg.ServerTLS != nil {
+		annotations[fmt.Sprintf("hash.operator.tigera.io/%s", e.cfg.ServerTLS.Name)] = rmeta.AnnotationHash(e.cfg.ServerTLS.Data)
+	}
+
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-elasticsearch-metrics",
+			Name:      ElasticsearchMetricsName,
 			Namespace: render.ElasticsearchNamespace,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: ptr.Int32ToPtr(1),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"k8s-app": "tigera-elasticsearch-metrics",
+					"k8s-app": ElasticsearchMetricsName,
 				},
 			},
 			Template: *relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"k8s-app": "tigera-elasticsearch-metrics",
-					},
+					Labels: annotations,
 				},
 				Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
-					Tolerations:      e.cfg.Installation.ControlPlaneTolerations,
-					NodeSelector:     e.cfg.Installation.ControlPlaneNodeSelector,
-					ImagePullSecrets: secret.GetReferenceList(e.cfg.PullSecrets),
+					Tolerations:        e.cfg.Installation.ControlPlaneTolerations,
+					NodeSelector:       e.cfg.Installation.ControlPlaneNodeSelector,
+					ImagePullSecrets:   secret.GetReferenceList(e.cfg.PullSecrets),
+					ServiceAccountName: ElasticsearchMetricsName,
+					InitContainers:     initContainers,
 					Containers: []corev1.Container{
 						relasticsearch.ContainerDecorate(
 							corev1.Container{
-								Name:    "tigera-elasticsearch-metrics",
+								Name:    ElasticsearchMetricsName,
 								Image:   e.esMetricsImage,
 								Command: []string{"/bin/elasticsearch_exporter"},
 								Args: []string{"--es.uri=https://$(ELASTIC_USERNAME):$(ELASTIC_PASSWORD)@$(ELASTIC_HOST):$(ELASTIC_PORT)",
 									"--es.all", "--es.indices", "--es.indices_settings", "--es.shards", "--es.cluster_settings",
 									"--es.timeout=30s", "--es.ca=$(ELASTIC_CA)", "--web.listen-address=:9081",
-									"--web.telemetry-path=/metrics"},
+									"--web.telemetry-path=/metrics", "--tls.key=/tls/tls.key", "--tls.crt=/tls/tls.crt", "--ca.crt=/ca/tls.crt"},
+								VolumeMounts: []corev1.VolumeMount{
+									{
+										Name:      ElasticsearchMetricsServerTLSSecret,
+										MountPath: "/tls",
+										ReadOnly:  true,
+									},
+									{
+										Name:      render.PrometheusCABundle,
+										MountPath: "/ca",
+										ReadOnly:  true,
+									},
+								},
 							}, render.DefaultElasticsearchClusterName, ElasticsearchMetricsSecret,
 							e.cfg.ClusterDomain, e.SupportedOSType(),
 						),
+					},
+					Volumes: []corev1.Volume{
+						{
+							Name:         ElasticsearchMetricsServerTLSSecret,
+							VolumeSource: render.CertificateVolumeSource(e.cfg.Installation.CertificateManagement, ElasticsearchMetricsServerTLSSecret),
+						},
+						{
+							Name: render.PrometheusCABundle,
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{Name: render.PrometheusCABundle},
+								},
+							},
+						},
 					},
 				}),
 			}, e.cfg.ESConfig, []*corev1.Secret{e.cfg.ESMetricsCredsSecret, e.cfg.ESCertSecret}).(*corev1.PodTemplateSpec),

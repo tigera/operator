@@ -21,6 +21,8 @@ import (
 
 	ocsv1 "github.com/openshift/api/security/v1"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
@@ -61,6 +63,11 @@ const (
 	ManagerInternalTLSSecretCertName = "internal-manager-tls-cert"
 	ManagerInternalSecretKeyName     = "key"
 	ManagerInternalSecretCertName    = "cert"
+
+	ManagerClusterSettings            = "cluster-settings"
+	ManagerUserSettings               = "user-settings"
+	ManagerClusterSettingsLayerTigera = "cluster-settings.layer.tigera-infrastructure"
+	ManagerClusterSettingsViewDefault = "cluster-settings.view.default"
 
 	ElasticsearchManagerUserSecret   = "tigera-ee-manager-elasticsearch-access"
 	TlsSecretHashAnnotation          = "hash.operator.tigera.io/tls-secret"
@@ -198,6 +205,10 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 		managerServiceAccount(),
 		managerClusterRole(c.cfg.ManagementCluster != nil, false, c.cfg.Openshift),
 		managerClusterRoleBinding(),
+		managerClusterWideSettingsGroup(),
+		managerUserSpecificSettingsGroup(),
+		managerClusterWideTigeraLayer(),
+		managerClusterWideDefaultView(),
 	)
 	objs = append(objs, c.getTLSObjects()...)
 	objs = append(objs,
@@ -353,7 +364,7 @@ func (c *managerComponent) managerVolumes() []corev1.Volume {
 	if c.cfg.Installation.CertificateManagement != nil {
 		certificateManagement = c.cfg.Installation.CertificateManagement
 	}
-	tlsVolumeSource := certificateVolumeSource(certificateManagement, ManagerTLSSecretName)
+	tlsVolumeSource := CertificateVolumeSource(certificateManagement, ManagerTLSSecretName)
 	v := []corev1.Volume{
 		{
 			Name:         ManagerTLSSecretName,
@@ -848,4 +859,108 @@ func (c *managerComponent) managerPodSecurityPolicy() *policyv1beta1.PodSecurity
 	psp := podsecuritypolicy.NewBasePolicy()
 	psp.GetObjectMeta().SetName("tigera-manager")
 	return psp
+}
+
+// managerClusterWideSettingsGroup returns a UISettingsGroup with the description "cluster-wide settings"
+//
+// Calico Enterprise only
+func managerClusterWideSettingsGroup() *v3.UISettingsGroup {
+	return &v3.UISettingsGroup{
+		TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: ManagerClusterSettings,
+		},
+		Spec: v3.UISettingsGroupSpec{
+			Description: "Cluster Settings",
+		},
+	}
+}
+
+// managerUserSpecificSettingsGroup returns a UISettingsGroup with the description "user settings"
+//
+// Calico Enterprise only
+func managerUserSpecificSettingsGroup() *v3.UISettingsGroup {
+	return &v3.UISettingsGroup{
+		TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: ManagerUserSettings,
+		},
+		Spec: v3.UISettingsGroupSpec{
+			Description: "User Settings",
+			FilterType:  v3.FilterTypeUser,
+		},
+	}
+}
+
+// managerClusterWideTigeraLayer returns a UISettings layer belonging to the cluster-wide settings group that contains
+// all of the tigera namespaces.
+//
+// Calico Enterprise only
+func managerClusterWideTigeraLayer() *v3.UISettings {
+	namespaces := []string{
+		"tigera-compliance",
+		"tigera-dex",
+		"tigera-dpi",
+		"tigera-eck-operator",
+		"tigera-elasticsearch",
+		"tigera-fluentd",
+		"tigera-guardian",
+		"tigera-intrusion-detection",
+		"tigera-kibana",
+		"tigera-manager",
+		"tigera-operator",
+		"tigera-packetcapture",
+		"tigera-prometheus",
+		"tigera-system",
+		"calico-system",
+	}
+	nodes := make([]v3.UIGraphNode, len(namespaces))
+	for i := range namespaces {
+		ns := namespaces[i]
+		nodes[i] = v3.UIGraphNode{
+			ID:   "namespace/" + ns,
+			Type: "namespace",
+			Name: ns,
+		}
+	}
+
+	return &v3.UISettings{
+		TypeMeta: metav1.TypeMeta{Kind: "UISettings", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: ManagerClusterSettingsLayerTigera,
+		},
+		Spec: v3.UISettingsSpec{
+			Group:       "cluster-settings",
+			Description: "Tigera Infrastructure",
+			Layer: &v3.UIGraphLayer{
+				Nodes: nodes,
+			},
+		},
+	}
+}
+
+// managerClusterWideDefaultView returns a UISettings view belonging to the cluster-wide settings group that shows
+// everything and uses the tigera-infrastructure layer.
+//
+// Calico Enterprise only
+func managerClusterWideDefaultView() *v3.UISettings {
+	return &v3.UISettings{
+		TypeMeta: metav1.TypeMeta{Kind: "UISettings", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: ManagerClusterSettingsViewDefault,
+		},
+		Spec: v3.UISettingsSpec{
+			Group:       "cluster-settings",
+			Description: "Default",
+			View: &v3.UIGraphView{
+				Nodes: []v3.UIGraphNodeView{{
+					UIGraphNode: v3.UIGraphNode{
+						ID:   "layer/cluster-settings.layer.tigera-infrastructure",
+						Type: "layer",
+						Name: "cluster-settings.layer.tigera-infrastructure",
+					},
+				}},
+			},
+		},
+	}
 }

@@ -17,6 +17,7 @@ package render
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/tigera/operator/pkg/url"
 
@@ -45,6 +46,10 @@ const (
 	S3FluentdSecretName                      = "log-collector-s3-credentials"
 	S3KeyIdName                              = "key-id"
 	S3KeySecretName                          = "key-secret"
+	FluentdPrometheusTLSSecretName           = "tigera-fluentd-prometheus-tls"
+	FluentdPrometheusTLSSecretHashAnnotation = "hash.operator.tigera.io/tigera-fluentd-prometheus-tls"
+	FluentdMetricsService                    = "fluentd-metrics"
+	FluentdMetricsPort                       = "fluentd-metrics-port"
 	filterHashAnnotation                     = "hash.operator.tigera.io/fluentd-filters"
 	s3CredentialHashAnnotation               = "hash.operator.tigera.io/s3-credentials"
 	splunkCredentialHashAnnotation           = "hash.operator.tigera.io/splunk-credentials"
@@ -136,11 +141,14 @@ type FluentdConfiguration struct {
 	Installation    *operatorv1.InstallationSpec
 	ClusterDomain   string
 	OSType          rmeta.OSType
+	TLS             *corev1.Secret
+	TrustedBundle   *corev1.ConfigMap
 }
 
 type fluentdComponent struct {
 	cfg          *FluentdConfiguration
 	image        string
+	csrImage     string
 	probeTimeout int32
 	probePeriod  int32
 }
@@ -157,7 +165,20 @@ func (c *fluentdComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	var err error
+	var errMsgs []string
 	c.image, err = components.GetReference(components.ComponentFluentd, reg, path, prefix, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+	if c.cfg.Installation.CertificateManagement != nil {
+		c.csrImage, err = ResolveCSRInitImage(c.cfg.Installation, is)
+		if err != nil {
+			errMsgs = append(errMsgs, err.Error())
+		}
+	}
+	if len(errMsgs) != 0 {
+		return fmt.Errorf(strings.Join(errMsgs, ","))
+	}
 	return err
 }
 
@@ -212,12 +233,13 @@ func (c *fluentdComponent) path(path string) string {
 }
 
 func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
-	var objs []client.Object
+	var objs, toDelete []client.Object
 	objs = append(objs,
 		CreateNamespace(
 			LogCollectorNamespace,
 			c.cfg.Installation.KubernetesProvider))
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.cfg.PullSecrets...)...)...)
+	objs = append(objs, c.metricsService())
 
 	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderGKE {
 		// We do this only for GKE as other providers don't (yet?)
@@ -260,8 +282,20 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, c.fluentdServiceAccount())
 	objs = append(objs, c.packetCaptureApiRole(), c.packetCaptureApiRoleBinding())
 	objs = append(objs, c.daemonset())
+	if c.cfg.TrustedBundle != nil {
+		objs = append(objs, c.cfg.TrustedBundle)
+	}
+	if c.cfg.Installation.CertificateManagement == nil {
+		if c.cfg.TLS != nil {
+			objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.cfg.TLS)...)...)
+		}
+		toDelete = append(toDelete, CSRClusterRoleBinding(fluentdName, LogCollectorNamespace))
+	} else {
+		objs = append(objs, CSRClusterRoleBinding(fluentdNodeName, LogCollectorNamespace))
+		toDelete = append(toDelete, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: FluentdPrometheusTLSSecretName, Namespace: LogCollectorNamespace}})
+	}
 
-	return objs, nil
+	return objs, toDelete
 }
 
 func (c *fluentdComponent) Ready() bool {
@@ -403,8 +437,13 @@ func (c *fluentdComponent) packetCaptureApiRoleBinding() *rbacv1.RoleBinding {
 func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 	var terminationGracePeriod int64 = 0
 	maxUnavailable := intstr.FromInt(1)
-
-	annots := map[string]string{}
+	annots := make(map[string]string)
+	if c.cfg.TrustedBundle != nil {
+		annots[PrometheusCABundleAnnotation] = rmeta.AnnotationHash(c.cfg.TrustedBundle.Data)
+	}
+	if c.cfg.TLS != nil {
+		annots[FluentdPrometheusTLSSecretHashAnnotation] = rmeta.AnnotationHash(c.cfg.TLS.Data)
+	}
 	if c.cfg.S3Credential != nil {
 		annots[s3CredentialHashAnnotation] = rmeta.AnnotationHash(c.cfg.S3Credential)
 	}
@@ -413,6 +452,19 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 	}
 	if c.cfg.Filters != nil {
 		annots[filterHashAnnotation] = rmeta.AnnotationHash(c.cfg.Filters)
+	}
+	var initContainers []corev1.Container
+	if c.cfg.OSType != rmeta.OSTypeWindows && c.cfg.Installation.CertificateManagement != nil {
+		initContainers = append(initContainers, CreateCSRInitContainer(
+			c.cfg.Installation.CertificateManagement,
+			c.csrImage,
+			FluentdPrometheusTLSSecretName,
+			FluentdPrometheusTLSSecretName,
+			corev1.TLSPrivateKeyKey,
+			corev1.TLSCertKey,
+			[]string{FluentdPrometheusTLSSecretName},
+			LogCollectorNamespace,
+		))
 	}
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
@@ -427,6 +479,7 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 			Tolerations:                   c.tolerations(),
 			ImagePullSecrets:              secret.GetReferenceList(c.cfg.PullSecrets),
 			TerminationGracePeriodSeconds: &terminationGracePeriod,
+			InitContainers:                initContainers,
 			Containers:                    []corev1.Container{c.container()},
 			Volumes:                       c.volumes(),
 			ServiceAccountName:            c.fluentdNodeName(),
@@ -495,8 +548,23 @@ func (c *fluentdComponent) container() corev1.Container {
 		volumeMounts = append(volumeMounts,
 			corev1.VolumeMount{
 				Name:      SplunkFluentdSecretsVolName,
-				MountPath: SplunkFluentdDefaultCertDir,
+				MountPath: c.path(SplunkFluentdDefaultCertDir),
 			})
+	}
+
+	if c.cfg.TrustedBundle != nil {
+		volumeMounts = append(volumeMounts,
+			corev1.VolumeMount{
+				Name:      FluentdPrometheusTLSSecretName,
+				MountPath: "/tls",
+				ReadOnly:  true,
+			},
+			corev1.VolumeMount{
+				Name:      c.cfg.TrustedBundle.Name,
+				MountPath: "/ca",
+				ReadOnly:  true,
+			},
+		)
 	}
 
 	isPrivileged := false
@@ -519,6 +587,29 @@ func (c *fluentdComponent) container() corev1.Container {
 			ContainerPort: 9081,
 		}},
 	}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchLogCollectorUserSecret, c.cfg.ClusterDomain, c.cfg.OSType)
+}
+
+func (c *fluentdComponent) metricsService() *corev1.Service {
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      FluentdMetricsService,
+			Namespace: LogCollectorNamespace,
+			Labels:    map[string]string{"k8s-app": fluentdNodeName},
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: map[string]string{"k8s-app": fluentdNodeName},
+			Type:     corev1.ServiceTypeClusterIP,
+			Ports: []corev1.ServicePort{
+				{
+					Name:       FluentdMetricsPort,
+					Port:       int32(9081),
+					TargetPort: intstr.FromInt(9081),
+					Protocol:   corev1.ProtocolTCP,
+				},
+			},
+		},
+	}
 }
 
 func (c *fluentdComponent) envvars() []corev1.EnvVar {
@@ -662,6 +753,14 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		corev1.EnvVar{Name: "ELASTIC_BGP_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
 	)
 
+	if c.cfg.TrustedBundle != nil {
+		envs = append(envs,
+			corev1.EnvVar{Name: "CA_CRT_PATH", Value: "/ca/tls.crt"},
+			corev1.EnvVar{Name: "TLS_KEY_PATH", Value: "/tls/tls.key"},
+			corev1.EnvVar{Name: "TLS_CRT_PATH", Value: "/tls/tls.crt"},
+		)
+	}
+
 	return envs
 }
 
@@ -745,6 +844,21 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 						Items: []corev1.KeyToPath{
 							{Key: SplunkFluentdSecretCertificateKey, Path: SplunkFluentdSecretCertificateKey},
 						},
+					},
+				},
+			})
+	}
+	if c.cfg.TrustedBundle != nil {
+		volumes = append(volumes,
+			corev1.Volume{
+				Name:         FluentdPrometheusTLSSecretName,
+				VolumeSource: CertificateVolumeSource(c.cfg.Installation.CertificateManagement, FluentdPrometheusTLSSecretName),
+			},
+			corev1.Volume{
+				Name: c.cfg.TrustedBundle.Name,
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{Name: c.cfg.TrustedBundle.Name},
 					},
 				},
 			})

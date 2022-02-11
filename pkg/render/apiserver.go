@@ -18,10 +18,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tigera/operator/pkg/render/common/podaffinity"
-	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
@@ -38,6 +34,9 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/ptr"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/podaffinity"
+	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
@@ -1037,7 +1036,7 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 	volumes = append(volumes,
 		corev1.Volume{
 			Name:         ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant),
-			VolumeSource: certificateVolumeSource(c.cfg.Installation.CertificateManagement, ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant)),
+			VolumeSource: CertificateVolumeSource(c.cfg.Installation.CertificateManagement, ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant)),
 		},
 	)
 
@@ -1333,18 +1332,17 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 				"stagednetworkpolicies",
 				"tier.stagednetworkpolicies",
 				"stagedkubernetesnetworkpolicies",
-				"uisettingsgroup/data",
 			},
 			Verbs: []string{"watch", "list"},
 		},
 		{
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"packetcaptures/files"},
-			Verbs:     []string{"get", "delete"},
+			Verbs:     []string{"get"},
 		},
 		{
 			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"packetcaptureslist"},
+			Resources: []string{"packetcaptures"},
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		// Additional "list" requests required to view flows.
@@ -1402,6 +1400,28 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			Resources: []string{"authorizationreviews"},
 			Verbs:     []string{"create"},
 		},
+		// User can:
+		// - read UISettings in the cluster-settings group
+		// - read and write UISettings in the user-settings group
+		// Default settings group and settings are created in manager.go.
+		{
+			APIGroups:     []string{"projectcalico.org"},
+			Resources:     []string{"uisettingsgroups"},
+			Verbs:         []string{"get"},
+			ResourceNames: []string{"cluster-settings", "user-settings"},
+		},
+		{
+			APIGroups:     []string{"projectcalico.org"},
+			Resources:     []string{"uisettingsgroups/data"},
+			Verbs:         []string{"get", "list", "watch"},
+			ResourceNames: []string{"cluster-settings"},
+		},
+		{
+			APIGroups:     []string{"projectcalico.org"},
+			Resources:     []string{"uisettingsgroups/data"},
+			Verbs:         []string{"*"},
+			ResourceNames: []string{"user-settings"},
+		},
 	}
 
 	// Privileges for lma.tigera.io have no effect on managed clusters.
@@ -1457,7 +1477,6 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 				"networksets",
 				"managedclusters",
 				"packetcaptures",
-				"uisettingsgroup/data",
 			},
 			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
 		},
@@ -1465,11 +1484,6 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"packetcaptures/files"},
 			Verbs:     []string{"get", "delete"},
-		},
-		{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"packetcaptureslist"},
-			Verbs:     []string{"get", "list", "watch"},
 		},
 		// Additional "list" requests that the Tigera Secure manager needs
 		{
@@ -1532,6 +1546,22 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"authorizationreviews"},
 			Verbs:     []string{"create"},
+		},
+		// User can:
+		// - read and write UISettings in the cluster-settings group, and rename the group
+		// - read and write UISettings in the user-settings group, and rename the group
+		// Default settings group and settings are created in manager.go.
+		{
+			APIGroups:     []string{"projectcalico.org"},
+			Resources:     []string{"uisettingsgroups"},
+			Verbs:         []string{"get", "patch", "update"},
+			ResourceNames: []string{"cluster-settings", "user-settings"},
+		},
+		{
+			APIGroups:     []string{"projectcalico.org"},
+			Resources:     []string{"uisettingsgroups/data"},
+			Verbs:         []string{"*"},
+			ResourceNames: []string{"cluster-settings", "user-settings"},
 		},
 	}
 

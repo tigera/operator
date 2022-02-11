@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Components defined here are required to be kept in sync with
+// config/enterprise_versions.yml
+
 package components
 
 var (
@@ -132,6 +135,12 @@ var (
 {{- end }}
 {{ with index .Components "intrusion-detection-controller" }}
 	ComponentIntrusionDetectionController = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
+{{ with index .Components "anomaly_detection_jobs" }}
+	ComponentAnomalyDetectionJobs = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
@@ -282,6 +291,7 @@ var (
 		ComponentFluentdWindows,
 		ComponentGuardian,
 		ComponentIntrusionDetectionController,
+		ComponentAnomalyDetectionJobs,
 		ComponentKibana,
 		ComponentManager,
 		ComponentDex,

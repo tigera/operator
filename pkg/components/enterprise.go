@@ -152,11 +152,6 @@ var (
 		Image:   "tigera/envoy",
 	}
 
-	ComponentDikastes = component{
-		Version: "master",
-		Image:   "tigera/app-policy",
-	}
-
 	ComponentCoreOSPrometheus = component{
 		Version: "v2.32.0",
 		Image:   "tigera/prometheus",
@@ -262,6 +257,5 @@ var (
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
 		ComponentTigeraWindows,
-		ComponentDikastes,
 	}
 )

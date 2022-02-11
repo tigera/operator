@@ -48,7 +48,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		}{
 			{name: applicationlayer.APLName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: applicationlayer.EnvoyConfigMapName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
-			{name: applicationlayer.ApplicationLayerDaemonsetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: applicationlayer.L7LogCollectorDeamonsetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 		// Should render the correct resources.
 		component := applicationlayer.ApplicationLayer(&applicationlayer.Config{
@@ -66,7 +66,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			i++
 		}
 
-		ds := rtest.GetResource(resources, applicationlayer.ApplicationLayerDaemonsetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		ds := rtest.GetResource(resources, applicationlayer.L7LogCollectorDeamonsetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 
 		// Check rendering of daemonset.
 		Expect(ds.Spec.Template.Spec.HostNetwork).To(BeTrue())
@@ -176,7 +176,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		})
 		resources, _ := component.Objects()
 
-		ds := rtest.GetResource(resources, applicationlayer.ApplicationLayerDaemonsetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		ds := rtest.GetResource(resources, applicationlayer.L7LogCollectorDeamonsetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 
 		collectorContainer := ds.Spec.Template.Spec.Containers[1]
 

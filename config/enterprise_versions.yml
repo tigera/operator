@@ -123,6 +123,3 @@ components:
   envoy:
     image: tigera/envoy
     version: master
-  dikastes:
-    image: tigera/app-policy
-    version: master

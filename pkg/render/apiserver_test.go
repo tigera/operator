@@ -1026,13 +1026,7 @@ var (
 			APIGroups:     []string{"projectcalico.org"},
 			Resources:     []string{"uisettingsgroups"},
 			Verbs:         []string{"get"},
-			ResourceNames: []string{"cluster-settings", "user-settings"},
-		},
-		{
-			APIGroups:     []string{"projectcalico.org"},
-			Resources:     []string{"uisettingsgroups/data"},
-			Verbs:         []string{"get", "list", "watch"},
-			ResourceNames: []string{"cluster-settings"},
+			ResourceNames: []string{"user-settings"},
 		},
 		{
 			APIGroups:     []string{"projectcalico.org"},
@@ -1137,13 +1131,7 @@ var (
 			APIGroups:     []string{"projectcalico.org"},
 			Resources:     []string{"uisettingsgroups"},
 			Verbs:         []string{"get", "patch", "update"},
-			ResourceNames: []string{"cluster-settings", "user-settings"},
-		},
-		{
-			APIGroups:     []string{"projectcalico.org"},
-			Resources:     []string{"uisettingsgroups/data"},
-			Verbs:         []string{"*"},
-			ResourceNames: []string{"cluster-settings", "user-settings"},
+			ResourceNames: []string{"user-settings"},
 		},
 		{
 			APIGroups: []string{"lma.tigera.io"},

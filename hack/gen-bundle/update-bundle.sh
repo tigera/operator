@@ -90,6 +90,9 @@ EOF
 # validation fails
 yq delete -i ${CSV} spec.install.spec.permissions
 
+# Rename CSV to "tigera-operator".
+mv bundle/${VERSION}/manifests/operator.clusterserviceversion.yaml bundle/${VERSION}/manifests/tigera-operator.clusterserviceversion.yaml
+
 # Remove unneeded empty lines
 sed -i '/^$/d' bundle.Dockerfile
 

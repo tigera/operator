@@ -58,6 +58,15 @@ fi
 # dot in the key "olm.skipRange".
 yq write -i ${CSV} --style double 'metadata.annotations[olm.skipRange]' \<${VERSION}
 
+# Add required 'relatedImages' to CSV
+# E.g.
+#
+#   relatedImages:
+#     - name: tigera-operator
+#       image: quay.io/tigera/operator@sha256:b4e3eeccfd3d5a931c07f31c244b272e058ccabd2d8155ccc3ff52ed78855e69
+yq write -i ${CSV} spec.relatedImages[0].name tigera-operator
+yq write -i ${CSV} spec.relatedImages[0].image ${OPERATOR_IMAGE_DIGEST}
+
 #
 # Now start updates to the bundle dockerfile. First update the package name.
 #

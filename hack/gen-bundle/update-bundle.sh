@@ -63,9 +63,12 @@ yq write -i ${CSV} --style double 'metadata.annotations[olm.skipRange]' \<${VERS
 #
 sed -i 's/\(operators\.operatorframework\.\io\.bundle\.package\.v1\)=operator/\1=tigera-operator/' bundle.Dockerfile
 
+# Supported OpenShift versions. Specify min version.
+openshiftVersions=v4.6
+
 # Add in required labels
 cat <<EOF >> bundle.Dockerfile
-LABEL com.redhat.openshift.versions="v4.5"
+LABEL com.redhat.openshift.versions="${openshiftVersions}"
 LABEL com.redhat.delivery.backport=true
 LABEL com.redhat.delivery.operator.bundle=true
 EOF
@@ -104,3 +107,8 @@ sed -i 's/.*operators\.operatorframework\.io\.test.*//' bundle/${VERSION}/metada
 
 # Remove unneeded empty lines
 sed -i '/^$/d' bundle/${VERSION}/metadata/annotations.yaml
+
+# Add required com.redhat.openshift.versions
+cat <<EOF >> bundle/${VERSION}/metadata/annotations.yaml
+  com.redhat.openshift.versions: ${openshiftVersions}
+EOF

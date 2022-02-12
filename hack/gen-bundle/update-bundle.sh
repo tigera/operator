@@ -39,7 +39,7 @@ mv bundle/{metadata,manifests} bundle/${VERSION}
 #
 # Update the CSV. Set the operator image container image and creation timestamp annotations.
 #
-yq write -i ${CSV} metadata.annotations.containerImage ${OPERATOR_IMAGE}
+yq write -i ${CSV} metadata.annotations.containerImage ${OPERATOR_IMAGE_DIGEST}
 TIMESTAMP=$(echo ${OPERATOR_IMAGE_INSPECT} | jq -r .[0].Created)
 yq write -i ${CSV} metadata.annotations.createdAt ${TIMESTAMP}
 

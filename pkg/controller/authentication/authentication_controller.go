@@ -194,8 +194,8 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	// Make sure Authentication and ManagementClusterConnection are not present at the same time.
 	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
 	if managementClusterConnection != nil {
-		log.Error(err, "Only one of Authentication and ManagementClusterConnection may be specified")
-		r.status.SetDegraded("Only one of Authentication and ManagementClusterConnection may be specified", err.Error())
+		log.Error(fmt.Errorf("only one of Authentication and ManagementClusterConnection may be specified"), "")
+		r.status.SetDegraded("Only one of Authentication and ManagementClusterConnection may be specified", "")
 		return reconcile.Result{}, err
 	} else if err != nil {
 		log.Error(err, "Error querying ManagementClusterConnection")

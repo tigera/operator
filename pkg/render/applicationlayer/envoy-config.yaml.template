@@ -27,6 +27,9 @@
                   - name: envoy.filters.http.ext_authz
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+                      with_request_body:
+                        max_request_bytes: 8192
+                        allow_partial_message: true
                       grpc_service:
                         google_grpc:
                           target_uri: unix:///var/run/dikastes/dikastes.sock

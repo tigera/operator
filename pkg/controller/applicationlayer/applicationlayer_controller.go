@@ -304,16 +304,25 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 
 // updateApplicationLayerWithDefaults populates the applicationlayer with defaults.
 func updateApplicationLayerWithDefaults(al *operatorv1.ApplicationLayer) {
-	defaultLogIntervalSeconds := int64(5)
-	defaultLogRequestsPerInterval := int64(-1)
+	var defaultLogIntervalSeconds int64 = 5
+	var defaultLogRequestsPerInterval int64 = -1
+	var defaultLogCollectionDisabled operatorv1.LogCollectionStatusType = "Disabled"
+	var defaultWebApplicationFirewallDisabled operatorv1.WAFStatusType = "Disabled"
 
-	if al.Spec.LogCollection != nil {
-		if al.Spec.LogCollection.LogRequestsPerInterval == nil {
-			al.Spec.LogCollection.LogRequestsPerInterval = &defaultLogRequestsPerInterval
-		}
-		if al.Spec.LogCollection.LogIntervalSeconds == nil {
-			al.Spec.LogCollection.LogIntervalSeconds = &defaultLogIntervalSeconds
-		}
+	if al.Spec.LogCollection == nil {
+		al.Spec.LogCollection = new(operatorv1.LogCollectionSpec)
+	}
+	if al.Spec.LogCollection.CollectLogs == nil {
+		al.Spec.LogCollection.CollectLogs = &defaultLogCollectionDisabled
+	}
+	if al.Spec.LogCollection.LogRequestsPerInterval == nil {
+		al.Spec.LogCollection.LogRequestsPerInterval = &defaultLogRequestsPerInterval
+	}
+	if al.Spec.LogCollection.LogIntervalSeconds == nil {
+		al.Spec.LogCollection.LogIntervalSeconds = &defaultLogIntervalSeconds
+	}
+	if al.Spec.WebApplicationFirewall == nil {
+		al.Spec.WebApplicationFirewall = &defaultWebApplicationFirewallDisabled
 	}
 }
 

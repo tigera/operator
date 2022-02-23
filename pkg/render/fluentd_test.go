@@ -88,23 +88,20 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Volumes[0].VolumeSource.HostPath.Path).To(Equal("/var/log/calico"))
 		envs := ds.Spec.Template.Spec.Containers[0].Env
 
-		expectedEnvs := []corev1.EnvVar{
-			{Name: "FLUENT_UID", Value: "0"},
-			{Name: "FLOW_LOG_FILE", Value: "/var/log/calico/flowlogs/flows.log"},
-			{Name: "DNS_LOG_FILE", Value: "/var/log/calico/dnslogs/dns.log"},
-			{Name: "FLUENTD_ES_SECURE", Value: "true"},
-			{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
-			{Name: "ELASTIC_PORT", Value: "9200"},
-			{
-				Name: "NODENAME",
+		Expect(envs).Should(ContainElements(
+			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
+			corev1.EnvVar{Name: "FLUENT_UID", Value: "0"},
+			corev1.EnvVar{Name: "FLOW_LOG_FILE", Value: "/var/log/calico/flowlogs/flows.log"},
+			corev1.EnvVar{Name: "DNS_LOG_FILE", Value: "/var/log/calico/dnslogs/dns.log"},
+			corev1.EnvVar{Name: "FLUENTD_ES_SECURE", Value: "true"},
+			corev1.EnvVar{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
+			corev1.EnvVar{Name: "ELASTIC_PORT", Value: "9200"},
+			corev1.EnvVar{Name: "NODENAME",
 				ValueFrom: &corev1.EnvVarSource{
 					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
 				},
 			},
-		}
-		for _, expected := range expectedEnvs {
-			Expect(envs).To(ContainElement(expected))
-		}
+		))
 
 		container := ds.Spec.Template.Spec.Containers[0]
 

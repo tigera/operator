@@ -22,11 +22,29 @@ func CopyToNamespace(ns string, oConfigMaps ...*v1.ConfigMap) []*v1.ConfigMap {
 // ToRuntimeObjects converts the given list of configMaps to a list of client.Objects
 func ToRuntimeObjects(configMaps ...*v1.ConfigMap) []client.Object {
 	var objs []client.Object
-	for _, secret := range configMaps {
-		if secret == nil {
+	for _, configMap := range configMaps {
+		if configMap == nil {
 			continue
 		}
-		objs = append(objs, secret)
+		objs = append(objs, configMap)
 	}
 	return objs
+}
+
+// GetEnvVarSource returns an EnvVarSource using the given configmap name and key.
+func GetEnvVarSource(cmName string, key string, optional bool) *v1.EnvVarSource {
+	var opt *bool
+	if optional {
+		r := optional
+		opt = &r
+	}
+	return &v1.EnvVarSource{
+		ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+			LocalObjectReference: v1.LocalObjectReference{
+				Name: cmName,
+			},
+			Key:      key,
+			Optional: opt,
+		},
+	}
 }

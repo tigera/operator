@@ -199,8 +199,8 @@ github.com/fatih/structs v1.1.0/go.mod h1:9NiDSp5zOcgEDl+j00MP/WkGVPOlPRLejGD8Ga
 github.com/form3tech-oss/jwt-go v3.2.2+incompatible/go.mod h1:pbq4aXjuKjdthFRnoDwaVPLA+WlJuPGy+QneDUgJi2k=
 github.com/fortytw2/leaktest v1.3.0 h1:u8491cBMTQ8ft8aeV+adlcytMZylmA5nnwwkRZjI8vw=
 github.com/fortytw2/leaktest v1.3.0/go.mod h1:jDsjWgpAGjm2CA7WthBh/CdZYEPF31XHquHwclZch5g=
-github.com/freecaykes/api v0.0.0-20220201212129-281c51cc19ae h1:/9vkQufevXuQN6pF5btf4DssMrm/7qUWxWiSZz635u4=
-github.com/freecaykes/api v0.0.0-20220201212129-281c51cc19ae/go.mod h1:FFE+MQo0Up7GGg3RagKRAwgdH7UqlXBFm+47BwmQLVQ=
+github.com/freecaykes/api v0.0.0-20220211183620-5ee48bcecb19 h1:sUwl8bayPniQqqOKB3Ar6BtnE6cmu7CcMmPcibHO/bc=
+github.com/freecaykes/api v0.0.0-20220211183620-5ee48bcecb19/go.mod h1:6qWfgULooruKiC8eoGgyRjOh0K+h/q8bc7AvdUysAUo=
 github.com/fsnotify/fsnotify v1.4.7/go.mod h1:jwhsz4b93w/PPRr/qN1Yymfu8t87LnFCMoQvtojpjFo=
 github.com/fsnotify/fsnotify v1.4.9/go.mod h1:znqG4EE+3YCdAaPaxE2ZRY/06pZUdp0tY4IgpuI1SZQ=
 github.com/fsnotify/fsnotify v1.5.1 h1:mZcQUHVQUQWoPXXtuf9yuEXKudkV2sx1E06UadKWpgI=

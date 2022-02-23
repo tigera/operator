@@ -138,7 +138,10 @@ func ExpectGlobalAlertTemplateToBePopulated(resource runtime.Object) {
 	Expect(ok).To(BeTrue(), fmt.Sprintf("resource (%v) should convert to GlobalAlertTemplate", resource))
 	Expect(v.Spec.Description).ToNot(BeEmpty(), fmt.Sprintf("Description should not be empty for resource (%v)", resource))
 	Expect(v.Spec.Severity).ToNot(BeNumerically("==", 0), fmt.Sprintf("Severity should not be empty for resource (%v)", resource))
-	Expect(v.Spec.DataSet).ToNot(BeEmpty(), fmt.Sprintf("DataSet should not be empty for resource (%v)", resource))
+
+	if v.Spec.Type != v3.GlobalAlertTypeAnomalyDetection { // ignored for  AnomalyDetection Typed
+		Expect(v.Spec.DataSet).ToNot(BeEmpty(), fmt.Sprintf("DataSet should not be empty for resource (%v)", resource))
+	}
 }
 
 func ExpectEnv(env []v1.EnvVar, key, value string) {

@@ -19,9 +19,18 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tigera/operator/pkg/dns"
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/ptr"
+	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	"github.com/tigera/operator/pkg/render/common/configmap"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -30,15 +39,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
-
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
-	"github.com/tigera/operator/pkg/render"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/secret"
-	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 )
 
 const (
@@ -65,27 +65,12 @@ const (
 
 	AlertmanagerConfigSecret = "alertmanager-calico-node-alertmanager"
 
-	prometheusServiceAccountName = "prometheus"
+	PrometheusServiceAccountName = "prometheus"
 )
 
 func Monitor(cfg *Config) render.Component {
-	var tlsSecrets []*corev1.Secret
-	var tlsHash string
-	var clientTLSHash string
-	if cfg.Installation.CertificateManagement == nil {
-		tlsSecrets = []*corev1.Secret{
-			secret.CopyToNamespace(common.TigeraPrometheusNamespace, cfg.ServerTLSSecret)[0],
-			secret.CopyToNamespace(common.TigeraPrometheusNamespace, cfg.ClientTLSSecret)[0],
-		}
-		tlsHash = rmeta.AnnotationHash(cfg.ServerTLSSecret.Data)
-		clientTLSHash = rmeta.AnnotationHash(cfg.ClientTLSSecret.Data)
-	}
-
 	return &monitorComponent{
-		cfg:           cfg,
-		tlsSecrets:    tlsSecrets,
-		tlsHash:       tlsHash,
-		clientTLSHash: clientTLSHash,
+		cfg: cfg,
 	}
 }
 
@@ -95,10 +80,10 @@ type Config struct {
 	PullSecrets              []*corev1.Secret
 	AlertmanagerConfigSecret *corev1.Secret
 	KeyValidatorConfig       authentication.KeyValidatorConfig
-	ServerTLSSecret          *corev1.Secret
-	ClientTLSSecret          *corev1.Secret
+	ServerTLSSecret          certificatemanagement.KeyPair
+	ClientTLSSecret          certificatemanagement.KeyPair
 	ClusterDomain            string
-	TrustedCertBundle        *corev1.ConfigMap
+	TrustedCertBundle        certificatemanagement.TrustedBundle
 }
 
 type monitorComponent struct {
@@ -107,9 +92,6 @@ type monitorComponent struct {
 	prometheusImage        string
 	prometheusServiceImage string
 	csrImage               string
-	tlsSecrets             []*corev1.Secret
-	tlsHash                string
-	clientTLSHash          string
 }
 
 func (mc *monitorComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -136,7 +118,7 @@ func (mc *monitorComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	if mc.cfg.Installation.CertificateManagement != nil {
-		mc.csrImage, err = render.ResolveCSRInitImage(mc.cfg.Installation, is)
+		mc.csrImage, err = certificatemanagement.ResolveCSRInitImage(mc.cfg.Installation, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
@@ -155,7 +137,6 @@ func (mc *monitorComponent) SupportedOSType() rmeta.OSType {
 func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 	toCreate := []client.Object{
 		render.CreateNamespace(common.TigeraPrometheusNamespace, mc.cfg.Installation.KubernetesProvider),
-		mc.cfg.TrustedCertBundle,
 	}
 
 	// Create role and role bindings first.
@@ -173,13 +154,7 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 	toDelete := []client.Object{
 		mc.serviceMonitorElasicsearchToDelete(),
 	}
-	if mc.cfg.Installation.CertificateManagement == nil {
-		toCreate = append(toCreate, secret.ToRuntimeObjects(mc.tlsSecrets...)...)
-		toDelete = append(toDelete, render.CSRClusterRoleBinding(prometheusServiceAccountName, common.TigeraPrometheusNamespace))
-	} else {
-		toDelete = append(toDelete, secret.ToRuntimeObjects(mc.tlsSecrets...)...)
-		toCreate = append(toCreate, render.CSRClusterRoleBinding(prometheusServiceAccountName, common.TigeraPrometheusNamespace))
-	}
+
 	toCreate = append(toCreate,
 		mc.alertmanagerService(),
 		mc.alertmanager(),
@@ -298,48 +273,11 @@ func (mc *monitorComponent) alertmanagerService() *corev1.Service {
 
 func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 	var initContainers []corev1.Container
-	if mc.cfg.Installation.CertificateManagement != nil {
-		svcDNSNames := dns.GetServiceDNSNames(PrometheusHTTPAPIServiceName, common.TigeraPrometheusNamespace, mc.cfg.ClusterDomain)
-		clientInit := render.CreateCSRInitContainer(
-			mc.cfg.Installation.CertificateManagement,
-			mc.csrImage,
-			PrometheusClientTLSSecretName,
-			PrometheusHTTPAPIServiceName,
-			corev1.TLSPrivateKeyKey,
-			corev1.TLSCertKey,
-			[]string{PrometheusClientTLSSecretName},
-			common.TigeraPrometheusNamespace)
-		// Make sure the names are not identical for the two init containers.
-		clientInit.Name = fmt.Sprintf("%s-%s", PrometheusClientTLSSecretName, clientInit.Name)
-		initContainers = append(initContainers, render.CreateCSRInitContainer(
-			mc.cfg.Installation.CertificateManagement,
-			mc.csrImage,
-			PrometheusTLSSecretName,
-			PrometheusHTTPAPIServiceName,
-			corev1.TLSPrivateKeyKey,
-			corev1.TLSCertKey,
-			svcDNSNames,
-			common.TigeraPrometheusNamespace),
-			clientInit)
-
+	if mc.cfg.ServerTLSSecret.UseCertificateManagement() {
+		initContainers = append(initContainers, mc.cfg.ServerTLSSecret.InitContainer(common.TigeraPrometheusNamespace, mc.csrImage))
 	}
-	volumes := []corev1.Volume{
-		{
-			Name:         PrometheusTLSSecretName,
-			VolumeSource: render.CertificateVolumeSource(mc.cfg.Installation.CertificateManagement, PrometheusTLSSecretName),
-		},
-		{
-			Name:         PrometheusClientTLSSecretName,
-			VolumeSource: render.CertificateVolumeSource(mc.cfg.Installation.CertificateManagement, PrometheusClientTLSSecretName),
-		},
-		{
-			Name: mc.cfg.TrustedCertBundle.Name,
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{Name: mc.cfg.TrustedCertBundle.Name},
-				},
-			},
-		},
+	if mc.cfg.ClientTLSSecret.UseCertificateManagement() {
+		initContainers = append(initContainers, mc.cfg.ClientTLSSecret.InitContainer(common.TigeraPrometheusNamespace, mc.csrImage))
 	}
 	env := []corev1.EnvVar{
 		{
@@ -353,36 +291,29 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		{
 			// No other way to annotate this pod.
 			Name:  "TLS_SERVER_SECRET_HASH_ANNOTATION",
-			Value: mc.tlsHash,
+			Value: mc.cfg.ServerTLSSecret.HashAnnotationValue(),
 		},
 		{
 			// No other way to annotate this pod.
 			Name:  "TLS_CLIENT_SECRET_HASH_ANNOTATION",
-			Value: mc.clientTLSHash,
+			Value: mc.cfg.ClientTLSSecret.HashAnnotationValue(),
 		},
 		{
 			// No other way to annotate this pod.
 			Name:  "TLS_CA_BUNDLE_HASH_ANNOTATION",
-			Value: rmeta.AnnotationHash(mc.cfg.TrustedCertBundle.Data),
+			Value: rmeta.AnnotationHash(mc.cfg.TrustedCertBundle.HashAnnotations()),
 		},
 	}
 
+	volumes := []corev1.Volume{
+		mc.cfg.ServerTLSSecret.Volume(),
+		mc.cfg.ClientTLSSecret.Volume(),
+		mc.cfg.TrustedCertBundle.Volume(),
+	}
 	volumeMounts := []corev1.VolumeMount{
-		{
-			Name:      PrometheusTLSSecretName,
-			MountPath: "/tls",
-			ReadOnly:  true,
-		},
-		{
-			Name:      PrometheusClientTLSSecretName,
-			MountPath: "/client-tls",
-			ReadOnly:  true,
-		},
-		{
-			Name:      mc.cfg.TrustedCertBundle.Name,
-			MountPath: fmt.Sprintf("/%s", mc.cfg.TrustedCertBundle.Name),
-			ReadOnly:  true,
-		},
+		mc.cfg.ServerTLSSecret.VolumeMount("/tls"),
+		mc.cfg.ClientTLSSecret.VolumeMount("/client-tls"),
+		mc.cfg.TrustedCertBundle.VolumeMount(),
 	}
 
 	if mc.cfg.KeyValidatorConfig != nil {
@@ -400,7 +331,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		Spec: monitoringv1.PrometheusSpec{
 			Image:              &mc.prometheusImage,
 			ImagePullSecrets:   secret.GetReferenceList(mc.cfg.PullSecrets),
-			ServiceAccountName: prometheusServiceAccountName,
+			ServiceAccountName: PrometheusServiceAccountName,
 			Volumes:            volumes,
 			VolumeMounts:       volumeMounts,
 			InitContainers:     initContainers,
@@ -467,7 +398,7 @@ func (mc *monitorComponent) prometheusServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      prometheusServiceAccountName,
+			Name:      PrometheusServiceAccountName,
 			Namespace: common.TigeraPrometheusNamespace,
 		},
 	}
@@ -516,7 +447,7 @@ func (mc *monitorComponent) prometheusClusterRoleBinding() *rbacv1.ClusterRoleBi
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      prometheusServiceAccountName,
+				Name:      PrometheusServiceAccountName,
 				Namespace: common.TigeraPrometheusNamespace,
 			},
 		},
@@ -625,7 +556,7 @@ func (mc *monitorComponent) tlsConfig(serverName string) *monitoringv1.TLSConfig
 	return &monitoringv1.TLSConfig{
 		KeyFile:  fmt.Sprintf("/client-tls/%s", corev1.TLSPrivateKeyKey),
 		CertFile: fmt.Sprintf("/client-tls/%s", corev1.TLSCertKey),
-		CAFile:   fmt.Sprintf("/%s/%s", mc.cfg.TrustedCertBundle.Name, corev1.ServiceAccountRootCAKey),
+		CAFile:   mc.cfg.TrustedCertBundle.MountPath(),
 		SafeTLSConfig: monitoringv1.SafeTLSConfig{
 			ServerName: serverName,
 		},

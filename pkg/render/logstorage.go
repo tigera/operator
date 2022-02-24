@@ -18,6 +18,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"hash/fnv"
 	"net/url"
 	"strings"
@@ -75,7 +76,6 @@ const (
 	KibanaPublicCertSecret   = "tigera-secure-es-gateway-http-certs-public"
 	KibanaInternalCertSecret = "tigera-secure-kb-http-certs-public"
 	TigeraKibanaCertSecret   = "tigera-secure-kibana-cert"
-	KibanaDefaultCertPath    = "/etc/ssl/kibana/ca.pem"
 	KibanaBasePath           = "tigera-kibana"
 	KibanaServiceName        = "tigera-secure-kb-http"
 	KibanaDefaultRoute       = "/app/kibana#/dashboards?%s&title=%s"
@@ -248,7 +248,7 @@ func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	if es.cfg.Installation.CertificateManagement != nil {
-		es.csrImage, err = ResolveCSRInitImage(es.cfg.Installation, is)
+		es.csrImage, err = certificatemanagement.ResolveCSRInitImage(es.cfg.Installation, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
@@ -396,8 +396,8 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	if es.cfg.Installation.CertificateManagement != nil {
-		toCreate = append(toCreate, CSRClusterRoleBinding("tigera-elasticsearch", ElasticsearchNamespace))
-		toCreate = append(toCreate, CSRClusterRoleBinding("tigera-kibana", KibanaNamespace))
+		toCreate = append(toCreate, certificatemanagement.CSRClusterRoleBinding("tigera-elasticsearch", ElasticsearchNamespace))
+		toCreate = append(toCreate, certificatemanagement.CSRClusterRoleBinding("tigera-kibana", KibanaNamespace))
 	}
 
 	return toCreate, toDelete
@@ -600,7 +600,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		}
 
 		// Add the init container that will issue a CSR for HTTP traffic and mount it in an emptyDir.
-		csrInitContainerHTTP := CreateCSRInitContainer(
+		csrInitContainerHTTP := certificatemanagement.CreateCSRInitContainer(
 			es.cfg.Installation.CertificateManagement,
 			es.csrImage,
 			csrVolumeNameHTTP,
@@ -612,7 +612,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		csrInitContainerHTTP.Name = "key-cert-elastic"
 
 		// Add the init container that will issue a CSR for transport and mount it in an emptyDir.
-		csrInitContainerTransport := CreateCSRInitContainer(
+		csrInitContainerTransport := certificatemanagement.CreateCSRInitContainer(
 			es.cfg.Installation.CertificateManagement,
 			es.csrImage,
 			csrVolumeNameTransport,
@@ -652,7 +652,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			},
 		})
 		esContainer.VolumeMounts = append(esContainer.VolumeMounts,
-			corev1.VolumeMount{MountPath: CSRCMountPath, Name: csrVolumeNameHTTP, ReadOnly: false},
+			corev1.VolumeMount{MountPath: certificatemanagement.CSRCMountPath, Name: csrVolumeNameHTTP, ReadOnly: false},
 			corev1.VolumeMount{MountPath: "/usr/share/elasticsearch/config/http-certs", Name: csrVolumeNameHTTP, ReadOnly: false},
 			corev1.VolumeMount{MountPath: "/usr/share/elasticsearch/config/transport-certs", Name: csrVolumeNameTransport, ReadOnly: false},
 			corev1.VolumeMount{MountPath: "/usr/share/elasticsearch/config/node-transport-cert", Name: csrVolumeNameTransport, ReadOnly: false},
@@ -1286,7 +1286,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 	if es.cfg.Installation.CertificateManagement != nil {
 		config["elasticsearch.ssl.certificateAuthorities"] = []string{"/mnt/elastic-internal/http-certs/ca.crt"}
 		automountToken = true
-		csrInitContainer := CreateCSRInitContainer(
+		csrInitContainer := certificatemanagement.CreateCSRInitContainer(
 			es.cfg.Installation.CertificateManagement,
 			es.csrImage,
 			csrVolumeNameHTTP,

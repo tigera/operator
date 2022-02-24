@@ -17,10 +17,11 @@ package clusterconnection_test
 import (
 	"context"
 	"fmt"
-
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/test"
 
 	"github.com/tigera/operator/pkg/controller/clusterconnection"
@@ -36,7 +37,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -81,38 +81,20 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				Namespace: render.GuardianNamespace,
 			},
 		}
-		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.GuardianSecretName,
-				Namespace: common.OperatorNamespace(),
-			},
-			Data: map[string][]byte{
-				"cert": []byte("foo"),
-				"key":  []byte("bar"),
-			},
-		}
-		c.Create(ctx, secret)
-		pcSecret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.PacketCaptureCertSecret,
-				Namespace: common.OperatorNamespace(),
-			},
-			Data: map[string][]byte{
-				"tls.crt": []byte("foo"),
-				"tls.key": []byte("bar"),
-			},
-		}
-		c.Create(ctx, pcSecret)
-		c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.PrometheusTLSSecretName,
-				Namespace: common.OperatorNamespace(),
-			},
-			Data: map[string][]byte{
-				"tls.crt": []byte("foo"),
-				"tls.key": []byte("bar"),
-			},
-		})
+		certificateManager, err := certificatemanagement.CreateCertificateManager(c, nil, dns.DefaultClusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+
+		secret, err := certificateManager.GetOrCreateKeyPair(c, render.GuardianSecretName, common.OperatorNamespace(), []string{"a"})
+		Expect(err).NotTo(HaveOccurred())
+
+		pcSecret, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureCertSecret, common.OperatorNamespace(), []string{"a"})
+		Expect(err).NotTo(HaveOccurred())
+
+		promSecret, err := certificateManager.GetOrCreateKeyPair(c, render.PrometheusTLSSecretName, common.OperatorNamespace(), []string{"a"})
+		Expect(err).NotTo(HaveOccurred())
+		c.Create(ctx, secret.Secret(common.OperatorNamespace()))
+		c.Create(ctx, pcSecret.Secret(common.OperatorNamespace()))
+		c.Create(ctx, promSecret.Secret(common.OperatorNamespace()))
 
 		By("applying the required prerequisites")
 		// Create a ManagementClusterConnection in the k8s client.

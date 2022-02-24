@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"strconv"
 	"strings"
 
@@ -47,7 +48,6 @@ const (
 	S3KeyIdName                              = "key-id"
 	S3KeySecretName                          = "key-secret"
 	FluentdPrometheusTLSSecretName           = "tigera-fluentd-prometheus-tls"
-	FluentdPrometheusTLSSecretHashAnnotation = "hash.operator.tigera.io/tigera-fluentd-prometheus-tls"
 	FluentdMetricsService                    = "fluentd-metrics"
 	FluentdMetricsPort                       = "fluentd-metrics-port"
 	filterHashAnnotation                     = "hash.operator.tigera.io/fluentd-filters"
@@ -80,7 +80,7 @@ const (
 	fluentdName        = "tigera-fluentd"
 	fluentdWindowsName = "tigera-fluentd-windows"
 
-	fluentdNodeName        = "fluentd-node"
+	FluentdNodeName        = "fluentd-node"
 	fluentdNodeWindowsName = "fluentd-node-windows"
 
 	eksLogForwarderName = "eks-log-forwarder"
@@ -130,19 +130,19 @@ type EksCloudwatchLogConfig struct {
 
 // FluentdConfiguration contains all the config information needed to render the component.
 type FluentdConfiguration struct {
-	LogCollector    *operatorv1.LogCollector
-	ESSecrets       []*corev1.Secret
-	ESClusterConfig *relasticsearch.ClusterConfig
-	S3Credential    *S3Credential
-	SplkCredential  *SplunkCredential
-	Filters         *FluentdFilters
-	EKSConfig       *EksCloudwatchLogConfig
-	PullSecrets     []*corev1.Secret
-	Installation    *operatorv1.InstallationSpec
-	ClusterDomain   string
-	OSType          rmeta.OSType
-	TLS             *corev1.Secret
-	TrustedBundle   *corev1.ConfigMap
+	LogCollector     *operatorv1.LogCollector
+	ESSecrets        []*corev1.Secret
+	ESClusterConfig  *relasticsearch.ClusterConfig
+	S3Credential     *S3Credential
+	SplkCredential   *SplunkCredential
+	Filters          *FluentdFilters
+	EKSConfig        *EksCloudwatchLogConfig
+	PullSecrets      []*corev1.Secret
+	Installation     *operatorv1.InstallationSpec
+	ClusterDomain    string
+	OSType           rmeta.OSType
+	MetricsServerTLS certificatemanagement.KeyPair
+	TrustedBundle    certificatemanagement.TrustedBundle
 }
 
 type fluentdComponent struct {
@@ -171,7 +171,7 @@ func (c *fluentdComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 	if c.cfg.Installation.CertificateManagement != nil {
-		c.csrImage, err = ResolveCSRInitImage(c.cfg.Installation, is)
+		c.csrImage, err = certificatemanagement.ResolveCSRInitImage(c.cfg.Installation, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
@@ -197,7 +197,7 @@ func (c *fluentdComponent) fluentdNodeName() string {
 	if c.cfg.OSType == rmeta.OSTypeWindows {
 		return fluentdNodeWindowsName
 	}
-	return fluentdNodeName
+	return FluentdNodeName
 }
 
 func (c *fluentdComponent) readinessCmd() []string {
@@ -282,18 +282,6 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, c.fluentdServiceAccount())
 	objs = append(objs, c.packetCaptureApiRole(), c.packetCaptureApiRoleBinding())
 	objs = append(objs, c.daemonset())
-	if c.cfg.TrustedBundle != nil {
-		objs = append(objs, c.cfg.TrustedBundle)
-	}
-	if c.cfg.Installation.CertificateManagement == nil {
-		if c.cfg.TLS != nil {
-			objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.cfg.TLS)...)...)
-		}
-		toDelete = append(toDelete, CSRClusterRoleBinding(fluentdName, LogCollectorNamespace))
-	} else {
-		objs = append(objs, CSRClusterRoleBinding(fluentdNodeName, LogCollectorNamespace))
-		toDelete = append(toDelete, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: FluentdPrometheusTLSSecretName, Namespace: LogCollectorNamespace}})
-	}
 
 	return objs, toDelete
 }
@@ -437,12 +425,14 @@ func (c *fluentdComponent) packetCaptureApiRoleBinding() *rbacv1.RoleBinding {
 func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 	var terminationGracePeriod int64 = 0
 	maxUnavailable := intstr.FromInt(1)
-	annots := make(map[string]string)
+	var annots map[string]string
 	if c.cfg.TrustedBundle != nil {
-		annots[PrometheusCABundleAnnotation] = rmeta.AnnotationHash(c.cfg.TrustedBundle.Data)
+		annots = c.cfg.TrustedBundle.HashAnnotations()
+	} else {
+		annots = make(map[string]string)
 	}
-	if c.cfg.TLS != nil {
-		annots[FluentdPrometheusTLSSecretHashAnnotation] = rmeta.AnnotationHash(c.cfg.TLS.Data)
+	if c.cfg.MetricsServerTLS != nil {
+		annots[c.cfg.MetricsServerTLS.HashAnnotationKey()] = c.cfg.MetricsServerTLS.HashAnnotationValue()
 	}
 	if c.cfg.S3Credential != nil {
 		annots[s3CredentialHashAnnotation] = rmeta.AnnotationHash(c.cfg.S3Credential)
@@ -454,17 +444,8 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 		annots[filterHashAnnotation] = rmeta.AnnotationHash(c.cfg.Filters)
 	}
 	var initContainers []corev1.Container
-	if c.cfg.OSType != rmeta.OSTypeWindows && c.cfg.Installation.CertificateManagement != nil {
-		initContainers = append(initContainers, CreateCSRInitContainer(
-			c.cfg.Installation.CertificateManagement,
-			c.csrImage,
-			FluentdPrometheusTLSSecretName,
-			FluentdPrometheusTLSSecretName,
-			corev1.TLSPrivateKeyKey,
-			corev1.TLSCertKey,
-			[]string{FluentdPrometheusTLSSecretName},
-			LogCollectorNamespace,
-		))
+	if c.cfg.MetricsServerTLS != nil && c.cfg.MetricsServerTLS.UseCertificateManagement() {
+		initContainers = append(initContainers, c.cfg.MetricsServerTLS.InitContainer(LogCollectorNamespace, c.csrImage))
 	}
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
@@ -553,18 +534,11 @@ func (c *fluentdComponent) container() corev1.Container {
 	}
 
 	if c.cfg.TrustedBundle != nil {
-		volumeMounts = append(volumeMounts,
-			corev1.VolumeMount{
-				Name:      FluentdPrometheusTLSSecretName,
-				MountPath: "/tls",
-				ReadOnly:  true,
-			},
-			corev1.VolumeMount{
-				Name:      c.cfg.TrustedBundle.Name,
-				MountPath: "/ca",
-				ReadOnly:  true,
-			},
-		)
+		volumeMounts = append(volumeMounts, c.cfg.TrustedBundle.VolumeMount())
+	}
+
+	if c.cfg.MetricsServerTLS != nil {
+		volumeMounts = append(volumeMounts, c.cfg.MetricsServerTLS.VolumeMount("/tls"))
 	}
 
 	isPrivileged := false
@@ -595,10 +569,10 @@ func (c *fluentdComponent) metricsService() *corev1.Service {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      FluentdMetricsService,
 			Namespace: LogCollectorNamespace,
-			Labels:    map[string]string{"k8s-app": fluentdNodeName},
+			Labels:    map[string]string{"k8s-app": FluentdNodeName},
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{"k8s-app": fluentdNodeName},
+			Selector: map[string]string{"k8s-app": FluentdNodeName},
 			Type:     corev1.ServiceTypeClusterIP,
 			Ports: []corev1.ServicePort{
 				{
@@ -848,20 +822,11 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 				},
 			})
 	}
+	if c.cfg.MetricsServerTLS != nil {
+		volumes = append(volumes, c.cfg.MetricsServerTLS.Volume())
+	}
 	if c.cfg.TrustedBundle != nil {
-		volumes = append(volumes,
-			corev1.Volume{
-				Name:         FluentdPrometheusTLSSecretName,
-				VolumeSource: CertificateVolumeSource(c.cfg.Installation.CertificateManagement, FluentdPrometheusTLSSecretName),
-			},
-			corev1.Volume{
-				Name: c.cfg.TrustedBundle.Name,
-				VolumeSource: corev1.VolumeSource{
-					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{Name: c.cfg.TrustedBundle.Name},
-					},
-				},
-			})
+		volumes = append(volumes, c.cfg.TrustedBundle.Volume())
 	}
 
 	return volumes

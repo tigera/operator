@@ -38,6 +38,7 @@ replace (
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v13.3.2+incompatible // Required by OLM
 	github.com/operator-framework/operator-sdk => github.com/operator-framework/operator-sdk v1.0.1
 
+	github.com/tigera/api => github.com/freecaykes/api v0.0.0-20220211183620-5ee48bcecb19
 	// Scanners flag anything less than v0.3.6 as having a CVE.
 	golang.org/x/text => golang.org/x/text v0.3.7
 

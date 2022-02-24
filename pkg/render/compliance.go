@@ -19,8 +19,18 @@ import (
 	"strings"
 
 	ocsv1 "github.com/openshift/api/security/v1"
-	"github.com/tigera/operator/pkg/dns"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/render/common/authentication"
 	"github.com/tigera/operator/pkg/render/common/configmap"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
+	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -28,15 +38,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/render/common/authentication"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
-	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
 const (
@@ -45,6 +46,7 @@ const (
 	ComplianceServerName      = "compliance-server"
 	ComplianceControllerName  = "compliance-controller"
 	ComplianceSnapshotterName = "compliance-snapshotter"
+	ComplianceServerSAName    = "tigera-compliance-server"
 )
 
 const (
@@ -55,27 +57,23 @@ const (
 	ElasticsearchComplianceServerUserSecret      = "tigera-ee-compliance-server-elasticsearch-access"
 	ElasticsearchCuratorUserSecret               = "tigera-ee-curator-elasticsearch-access"
 
-	ComplianceServerCertSecret    = "tigera-compliance-server-tls"
-	complianceServerTLSVolumeName = "tls"
+	ComplianceServerCertSecret = "tigera-compliance-server-tls"
 
-	complianceServerTLSHashAnnotation = "hash.operator.tigera.io/tls-certificate"
+	complianceServerTLSHashAnnotation = "hash.operator.tigera.io/tigera-compliance-server-tls"
 )
 
 func Compliance(cfg *ComplianceConfiguration) (Component, error) {
-	complianceServerCertSecrets := secret.CopyToNamespace(ComplianceNamespace, cfg.ComplianceServerCertSecret)
-
 	return &complianceComponent{
-		cfg:                         cfg,
-		complianceServerCertSecrets: complianceServerCertSecrets,
+		cfg: cfg,
 	}, nil
 }
 
 // ComplianceConfiguration contains all the config information needed to render the component.
 type ComplianceConfiguration struct {
 	ESSecrets                   []*corev1.Secret
-	ManagerInternalTLSSecret    *corev1.Secret
+	TrustedBundle               certificatemanagement.TrustedBundle
 	Installation                *operatorv1.InstallationSpec
-	ComplianceServerCertSecret  *corev1.Secret
+	ComplianceServerCertSecret  certificatemanagement.KeyPair
 	ESClusterConfig             *relasticsearch.ClusterConfig
 	PullSecrets                 []*corev1.Secret
 	Openshift                   bool
@@ -87,14 +85,13 @@ type ComplianceConfiguration struct {
 }
 
 type complianceComponent struct {
-	cfg                         *ComplianceConfiguration
-	complianceServerCertSecrets []*corev1.Secret
-	benchmarkerImage            string
-	snapshotterImage            string
-	serverImage                 string
-	controllerImage             string
-	reporterImage               string
-	csrInitImage                string
+	cfg              *ComplianceConfiguration
+	benchmarkerImage string
+	snapshotterImage string
+	serverImage      string
+	controllerImage  string
+	reporterImage    string
+	csrInitImage     string
 }
 
 func (c *complianceComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -130,7 +127,7 @@ func (c *complianceComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	if c.cfg.Installation.CertificateManagement != nil {
-		c.csrInitImage, err = ResolveCSRInitImage(c.cfg.Installation, is)
+		c.csrInitImage, err = certificatemanagement.ResolveCSRInitImage(c.cfg.Installation, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
@@ -185,10 +182,6 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 		c.complianceServerClusterRoleBinding(),
 	)
 
-	if c.cfg.ManagerInternalTLSSecret != nil {
-		complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(ComplianceNamespace, c.cfg.ManagerInternalTLSSecret)...)...)
-	}
-
 	if c.cfg.KeyValidatorConfig != nil {
 		complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(c.cfg.KeyValidatorConfig.RequiredSecrets(ComplianceNamespace)...)...)
 		complianceObjs = append(complianceObjs, configmap.ToRuntimeObjects(c.cfg.KeyValidatorConfig.RequiredConfigMaps(ComplianceNamespace)...)...)
@@ -197,24 +190,17 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 	var objsToDelete []client.Object
 	// Compliance server is only for Standalone or Management clusters
 	if c.cfg.ManagementClusterConnection == nil {
-		complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(c.complianceServerCertSecrets...)...)
 		complianceObjs = append(complianceObjs,
 			c.complianceServerClusterRole(),
 			c.complianceServerService(),
 			c.complianceServerDeployment(),
 		)
-
-		if c.cfg.Installation.CertificateManagement != nil {
-			complianceObjs = append(complianceObjs, CSRClusterRoleBinding("tigera-compliance-server", ComplianceNamespace))
-		}
-
 	} else {
-		complianceObjs = append(complianceObjs,
-			c.complianceServerManagedClusterRole(),
-		)
-		objsToDelete = []client.Object{c.complianceServerDeployment()}
-		if c.cfg.Installation.CertificateManagement != nil {
-			objsToDelete = append(objsToDelete, CSRClusterRoleBinding("tigera-compliance-server", ComplianceNamespace))
+		objsToDelete = append(objsToDelete, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: ComplianceServerName, Namespace: ComplianceNamespace}})
+		if c.cfg.ManagementClusterConnection != nil { // This is a managed cluster
+			complianceObjs = append(complianceObjs,
+				c.complianceServerManagedClusterRole(),
+			)
 		}
 	}
 
@@ -669,21 +655,14 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
+		{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: certificatemanagement.TrustedCertBundleMountPath},
 	}
 	if c.cfg.KeyValidatorConfig != nil {
 		envVars = append(envVars, c.cfg.KeyValidatorConfig.RequiredEnv("TIGERA_COMPLIANCE_")...)
 	}
 	var initContainers []corev1.Container
-	if c.cfg.Installation.CertificateManagement != nil {
-		initContainers = append(initContainers, CreateCSRInitContainer(
-			c.cfg.Installation.CertificateManagement,
-			c.csrInitImage,
-			complianceServerTLSVolumeName,
-			ComplianceServiceName,
-			APIServerSecretKeyName,
-			APIServerSecretCertName,
-			dns.GetServiceDNSNames(ComplianceServiceName, ComplianceNamespace, c.cfg.ClusterDomain),
-			ComplianceNamespace))
+	if c.cfg.ComplianceServerCertSecret.UseCertificateManagement() {
+		initContainers = append(initContainers, c.cfg.ComplianceServerCertSecret.InitContainer(ComplianceNamespace, c.csrInitImage))
 	}
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
@@ -730,6 +709,11 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 						PeriodSeconds:       10,
 						FailureThreshold:    5,
 					},
+					Command: []string{"/code/server"},
+					Args: []string{
+						"-certpath=/etc/ssl/tigera-compliance-server-tls/tls.crt",
+						"-keypath=/etc/ssl/tigera-compliance-server-tls/tls.key",
+					},
 					VolumeMounts: c.complianceServerVolumeMounts(),
 				}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceServerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()),
 			},
@@ -764,18 +748,9 @@ func (c *complianceComponent) complianceServerPodSecurityPolicy() *policyv1beta1
 }
 
 func (c *complianceComponent) complianceServerVolumeMounts() []corev1.VolumeMount {
-	var mounts = []corev1.VolumeMount{{
-		Name:      complianceServerTLSVolumeName,
-		MountPath: "/code/apiserver.local.config/certificates",
-		ReadOnly:  true,
-	}}
-
-	if c.cfg.ManagerInternalTLSSecret != nil {
-		mounts = append(mounts, corev1.VolumeMount{
-			Name:      ManagerInternalTLSSecretName,
-			MountPath: "/manager-tls",
-			ReadOnly:  true,
-		})
+	mounts := []corev1.VolumeMount{
+		c.cfg.TrustedBundle.VolumeMount(),
+		c.cfg.ComplianceServerCertSecret.VolumeMount("/etc/ssl/tigera-compliance-server-tls/"),
 	}
 
 	if c.cfg.KeyValidatorConfig != nil {
@@ -786,43 +761,9 @@ func (c *complianceComponent) complianceServerVolumeMounts() []corev1.VolumeMoun
 }
 
 func (c *complianceComponent) complianceServerVolumes() []corev1.Volume {
-	defaultMode := int32(420)
-
-	serverVolumeSource := CertificateVolumeSource(c.cfg.Installation.CertificateManagement, ComplianceServerCertSecret)
-	if c.cfg.Installation.CertificateManagement == nil {
-		serverVolumeSource.Secret.Items = []corev1.KeyToPath{
-			{
-				Key:  corev1.TLSCertKey,
-				Path: APIServerSecretCertName,
-			},
-			{
-				Key:  corev1.TLSPrivateKeyKey,
-				Path: APIServerSecretKeyName,
-			},
-		}
-	}
-	var volumes = []corev1.Volume{{
-		Name:         complianceServerTLSVolumeName,
-		VolumeSource: serverVolumeSource,
-	}}
-
-	if c.cfg.ManagerInternalTLSSecret != nil {
-		volumes = append(volumes,
-			corev1.Volume{
-				Name: ManagerInternalTLSSecretName,
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						DefaultMode: &defaultMode,
-						SecretName:  ManagerInternalTLSSecretName,
-						Items: []corev1.KeyToPath{
-							{
-								Key:  "cert",
-								Path: "cert",
-							},
-						},
-					},
-				},
-			})
+	volumes := []corev1.Volume{
+		c.cfg.ComplianceServerCertSecret.Volume(),
+		c.cfg.TrustedBundle.Volume(),
 	}
 
 	if c.cfg.KeyValidatorConfig != nil {
@@ -833,14 +774,10 @@ func (c *complianceComponent) complianceServerVolumes() []corev1.Volume {
 }
 
 func complianceAnnotations(c *complianceComponent) map[string]string {
-	var annotations = map[string]string{
-		complianceServerTLSHashAnnotation: rmeta.AnnotationHash(c.complianceServerCertSecrets[0].Data),
+	annotations := c.cfg.TrustedBundle.HashAnnotations()
+	if c.cfg.ComplianceServerCertSecret != nil {
+		annotations[c.cfg.ComplianceServerCertSecret.HashAnnotationKey()] = c.cfg.ComplianceServerCertSecret.HashAnnotationValue()
 	}
-
-	if c.cfg.ManagerInternalTLSSecret != nil {
-		annotations[ManagerInternalTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.ManagerInternalTLSSecret.Data)
-	}
-
 	return annotations
 }
 

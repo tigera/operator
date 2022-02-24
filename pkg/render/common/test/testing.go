@@ -151,6 +151,16 @@ func ExpectEnv(env []v1.EnvVar, key, value string) {
 	Expect(false).To(BeTrue(), fmt.Sprintf("Missing expected environment variable %s", key))
 }
 
+func ExpectVolumeMount(vms []v1.VolumeMount, name, path string) {
+	for _, vm := range vms {
+		if vm.Name == name {
+			Expect(vm.MountPath).To(Equal(path))
+			return
+		}
+	}
+	Expect(false).To(BeTrue(), fmt.Sprintf("Missing expected volume mount %s", name))
+}
+
 func CreateCertSecret(name, namespace string) *corev1.Secret {
 	return &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},

@@ -18,24 +18,29 @@ import (
 	"fmt"
 	"strings"
 
-	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
-	"github.com/onsi/gomega/gstruct"
-	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/apimachinery/pkg/util/intstr"
 
+	. "github.com/onsi/ginkgo"
+	"github.com/onsi/gomega/gstruct"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 var (
@@ -51,10 +56,11 @@ var _ = Describe("Node rendering tests", func() {
 	var typhaNodeTLS *render.TyphaNodeTLS
 	var k8sServiceEp k8sapi.ServiceEndpoint
 	one := intstr.FromInt(1)
-	defaultNumExpectedResources := 8
+	defaultNumExpectedResources := 6
 	const defaultClusterDomain = "svc.cluster.local"
 	var defaultMode int32 = 420
 	var cfg render.NodeConfiguration
+	var cli client.Client
 
 	BeforeEach(func() {
 		ff := true
@@ -78,22 +84,13 @@ var _ = Describe("Node rendering tests", func() {
 				},
 			},
 		}
-
+		scheme := runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
+		certificateManager, err := certificatemanagement.CreateCertificateManager(cli, nil, clusterDomain)
+		Expect(err).NotTo(HaveOccurred())
 		// Create a dummy secret to pass as input.
-		typhaNodeTLS = &render.TyphaNodeTLS{
-			CAConfigMap: &corev1.ConfigMap{},
-			TyphaSecret: &corev1.Secret{},
-			NodeSecret:  &corev1.Secret{},
-		}
-		typhaNodeTLS.NodeSecret.Name = "node-certs"
-		typhaNodeTLS.NodeSecret.Namespace = "tigera-operator"
-		typhaNodeTLS.NodeSecret.Kind = "Secret"
-		typhaNodeTLS.NodeSecret.APIVersion = "v1"
-
-		typhaNodeTLS.CAConfigMap.Name = "typha-node-ca"
-		typhaNodeTLS.CAConfigMap.Namespace = "tigera-operator"
-		typhaNodeTLS.CAConfigMap.Kind = "ConfigMap"
-		typhaNodeTLS.CAConfigMap.APIVersion = "v1"
+		typhaNodeTLS = getTyphaNodeTLS(cli, certificateManager)
 
 		// Dummy service endpoint for k8s API.
 		k8sServiceEp = k8sapi.ServiceEndpoint{}
@@ -118,8 +115,6 @@ var _ = Describe("Node rendering tests", func() {
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
-			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -197,7 +192,6 @@ var _ = Describe("Node rendering tests", func() {
 		// Verify the Flex volume container image.
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentFlexVolume.Image, components.ComponentFlexVolume.Version)))
 
-		optional := true
 		// Verify env
 		expectedNodeEnv := []corev1.EnvVar{
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
@@ -228,27 +222,9 @@ var _ = Describe("Node rendering tests", func() {
 			},
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
-			{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
-			{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretCertName)},
-			{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretKeyName)},
-			{Name: "FELIX_TYPHACN", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.CommonName,
-					Optional: &optional,
-				},
-			}},
-			{Name: "FELIX_TYPHAURISAN", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.URISAN,
-					Optional: &optional,
-				},
-			}},
+			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
+			{Name: "FELIX_TYPHACERTFILE", Value: render.TLSCertMountPath},
+			{Name: "FELIX_TYPHAKEYFILE", Value: render.TLSKeyMountPath},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		// Expect the SECURITY_GROUP env variables to not be set
@@ -286,17 +262,17 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
 			{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 			{
-				Name: "typha-ca",
+				Name: certificatemanagement.TrustedCertConfigMapName,
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: render.TyphaCAConfigMapName,
+							Name: certificatemanagement.TrustedCertConfigMapName,
 						},
 					},
 				},
 			},
 			{
-				Name: "felix-certs",
+				Name: render.NodeTLSSecretName,
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
 						SecretName:  render.NodeTLSSecretName,
@@ -316,8 +292,8 @@ var _ = Describe("Node rendering tests", func() {
 			{MountPath: "/var/run/calico", Name: "var-run-calico"},
 			{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 			{MountPath: "/var/run/nodeagent", Name: "policysync"},
-			{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
-			{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
+			{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
+			{MountPath: render.TLSMountPathBase, Name: render.NodeTLSSecretName, ReadOnly: true},
 			{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
@@ -345,8 +321,6 @@ var _ = Describe("Node rendering tests", func() {
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
-			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -440,7 +414,6 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(mountBpffs.Image).To(Equal(calicoNodeImage))
 		Expect(mountBpffs.Command).To(Equal([]string{"calico-node", "-init"}))
 
-		optional := true
 		// Verify env
 		expectedNodeEnv := []corev1.EnvVar{
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
@@ -472,27 +445,9 @@ var _ = Describe("Node rendering tests", func() {
 			},
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
-			{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
-			{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretCertName)},
-			{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretKeyName)},
-			{Name: "FELIX_TYPHACN", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.CommonName,
-					Optional: &optional,
-				},
-			}},
-			{Name: "FELIX_TYPHAURISAN", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.URISAN,
-					Optional: &optional,
-				},
-			}},
+			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
+			{Name: "FELIX_TYPHACERTFILE", Value: render.TLSCertMountPath},
+			{Name: "FELIX_TYPHAKEYFILE", Value: render.TLSKeyMountPath},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		// Expect the SECURITY_GROUP env variables to not be set
@@ -533,17 +488,17 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "bpffs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
 			{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 			{
-				Name: "typha-ca",
+				Name: certificatemanagement.TrustedCertConfigMapName,
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: render.TyphaCAConfigMapName,
+							Name: certificatemanagement.TrustedCertConfigMapName,
 						},
 					},
 				},
 			},
 			{
-				Name: "felix-certs",
+				Name: render.NodeTLSSecretName,
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
 						SecretName:  render.NodeTLSSecretName,
@@ -563,8 +518,8 @@ var _ = Describe("Node rendering tests", func() {
 			{MountPath: "/var/run/calico", Name: "var-run-calico"},
 			{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 			{MountPath: "/var/run/nodeagent", Name: "policysync"},
-			{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
-			{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
+			{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
+			{MountPath: render.TLSMountPathBase, Name: render.NodeTLSSecretName, ReadOnly: true},
 			{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 			{MountPath: "/sys/fs/bpf", Name: "bpffs"},
 		}
@@ -656,8 +611,6 @@ var _ = Describe("Node rendering tests", func() {
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
-			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "calico-node-metrics", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
@@ -683,7 +636,6 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(components.TigeraRegistry + "tigera/cnx-node:" + components.ComponentTigeraNode.Version))
 		rtest.ExpectEnv(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/etc/cni/net.d")
 
-		optional := true
 		expectedNodeEnv := []corev1.EnvVar{
 			// Default envvars.
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
@@ -714,27 +666,9 @@ var _ = Describe("Node rendering tests", func() {
 			},
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
-			{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
-			{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretCertName)},
-			{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretKeyName)},
-			{Name: "FELIX_TYPHACN", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.CommonName,
-					Optional: &optional,
-				},
-			}},
-			{Name: "FELIX_TYPHAURISAN", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.URISAN,
-					Optional: &optional,
-				},
-			}},
+			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
+			{Name: "FELIX_TYPHACERTFILE", Value: render.TLSCertMountPath},
+			{Name: "FELIX_TYPHAKEYFILE", Value: render.TLSKeyMountPath},
 			// Tigera-specific envvars
 			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
 			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: "9081"},
@@ -765,8 +699,6 @@ var _ = Describe("Node rendering tests", func() {
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
-			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -848,17 +780,17 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
 			{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 			{
-				Name: "typha-ca",
+				Name: certificatemanagement.TrustedCertConfigMapName,
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: render.TyphaCAConfigMapName,
+							Name: certificatemanagement.TrustedCertConfigMapName,
 						},
 					},
 				},
 			},
 			{
-				Name: "felix-certs",
+				Name: render.NodeTLSSecretName,
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
 						SecretName:  render.NodeTLSSecretName,
@@ -879,8 +811,8 @@ var _ = Describe("Node rendering tests", func() {
 			{MountPath: "/var/lib", Name: "var-lib"},
 			{MountPath: "/var/log", Name: "var-log"},
 			{MountPath: "/var/run/nodeagent", Name: "policysync"},
-			{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
-			{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
+			{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
+			{MountPath: render.TLSMountPathBase, Name: render.NodeTLSSecretName, ReadOnly: true},
 			{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
@@ -903,8 +835,6 @@ var _ = Describe("Node rendering tests", func() {
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
-			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -985,7 +915,6 @@ var _ = Describe("Node rendering tests", func() {
 		// Verify the Flex volume container image.
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentFlexVolume.Image, components.ComponentFlexVolume.Version)))
 
-		optional := true
 		// Verify env
 		expectedNodeEnv := []corev1.EnvVar{
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
@@ -1016,27 +945,9 @@ var _ = Describe("Node rendering tests", func() {
 			},
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
-			{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
-			{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretCertName)},
-			{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretKeyName)},
-			{Name: "FELIX_TYPHACN", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.CommonName,
-					Optional: &optional,
-				},
-			}},
-			{Name: "FELIX_TYPHAURISAN", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.URISAN,
-					Optional: &optional,
-				},
-			}},
+			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
+			{Name: "FELIX_TYPHACERTFILE", Value: render.TLSCertMountPath},
+			{Name: "FELIX_TYPHAKEYFILE", Value: render.TLSKeyMountPath},
 			{Name: "FELIX_WIREGUARDHOSTENCRYPTIONENABLED", Value: "true"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
@@ -1075,17 +986,17 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
 			{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 			{
-				Name: "typha-ca",
+				Name: certificatemanagement.TrustedCertConfigMapName,
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: render.TyphaCAConfigMapName,
+							Name: certificatemanagement.TrustedCertConfigMapName,
 						},
 					},
 				},
 			},
 			{
-				Name: "felix-certs",
+				Name: render.NodeTLSSecretName,
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
 						SecretName:  render.NodeTLSSecretName,
@@ -1105,8 +1016,8 @@ var _ = Describe("Node rendering tests", func() {
 			{MountPath: "/var/run/calico", Name: "var-run-calico"},
 			{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 			{MountPath: "/var/run/nodeagent", Name: "policysync"},
-			{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
-			{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
+			{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
+			{MountPath: render.TLSMountPathBase, Name: render.NodeTLSSecretName, ReadOnly: true},
 			{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
@@ -1144,8 +1055,6 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(rtest.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")).ToNot(BeNil())
 		Expect(rtest.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")).ToNot(BeNil())
 		Expect(rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")).ToNot(BeNil())
-		Expect(rtest.GetResource(resources, "node-certs", "calico-system", "", "v1", "Secret")).ToNot(BeNil())
-		Expect(rtest.GetResource(resources, "typha-node-ca", "calico-system", "", "v1", "ConfigMap")).ToNot(BeNil())
 		dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
 
@@ -1165,8 +1074,6 @@ var _ = Describe("Node rendering tests", func() {
 
 		// Verify the Flex volume container image.
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentFlexVolume.Image, components.ComponentFlexVolume.Version)))
-
-		optional := true
 
 		// Verify env
 		expectedNodeEnv := []corev1.EnvVar{
@@ -1196,27 +1103,9 @@ var _ = Describe("Node rendering tests", func() {
 			},
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
-			{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
-			{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretCertName)},
-			{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretKeyName)},
-			{Name: "FELIX_TYPHACN", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.CommonName,
-					Optional: &optional,
-				},
-			}},
-			{Name: "FELIX_TYPHAURISAN", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.URISAN,
-					Optional: &optional,
-				},
-			}},
+			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
+			{Name: "FELIX_TYPHACERTFILE", Value: render.TLSCertMountPath},
+			{Name: "FELIX_TYPHAKEYFILE", Value: render.TLSKeyMountPath},
 			{Name: "FELIX_INTERFACEPREFIX", Value: "eni"},
 			{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"},
 			{Name: "FELIX_ROUTESOURCE", Value: "WorkloadIPs"},
@@ -1239,17 +1128,17 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "xtables-lock", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
 			{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 			{
-				Name: "typha-ca",
+				Name: certificatemanagement.TrustedCertConfigMapName,
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: render.TyphaCAConfigMapName,
+							Name: certificatemanagement.TrustedCertConfigMapName,
 						},
 					},
 				},
 			},
 			{
-				Name: "felix-certs",
+				Name: render.NodeTLSSecretName,
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
 						SecretName:  render.NodeTLSSecretName,
@@ -1268,8 +1157,8 @@ var _ = Describe("Node rendering tests", func() {
 			{MountPath: "/var/run/calico", Name: "var-run-calico"},
 			{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 			{MountPath: "/var/run/nodeagent", Name: "policysync"},
-			{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
-			{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
+			{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
+			{MountPath: render.TLSMountPathBase, Name: render.NodeTLSSecretName, ReadOnly: true},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
 
@@ -1350,8 +1239,6 @@ var _ = Describe("Node rendering tests", func() {
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
-			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -1433,7 +1320,6 @@ var _ = Describe("Node rendering tests", func() {
 		// Verify the Flex volume container image.
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentFlexVolume.Image, components.ComponentFlexVolume.Version)))
 
-		optional := true
 		// Verify env
 		expectedNodeEnv := []corev1.EnvVar{
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
@@ -1464,27 +1350,9 @@ var _ = Describe("Node rendering tests", func() {
 			},
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
-			{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
-			{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretCertName)},
-			{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretKeyName)},
-			{Name: "FELIX_TYPHACN", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.CommonName,
-					Optional: &optional,
-				},
-			}},
-			{Name: "FELIX_TYPHAURISAN", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.URISAN,
-					Optional: &optional,
-				},
-			}},
+			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
+			{Name: "FELIX_TYPHACERTFILE", Value: render.TLSCertMountPath},
+			{Name: "FELIX_TYPHAKEYFILE", Value: render.TLSKeyMountPath},
 			{Name: "FELIX_WIREGUARDHOSTENCRYPTIONENABLED", Value: "true"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
@@ -1523,17 +1391,17 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
 			{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 			{
-				Name: "typha-ca",
+				Name: certificatemanagement.TrustedCertConfigMapName,
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: render.TyphaCAConfigMapName,
+							Name: certificatemanagement.TrustedCertConfigMapName,
 						},
 					},
 				},
 			},
 			{
-				Name: "felix-certs",
+				Name: render.NodeTLSSecretName,
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
 						SecretName:  render.NodeTLSSecretName,
@@ -1553,8 +1421,8 @@ var _ = Describe("Node rendering tests", func() {
 			{MountPath: "/var/run/calico", Name: "var-run-calico"},
 			{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 			{MountPath: "/var/run/nodeagent", Name: "policysync"},
-			{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
-			{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
+			{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
+			{MountPath: render.TLSMountPathBase, Name: render.NodeTLSSecretName, ReadOnly: true},
 			{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
@@ -1589,8 +1457,6 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(rtest.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")).ToNot(BeNil())
 		Expect(rtest.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")).ToNot(BeNil())
 		Expect(rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")).ToNot(BeNil())
-		Expect(rtest.GetResource(resources, "node-certs", "calico-system", "", "v1", "Secret")).ToNot(BeNil())
-		Expect(rtest.GetResource(resources, "typha-node-ca", "calico-system", "", "v1", "ConfigMap")).ToNot(BeNil())
 		dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 		Expect(dsResource).ToNot(BeNil())
 
@@ -1610,8 +1476,6 @@ var _ = Describe("Node rendering tests", func() {
 
 		// Verify the Flex volume container image.
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentFlexVolume.Image, components.ComponentFlexVolume.Version)))
-
-		optional := true
 
 		// Verify env
 		expectedNodeEnv := []corev1.EnvVar{
@@ -1641,27 +1505,9 @@ var _ = Describe("Node rendering tests", func() {
 			},
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
-			{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
-			{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretCertName)},
-			{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretKeyName)},
-			{Name: "FELIX_TYPHACN", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.CommonName,
-					Optional: &optional,
-				},
-			}},
-			{Name: "FELIX_TYPHAURISAN", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.URISAN,
-					Optional: &optional,
-				},
-			}},
+			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
+			{Name: "FELIX_TYPHACERTFILE", Value: render.TLSCertMountPath},
+			{Name: "FELIX_TYPHAKEYFILE", Value: render.TLSKeyMountPath},
 			{Name: "FELIX_INTERFACEPREFIX", Value: "eni"},
 			{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"},
 			{Name: "FELIX_ROUTESOURCE", Value: "WorkloadIPs"},
@@ -1684,17 +1530,17 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "xtables-lock", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
 			{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 			{
-				Name: "typha-ca",
+				Name: certificatemanagement.TrustedCertConfigMapName,
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: render.TyphaCAConfigMapName,
+							Name: certificatemanagement.TrustedCertConfigMapName,
 						},
 					},
 				},
 			},
 			{
-				Name: "felix-certs",
+				Name: render.NodeTLSSecretName,
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
 						SecretName:  render.NodeTLSSecretName,
@@ -1713,8 +1559,8 @@ var _ = Describe("Node rendering tests", func() {
 			{MountPath: "/var/run/calico", Name: "var-run-calico"},
 			{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 			{MountPath: "/var/run/nodeagent", Name: "policysync"},
-			{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
-			{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
+			{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
+			{MountPath: render.TLSMountPathBase, Name: render.NodeTLSSecretName, ReadOnly: true},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
 
@@ -1736,8 +1582,6 @@ var _ = Describe("Node rendering tests", func() {
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
-			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
@@ -1777,17 +1621,17 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 			{Name: "flexvol-driver-host", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/etc/kubernetes/kubelet-plugins/volume/exec/nodeagent~uds", Type: &dirOrCreate}}},
 			{
-				Name: "typha-ca",
+				Name: certificatemanagement.TrustedCertConfigMapName,
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: render.TyphaCAConfigMapName,
+							Name: certificatemanagement.TrustedCertConfigMapName,
 						},
 					},
 				},
 			},
 			{
-				Name: "felix-certs",
+				Name: render.NodeTLSSecretName,
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
 						SecretName:  render.NodeTLSSecretName,
@@ -1798,7 +1642,6 @@ var _ = Describe("Node rendering tests", func() {
 		}
 		Expect(ds.Spec.Template.Spec.Volumes).To(ConsistOf(expectedVols))
 
-		optional := true
 		expectedNodeEnv := []corev1.EnvVar{
 			// Default envvars.
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
@@ -1829,27 +1672,9 @@ var _ = Describe("Node rendering tests", func() {
 			},
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
-			{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
-			{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretCertName)},
-			{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretKeyName)},
-			{Name: "FELIX_TYPHACN", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.CommonName,
-					Optional: &optional,
-				},
-			}},
-			{Name: "FELIX_TYPHAURISAN", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.URISAN,
-					Optional: &optional,
-				},
-			}},
+			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
+			{Name: "FELIX_TYPHACERTFILE", Value: render.TLSCertMountPath},
+			{Name: "FELIX_TYPHAKEYFILE", Value: render.TLSKeyMountPath},
 			// The OpenShift envvar overrides.
 			{Name: "FELIX_HEALTHPORT", Value: "9199"},
 		}
@@ -1870,8 +1695,6 @@ var _ = Describe("Node rendering tests", func() {
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
-			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "calico-node-metrics", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -1899,7 +1722,6 @@ var _ = Describe("Node rendering tests", func() {
 
 		rtest.ExpectEnv(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/var/run/multus/cni/net.d")
 
-		optional := true
 		expectedNodeEnv := []corev1.EnvVar{
 			// Default envvars.
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
@@ -1930,27 +1752,9 @@ var _ = Describe("Node rendering tests", func() {
 			},
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
-			{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
-			{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretCertName)},
-			{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretKeyName)},
-			{Name: "FELIX_TYPHACN", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.CommonName,
-					Optional: &optional,
-				},
-			}},
-			{Name: "FELIX_TYPHAURISAN", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.URISAN,
-					Optional: &optional,
-				},
-			}},
+			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
+			{Name: "FELIX_TYPHACERTFILE", Value: render.TLSCertMountPath},
+			{Name: "FELIX_TYPHAKEYFILE", Value: render.TLSKeyMountPath},
 			// Tigera-specific envvars
 			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
 			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: "9081"},
@@ -1985,8 +1789,6 @@ var _ = Describe("Node rendering tests", func() {
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
-			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: render.BirdTemplatesConfigMapName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -2417,8 +2219,6 @@ var _ = Describe("Node rendering tests", func() {
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
-			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -2834,8 +2634,6 @@ var _ = Describe("Node rendering tests", func() {
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
-			{name: "node-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
@@ -2920,7 +2718,6 @@ var _ = Describe("Node rendering tests", func() {
 		// Verify the Flex volume container image.
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentFlexVolume.Image, components.ComponentFlexVolume.Version)))
 
-		optional := true
 		// Verify env
 		expectedNodeEnv := []corev1.EnvVar{
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
@@ -2952,27 +2749,9 @@ var _ = Describe("Node rendering tests", func() {
 			},
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
-			{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
-			{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretCertName)},
-			{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", render.TLSSecretKeyName)},
-			{Name: "FELIX_TYPHACN", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.CommonName,
-					Optional: &optional,
-				},
-			}},
-			{Name: "FELIX_TYPHAURISAN", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: render.TyphaTLSSecretName,
-					},
-					Key:      render.URISAN,
-					Optional: &optional,
-				},
-			}},
+			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
+			{Name: "FELIX_TYPHACERTFILE", Value: render.TLSCertMountPath},
+			{Name: "FELIX_TYPHAKEYFILE", Value: render.TLSKeyMountPath},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 
@@ -3072,9 +2851,12 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should render extra resources when certificate management is enabled", func() {
-		defaultInstance.CertificateManagement = &operatorv1.CertificateManagement{CACert: []byte("<ca>"), SignerName: "a.b/c"}
-		cfg.TLS.NodeSecret = nil
-		cfg.TLS.TyphaSecret = nil
+		ca, _ := certificatemanagement.MakeCA(rmeta.DefaultOperatorCASignerName())
+		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
+		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c", CACert: cert}
+		certificateManager, err := certificatemanagement.CreateCertificateManager(cli, cfg.Installation.CertificateManagement, clusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+		cfg.TLS = getTyphaNodeTLS(cli, certificateManager)
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -3085,12 +2867,10 @@ var _ = Describe("Node rendering tests", func() {
 			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "typha-node-ca", ns: "calico-system", group: "", version: "v1", kind: "ConfigMap"},
 			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
-			{name: render.CSRClusterRoleName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-node:csr-creator", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: certificatemanagement.CSRClusterRoleName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 		}
 
 		component := render.Node(&cfg)
@@ -3109,10 +2889,9 @@ var _ = Describe("Node rendering tests", func() {
 		deploy, ok := dep.(*appsv1.DaemonSet)
 		Expect(ok).To(BeTrue())
 		Expect(deploy.Spec.Template.Spec.InitContainers).To(HaveLen(3))
-		Expect(deploy.Spec.Template.Spec.InitContainers[0].Name).To(Equal(render.CSRInitContainerName))
+		Expect(deploy.Spec.Template.Spec.InitContainers[0].Name).To(Equal(fmt.Sprintf("%s-key-cert-provisioner", render.NodeTLSSecretName)))
 		Expect(deploy.Spec.Template.Spec.InitContainers[1].Name).To(Equal("flexvol-driver"))
 		Expect(deploy.Spec.Template.Spec.InitContainers[2].Name).To(Equal("install-cni"))
-		Expect(deploy.Spec.Template.Spec.InitContainers[0].Name).To(Equal(render.CSRInitContainerName))
 		rtest.ExpectEnv(deploy.Spec.Template.Spec.InitContainers[0].Env, "SIGNER", "a.b/c")
 	})
 

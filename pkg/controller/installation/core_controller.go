@@ -1097,17 +1097,18 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	components := []render.Component{
-		render.NewKeyPairPassthrough(certificateManager),
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			ServiceAccountName: render.CalicoNodeObjectName,
-			Namespace:          common.CalicoNamespace,
-			KeyPairs:           []certificatemanagement.KeyPair{typhaNodeTLS.NodeSecret, nodePrometheusTLS, managerInternalTLSSecret},
-			TrustedBundle:      typhaNodeTLS.TrustedBundle,
-		}),
-		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			ServiceAccountName: render.TyphaServiceAccountName,
-			Namespace:          common.CalicoNamespace,
-			KeyPairs:           []certificatemanagement.KeyPair{typhaNodeTLS.TyphaSecret},
+			Namespace:       common.CalicoNamespace,
+			ServiceAccounts: []string{render.CalicoNodeObjectName, render.TyphaServiceAccountName},
+			KeyPairOptions: []rcertificatemanagement.KeyPairCreator{
+				// this controller is responsible for rendering the tigera-ca-private secret.
+				rcertificatemanagement.NewKeyPairOption(certificateManager, true, false),
+				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(nodePrometheusTLS, true, true),
+				rcertificatemanagement.NewKeyPairOption(managerInternalTLSSecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecret, true, true),
+			},
+			TrustedBundle: typhaNodeTLS.TrustedBundle,
 		}),
 	}
 

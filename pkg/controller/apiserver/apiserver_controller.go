@@ -288,9 +288,12 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 	components := []render.Component{
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			ServiceAccountName: render.ApiServerServiceAccountName(variant),
-			Namespace:          rmeta.APIServerNamespace(variant),
-			KeyPairs:           []certificatemanagement.KeyPair{tlsSecret, tunnelCASecret},
+			Namespace:       rmeta.APIServerNamespace(variant),
+			ServiceAccounts: []string{render.ApiServerServiceAccountName(variant)},
+			KeyPairOptions: []rcertificatemanagement.KeyPairCreator{
+				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(tunnelCASecret, true, true),
+			},
 		}),
 	}
 	// Create a component handler to manage the rendered component.
@@ -356,11 +359,13 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		var pc = render.PacketCaptureAPI(packetCaptureApiCfg)
 		components = append(components, pc,
 			rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-				ServiceAccountName: render.PacketCaptureServiceAccountName,
-				Namespace:          rmeta.APIServerNamespace(variant),
-				KeyPairs:           []certificatemanagement.KeyPair{packetCaptureCertSecret},
-			}))
-
+				Namespace:       rmeta.APIServerNamespace(variant),
+				ServiceAccounts: []string{render.ApiServerServiceAccountName(variant)},
+				KeyPairOptions: []rcertificatemanagement.KeyPairCreator{
+					rcertificatemanagement.NewKeyPairOption(packetCaptureCertSecret, true, true),
+				},
+			}),
+		)
 		certificateManager.AddToStatusManager(r.status, render.PacketCaptureNamespace)
 	}
 

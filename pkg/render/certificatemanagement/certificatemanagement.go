@@ -20,11 +20,25 @@ func CertificateManagement(
 
 // Config contains all the config CertificateManagement needs to render objects.
 type Config struct {
-	// The service account that is mounting the key pairs and may issue CSRs if installation.CertificateManagement is used.
-	ServiceAccountName string
-	Namespace          string
-	KeyPairs           []certificatemanagement.KeyPair
-	TrustedBundle      certificatemanagement.TrustedBundle
+	// The service accounts that are mounting the key pairs and may issue CSRs if installation.CertificateManagement is used.
+	ServiceAccounts []string
+	KeyPairOptions  []KeyPairCreator
+	Namespace       string
+	TrustedBundle   certificatemanagement.TrustedBundle
+}
+
+func NewKeyPairOption(keyPair certificatemanagement.KeyPair, renderInOperatorNamespace, renderInNamespace bool) KeyPairCreator {
+	return KeyPairCreator{
+		keyPair:                   keyPair,
+		renderInOperatorNamespace: renderInOperatorNamespace,
+		renderInNamespace:         renderInNamespace,
+	}
+}
+
+type KeyPairCreator struct {
+	keyPair                   certificatemanagement.KeyPair
+	renderInOperatorNamespace bool
+	renderInNamespace         bool
 }
 
 type component struct {
@@ -40,23 +54,35 @@ func (c component) Objects() (objsToCreate, objsToDelete []client.Object) {
 		objsToCreate = append(objsToCreate, c.cfg.TrustedBundle.ConfigMap(c.cfg.Namespace))
 	}
 	var needsCSRRoleAndBinding bool
-	for _, keyPair := range c.cfg.KeyPairs {
+	for _, keyPairCreator := range c.cfg.KeyPairOptions {
+		keyPair := keyPairCreator.keyPair
 		if keyPair != nil {
 			if keyPair.UseCertificateManagement() {
+				if keyPairCreator.renderInOperatorNamespace {
+					objsToDelete = append(objsToDelete, keyPair.Secret(common.OperatorNamespace()))
+				}
+				if keyPairCreator.renderInNamespace {
+					objsToDelete = append(objsToDelete, keyPair.Secret(c.cfg.Namespace))
+				}
 				needsCSRRoleAndBinding = true
-				objsToDelete = append(objsToDelete, keyPair.Secret(c.cfg.Namespace))
 			} else {
-				objsToCreate = append(objsToCreate, keyPair.Secret(c.cfg.Namespace))
-				if !keyPair.HasSkipRenderInOperatorNamespace() {
+				if keyPairCreator.renderInOperatorNamespace && !keyPair.BYO() {
 					objsToCreate = append(objsToCreate, keyPair.Secret(common.OperatorNamespace()))
+				}
+				if keyPairCreator.renderInNamespace {
+					objsToCreate = append(objsToCreate, keyPair.Secret(c.cfg.Namespace))
 				}
 			}
 		}
 	}
 	if needsCSRRoleAndBinding {
-		objsToCreate = append(objsToCreate, certificatemanagement.CSRClusterRoleBinding(c.cfg.ServiceAccountName, c.cfg.Namespace))
+		for _, sa := range c.cfg.ServiceAccounts {
+			objsToCreate = append(objsToCreate, certificatemanagement.CSRClusterRoleBinding(sa, c.cfg.Namespace))
+		}
 	} else {
-		objsToDelete = append(objsToDelete, certificatemanagement.CSRClusterRoleBinding(c.cfg.ServiceAccountName, common.TigeraPrometheusNamespace))
+		for _, sa := range c.cfg.ServiceAccounts {
+			objsToDelete = append(objsToDelete, certificatemanagement.CSRClusterRoleBinding(sa, c.cfg.Namespace))
+		}
 	}
 	return
 }

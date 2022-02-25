@@ -190,7 +190,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	if !c.cfg.TLSKeyPair.UseCertificateManagement() {
 		globalObjects = append(globalObjects, c.apiServiceRegistration(c.cfg.TLSKeyPair.Secret("").Data[corev1.TLSCertKey]))
 	} else {
-		namespacedObjects = append(namespacedObjects, c.apiServiceRegistration(c.cfg.Installation.CertificateManagement.CACert))
+		globalObjects = append(globalObjects, c.apiServiceRegistration(c.cfg.Installation.CertificateManagement.CACert))
 	}
 
 	// Global enterprise-only objects.

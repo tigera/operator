@@ -17,6 +17,7 @@ package manager
 import (
 	"context"
 	"fmt"
+	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -30,6 +31,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -118,7 +120,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret,
 			render.ElasticsearchManagerUserSecret, render.KibanaPublicCertSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureCertSecret,
-			render.ManagerInternalTLSSecretName, render.DexCertSecretName, render.PrometheusTLSSecretName,
+			render.ManagerInternalTLSSecretName, render.DexCertSecretName, render.PrometheusTLSSecretName, certificatemanagement.CASecretName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("manager-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
@@ -255,60 +257,26 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	// Check that if the manager certpair secret exists that it is valid (has key and cert fields)
-	// If it does not exist then this function returns a nil secret but no error and a self-signed
-	// certificate will be generated when rendering below.
-	tlsSecret, err := utils.ValidateCertPair(r.client,
-		common.OperatorNamespace(),
-		render.ManagerTLSSecretName,
-		render.ManagerSecretKeyName,
-		render.ManagerSecretCertName,
-	)
-
-	// An error is returned in case the read cannot be performed of the secret does not match the expected format
-	// In case the secret is not found, the error and the secret will be nil. This check needs to be done for all
-	// cluster types. For management cluster, we also need to check if the secret was created before hand.
+	certificateManager, err := certificatemanagement.CreateCertificateManager(r.client, installation.CertificateManagement, r.clusterDomain)
 	if err != nil {
-		r.status.SetDegraded("Error validating manager TLS certificate", err.Error())
+		log.Error(err, "unable to create the Tigera CA")
+		r.status.SetDegraded("unable to create the Tigera CA", err.Error())
 		return reconcile.Result{}, err
 	}
 
-	// If the manager TLS secret exists, check whether it is managed by the
-	// operator.
-	var operatorManagedCertSecret bool
-	if installation.CertificateManagement == nil {
-		// We use EnsureCertificateSecret to ensure a secret exists, creating one if one is not passed in.
-		// It also ensures the secret passed has the proper DNS names if the secret is operator managed.
-
-		svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
-		svcDNSNames = append(svcDNSNames, "localhost")
-		certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
-		tlsSecret, operatorManagedCertSecret, err = utils.EnsureCertificateSecret(
-			render.ManagerTLSSecretName, tlsSecret, render.ManagerSecretKeyName, render.ManagerSecretCertName, certDur, svcDNSNames...,
-		)
-
-		if err != nil {
-			r.status.SetDegraded(fmt.Sprintf("Error ensuring manager TLS certificate %q exists and has valid DNS names", render.ManagerTLSSecretName), err.Error())
-			return reconcile.Result{}, err
-		}
-
-	} else if tlsSecret != nil {
-		operatorManagedCertSecret, err = utils.IsCertOperatorIssued(tlsSecret.Data[render.ManagerInternalSecretCertName])
-		if err != nil {
-			r.status.SetDegraded(fmt.Sprintf("Error checking if manager TLS certificate is operator managed"), err.Error())
-			return reconcile.Result{}, err
-		}
-
-		if !operatorManagedCertSecret {
-			err := fmt.Errorf("user provided secret %s/%s is not supported when certificate management is enabled", render.ManagerNamespace, render.ManagerTLSSecretName)
-			r.status.SetDegraded("Invalid certificate configuration", err.Error())
-			return reconcile.Result{}, err
-		}
+	svcDNSNames := append(dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain), "localhost")
+	tlsSecret, err := certificateManager.GetOrCreateKeyPair(
+		r.client,
+		render.ManagerTLSSecretName,
+		common.OperatorNamespace(),
+		svcDNSNames)
+	if err != nil {
+		r.status.SetDegraded("Error getting or creating manager TLS certificate", err.Error())
+		return reconcile.Result{}, err
 	}
 
+	trustedSecretNames := []string{render.PacketCaptureCertSecret, render.PrometheusTLSSecretName}
 	var installCompliance = utils.IsFeatureActive(license, common.ComplianceFeature)
-	var complianceServerCertSecret *corev1.Secret
-
 	if installCompliance {
 		// Check that compliance is running.
 		compliance, err := compliance.GetCompliance(ctx, r.client)
@@ -324,24 +292,23 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			r.status.SetDegraded("Compliance is not ready", fmt.Sprintf("compliance status: %s", compliance.Status.State))
 			return reconcile.Result{}, nil
 		}
-
-		complianceServerCertSecret, err = utils.ValidateCertPair(r.client,
-			common.OperatorNamespace(),
-			render.ComplianceServerCertSecret,
-			"", // We don't need the key.
-			corev1.TLSCertKey,
-		)
+		trustedSecretNames = append(trustedSecretNames, render.ComplianceServerCertSecret)
+	}
+	trustedBundle := certificatemanagement.CreateTrustedBundle(certificateManager)
+	for _, secretName := range trustedSecretNames {
+		certificate, err := certificateManager.GetCertificate(r.client, secretName, common.OperatorNamespace())
 		if err != nil {
-			reqLogger.Error(err, fmt.Sprintf("failed to retrieve %s", render.ComplianceServerCertSecret))
-			r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s", render.ComplianceServerCertSecret), err.Error())
+			reqLogger.Error(err, fmt.Sprintf("failed to retrieve %s", secretName))
+			r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s", secretName), err.Error())
 			return reconcile.Result{}, err
-		} else if complianceServerCertSecret == nil {
-			reqLogger.Info(fmt.Sprintf("Waiting for secret '%s' to become available", render.ComplianceServerCertSecret))
-			r.status.SetDegraded(fmt.Sprintf("Waiting for secret '%s' to become available", render.ComplianceServerCertSecret), "")
+		} else if certificate == nil {
+			reqLogger.Info(fmt.Sprintf("Waiting for secret '%s' to become available", secretName))
+			r.status.SetDegraded(fmt.Sprintf("Waiting for secret '%s' to become available", secretName), "")
 			return reconcile.Result{}, nil
 		}
+		trustedBundle.AddCertificates(certificate)
 	}
-
+	certificateManager.AddToStatusManager(r.status, render.ManagerNamespace)
 	// check that prometheus is running
 	ns := &corev1.Namespace{}
 	if err = r.client.Get(ctx, client.ObjectKey{Name: common.TigeraPrometheusNamespace}, ns); err != nil {
@@ -412,12 +379,12 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	var tunnelSecret *corev1.Secret
-	var internalTrafficSecret *corev1.Secret
+	var internalTrafficSecret certificatemanagement.KeyPair
 	if managementCluster != nil {
 		// We expect that the secret that holds the certificates for tunnel certificate generation
 		// is already created by the Api Server
 		tunnelSecret = &corev1.Secret{}
-		err := r.client.Get(ctx, client.ObjectKey{Name: render.VoltronTunnelSecretName, Namespace: common.OperatorNamespace()}, tunnelSecret)
+		err = r.client.Get(ctx, client.ObjectKey{Name: render.VoltronTunnelSecretName, Namespace: common.OperatorNamespace()}, tunnelSecret)
 		if err != nil {
 			r.status.SetDegraded("Failed to check for the existence of management-cluster-connection secret", err.Error())
 			return reconcile.Result{}, nil
@@ -425,18 +392,13 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 		// We expect that the secret that holds the certificates for internal communication within the management
 		// K8S cluster is already created by the KubeControllers
-		internalTrafficSecret = &corev1.Secret{}
-		err = r.client.Get(ctx, client.ObjectKey{
-			Name:      render.ManagerInternalTLSSecretName,
-			Namespace: common.OperatorNamespace(),
-		}, internalTrafficSecret)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				r.status.SetDegraded(fmt.Sprintf("Waiting for secret %s in namespace %s to be available", render.ManagerInternalTLSSecretName, common.OperatorNamespace()), "")
-				return reconcile.Result{}, nil
-			}
-			r.status.SetDegraded(fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.ManagerInternalTLSSecretName, common.OperatorNamespace()), err.Error())
+		internalTrafficSecret, err = certificateManager.GetKeyPair(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
+		if internalTrafficSecret == nil {
+			r.status.SetDegraded(fmt.Sprintf("Waiting for secret %s in namespace %s to be available", render.ManagerInternalTLSSecretName, common.OperatorNamespace()), "")
 			return reconcile.Result{}, err
+		} else if err != nil {
+			r.status.SetDegraded(fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.ManagerInternalTLSSecretName, common.OperatorNamespace()), err.Error())
+			return reconcile.Result{}, nil
 		}
 	}
 
@@ -466,38 +428,16 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
-	var packetCaptureServerCertSecret *corev1.Secret
-	packetCaptureServerCertSecret, err = utils.ValidateCertPair(r.client,
-		common.OperatorNamespace(),
-		render.PacketCaptureCertSecret,
-		"", // We don't need the key.
-		corev1.TLSCertKey,
-	)
-	if err != nil {
-		reqLogger.Error(err, fmt.Sprintf("failed to retrieve %s", render.PacketCaptureCertSecret))
-		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s", render.PacketCaptureCertSecret), err.Error())
-		return reconcile.Result{}, err
-	} else if packetCaptureServerCertSecret == nil {
-		reqLogger.Info(fmt.Sprintf("Waiting for secret '%s' to become available", render.PacketCaptureCertSecret))
-		r.status.SetDegraded(fmt.Sprintf("Waiting for secret '%s' to become available", render.PacketCaptureCertSecret), "")
-		return reconcile.Result{}, nil
-	}
-
-	prometheusCertSecret, err := utils.ValidateCertPair(r.client,
-		common.OperatorNamespace(),
-		render.PrometheusTLSSecretName,
-		"", // We don't need the key.
-		corev1.TLSCertKey,
-	)
-	if err != nil {
-		reqLogger.Error(err, fmt.Sprintf("failed to retrieve %s", render.PrometheusTLSSecretName))
-		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s", render.PrometheusTLSSecretName), err.Error())
-		return reconcile.Result{}, err
-	}
-
-	var components []render.Component
-	if tlsSecret != nil && operatorManagedCertSecret {
-		components = append(components, render.NewPassthrough(tlsSecret))
+	components := []render.Component{
+		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+			Namespace:       render.ManagerNamespace,
+			ServiceAccounts: []string{render.ManagerServiceAccount},
+			KeyPairOptions: []rcertificatemanagement.KeyPairCreator{
+				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(internalTrafficSecret, false, true),
+			},
+			TrustedBundle: trustedBundle,
+		}),
 	}
 
 	// Create a component handler to manage the rendered component.
@@ -512,23 +452,21 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	managerCfg := &render.ManagerConfiguration{
-		KeyValidatorConfig:            keyValidatorConfig,
-		ESSecrets:                     esSecrets,
-		KibanaSecrets:                 []*corev1.Secret{kibanaPublicCertSecret},
-		ComplianceServerCertSecret:    complianceServerCertSecret,
-		PacketCaptureServerCertSecret: packetCaptureServerCertSecret,
-		PrometheusCertSecret:          prometheusCertSecret,
-		ESClusterConfig:               esClusterConfig,
-		TLSKeyPair:                    tlsSecret,
-		PullSecrets:                   pullSecrets,
-		Openshift:                     r.provider == operatorv1.ProviderOpenShift,
-		Installation:                  installation,
-		ManagementCluster:             managementCluster,
-		TunnelSecret:                  tunnelSecret,
-		InternalTrafficSecret:         internalTrafficSecret,
-		ClusterDomain:                 r.clusterDomain,
-		ESLicenseType:                 elasticLicenseType,
-		Replicas:                      replicas,
+		KeyValidatorConfig:    keyValidatorConfig,
+		ESSecrets:             esSecrets,
+		KibanaSecrets:         []*corev1.Secret{kibanaPublicCertSecret},
+		TrustedCertBundle:     trustedBundle,
+		ESClusterConfig:       esClusterConfig,
+		TLSKeyPair:            tlsSecret,
+		PullSecrets:           pullSecrets,
+		Openshift:             r.provider == operatorv1.ProviderOpenShift,
+		Installation:          installation,
+		ManagementCluster:     managementCluster,
+		TunnelSecret:          tunnelSecret,
+		InternalTrafficSecret: internalTrafficSecret,
+		ClusterDomain:         r.clusterDomain,
+		ESLicenseType:         elasticLicenseType,
+		Replicas:              replicas,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

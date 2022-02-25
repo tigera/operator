@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/tls"
-
 	"github.com/openshift/library-go/pkg/crypto"
+
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -36,7 +37,7 @@ func CreateTLSSecret(
 ) (*corev1.Secret, error) {
 	var err error
 	if ca == nil {
-		ca, err = tls.MakeCA(rmeta.DefaultOperatorCASignerName())
+		ca, err = certificatemanagement.MakeCA(rmeta.DefaultOperatorCASignerName())
 		if err != nil {
 			return nil, fmt.Errorf("unable to create signed cert pair: %s", err)
 		}

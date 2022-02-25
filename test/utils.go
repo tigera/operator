@@ -29,10 +29,13 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
 	"github.com/openshift/library-go/pkg/crypto"
+
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 
+	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -108,11 +111,11 @@ func VerifyPublicCert(secret *v1.Secret, pubKey string, expectedSANs ...string) 
 	VerifyCertSANs(secret.Data[pubKey], expectedSANs...)
 }
 
-func VerifyCert(secret *v1.Secret, privKey string, pubKey string, expectedSANs ...string) {
-	Expect(secret.Data).To(HaveKey(privKey))
-	Expect(secret.Data).To(HaveKey(pubKey))
+func VerifyCert(secret *v1.Secret, expectedSANs ...string) {
+	Expect(secret.Data).To(HaveKey(corev1.TLSPrivateKeyKey))
+	Expect(secret.Data).To(HaveKey(corev1.TLSCertKey))
 
-	VerifyCertSANs(secret.Data[pubKey], expectedSANs...)
+	VerifyCertSANs(secret.Data[corev1.TLSCertKey], expectedSANs...)
 }
 
 func VerifyCertSANs(certBytes []byte, expectedSANs ...string) {

@@ -252,7 +252,7 @@ var _ = Describe("Rendering tests", func() {
 			{common.TyphaDeploymentName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
 			{common.TyphaDeploymentName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
 			{render.TyphaServiceName, common.CalicoNamespace, "", "v1", "Service"},
-			{common.TyphaDeploymentName, common.CalicoNamespace, "policy", "v1beta1", "PodDisruptionBudget"},
+			{common.TyphaDeploymentName, common.CalicoNamespace, "policy", "v1", "PodDisruptionBudget"},
 			{render.TyphaTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
 			{common.TyphaDeploymentName, "", "policy", "v1beta1", "PodSecurityPolicy"},
 			{common.TyphaDeploymentName, common.CalicoNamespace, "apps", "v1", "Deployment"},

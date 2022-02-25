@@ -16,17 +16,16 @@ package render
 
 import (
 	"fmt"
+	"github.com/tigera/operator/pkg/render/component"
 	"strconv"
 	"strings"
 
 	ocsv1 "github.com/openshift/api/security/v1"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
 	"github.com/tigera/operator/pkg/render/common/configmap"
@@ -37,6 +36,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -48,60 +48,44 @@ import (
 )
 
 const (
-	managerPort                      = 9443
-	managerTargetPort                = 9443
-	ManagerServiceName               = "tigera-manager"
-	ManagerNamespace                 = "tigera-manager"
-	ManagerServiceIP                 = "localhost"
-	ManagerServiceAccount            = "tigera-manager"
-	ManagerClusterRole               = "tigera-manager-role"
-	ManagerClusterRoleBinding        = "tigera-manager-binding"
-	ManagerTLSSecretName             = "manager-tls"
-	ManagerSecretKeyName             = "key"
-	ManagerSecretCertName            = "cert"
-	ManagerInternalTLSSecretName     = "internal-manager-tls"
-	ManagerInternalTLSSecretCertName = "internal-manager-tls-cert"
-	ManagerInternalSecretKeyName     = "key"
-	ManagerInternalSecretCertName    = "cert"
+	managerPort                  = 9443
+	managerTargetPort            = 9443
+	ManagerServiceName           = "tigera-manager"
+	ManagerNamespace             = "tigera-manager"
+	ManagerServiceIP             = "localhost"
+	ManagerServiceAccount        = "tigera-manager"
+	ManagerClusterRole           = "tigera-manager-role"
+	ManagerClusterRoleBinding    = "tigera-manager-binding"
+	ManagerTLSSecretName         = "manager-tls"
+	ManagerInternalTLSSecretName = "internal-manager-tls"
 
 	ManagerClusterSettings            = "cluster-settings"
 	ManagerUserSettings               = "user-settings"
 	ManagerClusterSettingsLayerTigera = "cluster-settings.layer.tigera-infrastructure"
 	ManagerClusterSettingsViewDefault = "cluster-settings.view.default"
 
-	ElasticsearchManagerUserSecret   = "tigera-ee-manager-elasticsearch-access"
-	TlsSecretHashAnnotation          = "hash.operator.tigera.io/tls-secret"
-	ManagerInternalTLSHashAnnotation = "hash.operator.tigera.io/internal-tls-secret"
-
+	ElasticsearchManagerUserSecret  = "tigera-ee-manager-elasticsearch-access"
+	TlsSecretHashAnnotation         = "hash.operator.tigera.io/tls-secret"
 	KibanaTLSHashAnnotation         = "hash.operator.tigera.io/kibana-secrets"
 	ElasticsearchUserHashAnnotation = "hash.operator.tigera.io/elasticsearch-user"
 
-	PrometheusTLSSecretName     = "calico-node-prometheus-tls"
-	prometheusTLSHashAnnotation = "hash.operator.tigera.io/prometheus-tls"
+	PrometheusTLSSecretName = "calico-node-prometheus-tls"
 )
 
 // ManagementClusterConnection configuration constants
 const (
 	VoltronName                 = "tigera-voltron"
 	VoltronTunnelSecretName     = "tigera-management-cluster-connection"
-	VoltronTunnelSecretCertName = "cert"
-	VoltronTunnelSecretKeyName  = "key"
 	voltronTunnelHashAnnotation = "hash.operator.tigera.io/voltron-tunnel"
 	defaultVoltronPort          = "9443"
 	defaultTunnelVoltronPort    = "9449"
 )
 
-func Manager(cfg *ManagerConfiguration) (Component, error) {
+func Manager(cfg *ManagerConfiguration) (component.Component, error) {
 	var tlsSecrets []*corev1.Secret
-	tlsAnnotations := map[string]string{
-		KibanaTLSHashAnnotation: rmeta.SecretsAnnotationHash(cfg.KibanaSecrets...),
-	}
-	var tlsAnnotation string
-	if cfg.Installation.CertificateManagement == nil {
-		tlsSecrets = append(tlsSecrets, secret.CopyToNamespace(ManagerNamespace, cfg.TLSKeyPair)...)
-		tlsAnnotation = rmeta.AnnotationHash(cfg.TLSKeyPair.Data)
-	}
-	tlsAnnotations[TlsSecretHashAnnotation] = tlsAnnotation
+	tlsAnnotations := cfg.TrustedCertBundle.HashAnnotations()
+	tlsAnnotations[KibanaTLSHashAnnotation] = rmeta.SecretsAnnotationHash(cfg.KibanaSecrets...)
+	tlsAnnotations[cfg.TLSKeyPair.HashAnnotationKey()] = cfg.TLSKeyPair.HashAnnotationValue()
 
 	if cfg.KeyValidatorConfig != nil {
 		tlsSecrets = append(tlsSecrets, cfg.KeyValidatorConfig.RequiredSecrets(ManagerNamespace)...)
@@ -115,9 +99,8 @@ func Manager(cfg *ManagerConfiguration) (Component, error) {
 		// tunnelSecret contains the ca cert to generate guardian certificates
 		// internalTrafficCert containts the cert used to communicated within the management K8S cluster
 		tlsSecrets = append(tlsSecrets, secret.CopyToNamespace(ManagerNamespace, cfg.TunnelSecret)...)
-		tlsSecrets = append(tlsSecrets, secret.CopyToNamespace(ManagerNamespace, cfg.InternalTrafficSecret)...)
 		tlsAnnotations[voltronTunnelHashAnnotation] = rmeta.AnnotationHash(cfg.TunnelSecret.Data)
-		tlsAnnotations[ManagerInternalTLSHashAnnotation] = rmeta.AnnotationHash(cfg.InternalTrafficSecret.Data)
+		tlsAnnotations[cfg.InternalTrafficSecret.HashAnnotationKey()] = cfg.InternalTrafficSecret.HashAnnotationValue()
 	}
 	return &managerComponent{
 		cfg:            cfg,
@@ -128,23 +111,21 @@ func Manager(cfg *ManagerConfiguration) (Component, error) {
 
 // ManagerConfiguration contains all the config information needed to render the component.
 type ManagerConfiguration struct {
-	KeyValidatorConfig            authentication.KeyValidatorConfig
-	ESSecrets                     []*corev1.Secret
-	KibanaSecrets                 []*corev1.Secret
-	ComplianceServerCertSecret    *corev1.Secret
-	PacketCaptureServerCertSecret *corev1.Secret
-	PrometheusCertSecret          *corev1.Secret
-	ESClusterConfig               *relasticsearch.ClusterConfig
-	TLSKeyPair                    *corev1.Secret
-	PullSecrets                   []*corev1.Secret
-	Openshift                     bool
-	Installation                  *operatorv1.InstallationSpec
-	ManagementCluster             *operatorv1.ManagementCluster
-	TunnelSecret                  *corev1.Secret
-	InternalTrafficSecret         *corev1.Secret
-	ClusterDomain                 string
-	ESLicenseType                 ElasticsearchLicenseType
-	Replicas                      *int32
+	KeyValidatorConfig    authentication.KeyValidatorConfig
+	ESSecrets             []*corev1.Secret
+	KibanaSecrets         []*corev1.Secret
+	TrustedCertBundle     certificatemanagement.TrustedBundle
+	ESClusterConfig       *relasticsearch.ClusterConfig
+	TLSKeyPair            certificatemanagement.KeyPair
+	PullSecrets           []*corev1.Secret
+	Openshift             bool
+	Installation          *operatorv1.InstallationSpec
+	ManagementCluster     *operatorv1.ManagementCluster
+	TunnelSecret          *corev1.Secret
+	InternalTrafficSecret certificatemanagement.KeyPair
+	ClusterDomain         string
+	ESLicenseType         ElasticsearchLicenseType
+	Replicas              *int32
 }
 
 type managerComponent struct {
@@ -154,7 +135,6 @@ type managerComponent struct {
 	managerImage   string
 	proxyImage     string
 	esProxyImage   string
-	csrInitImage   string
 }
 
 func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -176,13 +156,6 @@ func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	c.esProxyImage, err = components.GetReference(components.ComponentEsProxy, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
-	}
-
-	if c.cfg.Installation.CertificateManagement != nil {
-		c.csrInitImage, err = ResolveCSRInitImage(c.cfg.Installation, is)
-		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
-		}
 	}
 
 	if len(errMsgs) != 0 {
@@ -224,36 +197,12 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.cfg.ESSecrets...)...)...)
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.cfg.KibanaSecrets...)...)...)
-	if c.cfg.ComplianceServerCertSecret != nil {
-		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.cfg.ComplianceServerCertSecret)...)...)
-	}
-	if c.cfg.PacketCaptureServerCertSecret != nil {
-		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.cfg.PacketCaptureServerCertSecret)...)...)
-	}
-	if c.cfg.PrometheusCertSecret != nil {
-		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.cfg.PrometheusCertSecret)...)...)
-	}
 	objs = append(objs, c.managerDeployment())
 	if c.cfg.KeyValidatorConfig != nil {
 		objs = append(objs, configmap.ToRuntimeObjects(c.cfg.KeyValidatorConfig.RequiredConfigMaps(ManagerNamespace)...)...)
 	}
 
-	var toDelete []client.Object
-	if c.cfg.Installation.CertificateManagement != nil {
-		objs = append(objs, CSRClusterRoleBinding(ManagerServiceName, ManagerNamespace))
-		// If we want to use certificate management, we should clean up any existing secrets that have been created by the operator.
-		secretToDelete := &corev1.Secret{
-			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      ManagerTLSSecretName,
-				Namespace: common.OperatorNamespace(),
-			},
-		}
-		toDelete = append(toDelete, secretToDelete)
-		toDelete = append(toDelete, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, secretToDelete)...)...)
-	}
-
-	return objs, toDelete
+	return objs, nil
 }
 
 func (c *managerComponent) Ready() bool {
@@ -262,39 +211,9 @@ func (c *managerComponent) Ready() bool {
 
 // managerDeployment creates a deployment for the Tigera Secure manager component.
 func (c *managerComponent) managerDeployment() *appsv1.Deployment {
-	annotations := make(map[string]string)
-
-	if c.cfg.ComplianceServerCertSecret != nil {
-		annotations[complianceServerTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.ComplianceServerCertSecret.Data)
-	}
-
-	if c.cfg.PacketCaptureServerCertSecret != nil {
-		annotations[PacketCaptureTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.PacketCaptureServerCertSecret.Data)
-	}
-
-	if c.cfg.PrometheusCertSecret != nil {
-		annotations[prometheusTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.PrometheusCertSecret.Data)
-	}
-	// Add a hash of the Secret to ensure if it changes the manager will be
-	// redeployed.	The following secrets are annotated:
-	// manager-tls : cert used for tigera UI
-	// internal-manager-tls : cert used for internal communication within K8S cluster
-	// tigera-management-cluster-connection : cert used to generate guardian certificates
-	for k, v := range c.tlsAnnotations {
-		annotations[k] = v
-	}
-
 	var initContainers []corev1.Container
-	if c.cfg.Installation.CertificateManagement != nil {
-		initContainers = append(initContainers, CreateCSRInitContainer(
-			c.cfg.Installation.CertificateManagement,
-			c.csrInitImage,
-			ManagerTLSSecretName,
-			ManagerServiceName,
-			ManagerSecretKeyName,
-			ManagerSecretCertName,
-			dns.GetServiceDNSNames(ManagerServiceName, ManagerNamespace, c.cfg.ClusterDomain),
-			ManagerNamespace))
+	if c.cfg.TLSKeyPair.UseCertificateManagement() {
+		initContainers = append(initContainers, c.cfg.TLSKeyPair.InitContainer(ManagerNamespace))
 	}
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
@@ -304,7 +223,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 			Labels: map[string]string{
 				"k8s-app": "tigera-manager",
 			},
-			Annotations: annotations,
+			Annotations: c.tlsAnnotations,
 		},
 		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
 			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
@@ -360,16 +279,9 @@ func (c *managerComponent) managerVolumeMounts() []corev1.VolumeMount {
 
 // managerVolumes returns the volumes for the Tigera Secure manager component.
 func (c *managerComponent) managerVolumes() []corev1.Volume {
-	var certificateManagement *operatorv1.CertificateManagement
-	if c.cfg.Installation.CertificateManagement != nil {
-		certificateManagement = c.cfg.Installation.CertificateManagement
-	}
-	tlsVolumeSource := CertificateVolumeSource(certificateManagement, ManagerTLSSecretName)
 	v := []corev1.Volume{
-		{
-			Name:         ManagerTLSSecretName,
-			VolumeSource: tlsVolumeSource,
-		},
+		c.cfg.TLSKeyPair.Volume(),
+		c.cfg.TrustedCertBundle.Volume(),
 		{
 			Name: KibanaPublicCertSecret,
 			VolumeSource: corev1.VolumeSource{
@@ -379,74 +291,9 @@ func (c *managerComponent) managerVolumes() []corev1.Volume {
 			},
 		},
 	}
-
-	if c.cfg.ComplianceServerCertSecret != nil {
-		v = append(v, corev1.Volume{
-			Name: ComplianceServerCertSecret,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					Items: []corev1.KeyToPath{{
-						Key:  "tls.crt",
-						Path: "tls.crt",
-					}},
-					SecretName: ComplianceServerCertSecret,
-				},
-			},
-		})
-	}
-
-	if c.cfg.PacketCaptureServerCertSecret != nil {
-		v = append(v, corev1.Volume{
-			Name: PacketCaptureCertSecret,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					Items: []corev1.KeyToPath{{
-						Key:  "tls.crt",
-						Path: "tls.crt",
-					}},
-					SecretName: PacketCaptureCertSecret,
-				},
-			},
-		})
-	}
-
-	if c.cfg.PrometheusCertSecret != nil {
-		v = append(v, corev1.Volume{
-			Name: PrometheusTLSSecretName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: PrometheusTLSSecretName,
-				},
-			},
-		})
-	}
-
 	if c.cfg.ManagementCluster != nil {
 		v = append(v,
-			corev1.Volume{
-				// We only want to mount the cert, not the private key to es-proxy to establish a connection with voltron.
-				Name: ManagerInternalTLSSecretCertName,
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						SecretName: ManagerInternalTLSSecretName,
-						Items: []corev1.KeyToPath{
-							{
-								Key:  "cert",
-								Path: "cert",
-							},
-						},
-					},
-				},
-			},
-			corev1.Volume{
-				// We mount the full secret to be shared with Voltron.
-				Name: ManagerInternalTLSSecretName,
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						SecretName: ManagerInternalTLSSecretName,
-					},
-				},
-			},
+			c.cfg.InternalTrafficSecret.Volume(),
 			corev1.Volume{
 				// Append volume for tunnel certificate
 				Name: VoltronTunnelSecretName,
@@ -573,6 +420,13 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		{Name: "VOLTRON_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
 		{Name: "VOLTRON_KIBANA_BASE_PATH", Value: fmt.Sprintf("/%s/", KibanaBasePath)},
 		{Name: "VOLTRON_KIBANA_CA_BUNDLE_PATH", Value: "/certs/kibana/tls.crt"},
+		{Name: "VOLTRON_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+		{Name: "VOLTRON_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+		{Name: "VOLTRON_COMPLIANCE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+		{Name: "VOLTRON_HTTPS_KEY", Value: fmt.Sprintf("/certs/https/%s", corev1.TLSPrivateKeyKey)},
+		{Name: "VOLTRON_HTTPS_CERT", Value: fmt.Sprintf("/certs/https/%s", corev1.TLSCertKey)},
+		{Name: "VOLTRON_INTERNAL_HTTPS_KEY", Value: fmt.Sprintf("/certs/internal/%s", corev1.TLSPrivateKeyKey)},
+		{Name: "VOLTRON_INTERNAL_HTTPS_CERT", Value: fmt.Sprintf("/certs/internal/%s", corev1.TLSCertKey)},
 		{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
 		{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
 		{Name: "VOLTRON_DEFAULT_FORWARD_SERVER", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc:9200"},
@@ -582,7 +436,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		env = append(env, c.cfg.KeyValidatorConfig.RequiredEnv("VOLTRON_")...)
 	}
 
-	if c.cfg.ComplianceServerCertSecret == nil {
+	if _, ok := c.cfg.TrustedCertBundle.HashAnnotations()[complianceServerTLSHashAnnotation]; !ok {
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: "false"})
 	}
 
@@ -600,22 +454,11 @@ func (c *managerComponent) volumeMountsForProxyManager() []corev1.VolumeMount {
 	var mounts = []corev1.VolumeMount{
 		{Name: ManagerTLSSecretName, MountPath: "/certs/https", ReadOnly: true},
 		{Name: KibanaPublicCertSecret, MountPath: "/certs/kibana", ReadOnly: true},
-	}
-
-	if c.cfg.ComplianceServerCertSecret != nil {
-		mounts = append(mounts, corev1.VolumeMount{Name: ComplianceServerCertSecret, MountPath: "/certs/compliance", ReadOnly: true})
-	}
-
-	if c.cfg.PacketCaptureServerCertSecret != nil {
-		mounts = append(mounts, corev1.VolumeMount{Name: PacketCaptureCertSecret, MountPath: "/certs/packetcapture", ReadOnly: true})
-	}
-
-	if c.cfg.PrometheusCertSecret != nil {
-		mounts = append(mounts, corev1.VolumeMount{Name: PrometheusTLSSecretName, MountPath: "/certs/prometheus", ReadOnly: true})
+		c.cfg.TrustedCertBundle.VolumeMount(),
 	}
 
 	if c.cfg.ManagementCluster != nil {
-		mounts = append(mounts, corev1.VolumeMount{Name: ManagerInternalTLSSecretName, MountPath: "/certs/internal", ReadOnly: true})
+		mounts = append(mounts, c.cfg.InternalTrafficSecret.VolumeMount("/certs/internal"))
 		mounts = append(mounts, corev1.VolumeMount{Name: VoltronTunnelSecretName, MountPath: "/certs/tunnel", ReadOnly: true})
 	}
 
@@ -628,16 +471,17 @@ func (c *managerComponent) volumeMountsForProxyManager() []corev1.VolumeMount {
 
 // managerEsProxyContainer returns the ES proxy container
 func (c *managerComponent) managerEsProxyContainer() corev1.Container {
-	var volumeMounts []corev1.VolumeMount
-	if c.cfg.ManagementCluster != nil {
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{Name: ManagerInternalTLSSecretCertName, MountPath: "/manager-tls", ReadOnly: true})
-	}
-
 	env := []corev1.EnvVar{
 		{Name: "ELASTIC_LICENSE_TYPE", Value: string(c.cfg.ESLicenseType)},
 		// The ELASTIC_VERSION flag is used to set the kbn-version for a browser redirect.
 		{Name: "ELASTIC_VERSION", Value: components.ComponentEckKibana.Version},
 		{Name: "ELASTIC_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
+	}
+
+	var volumeMounts []corev1.VolumeMount
+	if c.cfg.ManagementCluster != nil {
+		volumeMounts = append(volumeMounts, c.cfg.TrustedCertBundle.VolumeMount())
+		env = append(env, corev1.EnvVar{Name: "VOLTRON_CA_PATH", Value: certificatemanagement.TrustedCertBundleMountPath})
 	}
 
 	if c.cfg.KeyValidatorConfig != nil {

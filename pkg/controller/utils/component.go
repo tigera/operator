@@ -17,6 +17,7 @@ package utils
 import (
 	"context"
 	"fmt"
+	"github.com/tigera/operator/pkg/render/component"
 	"reflect"
 	"sync"
 
@@ -41,12 +42,11 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
 type ComponentHandler interface {
-	CreateOrUpdateOrDelete(context.Context, render.Component, status.StatusManager) error
+	CreateOrUpdateOrDelete(context.Context, component.Component, status.StatusManager) error
 }
 
 // cr is allowed to be nil in the case we don't want to put ownership on a resource,
@@ -67,7 +67,7 @@ type componentHandler struct {
 	log    logr.Logger
 }
 
-func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component render.Component, status status.StatusManager) error {
+func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component component.Component, status status.StatusManager) error {
 	// Before creating the component, make sure that it is ready. This provides a hook to do
 	// dependency checking for the component.
 	cmpLog := c.log.WithValues("component", reflect.TypeOf(component))

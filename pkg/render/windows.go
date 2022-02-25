@@ -15,6 +15,7 @@
 package render
 
 import (
+	"github.com/tigera/operator/pkg/render/component"
 	appsv1 "k8s.io/api/apps/v1"
 
 	corev1 "k8s.io/api/core/v1"
@@ -29,7 +30,7 @@ import (
 
 func Windows(
 	cfg *WindowsConfig,
-) Component {
+) component.Component {
 	return &windowsComponent{cfg: cfg}
 }
 

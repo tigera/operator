@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package render
+package certificatemanagement
 
 import (
 	"encoding/base64"
@@ -32,8 +32,8 @@ import (
 
 const (
 	CSRClusterRoleName   = "tigera-csr-creator"
-	CSRInitContainerName = "key-cert-provisioner"
 	CSRCMountPath        = "/certs-share"
+	csrInitContainerName = "key-cert-provisioner"
 )
 
 // CreateCSRInitContainer creates an init container that can be added to a pod spec in order to create a CSR for its
@@ -48,7 +48,7 @@ func CreateCSRInitContainer(
 	dnsNames []string,
 	appNameLabel string) corev1.Container {
 	return corev1.Container{
-		Name:  CSRInitContainerName,
+		Name:  csrInitContainerName,
 		Image: image,
 		VolumeMounts: []corev1.VolumeMount{
 			{MountPath: CSRCMountPath, Name: mountName, ReadOnly: false},
@@ -99,8 +99,8 @@ func ResolveCSRInitImage(inst *operatorv1.InstallationSpec, is *operatorv1.Image
 	)
 }
 
-// csrClusterRole returns a role with the necessary permissions to create certificate signing requests.
-func csrClusterRole() client.Object {
+// CSRClusterRole returns a role with the necessary permissions to create certificate signing requests.
+func CSRClusterRole() client.Object {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{

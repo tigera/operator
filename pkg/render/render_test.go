@@ -18,20 +18,22 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	"github.com/tigera/operator/pkg/render/component"
 	glog "log"
-	"reflect"
-
-	"github.com/tigera/operator/pkg/render/kubecontrollers"
-
-	rtest "github.com/tigera/operator/pkg/render/common/test"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
+	"github.com/tigera/operator/pkg/apis"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -39,7 +41,12 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
+
+const clusterDomain = "cluster.local"
 
 // allCalicoComponents takes the given configuration and returns all the components
 // associated with installing Calico's core, similar to how the core_controller behaves.
@@ -50,7 +57,7 @@ func allCalicoComponents(
 	managementClusterConnection *operatorv1.ManagementClusterConnection,
 	pullSecrets []*corev1.Secret,
 	typhaNodeTLS *render.TyphaNodeTLS,
-	managerInternalTLSSecret *corev1.Secret,
+	managerInternalTLSSecret certificatemanagement.KeyPair,
 	bt map[string]string,
 	p operatorv1.Provider,
 	aci *operatorv1.AmazonCloudIntegration,
@@ -61,25 +68,13 @@ func allCalicoComponents(
 	nodeReporterMetricsPort int,
 	bgpLayout *corev1.ConfigMap,
 	logCollector *operatorv1.LogCollector,
-) ([]render.Component, error) {
+) ([]component.Component, error) {
 
 	namespaces := render.Namespaces(&render.NamespaceConfiguration{Installation: cr, PullSecrets: pullSecrets})
 
 	objs := []client.Object{}
-	if typhaNodeTLS.CAConfigMap != nil {
-		objs = append(objs, typhaNodeTLS.CAConfigMap)
-	}
 	if bgpLayout != nil {
 		objs = append(objs, bgpLayout)
-	}
-	if typhaNodeTLS.NodeSecret != nil {
-		objs = append(objs, typhaNodeTLS.NodeSecret)
-	}
-	if typhaNodeTLS.TyphaSecret != nil {
-		objs = append(objs, typhaNodeTLS.TyphaSecret)
-	}
-	if managerInternalTLSSecret != nil {
-		objs = append(objs, managerInternalTLSSecret)
 	}
 	secretsAndConfigMaps := render.NewPassthrough(objs...)
 
@@ -117,7 +112,18 @@ func allCalicoComponents(
 		Installation: cr,
 	}
 
-	return []render.Component{namespaces, secretsAndConfigMaps, render.Typha(typhaCfg), render.Node(nodeCfg), kubecontrollers.NewCalicoKubeControllers(kcCfg), render.Windows(winCfg)}, nil
+	nodeCertComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+		Namespace:       common.CalicoNamespace,
+		ServiceAccounts: []string{render.CalicoNodeObjectName, render.TyphaServiceAccountName},
+		KeyPairOptions: []rcertificatemanagement.KeyPairCreator{
+			rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, true, true),
+			rcertificatemanagement.NewKeyPairOption(managerInternalTLSSecret, true, true),
+			rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecret, true, true),
+		},
+		TrustedBundle: typhaNodeTLS.TrustedBundle,
+	})
+
+	return []component.Component{namespaces, secretsAndConfigMaps, render.Typha(typhaCfg), render.Node(nodeCfg), kubecontrollers.NewCalicoKubeControllers(kcCfg), render.Windows(winCfg), nodeCertComponent}, nil
 }
 
 var _ = Describe("Rendering tests", func() {
@@ -125,6 +131,7 @@ var _ = Describe("Rendering tests", func() {
 	var logBuffer bytes.Buffer
 	var logWriter *bufio.Writer
 	var typhaNodeTLS *render.TyphaNodeTLS
+	var internalManagerKeyPair certificatemanagement.KeyPair
 	one := intstr.FromInt(1)
 	miMode := operatorv1.MultiInterfaceModeNone
 	k8sServiceEp := k8sapi.ServiceEndpoint{}
@@ -150,32 +157,17 @@ var _ = Describe("Rendering tests", func() {
 				},
 			},
 		}
-
-		nodeSecret := corev1.Secret{}
-		nodeSecret.Name = render.NodeTLSSecretName
-		nodeSecret.Namespace = common.OperatorNamespace()
-		nodeSecret.Data = map[string][]byte{"k": []byte("v")}
-		nodeSecret.Kind = "Secret"
-		nodeSecret.APIVersion = "v1"
-
-		typhaSecret := corev1.Secret{}
-		typhaSecret.Name = render.TyphaTLSSecretName
-		typhaSecret.Namespace = common.OperatorNamespace()
-		typhaSecret.Data = map[string][]byte{"k": []byte("v")}
-		typhaSecret.Kind = "Secret"
-		typhaSecret.APIVersion = "v1"
+		scheme := runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
+		certificateManager, err := certificatemanagement.CreateCertificateManager(cli, nil, clusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+		typhaNodeTLS = getTyphaNodeTLS(cli, certificateManager)
+		internalManagerKeyPair, err = certificateManager.GetOrCreateKeyPair(cli, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{render.FelixCommonName})
+		Expect(err).NotTo(HaveOccurred())
 
 		logWriter = bufio.NewWriter(&logBuffer)
 		render.SetTestLogger(zap.New(zap.UseDevMode(true), zap.WriteTo(logWriter)))
-		typhaNodeTLS = &render.TyphaNodeTLS{
-			CAConfigMap: &corev1.ConfigMap{Data: map[string]string{}},
-			TyphaSecret: &typhaSecret,
-			NodeSecret:  &nodeSecret,
-		}
-		typhaNodeTLS.CAConfigMap.Name = render.TyphaCAConfigMapName
-		typhaNodeTLS.CAConfigMap.Namespace = common.OperatorNamespace()
-		typhaNodeTLS.CAConfigMap.Kind = "ConfigMap"
-		typhaNodeTLS.CAConfigMap.APIVersion = "v1"
 	})
 
 	AfterEach(func() {
@@ -190,14 +182,14 @@ var _ = Describe("Rendering tests", func() {
 		// created by the controller without any optional ones. These include:
 		// - 6 node resources (ServiceAccount, ClusterRole, Binding, ConfigMap, DaemonSet, PodSecurityPolicy)
 		// - 4 secrets for Typha comms (2 in operator namespace and 2 in calico namespace)
-		// - 2 ConfigMap for Typha comms (1 in operator namespace and 1 in calico namespace)
+		// - 1 ConfigMap for Typha comms (1 in calico namespace)
 		// - 7 typha resources (Service, SA, Role, Binding, Deployment, PodDisruptionBudget, PodSecurityPolicy)
 		// - 6 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment, PodSecurityPolicy, Service, Secret)
 		// - 2 windows-upgrader resources (ServiceAccount, DaemonSet)
 		// - 1 namespace
 		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, operatorv1.ProviderNone, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c)).To(Equal(6 + 4 + 2 + 7 + 6 + 2 + 1))
+		Expect(componentCount(c)).To(Equal(6 + 4 + 1 + 7 + 6 + 2 + 1))
 	})
 
 	It("should render all resources when variant is Tigera Secure", func() {
@@ -210,7 +202,7 @@ var _ = Describe("Rendering tests", func() {
 		instance.NodeMetricsPort = &nodeMetricsPort
 		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, operatorv1.ProviderNone, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c)).To(Equal((6 + 4 + 2 + 7 + 6 + 2 + 1) + 1 + 1))
+		Expect(componentCount(c)).To(Equal((6 + 4 + 1 + 7 + 6 + 2 + 1) + 1 + 1))
 	})
 
 	It("should render all resources when variant is Tigera Secure and Management Cluster", func() {
@@ -221,13 +213,7 @@ var _ = Describe("Rendering tests", func() {
 		instance.Variant = operatorv1.TigeraSecureEnterprise
 		instance.NodeMetricsPort = &nodeMetricsPort
 
-		internalManagerTLSSecret := &corev1.Secret{
-			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name: render.ManagerInternalTLSSecretName, Namespace: common.OperatorNamespace(),
-			},
-		}
-		c, err := allCalicoComponents(k8sServiceEp, instance, &operatorv1.ManagementCluster{}, nil, nil, typhaNodeTLS, internalManagerTLSSecret, nil, operatorv1.ProviderNone, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
+		c, err := allCalicoComponents(k8sServiceEp, instance, &operatorv1.ManagementCluster{}, nil, nil, typhaNodeTLS, internalManagerKeyPair, nil, operatorv1.ProviderNone, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 
 		expectedResources := []struct {
@@ -241,19 +227,12 @@ var _ = Describe("Rendering tests", func() {
 			{common.CalicoNamespace, "", "", "v1", "Namespace"},
 			{render.DexObjectName, "", "", "v1", "Namespace"},
 
-			// Secrets and configmaps from tigera-operator namespace.
-			{render.TyphaCAConfigMapName, common.OperatorNamespace(), "", "v1", "ConfigMap"},
-			{render.NodeTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
-			{render.TyphaTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
-			{render.ManagerInternalTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
-
 			// Typha objects.
 			{render.TyphaServiceAccountName, common.CalicoNamespace, "", "v1", "ServiceAccount"},
 			{common.TyphaDeploymentName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
 			{common.TyphaDeploymentName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
 			{render.TyphaServiceName, common.CalicoNamespace, "", "v1", "Service"},
 			{common.TyphaDeploymentName, common.CalicoNamespace, "policy", "v1beta1", "PodDisruptionBudget"},
-			{render.TyphaTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
 			{common.TyphaDeploymentName, "", "policy", "v1beta1", "PodSecurityPolicy"},
 			{common.TyphaDeploymentName, common.CalicoNamespace, "apps", "v1", "Deployment"},
 
@@ -261,8 +240,6 @@ var _ = Describe("Rendering tests", func() {
 			{common.NodeDaemonSetName, common.CalicoNamespace, "", "v1", "ServiceAccount"},
 			{common.NodeDaemonSetName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
 			{common.NodeDaemonSetName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
-			{render.TyphaCAConfigMapName, common.CalicoNamespace, "", "v1", "ConfigMap"},
-			{render.NodeTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
 			{"calico-node-metrics", common.CalicoNamespace, "", "v1", "Service"},
 			{"cni-config", common.CalicoNamespace, "", "v1", "ConfigMap"},
 			{common.NodeDaemonSetName, "", "policy", "v1beta1", "PodSecurityPolicy"},
@@ -280,6 +257,15 @@ var _ = Describe("Rendering tests", func() {
 			// windows upgrader objects.
 			{common.CalicoWindowsUpgradeResourceName, common.CalicoNamespace, "", "v1", "ServiceAccount"},
 			{common.CalicoWindowsUpgradeResourceName, common.CalicoNamespace, "apps", "v1", "DaemonSet"},
+
+			// Certificate Management objects
+			{certificatemanagement.TrustedCertConfigMapName, common.CalicoNamespace, "", "v1", "ConfigMap"},
+			{render.NodeTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
+			{render.NodeTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
+			{render.ManagerInternalTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
+			{render.ManagerInternalTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
+			{render.TyphaTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
+			{render.TyphaTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
 		}
 
 		var resources []client.Object
@@ -424,7 +410,24 @@ var _ = Describe("Rendering tests", func() {
 	})
 })
 
-func componentCount(components []render.Component) int {
+func getTyphaNodeTLS(cli client.Client, certificateManager certificatemanagement.CertificateManager) *render.TyphaNodeTLS {
+	nodeKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.NodeTLSSecretName, common.OperatorNamespace(), []string{render.FelixCommonName})
+	Expect(err).NotTo(HaveOccurred())
+
+	typhaKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TyphaTLSSecretName, common.OperatorNamespace(), []string{render.FelixCommonName})
+	Expect(err).NotTo(HaveOccurred())
+
+	trustedBundle := certificatemanagement.CreateTrustedBundle(certificateManager, nodeKeyPair, typhaKeyPair)
+
+	typhaNodeTLS := &render.TyphaNodeTLS{
+		TyphaSecret:   typhaKeyPair,
+		NodeSecret:    nodeKeyPair,
+		TrustedBundle: trustedBundle,
+	}
+	return typhaNodeTLS
+}
+
+func componentCount(components []component.Component) int {
 	count := 0
 	for _, c := range components {
 		objsToCreate, _ := c.Objects()

@@ -400,8 +400,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			r.status.SetDegraded(fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.ManagerInternalTLSSecretName, common.OperatorNamespace()), err.Error())
 			return reconcile.Result{}, nil
 		}
-		// Avoid taking ownership of the secret in the operator namespace.
-		internalTrafficSecret.SetSkipRenderInOperatorNamespace()
 	}
 
 	// Fetch the Authentication spec. If present, we use to configure user authentication.
@@ -432,10 +430,13 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	components := []render.Component{
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			ServiceAccountName: render.ManagerServiceAccount,
-			Namespace:          render.ManagerNamespace,
-			KeyPairs:           []certificatemanagement.KeyPair{tlsSecret, internalTrafficSecret},
-			TrustedBundle:      trustedBundle,
+			Namespace:       render.ManagerNamespace,
+			ServiceAccounts: []string{render.ManagerServiceAccount},
+			KeyPairOptions: []rcertificatemanagement.KeyPairCreator{
+				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(internalTrafficSecret, false, true),
+			},
+			TrustedBundle: trustedBundle,
 		}),
 	}
 

@@ -97,10 +97,12 @@ func (r *ReconcileLogStorage) createEsMetrics(
 	esMetricsComponent := esmetrics.ElasticsearchMetrics(esMetricsCfg)
 	components := []render.Component{esMetricsComponent,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			ServiceAccountName: esmetrics.ElasticsearchMetricsName,
-			Namespace:          render.ElasticsearchNamespace,
-			KeyPairs:           []certificatemanagement.KeyPair{serverTLS},
-			TrustedBundle:      trustedBundle,
+			Namespace:       render.ElasticsearchNamespace,
+			ServiceAccounts: []string{esmetrics.ElasticsearchMetricsName},
+			KeyPairOptions: []rcertificatemanagement.KeyPairCreator{
+				rcertificatemanagement.NewKeyPairOption(serverTLS, true, true),
+			},
+			TrustedBundle: trustedBundle,
 		}),
 	}
 

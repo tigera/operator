@@ -109,21 +109,18 @@ func allCalicoComponents(
 		Installation: cr,
 	}
 
-	//render.NewKeyPairPassthrough(certificateManager)
-
 	nodeCertComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-		ServiceAccountName: render.CalicoNodeObjectName,
-		Namespace:          common.CalicoNamespace,
-		KeyPairs:           []certificatemanagement.KeyPair{typhaNodeTLS.NodeSecret, managerInternalTLSSecret},
-		TrustedBundle:      typhaNodeTLS.TrustedBundle,
-	})
-	typhaCertComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-		ServiceAccountName: render.TyphaServiceAccountName,
-		Namespace:          common.CalicoNamespace,
-		KeyPairs:           []certificatemanagement.KeyPair{typhaNodeTLS.TyphaSecret},
+		Namespace:       common.CalicoNamespace,
+		ServiceAccounts: []string{render.CalicoNodeObjectName, render.TyphaServiceAccountName},
+		KeyPairOptions: []rcertificatemanagement.KeyPairCreator{
+			rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, true, true),
+			rcertificatemanagement.NewKeyPairOption(managerInternalTLSSecret, true, true),
+			rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecret, true, true),
+		},
+		TrustedBundle: typhaNodeTLS.TrustedBundle,
 	})
 
-	return []render.Component{namespaces, secretsAndConfigMaps, render.Typha(typhaCfg), render.Node(nodeCfg), kubecontrollers.NewCalicoKubeControllers(kcCfg), render.Windows(winCfg), nodeCertComponent, typhaCertComponent}, nil
+	return []render.Component{namespaces, secretsAndConfigMaps, render.Typha(typhaCfg), render.Node(nodeCfg), kubecontrollers.NewCalicoKubeControllers(kcCfg), render.Windows(winCfg), nodeCertComponent}, nil
 }
 
 var _ = Describe("Rendering tests", func() {
@@ -261,12 +258,12 @@ var _ = Describe("Rendering tests", func() {
 
 			// Certificate Management objects
 			{certificatemanagement.TrustedCertConfigMapName, common.CalicoNamespace, "", "v1", "ConfigMap"},
-			{render.NodeTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
 			{render.NodeTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
-			{render.ManagerInternalTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
+			{render.NodeTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
 			{render.ManagerInternalTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
-			{render.TyphaTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
+			{render.ManagerInternalTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
 			{render.TyphaTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
+			{render.TyphaTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
 		}
 
 		var resources []client.Object

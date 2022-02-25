@@ -288,10 +288,13 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	components := []render.Component{
 		monitor.Monitor(monitorCfg),
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			ServiceAccountName: monitor.PrometheusServiceAccountName,
-			Namespace:          common.TigeraPrometheusNamespace,
-			KeyPairs:           []certificatemanagement.KeyPair{serverTLSSecret, clientTLSSecret},
-			TrustedBundle:      trustedBundle,
+			Namespace:       common.TigeraPrometheusNamespace,
+			ServiceAccounts: []string{monitor.PrometheusServiceAccountName},
+			KeyPairOptions: []rcertificatemanagement.KeyPairCreator{
+				rcertificatemanagement.NewKeyPairOption(serverTLSSecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(clientTLSSecret, true, true),
+			},
+			TrustedBundle: trustedBundle,
 		}),
 	}
 

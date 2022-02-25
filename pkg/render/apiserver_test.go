@@ -978,6 +978,7 @@ var (
 		{
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{
+				"alertexceptions",
 				"globalalerts",
 				"globalalerts/status",
 				"globalalerttemplates",
@@ -1089,6 +1090,7 @@ var (
 		{
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{
+				"alertexceptions",
 				"globalalerts",
 				"globalalerts/status",
 				"globalalerttemplates",

@@ -124,7 +124,7 @@ func GetESGatewayCertificateSecrets(ctx context.Context, instl *operatorv1.Insta
 	}
 
 	// Ensure that cert is valid.
-	oprKeyCert, err = utils.EnsureCertificateSecret(render.TigeraElasticsearchCertSecret, oprKeyCert, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, svcDNSNames...)
+	oprKeyCert, _, err = utils.EnsureCertificateSecret(render.TigeraElasticsearchCertSecret, oprKeyCert, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, svcDNSNames...)
 	if err != nil {
 		return nil, nil, false, err
 	}

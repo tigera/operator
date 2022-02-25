@@ -51,14 +51,19 @@ spec:
                 description: Layer data. One of View, Layer or Dashboard should be
                   specified.
                 properties:
+                  color:
+                    description: The color used to represent the layer when an Icon
+                      has not been specified.
+                    type: string
                   icon:
-                    description: A user-configurable icon in SVG format. If not specified,
-                      the default layer icon is used for this layer node.
+                    description: A user-configurable icon. If not specified, the default
+                      layer icon is used for this layer node.
                     type: string
                   nodes:
                     description: The nodes that are aggregated into a single layer.
                     items:
-                      description: UIGraphNode contains details about a graph node.
+                      description: UIGraphNode contains details about a graph node
+                        so that the UI can render it correctly.
                       properties:
                         id:
                           description: The node ID.
@@ -79,9 +84,13 @@ spec:
                       type: object
                     type: array
                 required:
-                - icon
                 - nodes
                 type: object
+              user:
+                description: The user associated with these settings. This is filled
+                  in by the APIServer on a create request if the owning group is filtered
+                  by user. Cannot be modified.
+                type: string
               view:
                 description: View data. One of View, Layer or Dashboard should be
                   specified.
@@ -90,112 +99,10 @@ spec:
                     description: Whether ports are expanded. If false, port information
                       is aggregated.
                     type: boolean
-                  expanded:
-                    description: The set of nodes that are expanded to the next level
-                      of expansion.
-                    items:
-                      description: UIGraphNode contains details about a graph node.
-                      properties:
-                        id:
-                          description: The node ID.
-                          type: string
-                        name:
-                          description: The node name.
-                          type: string
-                        namespace:
-                          description: The node namespace.
-                          type: string
-                        type:
-                          description: The node type.
-                          type: string
-                      required:
-                      - id
-                      - name
-                      - type
-                      type: object
-                    type: array
-                  focus:
-                    description: The set of nodes that are the focus of the graph.
-                      All nodes returned by the graph query will be connected to at
-                      least one of these nodes. If this is empty, then all nodes will
-                      be returned.
-                    items:
-                      description: UIGraphNode contains details about a graph node.
-                      properties:
-                        id:
-                          description: The node ID.
-                          type: string
-                        name:
-                          description: The node name.
-                          type: string
-                        namespace:
-                          description: The node namespace.
-                          type: string
-                        type:
-                          description: The node type.
-                          type: string
-                      required:
-                      - id
-                      - name
-                      - type
-                      type: object
-                    type: array
                   followConnectionDirection:
                     description: Whether or not to automatically follow directly connected
                       nodes.
                     type: boolean
-                  followedEgress:
-                    description: Followed nodes. These are nodes on the periphery
-                      of the graph that we follow further out of the scope of the
-                      graph focus. For example a Node N may have egress connections
-                      to X and Y, but neither X nor Y are displayed in the graph because
-                      they are not explicitly in focus. The service graph response
-                      will indicate that Node N has egress connections that may be
-                      followed.  If Node N is added to this "FollowedEgress" then
-                      the response will include the egress connections to X and Y.
-                    items:
-                      description: UIGraphNode contains details about a graph node.
-                      properties:
-                        id:
-                          description: The node ID.
-                          type: string
-                        name:
-                          description: The node name.
-                          type: string
-                        namespace:
-                          description: The node namespace.
-                          type: string
-                        type:
-                          description: The node type.
-                          type: string
-                      required:
-                      - id
-                      - name
-                      - type
-                      type: object
-                    type: array
-                  followedIngress:
-                    items:
-                      description: UIGraphNode contains details about a graph node.
-                      properties:
-                        id:
-                          description: The node ID.
-                          type: string
-                        name:
-                          description: The node name.
-                          type: string
-                        namespace:
-                          description: The node namespace.
-                          type: string
-                        type:
-                          description: The node type.
-                          type: string
-                      required:
-                      - id
-                      - name
-                      - type
-                      type: object
-                    type: array
                   hostAggregationSelectors:
                     description: The set of selectors used to aggregate hosts (Kubernetes
                       nodes). Nodes are aggregated based on the supplied set of selectors.
@@ -217,18 +124,77 @@ spec:
                       type: object
                     type: array
                   layers:
-                    description: The set of layer names. This references other UISettings
-                      resources.
+                    description: The set of layer names that are active in this view.  Note
+                      that layers may be defined, but it is not necessary to have
+                      each layer "active". Corresponds directly to the name of the
+                      UISettings resource that contains a layer definition.
                     items:
                       type: string
                     type: array
-                  layout:
+                  layoutType:
                     description: Layout type. Semi-arbitrary value used to specify
                       the layout-type/algorithm. For example could specify different
                       layout algorithms, or click-to-grid.  Mostly here for future
                       use.
                     type: string
-                  position:
+                  nodes:
+                    description: Graph node specific view data. This provides information
+                      about what is in focus, expanded, hidden, deemphasized etc.
+                      at a per-node level.
+                    items:
+                      description: UIGraphNodeView contains the view configuration
+                        for a specific graph node.
+                      properties:
+                        deemphasize:
+                          description: Whether the UI should de-emphasize the node
+                            when visible. This is just a UI directive and does not
+                            correspond to a backend parameter.
+                          type: boolean
+                        expanded:
+                          description: This node is expanded to the next level.  This
+                            node can, for example, be a layer that is expanded into
+                            its constituent parts.
+                          type: boolean
+                        followEgress:
+                          type: boolean
+                        followIngress:
+                          description: Whether the ingress/egress connections to/from
+                            this node are included in the graph.  This effectively
+                            brings more nodes into focus.
+                          type: boolean
+                        hide:
+                          description: Whether the UI should hide the node. This is
+                            just a UI directive and does not correspond to a backend
+                            parameter.
+                          type: boolean
+                        hideUnrelated:
+                          description: Whether the UI should hide unrelated nodes.
+                            This is just a UI directive and does not correspond to
+                            a backend parameter.
+                          type: boolean
+                        id:
+                          description: The node ID.
+                          type: string
+                        inFocus:
+                          description: This node is a primary focus of the graph (i.e.
+                            the graph contains this node and connected nodes).
+                          type: boolean
+                        name:
+                          description: The node name.
+                          type: string
+                        namespace:
+                          description: The node namespace.
+                          type: string
+                        type:
+                          description: The node type.
+                          type: string
+                      required:
+                      - id
+                      - name
+                      - type
+                      type: object
+                    type: array
+                  positions:
                     description: Positions of graph nodes.
                     items:
                       description: UI screen position.
@@ -255,13 +221,6 @@ spec:
                       This never splits pods which represent a true microservice which
                       has ingress and egress connections.
                     type: boolean
-                required:
-                - expandPorts
-                - followConnectionDirection
-                - layers
-                - layout
-                - position
-                - splitIngressEgress
                 type: object
             required:
             - description

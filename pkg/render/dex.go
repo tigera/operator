@@ -53,42 +53,35 @@ const (
 	DexCNPattern = "tigera-dex.tigera-dex.svc.%s"
 )
 
-func Dex(
-	pullSecrets []*corev1.Secret,
-	openshift bool,
-	installation *operatorv1.InstallationSpec,
-	dexConfig DexConfig,
-	clusterDomain string,
-	deleteDex bool,
-) Component {
+func Dex(cfg *DexComponentConfiguration) Component {
 
 	return &dexComponent{
-		dexConfig:     dexConfig,
-		pullSecrets:   pullSecrets,
-		openshift:     openshift,
-		installation:  installation,
-		connector:     dexConfig.Connector(),
-		clusterDomain: clusterDomain,
-		deleteDex:     deleteDex,
+		cfg:       cfg,
+		connector: cfg.DexConfig.Connector(),
 	}
 }
 
+// DexComponentConfiguration contains all the config information needed to render the component.
+type DexComponentConfiguration struct {
+	PullSecrets   []*corev1.Secret
+	Openshift     bool
+	Installation  *operatorv1.InstallationSpec
+	DexConfig     DexConfig
+	ClusterDomain string
+	DeleteDex     bool
+}
+
 type dexComponent struct {
-	dexConfig     DexConfig
-	pullSecrets   []*corev1.Secret
-	openshift     bool
-	installation  *operatorv1.InstallationSpec
-	connector     map[string]interface{}
-	image         string
-	csrInitImage  string
-	clusterDomain string
-	deleteDex     bool
+	cfg          *DexComponentConfiguration
+	connector    map[string]interface{}
+	image        string
+	csrInitImage string
 }
 
 func (c *dexComponent) ResolveImages(is *operatorv1.ImageSet) error {
-	reg := c.installation.Registry
-	path := c.installation.ImagePath
-	prefix := c.installation.ImagePrefix
+	reg := c.cfg.Installation.Registry
+	path := c.cfg.Installation.ImagePath
+	prefix := c.cfg.Installation.ImagePrefix
 	var err error
 	c.image, err = components.GetReference(components.ComponentDex, reg, path, prefix, is)
 
@@ -97,8 +90,8 @@ func (c *dexComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	if c.installation.CertificateManagement != nil {
-		c.csrInitImage, err = ResolveCSRInitImage(c.installation, is)
+	if c.cfg.Installation.CertificateManagement != nil {
+		c.csrInitImage, err = ResolveCSRInitImage(c.cfg.Installation, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
@@ -127,19 +120,19 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 	// TODO Some of the secrets created in the operator namespace are created by the customer (i.e. oidc credentials)
 	// TODO so we can't just do a blanket delete of the secrets in the operator namespace. We need to refactor
 	// TODO the RequiredSecrets in the dex condig to not pass back secrets of this type.
-	if !c.deleteDex {
-		objs = append(objs, secret.ToRuntimeObjects(c.dexConfig.RequiredSecrets(common.OperatorNamespace())...)...)
+	if !c.cfg.DeleteDex {
+		objs = append(objs, secret.ToRuntimeObjects(c.cfg.DexConfig.RequiredSecrets(common.OperatorNamespace())...)...)
 	}
 
-	objs = append(objs, c.dexConfig.CreateCertSecret())
-	objs = append(objs, secret.ToRuntimeObjects(c.dexConfig.RequiredSecrets(DexNamespace)...)...)
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(DexNamespace, c.pullSecrets...)...)...)
+	objs = append(objs, c.cfg.DexConfig.CreateCertSecret())
+	objs = append(objs, secret.ToRuntimeObjects(c.cfg.DexConfig.RequiredSecrets(DexNamespace)...)...)
+	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(DexNamespace, c.cfg.PullSecrets...)...)...)
 
-	if c.installation.CertificateManagement != nil {
+	if c.cfg.Installation.CertificateManagement != nil {
 		objs = append(objs, CSRClusterRoleBinding(DexObjectName, DexNamespace))
 	}
 
-	if c.deleteDex {
+	if c.cfg.DeleteDex {
 		return nil, objs
 	}
 
@@ -202,15 +195,15 @@ func (c *dexComponent) clusterRoleBinding() client.Object {
 
 func (c *dexComponent) deployment() client.Object {
 	var initContainers []corev1.Container
-	if c.installation.CertificateManagement != nil {
+	if c.cfg.Installation.CertificateManagement != nil {
 		initContainers = append(initContainers, CreateCSRInitContainer(
-			c.installation.CertificateManagement,
+			c.cfg.Installation.CertificateManagement,
 			c.csrInitImage,
 			"tls",
 			DexObjectName,
 			corev1.TLSPrivateKeyKey,
 			corev1.TLSCertKey,
-			dns.GetServiceDNSNames(DexObjectName, DexNamespace, c.clusterDomain),
+			dns.GetServiceDNSNames(DexObjectName, DexNamespace, c.cfg.ClusterDomain),
 			DexNamespace))
 	}
 
@@ -229,7 +222,7 @@ func (c *dexComponent) deployment() client.Object {
 					"k8s-app": DexObjectName,
 				},
 			},
-			Replicas: c.installation.ControlPlaneReplicas,
+			Replicas: c.cfg.Installation.ControlPlaneReplicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
@@ -240,19 +233,19 @@ func (c *dexComponent) deployment() client.Object {
 					Labels: map[string]string{
 						"k8s-app": DexObjectName,
 					},
-					Annotations: c.dexConfig.RequiredAnnotations(),
+					Annotations: c.cfg.DexConfig.RequiredAnnotations(),
 				},
 				Spec: corev1.PodSpec{
-					NodeSelector:       c.installation.ControlPlaneNodeSelector,
+					NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 					ServiceAccountName: DexObjectName,
-					Tolerations:        append(c.installation.ControlPlaneTolerations, rmeta.TolerateMaster),
-					ImagePullSecrets:   secret.GetReferenceList(c.pullSecrets),
+					Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster),
+					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					InitContainers:     initContainers,
 					Containers: []corev1.Container{
 						{
 							Name:            DexObjectName,
 							Image:           c.image,
-							Env:             c.dexConfig.RequiredEnv(""),
+							Env:             c.cfg.DexConfig.RequiredEnv(""),
 							LivenessProbe:   c.probe(),
 							SecurityContext: podsecuritycontext.NewBaseContext(),
 
@@ -265,16 +258,16 @@ func (c *dexComponent) deployment() client.Object {
 								},
 							},
 
-							VolumeMounts: c.dexConfig.RequiredVolumeMounts(),
+							VolumeMounts: c.cfg.DexConfig.RequiredVolumeMounts(),
 						},
 					},
-					Volumes: c.dexConfig.RequiredVolumes(),
+					Volumes: c.cfg.DexConfig.RequiredVolumes(),
 				},
 			},
 		},
 	}
 
-	if c.installation.ControlPlaneReplicas != nil && *c.installation.ControlPlaneReplicas > 1 {
+	if c.cfg.Installation.ControlPlaneReplicas != nil && *c.cfg.Installation.ControlPlaneReplicas > 1 {
 		d.Spec.Template.Spec.Affinity = podaffinity.NewPodAntiAffinity(DexObjectName, DexNamespace)
 	}
 
@@ -324,7 +317,7 @@ func (c *dexComponent) probe() *corev1.Probe {
 
 func (c *dexComponent) configMap() *corev1.ConfigMap {
 	bytes, err := yaml.Marshal(map[string]interface{}{
-		"issuer": c.dexConfig.Issuer(),
+		"issuer": c.cfg.DexConfig.Issuer(),
 		"storage": map[string]interface{}{
 			"type": "kubernetes",
 			"config": map[string]bool{
@@ -346,7 +339,7 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 		"staticClients": []map[string]interface{}{
 			{
 				"id":           DexClientId,
-				"redirectURIs": c.dexConfig.RedirectURIs(),
+				"redirectURIs": c.cfg.DexConfig.RedirectURIs(),
 				"name":         "Calico Enterprise Manager",
 				"secretEnv":    dexSecretEnv,
 			},

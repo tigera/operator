@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	"github.com/tigera/operator/pkg/common"
 
 	apps "k8s.io/api/apps/v1"
@@ -51,6 +53,8 @@ import (
 const (
 	fakeComponentAnnotationKey   = "tigera.io/annotation-should-be"
 	fakeComponentAnnotationValue = "present"
+	fakeComponentLabelKey        = "tigera.io/label-should-be"
+	fakeComponentLabelValue      = "labelvalue"
 )
 
 var log = logf.Log.WithName("test_utils_logger")
@@ -209,6 +213,179 @@ var _ = Describe("Component handler tests", func() {
 		ns = &v1.Namespace{}
 		c.Get(ctx, nsKey, ns)
 		Expect(ns.GetAnnotations()).To(Equal(expectedAnnotations))
+	})
+
+	It("merges UISettings leaving owners unchanged", func() {
+		fc := &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs: []client.Object{&v3.UISettings{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test.test-settings",
+					OwnerReferences: []metav1.OwnerReference{{
+						APIVersion: "projectcalico.org/v3",
+						Kind:       "UISettingsGroup",
+						Name:       "owner",
+						UID:        "abcde",
+					}},
+				},
+				Spec: v3.UISettingsSpec{
+					Group:       "test",
+					Description: "just a test",
+					Layer: &v3.UIGraphLayer{
+						Nodes: []v3.UIGraphNode{},
+					},
+				},
+			}},
+		}
+
+		err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).To(BeNil())
+
+		By("checking that the UISettings is created and ownerref is not modified")
+		uiKey := client.ObjectKey{
+			Name: "test.test-settings",
+		}
+		ui := &v3.UISettings{}
+		c.Get(ctx, uiKey, ui)
+		Expect(ui.OwnerReferences).To(HaveLen(1))
+		Expect(ui.OwnerReferences[0].Name).To(Equal("owner"))
+
+		By("overwriting the description and updating the owner.")
+		ui.Spec.Description = "another test"
+		ui.OwnerReferences[0].Name = "differentowner"
+		fc.objs = []client.Object{ui}
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).To(BeNil())
+
+		By("checking that the uisettings is updated with description, but ownerref is not modified")
+		ui = &v3.UISettings{}
+		c.Get(ctx, uiKey, ui)
+		Expect(ui.OwnerReferences).To(HaveLen(1))
+		Expect(ui.OwnerReferences[0].Name).To(Equal("owner"))
+		Expect(ui.Spec.Description).To(Equal("another test"))
+	})
+
+	It("merges labels and reconciles only operator added labels", func() {
+		fc := &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs: []client.Object{&v1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-namespace",
+					Labels: map[string]string{
+						fakeComponentLabelKey: fakeComponentLabelValue,
+					},
+				},
+			}},
+		}
+
+		err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).To(BeNil())
+
+		By("checking that the namespace is created and desired label is present")
+		expectedLabels := map[string]string{
+			fakeComponentLabelKey: fakeComponentLabelValue,
+		}
+		nsKey := client.ObjectKey{
+			Name: "test-namespace",
+		}
+		ns := &v1.Namespace{}
+		c.Get(ctx, nsKey, ns)
+		Expect(ns.GetLabels()).To(Equal(expectedLabels))
+
+		By("ovewriting the namespace with extra label")
+		labels := map[string]string{
+			"extra": "extra-value",
+		}
+		ns.ObjectMeta.Labels = labels
+		Expect(c.Update(ctx, ns)).NotTo(HaveOccurred())
+
+		By("checking that the namespace is updated with extra label")
+		expectedLabels = map[string]string{
+			"extra": "extra-value",
+		}
+		nsKey = client.ObjectKey{
+			Name: "test-namespace",
+		}
+		ns = &v1.Namespace{}
+		c.Get(ctx, nsKey, ns)
+		Expect(ns.GetLabels()).To(Equal(expectedLabels))
+
+		// Re-initialize the fake component. Object metadata gets modified as part of CreateOrUpdate, leading
+		// to resource update conflicts.
+		fc = &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs: []client.Object{&v1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-namespace",
+					Labels: map[string]string{
+						fakeComponentLabelKey: fakeComponentLabelValue,
+					},
+				},
+			}},
+		}
+
+		By("initiating a merge with extra label")
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).To(BeNil())
+
+		By("retrieving the namespace and checking that both current and desired labels are still present")
+		expectedLabels = map[string]string{
+			"extra":               "extra-value",
+			fakeComponentLabelKey: fakeComponentLabelValue,
+		}
+		ns = &v1.Namespace{}
+		c.Get(ctx, nsKey, ns)
+		Expect(ns.GetLabels()).To(Equal(expectedLabels))
+
+		By("changing a desired label")
+		labels = map[string]string{
+			"extra":               "extra-value",
+			"cattle-not-pets":     "indeed",
+			fakeComponentLabelKey: "not-present",
+		}
+		ns.ObjectMeta.Labels = labels
+		c.Update(ctx, ns)
+
+		By("checking that the namespace is updated with new modified label")
+		expectedLabels = map[string]string{
+			"cattle-not-pets":     "indeed",
+			"extra":               "extra-value",
+			fakeComponentLabelKey: "not-present",
+		}
+		nsKey = client.ObjectKey{
+			Name: "test-namespace",
+		}
+		ns = &v1.Namespace{}
+		c.Get(ctx, nsKey, ns)
+		Expect(ns.GetLabels()).To(Equal(expectedLabels))
+
+		// Re-initialize the fake component. Object metadata gets modified as part of CreateOrUpdate, leading
+		// to resource update conflicts.
+		fc = &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs: []client.Object{&v1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-namespace",
+					Labels: map[string]string{
+						fakeComponentLabelKey: fakeComponentLabelValue,
+					},
+				},
+			}},
+		}
+
+		By("initiating a merge with namespace containing modified desired label")
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).To(BeNil())
+
+		By("retrieving the namespace and checking that desired label is reconciled, everything else is left as-is")
+		expectedLabels = map[string]string{
+			"cattle-not-pets":     "indeed",
+			"extra":               "extra-value",
+			fakeComponentLabelKey: fakeComponentLabelValue,
+		}
+		ns = &v1.Namespace{}
+		c.Get(ctx, nsKey, ns)
+		Expect(ns.GetLabels()).To(Equal(expectedLabels))
 	})
 
 	DescribeTable("ensuring os node selectors", func(component render.Component, key client.ObjectKey, obj client.Object, expectedNodeSelectors map[string]string) {

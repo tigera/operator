@@ -38,7 +38,6 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
-	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/test"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -220,10 +219,8 @@ var _ = Describe("Manager controller tests", func() {
 
 		It("should render a new manager cert if existing cert has invalid DNS names and the cert is operator managed", func() {
 			// Create a manager cert managed by the operator.
-			ca, err := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
-			Expect(err).ShouldNot(HaveOccurred())
 			oldCert, err := secret.CreateTLSSecret(
-				ca, render.ManagerTLSSecretName, common.OperatorNamespace(), render.ManagerSecretKeyName,
+				nil, render.ManagerTLSSecretName, common.OperatorNamespace(), render.ManagerSecretKeyName,
 				render.ManagerSecretCertName, rmeta.DefaultCertificateDuration, nil, "tigera-manager.tigera-manager.svc")
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(c.Create(ctx, oldCert)).NotTo(HaveOccurred())
@@ -260,6 +257,38 @@ var _ = Describe("Manager controller tests", func() {
 
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
 			Expect(secret.Data).To(Equal(userSecret.Data))
+		})
+
+		It("should create a manager TLS cert secret if not provided and add an OwnerReference to it", func() {
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			secret := &corev1.Secret{}
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
+			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
+		})
+
+		It("should not add OwnerReference to an user supplied manager TLS cert", func() {
+			// Create a manager cert secret.
+			dnsNames := []string{"manager.example.com", "192.168.10.22"}
+			testCA := test.MakeTestCA("manager-test")
+			userSecret, err := secret.CreateTLSSecret(
+				testCA, render.ManagerTLSSecretName, common.OperatorNamespace(), render.ManagerSecretKeyName,
+				render.ManagerSecretCertName, rmeta.DefaultCertificateDuration, nil, dnsNames...)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(c.Create(ctx, userSecret)).NotTo(HaveOccurred())
+
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Verify that the existing cert didn't get an owner reference
+			secret := &corev1.Secret{}
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
+			Expect(secret.GetOwnerReferences()).To(HaveLen(0))
+
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
+			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
 		})
 
 		It("should reconcile if operator-managed cert exists and user replaces it with a custom cert", func() {

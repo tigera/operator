@@ -15,7 +15,10 @@
 package components
 
 import (
+	"fmt"
+
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
 	op "github.com/tigera/operator/api/v1"
@@ -23,119 +26,103 @@ import (
 
 var _ = Describe("test GetReference", func() {
 	Context("No registry override", func() {
-		It("should render a calico image correctly", func() {
-			Expect(GetReference(ComponentCalicoNode, "", "", "", nil)).To(Equal("docker.io/calico/node:" + ComponentCalicoNode.Version))
-		})
-		It("should render a tigera image correctly", func() {
-			Expect(GetReference(ComponentTigeraNode, "", "", "", nil)).To(Equal(TigeraRegistry + "tigera/cnx-node:" + ComponentTigeraNode.Version))
-		})
-		It("should render an ECK image correctly", func() {
-			Expect(GetReference(ComponentElasticsearchOperator, "", "", "", nil)).To(Equal("quay.io/tigera/eck-operator:" + ComponentElasticsearchOperator.Version))
-		})
-		It("should render an operator init image correctly", func() {
-			Expect(GetReference(ComponentOperatorInit, "", "", "", nil)).To(Equal(InitRegistry + "tigera/operator:" + ComponentOperatorInit.Version))
-		})
+		DescribeTable("should render",
+			func(c component, registry, image string) {
+				Expect(GetReference(c, "", "", "", nil)).To(Equal(fmt.Sprintf("%s%s:%s", registry, image, c.Version)))
+			},
+			Entry("a calico image correctly", ComponentCalicoNode, CalicoRegistry, "calico/node"),
+			Entry("a tigera image correctly", ComponentTigeraNode, TigeraRegistry, "tigera/cnx-node"),
+			Entry("an ECK image correctly", ComponentElasticsearchOperator, TigeraRegistry, "tigera/eck-operator"),
+			Entry("an operator init image correctly", ComponentOperatorInit, InitRegistry, "tigera/operator"),
+			Entry("a CSR init image correctly", ComponentCSRInitContainer, CSRInitRegistry, "tigera/key-cert-provisioner"),
+		)
 	})
 
 	Context("UseDefault for registry and imagepath", func() {
-		ud := "UseDefault"
-		It("should render a calico image correctly", func() {
-			Expect(GetReference(ComponentCalicoNode, ud, ud, "", nil)).To(Equal("docker.io/calico/node:" + ComponentCalicoNode.Version))
-		})
-		It("should render a tigera image correctly", func() {
-			Expect(GetReference(ComponentTigeraNode, ud, ud, "", nil)).To(Equal(TigeraRegistry + "tigera/cnx-node:" + ComponentTigeraNode.Version))
-		})
-		It("should render an ECK image correctly", func() {
-			Expect(GetReference(ComponentElasticsearchOperator, ud, ud, "", nil)).To(Equal("quay.io/tigera/eck-operator:" + ComponentElasticsearchOperator.Version))
-		})
-		It("should render an operator init image correctly", func() {
-			Expect(GetReference(ComponentOperatorInit, ud, ud, "", nil)).To(Equal(InitRegistry + "tigera/operator:" + ComponentOperatorInit.Version))
-		})
+		DescribeTable("should render",
+			func(c component, registry, image string) {
+				ud := "UseDefault"
+				Expect(GetReference(c, ud, ud, "", nil)).To(Equal(fmt.Sprintf("%s%s:%s", registry, image, c.Version)))
+			},
+			Entry("a calico image correctly", ComponentCalicoNode, CalicoRegistry, "calico/node"),
+			Entry("a tigera image correctly", ComponentTigeraNode, TigeraRegistry, "tigera/cnx-node"),
+			Entry("an ECK image correctly", ComponentElasticsearchOperator, TigeraRegistry, "tigera/eck-operator"),
+			Entry("an operator init image correctly", ComponentOperatorInit, InitRegistry, "tigera/operator"),
+			Entry("a CSR init image correctly", ComponentCSRInitContainer, CSRInitRegistry, "tigera/key-cert-provisioner"),
+		)
 	})
 
 	Context("registry override", func() {
-		It("should render a calico image correctly", func() {
-			Expect(GetReference(ComponentCalicoNode, "quay.io/", "", "", nil)).To(Equal("quay.io/calico/node:" + ComponentCalicoNode.Version))
-		})
-		It("should render a tigera image correctly", func() {
-			Expect(GetReference(ComponentTigeraNode, "quay.io/", "", "", nil)).To(Equal("quay.io/tigera/cnx-node:" + ComponentTigeraNode.Version))
-		})
-		It("should render an ECK image correctly", func() {
-			Expect(GetReference(ComponentElasticsearchOperator, "quay.io/", "", "", nil)).To(Equal("quay.io/tigera/eck-operator:" + ComponentElasticsearchOperator.Version))
-		})
-		It("should render an operator init image correctly", func() {
-			Expect(GetReference(ComponentOperatorInit, "gcr.io/", "", "", nil)).To(Equal("gcr.io/tigera/operator:" + ComponentOperatorInit.Version))
-		})
+		DescribeTable("should render",
+			func(c component, image string) {
+				Expect(GetReference(c, "quay.io/", "", "", nil)).To(Equal(fmt.Sprintf("%s%s:%s", "quay.io/", image, c.Version)))
+			},
+			Entry("a calico image correctly", ComponentCalicoNode, "calico/node"),
+			Entry("a tigera image correctly", ComponentTigeraNode, "tigera/cnx-node"),
+			Entry("an ECK image correctly", ComponentElasticsearchOperator, "tigera/eck-operator"),
+			Entry("an operator init image correctly", ComponentOperatorInit, "tigera/operator"),
+			Entry("a CSR init image correctly", ComponentCSRInitContainer, "tigera/key-cert-provisioner"),
+		)
 	})
 
 	Context("image prefix override", func() {
-		It("should render a calico image correctly", func() {
-			Expect(GetReference(ComponentCalicoNode, "quay.io/", "", "pref", nil)).To(Equal("quay.io/calico/prefnode:" + ComponentCalicoNode.Version))
-		})
-		It("should render a tigera image correctly", func() {
-			Expect(GetReference(ComponentTigeraNode, "quay.io/", "", "pref", nil)).To(Equal("quay.io/tigera/prefcnx-node:" + ComponentTigeraNode.Version))
-		})
-		It("should render an ECK image correctly", func() {
-			Expect(GetReference(ComponentElasticsearchOperator, "quay.io/", "", "pref", nil)).To(Equal("quay.io/tigera/prefeck-operator:" + ComponentElasticsearchOperator.Version))
-		})
-		It("should render an operator init image correctly", func() {
-			Expect(GetReference(ComponentOperatorInit, "gcr.io/", "", "pref", nil)).To(Equal("gcr.io/tigera/prefoperator:" + ComponentOperatorInit.Version))
-		})
-		It("should render a calico image with UseDefault", func() {
-			Expect(GetReference(ComponentCalicoNode, "gcr.io/", "", "UseDefault", nil)).To(Equal("gcr.io/calico/node:" + ComponentCalicoNode.Version))
-		})
+		DescribeTable("should render",
+			func(c component, image string) {
+				Expect(GetReference(c, "quay.io/", "", "pref", nil)).To(Equal(fmt.Sprintf("quay.io/%s:%s", image, c.Version)))
+			},
+			Entry("a calico image correctly", ComponentCalicoNode, "calico/prefnode"),
+			Entry("a tigera image correctly", ComponentTigeraNode, "tigera/prefcnx-node"),
+			Entry("an ECK image correctly", ComponentElasticsearchOperator, "tigera/prefeck-operator"),
+			Entry("an operator init image correctly", ComponentOperatorInit, "tigera/prefoperator"),
+			Entry("a CSR init image correctly", ComponentCSRInitContainer, "tigera/prefkey-cert-provisioner"),
+		)
 	})
 
 	Context("imagepath override", func() {
-		It("should render a calico image correctly", func() {
-			Expect(GetReference(ComponentCalicoNode, "", "userpath", "", nil)).To(Equal("docker.io/userpath/node:" + ComponentCalicoNode.Version))
-		})
-		It("should render a tigera image correctly", func() {
-			Expect(GetReference(ComponentTigeraNode, "", "userpath", "", nil)).To(Equal(TigeraRegistry + "userpath/cnx-node:" + ComponentTigeraNode.Version))
-		})
-		It("should render an ECK image correctly", func() {
-			Expect(GetReference(ComponentElasticsearchOperator, "", "userpath", "", nil)).To(Equal("quay.io/userpath/eck-operator:" + ComponentElasticsearchOperator.Version))
-		})
-		It("should render an operator init image correctly", func() {
-			Expect(GetReference(ComponentOperatorInit, "", "userpath", "", nil)).To(Equal(InitRegistry + "userpath/operator:" + ComponentOperatorInit.Version))
-		})
+		DescribeTable("should render",
+			func(c component, registry, image string) {
+				Expect(GetReference(c, "", "userpath", "", nil)).To(Equal(fmt.Sprintf("%s%s:%s", registry, image, c.Version)))
+			},
+			Entry("a calico image correctly", ComponentCalicoNode, CalicoRegistry, "userpath/node"),
+			Entry("a tigera image correctly", ComponentTigeraNode, TigeraRegistry, "userpath/cnx-node"),
+			Entry("an ECK image correctly", ComponentElasticsearchOperator, TigeraRegistry, "userpath/eck-operator"),
+			Entry("an operator init image correctly", ComponentOperatorInit, InitRegistry, "userpath/operator"),
+			Entry("a CSR init image correctly", ComponentCSRInitContainer, CSRInitRegistry, "userpath/key-cert-provisioner"),
+		)
 	})
 	Context("registry and imagepath override", func() {
-		It("should render a calico image correctly", func() {
-			Expect(GetReference(ComponentCalicoNode, "quay.io/extra/", "userpath", "", nil)).To(Equal("quay.io/extra/userpath/node:" + ComponentCalicoNode.Version))
-		})
-		It("should render a tigera image correctly", func() {
-			Expect(GetReference(ComponentTigeraNode, "quay.io/extra/", "userpath", "", nil)).To(Equal("quay.io/extra/userpath/cnx-node:" + ComponentTigeraNode.Version))
-		})
-		It("should render an ECK image correctly", func() {
-			Expect(GetReference(ComponentElasticsearchOperator, "quay.io/extra/", "userpath", "", nil)).To(Equal("quay.io/extra/userpath/eck-operator:" + ComponentElasticsearchOperator.Version))
-		})
-		It("should render an operator init image correctly", func() {
-			Expect(GetReference(ComponentOperatorInit, "gcr.io/extra/", "userpath", "", nil)).To(Equal("gcr.io/extra/userpath/operator:" + ComponentOperatorInit.Version))
-		})
+		DescribeTable("should render",
+			func(c component, image string) {
+				Expect(GetReference(c, "quay.io/extra/", "userpath", "", nil)).To(Equal(fmt.Sprintf("quay.io/extra/%s:%s", image, c.Version)))
+			},
+			Entry("a calico image correctly", ComponentCalicoNode, "userpath/node"),
+			Entry("a tigera image correctly", ComponentTigeraNode, "userpath/cnx-node"),
+			Entry("an ECK image correctly", ComponentElasticsearchOperator, "userpath/eck-operator"),
+			Entry("an operator init image correctly", ComponentOperatorInit, "userpath/operator"),
+			Entry("a CSR init image correctly", ComponentCSRInitContainer, "userpath/key-cert-provisioner"),
+		)
 	})
 	Context("with an ImageSet", func() {
-		is := &op.ImageSet{
-			Spec: op.ImageSetSpec{
-				Images: []op.Image{
-					{Image: "calico/node", Digest: "sha256:caliconodehash"},
-					{Image: "tigera/cnx-node", Digest: "sha256:tigeracnxnodehash"},
-					{Image: "tigera/eck-operator", Digest: "sha256:eckeckoperatorhash"},
-					{Image: "tigera/operator", Digest: "sha256:tigeraoperatorhash"},
-				},
+		DescribeTable("should render",
+			func(c component, image, hash string) {
+				is := &op.ImageSet{
+					Spec: op.ImageSetSpec{
+						Images: []op.Image{
+							{Image: "calico/node", Digest: "sha256:caliconodehash"},
+							{Image: "tigera/cnx-node", Digest: "sha256:tigeracnxnodehash"},
+							{Image: "tigera/eck-operator", Digest: "sha256:eckeckoperatorhash"},
+							{Image: "tigera/operator", Digest: "sha256:tigeraoperatorhash"},
+							{Image: "tigera/key-cert-provisioner", Digest: "sha256:tigerakeycertprovisionerhash"},
+						},
+					},
+				}
+				Expect(GetReference(c, "quay.io/extra/", "userpath", "", is)).To(Equal(fmt.Sprintf("quay.io/extra/%s%s", image, hash)))
 			},
-		}
-		It("should render a calico image correctly", func() {
-			Expect(GetReference(ComponentCalicoNode, "quay.io/extra/", "userpath", "", is)).To(Equal("quay.io/extra/userpath/node@sha256:caliconodehash"))
-		})
-		It("should render a tigera image correctly", func() {
-			Expect(GetReference(ComponentTigeraNode, "quay.io/extra/", "userpath", "", is)).To(Equal("quay.io/extra/userpath/cnx-node@sha256:tigeracnxnodehash"))
-		})
-		It("should render an ECK image correctly", func() {
-			Expect(GetReference(ComponentElasticsearchOperator, "quay.io/extra/", "userpath", "", is)).To(Equal("quay.io/extra/userpath/eck-operator@sha256:eckeckoperatorhash"))
-		})
-		It("should render an operator init image correctly", func() {
-			Expect(GetReference(ComponentOperatorInit, "gcr.io/extra/", "userpath", "", is)).To(Equal("gcr.io/extra/userpath/operator@sha256:tigeraoperatorhash"))
-		})
+			Entry("a calico image correctly", ComponentCalicoNode, "userpath/node", "@sha256:caliconodehash"),
+			Entry("a tigera image correctly", ComponentTigeraNode, "userpath/cnx-node", "@sha256:tigeracnxnodehash"),
+			Entry("an ECK image correctly", ComponentElasticsearchOperator, "userpath/eck-operator", "@sha256:eckeckoperatorhash"),
+			Entry("an operator init image correctly", ComponentOperatorInit, "userpath/operator", "@sha256:tigeraoperatorhash"),
+			Entry("a CSR init image correctly", ComponentCSRInitContainer, "userpath/key-cert-provisioner", "@sha256:tigerakeycertprovisionerhash"),
+		)
 	})
 })

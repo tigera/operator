@@ -211,15 +211,16 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	ch := utils.NewComponentHandler(log, r.Client, r.Scheme, managementClusterConnection)
-	component := render.Guardian(
-		managementClusterConnection.Spec.ManagementClusterAddr,
-		pullSecrets,
-		r.Provider == operatorv1.ProviderOpenShift,
-		instl,
-		tunnelSecret,
-		packetCaptureServerCertSecret,
-		prometheusCertSecret,
-	)
+	guardianCfg := &render.GuardianConfiguration{
+		URL:                  managementClusterConnection.Spec.ManagementClusterAddr,
+		PullSecrets:          pullSecrets,
+		Openshift:            r.Provider == operatorv1.ProviderOpenShift,
+		Installation:         instl,
+		TunnelSecret:         tunnelSecret,
+		PacketCaptureSecret:  packetCaptureServerCertSecret,
+		PrometheusCertSecret: prometheusCertSecret,
+	}
+	component := render.Guardian(guardianCfg)
 
 	if err = imageset.ApplyImageSet(ctx, r.Client, variant, component); err != nil {
 		log.Error(err, "Error with images from ImageSet")

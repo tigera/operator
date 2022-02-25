@@ -58,32 +58,20 @@ var _ = Describe("Rendering tests", func() {
 				"tls.key": []byte("bar"),
 			},
 		}
-		prometheusSecret := &corev1.Secret{
-			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.PrometheusTLSSecretName,
-				Namespace: common.OperatorNamespace(),
-			},
-			Data: map[string][]byte{
-				"tls.crt": []byte("foo"),
-				"tls.key": []byte("bar"),
-			},
-		}
-		g = render.Guardian(
-			addr,
-			[]*corev1.Secret{{
+		cfg := &render.GuardianConfiguration{
+			URL: addr,
+			PullSecrets: []*corev1.Secret{{
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pull-secret",
 					Namespace: common.OperatorNamespace(),
 				},
 			}},
-			false,
-			&i,
-			secret,
-			packetCaptureSecret,
-			prometheusSecret,
-		)
+			Installation:        &i,
+			TunnelSecret:        secret,
+			PacketCaptureSecret: packetCaptureSecret,
+		}
+		g = render.Guardian(cfg)
 		Expect(g.ResolveImages(nil)).To(BeNil())
 		resources, _ = g.Objects()
 		return
@@ -114,7 +102,7 @@ var _ = Describe("Rendering tests", func() {
 			{name: render.ManagerServiceAccount, ns: render.ManagerNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: render.ManagerClusterRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: render.ManagerClusterRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: render.PrometheusTLSSecretName, ns: render.GuardianNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: render.ManagerUserSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
 		}
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 		for i, expectedRes := range expectedResources {

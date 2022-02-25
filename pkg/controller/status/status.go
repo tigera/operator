@@ -106,9 +106,25 @@ type statusManager struct {
 	// if there are any, and report statuses based on the state of those resources.
 	readyToMonitor bool
 	hasSynced      bool
+
+	// crExists tracks whether the status manager believes the CR to exist or not. It's used
+	// to determine whether we need to call Delete() on the object, without sending unnecessary
+	// get/delete calls to the API server.
+	crExists bool
 }
 
 func New(client client.Client, component string, kubernetesVersion *common.VersionInfo) StatusManager {
+	// Best-effort initialization of CR status by checking for its existence.
+	crExists := true
+	ts := &operator.TigeraStatus{}
+	err := client.Get(context.TODO(), types.NamespacedName{Name: component}, ts)
+	if err != nil && errors.IsNotFound(err) {
+		// CR doesn't exist. If we hit any other type of error, we'll assume the CR does
+		// exist. This may result in one unnecessary delete call if the resource in fact doesn't exist,
+		// but we can't assume the object has been deleted without hard evidence.
+		crExists = false
+	}
+
 	return &statusManager{
 		client:                    client,
 		component:                 component,
@@ -119,6 +135,7 @@ func New(client client.Client, component string, kubernetesVersion *common.Versi
 		certificatestatusrequests: make(map[string]map[string]string),
 		windowsNodeUpgrades:       newWindowsNodeUpgrades(),
 		kubernetesVersion:         kubernetesVersion,
+		crExists:                  crExists,
 	}
 }
 
@@ -128,9 +145,13 @@ func (m *statusManager) updateStatus() {
 		return
 	}
 
-	if m.removeTigeraStatus() {
+	if m.enabled != nil && !*m.enabled {
+		// This status manager is explicitly disabled, because the controller has called OnCRNotFound.
+		// Remove any TigeraStatus object that had previously been created, and skip updating the status.
+		m.removeTigeraStatus()
 		return
 	}
+	// This status manager is enabled. Perform a sync.
 
 	// Unless we've been given an explicit degraded reason we are not ready to start reporting statuses until
 	// ReadyToMonitor has been called by the owner of the status manager. This means there's no point in syncing
@@ -564,19 +585,24 @@ func (m *statusManager) isInitialized() bool {
 	return m.enabled != nil
 }
 
-// removeTigeraStatus returns true and removes the status displayed in TigeraStatus if corresponding CR not found
-func (m *statusManager) removeTigeraStatus() bool {
+// removeTigeraStatus removes the TigeraStatus object controlled by this status manager, if it exists.
+func (m *statusManager) removeTigeraStatus() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	if m.enabled != nil && !*m.enabled {
-		ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: m.component}}
-		err := m.client.Delete(context.TODO(), ts)
-		if err != nil && !errors.IsNotFound(err) {
-			log.WithValues("reason", err).Info("Failed to remove TigeraStatus", "component", m.component)
-		}
-		return true
+	if !m.crExists {
+		// No CR to delete, so short-circuit.
+		return
 	}
-	return false
+
+	// Status manager is explicitly disabled. Delete the TigeraStatus CR if it exists.
+	ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: m.component}}
+	err := m.client.Delete(context.TODO(), ts)
+	if err != nil && !errors.IsNotFound(err) {
+		log.WithValues("reason", err).Info("Failed to remove TigeraStatus", "component", m.component)
+	} else {
+		// CR no longer exists.
+		m.crExists = false
+	}
 }
 
 // podsFailing takes a selector and returns if any of the pods that match it are failing. Failing pods are defined
@@ -687,6 +713,7 @@ func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondi
 			}
 		}
 	}
+	m.crExists = true
 }
 
 func (m *statusManager) setAvailable(reason, msg string) {

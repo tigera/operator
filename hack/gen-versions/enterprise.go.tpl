@@ -82,6 +82,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "eck-elasticsearch-operator" }}
+	ComponentECKElasticsearchOperator = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "elasticsearch-operator" }}
 	ComponentElasticsearchOperator = component{
 		Version: "{{ .Version }}",
@@ -172,6 +178,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "coreos-prometheus" }}
+	ComponentCoreOSPrometheus = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "prometheus" }}
 	ComponentPrometheus = component{
 		Version: "{{ .Version }}",
@@ -180,6 +192,12 @@ var (
 {{- end }}
 {{ with index .Components "tigera-prometheus-service" }}
 	ComponentTigeraPrometheusService = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
+{{ with index .Components "coreos-alertmanager" }}
+	ComponentCoreOSAlertmanager = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
@@ -250,6 +268,7 @@ var (
 		ComponentEckKibana,
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,
+		ComponentECKElasticsearchOperator,
 		ComponentElasticsearchOperator,
 		ComponentEsCurator,
 		ComponentEsProxy,
@@ -264,8 +283,10 @@ var (
 		ComponentPacketCapture,
 		ComponentL7Collector,
 		ComponentEnvoyProxy,
+		ComponentCoreOSPrometheus,
 		ComponentPrometheus,
 		ComponentTigeraPrometheusService,
+		ComponentCoreOSAlertmanager,
 		ComponentPrometheusAlertmanager,
 		ComponentQueryServer,
 		ComponentTigeraKubeControllers,

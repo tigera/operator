@@ -144,7 +144,7 @@ func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
 func (c *typhaComponent) typhaPodDisruptionBudget() *policyv1.PodDisruptionBudget {
 	maxUnavailable := intstr.FromInt(1)
 	return &policyv1.PodDisruptionBudget{
-		TypeMeta: metav1.TypeMeta{Kind: "PodDisruptionBudget", APIVersion: "policy/v1beta1"},
+		TypeMeta: metav1.TypeMeta{Kind: "PodDisruptionBudget", APIVersion: "policy/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      common.TyphaDeploymentName,
 			Namespace: common.CalicoNamespace,

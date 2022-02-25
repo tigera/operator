@@ -1391,52 +1391,35 @@ func (r *ReconcileInstallation) SetDegraded(reason string, err error, log logr.L
 func GetOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certificatemanagement.CertificateManager) (*render.TyphaNodeTLS, error) {
 	// accumulate all the error messages so all problems with the certs
 	// and CA are reported.
-	errMsgs := []string{}
-	configMap, err := validateTyphaCAConfigMap(cli)
-	if err != nil {
-		errMsgs = append(errMsgs, fmt.Sprintf("CA for Typha is invalid: %s", err))
-	}
+	var errMsgs []string
 	getKeyPair := func(secretName, commonName string) (keyPair certificatemanagement.KeyPair, cn string, uriSAN string) {
-		keyPair, err = certificateManager.GetKeyPair(cli, secretName, common.OperatorNamespace())
-		if keyPair == nil {
-			keyPair, err = certificateManager.GetOrCreateKeyPair(cli, secretName, common.OperatorNamespace(), []string{commonName})
-			if err != nil {
-				errMsgs = append(errMsgs, err.Error())
-			}
-		} else if err != nil {
-			errMsgs = append(errMsgs, fmt.Sprintf("CertPair for %s is invalid: %v", secretName, err))
+		keyPair, err := certificateManager.GetOrCreateKeyPair(cli, secretName, common.OperatorNamespace(), []string{commonName})
+		if err != nil {
+			errMsgs = append(errMsgs, err.Error())
 		} else {
 			data := keyPair.Secret(common.OperatorNamespace()).Data
 			if data != nil {
 				cn, uriSAN = string(data[render.CommonName]), string(data[render.URISAN])
 			}
-		}
-		if !keyPair.BYO() {
-			cn = commonName
-		} else if cn == "" && uriSAN == "" {
-			errMsgs = append(errMsgs, fmt.Sprintf("CertPair for %s does not contain common-name or uri-san", secretName))
+			if !keyPair.BYO() {
+				cn = commonName
+			}
 		}
 		return
 	}
 	node, nodeCommonName, nodeURISAN := getKeyPair(render.NodeTLSSecretName, render.FelixCommonName)
 	typha, typhaCommonName, typhaURISAN := getKeyPair(render.TyphaTLSSecretName, render.TyphaCommonName)
-
-	// CA, typha, and node are all not set
-	allOperatorProvided := configMap == nil && !typha.BYO() && !node.BYO()
-	// CA, typha, and node are all are set
-	allUserProvided := configMap != nil && typha.BYO() && node.BYO()
-	// All CA, typha, and node must be set or not set.
-	if !(allUserProvided || allOperatorProvided) {
-		errMsgs = append(errMsgs, fmt.Sprintf("Typha-Node CA and Secrets should all be set or none set: configMap(%t) typha(%t) node(%t)", configMap != nil, typha != nil, node != nil))
-		errMsgs = append(errMsgs, "If not providing custom CA and certs, feel free to remove them from the operator namespace, they will be recreated")
-	}
-
 	trustedBundle := certificatemanagement.CreateTrustedBundle(certificateManager, node, typha)
-	if configMap != nil {
-		// TODO: We could make sure both TLS Secrets were signed by the CA
-		trustedBundle.AddPEM(render.TyphaCAConfigMapName, []byte(configMap.Data[render.TyphaCABundleName]))
+	configMap, err := getConfigMap(cli, render.TyphaCAConfigMapName)
+	if err != nil {
+		errMsgs = append(errMsgs, fmt.Sprintf("CA for Typha is invalid: %s", err))
+	} else if configMap != nil {
+		if len(configMap.Data[render.TyphaCABundleName]) == 0 {
+			errMsgs = append(errMsgs, fmt.Sprintf("ConfigMap %q does not have a field named %q", render.TyphaCAConfigMapName, render.TyphaCABundleName))
+		} else {
+			trustedBundle.AddPEM(render.TyphaCAConfigMapName, []byte(configMap.Data[render.TyphaCABundleName]))
+		}
 	}
-
 	if len(errMsgs) != 0 {
 		return nil, fmt.Errorf(strings.Join(errMsgs, ";"))
 	}
@@ -1449,34 +1432,6 @@ func GetOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 		NodeCommonName:  nodeCommonName,
 		NodeURISAN:      nodeURISAN,
 	}, nil
-}
-
-// validateTyphaCAConfigMap reads the Typha CA config map from the Operator
-// namespace and validates that it has a CA Bundle. It returns the validated
-// ConfigMap or an error.
-func validateTyphaCAConfigMap(cli client.Client) (*corev1.ConfigMap, error) {
-	cm := &corev1.ConfigMap{}
-	cmNamespacedName := types.NamespacedName{
-		Name:      render.TyphaCAConfigMapName,
-		Namespace: common.OperatorNamespace(),
-	}
-	err := cli.Get(context.Background(), cmNamespacedName, cm)
-	if err != nil {
-		// If the reason for the error is not found then that is acceptable
-		// so return valid in that case.
-		statErr, ok := err.(*apierrors.StatusError)
-		if ok && statErr.ErrStatus.Reason == metav1.StatusReasonNotFound {
-			return nil, nil
-		} else {
-			return nil, fmt.Errorf("Failed to read configmap %q from datastore: %s", render.TyphaCAConfigMapName, err)
-		}
-	}
-
-	if val, ok := cm.Data[render.TyphaCABundleName]; !ok || len(val) == 0 {
-		return nil, fmt.Errorf("ConfigMap %q does not have a field named %q", render.TyphaCAConfigMapName, render.TyphaCABundleName)
-	}
-
-	return cm, nil
 }
 
 // setDefaultOnFelixConfiguration will take the passed in fc and add any defaulting needed

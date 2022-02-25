@@ -17,8 +17,6 @@ package apiserver
 import (
 	"context"
 	"fmt"
-	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
-	"github.com/tigera/operator/pkg/render/component"
 	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -30,7 +28,9 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/component"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	"k8s.io/apimachinery/pkg/api/errors"

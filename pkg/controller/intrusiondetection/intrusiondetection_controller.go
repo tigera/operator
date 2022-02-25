@@ -17,8 +17,9 @@ package intrusiondetection
 import (
 	"context"
 	"fmt"
-	"github.com/tigera/operator/pkg/render/component"
 	"time"
+
+	"github.com/tigera/operator/pkg/render/component"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"

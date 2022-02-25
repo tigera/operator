@@ -1742,7 +1742,7 @@ func getAutodetectionMethod(ad *operatorv1.NodeAddressAutodetection) string {
 	return ""
 }
 
-// GetIPv4Pool returns the IPv4 IPPool in an instalation, or nil if one can't be found.
+// GetIPv4Pool returns the IPv4 IPPool in an installation, or nil if one can't be found.
 func GetIPv4Pool(pools []operatorv1.IPPool) *operatorv1.IPPool {
 	for ii, pool := range pools {
 		addr, _, err := net.ParseCIDR(pool.CIDR)
@@ -1756,7 +1756,7 @@ func GetIPv4Pool(pools []operatorv1.IPPool) *operatorv1.IPPool {
 	return nil
 }
 
-// GetIPv6Pool returns the IPv6 IPPool in an instalation, or nil if one can't be found.
+// GetIPv6Pool returns the IPv6 IPPool in an installation, or nil if one can't be found.
 func GetIPv6Pool(pools []operatorv1.IPPool) *operatorv1.IPPool {
 	for ii, pool := range pools {
 		addr, _, err := net.ParseCIDR(pool.CIDR)

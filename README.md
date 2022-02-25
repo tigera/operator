@@ -34,7 +34,7 @@ This graph shows the dependencies between controllers. Optional dependencies are
 
 When developing in the operator, there are a few design principles to be aware of.
 
-- API changes should be rare occurences, and the API should contain as little as possible. Use auto-detection
+- API changes should be rare occurrences, and the API should contain as little as possible. Use auto-detection
   or automation wherever possible to reduce the API surface.
 - Each "component" should receive its own CRD, namespace, controller, and status manager. e.g., compliance, networking, apiserver.
 - Controllers interact with each other through the Kubernetes API. For example, by updating status on relevant objects.

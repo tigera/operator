@@ -664,7 +664,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	// completed, SELinux is also enabled on the node, and Kubernetes/kubelet is using the Docker runtime.
 	//
 	// When SELinux is enabled, SELinux policy only allows a container to read a file/folder when their
-	// SELinux labels match or when the mounts are configured to be shared among mutliple containers (the
+	// SELinux labels match or when the mounts are configured to be shared among multiple containers (the
 	// latter isn't used by Kubernetes). These SELinux labels are managed by the container runtime.
 	// This assignement of SELinux labels and relabelling of files/folders happen when the container is started.
 	// The container runtime also assigns the same SELinux labels to containers created within the same sandbox.

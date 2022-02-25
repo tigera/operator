@@ -942,7 +942,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 		})
 		Context("Node selection", func() {
 			When("NodeSets is set but empty", func() {
-				It("returns the defualt NodeSet", func() {
+				It("returns the default NodeSet", func() {
 					cfg.LogStorage.Spec.Nodes = &operatorv1.Nodes{
 						Count:    2,
 						NodeSets: []operatorv1.NodeSet{},

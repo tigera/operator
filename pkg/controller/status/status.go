@@ -46,8 +46,8 @@ var log = logf.Log.WithName("status_manager")
 // component's current status:
 //
 // - Available: The component is successfully running. All pods launched by the component are healthy.
-//              An upgrade may or may not be occuring.
-// - Progressing: A state change is occuring. It may be that the component is being installed for the
+//              An upgrade may or may not be occurring.
+// - Progressing: A state change is occurring. It may be that the component is being installed for the
 //                first time, or being upgraded to a new configuration or version.
 // - Degraded: The component is not running the desired state and is not progressing towards it. Either the
 //             component has not been installed, has been updated with invalid configuration, or has crashed.
@@ -223,7 +223,7 @@ func (m *statusManager) Run(ctx context.Context) {
 //
 // If there are no resources to monitor, then by default this component is available (all 0 resources for this component
 // are healthy). One caveat to the default when there are no resources to monitor is if the component has a degraded
-// status explicitely set.
+// status explicitly set.
 func (m *statusManager) ReadyToMonitor() {
 	m.lock.Lock()
 	defer m.lock.Unlock()

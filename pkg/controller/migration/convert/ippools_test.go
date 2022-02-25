@@ -346,7 +346,7 @@ var _ = Describe("Convert network tests", func() {
 				BlockSize:     int32Ptr(24),
 				NodeSelector:  "nodeselectorstring",
 			}),
-			Entry("ipv4, no encap, nat, block 27, differnt nodeselector", true, crdv1.IPPool{Spec: crdv1.IPPoolSpec{
+			Entry("ipv4, no encap, nat, block 27, different nodeselector", true, crdv1.IPPool{Spec: crdv1.IPPoolSpec{
 				CIDR:         "1.168.4.0/24",
 				VXLANMode:    crdv1.VXLANModeNever,
 				IPIPMode:     crdv1.IPIPModeNever,

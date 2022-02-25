@@ -113,7 +113,7 @@ func Manager(cfg *ManagerConfiguration) (Component, error) {
 	if cfg.ManagementCluster != nil {
 		// Copy tunnelSecret and internalTrafficSecret to TLS secrets
 		// tunnelSecret contains the ca cert to generate guardian certificates
-		// internalTrafficCert containts the cert used to communicated within the management K8S cluster
+		// internalTrafficCert contains the cert used to communicated within the management K8S cluster
 		tlsSecrets = append(tlsSecrets, secret.CopyToNamespace(ManagerNamespace, cfg.TunnelSecret)...)
 		tlsSecrets = append(tlsSecrets, secret.CopyToNamespace(ManagerNamespace, cfg.InternalTrafficSecret)...)
 		tlsAnnotations[voltronTunnelHashAnnotation] = rmeta.AnnotationHash(cfg.TunnelSecret.Data)

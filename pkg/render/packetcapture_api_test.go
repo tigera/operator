@@ -65,14 +65,13 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 
 	// Rendering packet capture resources
 	var renderPacketCapture = func(i operatorv1.InstallationSpec, config authentication.KeyValidatorConfig) (resources []client.Object) {
-		var pc = render.PacketCaptureAPI(
-			pullSecrets,
-			false,
-			&i,
-			config,
-			secret,
-			"",
-		)
+		cfg := &render.PacketCaptureApiConfiguration{
+			PullSecrets:        pullSecrets,
+			Installation:       &i,
+			KeyValidatorConfig: config,
+			ServerCertSecret:   secret,
+		}
+		var pc = render.PacketCaptureAPI(cfg)
 		Expect(pc.ResolveImages(nil)).To(BeNil())
 		resources, _ = pc.Objects()
 		return resources
@@ -300,8 +299,8 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 				Verbs:     []string{"create"},
 			},
 			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"authenticationreviews"},
+				APIGroups: []string{"authentication.k8s.io"},
+				Resources: []string{"tokenreviews"},
 				Verbs:     []string{"create"},
 			},
 			{

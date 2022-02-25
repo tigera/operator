@@ -12,14 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package components
+package common
 
-var (
-	ComponentCSRInitContainer = component{
-		Version: "v1.1.1",
-		Image:   "tigera/key-cert-provisioner",
-	}
-	CommonComponents = []component{
-		ComponentCSRInitContainer,
-	}
+import (
+	"os"
+
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 )
+
+var _ = Describe("Operator ServiceAccount name tests", func() {
+	It("should read service account name from the environment variable", func() {
+		Expect(os.Setenv("OPERATOR_SERVICEACCOUNT", "tigera-operator-env-var")).NotTo(HaveOccurred())
+		Expect(getServiceAccount()).To(Equal("tigera-operator-env-var"))
+		Expect(os.Unsetenv("OPERATOR_SERVICEACCOUNT")).NotTo(HaveOccurred())
+	})
+})

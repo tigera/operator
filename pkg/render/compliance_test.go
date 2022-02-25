@@ -35,13 +35,25 @@ var _ = Describe("compliance rendering tests", func() {
 	rbac := "rbac.authorization.k8s.io"
 	clusterDomain := dns.DefaultClusterDomain
 	complianceServerCertSecret := rtest.CreateCertSecret(render.ComplianceServerCertSecret, common.OperatorNamespace())
+	var cfg *render.ComplianceConfiguration
+
+	BeforeEach(func() {
+		cfg = &render.ComplianceConfiguration{
+			Installation: &operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderNone,
+				Registry:           "testregistry.com/",
+			},
+			ComplianceServerCertSecret: complianceServerCertSecret,
+			ESClusterConfig:            relasticsearch.NewClusterConfig("cluster", 1, 1, 1),
+			Openshift:                  notOpenshift,
+			ClusterDomain:              clusterDomain,
+		}
+	})
 
 	Context("Standalone cluster", func() {
 		It("should render all resources for a default configuration", func() {
-			component, err := render.Compliance(nil, nil, &operatorv1.InstallationSpec{
-				KubernetesProvider: operatorv1.ProviderNone,
-				Registry:           "testregistry.com/",
-			}, complianceServerCertSecret, relasticsearch.NewClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, nil, nil, clusterDomain, false)
+
+			component, err := render.Compliance(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 
@@ -77,7 +89,6 @@ var _ = Describe("compliance rendering tests", func() {
 				{"cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
-				{render.ComplianceServerCertSecret, "tigera-operator", "", "v1", "Secret"},
 				{render.ComplianceServerCertSecret, "tigera-compliance", "", "v1", "Secret"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
 				{"compliance", ns, "", "v1", "Service"},
@@ -113,6 +124,11 @@ var _ = Describe("compliance rendering tests", func() {
 					Verbs:     []string{"create"},
 				},
 				{
+					APIGroups: []string{"authentication.k8s.io"},
+					Resources: []string{"tokenreviews"},
+					Verbs:     []string{"create"},
+				},
+				{
 					APIGroups:     []string{"policy"},
 					Resources:     []string{"podsecuritypolicies"},
 					Verbs:         []string{"use"},
@@ -135,11 +151,9 @@ var _ = Describe("compliance rendering tests", func() {
 
 	Context("Management cluster", func() {
 		It("should render all resources for a default configuration", func() {
-			component, err := render.Compliance(nil, &testutils.InternalManagerTLSSecret,
-				&operatorv1.InstallationSpec{
-					KubernetesProvider: operatorv1.ProviderNone,
-					Registry:           "testregistry.com/",
-				}, complianceServerCertSecret, relasticsearch.NewClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, &operatorv1.ManagementCluster{}, nil, nil, clusterDomain, false)
+			cfg.ManagerInternalTLSSecret = &testutils.InternalManagerTLSSecret
+			cfg.ManagementCluster = &operatorv1.ManagementCluster{}
+			component, err := render.Compliance(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 
@@ -176,7 +190,6 @@ var _ = Describe("compliance rendering tests", func() {
 				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
 				{render.ManagerInternalTLSSecretName, "tigera-compliance", "", "v1", "Secret"},
-				{render.ComplianceServerCertSecret, "tigera-operator", "", "v1", "Secret"},
 				{render.ComplianceServerCertSecret, "tigera-compliance", "", "v1", "Secret"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
 				{"compliance", ns, "", "v1", "Service"},
@@ -199,8 +212,26 @@ var _ = Describe("compliance rendering tests", func() {
 			rtest.ExpectGlobalReportType(rtest.GetResource(resources, "policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"), "policy-audit")
 			rtest.ExpectGlobalReportType(rtest.GetResource(resources, "cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"), "cis-benchmark")
 
-			var dpComplianceServer = rtest.GetResource(resources, "compliance-server", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			dpComplianceServer := rtest.GetResource(resources, "compliance-server", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			complianceController := rtest.GetResource(resources, "compliance-controller", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			complianceSnapshotter := rtest.GetResource(resources, "compliance-snapshotter", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			complianceBenchmarker := rtest.GetResource(resources, "compliance-benchmarker", ns, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 
+			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
+				corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
+			))
+			Expect(complianceController.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
+				corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
+			))
+			Expect(complianceSnapshotter.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
+				corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
+			))
+			Expect(complianceBenchmarker.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
+				corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
+			))
+			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
+				corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
+			))
 			Expect(len(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("tls"))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/code/apiserver.local.config/certificates"))
@@ -230,8 +261,8 @@ var _ = Describe("compliance rendering tests", func() {
 					Verbs:     []string{"create"},
 				},
 				{
-					APIGroups: []string{"projectcalico.org"},
-					Resources: []string{"authenticationreviews"},
+					APIGroups: []string{"authentication.k8s.io"},
+					Resources: []string{"tokenreviews"},
 					Verbs:     []string{"create"},
 				},
 				{
@@ -246,10 +277,8 @@ var _ = Describe("compliance rendering tests", func() {
 
 	Context("ManagedCluster", func() {
 		It("should render all resources for a default configuration", func() {
-			component, err := render.Compliance(nil, nil, &operatorv1.InstallationSpec{
-				KubernetesProvider: operatorv1.ProviderNone,
-				Registry:           "testregistry.com/",
-			}, complianceServerCertSecret, relasticsearch.NewClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, &operatorv1.ManagementClusterConnection{}, nil, clusterDomain, false)
+			cfg.ManagementClusterConnection = &operatorv1.ManagementClusterConnection{}
+			component, err := render.Compliance(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 
@@ -325,7 +354,8 @@ var _ = Describe("compliance rendering tests", func() {
 
 	Describe("node selection & affinity", func() {
 		var renderCompliance = func(i *operatorv1.InstallationSpec) (server, controller, snapshotter *appsv1.Deployment, reporter *corev1.PodTemplate, benchmarker *appsv1.DaemonSet) {
-			component, err := render.Compliance(nil, nil, i, complianceServerCertSecret, relasticsearch.NewClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, nil, nil, clusterDomain, false)
+			cfg.Installation = i
+			component, err := render.Compliance(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 			server = rtest.GetResource(resources, "compliance-server", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -364,11 +394,8 @@ var _ = Describe("compliance rendering tests", func() {
 
 	Context("Certificate management enabled", func() {
 		It("should render init containers and volume changes", func() {
-			component, err := render.Compliance(nil, nil, &operatorv1.InstallationSpec{
-				KubernetesProvider:    operatorv1.ProviderNone,
-				Registry:              "testregistry.com/",
-				CertificateManagement: &operatorv1.CertificateManagement{},
-			}, complianceServerCertSecret, relasticsearch.NewClusterConfig("cluster", 1, 1, 1), nil, notOpenshift, nil, nil, nil, clusterDomain, false)
+			cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{}
+			component, err := render.Compliance(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 
@@ -404,7 +431,6 @@ var _ = Describe("compliance rendering tests", func() {
 				{"cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
-				{render.ComplianceServerCertSecret, "tigera-operator", "", "v1", "Secret"},
 				{render.ComplianceServerCertSecret, ns, "", "v1", "Secret"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
 				{"compliance", ns, "", "v1", "Service"},
@@ -428,4 +454,60 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(csrInitContainer.Name).To(Equal(render.CSRInitContainerName))
 		})
 	})
+
+	Context("Render Benchmarker", func() {
+
+		It("should render benchmarker properly for non GKE environments", func() {
+			cfg.Installation.KubernetesProvider = operatorv1.ProviderNone
+			component, err := render.Compliance(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+			resources, _ := component.Objects()
+
+			var dsBenchMarker = rtest.GetResource(resources, "compliance-benchmarker", ns, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+			volumeMounts := dsBenchMarker.Spec.Template.Spec.Containers[0].VolumeMounts
+
+			Expect(len(volumeMounts)).To(Equal(6))
+
+			Expect(volumeMounts[0].Name).To(Equal("var-lib-etcd"))
+			Expect(volumeMounts[0].MountPath).To(Equal("/var/lib/etcd"))
+			Expect(volumeMounts[1].Name).To(Equal("var-lib-kubelet"))
+			Expect(volumeMounts[1].MountPath).To(Equal("/var/lib/kubelet"))
+			Expect(volumeMounts[2].Name).To(Equal("etc-systemd"))
+			Expect(volumeMounts[2].MountPath).To(Equal("/etc/systemd"))
+			Expect(volumeMounts[3].Name).To(Equal("etc-kubernetes"))
+			Expect(volumeMounts[3].MountPath).To(Equal("/etc/kubernetes"))
+			Expect(volumeMounts[4].Name).To(Equal("usr-bin"))
+			Expect(volumeMounts[4].MountPath).To(Equal("/usr/local/bin"))
+			Expect(volumeMounts[5].Name).To(Equal("elastic-ca-cert-volume"))
+			Expect(volumeMounts[5].MountPath).To(Equal("/etc/ssl/elastic/"))
+		})
+
+		It("should render benchmarker properly for GKE environments", func() {
+			cfg.Installation.KubernetesProvider = operatorv1.ProviderGKE
+			component, err := render.Compliance(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+			resources, _ := component.Objects()
+
+			var dsBenchMarker = rtest.GetResource(resources, "compliance-benchmarker", ns, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+			volumeMounts := dsBenchMarker.Spec.Template.Spec.Containers[0].VolumeMounts
+
+			Expect(len(volumeMounts)).To(Equal(7))
+
+			Expect(volumeMounts[0].Name).To(Equal("var-lib-etcd"))
+			Expect(volumeMounts[0].MountPath).To(Equal("/var/lib/etcd"))
+			Expect(volumeMounts[1].Name).To(Equal("var-lib-kubelet"))
+			Expect(volumeMounts[1].MountPath).To(Equal("/var/lib/kubelet"))
+			Expect(volumeMounts[2].Name).To(Equal("etc-systemd"))
+			Expect(volumeMounts[2].MountPath).To(Equal("/etc/systemd"))
+			Expect(volumeMounts[3].Name).To(Equal("etc-kubernetes"))
+			Expect(volumeMounts[3].MountPath).To(Equal("/etc/kubernetes"))
+			Expect(volumeMounts[4].Name).To(Equal("usr-bin"))
+			Expect(volumeMounts[4].MountPath).To(Equal("/usr/local/bin"))
+			Expect(volumeMounts[5].Name).To(Equal("home-kubernetes"))
+			Expect(volumeMounts[5].MountPath).To(Equal("/home/kubernetes"))
+			Expect(volumeMounts[6].Name).To(Equal("elastic-ca-cert-volume"))
+			Expect(volumeMounts[6].MountPath).To(Equal("/etc/ssl/elastic/"))
+		})
+	})
+
 })

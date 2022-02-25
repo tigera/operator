@@ -200,10 +200,8 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	ns := rmeta.APIServerNamespace(variant)
 
 	// We need separate certificates for OSS vs Enterprise.
-	secretName := "calico-apiserver-certs"
-	if network.Variant == operatorv1.TigeraSecureEnterprise {
-		secretName = "tigera-apiserver-certs"
-	}
+	secretName := render.ProjectCalicoApiServerTLSSecretName(network.Variant)
+	operatorManagedApiserverSecret := true
 	var tlsSecret *v1.Secret
 	if network.CertificateManagement == nil {
 		// Check that if the apiserver cert pair secret exists that it is valid (has key and cert fields)
@@ -219,7 +217,20 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			r.status.SetDegraded("Error validating TLS certificate", err.Error())
 			return reconcile.Result{}, err
 		}
+
 		r.status.RemoveCertificateSigningRequests(ns)
+
+		svcDNSNames := dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(network.Variant), rmeta.APIServerNamespace(network.Variant), r.clusterDomain)
+		tlsSecret, operatorManagedApiserverSecret, err = utils.EnsureCertificateSecret(
+			secretName, tlsSecret, render.APIServerSecretKeyName, render.APIServerSecretCertName, rmeta.DefaultCertificateDuration, svcDNSNames...,
+		)
+
+		if err != nil {
+			log.Error(err, "Error ensuring TLS certificate exists and has valid DNS names")
+			r.status.SetDegraded("Error ensuring TLS certificate exists and has valid DNS names", err.Error())
+			return reconcile.Result{}, err
+		}
+
 	} else {
 		// Monitor pending CSRs for the TigeraStatus
 		r.status.AddCertificateSigningRequests(ns, map[string]string{"k8s-app": ns})
@@ -291,15 +302,31 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		r.status.SetDegraded("Error reading services endpoint configmap", err.Error())
 		return reconcile.Result{}, err
 	}
-
+	var components []render.Component
+	if tlsSecret != nil && operatorManagedApiserverSecret {
+		components = append(components, render.NewPassthrough(tlsSecret))
+	}
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
-	var components []render.Component
-	component, err := render.APIServer(k8sapi.Endpoint, network, false, managementCluster, managementClusterConnection, amazon, tlsSecret, pullSecrets, r.provider == operatorv1.ProviderOpenShift,
-		tunnelCASecret, r.clusterDomain)
+
+	apiServerCfg := render.APIServerConfiguration{
+		K8SServiceEndpoint:          k8sapi.Endpoint,
+		Installation:                network,
+		ForceHostNetwork:            false,
+		ManagementCluster:           managementCluster,
+		ManagementClusterConnection: managementClusterConnection,
+		AmazonCloudIntegration:      amazon,
+		TLSKeyPair:                  tlsSecret,
+		PullSecrets:                 pullSecrets,
+		Openshift:                   r.provider == operatorv1.ProviderOpenShift,
+		TunnelCASecret:              tunnelCASecret,
+		ClusterDomain:               r.clusterDomain,
+	}
+
+	component, err := render.APIServer(&apiServerCfg)
 	if err != nil {
 		log.Error(err, "Error rendering APIServer")
 		r.status.SetDegraded("Error rendering APIServer", err.Error())
@@ -310,7 +337,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	if variant == operatorv1.TigeraSecureEnterprise {
 
 		var packetCaptureCertSecret *v1.Secret
-		var renderSecret bool
+		operatorManagedPacketCaptureSecret := true
 		if network.CertificateManagement == nil {
 			packetCaptureCertSecret, err = utils.ValidateCertPair(r.client,
 				common.OperatorNamespace(),
@@ -328,11 +355,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			// has the expected DNS names. If the cert doesn't and the cert is managed by the
 			// operator, the cert is recreated and returned. If the invalid cert is supplied by
 			// the user, set the component degraded.
-
-			if packetCaptureCertSecret == nil {
-				renderSecret = true
-			}
-			packetCaptureCertSecret, err = utils.EnsureCertificateSecret(
+			packetCaptureCertSecret, operatorManagedPacketCaptureSecret, err = utils.EnsureCertificateSecret(
 				render.PacketCaptureCertSecret, packetCaptureCertSecret, v1.TLSPrivateKeyKey, v1.TLSCertKey, rmeta.DefaultCertificateDuration, dns.GetServiceDNSNames(render.PacketCaptureServiceName, render.PacketCaptureNamespace, r.clusterDomain)...,
 			)
 			if err != nil {
@@ -341,11 +364,10 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			}
 		} else {
 			packetCaptureCertSecret = render.CreateCertificateSecret(network.CertificateManagement.CACert, render.PacketCaptureCertSecret, common.OperatorNamespace())
-			renderSecret = true
 		}
 
-		if renderSecret {
-			components = append(components, render.Secrets([]*v1.Secret{packetCaptureCertSecret}))
+		if operatorManagedPacketCaptureSecret {
+			components = append(components, render.NewPassthrough(packetCaptureCertSecret))
 		}
 
 		// Fetch the Authentication spec. If present, we use to configure user authentication.
@@ -362,7 +384,15 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			return reconcile.Result{}, err
 		}
 
-		var pc = render.PacketCaptureAPI(pullSecrets, r.provider == operatorv1.ProviderOpenShift, network, keyValidatorConfig, packetCaptureCertSecret, r.clusterDomain)
+		packetCaptureApiCfg := &render.PacketCaptureApiConfiguration{
+			PullSecrets:        pullSecrets,
+			Openshift:          r.provider == operatorv1.ProviderOpenShift,
+			Installation:       network,
+			KeyValidatorConfig: keyValidatorConfig,
+			ServerCertSecret:   packetCaptureCertSecret,
+			ClusterDomain:      r.clusterDomain,
+		}
+		var pc = render.PacketCaptureAPI(packetCaptureApiCfg)
 		components = append(components, pc)
 	}
 

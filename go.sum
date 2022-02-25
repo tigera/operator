@@ -621,6 +621,7 @@ github.com/ryanuber/go-glob v1.0.0/go.mod h1:807d1WSdnB0XRJzKNil9Om6lcp/3a0v4qIH
 github.com/santhosh-tekuri/jsonschema v1.2.4 h1:hNhW8e7t+H1vgY+1QeEQpveR6D4+OwKPXCfD2aieJis=
 github.com/santhosh-tekuri/jsonschema v1.2.4/go.mod h1:TEAUOeZSmIxTTuHatJzrvARHiuO9LYd+cIxzgEHCQI4=
 github.com/sean-/seed v0.0.0-20170313163322-e2103e2c3529/go.mod h1:DxrIzT+xaE7yg65j358z/aeFdxmN0P9QXhEzd20vsDc=
+github.com/sethvargo/go-password v0.2.0 h1:BTDl4CC/gjf/axHMaDQtw507ogrXLci6XRiLc7i/UHI=
 github.com/sethvargo/go-password v0.2.0/go.mod h1:Ym4Mr9JXLBycr02MFuVQ/0JHidNetSgbzutTr3zsYXE=
 github.com/shopspring/decimal v1.2.0/go.mod h1:DKyhrW/HYNuLGql+MJL6WCR6knT2jwCFRcu2hWCYk4o=
 github.com/shurcooL/sanitized_anchor_name v1.0.0/go.mod h1:1NzhyTcUVG4SuEtjjoZeVRXNmyL/1OwPU0+IJeTBvfc=
@@ -668,8 +669,8 @@ github.com/stretchr/testify v1.6.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/
 github.com/stretchr/testify v1.7.0 h1:nwc3DEeHmmLAfoZucVR881uASk0Mfjw8xYJ99tb5CcY=
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/subosito/gotenv v1.2.0/go.mod h1:N0PQaV/YGNqwC0u51sEeR/aUtSLEXKX9iv69rRypqCw=
-github.com/tigera/api v0.0.0-20211206200601-c5525835af81 h1:CVRKbodVmbftEr2dIs6CIkseFw8DEgukFqJd9C+4hCg=
-github.com/tigera/api v0.0.0-20211206200601-c5525835af81/go.mod h1:FFE+MQo0Up7GGg3RagKRAwgdH7UqlXBFm+47BwmQLVQ=
+github.com/tigera/api v0.0.0-20220204023436-07202ba89fcd h1:X8eZebsnfLrPuzZF/r0csxki18RzQ/IsgDjKPhAyFl0=
+github.com/tigera/api v0.0.0-20220204023436-07202ba89fcd/go.mod h1:6qWfgULooruKiC8eoGgyRjOh0K+h/q8bc7AvdUysAUo=
 github.com/tmc/grpc-websocket-proxy v0.0.0-20170815181823-89b8d40f7ca8/go.mod h1:ncp9v5uamzpCO7NfCPTXjqaC+bZgJeR0sMTm6dMHP7U=
 github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5/go.mod h1:ncp9v5uamzpCO7NfCPTXjqaC+bZgJeR0sMTm6dMHP7U=
 github.com/tsenart/vegeta v12.7.0+incompatible/go.mod h1:Smz/ZWfhKRcyDDChZkG3CyTHdj87lHzio/HOCkbndXM=
@@ -699,7 +700,9 @@ github.com/zmap/zcrypto v0.0.0-20190729165852-9051775e6a2e/go.mod h1:w7kd3qXHh8F
 github.com/zmap/zlint v0.0.0-20190806154020-fd021b4cfbeb/go.mod h1:29UiAJNsiVdvTBFCJW8e3q6dcDbOoPkhMgttOSCIMMY=
 go.elastic.co/apm v1.12.0 h1:0rYcZM/GPMeH0Er6DMFfHA8Flg5tf+XD9QbenrWWYWM=
 go.elastic.co/apm v1.12.0/go.mod h1:v8Yf+VZ3NplRjQUWlvPG4EV/GGtDNCVUMaafrCnmGEM=
+go.elastic.co/apm/module/apmelasticsearch v1.12.0 h1:DzDIrzuzpdLq6aaCo4yp4unH4Xly1AzsdYtdlgbrXE4=
 go.elastic.co/apm/module/apmelasticsearch v1.12.0/go.mod h1:9Xy9sEsFIuAuxpZWVipG7CT/aFVdbwlGhHlXSNbuG44=
+go.elastic.co/apm/module/apmhttp v1.12.0 h1:iSXbited+ouqB58MftpSz61CvGzuarF4+sq+dSOYJJk=
 go.elastic.co/apm/module/apmhttp v1.12.0/go.mod h1:9ry+uRvkUYdur2TvEuHMmu1stOlYymnrYaGJwO3fCI4=
 go.elastic.co/fastjson v1.1.0 h1:3MrGBWWVIxe/xvsbpghtkFoPciPhOCmjsR/HfwEeQR4=
 go.elastic.co/fastjson v1.1.0/go.mod h1:boNGISWMjQsUPy/t6yqt2/1Wx4YNPSe+mZjlyw9vKKI=

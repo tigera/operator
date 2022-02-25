@@ -83,6 +83,25 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).To(MatchError("IPv6 IP pool is specified but eBPF mode does not support IPv6"))
 	})
 
+	It("should prevent multiple node address autodetection methods", func() {
+		nodeIP := operator.NodeInternalIP
+		instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
+			CanReach:   "8.8.8.8",
+			Kubernetes: &nodeIP,
+		}
+		err := validateCustomResource(instance)
+		Expect(err).To(MatchError("no more than one node address autodetection method can be specified per-family"))
+	})
+
+	It("should allow autodetection based on Kubernetes node IP", func() {
+		nodeIP := operator.NodeInternalIP
+		instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
+			Kubernetes: &nodeIP,
+		}
+		err := validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 	It("should prevent host ports if BPF is enabled", func() {
 		bpf := operator.LinuxDataplaneBPF
 		instance.Spec.CalicoNetwork.LinuxDataplane = &bpf
@@ -104,6 +123,62 @@ var _ = Describe("Installation validation tests", func() {
 			CanReach: "8.8.8.8",
 		}
 		err := validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should not allow VPP to be used with a variant other than Calico", func() {
+		vpp := operator.LinuxDataplaneVPP
+		en := operator.BGPEnabled
+		instance.Spec.CalicoNetwork.LinuxDataplane = &vpp
+		instance.Spec.CalicoNetwork.BGP = &en
+		instance.Spec.CNI.Type = operator.PluginCalico
+		err := validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+		instance.Spec.Variant = operator.TigeraSecureEnterprise
+		err = validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should not allow VPP to be used with a CNI other than Calico", func() {
+		vpp := operator.LinuxDataplaneVPP
+		en := operator.BGPEnabled
+		instance.Spec.CalicoNetwork.LinuxDataplane = &vpp
+		instance.Spec.CalicoNetwork.BGP = &en
+		instance.Spec.CNI.Type = operator.PluginAmazonVPC
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+		instance.Spec.CNI.Type = operator.PluginCalico
+		err = validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should not allow VPP to be used if BGP is not enabled", func() {
+		vpp := operator.LinuxDataplaneVPP
+		en := operator.BGPEnabled
+		dis := operator.BGPDisabled
+		instance.Spec.CalicoNetwork.LinuxDataplane = &vpp
+		instance.Spec.CNI.Type = operator.PluginCalico
+		instance.Spec.CalicoNetwork.BGP = &dis
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+		instance.Spec.CalicoNetwork.BGP = &en
+		err = validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should not allow HostPorts to be disabled with VPP", func() {
+		vpp := operator.LinuxDataplaneVPP
+		bgp := operator.BGPEnabled
+		en := operator.HostPortsEnabled
+		dis := operator.HostPortsDisabled
+		instance.Spec.CalicoNetwork.LinuxDataplane = &vpp
+		instance.Spec.CalicoNetwork.BGP = &bgp
+		instance.Spec.CNI.Type = operator.PluginCalico
+		instance.Spec.CalicoNetwork.HostPorts = &dis
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+		instance.Spec.CalicoNetwork.HostPorts = &en
+		err = validateCustomResource(instance)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -314,6 +389,26 @@ var _ = Describe("Installation validation tests", func() {
 			It("with BGP enabled validates", func() {
 				enable := operator.BGPEnabled
 				instance.Spec.CalicoNetwork.BGP = &enable
+				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
+				err := validateCustomResource(instance)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("With dual-stack enabled", func() {
+				instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+					{
+						CIDR:          "192.168.0.0/24",
+						Encapsulation: operator.EncapsulationNone,
+						NATOutgoing:   operator.NATOutgoingEnabled,
+						NodeSelector:  "all()",
+					},
+					{
+						CIDR:          "fe80:00::00/64",
+						Encapsulation: operator.EncapsulationNone,
+						NATOutgoing:   operator.NATOutgoingEnabled,
+						NodeSelector:  "all()",
+					},
+				}
 				Expect(fillDefaults(instance)).NotTo(HaveOccurred())
 				err := validateCustomResource(instance)
 				Expect(err).NotTo(HaveOccurred())

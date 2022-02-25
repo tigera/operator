@@ -12,14 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package components
+package common
 
-var (
-	ComponentCSRInitContainer = component{
-		Version: "v1.1.1",
-		Image:   "tigera/key-cert-provisioner",
-	}
-	CommonComponents = []component{
-		ComponentCSRInitContainer,
-	}
+import (
+	"testing"
+
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
+
+	"github.com/onsi/ginkgo/reporters"
 )
+
+func TestRender(t *testing.T) {
+	RegisterFailHandler(Fail)
+	junitReporter := reporters.NewJUnitReporter("../../report/common_suite.xml")
+	RunSpecsWithDefaultAndCustomReporters(t, "pkg/common Suite", []Reporter{junitReporter})
+}

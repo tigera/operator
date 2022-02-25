@@ -21,13 +21,18 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 
+	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/monitor"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -55,36 +60,35 @@ func GetSecret(ctx context.Context, client client.Client, name string, ns string
 }
 
 // EnsureCertificateSecret ensures that the certificate in the
-// secret has the expected DNS names. If no secret is provided, a new
-// secret is created and returned. If the secret does have the
-// right DNS names then the secret is returned.
-// If the cert in the secret has invalid DNS names and the secret is operator
-// managed, then a new secret is created and returned. Otherwise,
-// if the secret is user-supplied, an error is returned.
-func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName string, certName string, certDuration time.Duration, svcDNSNames ...string) (*corev1.Secret, error) {
+// secret has the expected DNS names. If no secret is provided, a new secret is created.
+// The first returned value (*corev1.Secret) is the validated or created Secret to use.
+// The second returned value (bool) is true if the Secret returned is managed by the operator or false if the secret is user-supplied.
+// The third returned value (error) is nil if the Secret pass in is valid or was created successfully. If there was a
+// problem creating the certificate or the Secret has invalid DNS names and the secret is not operator managed, an error is returned.
+func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName string, certName string, certDuration time.Duration, svcDNSNames ...string) (*corev1.Secret, bool, error) {
 	var err error
 
 	// Create the secret if it doesn't exist.
 	if secret == nil {
 		certsLogger.Info(fmt.Sprintf("cert %q doesn't exist, creating it", secretName))
 
-		return rsecret.CreateTLSSecret(nil,
+		secret, err = rsecret.CreateTLSSecret(nil,
 			secretName, common.OperatorNamespace(), keyName, certName,
 			certDuration, nil, svcDNSNames...,
 		)
+
+		return secret, true, err
 	}
 
-	issuer, err := GetCertificateIssuer(secret.Data[certName])
+	operatorManaged, err := IsCertOperatorIssued(secret.Data[certName])
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-
-	operatorManaged := IsOperatorIssued(issuer)
 
 	// For user provided certs, skip checking whether they have the right DNS
 	// names.
 	if !operatorManaged {
-		return secret, err
+		return secret, operatorManaged, err
 	}
 
 	err = SecretHasExpectedDNSNames(secret, certName, svcDNSNames)
@@ -93,18 +97,28 @@ func EnsureCertificateSecret(secretName string, secret *corev1.Secret, keyName s
 		// replace the invalid one since it's managed by the operator.
 		certsLogger.Info(fmt.Sprintf("operator-managed cert %q has wrong DNS names, recreating it", secretName))
 
-		return rsecret.CreateTLSSecret(nil,
+		secret, err = rsecret.CreateTLSSecret(nil,
 			secretName, common.OperatorNamespace(), keyName, certName,
 			rmeta.DefaultCertificateDuration, nil, svcDNSNames...,
 		)
 	}
 
-	return secret, err
+	return secret, operatorManaged, err
 }
 
 // IsOperatorIssued checks if the cert secret is issued operator.
 func IsOperatorIssued(issuer string) bool {
 	return operatorIssuedCertRegexp.MatchString(issuer)
+}
+
+func IsCertOperatorIssued(certPem []byte) (bool, error) {
+
+	issuer, err := GetCertificateIssuer(certPem)
+	if err != nil {
+		return false, err
+	}
+
+	return IsOperatorIssued(issuer), nil
 }
 
 // GetCertificateIssuer returns the issuer of a PEM block.
@@ -131,7 +145,7 @@ func parseCertificate(certBytes []byte) (*x509.Certificate, error) {
 	return cert, nil
 }
 
-// Check that the cert in the secret has the expected DNS names.
+// SecretHasExpectedDNSNames Check that the cert in the secret has the expected DNS names.
 func SecretHasExpectedDNSNames(secret *corev1.Secret, certKeyName string, expectedDNSNames []string) error {
 	cert, err := parseCertificate(secret.Data[certKeyName])
 	if err != nil {
@@ -143,4 +157,35 @@ func SecretHasExpectedDNSNames(secret *corev1.Secret, certKeyName string, expect
 		return nil
 	}
 	return ErrInvalidCertDNSNames
+}
+
+// GetPrometheusCertificateBundle creates a configmap with a bundle for prometheus mTLS.
+func GetPrometheusCertificateBundle(ctx context.Context, cli client.Client, namespace string, certificateManagement *operator.CertificateManagement, extraPems ...[]byte) (*corev1.ConfigMap, error) {
+	var pem strings.Builder
+	prometheusTLS := &corev1.Secret{}
+	err := cli.Get(ctx, types.NamespacedName{Name: monitor.PrometheusClientTLSSecretName, Namespace: common.OperatorNamespace()}, prometheusTLS)
+	if apierrors.IsNotFound(err) {
+		if certificateManagement == nil {
+			return nil, nil
+		}
+	} else if err != nil {
+		return nil, err
+	} else {
+		if _, ok := prometheusTLS.Data[corev1.TLSCertKey]; !ok {
+			return nil, fmt.Errorf("secret %s/%s must contain field %s", common.OperatorNamespace(), monitor.PrometheusClientTLSSecretName, corev1.TLSCertKey)
+		}
+		pem.WriteString(string(prometheusTLS.Data[corev1.TLSCertKey]))
+	}
+
+	if certificateManagement != nil {
+		// Append the CA to the pem
+		pem.WriteString("\n\n")
+		pem.Write(certificateManagement.CACert)
+	}
+	for _, extraPem := range extraPems {
+		pem.WriteString("\n\n")
+		pem.Write(extraPem)
+	}
+
+	return render.CreateCertificateConfigMap(pem.String(), render.PrometheusCABundle, namespace), nil
 }

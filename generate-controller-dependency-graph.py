@@ -12,6 +12,7 @@ def main():
     graph.add_node(Node('amazoncloudintegration',
                    label='AmazonCloudIntegration', shape='box'))
     graph.add_node(Node('apiserver', label='APIServer', shape='box'))
+    graph.add_node(Node('applicationlayer', label='ApplicationLayer', shape='box'))
     graph.add_node(Node('authentication', label='Authentication', shape='box'))
     graph.add_node(Node('clusterconnection',
                    label='{ClusterConnection|Standalone\nManagementCluster\nManagementClusterConnection}', shape='record'))
@@ -34,6 +35,8 @@ def main():
     graph.add_edge(Edge('apiserver', 'amazoncloudintegration', label='amazonCRDExists', style='dashed'))
     graph.add_edge(Edge('apiserver', 'clusterconnection', label='TSEE', style='dashed'))
     graph.add_edge(Edge('apiserver', 'installation'))
+    # [ApplicationLayer] -> [Installation]
+    graph.add_edge(Edge('applicationlayer', 'installation'))
     # [Authentication] -> [ClusterConnection]
     # [Authentication] -> [Installation]
     graph.add_edge(Edge('authentication', 'clusterconnection', style='dashed'))
@@ -76,6 +79,8 @@ def main():
     graph.add_edge(Edge('manager', 'compliance'))
     graph.add_edge(Edge('manager', 'installation'))
     graph.add_edge(Edge('manager', 'logstorage'))
+    # [Monitor] -> [Authentication]
+    graph.add_edge(Edge('monitor', 'authentication'))
     # [Monitor] -> [Installation]
     graph.add_edge(Edge('monitor', 'installation'))
 

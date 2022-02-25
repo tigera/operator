@@ -81,7 +81,7 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 		svcDNSNames = append(svcDNSNames, render.ManagerServiceIP)
 		certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
 
-		managerInternalTLSSecret, err = utils.EnsureCertificateSecret(
+		managerInternalTLSSecret, _, err = utils.EnsureCertificateSecret(
 			render.ManagerInternalTLSSecretName, managerInternalTLSSecret, render.ManagerInternalSecretKeyName, render.ManagerInternalSecretCertName, certDur, svcDNSNames...,
 		)
 

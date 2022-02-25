@@ -247,6 +247,22 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			}
 		}
 
+		// VPP specific validation
+		if instance.Spec.CalicoNetwork.LinuxDataplane != nil && *instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneVPP {
+			if instance.Spec.Variant != operatorv1.Calico {
+				return fmt.Errorf("The VPP dataplane only supports the Calico variant (configured: %s)", instance.Spec.Variant)
+			}
+			if instance.Spec.CNI.Type != operatorv1.PluginCalico {
+				return fmt.Errorf("The VPP dataplane only supports the Calico CNI (configured: %s)", instance.Spec.CNI.Type)
+			}
+			if instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled {
+				return fmt.Errorf("VPP requires BGP to be enabled")
+			}
+			if instance.Spec.CalicoNetwork.HostPorts != nil && *instance.Spec.CalicoNetwork.HostPorts == operatorv1.HostPortsDisabled {
+				return fmt.Errorf("VPP doesn't support disabling HostPorts")
+			}
+		}
+
 		if bpfDataplane && instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 == nil {
 			return fmt.Errorf("spec.calicoNetwork.nodeAddressAutodetectionV4 is required for the BPF dataplane")
 		}
@@ -371,6 +387,10 @@ func validateNodeAddressDetection(ad *operatorv1.NodeAddressAutodetection) error
 				return fmt.Errorf("invalid CIDR provided for node address autodetection: %s", c)
 			}
 		}
+	}
+
+	if ad.Kubernetes != nil {
+		numEnabled++
 	}
 
 	if numEnabled > 1 {

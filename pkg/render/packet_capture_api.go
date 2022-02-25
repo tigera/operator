@@ -51,37 +51,33 @@ const (
 	PacketCaptureTLSHashAnnotation = "hash.operator.tigera.io/packetcapture-certificate"
 )
 
-type packetCaptureApiComponent struct {
-	pullSecrets        []*corev1.Secret
-	openshift          bool
-	installation       *operatorv1.InstallationSpec
-	image              string
-	csrInitImage       string
-	keyValidatorConfig authentication.KeyValidatorConfig
-	serverCertSecret   *corev1.Secret
-	clusterDomain      string
+// PacketCaptureApiConfiguration contains all the config information needed to render the component.
+type PacketCaptureApiConfiguration struct {
+	PullSecrets        []*corev1.Secret
+	Openshift          bool
+	Installation       *operatorv1.InstallationSpec
+	KeyValidatorConfig authentication.KeyValidatorConfig
+	ServerCertSecret   *corev1.Secret
+	ClusterDomain      string
 }
 
-func PacketCaptureAPI(pullSecrets []*corev1.Secret, openshift bool,
-	installation *operatorv1.InstallationSpec,
-	keyValidatorConfig authentication.KeyValidatorConfig,
-	serverCertSecret *corev1.Secret,
-	clusterDomain string) Component {
+type packetCaptureApiComponent struct {
+	cfg          *PacketCaptureApiConfiguration
+	image        string
+	csrInitImage string
+}
+
+func PacketCaptureAPI(cfg *PacketCaptureApiConfiguration) Component {
 
 	return &packetCaptureApiComponent{
-		pullSecrets:        pullSecrets,
-		openshift:          openshift,
-		installation:       installation,
-		keyValidatorConfig: keyValidatorConfig,
-		serverCertSecret:   serverCertSecret,
-		clusterDomain:      clusterDomain,
+		cfg: cfg,
 	}
 }
 
 func (pc *packetCaptureApiComponent) ResolveImages(is *operatorv1.ImageSet) error {
-	reg := pc.installation.Registry
-	path := pc.installation.ImagePath
-	prefix := pc.installation.ImagePrefix
+	reg := pc.cfg.Installation.Registry
+	path := pc.cfg.Installation.ImagePath
+	prefix := pc.cfg.Installation.ImagePrefix
 
 	var err error
 	var errMsg []string
@@ -90,8 +86,8 @@ func (pc *packetCaptureApiComponent) ResolveImages(is *operatorv1.ImageSet) erro
 		errMsg = append(errMsg, err.Error())
 	}
 
-	if pc.installation.CertificateManagement != nil {
-		pc.csrInitImage, err = ResolveCSRInitImage(pc.installation, is)
+	if pc.cfg.Installation.CertificateManagement != nil {
+		pc.csrInitImage, err = ResolveCSRInitImage(pc.cfg.Installation, is)
 		if err != nil {
 			errMsg = append(errMsg, err.Error())
 		}
@@ -110,10 +106,10 @@ func (pc *packetCaptureApiComponent) SupportedOSType() rmeta.OSType {
 
 func (pc *packetCaptureApiComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
-		CreateNamespace(PacketCaptureNamespace, pc.installation.KubernetesProvider),
+		CreateNamespace(PacketCaptureNamespace, pc.cfg.Installation.KubernetesProvider),
 	}
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PacketCaptureNamespace, pc.pullSecrets...)...)...)
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PacketCaptureNamespace, pc.serverCertSecret)...)...)
+	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PacketCaptureNamespace, pc.cfg.PullSecrets...)...)...)
+	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PacketCaptureNamespace, pc.cfg.ServerCertSecret)...)...)
 
 	objs = append(objs,
 		pc.serviceAccount(),
@@ -123,12 +119,12 @@ func (pc *packetCaptureApiComponent) Objects() ([]client.Object, []client.Object
 		pc.service(),
 	)
 
-	if pc.keyValidatorConfig != nil {
-		objs = append(objs, secret.ToRuntimeObjects(pc.keyValidatorConfig.RequiredSecrets(PacketCaptureNamespace)...)...)
-		objs = append(objs, configmap.ToRuntimeObjects(pc.keyValidatorConfig.RequiredConfigMaps(PacketCaptureNamespace)...)...)
+	if pc.cfg.KeyValidatorConfig != nil {
+		objs = append(objs, secret.ToRuntimeObjects(pc.cfg.KeyValidatorConfig.RequiredSecrets(PacketCaptureNamespace)...)...)
+		objs = append(objs, configmap.ToRuntimeObjects(pc.cfg.KeyValidatorConfig.RequiredConfigMaps(PacketCaptureNamespace)...)...)
 	}
 
-	if pc.installation.CertificateManagement != nil {
+	if pc.cfg.Installation.CertificateManagement != nil {
 		objs = append(objs, CSRClusterRoleBinding(PacketCaptureServiceName, PacketCaptureNamespace))
 	}
 
@@ -178,8 +174,8 @@ func (pc *packetCaptureApiComponent) clusterRole() client.Object {
 			Verbs:     []string{"create"},
 		},
 		{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"authenticationreviews"},
+			APIGroups: []string{"authentication.k8s.io"},
+			Resources: []string{"tokenreviews"},
 			Verbs:     []string{"create"},
 		},
 		{
@@ -254,10 +250,10 @@ func (pc *packetCaptureApiComponent) deployment() client.Object {
 					Annotations: pc.annotations(),
 				},
 				Spec: corev1.PodSpec{
-					NodeSelector:       pc.installation.ControlPlaneNodeSelector,
+					NodeSelector:       pc.cfg.Installation.ControlPlaneNodeSelector,
 					ServiceAccountName: PacketCaptureServiceAccountName,
-					Tolerations:        append(pc.installation.ControlPlaneTolerations, rmeta.TolerateMaster, rmeta.TolerateCriticalAddonsOnly),
-					ImagePullSecrets:   secret.GetReferenceList(pc.pullSecrets),
+					Tolerations:        append(pc.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster, rmeta.TolerateCriticalAddonsOnly),
+					ImagePullSecrets:   secret.GetReferenceList(pc.cfg.PullSecrets),
 					InitContainers:     pc.initContainers(),
 					Containers:         []corev1.Container{pc.container()},
 					Volumes:            pc.volumes(),
@@ -269,15 +265,15 @@ func (pc *packetCaptureApiComponent) deployment() client.Object {
 
 func (pc *packetCaptureApiComponent) initContainers() []corev1.Container {
 	var initContainers []corev1.Container
-	if pc.installation.CertificateManagement != nil {
+	if pc.cfg.Installation.CertificateManagement != nil {
 		initContainers = append(initContainers, CreateCSRInitContainer(
-			pc.installation.CertificateManagement,
+			pc.cfg.Installation.CertificateManagement,
 			pc.csrInitImage,
 			PacketCaptureCertSecret,
 			PacketCaptureServiceName,
 			corev1.TLSPrivateKeyKey,
 			corev1.TLSCertKey,
-			dns.GetServiceDNSNames(PacketCaptureServiceName, PacketCaptureNamespace, pc.clusterDomain),
+			dns.GetServiceDNSNames(PacketCaptureServiceName, PacketCaptureNamespace, pc.cfg.ClusterDomain),
 			PacketCaptureNamespace))
 	}
 	return initContainers
@@ -293,9 +289,9 @@ func (pc *packetCaptureApiComponent) container() corev1.Container {
 		{Name: "PACKETCAPTURE_API_LOG_LEVEL", Value: "Info"},
 	}
 
-	if pc.keyValidatorConfig != nil {
-		env = append(env, pc.keyValidatorConfig.RequiredEnv("PACKETCAPTURE_API_")...)
-		volumeMounts = append(volumeMounts, pc.keyValidatorConfig.RequiredVolumeMounts()...)
+	if pc.cfg.KeyValidatorConfig != nil {
+		env = append(env, pc.cfg.KeyValidatorConfig.RequiredEnv("PACKETCAPTURE_API_")...)
+		volumeMounts = append(volumeMounts, pc.cfg.KeyValidatorConfig.RequiredVolumeMounts()...)
 	}
 
 	return corev1.Container{
@@ -326,11 +322,11 @@ func (pc *packetCaptureApiComponent) healthProbe() *corev1.Probe {
 func (pc *packetCaptureApiComponent) volumes() []corev1.Volume {
 	var volumes = []corev1.Volume{{
 		Name:         PacketCaptureCertSecret,
-		VolumeSource: certificateVolumeSource(pc.installation.CertificateManagement, PacketCaptureCertSecret),
+		VolumeSource: CertificateVolumeSource(pc.cfg.Installation.CertificateManagement, PacketCaptureCertSecret),
 	}}
 
-	if pc.keyValidatorConfig != nil {
-		volumes = append(volumes, pc.keyValidatorConfig.RequiredVolumes()...)
+	if pc.cfg.KeyValidatorConfig != nil {
+		volumes = append(volumes, pc.cfg.KeyValidatorConfig.RequiredVolumes()...)
 	}
 
 	return volumes
@@ -338,7 +334,7 @@ func (pc *packetCaptureApiComponent) volumes() []corev1.Volume {
 
 func (pc *packetCaptureApiComponent) annotations() map[string]string {
 	var annotations = map[string]string{
-		PacketCaptureTLSHashAnnotation: rmeta.AnnotationHash(pc.serverCertSecret.Data),
+		PacketCaptureTLSHashAnnotation: rmeta.AnnotationHash(pc.cfg.ServerCertSecret.Data),
 	}
 
 	return annotations

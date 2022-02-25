@@ -106,7 +106,7 @@ func (r *ReconcileLogStorage) createEsGateway(
 	}
 
 	if !customerProvidedCert {
-		if err := hdler.CreateOrUpdateOrDelete(ctx, render.Secrets([]*corev1.Secret{gatewayCertSecret}), r.status); err != nil {
+		if err := hdler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(gatewayCertSecret), r.status); err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Error creating / updating resource", err.Error())
 			return reconcile.Result{}, false, err

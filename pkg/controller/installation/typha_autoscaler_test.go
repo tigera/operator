@@ -213,7 +213,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		_, err := c.AppsV1().Deployments("calico-system").Create(ctx, typha, metav1.CreateOptions{})
 		Expect(err).To(BeNil())
 
-		// Create two nodes, one of which is a virtual-kubelet
+		// Create five nodes, one of which is a virtual-kubelet
 		CreateNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
 		CreateNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"}, nil)
 		CreateNode(c, "node3", map[string]string{"kubernetes.io/os": "linux"}, nil)

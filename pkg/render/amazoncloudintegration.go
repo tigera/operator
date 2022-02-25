@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+	"github.com/tigera/operator/pkg/render/component"
 	"strings"
 
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -41,7 +42,7 @@ const (
 	credentialSecretHashAnnotation       = "hash.operator.tigera.io/credential-secret"
 )
 
-func AmazonCloudIntegration(cfg *AmazonCloudIntegrationConfiguration) (Component, error) {
+func AmazonCloudIntegration(cfg *AmazonCloudIntegrationConfiguration) (component.Component, error) {
 	return &amazonCloudIntegrationComponent{cfg: cfg}, nil
 }
 

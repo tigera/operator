@@ -17,6 +17,7 @@ package render
 import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/component"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -25,7 +26,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 )
 
-func Namespaces(cfg *NamespaceConfiguration) Component {
+func Namespaces(cfg *NamespaceConfiguration) component.Component {
 	return &namespaceComponent{
 		cfg: cfg,
 	}

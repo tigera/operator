@@ -15,14 +15,19 @@
 package render_test
 
 import (
+	"fmt"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gstruct"
-
+	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -36,6 +41,7 @@ var _ = Describe("Typha rendering tests", func() {
 	var installation *operatorv1.InstallationSpec
 	var registry string
 	var typhaNodeTLS *render.TyphaNodeTLS
+	var cli client.Client
 	k8sServiceEp := k8sapi.ServiceEndpoint{}
 	var cfg render.TyphaConfiguration
 	BeforeEach(func() {
@@ -50,16 +56,12 @@ var _ = Describe("Typha rendering tests", func() {
 				Type: operatorv1.PluginCalico,
 			},
 		}
-		typhaNodeTLS = &render.TyphaNodeTLS{
-			CAConfigMap: &corev1.ConfigMap{},
-			TyphaSecret: &corev1.Secret{},
-			NodeSecret:  &corev1.Secret{},
-		}
-		typhaNodeTLS.TyphaSecret.Name = "typha-certs"
-		typhaNodeTLS.TyphaSecret.Namespace = "tigera-operator"
-		typhaNodeTLS.TyphaSecret.Kind = "Secret"
-		typhaNodeTLS.TyphaSecret.APIVersion = "v1"
-
+		scheme := runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
+		certificateManager, err := certificatemanagement.CreateCertificateManager(cli, nil, clusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+		typhaNodeTLS = getTyphaNodeTLS(cli, certificateManager)
 		cfg = render.TyphaConfiguration{
 			K8sServiceEp:  k8sServiceEp,
 			TLS:           typhaNodeTLS,
@@ -82,7 +84,6 @@ var _ = Describe("Typha rendering tests", func() {
 			{name: "calico-typha", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 			{name: "calico-typha", ns: "calico-system", group: "policy", version: "v1beta1", kind: "PodDisruptionBudget"},
-			{name: "typha-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "calico-typha", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: "calico-typha", ns: "calico-system", group: "apps", version: "v1", kind: "Deployment"},
 		}
@@ -122,7 +123,6 @@ var _ = Describe("Typha rendering tests", func() {
 			{name: "calico-typha", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 			{name: "calico-typha", ns: "calico-system", group: "policy", version: "v1beta1", kind: "PodDisruptionBudget"},
-			{name: "typha-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "calico-typha", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: "calico-typha", ns: "calico-system", group: "apps", version: "v1", kind: "Deployment"},
 		}
@@ -160,7 +160,6 @@ var _ = Describe("Typha rendering tests", func() {
 			{name: "calico-typha", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 			{name: "calico-typha", ns: "calico-system", group: "policy", version: "v1beta1", kind: "PodDisruptionBudget"},
-			{name: "typha-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "calico-typha", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: "calico-typha", ns: "calico-system", group: "apps", version: "v1", kind: "Deployment"},
 		}
@@ -277,7 +276,10 @@ var _ = Describe("Typha rendering tests", func() {
 	})
 
 	It("should render all resources when certificate management is enabled", func() {
-		installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: []byte("<ca>"), SignerName: "a.b/c"}
+		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c", CACert: cfg.TLS.TyphaSecret.Secret("").Data[corev1.TLSCertKey]}
+		certificateManager, err := certificatemanagement.CreateCertificateManager(cli, cfg.Installation, clusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+		cfg.TLS = getTyphaNodeTLS(cli, certificateManager)
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -291,15 +293,12 @@ var _ = Describe("Typha rendering tests", func() {
 			{name: "calico-typha", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 			{name: "calico-typha", ns: "calico-system", group: "policy", version: "v1beta1", kind: "PodDisruptionBudget"},
-			{name: "typha-certs", ns: "calico-system", group: "", version: "v1", kind: "Secret"},
 			{name: "calico-typha", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
-			{name: "calico-typha:csr-creator", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "calico-typha", ns: "calico-system", group: "apps", version: "v1", kind: "Deployment"},
 		}
 
 		component := render.Typha(&cfg)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		// Should render the correct resources.
 		i := 0
@@ -307,13 +306,14 @@ var _ = Describe("Typha rendering tests", func() {
 			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			i++
 		}
+		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		dep := rtest.GetResource(resources, common.TyphaDeploymentName, common.CalicoNamespace, "apps", "v1", "Deployment")
 		Expect(dep).ToNot(BeNil())
 		deploy, ok := dep.(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
 		Expect(deploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
-		Expect(deploy.Spec.Template.Spec.InitContainers[0].Name).To(Equal(render.CSRInitContainerName))
+		Expect(deploy.Spec.Template.Spec.InitContainers[0].Name).To(Equal(fmt.Sprintf("%s-key-cert-provisioner", render.TyphaTLSSecretName)))
 		rtest.ExpectEnv(deploy.Spec.Template.Spec.InitContainers[0].Env, "SIGNER", "a.b/c")
 	})
 	It("should not enable prometheus metrics if TyphaMetricsPort is nil", func() {

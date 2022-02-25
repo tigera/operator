@@ -3,10 +3,11 @@ package render
 import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/component"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func NewPassthrough(objs ...client.Object) Component {
+func NewPassthrough(objs ...client.Object) component.Component {
 	return &passthroughComponent{objs: objs}
 }
 

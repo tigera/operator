@@ -17,6 +17,7 @@ package utils_test
 import (
 	"context"
 	"fmt"
+	"github.com/tigera/operator/pkg/render/component"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
@@ -42,7 +43,6 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	. "github.com/onsi/ginkgo"
@@ -388,7 +388,7 @@ var _ = Describe("Component handler tests", func() {
 		Expect(ns.GetLabels()).To(Equal(expectedLabels))
 	})
 
-	DescribeTable("ensuring os node selectors", func(component render.Component, key client.ObjectKey, obj client.Object, expectedNodeSelectors map[string]string) {
+	DescribeTable("ensuring os node selectors", func(component component.Component, key client.ObjectKey, obj client.Object, expectedNodeSelectors map[string]string) {
 		Expect(handler.CreateOrUpdateOrDelete(ctx, component, sm)).ShouldNot(HaveOccurred())
 		Expect(c.Get(ctx, key, obj)).ShouldNot(HaveOccurred())
 

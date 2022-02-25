@@ -18,6 +18,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/tls"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -54,6 +56,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/test"
 )
 
@@ -388,7 +391,12 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			r.typhaAutoscaler.start(ctx)
 			r.calicoWindowsUpgrader.Start(ctx)
-
+			certificateManager, err := certificatemanagement.CreateCertificateManager(c, nil, "")
+			Expect(err).NotTo(HaveOccurred())
+			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{"render.PrometheusTLSSecretName"})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, certificateManager.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			// We start off with a 'standard' installation, with nothing special
 			Expect(c.Create(
 				ctx,
@@ -397,7 +405,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					Spec: operator.InstallationSpec{
 						Variant:               operator.TigeraSecureEnterprise,
 						Registry:              "some.registry.org/",
-						CertificateManagement: &operator.CertificateManagement{},
+						CertificateManagement: &operator.CertificateManagement{CACert: prometheusTLS.Secret("").Data[corev1.TLSCertKey]},
 					},
 					Status: operator.InstallationStatus{
 						Variant: operator.TigeraSecureEnterprise,
@@ -449,7 +457,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					components.ComponentTigeraTypha.Image,
 					components.ComponentTigeraTypha.Version)))
 			Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
-			csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, render.CSRInitContainerName)
+			csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.TyphaTLSSecretName))
 			Expect(csrinit).ToNot(BeNil())
 			Expect(csrinit.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
@@ -484,13 +492,13 @@ var _ = Describe("Testing core-controller installation", func() {
 				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentTigeraCNI.Image,
 					components.ComponentTigeraCNI.Version)))
-			csrinit = test.GetContainer(ds.Spec.Template.Spec.InitContainers, render.CSRInitContainerName)
+			csrinit = test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodeTLSSecretName))
 			Expect(csrinit).ToNot(BeNil())
 			Expect(csrinit.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentCSRInitContainer.Image,
 					components.ComponentCSRInitContainer.Version)))
-			csrinit2 := test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-%s", render.CalicoNodeMetricsService, render.CSRInitContainerName))
+			csrinit2 := test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodePrometheusTLSServerSecret))
 			Expect(csrinit2).ToNot(BeNil())
 			Expect(csrinit2.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
@@ -548,7 +556,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					components.ComponentTigeraTypha.Image,
 					"sha256:tigeratyphahash")))
 			Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
-			csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, render.CSRInitContainerName)
+			csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.TyphaTLSSecretName))
 			Expect(csrinit).ToNot(BeNil())
 			Expect(csrinit.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
@@ -583,13 +591,13 @@ var _ = Describe("Testing core-controller installation", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentTigeraCNI.Image,
 					"sha256:tigeracnihash")))
-			csrinit = test.GetContainer(ds.Spec.Template.Spec.InitContainers, render.CSRInitContainerName)
+			csrinit = test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodeTLSSecretName))
 			Expect(csrinit).ToNot(BeNil())
 			Expect(csrinit.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentCSRInitContainer.Image,
 					"sha256:calicocsrinithash")))
-			csrinit2 := test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-%s", render.CalicoNodeMetricsService, render.CSRInitContainerName))
+			csrinit2 := test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodePrometheusTLSServerSecret))
 			Expect(csrinit2).ToNot(BeNil())
 			Expect(csrinit2.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
@@ -783,6 +791,11 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			expectedDNSNames = dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
 			expectedDNSNames = append(expectedDNSNames, "localhost")
+			certificateManager, err := certificatemanagement.CreateCertificateManager(c, nil, "")
+			Expect(err).NotTo(HaveOccurred())
+			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{"render.PrometheusTLSSecretName"})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 		})
 		AfterEach(func() {
 			cancel()
@@ -795,14 +808,15 @@ var _ = Describe("Testing core-controller installation", func() {
 			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
 			dnsNames = append(dnsNames, "localhost")
 			Expect(test.GetResource(c, internalManagerTLSSecret)).To(BeNil())
-			test.VerifyCert(internalManagerTLSSecret, render.ManagerInternalSecretKeyName, render.ManagerInternalSecretCertName, dnsNames...)
+			test.VerifyCert(internalManagerTLSSecret, dnsNames...)
+
 		})
 
 		It("should replace the internal manager TLS cert secret if its DNS names are invalid", func() {
 			// Create a internal manager TLS secret with old DNS name.
 			oldSecret, err := secret.CreateTLSSecret(nil,
-				render.ManagerInternalTLSSecretName, common.OperatorNamespace(), render.ManagerInternalSecretKeyName,
-				render.ManagerInternalSecretCertName, rmeta.DefaultCertificateDuration, nil, "tigera-manager.tigera-manager.svc",
+				render.ManagerInternalTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey,
+				rmeta.DefaultCertificateDuration, nil, "tigera-manager.tigera-manager.svc",
 			)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(c.Create(ctx, oldSecret)).NotTo(HaveOccurred())
@@ -813,7 +827,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
 			dnsNames = append(dnsNames, "localhost")
 			Expect(test.GetResource(c, internalManagerTLSSecret)).To(BeNil())
-			test.VerifyCert(internalManagerTLSSecret, render.ManagerInternalSecretKeyName, render.ManagerInternalSecretCertName, dnsNames...)
+			test.VerifyCert(internalManagerTLSSecret, dnsNames...)
 		})
 
 		It("should create node and typha TLS cert secrets if not provided and add OwnerReference to those", func() {
@@ -824,7 +838,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			secret := &corev1.Secret{}
 			cfgMap := &corev1.ConfigMap{}
 
-			Expect(c.Get(ctx, client.ObjectKey{Name: render.TyphaCAConfigMapName, Namespace: common.OperatorNamespace()}, cfgMap)).ShouldNot(HaveOccurred())
+			Expect(c.Get(ctx, client.ObjectKey{Name: certificatemanagement.TrustedCertConfigMapName, Namespace: common.CalicoNamespace}, cfgMap)).ShouldNot(HaveOccurred())
 			Expect(cfgMap.GetOwnerReferences()).To(HaveLen(1))
 
 			Expect(c.Get(ctx, client.ObjectKey{Name: render.NodeTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
@@ -855,16 +869,16 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(c.Create(ctx, caConfigMap)).NotTo(HaveOccurred())
 
 			nodeSecret, err := secret.CreateTLSSecret(testCA,
-				render.NodeTLSSecretName, common.OperatorNamespace(), render.TLSSecretKeyName,
-				render.TLSSecretCertName, rmeta.DefaultCertificateDuration, nil, render.FelixCommonName,
+				render.NodeTLSSecretName, common.OperatorNamespace(), "key.key",
+				"cert.crt", rmeta.DefaultCertificateDuration, nil, render.FelixCommonName,
 			)
 			nodeSecret.Data[render.CommonName] = []byte(render.FelixCommonName)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(c.Create(ctx, nodeSecret)).NotTo(HaveOccurred())
 
 			typhaSecret, err := secret.CreateTLSSecret(testCA,
-				render.TyphaTLSSecretName, common.OperatorNamespace(), render.TLSSecretKeyName,
-				render.TLSSecretCertName, rmeta.DefaultCertificateDuration, nil, render.TyphaCommonName,
+				render.TyphaTLSSecretName, common.OperatorNamespace(), "key.key",
+				"cert.crt", rmeta.DefaultCertificateDuration, nil, render.TyphaCommonName,
 			)
 			typhaSecret.Data[render.CommonName] = []byte(render.TyphaCommonName)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -979,16 +993,23 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			r.typhaAutoscaler.start(ctx)
 			r.calicoWindowsUpgrader.Start(ctx)
-
+			ca, err := tls.MakeCA("test")
+			Expect(err).NotTo(HaveOccurred())
+			cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 			// We start off with a 'standard' installation, with nothing special
 			cr = &operator.Installation{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 				Spec: operator.InstallationSpec{
 					Variant:               operator.TigeraSecureEnterprise,
 					Registry:              "some.registry.org/",
-					CertificateManagement: &operator.CertificateManagement{},
+					CertificateManagement: &operator.CertificateManagement{CACert: cert},
 				},
 			}
+			certificateManager, err := certificatemanagement.CreateCertificateManager(c, nil, "")
+			Expect(err).NotTo(HaveOccurred())
+			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{"render.PrometheusTLSSecretName"})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 		})
 		AfterEach(func() {
 			cancel()

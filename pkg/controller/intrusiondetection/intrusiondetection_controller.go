@@ -17,7 +17,7 @@ package intrusiondetection
 import (
 	"context"
 	"fmt"
-	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	"github.com/tigera/operator/pkg/render/component"
 	"time"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -30,6 +30,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
+	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -322,7 +323,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	certificateManager, err := certificatemanagement.CreateCertificateManager(r.client, network.CertificateManagement, r.clusterDomain)
+	certificateManager, err := certificatemanagement.CreateCertificateManager(r.client, network, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
 		r.status.SetDegraded("unable to create the Tigera CA", err.Error())
@@ -379,9 +380,9 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		HasNoLicense:      hasNoLicense,
 		TrustedCertBundle: trustedBundle,
 	}
-	component := render.IntrusionDetection(intrusionDetectionCfg)
+	comp := render.IntrusionDetection(intrusionDetectionCfg)
 
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, comp); err != nil {
 		reqLogger.Error(err, "Error with images from ImageSet")
 		r.status.SetDegraded("Error with images from ImageSet", err.Error())
 		return reconcile.Result{}, err
@@ -413,8 +414,8 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		ClusterDomain:      r.clusterDomain,
 	})
 
-	components := []render.Component{
-		component,
+	components := []component.Component{
+		comp,
 		dpiComponent,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       render.IntrusionDetectionNamespace,

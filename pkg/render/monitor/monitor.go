@@ -17,6 +17,7 @@ package monitor
 import (
 	_ "embed"
 	"fmt"
+	"github.com/tigera/operator/pkg/render/component"
 	"strings"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -68,7 +69,7 @@ const (
 	PrometheusServiceAccountName = "prometheus"
 )
 
-func Monitor(cfg *Config) render.Component {
+func Monitor(cfg *Config) component.Component {
 	return &monitorComponent{
 		cfg: cfg,
 	}
@@ -91,7 +92,6 @@ type monitorComponent struct {
 	alertmanagerImage      string
 	prometheusImage        string
 	prometheusServiceImage string
-	csrImage               string
 }
 
 func (mc *monitorComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -115,13 +115,6 @@ func (mc *monitorComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	mc.prometheusServiceImage, err = components.GetReference(components.ComponentTigeraPrometheusService, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
-	}
-
-	if mc.cfg.Installation.CertificateManagement != nil {
-		mc.csrImage, err = certificatemanagement.ResolveCSRInitImage(mc.cfg.Installation, is)
-		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
-		}
 	}
 
 	if len(errMsgs) != 0 {
@@ -271,10 +264,10 @@ func (mc *monitorComponent) alertmanagerService() *corev1.Service {
 func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 	var initContainers []corev1.Container
 	if mc.cfg.ServerTLSSecret.UseCertificateManagement() {
-		initContainers = append(initContainers, mc.cfg.ServerTLSSecret.InitContainer(common.TigeraPrometheusNamespace, mc.csrImage))
+		initContainers = append(initContainers, mc.cfg.ServerTLSSecret.InitContainer(common.TigeraPrometheusNamespace))
 	}
 	if mc.cfg.ClientTLSSecret.UseCertificateManagement() {
-		initContainers = append(initContainers, mc.cfg.ClientTLSSecret.InitContainer(common.TigeraPrometheusNamespace, mc.csrImage))
+		initContainers = append(initContainers, mc.cfg.ClientTLSSecret.InitContainer(common.TigeraPrometheusNamespace))
 	}
 	env := []corev1.EnvVar{
 		{

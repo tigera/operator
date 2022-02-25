@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+	"github.com/tigera/operator/pkg/render/component"
 	"strings"
 	"time"
 
@@ -51,7 +52,7 @@ const (
 	IntrusionDetectionInstallerJobName = "intrusion-detection-es-job-installer"
 )
 
-func IntrusionDetection(cfg *IntrusionDetectionConfiguration) Component {
+func IntrusionDetection(cfg *IntrusionDetectionConfiguration) component.Component {
 	return &intrusionDetectionComponent{
 		cfg: cfg,
 	}

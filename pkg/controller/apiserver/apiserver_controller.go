@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	"github.com/tigera/operator/pkg/render/component"
 	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -203,7 +204,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 	ns := rmeta.APIServerNamespace(variant)
 
-	certificateManager, err := certificatemanagement.CreateCertificateManager(r.client, network.CertificateManagement, r.clusterDomain)
+	certificateManager, err := certificatemanagement.CreateCertificateManager(r.client, network, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
 		r.status.SetDegraded("unable to create the Tigera CA", err.Error())
@@ -286,7 +287,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		r.status.SetDegraded("Error reading services endpoint configmap", err.Error())
 		return reconcile.Result{}, err
 	}
-	components := []render.Component{
+	components := []component.Component{
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       rmeta.APIServerNamespace(variant),
 			ServiceAccounts: []string{render.ApiServerServiceAccountName(variant)},

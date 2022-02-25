@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	"github.com/tigera/operator/pkg/render/component"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -53,7 +54,7 @@ func (r *ReconcileLogStorage) createEsMetrics(
 		return reconcile.Result{}, false, nil
 	}
 
-	certificateManager, err := certificatemanagement.CreateCertificateManager(r.client, install.CertificateManagement, r.clusterDomain)
+	certificateManager, err := certificatemanagement.CreateCertificateManager(r.client, install, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
 		r.status.SetDegraded("unable to create the Tigera CA", err.Error())
@@ -95,7 +96,7 @@ func (r *ReconcileLogStorage) createEsMetrics(
 		TrustedBundle:        trustedBundle,
 	}
 	esMetricsComponent := esmetrics.ElasticsearchMetrics(esMetricsCfg)
-	components := []render.Component{esMetricsComponent,
+	components := []component.Component{esMetricsComponent,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       render.ElasticsearchNamespace,
 			ServiceAccounts: []string{esmetrics.ElasticsearchMetricsName},

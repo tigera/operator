@@ -16,6 +16,7 @@ package render
 
 import (
 	"github.com/go-logr/logr"
+	"github.com/tigera/operator/pkg/render/component"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -30,7 +31,7 @@ var (
 
 // A Renderer is capable of generating components to be installed on the cluster.
 type Renderer interface {
-	Render() []Component
+	Render() []component.Component
 }
 
 func SetTestLogger(l logr.Logger) {

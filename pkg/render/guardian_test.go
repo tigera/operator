@@ -24,6 +24,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/render/component"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -35,7 +36,7 @@ import (
 )
 
 var _ = Describe("Rendering tests", func() {
-	var g render.Component
+	var g component.Component
 	var resources []client.Object
 
 	var renderGuardian = func(i operatorv1.InstallationSpec) {

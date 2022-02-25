@@ -20,6 +20,7 @@ import (
 	"bytes"
 	_ "embed"
 	"fmt"
+	component2 "github.com/tigera/operator/pkg/render/component"
 	"strconv"
 	"strings"
 	"text/template"
@@ -30,7 +31,6 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
-	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 
@@ -61,7 +61,7 @@ const (
 
 func ApplicationLayer(
 	config *Config,
-) render.Component {
+) component2.Component {
 	return &component{
 		config: config,
 	}

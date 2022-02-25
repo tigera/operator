@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+	"github.com/tigera/operator/pkg/render/component"
 	"strconv"
 	"strings"
 
@@ -80,7 +81,7 @@ const (
 	defaultTunnelVoltronPort    = "9449"
 )
 
-func Manager(cfg *ManagerConfiguration) (Component, error) {
+func Manager(cfg *ManagerConfiguration) (component.Component, error) {
 	var tlsSecrets []*corev1.Secret
 	tlsAnnotations := cfg.TrustedCertBundle.HashAnnotations()
 	tlsAnnotations[KibanaTLSHashAnnotation] = rmeta.SecretsAnnotationHash(cfg.KibanaSecrets...)
@@ -134,7 +135,6 @@ type managerComponent struct {
 	managerImage   string
 	proxyImage     string
 	esProxyImage   string
-	csrInitImage   string
 }
 
 func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -156,13 +156,6 @@ func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	c.esProxyImage, err = components.GetReference(components.ComponentEsProxy, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
-	}
-
-	if c.cfg.Installation.CertificateManagement != nil {
-		c.csrInitImage, err = certificatemanagement.ResolveCSRInitImage(c.cfg.Installation, is)
-		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
-		}
 	}
 
 	if len(errMsgs) != 0 {
@@ -220,7 +213,7 @@ func (c *managerComponent) Ready() bool {
 func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	var initContainers []corev1.Container
 	if c.cfg.TLSKeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.TLSKeyPair.InitContainer(ManagerNamespace, c.csrInitImage))
+		initContainers = append(initContainers, c.cfg.TLSKeyPair.InitContainer(ManagerNamespace))
 	}
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{

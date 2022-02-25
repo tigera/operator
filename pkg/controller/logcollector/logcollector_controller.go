@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	"github.com/tigera/operator/pkg/render/component"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"strings"
 	"time"
@@ -314,7 +315,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	certificateManager, err := certificatemanagement.CreateCertificateManager(r.client, installation.CertificateManagement, r.clusterDomain)
+	certificateManager, err := certificatemanagement.CreateCertificateManager(r.client, installation, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
 		r.status.SetDegraded("unable to create the Tigera CA", err.Error())
@@ -468,9 +469,9 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		TrustedBundle:    trustedBundle,
 	}
 	// Render the fluentd component for Linux
-	component := render.Fluentd(fluentdCfg)
-	components := []render.Component{
-		component,
+	comp := render.Fluentd(fluentdCfg)
+	components := []component.Component{
+		comp,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       render.LogCollectorNamespace,
 			ServiceAccounts: []string{render.FluentdNodeName},
@@ -481,7 +482,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}),
 	}
 
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, comp); err != nil {
 		reqLogger.Error(err, "Error with images from ImageSet")
 		r.status.SetDegraded("Error with images from ImageSet", err.Error())
 		return reconcile.Result{}, err
@@ -514,9 +515,9 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			ClusterDomain:   r.clusterDomain,
 			OSType:          rmeta.OSTypeWindows,
 		}
-		component = render.Fluentd(fluentdCfg)
+		comp = render.Fluentd(fluentdCfg)
 
-		if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+		if err = imageset.ApplyImageSet(ctx, r.client, variant, comp); err != nil {
 			reqLogger.Error(err, "Error with images from ImageSet")
 			r.status.SetDegraded("Error with images from ImageSet", err.Error())
 			return reconcile.Result{}, err
@@ -525,7 +526,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		// Create a component handler to manage the rendered component.
 		handler = utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
-		if err := handler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+		if err := handler.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
 			r.status.SetDegraded("Error creating / updating resource", err.Error())
 			return reconcile.Result{}, err
 		}

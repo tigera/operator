@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+	"github.com/tigera/operator/pkg/render/component"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -78,7 +79,7 @@ func csrRolebindingName(v operatorv1.ProductVariant) string {
 	return "tigera-apiserver"
 }
 
-func APIServer(cfg *APIServerConfiguration) (Component, error) {
+func APIServer(cfg *APIServerConfiguration) (component.Component, error) {
 	return &apiServerComponent{
 		cfg: cfg,
 	}, nil
@@ -102,7 +103,6 @@ type apiServerComponent struct {
 	cfg              *APIServerConfiguration
 	apiServerImage   string
 	queryServerImage string
-	certSignReqImage string
 }
 
 func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -123,13 +123,6 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		}
 	} else {
 		c.apiServerImage, err = components.GetReference(components.ComponentCalicoAPIServer, reg, path, prefix, is)
-		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
-		}
-	}
-
-	if c.cfg.Installation.CertificateManagement != nil {
-		c.certSignReqImage, err = certificatemanagement.ResolveCSRInitImage(c.cfg.Installation, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
@@ -738,7 +731,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 
 	var initContainers []corev1.Container
 	if c.cfg.TLSKeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.TLSKeyPair.InitContainer(rmeta.APIServerNamespace(c.cfg.Installation.Variant), c.certSignReqImage))
+		initContainers = append(initContainers, c.cfg.TLSKeyPair.InitContainer(rmeta.APIServerNamespace(c.cfg.Installation.Variant)))
 	}
 
 	annotations := map[string]string{

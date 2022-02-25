@@ -38,6 +38,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
+	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -455,7 +456,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	It("should render all resources for certificate management", func() {
-		ca, _ := certificatemanagement.MakeCA(rmeta.DefaultOperatorCASignerName())
+		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 		cert, _, _ := ca.Config.GetPEMBytes()
 		resources := renderObjects(false, nil, &operatorv1.InstallationSpec{
 			CertificateManagement: &operatorv1.CertificateManagement{CACert: cert},
@@ -542,7 +543,7 @@ func renderObjects(oidc bool, managementCluster *operatorv1.ManagementCluster, i
 	scheme := runtime.NewScheme()
 	Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 	cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-	certificateManager, err := certificatemanagement.CreateCertificateManager(cli, installation.CertificateManagement, clusterDomain)
+	certificateManager, err := certificatemanagement.CreateCertificateManager(cli, installation, clusterDomain)
 	Expect(err).NotTo(HaveOccurred())
 	bundle := certificatemanagement.CreateTrustedBundle(certificateManager)
 

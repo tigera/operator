@@ -18,6 +18,7 @@ import (
 	"fmt"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/tigera/operator/pkg/tls"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
@@ -406,10 +407,10 @@ var _ = Describe("compliance rendering tests", func() {
 
 	Context("Certificate management enabled", func() {
 		It("should render init containers and volume changes", func() {
-			ca, _ := certificatemanagement.MakeCA(rmeta.DefaultOperatorCASignerName())
+			ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 			cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 			cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: cert}
-			certificateManager, err := certificatemanagement.CreateCertificateManager(cli, cfg.Installation.CertificateManagement, clusterDomain)
+			certificateManager, err := certificatemanagement.CreateCertificateManager(cli, cfg.Installation, clusterDomain)
 			complianceTLS, err := certificateManager.GetOrCreateKeyPair(cli, render.ComplianceServerCertSecret, common.OperatorNamespace(), []string{""})
 			Expect(err).NotTo(HaveOccurred())
 			cfg.ComplianceServerCertSecret = complianceTLS

@@ -3,6 +3,7 @@ package logstorage
 import (
 	"context"
 	"fmt"
+	"github.com/tigera/operator/pkg/render/component"
 
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	apps "k8s.io/api/apps/v1"
@@ -127,7 +128,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexCertSecret, dexSecret, r.clusterDomain)
 	}
 
-	var components []render.Component
+	var components []component.Component
 
 	logStorageCfg := &render.ElasticsearchConfiguration{
 		LogStorage:                  ls,

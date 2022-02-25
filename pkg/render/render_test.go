@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"fmt"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	"github.com/tigera/operator/pkg/render/component"
 	glog "log"
 
 	. "github.com/onsi/ginkgo"
@@ -67,7 +68,7 @@ func allCalicoComponents(
 	nodeReporterMetricsPort int,
 	bgpLayout *corev1.ConfigMap,
 	logCollector *operatorv1.LogCollector,
-) ([]render.Component, error) {
+) ([]component.Component, error) {
 
 	namespaces := render.Namespaces(&render.NamespaceConfiguration{Installation: cr, PullSecrets: pullSecrets})
 
@@ -122,7 +123,7 @@ func allCalicoComponents(
 		TrustedBundle: typhaNodeTLS.TrustedBundle,
 	})
 
-	return []render.Component{namespaces, secretsAndConfigMaps, render.Typha(typhaCfg), render.Node(nodeCfg), kubecontrollers.NewCalicoKubeControllers(kcCfg), render.Windows(winCfg), nodeCertComponent}, nil
+	return []component.Component{namespaces, secretsAndConfigMaps, render.Typha(typhaCfg), render.Node(nodeCfg), kubecontrollers.NewCalicoKubeControllers(kcCfg), render.Windows(winCfg), nodeCertComponent}, nil
 }
 
 var _ = Describe("Rendering tests", func() {
@@ -426,7 +427,7 @@ func getTyphaNodeTLS(cli client.Client, certificateManager certificatemanagement
 	return typhaNodeTLS
 }
 
-func componentCount(components []render.Component) int {
+func componentCount(components []component.Component) int {
 	count := 0
 	for _, c := range components {
 		objsToCreate, _ := c.Objects()

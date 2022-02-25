@@ -40,6 +40,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	tls2 "github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -2851,10 +2852,10 @@ var _ = Describe("Node rendering tests", func() {
 	})
 
 	It("should render extra resources when certificate management is enabled", func() {
-		ca, _ := certificatemanagement.MakeCA(rmeta.DefaultOperatorCASignerName())
+		ca, _ := tls2.MakeCA(rmeta.DefaultOperatorCASignerName())
 		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c", CACert: cert}
-		certificateManager, err := certificatemanagement.CreateCertificateManager(cli, cfg.Installation.CertificateManagement, clusterDomain)
+		certificateManager, err := certificatemanagement.CreateCertificateManager(cli, cfg.Installation, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		cfg.TLS = getTyphaNodeTLS(cli, certificateManager)
 		expectedResources := []struct {

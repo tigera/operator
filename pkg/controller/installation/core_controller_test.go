@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/tls"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -992,7 +993,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			r.typhaAutoscaler.start(ctx)
 			r.calicoWindowsUpgrader.Start(ctx)
-			ca, err := certificatemanagement.MakeCA("test")
+			ca, err := tls.MakeCA("test")
 			Expect(err).NotTo(HaveOccurred())
 			cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 			// We start off with a 'standard' installation, with nothing special

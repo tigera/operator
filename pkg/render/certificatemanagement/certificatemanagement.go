@@ -3,8 +3,8 @@ package certificatemanagement
 import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	component2 "github.com/tigera/operator/pkg/render/component"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -12,7 +12,7 @@ import (
 // CertificateManagement renders your KeyPairs and TrustedBundle, thereby simplifying other render components.
 func CertificateManagement(
 	cfg *Config,
-) render.Component {
+) component2.Component {
 	return &component{
 		cfg: cfg,
 	}

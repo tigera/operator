@@ -662,7 +662,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		By("Validating the newly created tunnel secret")
-		certificateManager, err := certificatemanagement.CreateCertificateManager(cli, cfg.Installation.CertificateManagement, clusterDomain)
+		certificateManager, err := certificatemanagement.CreateCertificateManager(cli, cfg.Installation, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		tunnelCASecret, err := certificatemanagement.NewKeyPair(certificateManager, render.VoltronTunnelSecret(), nil, "")
 
@@ -757,7 +757,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 	It("should add an init container if certificate management is enabled", func() {
 		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c", CACert: cfg.TLSKeyPair.Secret("").Data[corev1.TLSCertKey]}
-		certificateManager, err := certificatemanagement.CreateCertificateManager(cli, cfg.Installation.CertificateManagement, clusterDomain)
+		certificateManager, err := certificatemanagement.CreateCertificateManager(cli, cfg.Installation, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		kp, err := certificateManager.GetOrCreateKeyPair(cli, render.ProjectCalicoApiServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
 		cfg.TLSKeyPair = kp

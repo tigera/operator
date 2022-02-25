@@ -17,6 +17,7 @@ package render_test
 import (
 	"fmt"
 	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -360,10 +361,10 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 	})
 
 	It("should render all resources for an installation with certificate management", func() {
-		ca, _ := certificatemanagement.MakeCA(rmeta.DefaultOperatorCASignerName())
+		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 		installation := operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{CACert: cert}}
-		certificateManager, err := certificatemanagement.CreateCertificateManager(cli, installation.CertificateManagement, clusterDomain)
+		certificateManager, err := certificatemanagement.CreateCertificateManager(cli, &installation, clusterDomain)
 		secret, err = certificateManager.GetOrCreateKeyPair(cli, render.PacketCaptureCertSecret, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
 

@@ -15,6 +15,7 @@
 package render
 
 import (
+	"github.com/tigera/operator/pkg/render/component"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -28,7 +29,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 )
 
-func AWSSecurityGroupSetup(cfg *AWSSGSetupConfiguration) (Component, error) {
+func AWSSecurityGroupSetup(cfg *AWSSGSetupConfiguration) (component.Component, error) {
 	return &awsSGSetupComponent{cfg: cfg}, nil
 }
 

@@ -24,8 +24,6 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/tls"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -166,7 +164,7 @@ func ExpectVolumeMount(vms []v1.VolumeMount, name, path string) {
 }
 
 func CreateCertSecret(name, namespace string, dnsNames ...string) *corev1.Secret {
-	cryptoCA, _ := certificatemanagement.MakeCA(rmeta.TigeraOperatorCAIssuerPrefix)
+	cryptoCA, _ := tls.MakeCA(rmeta.TigeraOperatorCAIssuerPrefix)
 	cfg, _ := cryptoCA.MakeServerCertForDuration(sets.NewString(dnsNames...), rmeta.DefaultCertificateDuration, tls.SetServerAuth, tls.SetClientAuth)
 	keyContent, crtContent := &bytes.Buffer{}, &bytes.Buffer{}
 	cfg.WriteCertConfig(crtContent, keyContent)

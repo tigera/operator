@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	"github.com/tigera/operator/pkg/render/component"
 	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -257,7 +258,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	certificateManager, err := certificatemanagement.CreateCertificateManager(r.client, installation.CertificateManagement, r.clusterDomain)
+	certificateManager, err := certificatemanagement.CreateCertificateManager(r.client, installation, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
 		r.status.SetDegraded("unable to create the Tigera CA", err.Error())
@@ -428,7 +429,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
-	components := []render.Component{
+	components := []component.Component{
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       render.ManagerNamespace,
 			ServiceAccounts: []string{render.ManagerServiceAccount},

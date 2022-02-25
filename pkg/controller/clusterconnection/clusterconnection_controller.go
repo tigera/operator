@@ -174,7 +174,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return result, err
 	}
 
-	certificateManager, err := certificatemanagement.CreateCertificateManager(r.Client, instl.CertificateManagement, r.clusterDomain)
+	certificateManager, err := certificatemanagement.CreateCertificateManager(r.Client, instl, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
 		r.status.SetDegraded("unable to create the Tigera CA", err.Error())

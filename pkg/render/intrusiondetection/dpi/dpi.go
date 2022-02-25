@@ -15,9 +15,6 @@
 package dpi
 
 import (
-	"fmt"
-	"strings"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
@@ -26,8 +23,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/meta"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-
+	"github.com/tigera/operator/pkg/render/component"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -58,18 +54,16 @@ type DPIConfig struct {
 	ClusterDomain      string
 }
 
-func DPI(cfg *DPIConfig) render.Component {
+func DPI(cfg *DPIConfig) component.Component {
 	return &dpiComponent{cfg: cfg}
 }
 
 type dpiComponent struct {
-	cfg              *DPIConfig
-	dpiImage         string
-	certSignReqImage string
+	cfg      *DPIConfig
+	dpiImage string
 }
 
 func (d *dpiComponent) ResolveImages(is *operatorv1.ImageSet) error {
-	var errMsgs []string
 	var err error
 	d.dpiImage, err = components.GetReference(
 		components.ComponentDeepPacketInspection,
@@ -78,16 +72,7 @@ func (d *dpiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		d.cfg.Installation.ImagePrefix,
 		is)
 	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
-	}
-	if d.cfg.Installation.CertificateManagement != nil {
-		d.certSignReqImage, err = certificatemanagement.ResolveCSRInitImage(d.cfg.Installation, is)
-		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
-		}
-	}
-	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+		return err
 	}
 	return nil
 }
@@ -141,7 +126,7 @@ func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 	var terminationGracePeriod int64 = 0
 	var initContainers []corev1.Container
 	if d.cfg.TyphaNodeTLS.NodeSecret.UseCertificateManagement() {
-		initContainers = append(initContainers, d.cfg.TyphaNodeTLS.NodeSecret.InitContainer(DeepPacketInspectionNamespace, d.certSignReqImage))
+		initContainers = append(initContainers, d.cfg.TyphaNodeTLS.NodeSecret.InitContainer(DeepPacketInspectionNamespace))
 	}
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{

@@ -68,7 +68,7 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 		enableESOIDCWorkaround = true
 	}
 
-	certificateManager, err := certificatemanagement.CreateCertificateManager(r.client, install.CertificateManagement, r.clusterDomain)
+	certificateManager, err := certificatemanagement.CreateCertificateManager(r.client, install, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
 		r.status.SetDegraded("unable to create the Tigera CA", err.Error())

@@ -15,9 +15,7 @@
 package render
 
 import (
-	"fmt"
-	"strings"
-
+	"github.com/tigera/operator/pkg/render/component"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -61,12 +59,11 @@ type PacketCaptureApiConfiguration struct {
 }
 
 type packetCaptureApiComponent struct {
-	cfg          *PacketCaptureApiConfiguration
-	image        string
-	csrInitImage string
+	cfg   *PacketCaptureApiConfiguration
+	image string
 }
 
-func PacketCaptureAPI(cfg *PacketCaptureApiConfiguration) Component {
+func PacketCaptureAPI(cfg *PacketCaptureApiConfiguration) component.Component {
 
 	return &packetCaptureApiComponent{
 		cfg: cfg,
@@ -79,23 +76,10 @@ func (pc *packetCaptureApiComponent) ResolveImages(is *operatorv1.ImageSet) erro
 	prefix := pc.cfg.Installation.ImagePrefix
 
 	var err error
-	var errMsg []string
 	pc.image, err = components.GetReference(components.ComponentPacketCapture, reg, path, prefix, is)
 	if err != nil {
-		errMsg = append(errMsg, err.Error())
+		return err
 	}
-
-	if pc.cfg.Installation.CertificateManagement != nil {
-		pc.csrInitImage, err = certificatemanagement.ResolveCSRInitImage(pc.cfg.Installation, is)
-		if err != nil {
-			errMsg = append(errMsg, err.Error())
-		}
-	}
-
-	if len(errMsg) != 0 {
-		return fmt.Errorf(strings.Join(errMsg, ","))
-	}
-
 	return nil
 }
 
@@ -260,7 +244,7 @@ func (pc *packetCaptureApiComponent) deployment() client.Object {
 func (pc *packetCaptureApiComponent) initContainers() []corev1.Container {
 	var initContainers []corev1.Container
 	if pc.cfg.ServerCertSecret.UseCertificateManagement() {
-		initContainers = append(initContainers, pc.cfg.ServerCertSecret.InitContainer(PacketCaptureNamespace, pc.csrInitImage))
+		initContainers = append(initContainers, pc.cfg.ServerCertSecret.InitContainer(PacketCaptureNamespace))
 	}
 	return initContainers
 }

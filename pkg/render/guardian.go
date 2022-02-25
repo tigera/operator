@@ -17,6 +17,7 @@
 package render
 
 import (
+	"github.com/tigera/operator/pkg/render/component"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -44,7 +45,7 @@ const (
 	GuardianSecretName             = "tigera-managed-cluster-connection"
 )
 
-func Guardian(cfg *GuardianConfiguration) Component {
+func Guardian(cfg *GuardianConfiguration) component.Component {
 	return &GuardianComponent{
 		cfg: cfg,
 	}

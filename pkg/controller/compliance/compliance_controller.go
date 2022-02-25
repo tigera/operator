@@ -17,7 +17,7 @@ package compliance
 import (
 	"context"
 	"fmt"
-	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	"github.com/tigera/operator/pkg/render/component"
 	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -28,6 +28,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
@@ -288,7 +289,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	certificateManager, err := certificatemanagement.CreateCertificateManager(r.client, network.CertificateManagement, r.clusterDomain)
+	certificateManager, err := certificatemanagement.CreateCertificateManager(r.client, network, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
 		r.status.SetDegraded("unable to create the Tigera CA", err.Error())
@@ -359,14 +360,14 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		HasNoLicense:                hasNoLicense,
 	}
 	// Render the desired objects from the CRD and create or update them.
-	component, err := render.Compliance(complianceCfg)
+	comp, err := render.Compliance(complianceCfg)
 	if err != nil {
 		log.Error(err, "error rendering Compliance")
 		r.status.SetDegraded("Error rendering Compliance", err.Error())
 		return reconcile.Result{}, err
 	}
 
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, comp); err != nil {
 		log.Error(err, "Error with images from ImageSet")
 		r.status.SetDegraded("Error with images from ImageSet", err.Error())
 		return reconcile.Result{}, err
@@ -380,8 +381,8 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		TrustedBundle: trustedBundle,
 	})
 
-	for _, component := range []render.Component{component, certificateComponent} {
-		if err := handler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+	for _, comp := range []component.Component{comp, certificateComponent} {
+		if err := handler.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
 			r.status.SetDegraded("Error creating / updating / deleting resource", err.Error())
 			return reconcile.Result{}, err
 		}

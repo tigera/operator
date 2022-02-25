@@ -18,6 +18,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/tigera/operator/pkg/render/component"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"hash/fnv"
 	"net/url"
@@ -163,7 +164,7 @@ const (
 var log = logf.Log.WithName("render")
 
 // LogStorage renders the components necessary for kibana and elasticsearch
-func LogStorage(cfg *ElasticsearchConfiguration) Component {
+func LogStorage(cfg *ElasticsearchConfiguration) component.Component {
 
 	var kibanaSecrets []*corev1.Secret
 

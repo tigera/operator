@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"github.com/elastic/cloud-on-k8s/pkg/utils/stringsutil"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	"github.com/tigera/operator/pkg/render/component"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"io/ioutil"
 	"net"
@@ -943,7 +944,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	certificateManager, err := certificatemanagement.CreateCertificateManager(r.client, instance.Spec.CertificateManagement, r.clusterDomain)
+	certificateManager, err := certificatemanagement.CreateCertificateManager(r.client, &instance.Spec, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
 		r.status.SetDegraded("unable to create the Tigera CA", err.Error())
@@ -1096,7 +1097,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		nodeAppArmorProfile = val
 	}
 
-	components := []render.Component{
+	components := []component.Component{
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       common.CalicoNamespace,
 			ServiceAccounts: []string{render.CalicoNodeObjectName, render.TyphaServiceAccountName},

@@ -16,11 +16,8 @@ package esmetrics
 
 import (
 	"fmt"
+	"github.com/tigera/operator/pkg/render/component"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	"strings"
-
-	"github.com/tigera/operator/pkg/dns"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,7 +39,7 @@ const (
 	ElasticsearchMetricsName            = "tigera-elasticsearch-metrics"
 )
 
-func ElasticsearchMetrics(cfg *Config) render.Component {
+func ElasticsearchMetrics(cfg *Config) component.Component {
 	return &elasticsearchMetrics{
 		cfg: cfg,
 	}
@@ -62,7 +59,6 @@ type Config struct {
 type elasticsearchMetrics struct {
 	cfg            *Config
 	esMetricsImage string
-	csrImage       string
 }
 
 func (e *elasticsearchMetrics) ResolveImages(is *operatorv1.ImageSet) error {
@@ -72,22 +68,9 @@ func (e *elasticsearchMetrics) ResolveImages(is *operatorv1.ImageSet) error {
 	path := e.cfg.Installation.ImagePath
 	prefix := e.cfg.Installation.ImagePrefix
 
-	var errMsgs []string
-
 	e.esMetricsImage, err = components.GetReference(components.ComponentElasticsearchMetrics, reg, path, prefix, is)
 	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
-	}
-
-	if e.cfg.Installation.CertificateManagement != nil {
-		e.csrImage, err = certificatemanagement.ResolveCSRInitImage(e.cfg.Installation, is)
-		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
-		}
-	}
-
-	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+		return err
 	}
 
 	return err
@@ -150,17 +133,7 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 	var initContainers []corev1.Container
 	annotations := e.cfg.TrustedBundle.HashAnnotations()
 	if e.cfg.ServerTLS.UseCertificateManagement() {
-		initContainers = append(initContainers,
-			certificatemanagement.CreateCSRInitContainer(
-				e.cfg.Installation.CertificateManagement,
-				e.csrImage,
-				ElasticsearchMetricsServerTLSSecret,
-				ElasticsearchMetricsServerTLSSecret,
-				corev1.TLSPrivateKeyKey,
-				corev1.TLSCertKey,
-				dns.GetServiceDNSNames(ElasticsearchMetricsName, render.ElasticsearchNamespace, e.cfg.ClusterDomain),
-				render.ElasticsearchNamespace),
-		)
+		initContainers = append(initContainers, e.cfg.ServerTLS.InitContainer(render.ElasticsearchNamespace))
 	} else {
 		annotations[e.cfg.ServerTLS.HashAnnotationKey()] = e.cfg.ServerTLS.HashAnnotationValue()
 	}

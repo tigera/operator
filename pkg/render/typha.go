@@ -16,8 +16,7 @@ package render
 
 import (
 	"fmt"
-	"strings"
-
+	"github.com/tigera/operator/pkg/render/component"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -33,7 +32,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/migration"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
@@ -63,7 +61,7 @@ type TyphaConfiguration struct {
 }
 
 // Typha creates the typha daemonset and other resources for the daemonset to operate normally.
-func Typha(cfg *TyphaConfiguration) Component {
+func Typha(cfg *TyphaConfiguration) component.Component {
 	return &typhaComponent{cfg: cfg}
 }
 
@@ -72,8 +70,7 @@ type typhaComponent struct {
 	cfg *TyphaConfiguration
 
 	// Generated internal config, built from the given configuration.
-	typhaImage       string
-	certSignReqImage string
+	typhaImage string
 }
 
 func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -86,20 +83,8 @@ func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	} else {
 		c.typhaImage, err = components.GetReference(components.ComponentCalicoTypha, reg, path, prefix, is)
 	}
-	errMsgs := []string{}
 	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
-	}
-
-	if c.cfg.Installation.CertificateManagement != nil {
-		c.certSignReqImage, err = certificatemanagement.ResolveCSRInitImage(c.cfg.Installation, is)
-		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
-		}
-	}
-
-	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+		return err
 	}
 	return nil
 }
@@ -358,7 +343,7 @@ func (c *typhaComponent) typhaDeployment() *appsv1.Deployment {
 	annotations[c.cfg.TLS.TyphaSecret.HashAnnotationKey()] = c.cfg.TLS.TyphaSecret.HashAnnotationValue()
 	var initContainers []corev1.Container
 	if c.cfg.TLS.TyphaSecret.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.TLS.TyphaSecret.InitContainer(common.CalicoNamespace, c.certSignReqImage))
+		initContainers = append(initContainers, c.cfg.TLS.TyphaSecret.InitContainer(common.CalicoNamespace))
 	}
 
 	// Include annotation for prometheus scraping configuration.

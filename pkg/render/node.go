@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+	"github.com/tigera/operator/pkg/render/component"
 	"net"
 	"sort"
 	"strconv"
@@ -111,7 +112,7 @@ type NodeConfiguration struct {
 }
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
-func Node(cfg *NodeConfiguration) Component {
+func Node(cfg *NodeConfiguration) component.Component {
 	return &nodeComponent{cfg: cfg}
 }
 
@@ -120,10 +121,9 @@ type nodeComponent struct {
 	cfg *NodeConfiguration
 
 	// Calculated internal fields based on the given information.
-	cniImage         string
-	flexvolImage     string
-	nodeImage        string
-	certSignReqImage string
+	cniImage     string
+	flexvolImage string
+	nodeImage    string
 }
 
 func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -153,13 +153,6 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
-	}
-
-	if c.cfg.Installation.CertificateManagement != nil {
-		c.certSignReqImage, err = certificatemanagement.ResolveCSRInitImage(c.cfg.Installation, is)
-		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
-		}
 	}
 
 	if len(errMsgs) != 0 {
@@ -665,11 +658,11 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 	}
 
 	if c.cfg.TLS.NodeSecret.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.TLS.NodeSecret.InitContainer(common.CalicoNamespace, c.certSignReqImage))
+		initContainers = append(initContainers, c.cfg.TLS.NodeSecret.InitContainer(common.CalicoNamespace))
 	}
 
 	if c.cfg.PrometheusServerTLS != nil && c.cfg.PrometheusServerTLS.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.PrometheusServerTLS.InitContainer(common.CalicoNamespace, c.certSignReqImage))
+		initContainers = append(initContainers, c.cfg.PrometheusServerTLS.InitContainer(common.CalicoNamespace))
 	}
 
 	if cniCfgMap != nil {

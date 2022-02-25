@@ -16,11 +16,10 @@ package render
 
 import (
 	"fmt"
+	"github.com/tigera/operator/pkg/render/component"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	"strconv"
-	"strings"
-
 	"github.com/tigera/operator/pkg/url"
+	"strconv"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -104,7 +103,7 @@ type SplunkCredential struct {
 	Certificate []byte
 }
 
-func Fluentd(cfg *FluentdConfiguration) Component {
+func Fluentd(cfg *FluentdConfiguration) component.Component {
 	timeout := probeTimeoutSeconds
 	period := probePeriodSeconds
 	if cfg.OSType == rmeta.OSTypeWindows {
@@ -148,7 +147,6 @@ type FluentdConfiguration struct {
 type fluentdComponent struct {
 	cfg          *FluentdConfiguration
 	image        string
-	csrImage     string
 	probeTimeout int32
 	probePeriod  int32
 }
@@ -165,19 +163,9 @@ func (c *fluentdComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	var err error
-	var errMsgs []string
 	c.image, err = components.GetReference(components.ComponentFluentd, reg, path, prefix, is)
 	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
-	}
-	if c.cfg.Installation.CertificateManagement != nil {
-		c.csrImage, err = certificatemanagement.ResolveCSRInitImage(c.cfg.Installation, is)
-		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
-		}
-	}
-	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+		return err
 	}
 	return err
 }
@@ -445,7 +433,7 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 	}
 	var initContainers []corev1.Container
 	if c.cfg.MetricsServerTLS != nil && c.cfg.MetricsServerTLS.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.MetricsServerTLS.InitContainer(LogCollectorNamespace, c.csrImage))
+		initContainers = append(initContainers, c.cfg.MetricsServerTLS.InitContainer(LogCollectorNamespace))
 	}
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{

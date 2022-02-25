@@ -21,7 +21,8 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"strings"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/status"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/tls"
 
@@ -40,20 +42,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
-
-func MakeCA(signerName string) (*crypto.CA, error) {
-	caConfig, err := crypto.MakeSelfSignedCAConfigForDuration(
-		signerName,
-		100*365*24*time.Hour, //100years*365days*24hours
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create CA: %s", err)
-	}
-	return &crypto.CA{
-		SerialGenerator: &crypto.RandomSerialGenerator{},
-		Config:          caConfig,
-	}, nil
-}
 
 const (
 	CASecretName                = "tigera-ca-private"
@@ -87,7 +75,7 @@ type KeyPair interface {
 	UseCertificateManagement() bool
 	// BYO returns true if this KeyPair was provided by the user. If BYO is true, UseCertificateManagement is false.
 	BYO() bool
-	InitContainer(namespace, csrImage string) corev1.Container
+	InitContainer(namespace string) corev1.Container
 	VolumeMount(folder string) corev1.VolumeMount
 	Volume() corev1.Volume
 	Certificate
@@ -209,10 +197,28 @@ type certificateManager struct {
 
 // CreateCertificateManager creates a signer of new certificates and has methods to retrieve existing KeyPairs and Certificates. If a user
 // brings their own secrets, CertificateManager will preserve and return them.
-func CreateCertificateManager(cli client.Client, certificateManagement *operatorv1.CertificateManagement, clusterDomain string) (CertificateManager, error) {
+func CreateCertificateManager(cli client.Client, installation *operatorv1.InstallationSpec, clusterDomain string) (CertificateManager, error) {
 	var cryptoCA *crypto.CA
 	var caSecret *corev1.Secret
-	if certificateManagement != nil {
+	var csrImage string
+	var certificateManagement *operatorv1.CertificateManagement
+	if installation != nil && installation.CertificateManagement != nil {
+		certificateManagement = installation.CertificateManagement
+		imageSet, err := imageset.GetImageSet(context.Background(), cli, installation.Variant)
+		if err != nil {
+			return nil, err
+		}
+		csrImage, err = components.GetReference(
+			components.ComponentCSRInitContainer,
+			installation.Registry,
+			installation.ImagePath,
+			installation.ImagePrefix,
+			imageSet,
+		)
+		if err != nil {
+			return nil, err
+		}
+
 		caSecret = &corev1.Secret{
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
@@ -236,7 +242,7 @@ func CreateCertificateManager(cli client.Client, certificateManagement *operator
 			len(caSecret.Data) == 0 ||
 			len(caSecret.Data[corev1.TLSPrivateKeyKey]) == 0 ||
 			len(caSecret.Data[corev1.TLSCertKey]) == 0 {
-			cryptoCA, err = MakeCA(rmeta.TigeraOperatorCAIssuerPrefix)
+			cryptoCA, err = tls.MakeCA(rmeta.TigeraOperatorCAIssuerPrefix)
 			if err != nil {
 				return nil, err
 			}
@@ -255,6 +261,7 @@ func CreateCertificateManager(cli client.Client, certificateManagement *operator
 	return &certificateManager{
 		CA: cryptoCA,
 		keyPair: keyPair{
+			csrImage:              csrImage,
 			Certificate:           x509Cert,
 			secret:                caSecret,
 			clusterDomain:         clusterDomain,
@@ -406,6 +413,7 @@ func (cm *certificateManager) CertificateManagement() *operatorv1.CertificateMan
 }
 
 type keyPair struct {
+	csrImage string
 	*x509.Certificate
 	secret        *corev1.Secret
 	clusterDomain string
@@ -416,17 +424,17 @@ type keyPair struct {
 }
 
 // UseCertificateManagement is true if this secret is not BYO and certificate management is used to provide the a pair to a pod.
-func (c *keyPair) UseCertificateManagement() bool {
-	return c.useCertificateManagement
+func (k *keyPair) UseCertificateManagement() bool {
+	return k.useCertificateManagement
 }
 
 // BYO returns true if this KeyPair was provided by the user. If BYO is true, UseCertificateManagement is false.
-func (c *keyPair) BYO() bool {
-	return c.useCertificateManagement == false && (c.ca != nil && !c.ca.Issued(c))
+func (k *keyPair) BYO() bool {
+	return k.useCertificateManagement == false && (k.ca != nil && !k.ca.Issued(k))
 }
 
-func (c *keyPair) X509Certificate() *x509.Certificate {
-	return c.Certificate
+func (k *keyPair) X509Certificate() *x509.Certificate {
+	return k.Certificate
 }
 
 // certificateManagementKeyPair returns a KeyPair for to be used when certificate management is used to provide a key pair to a pod.
@@ -440,6 +448,7 @@ func certificateManagementKeyPair(ca *certificateManager, secretName, secretName
 		useCertificateManagement: true,
 		dnsNames:                 dnsNames,
 		ca:                       ca,
+		csrImage:                 ca.csrImage,
 	}
 }
 
@@ -490,51 +499,51 @@ func standardizeFields(secret *corev1.Secret) error {
 	return nil
 }
 
-func (c *keyPair) Secret(namespace string) *corev1.Secret {
-	secret := c.secret.DeepCopy()
+func (k *keyPair) Secret(namespace string) *corev1.Secret {
+	secret := k.secret.DeepCopy()
 	secret.ObjectMeta = metav1.ObjectMeta{Name: secret.Name, Namespace: namespace}
 	return secret
 }
 
-func (c *keyPair) HashAnnotationKey() string {
-	return fmt.Sprintf("hash.operator.tigera.io/%s", c.secret.Name)
+func (k *keyPair) HashAnnotationKey() string {
+	return fmt.Sprintf("hash.operator.tigera.io/%s", k.secret.Name)
 }
 
-func (c *keyPair) HashAnnotationValue() string {
-	if c.CertificateManagement != nil {
+func (k *keyPair) HashAnnotationValue() string {
+	if k.CertificateManagement != nil {
 		return ""
 	}
-	return rmeta.AnnotationHash(c.Certificate.SubjectKeyId)
+	return rmeta.AnnotationHash(k.Certificate.SubjectKeyId)
 }
 
-func (c *keyPair) Volume() corev1.Volume {
-	volumeSource := CertificateVolumeSource(c.CertificateManagement, c.secret.Name)
+func (k *keyPair) Volume() corev1.Volume {
+	volumeSource := CertificateVolumeSource(k.CertificateManagement, k.secret.Name)
 	return corev1.Volume{
-		Name:         c.secret.Name,
+		Name:         k.secret.Name,
 		VolumeSource: volumeSource,
 	}
 }
 
-func (c *keyPair) VolumeMount(path string) corev1.VolumeMount {
+func (k *keyPair) VolumeMount(path string) corev1.VolumeMount {
 	return corev1.VolumeMount{
-		Name:      c.secret.Name,
+		Name:      k.secret.Name,
 		MountPath: path,
 		ReadOnly:  true,
 	}
 }
 
 // InitContainer contains an init container for making a CSR. is only applicable when certificate management is enabled.
-func (c *keyPair) InitContainer(namespace, csrImage string) corev1.Container {
+func (k *keyPair) InitContainer(namespace string) corev1.Container {
 	initContainer := CreateCSRInitContainer(
-		c.CertificateManagement,
-		csrImage,
-		c.secret.Name,
-		c.dnsNames[0],
+		k.CertificateManagement,
+		k.csrImage,
+		k.secret.Name,
+		k.dnsNames[0],
 		corev1.TLSPrivateKeyKey,
 		corev1.TLSCertKey,
-		c.dnsNames,
+		k.dnsNames,
 		namespace)
-	initContainer.Name = fmt.Sprintf("%s-%s", c.secret.Name, initContainer.Name)
+	initContainer.Name = fmt.Sprintf("%s-%s", k.secret.Name, initContainer.Name)
 	return initContainer
 }
 

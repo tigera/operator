@@ -16,6 +16,7 @@ package esgateway
 
 import (
 	"fmt"
+	"github.com/tigera/operator/pkg/render/component"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -52,7 +53,7 @@ const (
 	KibanaPort                 = 5601
 )
 
-func EsGateway(c *Config) render.Component {
+func EsGateway(c *Config) component.Component {
 	var certSecretsESCopy []*corev1.Secret
 	// Only render the public cert secret in the Operator namespace.
 	secrets := []*corev1.Secret{c.CertSecrets[1]}

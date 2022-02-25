@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+	"github.com/tigera/operator/pkg/render/component"
 	"strings"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -54,7 +55,7 @@ const (
 	DexCNPattern = "tigera-dex.tigera-dex.svc.%s"
 )
 
-func Dex(cfg *DexComponentConfiguration) Component {
+func Dex(cfg *DexComponentConfiguration) component.Component {
 
 	return &dexComponent{
 		cfg:       cfg,

@@ -18,6 +18,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"github.com/tigera/operator/pkg/render/component"
 	"reflect"
 	"time"
 
@@ -210,7 +211,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
-	certificateManager, err := certificatemanagement.CreateCertificateManager(r.client, install.CertificateManagement, r.clusterDomain)
+	certificateManager, err := certificatemanagement.CreateCertificateManager(r.client, install, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
 		r.status.SetDegraded("unable to create the Tigera CA", err.Error())
@@ -285,7 +286,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Render prometheus component
-	components := []render.Component{
+	components := []component.Component{
 		monitor.Monitor(monitorCfg),
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       common.TigeraPrometheusNamespace,

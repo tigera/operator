@@ -81,7 +81,7 @@ type CertificateManager interface {
 }
 
 // KeyPair wraps a Secret object that contains a private key and a certificate. Whether CertificateManagement is
-// configured or not, KeyPair returns the right InitContainer, Volumemount or Volume (when applicable).
+// configured or not, KeyPair returns the right InitContainer, VolumeMount or Volume (when applicable).
 type KeyPair interface {
 	//UseCertificateManagement returns true if this key pair was not user provided and certificate management has been configured.
 	UseCertificateManagement() bool
@@ -90,10 +90,6 @@ type KeyPair interface {
 	InitContainer(namespace, csrImage string) corev1.Container
 	VolumeMount(folder string) corev1.VolumeMount
 	Volume() corev1.Volume
-	// HasSkipRenderInOperatorNamespace Default: false. If true, this will avoid (re-)rendering a secret in the operator namespace and avoid changing an ownerRef.
-	HasSkipRenderInOperatorNamespace() bool
-	// SetSkipRenderInOperatorNamespace will avoid (re-)rendering a secret in the operator namespace and avoid changing an ownerRef.
-	SetSkipRenderInOperatorNamespace()
 	Certificate
 }
 
@@ -414,10 +410,9 @@ type keyPair struct {
 	secret        *corev1.Secret
 	clusterDomain string
 	*operatorv1.CertificateManagement
-	dnsNames                      []string
-	useCertificateManagement      bool
-	ca                            CertificateManager
-	skipRenderInOperatorNamespace bool
+	dnsNames                 []string
+	useCertificateManagement bool
+	ca                       CertificateManager
 }
 
 // UseCertificateManagement is true if this secret is not BYO and certificate management is used to provide the a pair to a pod.
@@ -427,17 +422,7 @@ func (c *keyPair) UseCertificateManagement() bool {
 
 // BYO returns true if this KeyPair was provided by the user. If BYO is true, UseCertificateManagement is false.
 func (c *keyPair) BYO() bool {
-	return c.useCertificateManagement == false && !c.ca.Issued(c)
-}
-
-// HasSkipRenderInOperatorNamespace Default: false. If true, this will avoid (re-)rendering a secret in the operator namespace and avoid changing an ownerRef.
-func (c *keyPair) HasSkipRenderInOperatorNamespace() bool {
-	return c.BYO() || c.skipRenderInOperatorNamespace
-}
-
-// SetSkipRenderInOperatorNamespace will avoid (re-)rendering a secret in the operator namespace and avoid changing an ownerRef.
-func (c *keyPair) SetSkipRenderInOperatorNamespace() {
-	c.skipRenderInOperatorNamespace = true
+	return c.useCertificateManagement == false && (c.ca != nil && !c.ca.Issued(c))
 }
 
 func (c *keyPair) X509Certificate() *x509.Certificate {

@@ -2,9 +2,7 @@ package render
 
 import (
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -12,15 +10,10 @@ func NewPassthrough(objs ...client.Object) Component {
 	return &passthroughComponent{objs: objs}
 }
 
-func NewDeletionPassthrough(objsToDelete ...client.Object) Component {
-	return &passthroughComponent{objsToDelete: objsToDelete}
-}
-
 // passthroughComponent is an implementation of a Component that simply passes back
 // the objects it was given unmodified.
 type passthroughComponent struct {
-	objs         []client.Object
-	objsToDelete []client.Object
+	objs []client.Object
 }
 
 // ResolveImages should call components.GetReference for all images that the Component
@@ -36,17 +29,14 @@ func (p *passthroughComponent) ResolveImages(is *operatorv1.ImageSet) error {
 func (p *passthroughComponent) Objects() (objsToCreate []client.Object, objsToDelete []client.Object) {
 	// Filter out nil objects. This makes it easier for the calling code, so we don't need to duplicate
 	// this filtering logic in all the controllers that user this component.
+	objs := []client.Object{}
 	for _, o := range p.objs {
-		if o != nil {
-			objsToCreate = append(objsToCreate, o)
+		if o == nil {
+			continue
 		}
+		objs = append(objs, o)
 	}
-	for _, o := range p.objsToDelete {
-		if o != nil {
-			objsToDelete = append(objsToDelete, o)
-		}
-	}
-	return
+	return objs, nil
 }
 
 // Ready returns true if the component is ready to be created.
@@ -59,12 +49,4 @@ func (p *passthroughComponent) Ready() bool {
 // that create pods. Return OSTypeAny means that no node selector should be set for the "kubernetes.io/os" label.
 func (p *passthroughComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeAny
-}
-
-// NewKeyPairPassthrough is a convenience func for constructing a passthrough to create or clean up secrets in the operator namespace.
-func NewKeyPairPassthrough(keyPair certificatemanagement.KeyPair) Component {
-	if keyPair.UseCertificateManagement() {
-		return NewDeletionPassthrough(keyPair.Secret(common.OperatorNamespace()))
-	}
-	return NewPassthrough(keyPair.Secret(common.OperatorNamespace()))
 }

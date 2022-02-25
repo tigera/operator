@@ -372,11 +372,14 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 	certificateComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-		ServiceAccountName: render.ComplianceServerSAName,
-		Namespace:          render.ComplianceNamespace,
-		KeyPairs:           []certificatemanagement.KeyPair{complianceServerCertSecret},
-		TrustedBundle:      trustedBundle,
+		Namespace:       render.ComplianceNamespace,
+		ServiceAccounts: []string{render.ComplianceServerSAName},
+		KeyPairOptions: []rcertificatemanagement.KeyPairCreator{
+			rcertificatemanagement.NewKeyPairOption(complianceServerCertSecret, true, true),
+		},
+		TrustedBundle: trustedBundle,
 	})
+
 	for _, component := range []render.Component{component, certificateComponent} {
 		if err := handler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 			r.status.SetDegraded("Error creating / updating / deleting resource", err.Error())

@@ -413,21 +413,21 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		ClusterDomain:      r.clusterDomain,
 	})
 
-	// Avoid taking ownership of the secret that should be controlled by core_controller.
-	typhaNodeTLS.NodeSecret.SetSkipRenderInOperatorNamespace()
 	components := []render.Component{
 		component,
 		dpiComponent,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			ServiceAccountName: render.IntrusionDetectionName,
-			Namespace:          render.IntrusionDetectionNamespace,
-			TrustedBundle:      trustedBundle,
+			Namespace:       render.IntrusionDetectionNamespace,
+			ServiceAccounts: []string{render.IntrusionDetectionName},
+			TrustedBundle:   trustedBundle,
 		}),
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			ServiceAccountName: dpi.DeepPacketInspectionName,
-			Namespace:          dpi.DeepPacketInspectionNamespace,
-			KeyPairs:           []certificatemanagement.KeyPair{typhaNodeTLS.NodeSecret},
-			TrustedBundle:      typhaNodeTLS.TrustedBundle,
+			Namespace:       dpi.DeepPacketInspectionNamespace,
+			ServiceAccounts: []string{dpi.DeepPacketInspectionName},
+			KeyPairOptions: []rcertificatemanagement.KeyPairCreator{
+				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, false, true),
+			},
+			TrustedBundle: typhaNodeTLS.TrustedBundle,
 		}),
 	}
 

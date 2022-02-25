@@ -472,10 +472,12 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	components := []render.Component{
 		component,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			ServiceAccountName: render.FluentdNodeName,
-			Namespace:          render.LogCollectorNamespace,
-			KeyPairs:           []certificatemanagement.KeyPair{fluentdPrometheusTLS},
-			TrustedBundle:      trustedBundle,
+			Namespace:       render.LogCollectorNamespace,
+			ServiceAccounts: []string{render.FluentdNodeName},
+			KeyPairOptions: []rcertificatemanagement.KeyPairCreator{
+				rcertificatemanagement.NewKeyPairOption(fluentdPrometheusTLS, true, true),
+			},
+			TrustedBundle: trustedBundle,
 		}),
 	}
 

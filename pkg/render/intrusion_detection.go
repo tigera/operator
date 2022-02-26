@@ -49,7 +49,7 @@ const (
 	IntrusionDetectionInstallerJobName = "intrusion-detection-es-job-installer"
 
 	adDetectionJobsDefaultPeriod = 15 * time.Minute
-	adJobsPodTemplatePrefixName  = "tigera.io.adjobs."
+	adDetectorPrefixName         = "tigera.io.detector."
 )
 
 func IntrusionDetection(cfg *IntrusionDetectionConfiguration) Component {
@@ -818,7 +818,7 @@ func (c *intrusionDetectionComponent) adJobsGlobalertTemplates() []client.Object
 				APIVersion: "projectcalico.org/v3",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name: adJobsPodTemplatePrefixName + "ip-sweep",
+				Name: adDetectorPrefixName + "ip-sweep",
 			},
 			Spec: v3.GlobalAlertSpec{
 				Type:        v3.GlobalAlertTypeAnomalyDetection,
@@ -835,7 +835,7 @@ func (c *intrusionDetectionComponent) adJobsGlobalertTemplates() []client.Object
 				APIVersion: "projectcalico.org/v3",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name: adJobsPodTemplatePrefixName + "port-scan",
+				Name: adDetectorPrefixName + "port-scan",
 			},
 			Spec: v3.GlobalAlertSpec{
 				Type:        v3.GlobalAlertTypeAnomalyDetection,
@@ -852,7 +852,7 @@ func (c *intrusionDetectionComponent) adJobsGlobalertTemplates() []client.Object
 				APIVersion: "projectcalico.org/v3",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name: adJobsPodTemplatePrefixName + "bytes-in",
+				Name: adDetectorPrefixName + "bytes-in",
 			},
 			Spec: v3.GlobalAlertSpec{
 				Type:        v3.GlobalAlertTypeAnomalyDetection,
@@ -869,7 +869,7 @@ func (c *intrusionDetectionComponent) adJobsGlobalertTemplates() []client.Object
 				APIVersion: "projectcalico.org/v3",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name: adJobsPodTemplatePrefixName + "bytes-out",
+				Name: adDetectorPrefixName + "bytes-out",
 			},
 			Spec: v3.GlobalAlertSpec{
 				Type:        v3.GlobalAlertTypeAnomalyDetection,
@@ -886,7 +886,7 @@ func (c *intrusionDetectionComponent) adJobsGlobalertTemplates() []client.Object
 				APIVersion: "projectcalico.org/v3",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name: adJobsPodTemplatePrefixName + "process-restarts",
+				Name: adDetectorPrefixName + "process-restarts",
 			},
 			Spec: v3.GlobalAlertSpec{
 				Type:        v3.GlobalAlertTypeAnomalyDetection,
@@ -903,7 +903,7 @@ func (c *intrusionDetectionComponent) adJobsGlobalertTemplates() []client.Object
 				APIVersion: "projectcalico.org/v3",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name: adJobsPodTemplatePrefixName + "dns-latency",
+				Name: adDetectorPrefixName + "dns-latency",
 			},
 			Spec: v3.GlobalAlertSpec{
 				Type:        v3.GlobalAlertTypeAnomalyDetection,
@@ -920,7 +920,7 @@ func (c *intrusionDetectionComponent) adJobsGlobalertTemplates() []client.Object
 				APIVersion: "projectcalico.org/v3",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name: adJobsPodTemplatePrefixName + "l7-latency",
+				Name: adDetectorPrefixName + "l7-latency",
 			},
 			Spec: v3.GlobalAlertSpec{
 				Type:        v3.GlobalAlertTypeAnomalyDetection,
@@ -937,7 +937,7 @@ func (c *intrusionDetectionComponent) adJobsGlobalertTemplates() []client.Object
 				APIVersion: "projectcalico.org/v3",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name: adJobsPodTemplatePrefixName + "http-connection-spike",
+				Name: adDetectorPrefixName + "http-connection-spike",
 			},
 			Spec: v3.GlobalAlertSpec{
 				Type:        v3.GlobalAlertTypeAnomalyDetection,

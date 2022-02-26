@@ -19,10 +19,11 @@ package certificatemanagement_test
 
 import (
 	"context"
-	"github.com/tigera/operator/pkg/tls"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"strings"
 	"time"
+
+	"github.com/tigera/operator/pkg/tls"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -210,7 +211,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			Expect(volume.VolumeSource.Secret.SecretName).To(Equal(appSecretName))
 
 			By("verifying the volume mount is correct")
-			mount := keyPair.VolumeMount(mountPath)
+			mount := keyPair.VolumeMount()
 			Expect(mount.MountPath).To(Equal(mountPath))
 			Expect(mount.Name).To(Equal(appSecretName))
 
@@ -237,7 +238,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			Expect(volume.VolumeSource.EmptyDir).NotTo(BeNil())
 
 			By("verifying the volume mount is correct")
-			mount := keyPair.VolumeMount(mountPath)
+			mount := keyPair.VolumeMount()
 			Expect(mount.MountPath).To(Equal(mountPath))
 			Expect(mount.Name).To(Equal(appSecretName))
 
@@ -267,7 +268,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			Expect(volume.VolumeSource.Secret.SecretName).To(Equal(appSecretName))
 
 			By("verifying the volume mount is correct")
-			mount := keyPair.VolumeMount(mountPath)
+			mount := keyPair.VolumeMount()
 			Expect(mount.MountPath).To(Equal(mountPath))
 			Expect(mount.Name).To(Equal(appSecretName))
 
@@ -296,7 +297,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			Expect(volume.VolumeSource.Secret.SecretName).To(Equal(appSecretName))
 
 			By("verifying the volume mount is correct")
-			mount := keyPair.VolumeMount(mountPath)
+			mount := keyPair.VolumeMount()
 			Expect(mount.MountPath).To(Equal(mountPath))
 			Expect(mount.Name).To(Equal(appSecretName))
 

@@ -16,10 +16,11 @@ package render
 
 import (
 	"fmt"
+	"strconv"
+
 	"github.com/tigera/operator/pkg/render/component"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/url"
-	"strconv"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -526,7 +527,7 @@ func (c *fluentdComponent) container() corev1.Container {
 	}
 
 	if c.cfg.MetricsServerTLS != nil {
-		volumeMounts = append(volumeMounts, c.cfg.MetricsServerTLS.VolumeMount("/tls"))
+		volumeMounts = append(volumeMounts, c.cfg.MetricsServerTLS.VolumeMount())
 	}
 
 	isPrivileged := false
@@ -717,9 +718,9 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 
 	if c.cfg.TrustedBundle != nil {
 		envs = append(envs,
-			corev1.EnvVar{Name: "CA_CRT_PATH", Value: "/ca/tls.crt"},
-			corev1.EnvVar{Name: "TLS_KEY_PATH", Value: "/tls/tls.key"},
-			corev1.EnvVar{Name: "TLS_CRT_PATH", Value: "/tls/tls.crt"},
+			corev1.EnvVar{Name: "CA_CRT_PATH", Value: c.cfg.TrustedBundle.MountPath()},
+			corev1.EnvVar{Name: "TLS_KEY_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountKeyFilePath()},
+			corev1.EnvVar{Name: "TLS_CRT_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountCertificateFilePath()},
 		)
 	}
 

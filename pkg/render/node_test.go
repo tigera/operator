@@ -224,8 +224,8 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
-			{Name: "FELIX_TYPHACERTFILE", Value: render.TLSCertMountPath},
-			{Name: "FELIX_TYPHAKEYFILE", Value: render.TLSKeyMountPath},
+			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		// Expect the SECURITY_GROUP env variables to not be set
@@ -294,7 +294,7 @@ var _ = Describe("Node rendering tests", func() {
 			{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 			{MountPath: "/var/run/nodeagent", Name: "policysync"},
 			{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
-			{MountPath: render.TLSMountPathBase, Name: render.NodeTLSSecretName, ReadOnly: true},
+			{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
 			{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
@@ -447,8 +447,8 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
-			{Name: "FELIX_TYPHACERTFILE", Value: render.TLSCertMountPath},
-			{Name: "FELIX_TYPHAKEYFILE", Value: render.TLSKeyMountPath},
+			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		// Expect the SECURITY_GROUP env variables to not be set
@@ -520,7 +520,7 @@ var _ = Describe("Node rendering tests", func() {
 			{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 			{MountPath: "/var/run/nodeagent", Name: "policysync"},
 			{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
-			{MountPath: render.TLSMountPathBase, Name: render.NodeTLSSecretName, ReadOnly: true},
+			{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
 			{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 			{MountPath: "/sys/fs/bpf", Name: "bpffs"},
 		}
@@ -668,8 +668,8 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
-			{Name: "FELIX_TYPHACERTFILE", Value: render.TLSCertMountPath},
-			{Name: "FELIX_TYPHAKEYFILE", Value: render.TLSKeyMountPath},
+			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 			// Tigera-specific envvars
 			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
 			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: "9081"},
@@ -813,7 +813,7 @@ var _ = Describe("Node rendering tests", func() {
 			{MountPath: "/var/log", Name: "var-log"},
 			{MountPath: "/var/run/nodeagent", Name: "policysync"},
 			{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
-			{MountPath: render.TLSMountPathBase, Name: render.NodeTLSSecretName, ReadOnly: true},
+			{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
 			{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
@@ -947,8 +947,8 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
-			{Name: "FELIX_TYPHACERTFILE", Value: render.TLSCertMountPath},
-			{Name: "FELIX_TYPHAKEYFILE", Value: render.TLSKeyMountPath},
+			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 			{Name: "FELIX_WIREGUARDHOSTENCRYPTIONENABLED", Value: "true"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
@@ -1018,7 +1018,7 @@ var _ = Describe("Node rendering tests", func() {
 			{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 			{MountPath: "/var/run/nodeagent", Name: "policysync"},
 			{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
-			{MountPath: render.TLSMountPathBase, Name: render.NodeTLSSecretName, ReadOnly: true},
+			{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
 			{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
@@ -1105,8 +1105,8 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
-			{Name: "FELIX_TYPHACERTFILE", Value: render.TLSCertMountPath},
-			{Name: "FELIX_TYPHAKEYFILE", Value: render.TLSKeyMountPath},
+			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 			{Name: "FELIX_INTERFACEPREFIX", Value: "eni"},
 			{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"},
 			{Name: "FELIX_ROUTESOURCE", Value: "WorkloadIPs"},
@@ -1159,7 +1159,7 @@ var _ = Describe("Node rendering tests", func() {
 			{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 			{MountPath: "/var/run/nodeagent", Name: "policysync"},
 			{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
-			{MountPath: render.TLSMountPathBase, Name: render.NodeTLSSecretName, ReadOnly: true},
+			{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
 
@@ -1352,8 +1352,8 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
-			{Name: "FELIX_TYPHACERTFILE", Value: render.TLSCertMountPath},
-			{Name: "FELIX_TYPHAKEYFILE", Value: render.TLSKeyMountPath},
+			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 			{Name: "FELIX_WIREGUARDHOSTENCRYPTIONENABLED", Value: "true"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
@@ -1423,7 +1423,7 @@ var _ = Describe("Node rendering tests", func() {
 			{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 			{MountPath: "/var/run/nodeagent", Name: "policysync"},
 			{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
-			{MountPath: render.TLSMountPathBase, Name: render.NodeTLSSecretName, ReadOnly: true},
+			{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
 			{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
@@ -1507,8 +1507,8 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
-			{Name: "FELIX_TYPHACERTFILE", Value: render.TLSCertMountPath},
-			{Name: "FELIX_TYPHAKEYFILE", Value: render.TLSKeyMountPath},
+			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 			{Name: "FELIX_INTERFACEPREFIX", Value: "eni"},
 			{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"},
 			{Name: "FELIX_ROUTESOURCE", Value: "WorkloadIPs"},
@@ -1561,7 +1561,7 @@ var _ = Describe("Node rendering tests", func() {
 			{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 			{MountPath: "/var/run/nodeagent", Name: "policysync"},
 			{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
-			{MountPath: render.TLSMountPathBase, Name: render.NodeTLSSecretName, ReadOnly: true},
+			{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
 
@@ -1674,8 +1674,8 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
-			{Name: "FELIX_TYPHACERTFILE", Value: render.TLSCertMountPath},
-			{Name: "FELIX_TYPHAKEYFILE", Value: render.TLSKeyMountPath},
+			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 			// The OpenShift envvar overrides.
 			{Name: "FELIX_HEALTHPORT", Value: "9199"},
 		}
@@ -1754,8 +1754,8 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
-			{Name: "FELIX_TYPHACERTFILE", Value: render.TLSCertMountPath},
-			{Name: "FELIX_TYPHAKEYFILE", Value: render.TLSKeyMountPath},
+			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 			// Tigera-specific envvars
 			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
 			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: "9081"},
@@ -2751,8 +2751,8 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
-			{Name: "FELIX_TYPHACERTFILE", Value: render.TLSCertMountPath},
-			{Name: "FELIX_TYPHAKEYFILE", Value: render.TLSKeyMountPath},
+			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 

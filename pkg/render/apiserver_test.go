@@ -19,8 +19,9 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -201,8 +202,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		expectedArgs := []string{
 			"--secure-port=5443",
-			"--tls-private-key-file=/code/apiserver.local.config/certificates/tls.key",
-			"--tls-cert-file=/code/apiserver.local.config/certificates/tls.crt",
+			"--tls-private-key-file=/tigera-apiserver-certs/tls.key",
+			"--tls-cert-file=/tigera-apiserver-certs/tls.crt",
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
 			"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
 		}
@@ -213,7 +214,6 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(d.Spec.Template.Spec.Containers[0].Env[0].ValueFrom).To(BeNil())
 
 		Expect(len(d.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
-		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/code/apiserver.local.config/certificates"))
 		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("tigera-apiserver-certs"))
 		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal("/var/log/calico/audit"))
 		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal("tigera-audit-logs"))
@@ -675,13 +675,13 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		By("Validating startup args")
 		expectedArgs := []string{
 			"--secure-port=5443",
-			"--tls-private-key-file=/code/apiserver.local.config/certificates/tls.key",
-			"--tls-cert-file=/code/apiserver.local.config/certificates/tls.crt",
+			"--tls-private-key-file=/tigera-apiserver-certs/tls.key",
+			"--tls-cert-file=/tigera-apiserver-certs/tls.crt",
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
 			"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
 			"--enable-managed-clusters-create-api=true",
-			"--set-managed-clusters-ca-cert=/code/apiserver.local.config/multicluster/certificates/tls.crt",
-			"--set-managed-clusters-ca-key=/code/apiserver.local.config/multicluster/certificates/tls.key",
+			"--set-managed-clusters-ca-cert=/tigera-management-cluster-connection/tls.crt",
+			"--set-managed-clusters-ca-key=/tigera-management-cluster-connection/tls.key",
 			"--managementClusterAddr=example.com:1234",
 		}
 		Expect((dep.(*appsv1.Deployment)).Spec.Template.Spec.Containers[0].Args).To(ConsistOf(expectedArgs))
@@ -743,13 +743,13 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		By("Validating startup args")
 		expectedArgs := []string{
 			"--secure-port=5443",
-			"--tls-private-key-file=/code/apiserver.local.config/certificates/tls.key",
-			"--tls-cert-file=/code/apiserver.local.config/certificates/tls.crt",
+			"--tls-private-key-file=/tigera-apiserver-certs/tls.key",
+			"--tls-cert-file=/tigera-apiserver-certs/tls.crt",
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
 			"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
 			"--enable-managed-clusters-create-api=true",
-			"--set-managed-clusters-ca-cert=/code/apiserver.local.config/multicluster/certificates/tls.crt",
-			"--set-managed-clusters-ca-key=/code/apiserver.local.config/multicluster/certificates/tls.key",
+			"--set-managed-clusters-ca-cert=/tigera-management-cluster-connection/tls.crt",
+			"--set-managed-clusters-ca-key=/tigera-management-cluster-connection/tls.key",
 			"--managementClusterAddr=example.com:1234",
 		}
 		Expect((dep.(*appsv1.Deployment)).Spec.Template.Spec.Containers[0].Args).To(ConsistOf(expectedArgs))
@@ -1239,8 +1239,8 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 
 		expectedArgs := []string{
 			"--secure-port=5443",
-			"--tls-private-key-file=/code/apiserver.local.config/certificates/tls.key",
-			"--tls-cert-file=/code/apiserver.local.config/certificates/tls.crt",
+			"--tls-private-key-file=/calico-apiserver-certs/tls.key",
+			"--tls-cert-file=/calico-apiserver-certs/tls.crt",
 		}
 		Expect(d.Spec.Template.Spec.Containers[0].Args).To(ConsistOf(expectedArgs))
 		Expect(len(d.Spec.Template.Spec.Containers[0].Env)).To(Equal(1))

@@ -16,8 +16,9 @@ package render
 
 import (
 	"fmt"
-	"github.com/tigera/operator/pkg/render/component"
 	"strings"
+
+	"github.com/tigera/operator/pkg/render/component"
 
 	ocsv1 "github.com/openshift/api/security/v1"
 
@@ -704,8 +705,8 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 					},
 					Command: []string{"/code/server"},
 					Args: []string{
-						"-certpath=/etc/ssl/tigera-compliance-server-tls/tls.crt",
-						"-keypath=/etc/ssl/tigera-compliance-server-tls/tls.key",
+						fmt.Sprintf("-certpath=%s", c.cfg.ComplianceServerCertSecret.VolumeMountCertificateFilePath()),
+						fmt.Sprintf("-keypath=%s", c.cfg.ComplianceServerCertSecret.VolumeMountKeyFilePath()),
 					},
 					VolumeMounts: c.complianceServerVolumeMounts(),
 				}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceServerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()),
@@ -743,7 +744,7 @@ func (c *complianceComponent) complianceServerPodSecurityPolicy() *policyv1beta1
 func (c *complianceComponent) complianceServerVolumeMounts() []corev1.VolumeMount {
 	mounts := []corev1.VolumeMount{
 		c.cfg.TrustedBundle.VolumeMount(),
-		c.cfg.ComplianceServerCertSecret.VolumeMount("/etc/ssl/tigera-compliance-server-tls/"),
+		c.cfg.ComplianceServerCertSecret.VolumeMount(),
 	}
 
 	if c.cfg.KeyValidatorConfig != nil {

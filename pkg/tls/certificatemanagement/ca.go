@@ -76,7 +76,9 @@ type KeyPair interface {
 	// BYO returns true if this KeyPair was provided by the user. If BYO is true, UseCertificateManagement is false.
 	BYO() bool
 	InitContainer(namespace string) corev1.Container
-	VolumeMount(folder string) corev1.VolumeMount
+	VolumeMount() corev1.VolumeMount
+	VolumeMountKeyFilePath() string
+	VolumeMountCertificateFilePath() string
 	Volume() corev1.Volume
 	Certificate
 }
@@ -524,10 +526,18 @@ func (k *keyPair) Volume() corev1.Volume {
 	}
 }
 
-func (k *keyPair) VolumeMount(path string) corev1.VolumeMount {
+func (k *keyPair) VolumeMountCertificateFilePath() string {
+	return fmt.Sprintf("/%s/%s", k.secret.Name, corev1.TLSCertKey)
+}
+
+func (k *keyPair) VolumeMountKeyFilePath() string {
+	return fmt.Sprintf("/%s/%s", k.secret.Name, corev1.TLSPrivateKeyKey)
+}
+
+func (k *keyPair) VolumeMount() corev1.VolumeMount {
 	return corev1.VolumeMount{
 		Name:      k.secret.Name,
-		MountPath: path,
+		MountPath: fmt.Sprintf("/%s", k.secret.Name),
 		ReadOnly:  true,
 	}
 }

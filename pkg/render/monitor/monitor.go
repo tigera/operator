@@ -17,8 +17,9 @@ package monitor
 import (
 	_ "embed"
 	"fmt"
-	"github.com/tigera/operator/pkg/render/component"
 	"strings"
+
+	"github.com/tigera/operator/pkg/render/component"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -279,6 +280,14 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 			Value: fmt.Sprintf(":%d", PrometheusProxyPort),
 		},
 		{
+			Name:  "TLS_KEY",
+			Value: mc.cfg.ServerTLSSecret.VolumeMountKeyFilePath(),
+		},
+		{
+			Name:  "TLS_CERT",
+			Value: mc.cfg.ServerTLSSecret.VolumeMountCertificateFilePath(),
+		},
+		{
 			// No other way to annotate this pod.
 			Name:  "TLS_SERVER_SECRET_HASH_ANNOTATION",
 			Value: mc.cfg.ServerTLSSecret.HashAnnotationValue(),
@@ -301,8 +310,8 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		mc.cfg.TrustedCertBundle.Volume(),
 	}
 	volumeMounts := []corev1.VolumeMount{
-		mc.cfg.ServerTLSSecret.VolumeMount("/tls"),
-		mc.cfg.ClientTLSSecret.VolumeMount("/client-tls"),
+		mc.cfg.ServerTLSSecret.VolumeMount(),
+		mc.cfg.ClientTLSSecret.VolumeMount(),
 		mc.cfg.TrustedCertBundle.VolumeMount(),
 	}
 
@@ -544,8 +553,8 @@ func (mc *monitorComponent) serviceMonitorCalicoNode() *monitoringv1.ServiceMoni
 
 func (mc *monitorComponent) tlsConfig(serverName string) *monitoringv1.TLSConfig {
 	return &monitoringv1.TLSConfig{
-		KeyFile:  fmt.Sprintf("/client-tls/%s", corev1.TLSPrivateKeyKey),
-		CertFile: fmt.Sprintf("/client-tls/%s", corev1.TLSCertKey),
+		KeyFile:  fmt.Sprintf(mc.cfg.ClientTLSSecret.VolumeMountKeyFilePath()),
+		CertFile: fmt.Sprintf(mc.cfg.ClientTLSSecret.VolumeMountCertificateFilePath()),
 		CAFile:   mc.cfg.TrustedCertBundle.MountPath(),
 		SafeTLSConfig: monitoringv1.SafeTLSConfig{
 			ServerName: serverName,

@@ -137,7 +137,7 @@ var (
 
 	expectedVolumeMounts = []corev1.VolumeMount{
 		{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
-		{MountPath: render.TLSMountPathBase, Name: "node-certs", ReadOnly: true},
+		{MountPath: "/node-certs", Name: "node-certs", ReadOnly: true},
 		{
 			MountPath: "/etc/ssl/elastic/", Name: "elastic-ca-cert-volume",
 		},

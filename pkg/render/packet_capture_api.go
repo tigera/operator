@@ -251,10 +251,12 @@ func (pc *packetCaptureApiComponent) initContainers() []corev1.Container {
 
 func (pc *packetCaptureApiComponent) container() corev1.Container {
 	var volumeMounts = []corev1.VolumeMount{
-		pc.cfg.ServerCertSecret.VolumeMount("/certs/https"),
+		pc.cfg.ServerCertSecret.VolumeMount(),
 	}
 	env := []corev1.EnvVar{
 		{Name: "PACKETCAPTURE_API_LOG_LEVEL", Value: "Info"},
+		{Name: "PACKETCAPTURE_HTTPS_KEY", Value: pc.cfg.ServerCertSecret.VolumeMountKeyFilePath()},
+		{Name: "PACKETCAPTURE_HTTPS_CERT", Value: pc.cfg.ServerCertSecret.VolumeMountCertificateFilePath()},
 	}
 
 	if pc.cfg.KeyValidatorConfig != nil {

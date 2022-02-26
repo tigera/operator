@@ -16,9 +16,10 @@ package render
 
 import (
 	"fmt"
-	"github.com/tigera/operator/pkg/render/component"
 	"strconv"
 	"strings"
+
+	"github.com/tigera/operator/pkg/render/component"
 
 	ocsv1 "github.com/openshift/api/security/v1"
 
@@ -413,6 +414,13 @@ func (c *managerComponent) managerOAuth2EnvVars() []corev1.EnvVar {
 
 // managerProxyContainer returns the container for the manager proxy container.
 func (c *managerComponent) managerProxyContainer() corev1.Container {
+	var keyPath, certPath, intKeyPath, intCertPath string
+	if c.cfg.TLSKeyPair != nil {
+		keyPath, certPath = c.cfg.TLSKeyPair.VolumeMountKeyFilePath(), c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()
+	}
+	if c.cfg.InternalTrafficSecret != nil {
+		intKeyPath, intCertPath = c.cfg.InternalTrafficSecret.VolumeMountKeyFilePath(), c.cfg.InternalTrafficSecret.VolumeMountCertificateFilePath()
+	}
 	env := []corev1.EnvVar{
 		{Name: "VOLTRON_PORT", Value: defaultVoltronPort},
 		{Name: "VOLTRON_COMPLIANCE_ENDPOINT", Value: fmt.Sprintf("https://compliance.%s.svc.%s", ComplianceNamespace, c.cfg.ClusterDomain)},
@@ -423,10 +431,10 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		{Name: "VOLTRON_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_COMPLIANCE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
-		{Name: "VOLTRON_HTTPS_KEY", Value: fmt.Sprintf("/certs/https/%s", corev1.TLSPrivateKeyKey)},
-		{Name: "VOLTRON_HTTPS_CERT", Value: fmt.Sprintf("/certs/https/%s", corev1.TLSCertKey)},
-		{Name: "VOLTRON_INTERNAL_HTTPS_KEY", Value: fmt.Sprintf("/certs/internal/%s", corev1.TLSPrivateKeyKey)},
-		{Name: "VOLTRON_INTERNAL_HTTPS_CERT", Value: fmt.Sprintf("/certs/internal/%s", corev1.TLSCertKey)},
+		{Name: "VOLTRON_HTTPS_KEY", Value: keyPath},
+		{Name: "VOLTRON_HTTPS_CERT", Value: certPath},
+		{Name: "VOLTRON_INTERNAL_HTTPS_KEY", Value: intKeyPath},
+		{Name: "VOLTRON_INTERNAL_HTTPS_CERT", Value: intCertPath},
 		{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
 		{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
 		{Name: "VOLTRON_DEFAULT_FORWARD_SERVER", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc:9200"},
@@ -452,13 +460,13 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 
 func (c *managerComponent) volumeMountsForProxyManager() []corev1.VolumeMount {
 	var mounts = []corev1.VolumeMount{
-		{Name: ManagerTLSSecretName, MountPath: "/certs/https", ReadOnly: true},
+		{Name: ManagerTLSSecretName, MountPath: "/manager-tls", ReadOnly: true},
 		{Name: KibanaPublicCertSecret, MountPath: "/certs/kibana", ReadOnly: true},
 		c.cfg.TrustedCertBundle.VolumeMount(),
 	}
 
 	if c.cfg.ManagementCluster != nil {
-		mounts = append(mounts, c.cfg.InternalTrafficSecret.VolumeMount("/certs/internal"))
+		mounts = append(mounts, c.cfg.InternalTrafficSecret.VolumeMount())
 		mounts = append(mounts, corev1.VolumeMount{Name: VoltronTunnelSecretName, MountPath: "/certs/tunnel", ReadOnly: true})
 	}
 

@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+
 	"github.com/tigera/operator/pkg/render/component"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -419,7 +420,7 @@ func (c *typhaComponent) volumes() []corev1.Volume {
 func (c *typhaComponent) typhaVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
 		c.cfg.TLS.TrustedBundle.VolumeMount(),
-		c.cfg.TLS.TyphaSecret.VolumeMount(TLSMountPathBase),
+		c.cfg.TLS.TyphaSecret.VolumeMount(),
 	}
 }
 
@@ -465,8 +466,8 @@ func (c *typhaComponent) typhaEnvVars() []corev1.EnvVar {
 		{Name: "TYPHA_HEALTHENABLED", Value: "true"},
 		{Name: "TYPHA_K8SNAMESPACE", Value: common.CalicoNamespace},
 		{Name: "TYPHA_CAFILE", Value: c.cfg.TLS.TrustedBundle.MountPath()},
-		{Name: "TYPHA_SERVERCERTFILE", Value: TLSCertMountPath},
-		{Name: "TYPHA_SERVERKEYFILE", Value: TLSKeyMountPath},
+		{Name: "TYPHA_SERVERCERTFILE", Value: c.cfg.TLS.TyphaSecret.VolumeMountCertificateFilePath()},
+		{Name: "TYPHA_SERVERKEYFILE", Value: c.cfg.TLS.TyphaSecret.VolumeMountKeyFilePath()},
 	}
 	// We need at least the CN or URISAN set, we depend on the validation
 	// done by the core_controller that the Secret will have one.

@@ -16,8 +16,9 @@ package render
 
 import (
 	"fmt"
-	"github.com/tigera/operator/pkg/render/component"
 	"strings"
+
+	"github.com/tigera/operator/pkg/render/component"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -810,11 +811,11 @@ func (c *apiServerComponent) hostNetwork() bool {
 // apiServerContainer creates the API server container.
 func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	volumeMounts := []corev1.VolumeMount{
-		c.cfg.TLSKeyPair.VolumeMount("/code/apiserver.local.config/certificates"),
+		c.cfg.TLSKeyPair.VolumeMount(),
 	}
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		if c.cfg.ManagementCluster != nil {
-			volumeMounts = append(volumeMounts, c.cfg.TunnelCASecret.VolumeMount("/code/apiserver.local.config/multicluster/certificates"))
+			volumeMounts = append(volumeMounts, c.cfg.TunnelCASecret.VolumeMount())
 		}
 		volumeMounts = append(volumeMounts,
 			corev1.VolumeMount{Name: auditLogsVolumeName, MountPath: "/var/log/calico/audit"},
@@ -888,8 +889,8 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 func (c *apiServerComponent) startUpArgs() []string {
 	args := []string{
 		fmt.Sprintf("--secure-port=%d", apiServerPort),
-		"--tls-private-key-file=/code/apiserver.local.config/certificates/tls.key",
-		"--tls-cert-file=/code/apiserver.local.config/certificates/tls.crt",
+		fmt.Sprintf("--tls-private-key-file=%s", c.cfg.TLSKeyPair.VolumeMountKeyFilePath()),
+		fmt.Sprintf("--tls-cert-file=%s", c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()),
 	}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
@@ -902,8 +903,8 @@ func (c *apiServerComponent) startUpArgs() []string {
 	if c.cfg.ManagementCluster != nil {
 		args = append(args,
 			"--enable-managed-clusters-create-api=true",
-			"--set-managed-clusters-ca-cert=/code/apiserver.local.config/multicluster/certificates/tls.crt",
-			"--set-managed-clusters-ca-key=/code/apiserver.local.config/multicluster/certificates/tls.key")
+			fmt.Sprintf("--set-managed-clusters-ca-cert=%s", c.cfg.TunnelCASecret.VolumeMountCertificateFilePath()),
+			fmt.Sprintf("--set-managed-clusters-ca-key=%s", c.cfg.TunnelCASecret.VolumeMountKeyFilePath()))
 		if c.cfg.ManagementCluster.Spec.Address != "" {
 			args = append(args, fmt.Sprintf("--managementClusterAddr=%s", c.cfg.ManagementCluster.Spec.Address))
 		}

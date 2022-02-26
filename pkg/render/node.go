@@ -16,11 +16,12 @@ package render
 
 import (
 	"fmt"
-	"github.com/tigera/operator/pkg/render/component"
 	"net"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/tigera/operator/pkg/render/component"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -66,9 +67,6 @@ var (
 	// This is currently not intended to be user configurable.
 	nodeBGPReporterPort int32 = 9900
 
-	TLSMountPathBase  = "/tls/"
-	TLSKeyMountPath   = fmt.Sprintf("%s%s", TLSMountPathBase, corev1.TLSPrivateKeyKey)
-	TLSCertMountPath  = fmt.Sprintf("%s%s", TLSMountPathBase, corev1.TLSCertKey)
 	NodeTLSSecretName = "node-certs"
 )
 
@@ -1067,7 +1065,7 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 		{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
 		{MountPath: "/var/run/nodeagent", Name: "policysync"},
 		c.cfg.TLS.TrustedBundle.VolumeMount(),
-		c.cfg.TLS.NodeSecret.VolumeMount(TLSMountPathBase),
+		c.cfg.TLS.NodeSecret.VolumeMount(),
 	}
 	if c.runAsNonPrivileged() {
 		nodeVolumeMounts = append(nodeVolumeMounts,
@@ -1132,7 +1130,7 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 			})
 	}
 	if c.cfg.PrometheusServerTLS != nil {
-		nodeVolumeMounts = append(nodeVolumeMounts, c.cfg.PrometheusServerTLS.VolumeMount(fmt.Sprintf("/%s", NodePrometheusTLSServerSecret)))
+		nodeVolumeMounts = append(nodeVolumeMounts, c.cfg.PrometheusServerTLS.VolumeMount())
 	}
 	return nodeVolumeMounts
 }
@@ -1181,8 +1179,8 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		{Name: "FELIX_TYPHAK8SNAMESPACE", Value: common.CalicoNamespace},
 		{Name: "FELIX_TYPHAK8SSERVICENAME", Value: TyphaServiceName},
 		{Name: "FELIX_TYPHACAFILE", Value: c.cfg.TLS.TrustedBundle.MountPath()},
-		{Name: "FELIX_TYPHACERTFILE", Value: TLSCertMountPath},
-		{Name: "FELIX_TYPHAKEYFILE", Value: TLSKeyMountPath},
+		{Name: "FELIX_TYPHACERTFILE", Value: c.cfg.TLS.NodeSecret.VolumeMountCertificateFilePath()},
+		{Name: "FELIX_TYPHAKEYFILE", Value: c.cfg.TLS.NodeSecret.VolumeMountKeyFilePath()},
 	}
 	// We need at least the CN or URISAN set, we depend on the validation
 	// done by the core_controller that the Secret will have one.

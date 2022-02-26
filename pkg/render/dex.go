@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
+
 package render
 
 import (
 	"fmt"
-	"github.com/tigera/operator/pkg/render/component"
 	"strings"
+
+	"github.com/tigera/operator/pkg/render/component"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"

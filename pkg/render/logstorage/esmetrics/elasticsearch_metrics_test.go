@@ -196,7 +196,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 									{Name: "ES_CURATOR_BACKEND_CERT", Value: "/etc/ssl/elastic/ca.pem"},
 								},
 								VolumeMounts: []corev1.VolumeMount{
-									cfg.ServerTLS.VolumeMount("/tls"),
+									cfg.ServerTLS.VolumeMount(),
 									cfg.TrustedBundle.VolumeMount(),
 									{Name: "elastic-ca-cert-volume", MountPath: "/etc/ssl/elastic/"},
 								},

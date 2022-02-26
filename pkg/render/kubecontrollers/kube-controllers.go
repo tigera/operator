@@ -15,6 +15,7 @@
 package kubecontrollers
 
 import (
+	"fmt"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -408,6 +409,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	env := []corev1.EnvVar{
 		{Name: "KUBE_CONTROLLERS_CONFIG_NAME", Value: c.kubeControllerConfigName},
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+		{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: fmt.Sprintf("/%s", render.ManagerInternalTLSSecretName)},
 		{Name: "ENABLED_CONTROLLERS", Value: strings.Join(c.enabledControllers, ",")},
 	}
 
@@ -601,7 +603,7 @@ func (c *kubeControllersComponent) controllersPodSecurityPolicy() *policyv1beta1
 func (c *kubeControllersComponent) kubeControllersVolumeMounts() []corev1.VolumeMount {
 	if c.cfg.ManagerInternalSecret != nil {
 		return []corev1.VolumeMount{
-			c.cfg.ManagerInternalSecret.VolumeMount("/manager-tls"),
+			c.cfg.ManagerInternalSecret.VolumeMount(),
 		}
 	}
 	return []corev1.VolumeMount{}

@@ -16,6 +16,7 @@ package render_test
 
 import (
 	"fmt"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -105,7 +106,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		Expect(len(voltron.VolumeMounts)).To(Equal(3))
 		Expect(voltron.VolumeMounts[0].Name).To(Equal(render.ManagerTLSSecretName))
-		Expect(voltron.VolumeMounts[0].MountPath).To(Equal("/certs/https"))
+		Expect(voltron.VolumeMounts[0].MountPath).To(Equal("/manager-tls"))
 		Expect(voltron.VolumeMounts[1].Name).To(Equal(render.KibanaPublicCertSecret))
 		Expect(voltron.VolumeMounts[1].MountPath).To(Equal("/certs/kibana"))
 		Expect(voltron.VolumeMounts[2].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
@@ -289,13 +290,13 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		Expect(len(voltron.VolumeMounts)).To(Equal(5))
 		Expect(voltron.VolumeMounts[0].Name).To(Equal(render.ManagerTLSSecretName))
-		Expect(voltron.VolumeMounts[0].MountPath).To(Equal("/certs/https"))
+		Expect(voltron.VolumeMounts[0].MountPath).To(Equal("/manager-tls"))
 		Expect(voltron.VolumeMounts[1].Name).To(Equal(render.KibanaPublicCertSecret))
 		Expect(voltron.VolumeMounts[1].MountPath).To(Equal("/certs/kibana"))
 		Expect(voltron.VolumeMounts[2].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 		Expect(voltron.VolumeMounts[2].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
 		Expect(voltron.VolumeMounts[3].Name).To(Equal(render.ManagerInternalTLSSecretName))
-		Expect(voltron.VolumeMounts[3].MountPath).To(Equal("/certs/internal"))
+		Expect(voltron.VolumeMounts[3].MountPath).To(Equal("/internal-manager-tls"))
 		Expect(voltron.VolumeMounts[4].Name).To(Equal(render.VoltronTunnelSecretName))
 		Expect(voltron.VolumeMounts[4].MountPath).To(Equal("/certs/tunnel"))
 

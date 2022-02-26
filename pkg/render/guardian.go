@@ -17,6 +17,8 @@
 package render
 
 import (
+	"fmt"
+
 	"github.com/tigera/operator/pkg/render/component"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -246,6 +248,7 @@ func (c *GuardianComponent) container() []corev1.Container {
 			Image: c.image,
 			Env: []corev1.EnvVar{
 				{Name: "GUARDIAN_PORT", Value: "9443"},
+				{Name: "GUARDIAN_CERT_PATH", Value: fmt.Sprintf("/%s", VoltronTunnelSecretName)},
 				{Name: "GUARDIAN_LOGLEVEL", Value: "INFO"},
 				{Name: "GUARDIAN_VOLTRON_URL", Value: c.cfg.URL},
 				{Name: "VOLTRON_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
@@ -280,7 +283,7 @@ func (c *GuardianComponent) container() []corev1.Container {
 func (c *GuardianComponent) volumeMounts() []corev1.VolumeMount {
 	mounts := []corev1.VolumeMount{
 		c.cfg.TrustedCertBundle.VolumeMount(),
-		c.cfg.TunnelSecret.VolumeMount("/certs/"),
+		c.cfg.TunnelSecret.VolumeMount(),
 	}
 
 	return mounts

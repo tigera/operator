@@ -16,6 +16,7 @@ package render_test
 
 import (
 	"fmt"
+
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -116,6 +117,14 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 	var expectedEnvVars = func(enableOIDC bool) []corev1.EnvVar {
 		var envVars = []corev1.EnvVar{
 			{Name: "PACKETCAPTURE_API_LOG_LEVEL", Value: "Info"},
+			{
+				Name:  "PACKETCAPTURE_HTTPS_KEY",
+				Value: "/tigera-packetcapture-server-tls/tls.key",
+			},
+			{
+				Name:  "PACKETCAPTURE_HTTPS_CERT",
+				Value: "/tigera-packetcapture-server-tls/tls.crt",
+			},
 		}
 
 		if enableOIDC {
@@ -171,7 +180,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		var volumeMounts = []corev1.VolumeMount{
 			{
 				Name:      render.PacketCaptureCertSecret,
-				MountPath: "/certs/https",
+				MountPath: "/tigera-packetcapture-server-tls",
 				ReadOnly:  true,
 			},
 		}

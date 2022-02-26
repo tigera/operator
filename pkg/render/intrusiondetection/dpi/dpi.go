@@ -216,8 +216,8 @@ func (d *dpiComponent) dpiEnvVars() []corev1.EnvVar {
 		{Name: "DPI_TYPHAK8SNAMESPACE", Value: common.CalicoNamespace},
 		{Name: "DPI_TYPHAK8SSERVICENAME", Value: render.TyphaServiceName},
 		{Name: "DPI_TYPHACAFILE", Value: d.cfg.TyphaNodeTLS.TrustedBundle.MountPath()},
-		{Name: "DPI_TYPHACERTFILE", Value: render.TLSCertMountPath},
-		{Name: "DPI_TYPHAKEYFILE", Value: render.TLSKeyMountPath},
+		{Name: "DPI_TYPHACERTFILE", Value: d.cfg.TyphaNodeTLS.NodeSecret.VolumeMountCertificateFilePath()},
+		{Name: "DPI_TYPHAKEYFILE", Value: d.cfg.TyphaNodeTLS.NodeSecret.VolumeMountKeyFilePath()},
 	}
 	// We need at least the CN or URISAN set, we depend on the validation
 	// done by the core_controller that the Secret will have one.
@@ -233,7 +233,7 @@ func (d *dpiComponent) dpiEnvVars() []corev1.EnvVar {
 func (d *dpiComponent) dpiVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
 		d.cfg.TyphaNodeTLS.TrustedBundle.VolumeMount(),
-		d.cfg.TyphaNodeTLS.NodeSecret.VolumeMount(render.TLSMountPathBase),
+		d.cfg.TyphaNodeTLS.NodeSecret.VolumeMount(),
 		{MountPath: "/var/log/calico/snort-alerts", Name: "log-snort-alters"},
 	}
 }

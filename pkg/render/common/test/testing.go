@@ -15,20 +15,22 @@
 package test
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-
 	. "github.com/onsi/gomega"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/tls"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/sets"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func ExpectK8sServiceEpEnvVars(podSpec corev1.PodSpec, host, port string) {
@@ -161,7 +163,12 @@ func ExpectVolumeMount(vms []v1.VolumeMount, name, path string) {
 	Expect(false).To(BeTrue(), fmt.Sprintf("Missing expected volume mount %s", name))
 }
 
-func CreateCertSecret(name, namespace string) *corev1.Secret {
+func CreateCertSecret(name, namespace string, dnsNames ...string) *corev1.Secret {
+	cryptoCA, _ := tls.MakeCA(rmeta.TigeraOperatorCAIssuerPrefix)
+	cfg, _ := cryptoCA.MakeServerCertForDuration(sets.NewString(dnsNames...), rmeta.DefaultCertificateDuration, tls.SetServerAuth, tls.SetClientAuth)
+	keyContent, crtContent := &bytes.Buffer{}, &bytes.Buffer{}
+	cfg.WriteCertConfig(crtContent, keyContent)
+
 	return &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -169,8 +176,8 @@ func CreateCertSecret(name, namespace string) *corev1.Secret {
 			Namespace: namespace,
 		},
 		Data: map[string][]byte{
-			"tls.crt": []byte("crt"),
-			"tls.key": []byte("crt"),
+			corev1.TLSPrivateKeyKey: keyContent.Bytes(),
+			corev1.TLSCertKey:       crtContent.Bytes(),
 		},
 	}
 }

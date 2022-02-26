@@ -12,11 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
+
 package render
 
 import (
 	"fmt"
 	"strings"
+
+	"github.com/tigera/operator/pkg/render/component"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -26,6 +29,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"gopkg.in/yaml.v2"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -53,7 +57,7 @@ const (
 	DexCNPattern = "tigera-dex.tigera-dex.svc.%s"
 )
 
-func Dex(cfg *DexComponentConfiguration) Component {
+func Dex(cfg *DexComponentConfiguration) component.Component {
 
 	return &dexComponent{
 		cfg:       cfg,
@@ -91,7 +95,7 @@ func (c *dexComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	if c.cfg.Installation.CertificateManagement != nil {
-		c.csrInitImage, err = ResolveCSRInitImage(c.cfg.Installation, is)
+		c.csrInitImage, err = certificatemanagement.ResolveCSRInitImage(c.cfg.Installation, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
@@ -129,7 +133,7 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(DexNamespace, c.cfg.PullSecrets...)...)...)
 
 	if c.cfg.Installation.CertificateManagement != nil {
-		objs = append(objs, CSRClusterRoleBinding(DexObjectName, DexNamespace))
+		objs = append(objs, certificatemanagement.CSRClusterRoleBinding(DexObjectName, DexNamespace))
 	}
 
 	if c.cfg.DeleteDex {
@@ -196,7 +200,7 @@ func (c *dexComponent) clusterRoleBinding() client.Object {
 func (c *dexComponent) deployment() client.Object {
 	var initContainers []corev1.Container
 	if c.cfg.Installation.CertificateManagement != nil {
-		initContainers = append(initContainers, CreateCSRInitContainer(
+		initContainers = append(initContainers, certificatemanagement.CreateCSRInitContainer(
 			c.cfg.Installation.CertificateManagement,
 			c.csrInitImage,
 			"tls",

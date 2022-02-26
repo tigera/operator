@@ -36,6 +36,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -329,10 +330,10 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{Name: "elastic-internal-transport-certificates", MountPath: "/csr"},
 				})
 				compareInitContainer(initContainers[2], "key-cert-elastic", []corev1.VolumeMount{
-					{Name: "elastic-internal-http-certificates", MountPath: render.CSRCMountPath},
+					{Name: "elastic-internal-http-certificates", MountPath: certificatemanagement.CSRCMountPath},
 				})
 				compareInitContainer(initContainers[3], "key-cert-elastic-transport", []corev1.VolumeMount{
-					{Name: "elastic-internal-transport-certificates", MountPath: render.CSRCMountPath},
+					{Name: "elastic-internal-transport-certificates", MountPath: certificatemanagement.CSRCMountPath},
 				})
 				compareInitContainer(initContainers[4], "elastic-internal-init-log-selinux-context", []corev1.VolumeMount{})
 			})

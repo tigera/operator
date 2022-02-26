@@ -17,7 +17,6 @@ package logstorage
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -29,6 +28,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -68,23 +68,17 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 		enableESOIDCWorkaround = true
 	}
 
-	managerInternalTLSSecret, err := utils.ValidateCertPair(r.client,
-		common.CalicoNamespace,
-		render.ManagerInternalTLSSecretName,
-		render.ManagerInternalSecretKeyName,
-		render.ManagerInternalSecretCertName,
-	)
+	certificateManager, err := certificatemanagement.CreateCertificateManager(r.client, install, r.clusterDomain)
+	if err != nil {
+		log.Error(err, "unable to create the Tigera CA")
+		r.status.SetDegraded("unable to create the Tigera CA", err.Error())
+		return reconcile.Result{}, false, err
+	}
 
+	var managerInternalTLSSecret certificatemanagement.KeyPair
 	if managementCluster != nil {
-		var err error
-		svcDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain)
-		svcDNSNames = append(svcDNSNames, render.ManagerServiceIP)
-		certDur := 825 * 24 * time.Hour // 825days*24hours: Create cert with a max expiration that macOS 10.15 will accept
-
-		managerInternalTLSSecret, _, err = utils.EnsureCertificateSecret(
-			render.ManagerInternalTLSSecretName, managerInternalTLSSecret, render.ManagerInternalSecretKeyName, render.ManagerInternalSecretCertName, certDur, svcDNSNames...,
-		)
-
+		svcDNSNames := append(dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain), render.ManagerServiceIP)
+		managerInternalTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, render.ManagerInternalTLSSecretName, common.CalicoNamespace, svcDNSNames)
 		if err != nil {
 			r.status.SetDegraded(fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err.Error())
 			return reconcile.Result{}, false, err

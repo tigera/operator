@@ -752,6 +752,13 @@ func managerClusterRole(managementCluster, managedCluster, openshift bool) *rbac
 				Verbs: []string{"get"},
 			},
 			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"alertexceptions",
+				},
+				Verbs: []string{"get", "list", "update"},
+			},
+			{
 				APIGroups: []string{"networking.k8s.io"},
 				Resources: []string{"networkpolicies"},
 				Verbs:     []string{"get", "list"},

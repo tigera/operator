@@ -84,6 +84,7 @@ type ComplianceConfiguration struct {
 	KeyValidatorConfig          authentication.KeyValidatorConfig
 	ClusterDomain               string
 	HasNoLicense                bool
+	TenantID                    string
 }
 
 type complianceComponent struct {
@@ -702,7 +703,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			InitContainers:     initContainers,
 			Containers: []corev1.Container{
-				relasticsearch.ContainerDecorate(corev1.Container{
+				c.replaceESIndexFixsEnvs(relasticsearch.ContainerDecorate(corev1.Container{
 					Name:  ComplianceServerName,
 					Image: c.serverImage,
 					Env:   envVars,
@@ -731,7 +732,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 						FailureThreshold:    5,
 					},
 					VolumeMounts: c.complianceServerVolumeMounts(),
-				}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceServerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()),
+				}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceServerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType())),
 			},
 			Volumes: c.complianceServerVolumes(),
 		}),

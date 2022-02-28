@@ -44,9 +44,10 @@ var _ = Describe("compliance rendering tests", func() {
 				Registry:           "testregistry.com/",
 			},
 			ComplianceServerCertSecret: complianceServerCertSecret,
-			ESClusterConfig:            relasticsearch.NewClusterConfig("cluster", 1, 1, 1),
+			ESClusterConfig:            relasticsearch.NewClusterConfig("tenant_id.cluster", 1, 1, 1),
 			Openshift:                  notOpenshift,
 			ClusterDomain:              clusterDomain,
+			TenantID:                   "tenant_id",
 		}
 	})
 
@@ -217,20 +218,14 @@ var _ = Describe("compliance rendering tests", func() {
 			complianceSnapshotter := rtest.GetResource(resources, "compliance-snapshotter", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			complianceBenchmarker := rtest.GetResource(resources, "compliance-benchmarker", ns, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 
-			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-				corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
-			))
 			Expect(complianceController.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-				corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
+				corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "tenant_id.cluster"},
 			))
 			Expect(complianceSnapshotter.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-				corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
+				corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "tenant_id.cluster"},
 			))
 			Expect(complianceBenchmarker.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-				corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
-			))
-			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
-				corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
+				corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "tenant_id.cluster"},
 			))
 			Expect(len(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("tls"))
@@ -240,6 +235,13 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[2].Name).To(Equal("elastic-ca-cert-volume"))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[2].MountPath).To(Equal("/etc/ssl/elastic/"))
 
+			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
+				corev1.EnvVar{Name: "ELASTIC_INDEX_MIDFIX", Value: "tenant_id"},
+				corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
+			))
+			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].Env).ShouldNot(ContainElements(
+				corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "tenant_id.cluster"},
+			))
 			Expect(len(dpComplianceServer.Spec.Template.Spec.Volumes)).To(Equal(3))
 			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[0].Name).To(Equal("tls"))
 			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ComplianceServerCertSecret))

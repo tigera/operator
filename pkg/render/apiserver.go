@@ -1135,6 +1135,7 @@ func (c *apiServerComponent) tigeraCustomResourcesClusterRole() *rbacv1.ClusterR
 				"stagedglobalnetworkpolicies",
 				"tiers",
 				"licensekeys",
+				"alertexceptions",
 				"globalalerts",
 				"globalalerttemplates",
 				"globalthreatfeeds",
@@ -1386,6 +1387,7 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 		{
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{
+				"alertexceptions",
 				"globalalerts",
 				"globalalerts/status",
 				"globalalerttemplates",
@@ -1533,6 +1535,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 		{
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{
+				"alertexceptions",
 				"globalalerts",
 				"globalalerts/status",
 				"globalalerttemplates",

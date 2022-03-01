@@ -38,7 +38,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/test"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -308,7 +308,7 @@ var _ = Describe("Manager controller tests", func() {
 				Expect(c.Create(ctx, userSecret)).NotTo(HaveOccurred())
 			}
 			if certificateManagementEnabled {
-				ca, _ := certificatemanagement.MakeCA(rmeta.DefaultOperatorCASignerName())
+				ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 				cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 				installation := &operatorv1.Installation{}
 				Expect(c.Get(ctx, types.NamespacedName{Name: "default", Namespace: ""}, installation))

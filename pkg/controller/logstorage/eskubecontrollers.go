@@ -28,7 +28,8 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
+	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -68,14 +69,14 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 		enableESOIDCWorkaround = true
 	}
 
-	certificateManager, err := certificatemanagement.CreateCertificateManager(r.client, install.CertificateManagement, r.clusterDomain)
+	certificateManager, err := controller.CreateCertificateManager(r.client, install, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
 		r.status.SetDegraded("unable to create the Tigera CA", err.Error())
 		return reconcile.Result{}, false, err
 	}
 
-	var managerInternalTLSSecret certificatemanagement.KeyPair
+	var managerInternalTLSSecret cmrender.KeyPair
 	if managementCluster != nil {
 		svcDNSNames := append(dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain), render.ManagerServiceIP)
 		managerInternalTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, render.ManagerInternalTLSSecretName, common.CalicoNamespace, svcDNSNames)

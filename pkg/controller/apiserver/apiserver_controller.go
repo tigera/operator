@@ -17,7 +17,6 @@ package apiserver
 import (
 	"context"
 	"fmt"
-	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -29,8 +28,10 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	controller2 "github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
+	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -136,7 +137,7 @@ func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 		return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 	}
 
-	if err = utils.AddSecretsWatch(c, certificatemanagement.CASecretName, common.OperatorNamespace()); err != nil {
+	if err = utils.AddSecretsWatch(c, cmrender.CASecretName, common.OperatorNamespace()); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 	}
 
@@ -203,7 +204,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 	ns := rmeta.APIServerNamespace(variant)
 
-	certificateManager, err := certificatemanagement.CreateCertificateManager(r.client, network.CertificateManagement, r.clusterDomain)
+	certificateManager, err := controller2.CreateCertificateManager(r.client, network, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
 		r.status.SetDegraded("unable to create the Tigera CA", err.Error())
@@ -229,7 +230,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 
 	// Query enterprise-only data.
-	var tunnelCASecret certificatemanagement.KeyPair
+	var tunnelCASecret cmrender.KeyPair
 	var amazon *operatorv1.AmazonCloudIntegration
 	var managementCluster *operatorv1.ManagementCluster
 	var managementClusterConnection *operatorv1.ManagementClusterConnection
@@ -259,7 +260,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			tunnelCASecret, err = certificateManager.GetKeyPair(r.client, render.VoltronTunnelSecretName, common.OperatorNamespace())
 			if tunnelCASecret == nil {
 				// tunnelCASecret is a secret unaffected by the last two args (dnsNames and clusterDomain).
-				tunnelCASecret, err = certificatemanagement.NewKeyPair(certificateManager, render.VoltronTunnelSecret(), nil, "")
+				tunnelCASecret, err = controller2.NewKeyPair(certificateManager, render.VoltronTunnelSecret(), nil, "")
 			}
 			if err != nil {
 				log.Error(err, "Unable to get or create the tunnel secret")

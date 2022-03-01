@@ -16,7 +16,6 @@ package render
 
 import (
 	"fmt"
-	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -33,7 +32,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/migration"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
@@ -72,8 +70,7 @@ type typhaComponent struct {
 	cfg *TyphaConfiguration
 
 	// Generated internal config, built from the given configuration.
-	typhaImage       string
-	certSignReqImage string
+	typhaImage string
 }
 
 func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -86,20 +83,8 @@ func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	} else {
 		c.typhaImage, err = components.GetReference(components.ComponentCalicoTypha, reg, path, prefix, is)
 	}
-	errMsgs := []string{}
 	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
-	}
-
-	if c.cfg.Installation.CertificateManagement != nil {
-		c.certSignReqImage, err = certificatemanagement.ResolveCSRInitImage(c.cfg.Installation, is)
-		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
-		}
-	}
-
-	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+		return err
 	}
 	return nil
 }
@@ -358,7 +343,7 @@ func (c *typhaComponent) typhaDeployment() *appsv1.Deployment {
 	annotations[c.cfg.TLS.TyphaSecret.HashAnnotationKey()] = c.cfg.TLS.TyphaSecret.HashAnnotationValue()
 	var initContainers []corev1.Container
 	if c.cfg.TLS.TyphaSecret.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.TLS.TyphaSecret.InitContainer(common.CalicoNamespace, c.certSignReqImage))
+		initContainers = append(initContainers, c.cfg.TLS.TyphaSecret.InitContainer(common.CalicoNamespace))
 	}
 
 	// Include annotation for prometheus scraping configuration.
@@ -434,7 +419,7 @@ func (c *typhaComponent) volumes() []corev1.Volume {
 func (c *typhaComponent) typhaVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
 		c.cfg.TLS.TrustedBundle.VolumeMount(),
-		c.cfg.TLS.TyphaSecret.VolumeMount(TLSMountPathBase),
+		c.cfg.TLS.TyphaSecret.VolumeMount(),
 	}
 }
 
@@ -480,8 +465,8 @@ func (c *typhaComponent) typhaEnvVars() []corev1.EnvVar {
 		{Name: "TYPHA_HEALTHENABLED", Value: "true"},
 		{Name: "TYPHA_K8SNAMESPACE", Value: common.CalicoNamespace},
 		{Name: "TYPHA_CAFILE", Value: c.cfg.TLS.TrustedBundle.MountPath()},
-		{Name: "TYPHA_SERVERCERTFILE", Value: TLSCertMountPath},
-		{Name: "TYPHA_SERVERKEYFILE", Value: TLSKeyMountPath},
+		{Name: "TYPHA_SERVERCERTFILE", Value: c.cfg.TLS.TyphaSecret.VolumeMountCertificateFilePath()},
+		{Name: "TYPHA_SERVERKEYFILE", Value: c.cfg.TLS.TyphaSecret.VolumeMountKeyFilePath()},
 	}
 	// We need at least the CN or URISAN set, we depend on the validation
 	// done by the core_controller that the Secret will have one.

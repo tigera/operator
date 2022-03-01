@@ -31,6 +31,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement/render"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -65,19 +66,16 @@ var (
 	// This is currently not intended to be user configurable.
 	nodeBGPReporterPort int32 = 9900
 
-	TLSMountPathBase  = "/tls/"
-	TLSKeyMountPath   = fmt.Sprintf("%s%s", TLSMountPathBase, corev1.TLSPrivateKeyKey)
-	TLSCertMountPath  = fmt.Sprintf("%s%s", TLSMountPathBase, corev1.TLSCertKey)
 	NodeTLSSecretName = "node-certs"
 )
 
 // TyphaNodeTLS holds configuration for Node and Typha to establish TLS.
 type TyphaNodeTLS struct {
-	TrustedBundle   certificatemanagement.TrustedBundle
-	TyphaSecret     certificatemanagement.KeyPair
+	TrustedBundle   render.TrustedBundle
+	TyphaSecret     render.KeyPair
 	TyphaCommonName string
 	TyphaURISAN     string
-	NodeSecret      certificatemanagement.KeyPair
+	NodeSecret      render.KeyPair
 	NodeCommonName  string
 	NodeURISAN      string
 }
@@ -101,7 +99,7 @@ type NodeConfiguration struct {
 	// leave RBAC and SA to allow any CNI plugin calls to continue to function
 	// For details on why this is needed see 'Node and Installation finalizer' in the core_controller.
 	Terminating         bool
-	PrometheusServerTLS certificatemanagement.KeyPair
+	PrometheusServerTLS render.KeyPair
 
 	// BGPLayouts is returned by the rendering code after modifying its namespace
 	// so that it can be deployed into the cluster.
@@ -120,10 +118,9 @@ type nodeComponent struct {
 	cfg *NodeConfiguration
 
 	// Calculated internal fields based on the given information.
-	cniImage         string
-	flexvolImage     string
-	nodeImage        string
-	certSignReqImage string
+	cniImage     string
+	flexvolImage string
+	nodeImage    string
 }
 
 func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -153,13 +150,6 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
-	}
-
-	if c.cfg.Installation.CertificateManagement != nil {
-		c.certSignReqImage, err = certificatemanagement.ResolveCSRInitImage(c.cfg.Installation, is)
-		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
-		}
 	}
 
 	if len(errMsgs) != 0 {
@@ -665,11 +655,11 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 	}
 
 	if c.cfg.TLS.NodeSecret.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.TLS.NodeSecret.InitContainer(common.CalicoNamespace, c.certSignReqImage))
+		initContainers = append(initContainers, c.cfg.TLS.NodeSecret.InitContainer(common.CalicoNamespace))
 	}
 
 	if c.cfg.PrometheusServerTLS != nil && c.cfg.PrometheusServerTLS.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.PrometheusServerTLS.InitContainer(common.CalicoNamespace, c.certSignReqImage))
+		initContainers = append(initContainers, c.cfg.PrometheusServerTLS.InitContainer(common.CalicoNamespace))
 	}
 
 	if cniCfgMap != nil {
@@ -1074,7 +1064,7 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 		{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
 		{MountPath: "/var/run/nodeagent", Name: "policysync"},
 		c.cfg.TLS.TrustedBundle.VolumeMount(),
-		c.cfg.TLS.NodeSecret.VolumeMount(TLSMountPathBase),
+		c.cfg.TLS.NodeSecret.VolumeMount(),
 	}
 	if c.runAsNonPrivileged() {
 		nodeVolumeMounts = append(nodeVolumeMounts,
@@ -1139,7 +1129,7 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 			})
 	}
 	if c.cfg.PrometheusServerTLS != nil {
-		nodeVolumeMounts = append(nodeVolumeMounts, c.cfg.PrometheusServerTLS.VolumeMount(fmt.Sprintf("/%s", NodePrometheusTLSServerSecret)))
+		nodeVolumeMounts = append(nodeVolumeMounts, c.cfg.PrometheusServerTLS.VolumeMount())
 	}
 	return nodeVolumeMounts
 }
@@ -1188,8 +1178,8 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		{Name: "FELIX_TYPHAK8SNAMESPACE", Value: common.CalicoNamespace},
 		{Name: "FELIX_TYPHAK8SSERVICENAME", Value: TyphaServiceName},
 		{Name: "FELIX_TYPHACAFILE", Value: c.cfg.TLS.TrustedBundle.MountPath()},
-		{Name: "FELIX_TYPHACERTFILE", Value: TLSCertMountPath},
-		{Name: "FELIX_TYPHAKEYFILE", Value: TLSKeyMountPath},
+		{Name: "FELIX_TYPHACERTFILE", Value: c.cfg.TLS.NodeSecret.VolumeMountCertificateFilePath()},
+		{Name: "FELIX_TYPHAKEYFILE", Value: c.cfg.TLS.NodeSecret.VolumeMountKeyFilePath()},
 	}
 	// We need at least the CN or URISAN set, we depend on the validation
 	// done by the core_controller that the Secret will have one.

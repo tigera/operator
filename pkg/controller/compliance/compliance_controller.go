@@ -17,7 +17,6 @@ package compliance
 import (
 	"context"
 	"fmt"
-	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -28,8 +27,10 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	cmcontroller "github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
+	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -115,7 +116,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 			relasticsearch.PublicCertSecret, render.ElasticsearchComplianceBenchmarkerUserSecret,
 			render.ElasticsearchComplianceControllerUserSecret, render.ElasticsearchComplianceReporterUserSecret,
 			render.ElasticsearchComplianceSnapshotterUserSecret, render.ElasticsearchComplianceServerUserSecret,
-			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, render.DexCertSecretName, certificatemanagement.CASecretName} {
+			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, render.DexCertSecretName, cmrender.CASecretName} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("compliance-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
 			}
@@ -288,13 +289,13 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	certificateManager, err := certificatemanagement.CreateCertificateManager(r.client, network.CertificateManagement, r.clusterDomain)
+	certificateManager, err := cmcontroller.CreateCertificateManager(r.client, network, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
 		r.status.SetDegraded("unable to create the Tigera CA", err.Error())
 		return reconcile.Result{}, err
 	}
-	var managerInternalTLSSecret certificatemanagement.Certificate
+	var managerInternalTLSSecret cmrender.Certificate
 	if managementCluster != nil {
 		managerInternalTLSSecret, err = certificateManager.GetCertificate(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
 		if err != nil {
@@ -303,9 +304,9 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, err
 		}
 	}
-	trustedBundle := certificatemanagement.CreateTrustedBundle(certificateManager, managerInternalTLSSecret)
+	trustedBundle := cmcontroller.CreateTrustedBundle(certificateManager, managerInternalTLSSecret)
 
-	var complianceServerCertSecret certificatemanagement.KeyPair
+	var complianceServerCertSecret cmrender.KeyPair
 	if managementClusterConnection == nil {
 		complianceServerCertSecret, err = certificateManager.GetOrCreateKeyPair(
 			r.client,
@@ -359,14 +360,14 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		HasNoLicense:                hasNoLicense,
 	}
 	// Render the desired objects from the CRD and create or update them.
-	component, err := render.Compliance(complianceCfg)
+	comp, err := render.Compliance(complianceCfg)
 	if err != nil {
 		log.Error(err, "error rendering Compliance")
 		r.status.SetDegraded("Error rendering Compliance", err.Error())
 		return reconcile.Result{}, err
 	}
 
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, comp); err != nil {
 		log.Error(err, "Error with images from ImageSet")
 		r.status.SetDegraded("Error with images from ImageSet", err.Error())
 		return reconcile.Result{}, err
@@ -380,8 +381,8 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		TrustedBundle: trustedBundle,
 	})
 
-	for _, component := range []render.Component{component, certificateComponent} {
-		if err := handler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+	for _, comp := range []render.Component{comp, certificateComponent} {
+		if err := handler.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
 			r.status.SetDegraded("Error creating / updating / deleting resource", err.Error())
 			return reconcile.Result{}, err
 		}

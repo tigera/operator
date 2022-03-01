@@ -19,8 +19,9 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"time"
+
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -40,7 +41,8 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
+	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
 	"github.com/tigera/operator/test"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -58,10 +60,10 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		managementCluster  = &operatorv1.ManagementCluster{Spec: operatorv1.ManagementClusterSpec{Address: "example.com:1234"}}
 		replicas           int32
 		cfg                *render.APIServerConfiguration
-		tunnelKeyPair      certificatemanagement.KeyPair
+		tunnelKeyPair      cmrender.KeyPair
 		dnsNames           []string
 		cli                client.Client
-		certificateManager certificatemanagement.CertificateManager
+		certificateManager cmrender.CertificateManager
 	)
 
 	BeforeEach(func() {
@@ -75,11 +77,11 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
 		var err error
-		certificateManager, err = certificatemanagement.CreateCertificateManager(cli, nil, clusterDomain)
+		certificateManager, err = controller.CreateCertificateManager(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		kp, err := certificateManager.GetOrCreateKeyPair(cli, render.ProjectCalicoApiServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
 		Expect(err).NotTo(HaveOccurred())
-		tunnelKeyPair, err = certificatemanagement.NewKeyPair(nil, render.VoltronTunnelSecret(), []string{""}, "")
+		tunnelKeyPair, err = controller.NewKeyPair(nil, render.VoltronTunnelSecret(), []string{""}, "")
 		Expect(err).NotTo(HaveOccurred())
 		replicas = 2
 		cfg = &render.APIServerConfiguration{
@@ -201,8 +203,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		expectedArgs := []string{
 			"--secure-port=5443",
-			"--tls-private-key-file=/code/apiserver.local.config/certificates/tls.key",
-			"--tls-cert-file=/code/apiserver.local.config/certificates/tls.crt",
+			"--tls-private-key-file=/tigera-apiserver-certs/tls.key",
+			"--tls-cert-file=/tigera-apiserver-certs/tls.crt",
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
 			"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
 		}
@@ -213,7 +215,6 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(d.Spec.Template.Spec.Containers[0].Env[0].ValueFrom).To(BeNil())
 
 		Expect(len(d.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
-		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/code/apiserver.local.config/certificates"))
 		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("tigera-apiserver-certs"))
 		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal("/var/log/calico/audit"))
 		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal("tigera-audit-logs"))
@@ -662,9 +663,9 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		By("Validating the newly created tunnel secret")
-		certificateManager, err := certificatemanagement.CreateCertificateManager(cli, cfg.Installation.CertificateManagement, clusterDomain)
+		certificateManager, err := controller.CreateCertificateManager(cli, cfg.Installation, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
-		tunnelCASecret, err := certificatemanagement.NewKeyPair(certificateManager, render.VoltronTunnelSecret(), nil, "")
+		tunnelCASecret, err := controller.NewKeyPair(certificateManager, render.VoltronTunnelSecret(), nil, "")
 
 		// Use the x509 package to validate that the cert was signed with the privatekey
 		validateTunnelSecret(tunnelCASecret.Secret(""))
@@ -675,13 +676,13 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		By("Validating startup args")
 		expectedArgs := []string{
 			"--secure-port=5443",
-			"--tls-private-key-file=/code/apiserver.local.config/certificates/tls.key",
-			"--tls-cert-file=/code/apiserver.local.config/certificates/tls.crt",
+			"--tls-private-key-file=/tigera-apiserver-certs/tls.key",
+			"--tls-cert-file=/tigera-apiserver-certs/tls.crt",
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
 			"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
 			"--enable-managed-clusters-create-api=true",
-			"--set-managed-clusters-ca-cert=/code/apiserver.local.config/multicluster/certificates/tls.crt",
-			"--set-managed-clusters-ca-key=/code/apiserver.local.config/multicluster/certificates/tls.key",
+			"--set-managed-clusters-ca-cert=/tigera-management-cluster-connection/tls.crt",
+			"--set-managed-clusters-ca-key=/tigera-management-cluster-connection/tls.key",
 			"--managementClusterAddr=example.com:1234",
 		}
 		Expect((dep.(*appsv1.Deployment)).Spec.Template.Spec.Containers[0].Args).To(ConsistOf(expectedArgs))
@@ -743,13 +744,13 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		By("Validating startup args")
 		expectedArgs := []string{
 			"--secure-port=5443",
-			"--tls-private-key-file=/code/apiserver.local.config/certificates/tls.key",
-			"--tls-cert-file=/code/apiserver.local.config/certificates/tls.crt",
+			"--tls-private-key-file=/tigera-apiserver-certs/tls.key",
+			"--tls-cert-file=/tigera-apiserver-certs/tls.crt",
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
 			"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
 			"--enable-managed-clusters-create-api=true",
-			"--set-managed-clusters-ca-cert=/code/apiserver.local.config/multicluster/certificates/tls.crt",
-			"--set-managed-clusters-ca-key=/code/apiserver.local.config/multicluster/certificates/tls.key",
+			"--set-managed-clusters-ca-cert=/tigera-management-cluster-connection/tls.crt",
+			"--set-managed-clusters-ca-key=/tigera-management-cluster-connection/tls.key",
 			"--managementClusterAddr=example.com:1234",
 		}
 		Expect((dep.(*appsv1.Deployment)).Spec.Template.Spec.Containers[0].Args).To(ConsistOf(expectedArgs))
@@ -757,7 +758,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 	It("should add an init container if certificate management is enabled", func() {
 		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c", CACert: cfg.TLSKeyPair.Secret("").Data[corev1.TLSCertKey]}
-		certificateManager, err := certificatemanagement.CreateCertificateManager(cli, cfg.Installation.CertificateManagement, clusterDomain)
+		certificateManager, err := controller.CreateCertificateManager(cli, cfg.Installation, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		kp, err := certificateManager.GetOrCreateKeyPair(cli, render.ProjectCalicoApiServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
 		cfg.TLSKeyPair = kp
@@ -1130,7 +1131,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 	var instance *operatorv1.InstallationSpec
 	var replicas int32
 	var cfg *render.APIServerConfiguration
-	var certificateManager certificatemanagement.CertificateManager
+	var certificateManager cmrender.CertificateManager
 	var cli client.Client
 
 	BeforeEach(func() {
@@ -1143,7 +1144,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
 		var err error
-		certificateManager, err = certificatemanagement.CreateCertificateManager(cli, nil, clusterDomain)
+		certificateManager, err = controller.CreateCertificateManager(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		dnsNames := dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(instance.Variant), rmeta.APIServerNamespace(instance.Variant), clusterDomain)
 		kp, err := certificateManager.GetOrCreateKeyPair(cli, render.ProjectCalicoApiServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
@@ -1239,8 +1240,8 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 
 		expectedArgs := []string{
 			"--secure-port=5443",
-			"--tls-private-key-file=/code/apiserver.local.config/certificates/tls.key",
-			"--tls-cert-file=/code/apiserver.local.config/certificates/tls.crt",
+			"--tls-private-key-file=/calico-apiserver-certs/tls.key",
+			"--tls-cert-file=/calico-apiserver-certs/tls.crt",
 		}
 		Expect(d.Spec.Template.Spec.Containers[0].Args).To(ConsistOf(expectedArgs))
 		Expect(len(d.Spec.Template.Spec.Containers[0].Env)).To(Equal(1))

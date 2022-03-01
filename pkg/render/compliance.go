@@ -29,7 +29,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement/render"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -71,9 +71,9 @@ func Compliance(cfg *ComplianceConfiguration) (Component, error) {
 // ComplianceConfiguration contains all the config information needed to render the component.
 type ComplianceConfiguration struct {
 	ESSecrets                   []*corev1.Secret
-	TrustedBundle               certificatemanagement.TrustedBundle
+	TrustedBundle               render.TrustedBundle
 	Installation                *operatorv1.InstallationSpec
-	ComplianceServerCertSecret  certificatemanagement.KeyPair
+	ComplianceServerCertSecret  render.KeyPair
 	ESClusterConfig             *relasticsearch.ClusterConfig
 	PullSecrets                 []*corev1.Secret
 	Openshift                   bool
@@ -91,7 +91,6 @@ type complianceComponent struct {
 	serverImage      string
 	controllerImage  string
 	reporterImage    string
-	csrInitImage     string
 }
 
 func (c *complianceComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -124,13 +123,6 @@ func (c *complianceComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	c.reporterImage, err = components.GetReference(components.ComponentComplianceReporter, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
-	}
-
-	if c.cfg.Installation.CertificateManagement != nil {
-		c.csrInitImage, err = certificatemanagement.ResolveCSRInitImage(c.cfg.Installation, is)
-		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
-		}
 	}
 
 	if len(errMsgs) != 0 {
@@ -655,14 +647,14 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
-		{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: certificatemanagement.TrustedCertBundleMountPath},
+		{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: render.TrustedCertBundleMountPath},
 	}
 	if c.cfg.KeyValidatorConfig != nil {
 		envVars = append(envVars, c.cfg.KeyValidatorConfig.RequiredEnv("TIGERA_COMPLIANCE_")...)
 	}
 	var initContainers []corev1.Container
 	if c.cfg.ComplianceServerCertSecret.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.ComplianceServerCertSecret.InitContainer(ComplianceNamespace, c.csrInitImage))
+		initContainers = append(initContainers, c.cfg.ComplianceServerCertSecret.InitContainer(ComplianceNamespace))
 	}
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
@@ -711,8 +703,8 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 					},
 					Command: []string{"/code/server"},
 					Args: []string{
-						"-certpath=/etc/ssl/tigera-compliance-server-tls/tls.crt",
-						"-keypath=/etc/ssl/tigera-compliance-server-tls/tls.key",
+						fmt.Sprintf("-certpath=%s", c.cfg.ComplianceServerCertSecret.VolumeMountCertificateFilePath()),
+						fmt.Sprintf("-keypath=%s", c.cfg.ComplianceServerCertSecret.VolumeMountKeyFilePath()),
 					},
 					VolumeMounts: c.complianceServerVolumeMounts(),
 				}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceServerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()),
@@ -750,7 +742,7 @@ func (c *complianceComponent) complianceServerPodSecurityPolicy() *policyv1beta1
 func (c *complianceComponent) complianceServerVolumeMounts() []corev1.VolumeMount {
 	mounts := []corev1.VolumeMount{
 		c.cfg.TrustedBundle.VolumeMount(),
-		c.cfg.ComplianceServerCertSecret.VolumeMount("/etc/ssl/tigera-compliance-server-tls/"),
+		c.cfg.ComplianceServerCertSecret.VolumeMount(),
 	}
 
 	if c.cfg.KeyValidatorConfig != nil {

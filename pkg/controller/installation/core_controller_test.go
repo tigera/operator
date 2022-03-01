@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/tigera/operator/pkg/render/monitor"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -55,7 +54,10 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/tls"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
+	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
 	"github.com/tigera/operator/test"
 )
 
@@ -390,7 +392,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			r.typhaAutoscaler.start(ctx)
 			r.calicoWindowsUpgrader.Start(ctx)
-			certificateManager, err := certificatemanagement.CreateCertificateManager(c, nil, "")
+			certificateManager, err := controller.CreateCertificateManager(c, nil, "")
 			Expect(err).NotTo(HaveOccurred())
 			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{"render.PrometheusTLSSecretName"})
 			Expect(err).NotTo(HaveOccurred())
@@ -790,7 +792,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			expectedDNSNames = dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
 			expectedDNSNames = append(expectedDNSNames, "localhost")
-			certificateManager, err := certificatemanagement.CreateCertificateManager(c, nil, "")
+			certificateManager, err := controller.CreateCertificateManager(c, nil, "")
 			Expect(err).NotTo(HaveOccurred())
 			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{"render.PrometheusTLSSecretName"})
 			Expect(err).NotTo(HaveOccurred())
@@ -837,7 +839,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			secret := &corev1.Secret{}
 			cfgMap := &corev1.ConfigMap{}
 
-			Expect(c.Get(ctx, client.ObjectKey{Name: certificatemanagement.TrustedCertConfigMapName, Namespace: common.CalicoNamespace}, cfgMap)).ShouldNot(HaveOccurred())
+			Expect(c.Get(ctx, client.ObjectKey{Name: cmrender.TrustedCertConfigMapName, Namespace: common.CalicoNamespace}, cfgMap)).ShouldNot(HaveOccurred())
 			Expect(cfgMap.GetOwnerReferences()).To(HaveLen(1))
 
 			Expect(c.Get(ctx, client.ObjectKey{Name: render.NodeTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
@@ -992,7 +994,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			r.typhaAutoscaler.start(ctx)
 			r.calicoWindowsUpgrader.Start(ctx)
-			ca, err := certificatemanagement.MakeCA("test")
+			ca, err := tls.MakeCA("test")
 			Expect(err).NotTo(HaveOccurred())
 			cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 			// We start off with a 'standard' installation, with nothing special
@@ -1004,7 +1006,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					CertificateManagement: &operator.CertificateManagement{CACert: cert},
 				},
 			}
-			certificateManager, err := certificatemanagement.CreateCertificateManager(c, nil, "")
+			certificateManager, err := controller.CreateCertificateManager(c, nil, "")
 			Expect(err).NotTo(HaveOccurred())
 			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{"render.PrometheusTLSSecretName"})
 			Expect(err).NotTo(HaveOccurred())

@@ -17,7 +17,6 @@ package logcollector
 import (
 	"context"
 	"fmt"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -33,6 +32,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
 	"github.com/tigera/operator/test"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -41,7 +41,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -131,7 +130,7 @@ var _ = Describe("LogCollector controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ElasticsearchEksLogForwarderUserSecret,
 					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-			certificateManager, err := certificatemanagement.CreateCertificateManager(c, nil, "")
+			certificateManager, err := controller.CreateCertificateManager(c, nil, "")
 			Expect(err).NotTo(HaveOccurred())
 			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{render.PrometheusTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())

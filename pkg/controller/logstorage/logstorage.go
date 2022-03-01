@@ -127,6 +127,11 @@ func (r *ReconcileLogStorage) createLogStorage(
 		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexCertSecret, dexSecret, r.clusterDomain)
 	}
 
+	var managerDomain string
+	if authentication != nil {
+		managerDomain = authentication.Spec.ManagerDomain
+	}
+
 	var components []render.Component
 
 	logStorageCfg := &render.ElasticsearchConfiguration{
@@ -147,6 +152,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 		KbService:                   kbService,
 		ClusterDomain:               r.clusterDomain,
 		DexCfg:                      dexCfg,
+		ManagerDomain:               managerDomain,
 		ElasticLicenseType:          esLicenseType,
 	}
 

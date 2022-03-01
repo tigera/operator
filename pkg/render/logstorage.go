@@ -207,6 +207,7 @@ type ElasticsearchConfiguration struct {
 	KbService                   *corev1.Service
 	ClusterDomain               string
 	DexCfg                      DexRelyingPartyConfig
+	BaseURL                     string // BaseUrl is where the manager is reachable, for setting Kibana publicBaseUrl
 	ElasticLicenseType          ElasticsearchLicenseType
 }
 
@@ -1259,8 +1260,8 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 		"defaultRoute":    fmt.Sprintf(KibanaDefaultRoute, TimeFilter, url.PathEscape(FlowsDashboardName)),
 	}
 
-	if es.cfg.DexCfg != nil && es.cfg.DexCfg.BaseURL() != "" {
-		server["publicBaseUrl"] = fmt.Sprintf("%s/tigera-kibana", es.cfg.DexCfg.BaseURL())
+	if es.cfg.BaseURL != "" {
+		server["publicBaseUrl"] = fmt.Sprintf("%s/%s", es.cfg.BaseURL, KibanaBasePath)
 	}
 
 	config := map[string]interface{}{

@@ -16,10 +16,6 @@ package esmetrics
 
 import (
 	"fmt"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	"strings"
-
-	"github.com/tigera/operator/pkg/dns"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -34,6 +30,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
 )
 
 const (
@@ -55,14 +52,13 @@ type Config struct {
 	ESMetricsCredsSecret *corev1.Secret
 	ESCertSecret         *corev1.Secret
 	ClusterDomain        string
-	ServerTLS            certificatemanagement.KeyPair
-	TrustedBundle        certificatemanagement.TrustedBundle
+	ServerTLS            cmrender.KeyPair
+	TrustedBundle        cmrender.TrustedBundle
 }
 
 type elasticsearchMetrics struct {
 	cfg            *Config
 	esMetricsImage string
-	csrImage       string
 }
 
 func (e *elasticsearchMetrics) ResolveImages(is *operatorv1.ImageSet) error {
@@ -72,22 +68,9 @@ func (e *elasticsearchMetrics) ResolveImages(is *operatorv1.ImageSet) error {
 	path := e.cfg.Installation.ImagePath
 	prefix := e.cfg.Installation.ImagePrefix
 
-	var errMsgs []string
-
 	e.esMetricsImage, err = components.GetReference(components.ComponentElasticsearchMetrics, reg, path, prefix, is)
 	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
-	}
-
-	if e.cfg.Installation.CertificateManagement != nil {
-		e.csrImage, err = certificatemanagement.ResolveCSRInitImage(e.cfg.Installation, is)
-		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
-		}
-	}
-
-	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+		return err
 	}
 
 	return err
@@ -150,17 +133,7 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 	var initContainers []corev1.Container
 	annotations := e.cfg.TrustedBundle.HashAnnotations()
 	if e.cfg.ServerTLS.UseCertificateManagement() {
-		initContainers = append(initContainers,
-			certificatemanagement.CreateCSRInitContainer(
-				e.cfg.Installation.CertificateManagement,
-				e.csrImage,
-				ElasticsearchMetricsServerTLSSecret,
-				ElasticsearchMetricsServerTLSSecret,
-				corev1.TLSPrivateKeyKey,
-				corev1.TLSCertKey,
-				dns.GetServiceDNSNames(ElasticsearchMetricsName, render.ElasticsearchNamespace, e.cfg.ClusterDomain),
-				render.ElasticsearchNamespace),
-		)
+		initContainers = append(initContainers, e.cfg.ServerTLS.InitContainer(render.ElasticsearchNamespace))
 	} else {
 		annotations[e.cfg.ServerTLS.HashAnnotationKey()] = e.cfg.ServerTLS.HashAnnotationValue()
 	}
@@ -200,7 +173,7 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 								Args: []string{"--es.uri=https://$(ELASTIC_USERNAME):$(ELASTIC_PASSWORD)@$(ELASTIC_HOST):$(ELASTIC_PORT)",
 									"--es.all", "--es.indices", "--es.indices_settings", "--es.shards", "--es.cluster_settings",
 									"--es.timeout=30s", "--es.ca=$(ELASTIC_CA)", "--web.listen-address=:9081",
-									"--web.telemetry-path=/metrics", "--tls.key=/tls/tls.key", "--tls.crt=/tls/tls.crt", fmt.Sprintf("--ca.crt=%s", certificatemanagement.TrustedCertBundleMountPath)},
+									"--web.telemetry-path=/metrics", "--tls.key=/tls/tls.key", "--tls.crt=/tls/tls.crt", fmt.Sprintf("--ca.crt=%s", cmrender.TrustedCertBundleMountPath)},
 								VolumeMounts: []corev1.VolumeMount{
 									{
 										Name:      ElasticsearchMetricsServerTLSSecret,

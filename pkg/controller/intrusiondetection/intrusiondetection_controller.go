@@ -17,7 +17,6 @@ package intrusiondetection
 import (
 	"context"
 	"fmt"
-	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"time"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -30,9 +29,11 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
+	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	cmcontroller "github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
+	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -147,7 +148,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		render.ManagerInternalTLSSecretName,
 		render.NodeTLSSecretName,
 		render.TyphaTLSSecretName,
-		certificatemanagement.CASecretName,
+		cmrender.CASecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
@@ -322,7 +323,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	certificateManager, err := certificatemanagement.CreateCertificateManager(r.client, network.CertificateManagement, r.clusterDomain)
+	certificateManager, err := cmcontroller.CreateCertificateManager(r.client, network, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
 		r.status.SetDegraded("unable to create the Tigera CA", err.Error())
@@ -342,7 +343,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	var esLicenseType render.ElasticsearchLicenseType
-	trustedBundle := certificatemanagement.CreateTrustedBundle(certificateManager, kibanaPublicCertSecret)
+	trustedBundle := cmcontroller.CreateTrustedBundle(certificateManager, kibanaPublicCertSecret)
 
 	if managementClusterConnection == nil {
 		if esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger); err != nil {
@@ -379,9 +380,9 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		HasNoLicense:      hasNoLicense,
 		TrustedCertBundle: trustedBundle,
 	}
-	component := render.IntrusionDetection(intrusionDetectionCfg)
+	comp := render.IntrusionDetection(intrusionDetectionCfg)
 
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, comp); err != nil {
 		reqLogger.Error(err, "Error with images from ImageSet")
 		r.status.SetDegraded("Error with images from ImageSet", err.Error())
 		return reconcile.Result{}, err
@@ -414,7 +415,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	})
 
 	components := []render.Component{
-		component,
+		comp,
 		dpiComponent,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       render.IntrusionDetectionNamespace,

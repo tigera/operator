@@ -29,7 +29,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -80,10 +80,10 @@ type Config struct {
 	PullSecrets              []*corev1.Secret
 	AlertmanagerConfigSecret *corev1.Secret
 	KeyValidatorConfig       authentication.KeyValidatorConfig
-	ServerTLSSecret          certificatemanagement.KeyPair
-	ClientTLSSecret          certificatemanagement.KeyPair
+	ServerTLSSecret          cmrender.KeyPair
+	ClientTLSSecret          cmrender.KeyPair
 	ClusterDomain            string
-	TrustedCertBundle        certificatemanagement.TrustedBundle
+	TrustedCertBundle        cmrender.TrustedBundle
 }
 
 type monitorComponent struct {
@@ -91,7 +91,6 @@ type monitorComponent struct {
 	alertmanagerImage      string
 	prometheusImage        string
 	prometheusServiceImage string
-	csrImage               string
 }
 
 func (mc *monitorComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -115,13 +114,6 @@ func (mc *monitorComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	mc.prometheusServiceImage, err = components.GetReference(components.ComponentTigeraPrometheusService, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
-	}
-
-	if mc.cfg.Installation.CertificateManagement != nil {
-		mc.csrImage, err = certificatemanagement.ResolveCSRInitImage(mc.cfg.Installation, is)
-		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
-		}
 	}
 
 	if len(errMsgs) != 0 {
@@ -274,10 +266,10 @@ func (mc *monitorComponent) alertmanagerService() *corev1.Service {
 func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 	var initContainers []corev1.Container
 	if mc.cfg.ServerTLSSecret.UseCertificateManagement() {
-		initContainers = append(initContainers, mc.cfg.ServerTLSSecret.InitContainer(common.TigeraPrometheusNamespace, mc.csrImage))
+		initContainers = append(initContainers, mc.cfg.ServerTLSSecret.InitContainer(common.TigeraPrometheusNamespace))
 	}
 	if mc.cfg.ClientTLSSecret.UseCertificateManagement() {
-		initContainers = append(initContainers, mc.cfg.ClientTLSSecret.InitContainer(common.TigeraPrometheusNamespace, mc.csrImage))
+		initContainers = append(initContainers, mc.cfg.ClientTLSSecret.InitContainer(common.TigeraPrometheusNamespace))
 	}
 	env := []corev1.EnvVar{
 		{
@@ -287,6 +279,14 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		{
 			Name:  "LISTEN_ADDR",
 			Value: fmt.Sprintf(":%d", PrometheusProxyPort),
+		},
+		{
+			Name:  "TLS_KEY",
+			Value: mc.cfg.ServerTLSSecret.VolumeMountKeyFilePath(),
+		},
+		{
+			Name:  "TLS_CERT",
+			Value: mc.cfg.ServerTLSSecret.VolumeMountCertificateFilePath(),
 		},
 		{
 			// No other way to annotate this pod.
@@ -311,8 +311,8 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		mc.cfg.TrustedCertBundle.Volume(),
 	}
 	volumeMounts := []corev1.VolumeMount{
-		mc.cfg.ServerTLSSecret.VolumeMount("/tls"),
-		mc.cfg.ClientTLSSecret.VolumeMount("/client-tls"),
+		mc.cfg.ServerTLSSecret.VolumeMount(),
+		mc.cfg.ClientTLSSecret.VolumeMount(),
 		mc.cfg.TrustedCertBundle.VolumeMount(),
 	}
 
@@ -554,8 +554,8 @@ func (mc *monitorComponent) serviceMonitorCalicoNode() *monitoringv1.ServiceMoni
 
 func (mc *monitorComponent) tlsConfig(serverName string) *monitoringv1.TLSConfig {
 	return &monitoringv1.TLSConfig{
-		KeyFile:  fmt.Sprintf("/client-tls/%s", corev1.TLSPrivateKeyKey),
-		CertFile: fmt.Sprintf("/client-tls/%s", corev1.TLSCertKey),
+		KeyFile:  fmt.Sprintf(mc.cfg.ClientTLSSecret.VolumeMountKeyFilePath()),
+		CertFile: fmt.Sprintf(mc.cfg.ClientTLSSecret.VolumeMountCertificateFilePath()),
 		CAFile:   mc.cfg.TrustedCertBundle.MountPath(),
 		SafeTLSConfig: monitoringv1.SafeTLSConfig{
 			ServerName: serverName,

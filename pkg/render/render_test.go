@@ -18,8 +18,8 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	glog "log"
+	"reflect"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -30,7 +30,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"reflect"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -40,9 +39,11 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
+	render2 "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
 )
 
 const clusterDomain = "cluster.local"
@@ -56,7 +57,7 @@ func allCalicoComponents(
 	managementClusterConnection *operatorv1.ManagementClusterConnection,
 	pullSecrets []*corev1.Secret,
 	typhaNodeTLS *render.TyphaNodeTLS,
-	managerInternalTLSSecret certificatemanagement.KeyPair,
+	managerInternalTLSSecret render2.KeyPair,
 	bt map[string]string,
 	aci *operatorv1.AmazonCloudIntegration,
 	up bool,
@@ -128,7 +129,7 @@ var _ = Describe("Rendering tests", func() {
 	var logBuffer bytes.Buffer
 	var logWriter *bufio.Writer
 	var typhaNodeTLS *render.TyphaNodeTLS
-	var internalManagerKeyPair certificatemanagement.KeyPair
+	var internalManagerKeyPair render2.KeyPair
 	one := intstr.FromInt(1)
 	miMode := operatorv1.MultiInterfaceModeNone
 	k8sServiceEp := k8sapi.ServiceEndpoint{}
@@ -157,7 +158,7 @@ var _ = Describe("Rendering tests", func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := certificatemanagement.CreateCertificateManager(cli, nil, clusterDomain)
+		certificateManager, err := controller.CreateCertificateManager(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		typhaNodeTLS = getTyphaNodeTLS(cli, certificateManager)
 		internalManagerKeyPair, err = certificateManager.GetOrCreateKeyPair(cli, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{render.FelixCommonName})
@@ -257,7 +258,7 @@ var _ = Describe("Rendering tests", func() {
 			{common.CalicoWindowsUpgradeResourceName, common.CalicoNamespace, "apps", "v1", "DaemonSet"},
 
 			// Certificate Management objects
-			{certificatemanagement.TrustedCertConfigMapName, common.CalicoNamespace, "", "v1", "ConfigMap"},
+			{render2.TrustedCertConfigMapName, common.CalicoNamespace, "", "v1", "ConfigMap"},
 			{render.NodeTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
 			{render.NodeTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
 			{render.ManagerInternalTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
@@ -416,14 +417,14 @@ var _ = Describe("Rendering tests", func() {
 	})
 })
 
-func getTyphaNodeTLS(cli client.Client, certificateManager certificatemanagement.CertificateManager) *render.TyphaNodeTLS {
+func getTyphaNodeTLS(cli client.Client, certificateManager render2.CertificateManager) *render.TyphaNodeTLS {
 	nodeKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.NodeTLSSecretName, common.OperatorNamespace(), []string{render.FelixCommonName})
 	Expect(err).NotTo(HaveOccurred())
 
 	typhaKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TyphaTLSSecretName, common.OperatorNamespace(), []string{render.FelixCommonName})
 	Expect(err).NotTo(HaveOccurred())
 
-	trustedBundle := certificatemanagement.CreateTrustedBundle(certificateManager, nodeKeyPair, typhaKeyPair)
+	trustedBundle := controller.CreateTrustedBundle(certificateManager, nodeKeyPair, typhaKeyPair)
 
 	typhaNodeTLS := &render.TyphaNodeTLS{
 		TyphaSecret:   typhaKeyPair,

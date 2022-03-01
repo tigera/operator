@@ -16,11 +16,7 @@ package render
 
 import (
 	"fmt"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"strconv"
-	"strings"
-
-	"github.com/tigera/operator/pkg/url"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -37,6 +33,8 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement/render"
+	"github.com/tigera/operator/pkg/url"
 )
 
 const (
@@ -141,14 +139,13 @@ type FluentdConfiguration struct {
 	Installation     *operatorv1.InstallationSpec
 	ClusterDomain    string
 	OSType           rmeta.OSType
-	MetricsServerTLS certificatemanagement.KeyPair
-	TrustedBundle    certificatemanagement.TrustedBundle
+	MetricsServerTLS render.KeyPair
+	TrustedBundle    render.TrustedBundle
 }
 
 type fluentdComponent struct {
 	cfg          *FluentdConfiguration
 	image        string
-	csrImage     string
 	probeTimeout int32
 	probePeriod  int32
 }
@@ -165,19 +162,9 @@ func (c *fluentdComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	var err error
-	var errMsgs []string
 	c.image, err = components.GetReference(components.ComponentFluentd, reg, path, prefix, is)
 	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
-	}
-	if c.cfg.Installation.CertificateManagement != nil {
-		c.csrImage, err = certificatemanagement.ResolveCSRInitImage(c.cfg.Installation, is)
-		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
-		}
-	}
-	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+		return err
 	}
 	return err
 }
@@ -445,7 +432,7 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 	}
 	var initContainers []corev1.Container
 	if c.cfg.MetricsServerTLS != nil && c.cfg.MetricsServerTLS.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.MetricsServerTLS.InitContainer(LogCollectorNamespace, c.csrImage))
+		initContainers = append(initContainers, c.cfg.MetricsServerTLS.InitContainer(LogCollectorNamespace))
 	}
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
@@ -538,7 +525,7 @@ func (c *fluentdComponent) container() corev1.Container {
 	}
 
 	if c.cfg.MetricsServerTLS != nil {
-		volumeMounts = append(volumeMounts, c.cfg.MetricsServerTLS.VolumeMount("/tls"))
+		volumeMounts = append(volumeMounts, c.cfg.MetricsServerTLS.VolumeMount())
 	}
 
 	isPrivileged := false
@@ -729,9 +716,9 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 
 	if c.cfg.TrustedBundle != nil {
 		envs = append(envs,
-			corev1.EnvVar{Name: "CA_CRT_PATH", Value: "/ca/tls.crt"},
-			corev1.EnvVar{Name: "TLS_KEY_PATH", Value: "/tls/tls.key"},
-			corev1.EnvVar{Name: "TLS_CRT_PATH", Value: "/tls/tls.crt"},
+			corev1.EnvVar{Name: "CA_CRT_PATH", Value: c.cfg.TrustedBundle.MountPath()},
+			corev1.EnvVar{Name: "TLS_KEY_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountKeyFilePath()},
+			corev1.EnvVar{Name: "TLS_CRT_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountCertificateFilePath()},
 		)
 	}
 

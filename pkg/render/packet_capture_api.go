@@ -15,9 +15,6 @@
 package render
 
 import (
-	"fmt"
-	"strings"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -33,7 +30,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/secret"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement/render"
 )
 
 // The names of the components related to the PacketCapture APIs related rendered objects.
@@ -56,14 +53,13 @@ type PacketCaptureApiConfiguration struct {
 	Openshift          bool
 	Installation       *operatorv1.InstallationSpec
 	KeyValidatorConfig authentication.KeyValidatorConfig
-	ServerCertSecret   certificatemanagement.KeyPair
+	ServerCertSecret   render.KeyPair
 	ClusterDomain      string
 }
 
 type packetCaptureApiComponent struct {
-	cfg          *PacketCaptureApiConfiguration
-	image        string
-	csrInitImage string
+	cfg   *PacketCaptureApiConfiguration
+	image string
 }
 
 func PacketCaptureAPI(cfg *PacketCaptureApiConfiguration) Component {
@@ -79,23 +75,10 @@ func (pc *packetCaptureApiComponent) ResolveImages(is *operatorv1.ImageSet) erro
 	prefix := pc.cfg.Installation.ImagePrefix
 
 	var err error
-	var errMsg []string
 	pc.image, err = components.GetReference(components.ComponentPacketCapture, reg, path, prefix, is)
 	if err != nil {
-		errMsg = append(errMsg, err.Error())
+		return err
 	}
-
-	if pc.cfg.Installation.CertificateManagement != nil {
-		pc.csrInitImage, err = certificatemanagement.ResolveCSRInitImage(pc.cfg.Installation, is)
-		if err != nil {
-			errMsg = append(errMsg, err.Error())
-		}
-	}
-
-	if len(errMsg) != 0 {
-		return fmt.Errorf(strings.Join(errMsg, ","))
-	}
-
 	return nil
 }
 
@@ -260,17 +243,19 @@ func (pc *packetCaptureApiComponent) deployment() client.Object {
 func (pc *packetCaptureApiComponent) initContainers() []corev1.Container {
 	var initContainers []corev1.Container
 	if pc.cfg.ServerCertSecret.UseCertificateManagement() {
-		initContainers = append(initContainers, pc.cfg.ServerCertSecret.InitContainer(PacketCaptureNamespace, pc.csrInitImage))
+		initContainers = append(initContainers, pc.cfg.ServerCertSecret.InitContainer(PacketCaptureNamespace))
 	}
 	return initContainers
 }
 
 func (pc *packetCaptureApiComponent) container() corev1.Container {
 	var volumeMounts = []corev1.VolumeMount{
-		pc.cfg.ServerCertSecret.VolumeMount("/certs/https"),
+		pc.cfg.ServerCertSecret.VolumeMount(),
 	}
 	env := []corev1.EnvVar{
 		{Name: "PACKETCAPTURE_API_LOG_LEVEL", Value: "Info"},
+		{Name: "PACKETCAPTURE_API_HTTPS_KEY", Value: pc.cfg.ServerCertSecret.VolumeMountKeyFilePath()},
+		{Name: "PACKETCAPTURE_API_HTTPS_CERT", Value: pc.cfg.ServerCertSecret.VolumeMountCertificateFilePath()},
 	}
 
 	if pc.cfg.KeyValidatorConfig != nil {

@@ -17,7 +17,6 @@ package logstorage
 import (
 	"context"
 	"fmt"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"reflect"
 
 	"github.com/tigera/operator/pkg/render/monitor"
@@ -38,6 +37,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
 	"github.com/tigera/operator/test"
 
 	"github.com/stretchr/testify/mock"
@@ -119,7 +119,7 @@ var _ = Describe("LogStorage controller", func() {
 
 		ctx = context.Background()
 		cli = fake.NewFakeClientWithScheme(scheme)
-		certificateManager, err := certificatemanagement.CreateCertificateManager(cli, nil, "")
+		certificateManager, err := controller.CreateCertificateManager(cli, nil, "")
 		Expect(err).NotTo(HaveOccurred())
 		prometheusTLS, err := certificateManager.GetOrCreateKeyPair(cli, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{render.PrometheusTLSSecretName})
 		Expect(err).NotTo(HaveOccurred())

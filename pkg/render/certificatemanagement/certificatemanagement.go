@@ -6,6 +6,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -24,10 +25,10 @@ type Config struct {
 	ServiceAccounts []string
 	KeyPairOptions  []KeyPairCreator
 	Namespace       string
-	TrustedBundle   certificatemanagement.TrustedBundle
+	TrustedBundle   cmrender.TrustedBundle
 }
 
-func NewKeyPairOption(keyPair certificatemanagement.KeyPair, renderInOperatorNamespace, renderInNamespace bool) KeyPairCreator {
+func NewKeyPairOption(keyPair cmrender.KeyPair, renderInOperatorNamespace, renderInNamespace bool) KeyPairCreator {
 	return KeyPairCreator{
 		keyPair:                   keyPair,
 		renderInOperatorNamespace: renderInOperatorNamespace,
@@ -36,7 +37,7 @@ func NewKeyPairOption(keyPair certificatemanagement.KeyPair, renderInOperatorNam
 }
 
 type KeyPairCreator struct {
-	keyPair                   certificatemanagement.KeyPair
+	keyPair                   cmrender.KeyPair
 	renderInOperatorNamespace bool
 	renderInNamespace         bool
 }

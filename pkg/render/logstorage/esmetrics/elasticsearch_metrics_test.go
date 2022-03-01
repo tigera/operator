@@ -17,17 +17,17 @@ package esmetrics
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/ptr"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -49,9 +49,9 @@ var _ = Describe("Elasticsearch metrics", func() {
 			scheme := runtime.NewScheme()
 			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 			cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-			certificateManager, err := certificatemanagement.CreateCertificateManager(cli, nil, "")
+			certificateManager, err := controller.CreateCertificateManager(cli, nil, "")
 			Expect(err).NotTo(HaveOccurred())
-			bundle := certificatemanagement.CreateTrustedBundle(certificateManager)
+			bundle := controller.CreateTrustedBundle(certificateManager)
 			secret, err := certificateManager.GetOrCreateKeyPair(cli, ElasticsearchMetricsServerTLSSecret, common.OperatorNamespace(), []string{""})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -196,7 +196,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 									{Name: "ES_CURATOR_BACKEND_CERT", Value: "/etc/ssl/elastic/ca.pem"},
 								},
 								VolumeMounts: []corev1.VolumeMount{
-									cfg.ServerTLS.VolumeMount("/tls"),
+									cfg.ServerTLS.VolumeMount(),
 									cfg.TrustedBundle.VolumeMount(),
 									{Name: "elastic-ca-cert-volume", MountPath: "/etc/ssl/elastic/"},
 								},

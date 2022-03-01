@@ -17,6 +17,7 @@ package render_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
@@ -24,14 +25,15 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
+	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
+
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 )
 
 var _ = Describe("Rendering tests", func() {
@@ -40,14 +42,14 @@ var _ = Describe("Rendering tests", func() {
 
 	var renderGuardian = func(i operatorv1.InstallationSpec) {
 		addr := "127.0.0.1:1234"
-		secret, err := certificatemanagement.NewKeyPair(nil, rtest.CreateCertSecret(render.GuardianSecretName, common.OperatorNamespace(), render.GuardianSecretName), []string{""}, "")
+		secret, err := controller.NewKeyPair(nil, rtest.CreateCertSecret(render.GuardianSecretName, common.OperatorNamespace(), render.GuardianSecretName), []string{""}, "")
 
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := certificatemanagement.CreateCertificateManager(cli, nil, clusterDomain)
+		certificateManager, err := controller.CreateCertificateManager(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
-		bundle := certificatemanagement.CreateTrustedBundle(certificateManager)
+		bundle := controller.CreateTrustedBundle(certificateManager)
 
 		cfg := &render.GuardianConfiguration{
 			URL: addr,
@@ -88,7 +90,7 @@ var _ = Describe("Rendering tests", func() {
 			{name: render.GuardianDeploymentName, ns: render.GuardianNamespace, group: "apps", version: "v1", kind: "Deployment"},
 			{name: render.GuardianServiceName, ns: render.GuardianNamespace, group: "", version: "", kind: ""},
 			{name: render.GuardianSecretName, ns: render.GuardianNamespace, group: "", version: "v1", kind: "Secret"},
-			{name: certificatemanagement.TrustedCertConfigMapName, ns: render.GuardianNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: cmrender.TrustedCertConfigMapName, ns: render.GuardianNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: render.ManagerNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: render.ManagerServiceAccount, ns: render.ManagerNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: render.ManagerClusterRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},

@@ -35,8 +35,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-
+	"github.com/tigera/operator/pkg/tls/certificatemanagement/render"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -113,15 +112,15 @@ type ManagerConfiguration struct {
 	KeyValidatorConfig    authentication.KeyValidatorConfig
 	ESSecrets             []*corev1.Secret
 	KibanaSecrets         []*corev1.Secret
-	TrustedCertBundle     certificatemanagement.TrustedBundle
+	TrustedCertBundle     render.TrustedBundle
 	ESClusterConfig       *relasticsearch.ClusterConfig
-	TLSKeyPair            certificatemanagement.KeyPair
+	TLSKeyPair            render.KeyPair
 	PullSecrets           []*corev1.Secret
 	Openshift             bool
 	Installation          *operatorv1.InstallationSpec
 	ManagementCluster     *operatorv1.ManagementCluster
 	TunnelSecret          *corev1.Secret
-	InternalTrafficSecret certificatemanagement.KeyPair
+	InternalTrafficSecret render.KeyPair
 	ClusterDomain         string
 	ESLicenseType         ElasticsearchLicenseType
 	Replicas              *int32
@@ -134,7 +133,6 @@ type managerComponent struct {
 	managerImage   string
 	proxyImage     string
 	esProxyImage   string
-	csrInitImage   string
 }
 
 func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -156,13 +154,6 @@ func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	c.esProxyImage, err = components.GetReference(components.ComponentEsProxy, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
-	}
-
-	if c.cfg.Installation.CertificateManagement != nil {
-		c.csrInitImage, err = certificatemanagement.ResolveCSRInitImage(c.cfg.Installation, is)
-		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
-		}
 	}
 
 	if len(errMsgs) != 0 {
@@ -220,7 +211,7 @@ func (c *managerComponent) Ready() bool {
 func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	var initContainers []corev1.Container
 	if c.cfg.TLSKeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.TLSKeyPair.InitContainer(ManagerNamespace, c.csrInitImage))
+		initContainers = append(initContainers, c.cfg.TLSKeyPair.InitContainer(ManagerNamespace))
 	}
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
@@ -420,6 +411,13 @@ func (c *managerComponent) managerOAuth2EnvVars() []corev1.EnvVar {
 
 // managerProxyContainer returns the container for the manager proxy container.
 func (c *managerComponent) managerProxyContainer() corev1.Container {
+	var keyPath, certPath, intKeyPath, intCertPath string
+	if c.cfg.TLSKeyPair != nil {
+		keyPath, certPath = c.cfg.TLSKeyPair.VolumeMountKeyFilePath(), c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()
+	}
+	if c.cfg.InternalTrafficSecret != nil {
+		intKeyPath, intCertPath = c.cfg.InternalTrafficSecret.VolumeMountKeyFilePath(), c.cfg.InternalTrafficSecret.VolumeMountCertificateFilePath()
+	}
 	env := []corev1.EnvVar{
 		{Name: "VOLTRON_PORT", Value: defaultVoltronPort},
 		{Name: "VOLTRON_COMPLIANCE_ENDPOINT", Value: fmt.Sprintf("https://compliance.%s.svc.%s", ComplianceNamespace, c.cfg.ClusterDomain)},
@@ -430,10 +428,10 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		{Name: "VOLTRON_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_COMPLIANCE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
-		{Name: "VOLTRON_HTTPS_KEY", Value: fmt.Sprintf("/certs/https/%s", corev1.TLSPrivateKeyKey)},
-		{Name: "VOLTRON_HTTPS_CERT", Value: fmt.Sprintf("/certs/https/%s", corev1.TLSCertKey)},
-		{Name: "VOLTRON_INTERNAL_HTTPS_KEY", Value: fmt.Sprintf("/certs/internal/%s", corev1.TLSPrivateKeyKey)},
-		{Name: "VOLTRON_INTERNAL_HTTPS_CERT", Value: fmt.Sprintf("/certs/internal/%s", corev1.TLSCertKey)},
+		{Name: "VOLTRON_HTTPS_KEY", Value: keyPath},
+		{Name: "VOLTRON_HTTPS_CERT", Value: certPath},
+		{Name: "VOLTRON_INTERNAL_HTTPS_KEY", Value: intKeyPath},
+		{Name: "VOLTRON_INTERNAL_HTTPS_CERT", Value: intCertPath},
 		{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
 		{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
 		{Name: "VOLTRON_DEFAULT_FORWARD_SERVER", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc:9200"},
@@ -459,13 +457,13 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 
 func (c *managerComponent) volumeMountsForProxyManager() []corev1.VolumeMount {
 	var mounts = []corev1.VolumeMount{
-		{Name: ManagerTLSSecretName, MountPath: "/certs/https", ReadOnly: true},
+		{Name: ManagerTLSSecretName, MountPath: "/manager-tls", ReadOnly: true},
 		{Name: KibanaPublicCertSecret, MountPath: "/certs/kibana", ReadOnly: true},
 		c.cfg.TrustedCertBundle.VolumeMount(),
 	}
 
 	if c.cfg.ManagementCluster != nil {
-		mounts = append(mounts, c.cfg.InternalTrafficSecret.VolumeMount("/certs/internal"))
+		mounts = append(mounts, c.cfg.InternalTrafficSecret.VolumeMount())
 		mounts = append(mounts, corev1.VolumeMount{Name: VoltronTunnelSecretName, MountPath: "/certs/tunnel", ReadOnly: true})
 	}
 
@@ -486,7 +484,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 	var volumeMounts []corev1.VolumeMount
 	if c.cfg.ManagementCluster != nil {
 		volumeMounts = append(volumeMounts, c.cfg.TrustedCertBundle.VolumeMount())
-		env = append(env, corev1.EnvVar{Name: "VOLTRON_CA_PATH", Value: certificatemanagement.TrustedCertBundleMountPath})
+		env = append(env, corev1.EnvVar{Name: "VOLTRON_CA_PATH", Value: render.TrustedCertBundleMountPath})
 	}
 
 	if c.cfg.KeyValidatorConfig != nil {

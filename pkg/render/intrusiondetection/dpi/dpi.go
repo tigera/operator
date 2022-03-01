@@ -15,9 +15,6 @@
 package dpi
 
 import (
-	"fmt"
-	"strings"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
@@ -26,7 +23,6 @@ import (
 	"github.com/tigera/operator/pkg/render/common/meta"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -63,13 +59,11 @@ func DPI(cfg *DPIConfig) render.Component {
 }
 
 type dpiComponent struct {
-	cfg              *DPIConfig
-	dpiImage         string
-	certSignReqImage string
+	cfg      *DPIConfig
+	dpiImage string
 }
 
 func (d *dpiComponent) ResolveImages(is *operatorv1.ImageSet) error {
-	var errMsgs []string
 	var err error
 	d.dpiImage, err = components.GetReference(
 		components.ComponentDeepPacketInspection,
@@ -78,16 +72,7 @@ func (d *dpiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		d.cfg.Installation.ImagePrefix,
 		is)
 	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
-	}
-	if d.cfg.Installation.CertificateManagement != nil {
-		d.certSignReqImage, err = certificatemanagement.ResolveCSRInitImage(d.cfg.Installation, is)
-		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
-		}
-	}
-	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+		return err
 	}
 	return nil
 }
@@ -141,7 +126,7 @@ func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 	var terminationGracePeriod int64 = 0
 	var initContainers []corev1.Container
 	if d.cfg.TyphaNodeTLS.NodeSecret.UseCertificateManagement() {
-		initContainers = append(initContainers, d.cfg.TyphaNodeTLS.NodeSecret.InitContainer(DeepPacketInspectionNamespace, d.certSignReqImage))
+		initContainers = append(initContainers, d.cfg.TyphaNodeTLS.NodeSecret.InitContainer(DeepPacketInspectionNamespace))
 	}
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
@@ -231,8 +216,8 @@ func (d *dpiComponent) dpiEnvVars() []corev1.EnvVar {
 		{Name: "DPI_TYPHAK8SNAMESPACE", Value: common.CalicoNamespace},
 		{Name: "DPI_TYPHAK8SSERVICENAME", Value: render.TyphaServiceName},
 		{Name: "DPI_TYPHACAFILE", Value: d.cfg.TyphaNodeTLS.TrustedBundle.MountPath()},
-		{Name: "DPI_TYPHACERTFILE", Value: render.TLSCertMountPath},
-		{Name: "DPI_TYPHAKEYFILE", Value: render.TLSKeyMountPath},
+		{Name: "DPI_TYPHACERTFILE", Value: d.cfg.TyphaNodeTLS.NodeSecret.VolumeMountCertificateFilePath()},
+		{Name: "DPI_TYPHAKEYFILE", Value: d.cfg.TyphaNodeTLS.NodeSecret.VolumeMountKeyFilePath()},
 	}
 	// We need at least the CN or URISAN set, we depend on the validation
 	// done by the core_controller that the Secret will have one.
@@ -248,7 +233,7 @@ func (d *dpiComponent) dpiEnvVars() []corev1.EnvVar {
 func (d *dpiComponent) dpiVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
 		d.cfg.TyphaNodeTLS.TrustedBundle.VolumeMount(),
-		d.cfg.TyphaNodeTLS.NodeSecret.VolumeMount(render.TLSMountPathBase),
+		d.cfg.TyphaNodeTLS.NodeSecret.VolumeMount(),
 		{MountPath: "/var/log/calico/snort-alerts", Name: "log-snort-alters"},
 	}
 }

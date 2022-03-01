@@ -21,7 +21,6 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/tigera/operator/pkg/dns"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -44,12 +43,14 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/render/monitor"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	cmcontroller "github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
+	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
 )
 
 var log = logf.Log.WithName("controller_monitor")
@@ -122,7 +123,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		render.NodePrometheusTLSServerSecret,
 		esmetrics.ElasticsearchMetricsServerTLSSecret,
 		render.FluentdPrometheusTLSSecretName,
-		certificatemanagement.CASecretName} {
+		cmrender.CASecretName} {
 		if err = utils.AddSecretsWatch(c, secret, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("monitor-controller failed to watch secret: %w", err)
 		}
@@ -210,7 +211,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
-	certificateManager, err := certificatemanagement.CreateCertificateManager(r.client, install.CertificateManagement, r.clusterDomain)
+	certificateManager, err := cmcontroller.CreateCertificateManager(r.client, install, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
 		r.status.SetDegraded("unable to create the Tigera CA", err.Error())
@@ -230,7 +231,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	trustedBundle := certificatemanagement.CreateTrustedBundle(certificateManager)
+	trustedBundle := cmcontroller.CreateTrustedBundle(certificateManager)
 	for _, certificateName := range []string{
 		render.NodePrometheusTLSServerSecret,
 		esmetrics.ElasticsearchMetricsServerTLSSecret,

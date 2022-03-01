@@ -16,15 +16,12 @@ package render_test
 
 import (
 	"fmt"
-	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
@@ -33,24 +30,29 @@ import (
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/tls"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
+	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 var _ = Describe("Rendering tests for PacketCapture API component", func() {
 
-	var secret certificatemanagement.KeyPair
+	var secret cmrender.KeyPair
 	var cli client.Client
 	BeforeEach(func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := certificatemanagement.CreateCertificateManager(cli, nil, clusterDomain)
+		certificateManager, err := controller.CreateCertificateManager(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		secret, err = certificateManager.GetOrCreateKeyPair(cli, render.PacketCaptureCertSecret, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
@@ -115,6 +117,14 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 	var expectedEnvVars = func(enableOIDC bool) []corev1.EnvVar {
 		var envVars = []corev1.EnvVar{
 			{Name: "PACKETCAPTURE_API_LOG_LEVEL", Value: "Info"},
+			{
+				Name:  "PACKETCAPTURE_API_HTTPS_KEY",
+				Value: "/tigera-packetcapture-server-tls/tls.key",
+			},
+			{
+				Name:  "PACKETCAPTURE_API_HTTPS_CERT",
+				Value: "/tigera-packetcapture-server-tls/tls.crt",
+			},
 		}
 
 		if enableOIDC {
@@ -170,7 +180,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		var volumeMounts = []corev1.VolumeMount{
 			{
 				Name:      render.PacketCaptureCertSecret,
-				MountPath: "/certs/https",
+				MountPath: "/tigera-packetcapture-server-tls",
 				ReadOnly:  true,
 			},
 		}
@@ -360,10 +370,10 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 	})
 
 	It("should render all resources for an installation with certificate management", func() {
-		ca, _ := certificatemanagement.MakeCA(rmeta.DefaultOperatorCASignerName())
+		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 		installation := operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{CACert: cert}}
-		certificateManager, err := certificatemanagement.CreateCertificateManager(cli, installation.CertificateManagement, clusterDomain)
+		certificateManager, err := controller.CreateCertificateManager(cli, &installation, clusterDomain)
 		secret, err = certificateManager.GetOrCreateKeyPair(cli, render.PacketCaptureCertSecret, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
 

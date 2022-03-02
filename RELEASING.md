@@ -60,10 +60,13 @@ Before beginning, ensure that the docs at docs.projectcalico.org for the Calico 
 
 1. After the semaphore job in the releasing steps is complete, and images have been tagged and pushed, checkout the tag you released and create a new branch.
 
-1. Login to our operator project on connect.redhat.com and publish the operator image on the RH Catalog. This step needs to happen before we generate and submit the operator metadata bundle.
+1. Login to our operator project on connect.redhat.com and publish the operator image on the RH Catalog. This step needs to happen before we generate and submit the operator bundle.
 
-1. Create the operator bundle, using the tag version for VERSION and the version that the release replaces in PREV_VERSION. The versions are semver strings.
-   CHANNELS and DEFAULT_CHANNEL should be set to the release stream.
+1. Create the operator bundle using `make bundle` with the required variables `VERSION`, `PREV_VERSION`, `CHANNELS`, and `DEFAULT_CHANNEL`:
+   - **VERSION**: this release version. E.g. `1.13.1` (Note that these version strings are semver strings without the `v`.)
+   - **PREV_VERSION**: the latest published bundle version in this release stream. Navigate to the [certified operators production catalog](https://github.com/redhat-openshift-ecosystem/certified-operators/tree/main/operators/tigera-operator) and look for the most recent version from this release branch. E.g., if this release is `v1.24.11` but the most recently published v1.24.x bundle is `v1.24.9` then you would use `VERSION=v1.24.11` and `PREV_VERSION=v1.24.9`. If this release is the first in this release branch, then there is no prior version so set `PREV_VERSION=0.0.0`.
+   - **CHANNELS** and **DEFAULT_CHANNEL**: should be set to the release branch of this operator release. E.g., if the operator release tag is `v1.23.5`, then CHANNELS and DEFAULT_CHANNEL should be `release-v1.23`.
+
    For example:
 
    ```

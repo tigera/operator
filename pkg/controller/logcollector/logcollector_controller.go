@@ -317,7 +317,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	certificateManager, err := cmcontroller.CreateCertificateManager(r.client, installation, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
-		r.status.SetDegraded("unable to create the Tigera CA", err.Error())
+		r.status.SetDegraded("Unable to create the Tigera CA", err.Error())
 		return reconcile.Result{}, err
 	}
 	fluentdPrometheusTLS, err := certificateManager.GetOrCreateKeyPair(r.client, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), []string{render.FluentdPrometheusTLSSecretName})

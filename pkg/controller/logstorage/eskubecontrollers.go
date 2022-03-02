@@ -72,7 +72,7 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 	certificateManager, err := controller.CreateCertificateManager(r.client, install, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
-		r.status.SetDegraded("unable to create the Tigera CA", err.Error())
+		r.status.SetDegraded("Unable to create the Tigera CA", err.Error())
 		return reconcile.Result{}, false, err
 	}
 

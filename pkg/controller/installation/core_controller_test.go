@@ -406,7 +406,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					Spec: operator.InstallationSpec{
 						Variant:               operator.TigeraSecureEnterprise,
 						Registry:              "some.registry.org/",
-						CertificateManagement: &operator.CertificateManagement{CACert: prometheusTLS.Secret("").Data[corev1.TLSCertKey]},
+						CertificateManagement: &operator.CertificateManagement{CACert: prometheusTLS.CertificatePEM()},
 					},
 					Status: operator.InstallationStatus{
 						Variant: operator.TigeraSecureEnterprise,

@@ -173,13 +173,9 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 								Args: []string{"--es.uri=https://$(ELASTIC_USERNAME):$(ELASTIC_PASSWORD)@$(ELASTIC_HOST):$(ELASTIC_PORT)",
 									"--es.all", "--es.indices", "--es.indices_settings", "--es.shards", "--es.cluster_settings",
 									"--es.timeout=30s", "--es.ca=$(ELASTIC_CA)", "--web.listen-address=:9081",
-									"--web.telemetry-path=/metrics", "--tls.key=/tls/tls.key", "--tls.crt=/tls/tls.crt", fmt.Sprintf("--ca.crt=%s", cmrender.TrustedCertBundleMountPath)},
+									"--web.telemetry-path=/metrics", "--tls.key=/tigera-ee-elasticsearch-metrics-tls/tls.key", "--tls.crt=/tigera-ee-elasticsearch-metrics-tls/tls.crt", fmt.Sprintf("--ca.crt=%s", cmrender.TrustedCertBundleMountPath)},
 								VolumeMounts: []corev1.VolumeMount{
-									{
-										Name:      ElasticsearchMetricsServerTLSSecret,
-										MountPath: "/tls",
-										ReadOnly:  true,
-									},
+									e.cfg.ServerTLS.VolumeMount(),
 									e.cfg.TrustedBundle.VolumeMount(),
 								},
 							}, render.DefaultElasticsearchClusterName, ElasticsearchMetricsSecret,

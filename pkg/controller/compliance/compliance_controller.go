@@ -292,7 +292,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	certificateManager, err := cmcontroller.CreateCertificateManager(r.client, network, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
-		r.status.SetDegraded("unable to create the Tigera CA", err.Error())
+		r.status.SetDegraded("Unable to create the Tigera CA", err.Error())
 		return reconcile.Result{}, err
 	}
 	var managerInternalTLSSecret cmrender.Certificate

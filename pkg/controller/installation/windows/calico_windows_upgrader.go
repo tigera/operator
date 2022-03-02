@@ -227,13 +227,17 @@ func (w *calicoWindowsUpgrader) updateWindowsNodes() {
 	// maxUnavailable value, if the node upgrade strategy was respected.
 	numWindowsNodes := len(pending) + len(inProgress) + len(inSync)
 	numNodesMaxUnavailable, err := intstr.GetValueFromIntOrPercent(w.install.NodeUpdateStrategy.RollingUpdate.MaxUnavailable, numWindowsNodes, false)
-	if err != nil || numNodesMaxUnavailable < 1 {
-		// Due to the potential rounding down of (maxUnavailable %) * ksD+csD, where maxUnavailable is a percentage value,
+	if err != nil {
+		// Due to the potential rounding down of numNodesMaxUnavailable =  (maxUnavailable %) * ksD+csD, where maxUnavailable is a percentage value,
 		// ,it may resolve to zero. Then we should default back maxUnavailable to 1 on the theory that surge might not work
 		// due to quota.
 		windowsLog.Error(err, "Invalid maxUnavailable value, falling back to default of 1")
 	} else {
-		maxUnavailable = int32(numNodesMaxUnavailable)
+		if numNodesMaxUnavailable < 1 {
+			windowsLog.Info("Max unavailble nodes calculation resolved to 0, defaulting back to 1 to allow upgrades to continue")
+		} else {
+			maxUnavailable = int32(numNodesMaxUnavailable)
+		}
 	}
 
 	for _, nodeName := range sortedSliceFromMap(pending) {

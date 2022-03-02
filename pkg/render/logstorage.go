@@ -207,6 +207,7 @@ type ElasticsearchConfiguration struct {
 	KbService                   *corev1.Service
 	ClusterDomain               string
 	DexCfg                      DexRelyingPartyConfig
+	ManagerDomain               string // Domain where the manager is reachable, for setting Kibana publicBaseUrl
 	ElasticLicenseType          ElasticsearchLicenseType
 }
 
@@ -1259,8 +1260,15 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 		"defaultRoute":    fmt.Sprintf(KibanaDefaultRoute, TimeFilter, url.PathEscape(FlowsDashboardName)),
 	}
 
-	if es.cfg.DexCfg != nil && es.cfg.DexCfg.BaseURL() != "" {
-		server["publicBaseUrl"] = fmt.Sprintf("%s/tigera-kibana", es.cfg.DexCfg.BaseURL())
+	baseUrl := es.cfg.ManagerDomain
+	// If we can't parse the ManagerDomain with url.Parse then assume it won't be valid for the Kibana publicBaseUrl
+	if u, err := url.Parse(baseUrl); err == nil {
+		if u.Scheme == "" {
+			baseUrl = fmt.Sprintf("https://%s", baseUrl)
+		}
+		if es.cfg.ManagerDomain != "" {
+			server["publicBaseUrl"] = fmt.Sprintf("%s/%s", baseUrl, KibanaBasePath)
+		}
 	}
 
 	config := map[string]interface{}{

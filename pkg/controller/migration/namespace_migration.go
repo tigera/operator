@@ -57,6 +57,8 @@ const (
 	typhaDeploymentName          = "calico-typha"
 	nodeDaemonSetName            = "calico-node"
 	kubeControllerDeploymentName = "calico-kube-controllers"
+
+	defaultMaxUnavailable = 1
 )
 
 var (
@@ -529,7 +531,7 @@ func (m *CoreNamespaceMigration) migrateEachNode(ctx context.Context, log logr.L
 			// to come up. Also if the operator crashed we don't want to continue
 			// updating if the pods are not healthy.
 			log.V(1).Info("Waiting for new calico pods to be healthy")
-			err := m.waitUntilNodeCanBeMigrated(ctx)
+			err := m.waitUntilNodeCanBeMigrated(ctx, log)
 			if err == nil {
 				log.WithValues("node.Name", node.Name).V(1).Info("Adding label to node")
 				err = m.addNodeLabel(ctx, node.Name, nodeSelectorKey, nodeSelectorValuePost)
@@ -571,23 +573,35 @@ func (m *CoreNamespaceMigration) getNodesToMigrate() []*v1.Node {
 
 // waitUntilNodeCanBeMigrated checks the number of desired and ready pods in the kube-system and calico-system
 // daemonsets to make sure we don't simultaneously migrate more pods than allowed.
-func (m *CoreNamespaceMigration) waitUntilNodeCanBeMigrated(ctx context.Context) error {
+func (m *CoreNamespaceMigration) waitUntilNodeCanBeMigrated(ctx context.Context, log logr.Logger) error {
 	return wait.PollImmediate(1*time.Second, 1*time.Minute, func() (bool, error) {
+		// num node desired schedule, num node ready, node max unavailable in kube-system
 		ksD, ksR, _, err := m.getNumPodsDesiredAndReady(ctx, kubeSystem, nodeDaemonSetName)
 		if err != nil {
 			return false, err
 		}
+
+		// num node desired schedule, num node ready, node max unavailable in calico-system
 		csD, csR, csMaxUnavailable, err := m.getNumPodsDesiredAndReady(ctx, common.CalicoNamespace, nodeDaemonSetName)
 		if err != nil {
 			return false, err
 		}
 
-		var maxUnavailable int32 = 1
+		var maxUnavailable int32 = int32(defaultMaxUnavailable)
 
 		if csMaxUnavailable != nil {
-			n, err := intstr.GetValueFromIntOrPercent(csMaxUnavailable, int(ksD+csD), false)
-			if err == nil {
-				maxUnavailable = int32(n)
+			numNodesMaxUnavailable, err := intstr.GetValueFromIntOrPercent(csMaxUnavailable, int(ksD+csD), false)
+			if err != nil {
+				log.Error(err, "Invalid maxUnavailable value, falling back to default of 1")
+			} else {
+				// Due to the potential rounding down of numNodesMaxUnavailable = (csMaxUnavailable %) * ksD+csD, where maxUnavailable is a percentage value,
+				// ,it may resolve to zero. Then we should default back maxUnavailable to 1 on the theory that surge might not work
+				// due to quota.
+				if numNodesMaxUnavailable < 1 {
+					log.Info("Max unavailble nodes calculation resolved to 0, defaulting back to 1 to allow upgrades to continue")
+				} else {
+					maxUnavailable = int32(numNodesMaxUnavailable)
+				}
 			}
 		}
 

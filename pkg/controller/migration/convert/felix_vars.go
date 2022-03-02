@@ -33,6 +33,13 @@ func (s *patches) Data(obj client.Object) ([]byte, error) {
 	return json.Marshal(s)
 }
 
+// These env variable values are specified with no units, but the FelixConfiguration
+// API uses a metav1.Duration and expects units to be present. This maps the env var
+// to the assumed units to be attached to the value.
+var unitlessEnvVars = map[string]string{
+	"FELIX_IPTABLESREFRESHINTERVAL": "s",
+}
+
 // handleFelixVars handles unexpected felix env vars (i.e. vars that start with FELIX_*) on the calico-node container
 // by patching them into the default FelixConfiguration resource.
 func handleFelixVars(c *components) error {
@@ -63,6 +70,12 @@ func handleFelixVars(c *components) error {
 		// auto as a value so nothing to do with this case.
 		if env.Name == "FELIX_IPTABLESBACKEND" && strings.ToLower(*fval) == "auto" {
 			continue
+		}
+
+		// Handle env vars that need to be represented as metav1.Duration.
+		if unit, ok := unitlessEnvVars[env.Name]; ok && !strings.HasSuffix(*fval, unit) {
+			withUnits := fmt.Sprintf("%s%s", *fval, unit)
+			fval = &withUnits
 		}
 
 		// downcase and remove FELIX_ prefix
@@ -154,11 +167,16 @@ func convert(t interface{}, str string) (interface{}, error) {
 
 	case *[]crdv1.ProtoPort:
 		pps := []crdv1.ProtoPort{}
+		if str == "none" {
+			// Failsafe ports support the value "none", which is represented as
+			// an empty slice on the FelixConfiguration API.
+			return &pps, nil
+		}
 		ppsStr := strings.Split(str, ",")
 		for _, ppStr := range ppsStr {
 			vals := strings.Split(ppStr, ":")
 			if len(vals) != 2 {
-				return nil, fmt.Errorf("could not convert protoport: must be of form <proto>:<port>")
+				return nil, fmt.Errorf("could not convert protoport '%s': must be of form <proto>:<port>", ppStr)
 			}
 			port, err := strconv.ParseUint(vals[1], 10, 16)
 			if err != nil {

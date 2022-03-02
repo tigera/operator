@@ -23,6 +23,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -955,6 +956,14 @@ func (c *intrusionDetectionComponent) getBaseIntrusionDetectionADJobPodTemplate(
 							},
 						},
 					},
+					{
+						Name: "host-volume",
+						VolumeSource: corev1.VolumeSource{
+							HostPath: &v1.HostPathVolumeSource{
+								Path: "/home/idsuser/anomaly_detection_jobs/models",
+							},
+						},
+					},
 				},
 				DNSPolicy:          corev1.DNSClusterFirst,
 				ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
@@ -979,7 +988,7 @@ func (c *intrusionDetectionComponent) getBaseIntrusionDetectionADJobPodTemplate(
 								Value: strconv.Itoa(ElasticsearchDefaultPort),
 							},
 							{
-								Name:      "ELASTIC_USERNAME",
+								Name:      "ELASTIC_USER",
 								ValueFrom: secret.GetEnvVarSource(ElasticsearchADJobUserSecret, "username", false),
 							},
 							{
@@ -996,6 +1005,10 @@ func (c *intrusionDetectionComponent) getBaseIntrusionDetectionADJobPodTemplate(
 								Name:      "es-certs",
 								MountPath: "/certs/es-ca.pem",
 								SubPath:   "es-ca.pem",
+							},
+							{
+								Name:      "host-volume",
+								MountPath: "/home/idsuser/anomaly_detection_jobs/models",
 							},
 						},
 					},

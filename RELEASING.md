@@ -51,7 +51,7 @@ You should have no local changes and tests should be passing.
 
 If the release includes new Calico CRDs, add the new CRDs to `hack/gen-bundle/get-manifests.sh` and `config/manifests/bases/operator.clusterserviceversion.yaml`.
 
-## Publishing a release on RH Catalog
+## Publishing a release on the RH Catalog
 
 We currently only publish operator releases targeting Calico. If the release targets Calico, continue onto the following steps to generate the
 operator bundle for it, and publish the release on the RH Catalog.
@@ -62,7 +62,7 @@ Before beginning, ensure that the docs at docs.projectcalico.org for the Calico 
 
 1. Login to our operator project on connect.redhat.com and publish the operator image on the RH Catalog. This step needs to happen before we generate and submit the operator metadata bundle.
 
-1. Create the operator metadata bundle, using the tag version for VERSION and the version that the release replaces in PREV_VERSION. The versions are semver strings.
+1. Create the operator bundle, using the tag version for VERSION and the version that the release replaces in PREV_VERSION. The versions are semver strings.
    CHANNELS and DEFAULT_CHANNEL should be set to the release stream.
    For example:
 
@@ -72,17 +72,4 @@ Before beginning, ensure that the docs at docs.projectcalico.org for the Calico 
 
    This step will create the bundle `bundle/1.13.1`.
 
-1. Login to our operator bundle project on connect.redhat.com
-
-1. Tag and push the operator bundle image to connect.redhat.com
-   ```
-   docker login -u unused scan.connect.redhat.com # Use the registry key found on our operator bundle project page at connect.redhat.com
-   docker tag tigera-operator-bundle:1.13.1 scan.connect.redhat.com/<project_id>/operator:1.13.1 # Replace the <project_id> with the PID found on our operator bundle project page at connect.redhat.com
-   docker push !$
-   ```
-
-3. Add the new bundle in `bundle/`, push the branch, submit a PR, and get it reviewed.
-
-4. Wait until the operator bundle has passed validation tests on our operator bundle project page at connect.redhat.com. Once that has
-   happened, publish the new bundle in the UI, and merge the operator PR.
-
+1. Publish the generated operator bundle following the [Operator Certification CI Pipeline instructions](https://github.com/redhat-openshift-ecosystem/certification-releases/blob/main/4.9/ga/ci-pipeline.md). Bundles are no longer committed in this repository as they are committed in [redhat-openshift-ecosystem/certified-operators](https://github.com/redhat-openshift-ecosystem/certified-operators).

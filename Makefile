@@ -712,7 +712,7 @@ bundle: bundle-generate bundle-crd-clean update-bundle bundle-validate bundle-im
 
 .PHONY: bundle-crd-clean
 bundle-crd-clean:
-	git checkout -- config/crd/bases/
+	git checkout -- config/crd/bases
 
 .PHONY: bundle-validate
 bundle-validate:

@@ -58,7 +58,7 @@ const (
 	nodeDaemonSetName            = "calico-node"
 	kubeControllerDeploymentName = "calico-kube-controllers"
 
-	defaultMaxUnavailable = 1
+	defaultMaxUnavailable int32 = 1
 )
 
 var (
@@ -587,7 +587,7 @@ func (m *CoreNamespaceMigration) waitUntilNodeCanBeMigrated(ctx context.Context,
 			return false, err
 		}
 
-		var maxUnavailable int32 = int32(defaultMaxUnavailable)
+		var maxUnavailable int32 = defaultMaxUnavailable
 
 		if csMaxUnavailable != nil {
 			numNodesMaxUnavailable, err := intstr.GetValueFromIntOrPercent(csMaxUnavailable, int(ksD+csD), false)

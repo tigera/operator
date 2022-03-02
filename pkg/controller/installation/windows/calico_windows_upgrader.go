@@ -41,7 +41,7 @@ import (
 )
 
 const (
-	defaultMaxUnavailable = 1
+	defaultMaxUnavailable int32 = 1
 )
 
 var (
@@ -222,7 +222,7 @@ func (w *calicoWindowsUpgrader) updateWindowsNodes() {
 		}
 	}
 
-	var maxUnavailable int32 = int32(defaultMaxUnavailable)
+	var maxUnavailable int32 = defaultMaxUnavailable
 	// Get the total # of windows nodes we can have upgrading using the
 	// maxUnavailable value, if the node upgrade strategy was respected.
 	numWindowsNodes := len(pending) + len(inProgress) + len(inSync)

@@ -592,14 +592,12 @@ func (m *CoreNamespaceMigration) waitUntilNodeCanBeMigrated(ctx context.Context,
 		if csMaxUnavailable != nil {
 			numNodesMaxUnavailable, err := intstr.GetValueFromIntOrPercent(csMaxUnavailable, int(ksD+csD), false)
 			if err != nil || numNodesMaxUnavailable < 1 {
-				log.Error(err, "Invalid maxUnavailable value, falling back to default of 1")
-			} else {
 				// Due to the potential rounding down of numNodesMaxUnavailable = (csMaxUnavailable %) * ksD+csD, where maxUnavailable is a percentage value,
 				// ,it may resolve to zero. Then we should default back maxUnavailable to 1 on the theory that surge might not work
 				// due to quota.
-				if numNodesMaxUnavailable >= 1 {
-					maxUnavailable = int32(numNodesMaxUnavailable)
-				}
+				log.Error(err, "Invalid maxUnavailable value, falling back to default of 1")
+			} else {
+				maxUnavailable = int32(numNodesMaxUnavailable)
 			}
 		}
 

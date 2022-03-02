@@ -1260,8 +1260,12 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 		"defaultRoute":    fmt.Sprintf(KibanaDefaultRoute, TimeFilter, url.PathEscape(FlowsDashboardName)),
 	}
 
+	baseUrl := es.cfg.ManagerDomain
+	if !strings.HasPrefix(baseUrl, "http://") && !strings.HasPrefix(baseUrl, "https://") {
+		baseUrl = fmt.Sprintf("https://%s", baseUrl)
+	}
 	if es.cfg.ManagerDomain != "" {
-		server["publicBaseUrl"] = fmt.Sprintf("%s/%s", es.cfg.ManagerDomain, KibanaBasePath)
+		server["publicBaseUrl"] = fmt.Sprintf("%s/%s", baseUrl, KibanaBasePath)
 	}
 
 	config := map[string]interface{}{

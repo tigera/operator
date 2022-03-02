@@ -532,7 +532,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			Expect(kb).ShouldNot(BeNil())
 			kibana := kb.(*kbv1.Kibana)
 			x := kibana.Spec.Config.Data["server"].(map[string]interface{})
-			Expect(x["publicBaseUrl"]).To(Equal("test.domain.com/tigera-kibana"))
+			Expect(x["publicBaseUrl"]).To(Equal("https://test.domain.com/tigera-kibana"))
 		})
 
 		It("should not configures OIDC for Kibana when elasticsearch basic license is used", func() {

@@ -40,10 +40,12 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+const (
+	defaultMaxUnavailable = 1
+)
+
 var (
 	windowsLog = logf.Log.WithName("windows_upgrader")
-
-	defaultMaxUnavailable = 1
 )
 
 type CalicoWindowsUpgrader interface {
@@ -220,13 +222,18 @@ func (w *calicoWindowsUpgrader) updateWindowsNodes() {
 		}
 	}
 
+	maxUnavailable := defaultMaxUnavailable
 	// Get the total # of windows nodes we can have upgrading using the
 	// maxUnavailable value, if the node upgrade strategy was respected.
 	numWindowsNodes := len(pending) + len(inProgress) + len(inSync)
-	maxUnavailable, err := intstr.GetValueFromIntOrPercent(w.install.NodeUpdateStrategy.RollingUpdate.MaxUnavailable, numWindowsNodes, false)
-	if err != nil {
+	numNodesMaxUnavailable, err := intstr.GetValueFromIntOrPercent(w.install.NodeUpdateStrategy.RollingUpdate.MaxUnavailable, numWindowsNodes, false)
+	if err != nil || numNodesMaxUnavailable < 1 {
+		// Due to the potential rounding down of (maxUnavailable %) * ksD+csD, where maxUnavailable is a percentage value,
+		// ,it may resolve to zero. Then we should default back maxUnavailable to 1 on the theory that surge might not work
+		// due to quota.
 		windowsLog.Error(err, "Invalid maxUnavailable value, falling back to default of 1")
-		maxUnavailable = defaultMaxUnavailable
+	} else {
+		maxUnavailable = numNodesMaxUnavailable
 	}
 
 	for _, nodeName := range sortedSliceFromMap(pending) {

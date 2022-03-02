@@ -113,7 +113,7 @@ var _ = Describe("felix env parser", func() {
 	})
 
 	Context("creating a felixconfiguration", func() {
-		var c = emptyComponents()
+		c := emptyComponents()
 
 		BeforeEach(func() {
 			c = emptyComponents()
@@ -137,10 +137,38 @@ var _ = Describe("felix env parser", func() {
 			Expect(*f.Spec.BPFEnabled).To(BeTrue())
 		})
 
+		It("handles 'none' failsafe inbound ports", func() {
+			c.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+				Name:  "FELIX_FAILSAFEINBOUNDHOSTPORTS",
+				Value: "none",
+			}}
+
+			Expect(handleFelixVars(&c)).ToNot(HaveOccurred())
+
+			f := crdv1.FelixConfiguration{}
+			Expect(c.client.Get(ctx, types.NamespacedName{Name: "default"}, &f)).ToNot(HaveOccurred())
+			Expect(f.Spec.FailsafeInboundHostPorts).ToNot(BeNil())
+			Expect(f.Spec.FailsafeInboundHostPorts).To(Equal(&[]crdv1.ProtoPort{}))
+		})
+
+		It("handles 'none' failsafe outbound ports", func() {
+			c.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+				Name:  "FELIX_FAILSAFEOUTBOUNDHOSTPORTS",
+				Value: "none",
+			}}
+
+			Expect(handleFelixVars(&c)).ToNot(HaveOccurred())
+
+			f := crdv1.FelixConfiguration{}
+			Expect(c.client.Get(ctx, types.NamespacedName{Name: "default"}, &f)).ToNot(HaveOccurred())
+			Expect(f.Spec.FailsafeOutboundHostPorts).ToNot(BeNil())
+			Expect(f.Spec.FailsafeOutboundHostPorts).To(Equal(&[]crdv1.ProtoPort{}))
+		})
+
 		It("sets a duration", func() {
 			c.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
 				Name:  "FELIX_IPTABLESREFRESHINTERVAL",
-				Value: "20s",
+				Value: "20",
 			}}
 
 			Expect(handleFelixVars(&c)).ToNot(HaveOccurred())

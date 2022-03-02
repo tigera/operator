@@ -534,6 +534,20 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			x := kibana.Spec.Config.Data["server"].(map[string]interface{})
 			Expect(x["publicBaseUrl"]).To(Equal("https://test.domain.com/tigera-kibana"))
 		})
+		It("should configures Kibana publicBaseUrl when scheme specified", func() {
+			// This is probably an invalid scheme to use but it is just to test that a specified scheme is carried through
+			cfg.ElasticLicenseType = render.ElasticsearchLicenseTypeBasic
+			cfg.ManagerDomain = "tcp://test.domain.com"
+
+			component := render.LogStorage(cfg)
+
+			createResources, _ := component.Objects()
+			kb := rtest.GetResource(createResources, render.KibanaName, render.KibanaNamespace, "kibana.k8s.elastic.co", "v1", "Kibana")
+			Expect(kb).ShouldNot(BeNil())
+			kibana := kb.(*kbv1.Kibana)
+			x := kibana.Spec.Config.Data["server"].(map[string]interface{})
+			Expect(x["publicBaseUrl"]).To(Equal("tcp://test.domain.com/tigera-kibana"))
+		})
 
 		It("should not configures OIDC for Kibana when elasticsearch basic license is used", func() {
 			cfg.DexCfg = render.NewDexRelyingPartyConfig(&operatorv1.Authentication{

@@ -326,7 +326,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	certificateManager, err := cmcontroller.CreateCertificateManager(r.client, network, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
-		r.status.SetDegraded("unable to create the Tigera CA", err.Error())
+		r.status.SetDegraded("Unable to create the Tigera CA", err.Error())
 		return reconcile.Result{}, err
 	}
 	kibanaPublicCertSecret, err := certificateManager.GetCertificate(r.client, render.KibanaPublicCertSecret, common.OperatorNamespace())

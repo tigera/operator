@@ -79,39 +79,33 @@ func (d *dpiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 
 func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 	var toCreate, toDelete []client.Object
-
-	nsObj := []client.Object{
-		render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider),
+	if d.cfg.HasNoLicense {
+		toDelete = append(toDelete, render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider))
+	} else {
+		toCreate = append(toCreate, render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider))
 	}
-
 	if d.cfg.HasNoDPIResource || d.cfg.HasNoLicense {
-		// create empty secrets and configMap when resource needs to be deleted.
-		toCreate = append(toCreate, d.cfg.TyphaNodeTLS.TrustedBundle.ConfigMap(DeepPacketInspectionNamespace))
-		toCreate = append(toCreate, &corev1.Secret{
-			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: render.NodeTLSSecretName, Namespace: DeepPacketInspectionNamespace}})
-		toCreate = append(toCreate, &corev1.Secret{
+		toDelete = append(toDelete, &corev1.Secret{
 			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: DeepPacketInspectionNamespace}})
+		toDelete = append(toDelete, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.PullSecrets...)...)...)
+		toDelete = append(toDelete,
+			d.dpiServiceAccount(),
+			d.dpiClusterRole(),
+			d.dpiClusterRoleBinding(),
+			d.dpiDaemonset(),
+		)
 	} else {
 		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.ESSecrets...)...)...)
+		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.PullSecrets...)...)...)
+		toCreate = append(toCreate,
+			d.dpiServiceAccount(),
+			d.dpiClusterRole(),
+			d.dpiClusterRoleBinding(),
+			d.dpiDaemonset(),
+		)
 	}
-
-	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.PullSecrets...)...)...)
-	toCreate = append(toCreate,
-		d.dpiServiceAccount(),
-		d.dpiClusterRole(),
-		d.dpiClusterRoleBinding(),
-		d.dpiDaemonset(),
-	)
-
-	if d.cfg.HasNoLicense {
-		return nil, append(append(nsObj, toCreate...), toDelete...)
-	}
-	if d.cfg.HasNoDPIResource {
-		return nsObj, append(toCreate, toDelete...)
-	}
-	return append(nsObj, toCreate...), toDelete
+	return toCreate, toDelete
 }
 
 func (d *dpiComponent) Ready() bool {

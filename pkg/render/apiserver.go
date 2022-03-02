@@ -180,7 +180,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 
 	// Add in certificates for API server TLS.
 	if !c.cfg.TLSKeyPair.UseCertificateManagement() {
-		globalObjects = append(globalObjects, c.apiServiceRegistration(c.cfg.TLSKeyPair.Secret("").Data[corev1.TLSCertKey]))
+		globalObjects = append(globalObjects, c.apiServiceRegistration(c.cfg.TLSKeyPair.CertificatePEM()))
 	} else {
 		globalObjects = append(globalObjects, c.apiServiceRegistration(c.cfg.Installation.CertificateManagement.CACert))
 	}

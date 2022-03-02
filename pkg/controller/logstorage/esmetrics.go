@@ -57,7 +57,7 @@ func (r *ReconcileLogStorage) createEsMetrics(
 	certificateManager, err := controller.CreateCertificateManager(r.client, install, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
-		r.status.SetDegraded("unable to create the Tigera CA", err.Error())
+		r.status.SetDegraded("Unable to create the Tigera CA", err.Error())
 		return reconcile.Result{}, false, err
 	}
 	prometheusCertificate, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
@@ -66,11 +66,10 @@ func (r *ReconcileLogStorage) createEsMetrics(
 			log.Info("Prometheus secrets are not available yet, waiting until they become available")
 			r.status.SetDegraded("Prometheus secrets are not available yet, waiting until they become available", "")
 			return reconcile.Result{RequeueAfter: 5 * time.Second}, false, nil
-		} else {
-			log.Error(err, "Failed to get certificate")
-			r.status.SetDegraded("Failed to get certificate", err.Error())
-			return reconcile.Result{}, false, err
 		}
+		log.Error(err, "Failed to get certificate")
+		r.status.SetDegraded("Failed to get certificate", err.Error())
+		return reconcile.Result{}, false, err
 	}
 	trustedBundle := controller.CreateTrustedBundle(certificateManager, prometheusCertificate)
 

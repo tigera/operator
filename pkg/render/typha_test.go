@@ -277,7 +277,7 @@ var _ = Describe("Typha rendering tests", func() {
 	})
 
 	It("should render all resources when certificate management is enabled", func() {
-		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c", CACert: cfg.TLS.TyphaSecret.Secret("").Data[corev1.TLSCertKey]}
+		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c", CACert: cfg.TLS.TyphaSecret.CertificatePEM()}
 		certificateManager, err := controller.CreateCertificateManager(cli, cfg.Installation, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		cfg.TLS = getTyphaNodeTLS(cli, certificateManager)

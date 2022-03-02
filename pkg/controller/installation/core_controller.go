@@ -948,12 +948,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	certificateManager, err := cmcontroller.CreateCertificateManager(r.client, &instance.Spec, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
-		r.status.SetDegraded("unable to create the Tigera CA", err.Error())
+		r.status.SetDegraded("Unable to create the Tigera CA", err.Error())
 		return reconcile.Result{}, err
 	}
 	var managerInternalTLSSecret cmrender.KeyPair
 	if instance.Spec.Variant == operator.TigeraSecureEnterprise && managementCluster != nil {
-		managerInternalTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, render.ManagerInternalTLSSecretName, common.CalicoNamespace, append(dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain), render.ManagerServiceIP))
+		dnsNames := append(dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain), render.ManagerServiceIP)
+		managerInternalTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, render.ManagerInternalTLSSecretName, common.CalicoNamespace, dnsNames)
 		if err != nil {
 			r.status.SetDegraded(fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err.Error())
 			return reconcile.Result{}, err
@@ -1402,7 +1403,7 @@ func GetOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager cmrende
 			if data != nil {
 				cn, uriSAN = string(data[render.CommonName]), string(data[render.URISAN])
 			}
-			if !keyPair.BYO() {
+			if certificateManager.Issued(keyPair.CertificatePEM()) || keyPair.UseCertificateManagement() {
 				cn = commonName
 			}
 		}
@@ -1410,7 +1411,7 @@ func GetOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager cmrende
 	}
 	node, nodeCommonName, nodeURISAN := getKeyPair(render.NodeTLSSecretName, render.FelixCommonName)
 	typha, typhaCommonName, typhaURISAN := getKeyPair(render.TyphaTLSSecretName, render.TyphaCommonName)
-	trustedBundle := cmcontroller.CreateTrustedBundle(certificateManager, node, typha)
+	var trustedBundle cmrender.TrustedBundle
 	configMap, err := getConfigMap(cli, render.TyphaCAConfigMapName)
 	if err != nil {
 		errMsgs = append(errMsgs, fmt.Sprintf("CA for Typha is invalid: %s", err))
@@ -1418,8 +1419,11 @@ func GetOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager cmrende
 		if len(configMap.Data[render.TyphaCABundleName]) == 0 {
 			errMsgs = append(errMsgs, fmt.Sprintf("ConfigMap %q does not have a field named %q", render.TyphaCAConfigMapName, render.TyphaCABundleName))
 		} else {
-			trustedBundle.AddPEM(render.TyphaCAConfigMapName, []byte(configMap.Data[render.TyphaCABundleName]))
+			trustedBundle = cmcontroller.CreateTrustedBundle(certificateManager, node, typha,
+				cmcontroller.NewCertificate(render.TyphaCAConfigMapName, []byte(configMap.Data[render.TyphaCABundleName])))
 		}
+	} else {
+		trustedBundle = cmcontroller.CreateTrustedBundle(certificateManager, node, typha)
 	}
 	if len(errMsgs) != 0 {
 		return nil, fmt.Errorf(strings.Join(errMsgs, ";"))

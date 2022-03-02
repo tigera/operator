@@ -303,8 +303,6 @@ var _ = Describe("DPI rendering tests", func() {
 		createResources, deleteResource := component.Objects()
 		expectedResources := []resourceTestObj{
 			{name: dpi.DeepPacketInspectionNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: cmrender.TrustedCertConfigMapName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ConfigMap"},
-			{name: render.NodeTLSSecretName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: relasticsearch.PublicCertSecret, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: "pull-secret", ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ServiceAccount"},
@@ -336,8 +334,6 @@ var _ = Describe("DPI rendering tests", func() {
 		})
 		createResources, deleteResource := component.Objects()
 		expectedResources := []resourceTestObj{
-			{name: cmrender.TrustedCertConfigMapName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ConfigMap"},
-			{name: render.NodeTLSSecretName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: relasticsearch.PublicCertSecret, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: "pull-secret", ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ServiceAccount"},

@@ -149,7 +149,8 @@ var _ = Describe("Elasticsearch metrics", func() {
 								Args: []string{"--es.uri=https://$(ELASTIC_USERNAME):$(ELASTIC_PASSWORD)@$(ELASTIC_HOST):$(ELASTIC_PORT)",
 									"--es.all", "--es.indices", "--es.indices_settings", "--es.shards", "--es.cluster_settings",
 									"--es.timeout=30s", "--es.ca=$(ELASTIC_CA)", "--web.listen-address=:9081",
-									"--web.telemetry-path=/metrics", "--tls.key=/tls/tls.key", "--tls.crt=/tls/tls.crt",
+									"--web.telemetry-path=/metrics", "--tls.key=/tigera-ee-elasticsearch-metrics-tls/tls.key",
+									"--tls.crt=/tigera-ee-elasticsearch-metrics-tls/tls.crt",
 									"--ca.crt=/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 								Env: []corev1.EnvVar{
 									{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},

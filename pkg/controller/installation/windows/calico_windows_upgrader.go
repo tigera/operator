@@ -222,7 +222,7 @@ func (w *calicoWindowsUpgrader) updateWindowsNodes() {
 		}
 	}
 
-	maxUnavailable := defaultMaxUnavailable
+	var maxUnavailable int32 = int32(defaultMaxUnavailable)
 	// Get the total # of windows nodes we can have upgrading using the
 	// maxUnavailable value, if the node upgrade strategy was respected.
 	numWindowsNodes := len(pending) + len(inProgress) + len(inSync)
@@ -233,7 +233,7 @@ func (w *calicoWindowsUpgrader) updateWindowsNodes() {
 		// due to quota.
 		windowsLog.Error(err, "Invalid maxUnavailable value, falling back to default of 1")
 	} else {
-		maxUnavailable = numNodesMaxUnavailable
+		maxUnavailable = int32(numNodesMaxUnavailable)
 	}
 
 	for _, nodeName := range sortedSliceFromMap(pending) {
@@ -242,7 +242,7 @@ func (w *calicoWindowsUpgrader) updateWindowsNodes() {
 		// For upgrades from Calico -> Enterprise, we always upgrade regardless
 		// of maxUnavailable. For other upgrades, check that we have room
 		// available.
-		if w.isUpgradeFromCalicoToEnterprise(node) || len(inProgress) < maxUnavailable {
+		if w.isUpgradeFromCalicoToEnterprise(node) || int32(len(inProgress)) < maxUnavailable {
 			if err := w.startUpgrade(context.Background(), node); err != nil {
 				// Log the error and continue. We will retry when we update nodes again.
 				windowsLog.Info(fmt.Sprintf("Could not start upgrade on node %v: %v", node.Name, err))

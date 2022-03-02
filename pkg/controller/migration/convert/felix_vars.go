@@ -73,7 +73,7 @@ func handleFelixVars(c *components) error {
 		}
 
 		// Handle env vars that need to be represented as metav1.Duration.
-		if unit, ok := unitlessEnvVars[env.Name]; ok {
+		if unit, ok := unitlessEnvVars[env.Name]; ok && !strings.HasSuffix(*fval, unit) {
 			withUnits := fmt.Sprintf("%s%s", *fval, unit)
 			fval = &withUnits
 		}

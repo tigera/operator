@@ -21,7 +21,17 @@ import (
 	"strconv"
 	"strings"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/ptr"
+	"github.com/tigera/operator/pkg/render/common/configmap"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement/render"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -30,23 +40,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/controller/k8sapi"
-	"github.com/tigera/operator/pkg/controller/migration"
-	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/render/common/configmap"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
-	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
 const (
 	BirdTemplatesConfigMapName        = "bird-templates"
 	birdTemplateHashAnnotation        = "hash.operator.tigera.io/bird-templates"
-	NodeCertHashAnnotation            = "hash.operator.tigera.io/node-cert"
 	nodeCniConfigAnnotation           = "hash.operator.tigera.io/cni-config"
 	bgpLayoutHashAnnotation           = "hash.operator.tigera.io/bgp-layout"
 	CSRLabelCalicoSystem              = "calico-system"
@@ -58,11 +56,9 @@ const (
 	nodeTerminationGracePeriodSeconds = 5
 	NodeFinalizer                     = "tigera.io/cni-protector"
 
-	CalicoNodeMetricsService          = "calico-node-metrics"
-	NodePrometheusTLSServerSecret     = "calico-node-prometheus-server-tls"
-	NodePrometheusTLSServerAnnotation = "hash.operator.tigera.io/calico-node-prometheus-server-tls"
-	PrometheusCABundle                = "tigera-prometheus-metrics-ca-bundle"
-	PrometheusCABundleAnnotation      = "hash.operator.tigera.io/tigera-prometheus-metrics-ca-bundle"
+	CalicoNodeMetricsService      = "calico-node-metrics"
+	NodePrometheusTLSServerSecret = "calico-node-prometheus-server-tls"
+	CalicoNodeObjectName          = "calico-node"
 )
 
 var (
@@ -71,15 +67,17 @@ var (
 	nodeBGPReporterPort int32 = 9900
 
 	NodeTLSSecretName = "node-certs"
-	TLSSecretCertName = "cert.crt"
-	TLSSecretKeyName  = "key.key"
 )
 
 // TyphaNodeTLS holds configuration for Node and Typha to establish TLS.
 type TyphaNodeTLS struct {
-	CAConfigMap *corev1.ConfigMap
-	TyphaSecret *corev1.Secret
-	NodeSecret  *corev1.Secret
+	TrustedBundle   render.TrustedBundle
+	TyphaSecret     render.KeyPair
+	TyphaCommonName string
+	TyphaURISAN     string
+	NodeSecret      render.KeyPair
+	NodeCommonName  string
+	NodeURISAN      string
 }
 
 // NodeConfiguration is the public API used to provide information to the render code to
@@ -100,9 +98,8 @@ type NodeConfiguration struct {
 	// Indicates node is being terminated, so remove most resources but
 	// leave RBAC and SA to allow any CNI plugin calls to continue to function
 	// For details on why this is needed see 'Node and Installation finalizer' in the core_controller.
-	Terminating               bool
-	PrometheusServerTLS       *corev1.Secret
-	PrometheusMetricsCABundle *corev1.ConfigMap
+	Terminating         bool
+	PrometheusServerTLS render.KeyPair
 
 	// BGPLayouts is returned by the rendering code after modifying its namespace
 	// so that it can be deployed into the cluster.
@@ -121,10 +118,9 @@ type nodeComponent struct {
 	cfg *NodeConfiguration
 
 	// Calculated internal fields based on the given information.
-	cniImage         string
-	flexvolImage     string
-	nodeImage        string
-	certSignReqImage string
+	cniImage     string
+	flexvolImage string
+	nodeImage    string
 }
 
 func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -156,13 +152,6 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	if c.cfg.Installation.CertificateManagement != nil {
-		c.certSignReqImage, err = ResolveCSRInitImage(c.cfg.Installation, is)
-		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
-		}
-	}
-
 	if len(errMsgs) != 0 {
 		return fmt.Errorf(strings.Join(errMsgs, ","))
 	}
@@ -192,14 +181,7 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, configmap.ToRuntimeObjects(configmap.CopyToNamespace(common.CalicoNamespace, c.cfg.BGPLayouts)...)...)
 	}
 
-	// Include secrets and config necessary for node and Typha to communicate. These are passed in to us as configuration,
-	// but need to be rendered into the correct namespace.
-	if c.cfg.TLS.CAConfigMap != nil {
-		objs = append(objs, configmap.ToRuntimeObjects(configmap.CopyToNamespace(common.CalicoNamespace, c.cfg.TLS.CAConfigMap)...)...)
-	}
-	if c.cfg.TLS.NodeSecret != nil {
-		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(common.CalicoNamespace, c.cfg.TLS.NodeSecret)...)...)
-	}
+	var objsToDelete []client.Object
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		// Include Service for exposing node metrics.
@@ -225,21 +207,11 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 
 	objs = append(objs, c.nodeDaemonset(cniConfig))
 
+	// This controller creates the cluster role for any pod in the cluster that requires certificate management.
 	if c.cfg.Installation.CertificateManagement != nil {
-		objs = append(objs, csrClusterRole())
-		objs = append(objs, CSRClusterRoleBinding("calico-node", common.CalicoNamespace))
+		objs = append(objs, certificatemanagement.CSRClusterRole())
 	}
 
-	var objsToDelete []client.Object
-	if c.cfg.PrometheusServerTLS != nil {
-		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(common.CalicoNamespace, c.cfg.PrometheusServerTLS)...)...)
-	} else {
-		objsToDelete = append(objsToDelete, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: NodePrometheusTLSServerSecret, Namespace: common.CalicoNamespace}})
-	}
-
-	if c.cfg.PrometheusMetricsCABundle != nil {
-		objs = append(objs, c.cfg.PrometheusMetricsCABundle)
-	}
 	if c.cfg.Terminating {
 		return objsToKeep, append(objs, objsToDelete...)
 
@@ -261,7 +233,7 @@ func (c *nodeComponent) nodeServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:       "calico-node",
+			Name:       CalicoNodeObjectName,
 			Namespace:  common.CalicoNamespace,
 			Finalizers: finalizer,
 		},
@@ -277,19 +249,19 @@ func (c *nodeComponent) nodeRoleBinding() *rbacv1.ClusterRoleBinding {
 	crb := &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:       "calico-node",
+			Name:       CalicoNodeObjectName,
 			Labels:     map[string]string{},
 			Finalizers: finalizer,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     "calico-node",
+			Name:     CalicoNodeObjectName,
 		},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "calico-node",
+				Name:      CalicoNodeObjectName,
 				Namespace: common.CalicoNamespace,
 			},
 		},
@@ -309,7 +281,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:       "calico-node",
+			Name:       CalicoNodeObjectName,
 			Labels:     map[string]string{},
 			Finalizers: finalizer,
 		},
@@ -661,7 +633,7 @@ func (c *nodeComponent) clusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBind
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "calico-node",
+				Name:      CalicoNodeObjectName,
 				Namespace: common.CalicoNamespace,
 			},
 		},
@@ -674,43 +646,20 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 	var terminationGracePeriod int64 = nodeTerminationGracePeriodSeconds
 	var initContainers []corev1.Container
 
-	annotations := make(map[string]string)
+	annotations := c.cfg.TLS.TrustedBundle.HashAnnotations()
 	if len(c.cfg.BirdTemplates) != 0 {
 		annotations[birdTemplateHashAnnotation] = rmeta.AnnotationHash(c.cfg.BirdTemplates)
 	}
 	if c.cfg.PrometheusServerTLS != nil {
-		annotations[NodePrometheusTLSServerAnnotation] = rmeta.AnnotationHash(c.cfg.PrometheusServerTLS.Data)
-	}
-	if c.cfg.PrometheusMetricsCABundle != nil {
-		annotations[PrometheusCABundleAnnotation] = rmeta.AnnotationHash(c.cfg.PrometheusMetricsCABundle.Data)
+		annotations[c.cfg.PrometheusServerTLS.HashAnnotationKey()] = c.cfg.PrometheusServerTLS.HashAnnotationValue()
 	}
 
-	annotations[TyphaCAHashAnnotation] = rmeta.AnnotationHash(c.cfg.TLS.CAConfigMap.Data)
-	if c.cfg.Installation.CertificateManagement == nil {
-		annotations[NodeCertHashAnnotation] = rmeta.AnnotationHash(c.cfg.TLS.NodeSecret.Data)
-	} else {
-		initContainers = append(initContainers, CreateCSRInitContainer(
-			c.cfg.Installation.CertificateManagement,
-			c.certSignReqImage,
-			"felix-certs",
-			FelixCommonName,
-			TLSSecretKeyName,
-			TLSSecretCertName,
-			dns.GetServiceDNSNames(common.NodeDaemonSetName, common.CalicoNamespace, c.cfg.ClusterDomain),
-			CSRLabelCalicoSystem))
-		if c.cfg.PrometheusMetricsCABundle != nil { // If this bundle is present, it means we want to create a mTLS certificate.
-			prometheusInit := CreateCSRInitContainer(
-				c.cfg.Installation.CertificateManagement,
-				c.certSignReqImage,
-				NodePrometheusTLSServerSecret,
-				NodePrometheusTLSServerSecret,
-				corev1.TLSPrivateKeyKey,
-				corev1.TLSCertKey,
-				dns.GetServiceDNSNames(CalicoNodeMetricsService, common.CalicoNamespace, c.cfg.ClusterDomain),
-				CSRLabelCalicoSystem)
-			prometheusInit.Name = fmt.Sprintf("%s-%s", CalicoNodeMetricsService, prometheusInit.Name)
-			initContainers = append(initContainers, prometheusInit)
-		}
+	if c.cfg.TLS.NodeSecret.UseCertificateManagement() {
+		initContainers = append(initContainers, c.cfg.TLS.NodeSecret.InitContainer(common.CalicoNamespace))
+	}
+
+	if c.cfg.PrometheusServerTLS != nil && c.cfg.PrometheusServerTLS.UseCertificateManagement() {
+		initContainers = append(initContainers, c.cfg.PrometheusServerTLS.InitContainer(common.CalicoNamespace))
 	}
 
 	if cniCfgMap != nil {
@@ -784,11 +733,11 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 			Namespace: common.CalicoNamespace,
 		},
 		Spec: appsv1.DaemonSetSpec{
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "calico-node"}},
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": CalicoNodeObjectName}},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						"k8s-app": "calico-node",
+						"k8s-app": CalicoNodeObjectName,
 					},
 					Annotations: annotations,
 				},
@@ -796,7 +745,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 					Tolerations:                   rmeta.TolerateAll,
 					Affinity:                      affinity,
 					ImagePullSecrets:              c.cfg.Installation.ImagePullSecrets,
-					ServiceAccountName:            "calico-node",
+					ServiceAccountName:            CalicoNodeObjectName,
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					HostNetwork:                   true,
 					InitContainers:                initContainers,
@@ -853,20 +802,8 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 		{Name: "lib-modules", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/lib/modules"}}},
 		{Name: "xtables-lock", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/run/xtables.lock", Type: &fileOrCreate}}},
 		{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
-		{
-			Name: "typha-ca",
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: TyphaCAConfigMapName,
-					},
-				},
-			},
-		},
-		{
-			Name:         "felix-certs",
-			VolumeSource: CertificateVolumeSource(c.cfg.Installation.CertificateManagement, NodeTLSSecretName),
-		},
+		c.cfg.TLS.TrustedBundle.Volume(),
+		c.cfg.TLS.NodeSecret.Volume(),
 	}
 
 	if c.runAsNonPrivileged() {
@@ -953,18 +890,8 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 				},
 			})
 	}
-	if c.cfg.PrometheusMetricsCABundle != nil {
-		volumes = append(volumes,
-			corev1.Volume{Name: c.cfg.PrometheusMetricsCABundle.Name,
-				VolumeSource: corev1.VolumeSource{
-					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{Name: c.cfg.PrometheusMetricsCABundle.Name},
-					},
-				},
-			},
-			corev1.Volume{Name: NodePrometheusTLSServerSecret,
-				VolumeSource: CertificateVolumeSource(c.cfg.Installation.CertificateManagement, NodePrometheusTLSServerSecret),
-			})
+	if c.cfg.PrometheusServerTLS != nil {
+		volumes = append(volumes, c.cfg.PrometheusServerTLS.Volume())
 	}
 
 	return volumes
@@ -1049,7 +976,7 @@ func (c *nodeComponent) bpffsInitContainer() corev1.Container {
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: ptr.BoolToPtr(true),
 		},
-		Command: []string{"calico-node", "-init"},
+		Command: []string{CalicoNodeObjectName, "-init"},
 	}
 }
 
@@ -1113,7 +1040,7 @@ func (c *nodeComponent) nodeContainer() corev1.Container {
 		}
 	}
 	return corev1.Container{
-		Name:            "calico-node",
+		Name:            CalicoNodeObjectName,
 		Image:           c.nodeImage,
 		Resources:       c.nodeResources(),
 		SecurityContext: sc,
@@ -1136,8 +1063,8 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 		{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
 		{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
 		{MountPath: "/var/run/nodeagent", Name: "policysync"},
-		{MountPath: "/typha-ca", Name: "typha-ca", ReadOnly: true},
-		{MountPath: "/felix-certs", Name: "felix-certs", ReadOnly: true},
+		c.cfg.TLS.TrustedBundle.VolumeMount(),
+		c.cfg.TLS.NodeSecret.VolumeMount(),
 	}
 	if c.runAsNonPrivileged() {
 		nodeVolumeMounts = append(nodeVolumeMounts,
@@ -1201,19 +1128,8 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 				SubPath:   BGPLayoutConfigMapKey,
 			})
 	}
-	if c.cfg.PrometheusMetricsCABundle != nil {
-		nodeVolumeMounts = append(nodeVolumeMounts,
-			corev1.VolumeMount{
-				Name:      c.cfg.PrometheusMetricsCABundle.Name,
-				MountPath: fmt.Sprintf("/%s", c.cfg.PrometheusMetricsCABundle.Name),
-				ReadOnly:  true,
-			},
-			corev1.VolumeMount{
-				Name:      NodePrometheusTLSServerSecret,
-				MountPath: fmt.Sprintf("/%s", NodePrometheusTLSServerSecret),
-				ReadOnly:  true,
-			},
-		)
+	if c.cfg.PrometheusServerTLS != nil {
+		nodeVolumeMounts = append(nodeVolumeMounts, c.cfg.PrometheusServerTLS.VolumeMount())
 	}
 	return nodeVolumeMounts
 }
@@ -1240,25 +1156,6 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		clusterType = clusterType + ",bgp"
 	}
 
-	var cnEnv corev1.EnvVar
-	if c.cfg.Installation.CertificateManagement != nil {
-		cnEnv = corev1.EnvVar{
-			Name: "FELIX_TYPHACN", Value: TyphaCommonName,
-		}
-	} else {
-		cnEnv = corev1.EnvVar{
-			Name: "FELIX_TYPHACN", ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{
-						Name: TyphaTLSSecretName,
-					},
-					Key:      CommonName,
-					Optional: ptr.BoolToPtr(true),
-				},
-			},
-		}
-	}
-
 	nodeEnv := []corev1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "WAIT_FOR_DATASTORE", Value: "true"},
@@ -1280,22 +1177,17 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		},
 		{Name: "FELIX_TYPHAK8SNAMESPACE", Value: common.CalicoNamespace},
 		{Name: "FELIX_TYPHAK8SSERVICENAME", Value: TyphaServiceName},
-		{Name: "FELIX_TYPHACAFILE", Value: "/typha-ca/caBundle"},
-		{Name: "FELIX_TYPHACERTFILE", Value: fmt.Sprintf("/felix-certs/%s", TLSSecretCertName)},
-		{Name: "FELIX_TYPHAKEYFILE", Value: fmt.Sprintf("/felix-certs/%s", TLSSecretKeyName)},
-
-		// We need at least the CN or URISAN set, we depend on the validation
-		// done by the core_controller that the Secret will have one.
-		cnEnv,
-		{Name: "FELIX_TYPHAURISAN", ValueFrom: &corev1.EnvVarSource{
-			SecretKeyRef: &corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{
-					Name: TyphaTLSSecretName,
-				},
-				Key:      URISAN,
-				Optional: ptr.BoolToPtr(true),
-			},
-		}},
+		{Name: "FELIX_TYPHACAFILE", Value: c.cfg.TLS.TrustedBundle.MountPath()},
+		{Name: "FELIX_TYPHACERTFILE", Value: c.cfg.TLS.NodeSecret.VolumeMountCertificateFilePath()},
+		{Name: "FELIX_TYPHAKEYFILE", Value: c.cfg.TLS.NodeSecret.VolumeMountKeyFilePath()},
+	}
+	// We need at least the CN or URISAN set, we depend on the validation
+	// done by the core_controller that the Secret will have one.
+	if c.cfg.TLS.TyphaCommonName != "" {
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_TYPHACN", Value: c.cfg.TLS.TyphaCommonName})
+	}
+	if c.cfg.TLS.TyphaURISAN != "" {
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_TYPHAURISAN", Value: c.cfg.TLS.TyphaURISAN})
 	}
 
 	if c.cfg.Installation.CNI != nil && c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
@@ -1493,11 +1385,11 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 			extraNodeEnv = append(extraNodeEnv, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
 		}
 
-		if c.cfg.PrometheusMetricsCABundle != nil {
+		if c.cfg.PrometheusServerTLS != nil {
 			extraNodeEnv = append(extraNodeEnv,
 				corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERCERTFILE", Value: fmt.Sprintf("/%s/%s", NodePrometheusTLSServerSecret, corev1.TLSCertKey)},
 				corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERKEYFILE", Value: fmt.Sprintf("/%s/%s", NodePrometheusTLSServerSecret, corev1.TLSPrivateKeyKey)},
-				corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERCAFILE", Value: fmt.Sprintf("/%s/%s", c.cfg.PrometheusMetricsCABundle.Name, corev1.TLSCertKey)},
+				corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERCAFILE", Value: c.cfg.TLS.TrustedBundle.MountPath()},
 			)
 		}
 		nodeEnv = append(nodeEnv, extraNodeEnv...)
@@ -1631,10 +1523,10 @@ func (c *nodeComponent) nodeMetricsService() *corev1.Service {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      CalicoNodeMetricsService,
 			Namespace: common.CalicoNamespace,
-			Labels:    map[string]string{"k8s-app": "calico-node"},
+			Labels:    map[string]string{"k8s-app": CalicoNodeObjectName},
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{"k8s-app": "calico-node"},
+			Selector: map[string]string{"k8s-app": CalicoNodeObjectName},
 			Type:     corev1.ServiceTypeClusterIP,
 			Ports: []corev1.ServicePort{
 				{

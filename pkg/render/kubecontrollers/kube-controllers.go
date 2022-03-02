@@ -15,10 +15,8 @@
 package kubecontrollers
 
 import (
+	"fmt"
 	"strings"
-
-	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -32,9 +30,12 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/render"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
 )
 
 const (
@@ -79,7 +80,7 @@ type KubeControllersConfiguration struct {
 	// Secrets - provided by the caller. Used to generate secrets in the destination
 	// namespace to be returned by the rendered. Expected that the calling code
 	// take care to pass the same secret on each reconcile where possible.
-	ManagerInternalSecret        *corev1.Secret
+	ManagerInternalSecret        cmrender.KeyPair
 	ElasticsearchSecret          *corev1.Secret
 	KubeControllersGatewaySecret *corev1.Secret
 	KibanaSecret                 *corev1.Secret
@@ -221,8 +222,7 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 	}
 	objectsToDelete := []client.Object{}
 	if c.renderManagerInternalSecret {
-		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
-			secret.CopyToNamespace(common.CalicoNamespace, c.cfg.ManagerInternalSecret)...)...)
+		objectsToCreate = append(objectsToCreate, c.cfg.ManagerInternalSecret.Secret(common.CalicoNamespace))
 	}
 
 	if c.renderElasticsearchSecret {
@@ -409,6 +409,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	env := []corev1.EnvVar{
 		{Name: "KUBE_CONTROLLERS_CONFIG_NAME", Value: c.kubeControllerConfigName},
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+		{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: fmt.Sprintf("/%s", render.ManagerInternalTLSSecretName)},
 		{Name: "ENABLED_CONTROLLERS", Value: strings.Join(c.enabledControllers, ",")},
 	}
 
@@ -432,8 +433,6 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 			env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
 		}
 	}
-
-	defaultMode := int32(420)
 
 	container := corev1.Container{
 		Name:      c.kubeControllerName,
@@ -466,7 +465,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 			},
 			TimeoutSeconds: 10,
 		},
-		VolumeMounts: kubeControllersVolumeMounts(c.cfg.ManagerInternalSecret),
+		VolumeMounts: c.kubeControllersVolumeMounts(),
 	}
 
 	if c.kubeControllerName == EsKubeController {
@@ -480,7 +479,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		ImagePullSecrets:   c.cfg.Installation.ImagePullSecrets,
 		ServiceAccountName: c.kubeControllerServiceAccountName,
 		Containers:         []corev1.Container{container},
-		Volumes:            kubeControllersVolumes(defaultMode, c.cfg.ManagerInternalSecret),
+		Volumes:            c.kubeControllersVolumes(),
 	}
 
 	if c.kubeControllerName == EsKubeController {
@@ -581,7 +580,7 @@ func (c *kubeControllersComponent) kubeControllersResources() corev1.ResourceReq
 func (c *kubeControllersComponent) annotations() map[string]string {
 	am := map[string]string{}
 	if c.cfg.ManagerInternalSecret != nil {
-		am[render.ManagerInternalTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.ManagerInternalSecret.Data)
+		am[c.cfg.ManagerInternalSecret.HashAnnotationKey()] = c.cfg.ManagerInternalSecret.HashAnnotationValue()
 	}
 	if c.cfg.ElasticsearchSecret != nil {
 		am[render.TlsSecretHashAnnotation] = rmeta.AnnotationHash(c.cfg.ElasticsearchSecret.Data)
@@ -601,39 +600,20 @@ func (c *kubeControllersComponent) controllersPodSecurityPolicy() *policyv1beta1
 	return psp
 }
 
-func kubeControllersVolumeMounts(managerSecret *corev1.Secret) []corev1.VolumeMount {
-	if managerSecret != nil {
-		return []corev1.VolumeMount{{
-			Name:      render.ManagerInternalTLSSecretName,
-			MountPath: "/manager-tls",
-			ReadOnly:  true,
-		}}
+func (c *kubeControllersComponent) kubeControllersVolumeMounts() []corev1.VolumeMount {
+	if c.cfg.ManagerInternalSecret != nil {
+		return []corev1.VolumeMount{
+			c.cfg.ManagerInternalSecret.VolumeMount(),
+		}
 	}
-
 	return []corev1.VolumeMount{}
 }
 
-func kubeControllersVolumes(defaultMode int32, managerSecret *corev1.Secret) []corev1.Volume {
-	if managerSecret != nil {
-
+func (c *kubeControllersComponent) kubeControllersVolumes() []corev1.Volume {
+	if c.cfg.ManagerInternalSecret != nil {
 		return []corev1.Volume{
-			{
-				Name: render.ManagerInternalTLSSecretName,
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						DefaultMode: &defaultMode,
-						SecretName:  render.ManagerInternalTLSSecretName,
-						Items: []corev1.KeyToPath{
-							{
-								Key:  "cert",
-								Path: "cert",
-							},
-						},
-					},
-				},
-			},
+			c.cfg.ManagerInternalSecret.Volume(),
 		}
 	}
-
 	return []corev1.Volume{}
 }

@@ -37,6 +37,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
 	"github.com/tigera/operator/test"
 
 	"github.com/stretchr/testify/mock"
@@ -118,10 +119,11 @@ var _ = Describe("LogStorage controller", func() {
 
 		ctx = context.Background()
 		cli = fake.NewFakeClientWithScheme(scheme)
-		Expect(cli.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Namespace: common.OperatorNamespace(), Name: monitor.PrometheusClientTLSSecretName},
-			Data:       map[string][]byte{corev1.TLSCertKey: []byte("cert")},
-		})).ShouldNot(HaveOccurred())
+		certificateManager, err := controller.CreateCertificateManager(cli, nil, "")
+		Expect(err).NotTo(HaveOccurred())
+		prometheusTLS, err := certificateManager.GetOrCreateKeyPair(cli, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{render.PrometheusTLSSecretName})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cli.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 	})
 	Context("Reconcile", func() {
 		Context("Check default logstorage settings", func() {
@@ -414,10 +416,10 @@ var _ = Describe("LogStorage controller", func() {
 					By("confirming kibana certs are created")
 					secret := &corev1.Secret{}
 					Expect(cli.Get(ctx, kbCertSecretKey, secret)).ShouldNot(HaveOccurred())
-					test.VerifyCert(secret, "tls.key", "tls.crt", kbInternalDNSNames...)
+					test.VerifyCert(secret, kbInternalDNSNames...)
 
 					Expect(cli.Get(ctx, kbCertSecretOperKey, secret)).ShouldNot(HaveOccurred())
-					test.VerifyCert(secret, "tls.key", "tls.crt", kbInternalDNSNames...)
+					test.VerifyCert(secret, kbInternalDNSNames...)
 
 					// Create public ES and KB secrets
 					esPublicSecret := createPubSecret(relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, secret.Data["tls.crt"], "tls.crt")
@@ -655,10 +657,10 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(err).ShouldNot(HaveOccurred())
 
 					Expect(cli.Get(ctx, esCertSecretOperKey, esSecret)).ShouldNot(HaveOccurred())
-					test.VerifyCert(esSecret, "tls.key", "tls.crt", esDNSNames...)
+					test.VerifyCert(esSecret, esDNSNames...)
 
 					Expect(cli.Get(ctx, kbCertSecretOperKey, kbSecret)).ShouldNot(HaveOccurred())
-					test.VerifyCert(kbSecret, "tls.key", "tls.crt", kbDNSNames...)
+					test.VerifyCert(kbSecret, kbDNSNames...)
 				})
 
 				It("test that LogStorage creates new certs if operator managed certs have invalid DNS names", func() {
@@ -758,18 +760,18 @@ var _ = Describe("LogStorage controller", func() {
 					secret := &corev1.Secret{}
 
 					Expect(cli.Get(ctx, esCertSecretKey, secret)).ShouldNot(HaveOccurred())
-					test.VerifyCert(secret, "tls.key", "tls.crt", combinedDNSNames...)
+					test.VerifyCert(secret, combinedDNSNames...)
 
 					Expect(cli.Get(ctx, esCertSecretOperKey, secret)).ShouldNot(HaveOccurred())
-					test.VerifyCert(secret, "tls.key", "tls.crt", combinedDNSNames...)
+					test.VerifyCert(secret, combinedDNSNames...)
 
 					kbDNSNames = dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
 					By("confirming kibana certs were updated and have the expected DNS names")
 					Expect(cli.Get(ctx, kbCertSecretKey, secret)).ShouldNot(HaveOccurred())
-					test.VerifyCert(secret, "tls.key", "tls.crt", kbDNSNames...)
+					test.VerifyCert(secret, kbDNSNames...)
 
 					Expect(cli.Get(ctx, kbCertSecretOperKey, secret)).ShouldNot(HaveOccurred())
-					test.VerifyCert(secret, "tls.key", "tls.crt", kbDNSNames...)
+					test.VerifyCert(secret, kbDNSNames...)
 
 					mockStatus.AssertExpectations(GinkgoT())
 				})

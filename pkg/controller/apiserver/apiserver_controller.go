@@ -21,6 +21,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -30,9 +31,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	controller2 "github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
-	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
-
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -137,7 +136,7 @@ func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 		return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 	}
 
-	if err = utils.AddSecretsWatch(c, cmrender.CASecretName, common.OperatorNamespace()); err != nil {
+	if err = utils.AddSecretsWatch(c, certificatemanagement.CASecretName, common.OperatorNamespace()); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 	}
 
@@ -204,7 +203,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 	ns := rmeta.APIServerNamespace(variant)
 
-	certificateManager, err := controller2.CreateCertificateManager(r.client, network, r.clusterDomain)
+	certificateManager, err := certificatemanager.Create(r.client, network, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
 		r.status.SetDegraded("Unable to create the Tigera CA", err.Error())
@@ -230,7 +229,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 
 	// Query enterprise-only data.
-	var tunnelCASecret cmrender.KeyPair
+	var tunnelCASecret certificatemanagement.KeyPairInterface
 	var amazon *operatorv1.AmazonCloudIntegration
 	var managementCluster *operatorv1.ManagementCluster
 	var managementClusterConnection *operatorv1.ManagementClusterConnection
@@ -260,7 +259,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			tunnelCASecret, err = certificateManager.GetKeyPair(r.client, render.VoltronTunnelSecretName, common.OperatorNamespace())
 			if tunnelCASecret == nil {
 				// tunnelCASecret is a secret unaffected by the last two args (dnsNames and clusterDomain).
-				tunnelCASecret, err = controller2.NewKeyPair(certificateManager, render.VoltronTunnelSecret(), nil, "")
+				tunnelCASecret, err = certificatemanagement.NewKeyPair(render.VoltronTunnelSecret(), nil, "")
 			}
 			if err != nil {
 				log.Error(err, "Unable to get or create the tunnel secret")
@@ -287,16 +286,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		r.status.SetDegraded("Error reading services endpoint configmap", err.Error())
 		return reconcile.Result{}, err
 	}
-	components := []render.Component{
-		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			Namespace:       rmeta.APIServerNamespace(variant),
-			ServiceAccounts: []string{render.ApiServerServiceAccountName(variant)},
-			KeyPairOptions: []rcertificatemanagement.KeyPairCreator{
-				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
-				rcertificatemanagement.NewKeyPairOption(tunnelCASecret, true, true),
-			},
-		}),
-	}
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -322,8 +311,17 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		r.status.SetDegraded("Error rendering APIServer", err.Error())
 		return reconcile.Result{}, err
 	}
-	components = append(components, component)
-
+	components := []render.Component{
+		component,
+		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+			Namespace:       rmeta.APIServerNamespace(variant),
+			ServiceAccounts: []string{render.ApiServerServiceAccountName(variant)},
+			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(tunnelCASecret, true, true),
+			},
+		}),
+	}
 	if variant == operatorv1.TigeraSecureEnterprise {
 		packetCaptureCertSecret, err := certificateManager.GetOrCreateKeyPair(
 			r.client,
@@ -360,9 +358,9 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		var pc = render.PacketCaptureAPI(packetCaptureApiCfg)
 		components = append(components, pc,
 			rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-				Namespace:       rmeta.APIServerNamespace(variant),
+				Namespace:       render.PacketCaptureNamespace,
 				ServiceAccounts: []string{render.ApiServerServiceAccountName(variant)},
-				KeyPairOptions: []rcertificatemanagement.KeyPairCreator{
+				KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 					rcertificatemanagement.NewKeyPairOption(packetCaptureCertSecret, true, true),
 				},
 			}),

@@ -17,16 +17,17 @@ package clusterconnection
 import (
 	"context"
 	"fmt"
+	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
-	cmcontroller "github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
-	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -100,8 +101,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, render.PrometheusTLSSecretName, err)
 	}
 
-	if err = utils.AddSecretsWatch(c, cmrender.CASecretName, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, cmrender.CASecretName, err)
+	if err = utils.AddSecretsWatch(c, certificatemanagement.CASecretName, common.OperatorNamespace()); err != nil {
+		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, certificatemanagement.CASecretName, err)
 	}
 
 	if err = utils.AddNetworkWatch(c); err != nil {
@@ -175,7 +176,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return result, err
 	}
 
-	certificateManager, err := cmcontroller.CreateCertificateManager(r.Client, instl, r.clusterDomain)
+	certificateManager, err := certificatemanager.Create(r.Client, instl, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
 		r.status.SetDegraded("Unable to create the Tigera CA", err.Error())
@@ -189,7 +190,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return result, err
 	}
 
-	trustedCertBundle := cmcontroller.CreateTrustedBundle(certificateManager)
+	trustedCertBundle := certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair())
 	for _, secretName := range []string{render.PacketCaptureCertSecret, render.PrometheusTLSSecretName} {
 		secret, err := certificateManager.GetCertificate(r.Client, secretName, common.OperatorNamespace())
 		if err != nil {
@@ -199,7 +200,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		} else if secret == nil {
 			reqLogger.Info(fmt.Sprintf("Waiting for secret '%s' to become available", secretName))
 			r.status.SetDegraded(fmt.Sprintf("Waiting for secret '%s' to become available", secretName), "")
-			return reconcile.Result{}, nil
+			return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 		trustedCertBundle.AddCertificates(secret)
 	}

@@ -20,9 +20,9 @@ import (
 
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
 	"github.com/tigera/operator/test"
 
 	"github.com/tigera/operator/pkg/controller/clusterconnection"
@@ -82,7 +82,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				Namespace: render.GuardianNamespace,
 			},
 		}
-		certificateManager, err := controller.CreateCertificateManager(c, nil, dns.DefaultClusterDomain)
+		certificateManager, err := certificatemanager.Create(c, nil, dns.DefaultClusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 
 		secret, err := certificateManager.GetOrCreateKeyPair(c, render.GuardianSecretName, common.OperatorNamespace(), []string{"a"})

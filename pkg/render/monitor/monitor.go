@@ -29,7 +29,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
-	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -80,10 +80,10 @@ type Config struct {
 	PullSecrets              []*corev1.Secret
 	AlertmanagerConfigSecret *corev1.Secret
 	KeyValidatorConfig       authentication.KeyValidatorConfig
-	ServerTLSSecret          cmrender.KeyPair
-	ClientTLSSecret          cmrender.KeyPair
+	ServerTLSSecret          certificatemanagement.KeyPairInterface
+	ClientTLSSecret          certificatemanagement.KeyPairInterface
 	ClusterDomain            string
-	TrustedCertBundle        cmrender.TrustedBundle
+	TrustedCertBundle        certificatemanagement.TrustedBundle
 }
 
 type monitorComponent struct {

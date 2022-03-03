@@ -19,11 +19,11 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
@@ -31,9 +31,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/tls"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
-	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
-
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -46,13 +44,13 @@ import (
 
 var _ = Describe("Rendering tests for PacketCapture API component", func() {
 
-	var secret cmrender.KeyPair
+	var secret certificatemanagement.KeyPairInterface
 	var cli client.Client
 	BeforeEach(func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := controller.CreateCertificateManager(cli, nil, clusterDomain)
+		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		secret, err = certificateManager.GetOrCreateKeyPair(cli, render.PacketCaptureCertSecret, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
@@ -373,7 +371,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 		installation := operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{CACert: cert}}
-		certificateManager, err := controller.CreateCertificateManager(cli, &installation, clusterDomain)
+		certificateManager, err := certificatemanager.Create(cli, &installation, clusterDomain)
 		secret, err = certificateManager.GetOrCreateKeyPair(cli, render.PacketCaptureCertSecret, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
 

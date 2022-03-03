@@ -31,8 +31,6 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement/render"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -71,11 +69,11 @@ var (
 
 // TyphaNodeTLS holds configuration for Node and Typha to establish TLS.
 type TyphaNodeTLS struct {
-	TrustedBundle   render.TrustedBundle
-	TyphaSecret     render.KeyPair
+	TrustedBundle   certificatemanagement.TrustedBundle
+	TyphaSecret     certificatemanagement.KeyPairInterface
 	TyphaCommonName string
 	TyphaURISAN     string
-	NodeSecret      render.KeyPair
+	NodeSecret      certificatemanagement.KeyPairInterface
 	NodeCommonName  string
 	NodeURISAN      string
 }
@@ -99,7 +97,7 @@ type NodeConfiguration struct {
 	// leave RBAC and SA to allow any CNI plugin calls to continue to function
 	// For details on why this is needed see 'Node and Installation finalizer' in the core_controller.
 	Terminating         bool
-	PrometheusServerTLS render.KeyPair
+	PrometheusServerTLS certificatemanagement.KeyPairInterface
 
 	// BGPLayouts is returned by the rendering code after modifying its namespace
 	// so that it can be deployed into the cluster.

@@ -8,11 +8,11 @@ import (
 	"github.com/go-logr/logr"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/dns"
@@ -21,7 +21,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/render/monitor"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 func (r *ReconcileLogStorage) createEsMetrics(
@@ -54,7 +54,7 @@ func (r *ReconcileLogStorage) createEsMetrics(
 		return reconcile.Result{}, false, nil
 	}
 
-	certificateManager, err := controller.CreateCertificateManager(r.client, install, r.clusterDomain)
+	certificateManager, err := certificatemanager.Create(r.client, install, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
 		r.status.SetDegraded("Unable to create the Tigera CA", err.Error())
@@ -62,16 +62,15 @@ func (r *ReconcileLogStorage) createEsMetrics(
 	}
 	prometheusCertificate, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
 	if err != nil {
-		if errors.IsNotFound(err) {
-			log.Info("Prometheus secrets are not available yet, waiting until they become available")
-			r.status.SetDegraded("Prometheus secrets are not available yet, waiting until they become available", "")
-			return reconcile.Result{RequeueAfter: 5 * time.Second}, false, nil
-		}
 		log.Error(err, "Failed to get certificate")
 		r.status.SetDegraded("Failed to get certificate", err.Error())
 		return reconcile.Result{}, false, err
+	} else if prometheusCertificate == nil {
+		log.Info("Prometheus secrets are not available yet, waiting until they become available")
+		r.status.SetDegraded("Prometheus secrets are not available yet, waiting until they become available", "")
+		return reconcile.Result{RequeueAfter: 5 * time.Second}, false, nil
 	}
-	trustedBundle := controller.CreateTrustedBundle(certificateManager, prometheusCertificate)
+	trustedBundle := certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair(), prometheusCertificate)
 
 	serverTLS, err := certificateManager.GetOrCreateKeyPair(
 		r.client,
@@ -99,7 +98,7 @@ func (r *ReconcileLogStorage) createEsMetrics(
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       render.ElasticsearchNamespace,
 			ServiceAccounts: []string{esmetrics.ElasticsearchMetricsName},
-			KeyPairOptions: []rcertificatemanagement.KeyPairCreator{
+			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(serverTLS, true, true),
 			},
 			TrustedBundle: trustedBundle,

@@ -19,7 +19,6 @@ import (
 	"fmt"
 
 	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
 	"github.com/stretchr/testify/mock"
@@ -38,7 +37,6 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
-	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/test"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -187,25 +185,6 @@ var _ = Describe("Manager controller tests", func() {
 			r.licenseAPIReady.MarkAsReady()
 		})
 
-		It("should render a new manager cert if existing cert has invalid DNS names and the cert is operator managed", func() {
-			// Create a manager cert managed by the operator.
-			oldCert, err := secret.CreateTLSSecret(
-				nil, render.ManagerTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, nil, "tigera-manager.tigera-manager.svc")
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(c.Create(ctx, oldCert)).NotTo(HaveOccurred())
-
-			_, err = r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-
-			secret := &corev1.Secret{}
-			// Verify that certs now have expected DNS names.
-			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
-			test.VerifyCert(secret, expectedDNSNames...)
-
-			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
-			test.VerifyCert(secret, expectedDNSNames...)
-		})
-
 		It("should reconcile if user supplied a manager TLS cert", func() {
 			// Create a manager cert secret.
 			dnsNames := []string{"manager.example.com", "192.168.10.22"}
@@ -297,45 +276,6 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
 			test.VerifyCert(secret, dnsNames...)
 		})
-
-		DescribeTable("test combinations with certificate management and BYO tls", func(certificateManagementEnabled, byoTLS, expectDegraded bool) {
-			if byoTLS {
-				dnsNames := []string{"manager.example.com", "192.168.10.22"}
-				testCA := test.MakeTestCA("manager-test")
-				userSecret, err := secret.CreateTLSSecret(
-					testCA, render.ManagerTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, nil, dnsNames...)
-				Expect(err).ShouldNot(HaveOccurred())
-				Expect(c.Create(ctx, userSecret)).NotTo(HaveOccurred())
-			}
-			if certificateManagementEnabled {
-				ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
-				cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
-				installation := &operatorv1.Installation{}
-				Expect(c.Get(ctx, types.NamespacedName{Name: "default", Namespace: ""}, installation))
-				installation.Spec.CertificateManagement = &operatorv1.CertificateManagement{CACert: cert}
-				Expect(c.Update(ctx, installation)).NotTo(HaveOccurred())
-			}
-			if expectDegraded {
-				mockStatus.On("SetDegraded", mock.Anything, mock.Anything).Return().Once()
-				_, err := r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).Should(HaveOccurred())
-			} else {
-				_, err := r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).ShouldNot(HaveOccurred())
-				deploy := &appsv1.Deployment{}
-				Expect(c.Get(ctx, types.NamespacedName{Name: "tigera-manager", Namespace: render.ManagerNamespace}, deploy)).ShouldNot(HaveOccurred())
-
-				if certificateManagementEnabled && !byoTLS {
-					Expect(deploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
-				} else {
-					Expect(deploy.Spec.Template.Spec.InitContainers).To(HaveLen(0))
-				}
-			}
-		},
-			Entry("Regular flow", false, false, false),
-			Entry("Certificate management flow", true, false, false),
-			Entry("Self provided TLS", false, true, false),
-			Entry("Self provided TLS & certificate management", true, true, false))
 	})
 
 	Context("image reconciliation", func() {

@@ -6,7 +6,6 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -23,21 +22,21 @@ func CertificateManagement(
 type Config struct {
 	// The service accounts that are mounting the key pairs and may issue CSRs if installation.CertificateManagement is used.
 	ServiceAccounts []string
-	KeyPairOptions  []KeyPairCreator
+	KeyPairOptions  []KeyPairOption
 	Namespace       string
-	TrustedBundle   cmrender.TrustedBundle
+	TrustedBundle   certificatemanagement.TrustedBundle
 }
 
-func NewKeyPairOption(keyPair cmrender.KeyPair, renderInOperatorNamespace, renderInNamespace bool) KeyPairCreator {
-	return KeyPairCreator{
+func NewKeyPairOption(keyPair certificatemanagement.KeyPairInterface, renderInOperatorNamespace, renderInNamespace bool) KeyPairOption {
+	return KeyPairOption{
 		keyPair:                   keyPair,
 		renderInOperatorNamespace: renderInOperatorNamespace,
 		renderInNamespace:         renderInNamespace,
 	}
 }
 
-type KeyPairCreator struct {
-	keyPair                   cmrender.KeyPair
+type KeyPairOption struct {
+	keyPair                   certificatemanagement.KeyPairInterface
 	renderInOperatorNamespace bool
 	renderInNamespace         bool
 }
@@ -67,7 +66,7 @@ func (c component) Objects() (objsToCreate, objsToDelete []client.Object) {
 				}
 				needsCSRRoleAndBinding = true
 			} else {
-				if keyPairCreator.renderInOperatorNamespace && !keyPair.BYO() {
+				if keyPairCreator.renderInOperatorNamespace && (!keyPair.BYO() || keyPair.GetName() == certificatemanagement.CASecretName) {
 					objsToCreate = append(objsToCreate, keyPair.Secret(common.OperatorNamespace()))
 				}
 				if keyPairCreator.renderInNamespace {

@@ -35,14 +35,14 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
-	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/test"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -60,10 +60,10 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		managementCluster  = &operatorv1.ManagementCluster{Spec: operatorv1.ManagementClusterSpec{Address: "example.com:1234"}}
 		replicas           int32
 		cfg                *render.APIServerConfiguration
-		tunnelKeyPair      cmrender.KeyPair
+		tunnelKeyPair      certificatemanagement.KeyPairInterface
 		dnsNames           []string
 		cli                client.Client
-		certificateManager cmrender.CertificateManager
+		certificateManager certificatemanager.CertificateManager
 	)
 
 	BeforeEach(func() {
@@ -77,11 +77,11 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
 		var err error
-		certificateManager, err = controller.CreateCertificateManager(cli, nil, clusterDomain)
+		certificateManager, err = certificatemanager.Create(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		kp, err := certificateManager.GetOrCreateKeyPair(cli, render.ProjectCalicoApiServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
 		Expect(err).NotTo(HaveOccurred())
-		tunnelKeyPair, err = controller.NewKeyPair(nil, render.VoltronTunnelSecret(), []string{""}, "")
+		tunnelKeyPair, err = certificatemanagement.NewKeyPair(render.VoltronTunnelSecret(), []string{""}, "")
 		Expect(err).NotTo(HaveOccurred())
 		replicas = 2
 		cfg = &render.APIServerConfiguration{
@@ -663,9 +663,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		By("Validating the newly created tunnel secret")
-		certificateManager, err := controller.CreateCertificateManager(cli, cfg.Installation, clusterDomain)
-		Expect(err).NotTo(HaveOccurred())
-		tunnelCASecret, err := controller.NewKeyPair(certificateManager, render.VoltronTunnelSecret(), nil, "")
+		tunnelCASecret, err := certificatemanagement.NewKeyPair(render.VoltronTunnelSecret(), nil, "")
 
 		// Use the x509 package to validate that the cert was signed with the privatekey
 		validateTunnelSecret(tunnelCASecret.Secret(""))
@@ -757,8 +755,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	It("should add an init container if certificate management is enabled", func() {
-		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c", CACert: cfg.TLSKeyPair.CertificatePEM()}
-		certificateManager, err := controller.CreateCertificateManager(cli, cfg.Installation, clusterDomain)
+		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c", CACert: cfg.TLSKeyPair.GetCertificatePEM()}
+		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		kp, err := certificateManager.GetOrCreateKeyPair(cli, render.ProjectCalicoApiServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
 		cfg.TLSKeyPair = kp
@@ -1131,7 +1129,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 	var instance *operatorv1.InstallationSpec
 	var replicas int32
 	var cfg *render.APIServerConfiguration
-	var certificateManager cmrender.CertificateManager
+	var certificateManager certificatemanager.CertificateManager
 	var cli client.Client
 
 	BeforeEach(func() {
@@ -1144,7 +1142,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
 		var err error
-		certificateManager, err = controller.CreateCertificateManager(cli, nil, clusterDomain)
+		certificateManager, err = certificatemanager.Create(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		dnsNames := dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(instance.Variant), rmeta.APIServerNamespace(instance.Variant), clusterDomain)
 		kp, err := certificateManager.GetOrCreateKeyPair(cli, render.ProjectCalicoApiServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)

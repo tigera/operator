@@ -20,14 +20,13 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
-	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
-
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -99,11 +98,11 @@ var (
 
 	expectedVolumes = []corev1.Volume{
 		{
-			Name: cmrender.TrustedCertConfigMapName,
+			Name: certificatemanagement.TrustedCertConfigMapName,
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: cmrender.TrustedCertConfigMapName,
+						Name: certificatemanagement.TrustedCertConfigMapName,
 					}}},
 		},
 		{
@@ -137,7 +136,7 @@ var (
 	}
 
 	expectedVolumeMounts = []corev1.VolumeMount{
-		{MountPath: cmrender.TrustedCertVolumeMountPath, Name: cmrender.TrustedCertConfigMapName, ReadOnly: true},
+		{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
 		{MountPath: "/node-certs", Name: "node-certs", ReadOnly: true},
 		{
 			MountPath: "/etc/ssl/elastic/", Name: "elastic-ca-cert-volume",
@@ -173,13 +172,13 @@ var _ = Describe("DPI rendering tests", func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := controller.CreateCertificateManager(cli, nil, clusterDomain)
+		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		nodeKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.NodeTLSSecretName, common.OperatorNamespace(), []string{render.FelixCommonName})
 		Expect(err).NotTo(HaveOccurred())
 		typhaKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TyphaTLSSecretName, common.OperatorNamespace(), []string{render.FelixCommonName})
 		Expect(err).NotTo(HaveOccurred())
-		trustedBundle := controller.CreateTrustedBundle(certificateManager, nodeKeyPair, typhaKeyPair)
+		trustedBundle := certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair(), nodeKeyPair, typhaKeyPair)
 		typhaNodeTLS = &render.TyphaNodeTLS{
 			TyphaSecret:   typhaKeyPair,
 			NodeSecret:    nodeKeyPair,

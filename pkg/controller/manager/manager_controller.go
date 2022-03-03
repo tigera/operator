@@ -21,6 +21,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/compliance"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -31,8 +32,7 @@ import (
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	controller2 "github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
-	render2 "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	corev1 "k8s.io/api/core/v1"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -121,7 +121,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret,
 			render.ElasticsearchManagerUserSecret, render.KibanaPublicCertSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureCertSecret,
-			render.ManagerInternalTLSSecretName, render.DexCertSecretName, render.PrometheusTLSSecretName, render2.CASecretName,
+			render.ManagerInternalTLSSecretName, render.DexCertSecretName, render.PrometheusTLSSecretName, certificatemanagement.CASecretName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("manager-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
@@ -258,7 +258,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	certificateManager, err := controller2.CreateCertificateManager(r.client, installation, r.clusterDomain)
+	certificateManager, err := certificatemanager.Create(r.client, installation, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
 		r.status.SetDegraded("Unable to create the Tigera CA", err.Error())
@@ -295,7 +295,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 		trustedSecretNames = append(trustedSecretNames, render.ComplianceServerCertSecret)
 	}
-	trustedBundle := controller2.CreateTrustedBundle(certificateManager)
+	trustedBundle := certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair())
 	for _, secretName := range trustedSecretNames {
 		certificate, err := certificateManager.GetCertificate(r.client, secretName, common.OperatorNamespace())
 		if err != nil {
@@ -380,7 +380,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	var tunnelSecret *corev1.Secret
-	var internalTrafficSecret render2.KeyPair
+	var internalTrafficSecret certificatemanagement.KeyPairInterface
 	if managementCluster != nil {
 		// We expect that the secret that holds the certificates for tunnel certificate generation
 		// is already created by the Api Server
@@ -429,18 +429,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
-	components := []render.Component{
-		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			Namespace:       render.ManagerNamespace,
-			ServiceAccounts: []string{render.ManagerServiceAccount},
-			KeyPairOptions: []rcertificatemanagement.KeyPairCreator{
-				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
-				rcertificatemanagement.NewKeyPairOption(internalTrafficSecret, false, true),
-			},
-			TrustedBundle: trustedBundle,
-		}),
-	}
-
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -484,7 +472,18 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	components = append(components, component)
+	components := []render.Component{
+		component,
+		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+			Namespace:       render.ManagerNamespace,
+			ServiceAccounts: []string{render.ManagerServiceAccount},
+			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(internalTrafficSecret, false, true),
+			},
+			TrustedBundle: trustedBundle,
+		}),
+	}
 	for _, component := range components {
 		if err := handler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 			r.status.SetDegraded("Error creating / updating resource", err.Error())

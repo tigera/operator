@@ -35,7 +35,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement/render"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -112,15 +112,15 @@ type ManagerConfiguration struct {
 	KeyValidatorConfig    authentication.KeyValidatorConfig
 	ESSecrets             []*corev1.Secret
 	KibanaSecrets         []*corev1.Secret
-	TrustedCertBundle     render.TrustedBundle
+	TrustedCertBundle     certificatemanagement.TrustedBundle
 	ESClusterConfig       *relasticsearch.ClusterConfig
-	TLSKeyPair            render.KeyPair
+	TLSKeyPair            certificatemanagement.KeyPairInterface
 	PullSecrets           []*corev1.Secret
 	Openshift             bool
 	Installation          *operatorv1.InstallationSpec
 	ManagementCluster     *operatorv1.ManagementCluster
 	TunnelSecret          *corev1.Secret
-	InternalTrafficSecret render.KeyPair
+	InternalTrafficSecret certificatemanagement.KeyPairInterface
 	ClusterDomain         string
 	ESLicenseType         ElasticsearchLicenseType
 	Replicas              *int32
@@ -484,7 +484,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 	var volumeMounts []corev1.VolumeMount
 	if c.cfg.ManagementCluster != nil {
 		volumeMounts = append(volumeMounts, c.cfg.TrustedCertBundle.VolumeMount())
-		env = append(env, corev1.EnvVar{Name: "VOLTRON_CA_PATH", Value: render.TrustedCertBundleMountPath})
+		env = append(env, corev1.EnvVar{Name: "VOLTRON_CA_PATH", Value: certificatemanagement.TrustedCertBundleMountPath})
 	}
 
 	if c.cfg.KeyValidatorConfig != nil {

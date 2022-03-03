@@ -27,13 +27,13 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/tls"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
-	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/test"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -56,9 +56,9 @@ var _ = Describe("apiserver controller tests", func() {
 		mockStatus            *status.MockStatus
 		installation          *operatorv1.Installation
 		certificateManagement *operatorv1.CertificateManagement
-		certificateManager    cmrender.CertificateManager
-		apiSecret             cmrender.KeyPair
-		packetCaptureSecret   cmrender.KeyPair
+		certificateManager    certificatemanager.CertificateManager
+		apiSecret             certificatemanagement.KeyPairInterface
+		packetCaptureSecret   certificatemanagement.KeyPairInterface
 	)
 
 	BeforeEach(func() {
@@ -94,7 +94,7 @@ var _ = Describe("apiserver controller tests", func() {
 		Expect(cli.Create(ctx, &operatorv1.APIServer{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 		})).ToNot(HaveOccurred())
-		certificateManager, err = controller.CreateCertificateManager(cli, &installation.Spec, dns.DefaultClusterDomain)
+		certificateManager, err = certificatemanager.Create(cli, &installation.Spec, dns.DefaultClusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		apiSecret, err = certificateManager.GetOrCreateKeyPair(cli, "tigera-apiserver-certs", common.OperatorNamespace(), dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(operatorv1.TigeraSecureEnterprise), "tigera-system", dns.DefaultClusterDomain))
 		Expect(err).NotTo(HaveOccurred())

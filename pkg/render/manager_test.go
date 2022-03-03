@@ -31,6 +31,7 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/authentication"
@@ -40,8 +41,7 @@ import (
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
-	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 var _ = Describe("Tigera Secure Manager rendering tests", func() {
@@ -110,14 +110,14 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(voltron.VolumeMounts[0].MountPath).To(Equal("/manager-tls"))
 		Expect(voltron.VolumeMounts[1].Name).To(Equal(render.KibanaPublicCertSecret))
 		Expect(voltron.VolumeMounts[1].MountPath).To(Equal("/certs/kibana"))
-		Expect(voltron.VolumeMounts[2].Name).To(Equal(cmrender.TrustedCertConfigMapName))
-		Expect(voltron.VolumeMounts[2].MountPath).To(Equal(cmrender.TrustedCertVolumeMountPath))
+		Expect(voltron.VolumeMounts[2].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+		Expect(voltron.VolumeMounts[2].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
 
 		Expect(len(deployment.Spec.Template.Spec.Volumes)).To(Equal(4))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ManagerTLSSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ManagerTLSSecretName))
-		Expect(deployment.Spec.Template.Spec.Volumes[1].Name).To(Equal(cmrender.TrustedCertConfigMapName))
-		Expect(deployment.Spec.Template.Spec.Volumes[1].VolumeSource.ConfigMap.Name).To(Equal(cmrender.TrustedCertConfigMapName))
+		Expect(deployment.Spec.Template.Spec.Volumes[1].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+		Expect(deployment.Spec.Template.Spec.Volumes[1].VolumeSource.ConfigMap.Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 		Expect(deployment.Spec.Template.Spec.Volumes[2].Name).To(Equal(relasticsearch.PublicCertSecret))
 		Expect(deployment.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal(relasticsearch.PublicCertSecret))
 		Expect(deployment.Spec.Template.Spec.Volumes[3].Name).To(Equal("elastic-ca-cert-volume"))
@@ -284,8 +284,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		rtest.ExpectEnv(voltron.Env, "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", "true")
 
 		Expect(len(esProxy.VolumeMounts)).To(Equal(2))
-		Expect(esProxy.VolumeMounts[0].Name).To(Equal(cmrender.TrustedCertConfigMapName))
-		Expect(esProxy.VolumeMounts[0].MountPath).To(Equal(cmrender.TrustedCertVolumeMountPath))
+		Expect(esProxy.VolumeMounts[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+		Expect(esProxy.VolumeMounts[0].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
 		Expect(esProxy.VolumeMounts[1].Name).To(Equal("elastic-ca-cert-volume"))
 		Expect(esProxy.VolumeMounts[1].MountPath).To(Equal("/etc/ssl/elastic/"))
 
@@ -294,8 +294,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(voltron.VolumeMounts[0].MountPath).To(Equal("/manager-tls"))
 		Expect(voltron.VolumeMounts[1].Name).To(Equal(render.KibanaPublicCertSecret))
 		Expect(voltron.VolumeMounts[1].MountPath).To(Equal("/certs/kibana"))
-		Expect(voltron.VolumeMounts[2].Name).To(Equal(cmrender.TrustedCertConfigMapName))
-		Expect(voltron.VolumeMounts[2].MountPath).To(Equal(cmrender.TrustedCertVolumeMountPath))
+		Expect(voltron.VolumeMounts[2].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+		Expect(voltron.VolumeMounts[2].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
 		Expect(voltron.VolumeMounts[3].Name).To(Equal(render.ManagerInternalTLSSecretName))
 		Expect(voltron.VolumeMounts[3].MountPath).To(Equal("/internal-manager-tls"))
 		Expect(voltron.VolumeMounts[4].Name).To(Equal(render.VoltronTunnelSecretName))
@@ -304,8 +304,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(len(deployment.Spec.Template.Spec.Volumes)).To(Equal(6))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ManagerTLSSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ManagerTLSSecretName))
-		Expect(deployment.Spec.Template.Spec.Volumes[1].Name).To(Equal(cmrender.TrustedCertConfigMapName))
-		Expect(deployment.Spec.Template.Spec.Volumes[1].VolumeSource.ConfigMap.Name).To(Equal(cmrender.TrustedCertConfigMapName))
+		Expect(deployment.Spec.Template.Spec.Volumes[1].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+		Expect(deployment.Spec.Template.Spec.Volumes[1].VolumeSource.ConfigMap.Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 		Expect(deployment.Spec.Template.Spec.Volumes[2].Name).To(Equal(render.KibanaPublicCertSecret))
 		Expect(deployment.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal(render.KibanaPublicCertSecret))
 		Expect(deployment.Spec.Template.Spec.Volumes[3].Name).To(Equal(render.ManagerInternalTLSSecretName))
@@ -402,19 +402,19 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		}))
 	})
 
-	var kp cmrender.KeyPair
-	var bundle cmrender.TrustedBundle
+	var kp certificatemanagement.KeyPairInterface
+	var bundle certificatemanagement.TrustedBundle
 
 	BeforeEach(func() {
 		var err error
-		kp, err = controller.NewKeyPair(nil, rtest.CreateCertSecret(render.ManagerTLSSecretName, common.OperatorNamespace(), render.ManagerTLSSecretName), []string{""}, "")
+		kp, err = certificatemanagement.NewKeyPair(rtest.CreateCertSecret(render.ManagerTLSSecretName, common.OperatorNamespace(), render.ManagerTLSSecretName), []string{""}, "")
 		Expect(err).NotTo(HaveOccurred())
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := controller.CreateCertificateManager(cli, nil, clusterDomain)
+		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
-		bundle = controller.CreateTrustedBundle(certificateManager)
+		bundle = certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair())
 	})
 
 	// renderManager passes in as few parameters as possible to render.Manager without it
@@ -541,13 +541,13 @@ func renderObjects(oidc bool, managementCluster *operatorv1.ManagementCluster, i
 	}
 
 	var tunnelSecret *corev1.Secret
-	var internalTraffic cmrender.KeyPair
+	var internalTraffic certificatemanagement.KeyPairInterface
 	scheme := runtime.NewScheme()
 	Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 	cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-	certificateManager, err := controller.CreateCertificateManager(cli, installation, clusterDomain)
+	certificateManager, err := certificatemanager.Create(cli, installation, clusterDomain)
 	Expect(err).NotTo(HaveOccurred())
-	bundle := controller.CreateTrustedBundle(certificateManager)
+	bundle := certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair())
 
 	if managementCluster != nil {
 		tunnelSecret = &testutils.VoltronTunnelSecret

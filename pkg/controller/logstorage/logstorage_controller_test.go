@@ -19,8 +19,6 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/tigera/operator/pkg/render/monitor"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -28,6 +26,7 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
@@ -37,7 +36,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
+	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/test"
 
 	"github.com/stretchr/testify/mock"
@@ -119,7 +118,7 @@ var _ = Describe("LogStorage controller", func() {
 
 		ctx = context.Background()
 		cli = fake.NewFakeClientWithScheme(scheme)
-		certificateManager, err := controller.CreateCertificateManager(cli, nil, "")
+		certificateManager, err := certificatemanager.Create(cli, nil, "")
 		Expect(err).NotTo(HaveOccurred())
 		prometheusTLS, err := certificateManager.GetOrCreateKeyPair(cli, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{render.PrometheusTLSSecretName})
 		Expect(err).NotTo(HaveOccurred())

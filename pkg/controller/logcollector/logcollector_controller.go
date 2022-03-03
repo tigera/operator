@@ -36,6 +36,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	v1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -45,7 +46,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/monitor"
-	cmcontroller "github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
+	cmcontroller "github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/url"
 )
 
@@ -314,7 +315,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	certificateManager, err := cmcontroller.CreateCertificateManager(r.client, installation, r.clusterDomain)
+	certificateManager, err := certificatemanager.Create(r.client, installation, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
 		r.status.SetDegraded("Unable to create the Tigera CA", err.Error())
@@ -329,17 +330,15 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 
 	certificate, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
 	if err != nil {
-		if errors.IsNotFound(err) {
-			log.Info("Prometheus secrets are not available yet, waiting until they become available")
-			r.status.SetDegraded("Prometheus secrets are not available yet, waiting until they become available", "")
-			return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
-		} else {
-			log.Error(err, "Failed to get certificate")
-			r.status.SetDegraded("Failed to get certificate", err.Error())
-			return reconcile.Result{}, err
-		}
+		log.Error(err, "Failed to get certificate")
+		r.status.SetDegraded("Failed to get certificate", err.Error())
+		return reconcile.Result{}, err
+	} else if certificate == nil {
+		log.Info("Prometheus secrets are not available yet, waiting until they become available")
+		r.status.SetDegraded("Prometheus secrets are not available yet, waiting until they become available", "")
+		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
 	}
-	trustedBundle := cmcontroller.CreateTrustedBundle(certificateManager, certificate)
+	trustedBundle := cmcontroller.CreateTrustedBundle(certificateManager.KeyPair(), certificate)
 
 	certificateManager.AddToStatusManager(r.status, render.LogCollectorNamespace)
 
@@ -474,7 +473,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       render.LogCollectorNamespace,
 			ServiceAccounts: []string{render.FluentdNodeName},
-			KeyPairOptions: []rcertificatemanagement.KeyPairCreator{
+			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(fluentdPrometheusTLS, true, true),
 			},
 			TrustedBundle: trustedBundle,

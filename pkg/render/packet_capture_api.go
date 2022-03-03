@@ -30,7 +30,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/secret"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement/render"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 // The names of the components related to the PacketCapture APIs related rendered objects.
@@ -53,7 +53,7 @@ type PacketCaptureApiConfiguration struct {
 	Openshift          bool
 	Installation       *operatorv1.InstallationSpec
 	KeyValidatorConfig authentication.KeyValidatorConfig
-	ServerCertSecret   render.KeyPair
+	ServerCertSecret   certificatemanagement.KeyPairInterface
 	ClusterDomain      string
 }
 

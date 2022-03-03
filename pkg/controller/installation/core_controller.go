@@ -60,6 +60,7 @@ import (
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/installation/windows"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
@@ -75,8 +76,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/monitor"
-	cmcontroller "github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
-	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
@@ -945,13 +945,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	certificateManager, err := cmcontroller.CreateCertificateManager(r.client, &instance.Spec, r.clusterDomain)
+	certificateManager, err := certificatemanager.Create(r.client, &instance.Spec, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
 		r.status.SetDegraded("Unable to create the Tigera CA", err.Error())
 		return reconcile.Result{}, err
 	}
-	var managerInternalTLSSecret cmrender.KeyPair
+	var managerInternalTLSSecret certificatemanagement.KeyPairInterface
 	if instance.Spec.Variant == operator.TigeraSecureEnterprise && managementCluster != nil {
 		dnsNames := append(dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain), render.ManagerServiceIP)
 		managerInternalTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, render.ManagerInternalTLSSecretName, common.CalicoNamespace, dnsNames)
@@ -1048,7 +1048,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Here, we'll check the default felixconfiguration to see if the user is specifying
 	// a non-default port, and use that value if they are.
 	nodeReporterMetricsPort := defaultNodeReporterPort
-	var nodePrometheusTLS cmrender.KeyPair
+	var nodePrometheusTLS certificatemanagement.KeyPairInterface
 	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
 
 		// Determine the port to use for nodeReporter metrics.
@@ -1099,21 +1099,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		nodeAppArmorProfile = val
 	}
 
-	components := []render.Component{
-		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			Namespace:       common.CalicoNamespace,
-			ServiceAccounts: []string{render.CalicoNodeObjectName, render.TyphaServiceAccountName},
-			KeyPairOptions: []rcertificatemanagement.KeyPairCreator{
-				// this controller is responsible for rendering the tigera-ca-private secret.
-				rcertificatemanagement.NewKeyPairOption(certificateManager, true, false),
-				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, true, true),
-				rcertificatemanagement.NewKeyPairOption(nodePrometheusTLS, true, true),
-				rcertificatemanagement.NewKeyPairOption(managerInternalTLSSecret, true, true),
-				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecret, true, true),
-			},
-			TrustedBundle: typhaNodeTLS.TrustedBundle,
-		}),
-	}
+	components := []render.Component{}
 
 	namespaceCfg := &render.NamespaceConfiguration{
 		Installation: &instance.Spec,
@@ -1205,6 +1191,21 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		PrometheusServerTLS:     nodePrometheusTLS,
 	}
 	components = append(components, render.Node(&nodeCfg))
+
+	components = append(components,
+		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+			Namespace:       common.CalicoNamespace,
+			ServiceAccounts: []string{render.CalicoNodeObjectName, render.TyphaServiceAccountName},
+			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+				// this controller is responsible for rendering the tigera-ca-private secret.
+				rcertificatemanagement.NewKeyPairOption(certificateManager.KeyPair(), true, false),
+				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(nodePrometheusTLS, true, true),
+				rcertificatemanagement.NewKeyPairOption(managerInternalTLSSecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecret, true, true),
+			},
+			TrustedBundle: typhaNodeTLS.TrustedBundle,
+		}))
 
 	// Build a configuration for rendering calico/kube-controllers.
 	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
@@ -1390,11 +1391,11 @@ func (r *ReconcileInstallation) SetDegraded(reason string, err error, log logr.L
 // GetOrCreateTyphaNodeTLSConfig reads and validates the CA ConfigMap and Secrets for
 // Typha and Felix configuration. It returns the validated resources or error
 // if there was one.
-func GetOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager cmrender.CertificateManager) (*render.TyphaNodeTLS, error) {
+func GetOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certificatemanager.CertificateManager) (*render.TyphaNodeTLS, error) {
 	// accumulate all the error messages so all problems with the certs
 	// and CA are reported.
 	var errMsgs []string
-	getKeyPair := func(secretName, commonName string) (keyPair cmrender.KeyPair, cn string, uriSAN string) {
+	getKeyPair := func(secretName, commonName string) (keyPair certificatemanagement.KeyPairInterface, cn string, uriSAN string) {
 		keyPair, err := certificateManager.GetOrCreateKeyPair(cli, secretName, common.OperatorNamespace(), []string{commonName})
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
@@ -1403,7 +1404,7 @@ func GetOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager cmrende
 			if data != nil {
 				cn, uriSAN = string(data[render.CommonName]), string(data[render.URISAN])
 			}
-			if certificateManager.Issued(keyPair.CertificatePEM()) || keyPair.UseCertificateManagement() {
+			if !keyPair.BYO() {
 				cn = commonName
 			}
 		}
@@ -1411,7 +1412,7 @@ func GetOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager cmrende
 	}
 	node, nodeCommonName, nodeURISAN := getKeyPair(render.NodeTLSSecretName, render.FelixCommonName)
 	typha, typhaCommonName, typhaURISAN := getKeyPair(render.TyphaTLSSecretName, render.TyphaCommonName)
-	var trustedBundle cmrender.TrustedBundle
+	var trustedBundle certificatemanagement.TrustedBundle
 	configMap, err := getConfigMap(cli, render.TyphaCAConfigMapName)
 	if err != nil {
 		errMsgs = append(errMsgs, fmt.Sprintf("CA for Typha is invalid: %s", err))
@@ -1419,11 +1420,11 @@ func GetOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager cmrende
 		if len(configMap.Data[render.TyphaCABundleName]) == 0 {
 			errMsgs = append(errMsgs, fmt.Sprintf("ConfigMap %q does not have a field named %q", render.TyphaCAConfigMapName, render.TyphaCABundleName))
 		} else {
-			trustedBundle = cmcontroller.CreateTrustedBundle(certificateManager, node, typha,
-				cmcontroller.NewCertificate(render.TyphaCAConfigMapName, []byte(configMap.Data[render.TyphaCABundleName])))
+			trustedBundle = certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair(), node, typha,
+				certificatemanagement.NewCertificate(render.TyphaCAConfigMapName, []byte(configMap.Data[render.TyphaCABundleName]), nil))
 		}
 	} else {
-		trustedBundle = cmcontroller.CreateTrustedBundle(certificateManager, node, typha)
+		trustedBundle = certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair(), node, typha)
 	}
 	if len(errMsgs) != 0 {
 		return nil, fmt.Errorf(strings.Join(errMsgs, ";"))

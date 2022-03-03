@@ -21,7 +21,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gstruct"
 	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -60,7 +60,7 @@ var _ = Describe("Typha rendering tests", func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := controller.CreateCertificateManager(cli, nil, clusterDomain)
+		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		typhaNodeTLS = getTyphaNodeTLS(cli, certificateManager)
 		cfg = render.TyphaConfiguration{
@@ -280,8 +280,8 @@ var _ = Describe("Typha rendering tests", func() {
 	})
 
 	It("should render all resources when certificate management is enabled", func() {
-		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c", CACert: cfg.TLS.TyphaSecret.CertificatePEM()}
-		certificateManager, err := controller.CreateCertificateManager(cli, cfg.Installation, clusterDomain)
+		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c", CACert: cfg.TLS.TyphaSecret.GetCertificatePEM()}
+		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		cfg.TLS = getTyphaNodeTLS(cli, certificateManager)
 		expectedResources := []struct {

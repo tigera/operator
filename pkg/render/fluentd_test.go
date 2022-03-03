@@ -21,12 +21,13 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -46,7 +47,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := controller.CreateCertificateManager(cli, nil, clusterDomain)
+		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		metricsSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
@@ -59,7 +60,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 				KubernetesProvider: operatorv1.ProviderNone,
 			},
 			MetricsServerTLS: metricsSecret,
-			TrustedBundle:    controller.CreateTrustedBundle(certificateManager),
+			TrustedBundle:    certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair()),
 		}
 	})
 

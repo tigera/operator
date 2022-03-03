@@ -37,7 +37,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement/render"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
@@ -92,10 +92,10 @@ type APIServerConfiguration struct {
 	ManagementCluster           *operatorv1.ManagementCluster
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
 	AmazonCloudIntegration      *operatorv1.AmazonCloudIntegration
-	TLSKeyPair                  render.KeyPair
+	TLSKeyPair                  certificatemanagement.KeyPairInterface
 	PullSecrets                 []*corev1.Secret
 	Openshift                   bool
-	TunnelCASecret              render.KeyPair
+	TunnelCASecret              certificatemanagement.KeyPairInterface
 }
 
 type apiServerComponent struct {
@@ -180,7 +180,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 
 	// Add in certificates for API server TLS.
 	if !c.cfg.TLSKeyPair.UseCertificateManagement() {
-		globalObjects = append(globalObjects, c.apiServiceRegistration(c.cfg.TLSKeyPair.CertificatePEM()))
+		globalObjects = append(globalObjects, c.apiServiceRegistration(c.cfg.TLSKeyPair.GetCertificatePEM()))
 	} else {
 		globalObjects = append(globalObjects, c.apiServiceRegistration(c.cfg.Installation.CertificateManagement.CACert))
 	}

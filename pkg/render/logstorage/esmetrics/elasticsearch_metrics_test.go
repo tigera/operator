@@ -23,11 +23,12 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -49,9 +50,9 @@ var _ = Describe("Elasticsearch metrics", func() {
 			scheme := runtime.NewScheme()
 			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 			cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-			certificateManager, err := controller.CreateCertificateManager(cli, nil, "")
+			certificateManager, err := certificatemanager.Create(cli, nil, "")
 			Expect(err).NotTo(HaveOccurred())
-			bundle := controller.CreateTrustedBundle(certificateManager)
+			bundle := certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair())
 			secret, err := certificateManager.GetOrCreateKeyPair(cli, ElasticsearchMetricsServerTLSSecret, common.OperatorNamespace(), []string{""})
 			Expect(err).NotTo(HaveOccurred())
 

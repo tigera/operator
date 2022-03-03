@@ -30,7 +30,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
-	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
@@ -52,8 +52,8 @@ type Config struct {
 	ESMetricsCredsSecret *corev1.Secret
 	ESCertSecret         *corev1.Secret
 	ClusterDomain        string
-	ServerTLS            cmrender.KeyPair
-	TrustedBundle        cmrender.TrustedBundle
+	ServerTLS            certificatemanagement.KeyPairInterface
+	TrustedBundle        certificatemanagement.TrustedBundle
 }
 
 type elasticsearchMetrics struct {
@@ -173,7 +173,7 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 								Args: []string{"--es.uri=https://$(ELASTIC_USERNAME):$(ELASTIC_PASSWORD)@$(ELASTIC_HOST):$(ELASTIC_PORT)",
 									"--es.all", "--es.indices", "--es.indices_settings", "--es.shards", "--es.cluster_settings",
 									"--es.timeout=30s", "--es.ca=$(ELASTIC_CA)", "--web.listen-address=:9081",
-									"--web.telemetry-path=/metrics", "--tls.key=/tigera-ee-elasticsearch-metrics-tls/tls.key", "--tls.crt=/tigera-ee-elasticsearch-metrics-tls/tls.crt", fmt.Sprintf("--ca.crt=%s", cmrender.TrustedCertBundleMountPath)},
+									"--web.telemetry-path=/metrics", "--tls.key=/tigera-ee-elasticsearch-metrics-tls/tls.key", "--tls.crt=/tigera-ee-elasticsearch-metrics-tls/tls.crt", fmt.Sprintf("--ca.crt=%s", certificatemanagement.TrustedCertBundleMountPath)},
 								VolumeMounts: []corev1.VolumeMount{
 									e.cfg.ServerTLS.VolumeMount(),
 									e.cfg.TrustedBundle.VolumeMount(),

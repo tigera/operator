@@ -19,7 +19,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tigera/operator/pkg/tls/certificatemanagement/render"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -36,6 +35,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/url"
 )
 
@@ -69,7 +69,7 @@ type IntrusionDetectionConfiguration struct {
 	ESLicenseType     ElasticsearchLicenseType
 	ManagedCluster    bool
 	HasNoLicense      bool
-	TrustedCertBundle render.TrustedBundle
+	TrustedCertBundle certificatemanagement.TrustedBundle
 }
 
 type intrusionDetectionComponent struct {

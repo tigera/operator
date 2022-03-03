@@ -24,6 +24,7 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
@@ -32,8 +33,7 @@ import (
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/testutils"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
-	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -87,7 +87,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		{Name: "ES_CA_CERT", Value: "/etc/ssl/elastic/ca.pem"},
 		{Name: "ES_CURATOR_BACKEND_CERT", Value: "/etc/ssl/elastic/ca.pem"},
 	}
-	var internalManagerTLSSecret cmrender.KeyPair
+	var internalManagerTLSSecret certificatemanagement.KeyPairInterface
 
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
@@ -113,7 +113,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := controller.CreateCertificateManager(cli, nil, dns.DefaultClusterDomain)
+		certificateManager, err := certificatemanager.Create(cli, nil, dns.DefaultClusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		internalManagerTLSSecret, err = certificateManager.GetOrCreateKeyPair(cli, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
 		Expect(err).NotTo(HaveOccurred())

@@ -20,6 +20,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	corev1 "k8s.io/api/core/v1"
@@ -39,8 +40,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/monitor"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
-	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 var _ = Describe("monitor rendering tests", func() {
@@ -56,20 +56,20 @@ var _ = Describe("monitor rendering tests", func() {
 	}
 
 	var cfg *monitor.Config
-	var prometheusKeyPair cmrender.KeyPair
+	var prometheusKeyPair certificatemanagement.KeyPairInterface
 
 	BeforeEach(func() {
 
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := controller.CreateCertificateManager(cli, nil, dns.DefaultClusterDomain)
+		certificateManager, err := certificatemanager.Create(cli, nil, dns.DefaultClusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		prometheusKeyPair, err = certificateManager.GetOrCreateKeyPair(cli, monitor.PrometheusTLSSecretName, common.OperatorNamespace(), []string{render.FelixCommonName})
 		Expect(err).NotTo(HaveOccurred())
 		prometheusClientKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{render.FelixCommonName})
 		Expect(err).NotTo(HaveOccurred())
-		bundle := controller.CreateTrustedBundle(certificateManager)
+		bundle := certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair())
 		cfg = &monitor.Config{
 			Installation: &operatorv1.InstallationSpec{},
 			PullSecrets: []*corev1.Secret{

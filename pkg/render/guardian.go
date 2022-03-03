@@ -31,7 +31,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/secret"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement/render"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 // The names of the components related to the Guardian related rendered objects.
@@ -58,8 +58,8 @@ type GuardianConfiguration struct {
 	PullSecrets       []*corev1.Secret
 	Openshift         bool
 	Installation      *operatorv1.InstallationSpec
-	TunnelSecret      render.KeyPair
-	TrustedCertBundle render.TrustedBundle
+	TunnelSecret      certificatemanagement.KeyPairInterface
+	TrustedCertBundle certificatemanagement.TrustedBundle
 }
 
 type GuardianComponent struct {

@@ -35,7 +35,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
-	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
@@ -80,7 +80,7 @@ type KubeControllersConfiguration struct {
 	// Secrets - provided by the caller. Used to generate secrets in the destination
 	// namespace to be returned by the rendered. Expected that the calling code
 	// take care to pass the same secret on each reconcile where possible.
-	ManagerInternalSecret        cmrender.KeyPair
+	ManagerInternalSecret        certificatemanagement.KeyPairInterface
 	ElasticsearchSecret          *corev1.Secret
 	KubeControllersGatewaySecret *corev1.Secret
 	KibanaSecret                 *corev1.Secret

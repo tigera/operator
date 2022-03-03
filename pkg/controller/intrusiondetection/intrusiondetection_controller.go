@@ -22,6 +22,7 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/logcollector"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -32,8 +33,7 @@ import (
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
-	cmcontroller "github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
-	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -148,7 +148,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		render.ManagerInternalTLSSecretName,
 		render.NodeTLSSecretName,
 		render.TyphaTLSSecretName,
-		cmrender.CASecretName,
+		certificatemanagement.CASecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
@@ -323,7 +323,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	certificateManager, err := cmcontroller.CreateCertificateManager(r.client, network, r.clusterDomain)
+	certificateManager, err := certificatemanager.Create(r.client, network, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
 		r.status.SetDegraded("Unable to create the Tigera CA", err.Error())
@@ -343,7 +343,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	var esLicenseType render.ElasticsearchLicenseType
-	trustedBundle := cmcontroller.CreateTrustedBundle(certificateManager, kibanaPublicCertSecret)
+	trustedBundle := certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair(), kibanaPublicCertSecret)
 
 	if managementClusterConnection == nil {
 		if esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger); err != nil {
@@ -352,7 +352,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		}
 
 		managerInternalTLSSecret, err := certificateManager.GetCertificate(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
-		if err != nil && !errors.IsNotFound(err) {
+		if err != nil {
 			log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", render.ManagerInternalTLSSecretName))
 			r.status.SetDegraded(fmt.Sprintf("failed to retrieve / validate  %s", render.ManagerInternalTLSSecretName), err.Error())
 			return reconcile.Result{}, err
@@ -425,7 +425,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       dpi.DeepPacketInspectionNamespace,
 			ServiceAccounts: []string{dpi.DeepPacketInspectionName},
-			KeyPairOptions: []rcertificatemanagement.KeyPairCreator{
+			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, false, true),
 			},
 			TrustedBundle: typhaNodeTLS.TrustedBundle,

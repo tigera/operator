@@ -21,6 +21,7 @@ import (
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
@@ -28,8 +29,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
-	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -69,14 +69,14 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 		enableESOIDCWorkaround = true
 	}
 
-	certificateManager, err := controller.CreateCertificateManager(r.client, install, r.clusterDomain)
+	certificateManager, err := certificatemanager.Create(r.client, install, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
 		r.status.SetDegraded("Unable to create the Tigera CA", err.Error())
 		return reconcile.Result{}, false, err
 	}
 
-	var managerInternalTLSSecret cmrender.KeyPair
+	var managerInternalTLSSecret certificatemanagement.KeyPairInterface
 	if managementCluster != nil {
 		svcDNSNames := append(dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain), render.ManagerServiceIP)
 		managerInternalTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, render.ManagerInternalTLSSecretName, common.CalicoNamespace, svcDNSNames)

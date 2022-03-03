@@ -39,6 +39,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -49,8 +50,7 @@ import (
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/render/monitor"
-	cmcontroller "github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
-	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 var log = logf.Log.WithName("controller_monitor")
@@ -123,7 +123,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		render.NodePrometheusTLSServerSecret,
 		esmetrics.ElasticsearchMetricsServerTLSSecret,
 		render.FluentdPrometheusTLSSecretName,
-		cmrender.CASecretName} {
+		certificatemanagement.CASecretName} {
 		if err = utils.AddSecretsWatch(c, secret, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("monitor-controller failed to watch secret: %w", err)
 		}
@@ -211,7 +211,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
-	certificateManager, err := cmcontroller.CreateCertificateManager(r.client, install, r.clusterDomain)
+	certificateManager, err := certificatemanager.Create(r.client, install, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
 		r.status.SetDegraded("Unable to create the Tigera CA", err.Error())
@@ -231,7 +231,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	trustedBundle := cmcontroller.CreateTrustedBundle(certificateManager)
+	trustedBundle := certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair())
 	for _, certificateName := range []string{
 		render.NodePrometheusTLSServerSecret,
 		esmetrics.ElasticsearchMetricsServerTLSSecret,
@@ -239,7 +239,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		certificate, err := certificateManager.GetCertificate(r.client, certificateName, common.OperatorNamespace())
 		if err == nil {
 			trustedBundle.AddCertificates(certificate)
-		} else if !errors.IsNotFound(err) {
+		} else {
 			log.Error(err, "Error fetching TLS certificate")
 			r.status.SetDegraded("Error fetching TLS certificate", err.Error())
 			return reconcile.Result{}, err
@@ -291,7 +291,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       common.TigeraPrometheusNamespace,
 			ServiceAccounts: []string{monitor.PrometheusServiceAccountName},
-			KeyPairOptions: []rcertificatemanagement.KeyPairCreator{
+			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(serverTLSSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(clientTLSSecret, true, true),
 			},

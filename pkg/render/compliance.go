@@ -29,7 +29,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement/render"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -71,9 +71,9 @@ func Compliance(cfg *ComplianceConfiguration) (Component, error) {
 // ComplianceConfiguration contains all the config information needed to render the component.
 type ComplianceConfiguration struct {
 	ESSecrets                   []*corev1.Secret
-	TrustedBundle               render.TrustedBundle
+	TrustedBundle               certificatemanagement.TrustedBundle
 	Installation                *operatorv1.InstallationSpec
-	ComplianceServerCertSecret  render.KeyPair
+	ComplianceServerCertSecret  certificatemanagement.KeyPairInterface
 	ESClusterConfig             *relasticsearch.ClusterConfig
 	PullSecrets                 []*corev1.Secret
 	Openshift                   bool
@@ -647,7 +647,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
-		{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: render.TrustedCertBundleMountPath},
+		{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: certificatemanagement.TrustedCertBundleMountPath},
 	}
 	if c.cfg.KeyValidatorConfig != nil {
 		envVars = append(envVars, c.cfg.KeyValidatorConfig.RequiredEnv("TIGERA_COMPLIANCE_")...)

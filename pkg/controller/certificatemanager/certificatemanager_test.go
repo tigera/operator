@@ -15,16 +15,17 @@
 // This renderer is responsible for all resources related to a Guardian Deployment in a
 // multicluster setup.
 
-package controller_test
+package certificatemanager_test
 
 import (
 	"context"
 	"strings"
 	"time"
 
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/tls"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement/render"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/test"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	. "github.com/onsi/ginkgo"
@@ -60,7 +61,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 		clusterDomain      = "cluster.local"
 		appDNSNames        = []string{appSecretName}
 		ctx                = context.TODO()
-		certificateManager render.CertificateManager
+		certificateManager certificatemanager.CertificateManager
 		legacySecret       *corev1.Secret
 		byoSecret          *corev1.Secret
 	)
@@ -78,10 +79,11 @@ var _ = Describe("Test CertificateManagement suite", func() {
 		cli = fake.NewFakeClientWithScheme(scheme)
 
 		installation = &operatorv1.InstallationSpec{}
-		certificateManager, err = controller.CreateCertificateManager(cli, installation, clusterDomain)
+		certificateManager, err = certificatemanager.Create(cli, installation, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		keyPair, err := certificateManager.GetOrCreateKeyPair(cli, "temp", appNs, appDNSNames)
-		cm = &operatorv1.CertificateManagement{CACert: keyPair.CertificatePEM()}
+		Expect(err).NotTo(HaveOccurred())
+		cm = &operatorv1.CertificateManagement{CACert: keyPair.GetCertificatePEM()}
 
 		// Create a legacy secret (how certs were before v1.24) with non-standardized legacy key and cert name.
 		legacySecret, err = secret.CreateTLSSecret(nil, appSecretName, appNs, "key", "cert", time.Hour, nil, appSecretName)
@@ -98,57 +100,74 @@ var _ = Describe("Test CertificateManagement suite", func() {
 	Describe("test CertificateManager interface", func() {
 		It("should create a CA if it does not exist yet or reconstruct it from secret", func() {
 			By("constructing a new CA and storing it")
-			Expect(cli.Create(ctx, certificateManager.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			Expect(cli.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 			By("constructing a key pair signed by the CA and storing it in a secret")
 			keyPair, err := certificateManager.GetOrCreateKeyPair(cli, appSecretName, appNs, appDNSNames)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(keyPair).NotTo(BeNil())
-			Expect(certificateManager.Issued(keyPair.CertificatePEM())).To(BeTrue())
+			Expect(keyPair.GetIssuer()).To(Equal(certificateManager.KeyPair()))
 
 			By("reconstructing certificateManager2 from the secret that was stored")
-			certificateManager2, err := controller.CreateCertificateManager(cli, installation, clusterDomain)
+			certificateManager2, err := certificatemanager.Create(cli, installation, clusterDomain)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(certificateManager2).NotTo(BeNil())
-			Expect(certificateManager2.Issued(keyPair.CertificatePEM())).To(BeTrue()) // Proves that certificateManager & certificateManager2 are identical
+			Expect(keyPair.GetIssuer()).To(Equal(certificateManager2.KeyPair())) // Proves that certificateManager & certificateManager2 are identical
 
 			By("deleting the tigera-ca-secret")
-			Expect(cli.Delete(ctx, certificateManager.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			Expect(cli.Delete(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 			By("constructing a brand new CA and storing it")
-			certificateManager3, err := controller.CreateCertificateManager(cli, installation, clusterDomain)
+			certificateManager3, err := certificatemanager.Create(cli, installation, clusterDomain)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(certificateManager3).NotTo(BeNil())
-			Expect(certificateManager3.Issued(keyPair.CertificatePEM())).To(BeFalse()) // Proves that certificateManager & certificateManager3 are different
+			Expect(keyPair.GetIssuer()).NotTo(Equal(certificateManager3.KeyPair())) // Proves that certificateManager & certificateManager3 are different
 
 			By("Constructing a certificateManager with Certificate management enabled and verifying differences")
 			installation.CertificateManagement = cm
-			certificateManager4, err := controller.CreateCertificateManager(cli, installation, clusterDomain)
+			certificateManager4, err := certificatemanager.Create(cli, installation, clusterDomain)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(certificateManager4.Issued(keyPair.CertificatePEM())).To(BeFalse())
+			Expect(keyPair.GetIssuer()).NotTo(Equal(certificateManager4.KeyPair()))
 			Expect(keyPair.UseCertificateManagement()).To(BeFalse())
 			keyPair2, err := certificateManager4.GetOrCreateKeyPair(cli, appSecretName, appNs, appDNSNames)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(certificateManager4.Issued(keyPair2.CertificatePEM())).To(BeFalse()) // We expect the customer to bring an issuer to the cluster
+			Expect(keyPair2.GetIssuer()).NotTo(Equal(certificateManager4.KeyPair())) // We expect the customer to bring an issuer to the cluster
 			Expect(keyPair2.UseCertificateManagement()).To(BeTrue())
 		})
 
-		It("should create a keyPair if it does not exist yet or reconstruct it from secret", func() {
+		It("should create a KeyPair if it does not exist yet or reconstruct it from secret", func() {
 
 			By("creating a key pair and storing the secret")
 			keyPair, err := certificateManager.GetOrCreateKeyPair(cli, appSecretName, appNs, appDNSNames)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(cli.Create(ctx, keyPair.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			Expect(cli.Create(ctx, keyPair.Secret(appNs))).NotTo(HaveOccurred())
 
 			By("fetching the key pair again and verify the two are identical")
 			keyPair2, err := certificateManager.GetOrCreateKeyPair(cli, appSecretName, appNs, appDNSNames)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(keyPair.HashAnnotationValue()).ToNot(BeNil())
+			Expect(keyPair2.HashAnnotationValue()).To(Equal(keyPair.HashAnnotationValue()))
+		})
+
+		It("should replace a KeyPair if it was created by an older ca", func() {
+
+			By("creating a key pair and storing the secret")
+			keyPair, err := certificateManager.GetOrCreateKeyPair(cli, appSecretName, appNs, appDNSNames)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cli.Create(ctx, keyPair.Secret(appNs))).NotTo(HaveOccurred())
+
+			By("fetching the key pair again with a newer ca")
+			certificateManager2, err := certificatemanager.Create(cli, installation, clusterDomain)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(certificateManager2).NotTo(BeNil())
+			keyPair2, err := certificateManager2.GetOrCreateKeyPair(cli, appSecretName, appNs, appDNSNames)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(keyPair.HashAnnotationValue()).ToNot(BeNil())
 			Expect(keyPair2.HashAnnotationValue()).NotTo(Equal(keyPair.HashAnnotationValue()))
 		})
 
 		It("should be able to fetch a key pair if it exists", func() {
-			By("verifying that it returns an error if the key pair does not exist")
+			By("verifying that it returns nil if the key pair does not exist")
 			key, err := certificateManager.GetKeyPair(cli, appSecretName, appNs)
 			Expect(key).To(BeNil())
 			Expect(err).NotTo(HaveOccurred())
@@ -165,9 +184,10 @@ var _ = Describe("Test CertificateManagement suite", func() {
 		})
 
 		It("should be able to fetch a certificate if it exists", func() {
-			By("verifying that it returns an error if the certificate does not exist")
-			_, err := certificateManager.GetCertificate(cli, appSecretName, appNs)
-			Expect(err).To(HaveOccurred())
+			By("verifying that it returns nil if the certificate does not exist")
+			crt, err := certificateManager.GetCertificate(cli, appSecretName, appNs)
+			Expect(crt).To(BeNil())
+			Expect(err).NotTo(HaveOccurred())
 
 			By("creating a key pair and storing the secret")
 			keyPair, err := certificateManager.GetOrCreateKeyPair(cli, appSecretName, appNs, appDNSNames)
@@ -201,7 +221,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(keyPair.UseCertificateManagement()).To(BeFalse())
 			Expect(keyPair.BYO()).To(BeFalse())
-			Expect(certificateManager.Issued(keyPair.CertificatePEM())).To(BeTrue())
+			Expect(keyPair.GetIssuer()).To(Equal(certificateManager.KeyPair()))
 
 			By("verifying the volume is correct")
 			volume := keyPair.Volume()
@@ -222,13 +242,13 @@ var _ = Describe("Test CertificateManagement suite", func() {
 		It("renders the right spec for certificate management", func() {
 			By("creating a key pair w/ certificate management")
 			installation.CertificateManagement = cm
-			certificateManager, err := controller.CreateCertificateManager(cli, installation, clusterDomain)
+			certificateManager, err := certificatemanager.Create(cli, installation, clusterDomain)
 			Expect(err).NotTo(HaveOccurred())
 			keyPair, err := certificateManager.GetOrCreateKeyPair(cli, appSecretName, appNs, appDNSNames)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(keyPair.UseCertificateManagement()).To(BeTrue())
 			Expect(keyPair.BYO()).To(BeFalse())
-			Expect(certificateManager.Issued(keyPair.CertificatePEM())).To(BeFalse())
+			Expect(keyPair.GetIssuer()).NotTo(Equal(certificateManager.KeyPair()))
 
 			By("verifying the volume is correct")
 			volume := keyPair.Volume()
@@ -258,7 +278,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(keyPair.UseCertificateManagement()).To(BeFalse())
 			Expect(keyPair.BYO()).To(BeTrue())
-			Expect(certificateManager.Issued(keyPair.CertificatePEM())).To(BeFalse())
+			Expect(keyPair.GetIssuer()).NotTo(Equal(certificateManager.KeyPair()))
 
 			By("verifying the volume is correct")
 			volume := keyPair.Volume()
@@ -280,14 +300,33 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			Expect(keyPair.Secret(appNs).Data[corev1.TLSCertKey]).NotTo(BeNil())
 		})
 
+		It("handles missing DNS names as expected", func() {
+			missingDNSNames := append(appDNSNames, "missing-name")
+			By("verifying it does replace a secret when dns names are missing")
+			keyPair, err := certificateManager.GetOrCreateKeyPair(cli, appSecretName, appNs, appDNSNames)
+			Expect(err).NotTo(HaveOccurred())
+			test.VerifyCertSANs(keyPair.GetCertificatePEM(), appDNSNames...)
+			keyPair, err = certificateManager.GetOrCreateKeyPair(cli, appSecretName, appNs, missingDNSNames)
+			Expect(err).NotTo(HaveOccurred())
+			test.VerifyCertSANs(keyPair.GetCertificatePEM(), missingDNSNames...)
+
+			By("verifying it does not replace a BYO secret, nor throw an error")
+			Expect(cli.Create(ctx, byoSecret)).NotTo(HaveOccurred())
+			keyPair, err = certificateManager.GetOrCreateKeyPair(cli, appSecretName, appNs, missingDNSNames)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(keyPair.UseCertificateManagement()).To(BeFalse())
+			Expect(keyPair.BYO()).To(BeTrue())
+			Expect(keyPair.GetIssuer()).NotTo(Equal(certificateManager.KeyPair()))
+		})
+
 		It("renders the right spec for legacy certs (<= v1.24)", func() {
-			By("creating a legacy corev1.Secret and then create a KeyPair using the certificateManager")
+			By("creating a legacy secret and then create a KeyPair using the certificateManager")
 			Expect(cli.Create(ctx, legacySecret)).NotTo(HaveOccurred())
 			keyPair, err := certificateManager.GetOrCreateKeyPair(cli, appSecretName, appNs, appDNSNames)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(keyPair.UseCertificateManagement()).To(BeFalse())
 			Expect(keyPair.BYO()).To(BeTrue())
-			Expect(certificateManager.Issued(keyPair.CertificatePEM())).To(BeFalse())
+			Expect(keyPair.GetIssuer()).NotTo(Equal(certificateManager.KeyPair()))
 
 			By("verifying the volume is correct")
 			volume := keyPair.Volume()
@@ -338,32 +377,32 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			legacy, err := certificateManager.GetCertificate(cli, legacySecret.Name, common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
 
-			Expect(certificateManager.Issued(cert.CertificatePEM())).To(BeTrue())
-			Expect(certificateManager.Issued(cert2.CertificatePEM())).To(BeTrue())
-			Expect(certificateManager.Issued(byo.CertificatePEM())).To(BeFalse())
-			Expect(certificateManager.Issued(legacy.CertificatePEM())).To(BeFalse())
+			Expect(cert.GetIssuer()).To(Equal(certificateManager.KeyPair()))
+			Expect(cert2.GetIssuer()).To(Equal(certificateManager.KeyPair()))
+			Expect(byo.GetIssuer()).NotTo(Equal(certificateManager.KeyPair()))
+			Expect(legacy.GetIssuer()).NotTo(Equal(certificateManager.KeyPair()))
 
 			By("creating and validating a trusted certificate bundle")
-			trustedBundle := controller.CreateTrustedBundle(certificateManager, cert, cert2, byo, legacy)
+			trustedBundle := certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair(), cert, cert2, byo, legacy)
 			Expect(trustedBundle.Volume()).To(Equal(corev1.Volume{
-				Name: render.TrustedCertConfigMapName,
+				Name: certificatemanagement.TrustedCertConfigMapName,
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{Name: render.TrustedCertConfigMapName},
+						LocalObjectReference: corev1.LocalObjectReference{Name: certificatemanagement.TrustedCertConfigMapName},
 					},
 				},
 			}))
 			Expect(trustedBundle.VolumeMount()).To(Equal(corev1.VolumeMount{
-				Name:      render.TrustedCertConfigMapName,
-				MountPath: render.TrustedCertVolumeMountPath,
+				Name:      certificatemanagement.TrustedCertConfigMapName,
+				MountPath: certificatemanagement.TrustedCertVolumeMountPath,
 				ReadOnly:  true,
 			}))
-			Expect(trustedBundle.MountPath()).To(Equal(render.TrustedCertBundleMountPath))
+			Expect(trustedBundle.MountPath()).To(Equal(certificatemanagement.TrustedCertBundleMountPath))
 			configMap := trustedBundle.ConfigMap(appNs)
-			Expect(configMap.ObjectMeta).To(Equal(metav1.ObjectMeta{Name: render.TrustedCertConfigMapName, Namespace: appNs}))
+			Expect(configMap.ObjectMeta).To(Equal(metav1.ObjectMeta{Name: certificatemanagement.TrustedCertConfigMapName, Namespace: appNs}))
 			Expect(configMap.TypeMeta).To(Equal(metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}))
 			By("counting the number of pem blocks in the configmap")
-			bundle := configMap.Data[render.TrustedCertConfigMapKeyName]
+			bundle := configMap.Data[certificatemanagement.TrustedCertConfigMapKeyName]
 			numBlocks := strings.Count(bundle, "certificate name:")
 			// While we have the ca + 4 certs, we expect 3 cert blocks (+ 2):
 			// - the certificateManager: this covers for all certs signed by the tigera root ca

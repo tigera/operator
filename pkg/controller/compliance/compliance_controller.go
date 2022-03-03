@@ -21,6 +21,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -29,9 +30,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	cmcontroller "github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
-	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
-
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
@@ -116,7 +115,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 			relasticsearch.PublicCertSecret, render.ElasticsearchComplianceBenchmarkerUserSecret,
 			render.ElasticsearchComplianceControllerUserSecret, render.ElasticsearchComplianceReporterUserSecret,
 			render.ElasticsearchComplianceSnapshotterUserSecret, render.ElasticsearchComplianceServerUserSecret,
-			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, render.DexCertSecretName, cmrender.CASecretName} {
+			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, render.DexCertSecretName, certificatemanagement.CASecretName} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("compliance-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
 			}
@@ -289,13 +288,13 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	certificateManager, err := cmcontroller.CreateCertificateManager(r.client, network, r.clusterDomain)
+	certificateManager, err := certificatemanager.Create(r.client, network, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
 		r.status.SetDegraded("Unable to create the Tigera CA", err.Error())
 		return reconcile.Result{}, err
 	}
-	var managerInternalTLSSecret cmrender.Certificate
+	var managerInternalTLSSecret certificatemanagement.CertificateInterface
 	if managementCluster != nil {
 		managerInternalTLSSecret, err = certificateManager.GetCertificate(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
 		if err != nil {
@@ -304,9 +303,9 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, err
 		}
 	}
-	trustedBundle := cmcontroller.CreateTrustedBundle(certificateManager, managerInternalTLSSecret)
+	trustedBundle := certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair(), managerInternalTLSSecret)
 
-	var complianceServerCertSecret cmrender.KeyPair
+	var complianceServerCertSecret certificatemanagement.KeyPairInterface
 	if managementClusterConnection == nil {
 		complianceServerCertSecret, err = certificateManager.GetOrCreateKeyPair(
 			r.client,
@@ -375,7 +374,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	certificateComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 		Namespace:       render.ComplianceNamespace,
 		ServiceAccounts: []string{render.ComplianceServerSAName},
-		KeyPairOptions: []rcertificatemanagement.KeyPairCreator{
+		KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 			rcertificatemanagement.NewKeyPairOption(complianceServerCertSecret, true, true),
 		},
 		TrustedBundle: trustedBundle,

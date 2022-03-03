@@ -19,13 +19,12 @@ import (
 	. "github.com/onsi/gomega"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement/controller"
-	cmrender "github.com/tigera/operator/pkg/tls/certificatemanagement/render"
-
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -47,9 +46,9 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-		certificateManager, err := controller.CreateCertificateManager(cli, nil, clusterDomain)
+		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
-		bundle := controller.CreateTrustedBundle(certificateManager)
+		bundle := certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair())
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
 		cfg = &render.IntrusionDetectionConfiguration{
@@ -117,10 +116,10 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(idji.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
 			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
 		))
-		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(cmrender.TrustedCertConfigMapName))
-		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal(cmrender.TrustedCertVolumeMountPath))
-		Expect(idc.Spec.Template.Spec.Volumes[0].Name).To(Equal(cmrender.TrustedCertConfigMapName))
-		Expect(idc.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal(cmrender.TrustedCertConfigMapName))
+		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
+		Expect(idc.Spec.Template.Spec.Volumes[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+		Expect(idc.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 
 		clusterRole := rtest.GetResource(resources, "intrusion-detection-controller", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 

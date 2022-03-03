@@ -33,7 +33,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
 	"github.com/tigera/operator/pkg/render/common/secret"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement/render"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/url"
 )
 
@@ -139,8 +139,8 @@ type FluentdConfiguration struct {
 	Installation     *operatorv1.InstallationSpec
 	ClusterDomain    string
 	OSType           rmeta.OSType
-	MetricsServerTLS render.KeyPair
-	TrustedBundle    render.TrustedBundle
+	MetricsServerTLS certificatemanagement.KeyPairInterface
+	TrustedBundle    certificatemanagement.TrustedBundle
 }
 
 type fluentdComponent struct {

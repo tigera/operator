@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	apps "k8s.io/api/apps/v1"
@@ -143,6 +144,18 @@ func (r *ReconcileLogStorage) createLogStorage(
 		}
 	}
 
+	var baseURL string
+	if authentication != nil && authentication.Spec.ManagerDomain != "" {
+		baseURL = authentication.Spec.ManagerDomain
+		if u, err := url.Parse(baseURL); err == nil {
+			if u.Scheme == "" {
+				baseURL = fmt.Sprintf("https://%s", baseURL)
+			}
+		} else {
+			reqLogger.Error(err, "Parsing Authentication ManagerDomain failed so baseUrl is not set")
+		}
+	}
+
 	var components []render.Component
 
 	logStorageCfg := &render.ElasticsearchConfiguration{
@@ -163,6 +176,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 		KbService:                   kbService,
 		ClusterDomain:               r.clusterDomain,
 		DexCfg:                      dexCfg,
+		BaseURL:                     baseURL,
 		ElasticLicenseType:          esLicenseType,
 	}
 

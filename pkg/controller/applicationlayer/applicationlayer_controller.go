@@ -306,21 +306,23 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 func updateApplicationLayerWithDefaults(al *operatorv1.ApplicationLayer) {
 	var defaultLogIntervalSeconds int64 = 5
 	var defaultLogRequestsPerInterval int64 = -1
-	var defaultLogCollectionDisabled operatorv1.LogCollectionStatusType = "Disabled"
-	var defaultWebApplicationFirewallDisabled operatorv1.WAFStatusType = "Disabled"
+	var defaultLogCollectionDisabled operatorv1.LogCollectionStatusType = operatorv1.L7LogCollectionDisabled
+	var defaultWebApplicationFirewallDisabled operatorv1.WAFStatusType = operatorv1.WAFDisabled
 
 	if al.Spec.LogCollection == nil {
 		al.Spec.LogCollection = new(operatorv1.LogCollectionSpec)
-	}
-	if al.Spec.LogCollection.CollectLogs == nil {
 		al.Spec.LogCollection.CollectLogs = &defaultLogCollectionDisabled
 	}
-	if al.Spec.LogCollection.LogRequestsPerInterval == nil {
-		al.Spec.LogCollection.LogRequestsPerInterval = &defaultLogRequestsPerInterval
+
+	if *al.Spec.LogCollection.CollectLogs == operatorv1.L7LogCollectionEnabled {
+		if al.Spec.LogCollection.LogRequestsPerInterval == nil {
+			al.Spec.LogCollection.LogRequestsPerInterval = &defaultLogRequestsPerInterval
+		}
+		if al.Spec.LogCollection.LogIntervalSeconds == nil {
+			al.Spec.LogCollection.LogIntervalSeconds = &defaultLogIntervalSeconds
+		}
 	}
-	if al.Spec.LogCollection.LogIntervalSeconds == nil {
-		al.Spec.LogCollection.LogIntervalSeconds = &defaultLogIntervalSeconds
-	}
+
 	if al.Spec.WebApplicationFirewall == nil {
 		al.Spec.WebApplicationFirewall = &defaultWebApplicationFirewallDisabled
 	}
@@ -330,7 +332,8 @@ func updateApplicationLayerWithDefaults(al *operatorv1.ApplicationLayer) {
 func validateApplicationLayer(al *operatorv1.ApplicationLayer) error {
 
 	// If ApplicationLayer spec exists then one of its features should be set.
-	if al.Spec.LogCollection == nil && al.Spec.WebApplicationFirewall == nil {
+	if *al.Spec.LogCollection.CollectLogs != operatorv1.L7LogCollectionEnabled &&
+		*al.Spec.WebApplicationFirewall != operatorv1.WAFEnabled {
 		return fmt.Errorf("at least one of webApplicationFirewall or logCollector must be specified on ApplicationLayer resource")
 	}
 

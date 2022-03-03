@@ -229,8 +229,7 @@ func (w *calicoWindowsUpgrader) updateWindowsNodes() {
 	numNodesMaxUnavailable, err := intstr.GetValueFromIntOrPercent(w.install.NodeUpdateStrategy.RollingUpdate.MaxUnavailable, numWindowsNodes, false)
 	if err != nil {
 		// Due to the potential rounding down of numNodesMaxUnavailable =  (maxUnavailable %) * ksD+csD, where maxUnavailable is a percentage value,
-		// ,it may resolve to zero. Then we should default back maxUnavailable to 1 on the theory that surge might not work
-		// due to quota.
+		// it may resolve to zero. Then we should default back maxUnavailable to 1 on the theory that surge might not work due to quota.
 		windowsLog.Error(err, "Invalid maxUnavailable value, falling back to default of 1")
 	} else {
 		if numNodesMaxUnavailable < 1 {

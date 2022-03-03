@@ -62,7 +62,7 @@ func allCalicoComponents(
 	bgpLayout *corev1.ConfigMap,
 	logCollector *operatorv1.LogCollector,
 ) ([]render.Component, error) {
-
+	cr.KubernetesProvider = p
 	namespaces := render.Namespaces(&render.NamespaceConfiguration{Installation: cr, PullSecrets: pullSecrets})
 
 	objs := []client.Object{}
@@ -190,11 +190,11 @@ var _ = Describe("Rendering tests", func() {
 		// - 2 ConfigMap for Typha comms (1 in operator namespace and 1 in calico namespace)
 		// - 7 typha resources (Service, SA, Role, Binding, Deployment, PodDisruptionBudget, PodSecurityPolicy)
 		// - 6 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment, PodSecurityPolicy, Service, Secret)
-		// - 2 windows-upgrader resources (ServiceAccount, DaemonSet)
 		// - 1 namespace
 		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, operatorv1.ProviderNone, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c)).To(Equal(6 + 4 + 2 + 7 + 6 + 2 + 1))
+		Expect(componentCount(c)).To(Equal(6 + 4 + 2 + 7 + 6 + 1))
+		Expect(getAKSWindowsUpgraderComponentCount(c)).To(Equal(0))
 	})
 
 	It("should render all resources when variant is Tigera Secure", func() {
@@ -207,7 +207,8 @@ var _ = Describe("Rendering tests", func() {
 		instance.NodeMetricsPort = &nodeMetricsPort
 		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, operatorv1.ProviderNone, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c)).To(Equal((6 + 4 + 2 + 7 + 6 + 2 + 1) + 1 + 1))
+		Expect(componentCount(c)).To(Equal((6 + 4 + 2 + 7 + 6 + 1) + 1 + 1))
+		Expect(getAKSWindowsUpgraderComponentCount(c)).To(Equal(0))
 	})
 
 	It("should render all resources when variant is Tigera Secure and Management Cluster", func() {
@@ -273,10 +274,6 @@ var _ = Describe("Rendering tests", func() {
 			{render.ManagerInternalTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
 			{common.KubeControllersDeploymentName, "", "policy", "v1beta1", "PodSecurityPolicy"},
 			{"calico-kube-controllers-metrics", common.CalicoNamespace, "", "v1", "Service"},
-
-			// windows upgrader objects.
-			{common.CalicoWindowsUpgradeResourceName, common.CalicoNamespace, "", "v1", "ServiceAccount"},
-			{common.CalicoWindowsUpgradeResourceName, common.CalicoNamespace, "apps", "v1", "DaemonSet"},
 		}
 
 		var resources []client.Object
@@ -289,6 +286,13 @@ var _ = Describe("Rendering tests", func() {
 		for i, expectedRes := range expectedResources {
 			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
+		Expect(getAKSWindowsUpgraderComponentCount(c)).To(Equal(0))
+	})
+
+	It("should render windows upgrader resources for AKS", func() {
+		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, operatorv1.ProviderAKS, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
+		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
+		Expect(getAKSWindowsUpgraderComponentCount(c)).To(Equal(2))
 	})
 
 	It("should render calico with a apparmor profile if annotation is present in installation", func() {
@@ -429,6 +433,21 @@ func componentCount(components []render.Component) int {
 		glog.Printf("Component: %s\n", reflect.TypeOf(c))
 		for i, o := range objsToCreate {
 			glog.Printf(" - %d/%d: %s/%s\n", i, len(objsToCreate), o.GetNamespace(), o.GetName())
+		}
+	}
+	return count
+}
+
+func getAKSWindowsUpgraderComponentCount(components []render.Component) int {
+	var resources []client.Object
+	for _, component := range components {
+		var toCreate, _ = component.Objects()
+		resources = append(resources, toCreate...)
+	}
+	count := 0
+	for _, r := range resources {
+		if r.GetName() == common.CalicoWindowsUpgradeResourceName {
+			count += 1
 		}
 	}
 	return count

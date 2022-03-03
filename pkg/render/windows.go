@@ -73,6 +73,10 @@ func (c *windowsComponent) Objects() ([]client.Object, []client.Object) {
 		c.windowsUpgradeDaemonset(),
 	}
 
+	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderAKS {
+		return nil, objs
+	}
+
 	if c.cfg.Terminating {
 		return nil, objs
 	}

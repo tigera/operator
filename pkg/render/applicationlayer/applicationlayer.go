@@ -159,11 +159,6 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, c.securityContextConstraints())
 	}
 
-	// Delete all objects if both log collection and WAF are disabled
-	if !c.config.LogsEnabled && !c.config.WAFEnabled {
-		return nil, objs
-	}
-
 	return objs, nil
 }
 

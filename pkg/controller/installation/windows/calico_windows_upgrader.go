@@ -40,10 +40,12 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+const (
+	defaultMaxUnavailable int32 = 1
+)
+
 var (
 	windowsLog = logf.Log.WithName("windows_upgrader")
-
-	defaultMaxUnavailable = 1
 )
 
 type CalicoWindowsUpgrader interface {
@@ -220,13 +222,22 @@ func (w *calicoWindowsUpgrader) updateWindowsNodes() {
 		}
 	}
 
+	var maxUnavailable int32 = defaultMaxUnavailable
 	// Get the total # of windows nodes we can have upgrading using the
 	// maxUnavailable value, if the node upgrade strategy was respected.
 	numWindowsNodes := len(pending) + len(inProgress) + len(inSync)
-	maxUnavailable, err := intstr.GetValueFromIntOrPercent(w.install.NodeUpdateStrategy.RollingUpdate.MaxUnavailable, numWindowsNodes, false)
+	numNodesMaxUnavailable, err := intstr.GetValueFromIntOrPercent(w.install.NodeUpdateStrategy.RollingUpdate.MaxUnavailable, numWindowsNodes, false)
 	if err != nil {
+		// Due to the potential rounding down of numNodesMaxUnavailable =  (maxUnavailable %) * ksD+csD, where maxUnavailable is a percentage value,
+		// ,it may resolve to zero. Then we should default back maxUnavailable to 1 on the theory that surge might not work
+		// due to quota.
 		windowsLog.Error(err, "Invalid maxUnavailable value, falling back to default of 1")
-		maxUnavailable = defaultMaxUnavailable
+	} else {
+		if numNodesMaxUnavailable < 1 {
+			windowsLog.Info("Max unavailble nodes calculation resolved to 0, defaulting back to 1 to allow upgrades to continue")
+		} else {
+			maxUnavailable = int32(numNodesMaxUnavailable)
+		}
 	}
 
 	for _, nodeName := range sortedSliceFromMap(pending) {
@@ -235,7 +246,7 @@ func (w *calicoWindowsUpgrader) updateWindowsNodes() {
 		// For upgrades from Calico -> Enterprise, we always upgrade regardless
 		// of maxUnavailable. For other upgrades, check that we have room
 		// available.
-		if w.isUpgradeFromCalicoToEnterprise(node) || len(inProgress) < maxUnavailable {
+		if w.isUpgradeFromCalicoToEnterprise(node) || int32(len(inProgress)) < maxUnavailable {
 			if err := w.startUpgrade(context.Background(), node); err != nil {
 				// Log the error and continue. We will retry when we update nodes again.
 				windowsLog.Info(fmt.Sprintf("Could not start upgrade on node %v: %v", node.Name, err))

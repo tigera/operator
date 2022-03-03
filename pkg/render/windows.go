@@ -68,6 +68,10 @@ func (c *windowsComponent) Objects() ([]client.Object, []client.Object) {
 		c.windowsUpgradeDaemonset(),
 	}
 
+	if c.cr.KubernetesProvider != operatorv1.ProviderAKS {
+		return nil, objs
+	}
+
 	return objs, nil
 }
 

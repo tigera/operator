@@ -394,7 +394,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			r.calicoWindowsUpgrader.Start(ctx)
 			certificateManager, err := certificatemanager.Create(c, nil, "")
 			Expect(err).NotTo(HaveOccurred())
-			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{"render.PrometheusTLSSecretName"})
+			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{render.PrometheusTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
@@ -794,7 +794,8 @@ var _ = Describe("Testing core-controller installation", func() {
 			expectedDNSNames = append(expectedDNSNames, "localhost")
 			certificateManager, err := certificatemanager.Create(c, nil, "")
 			Expect(err).NotTo(HaveOccurred())
-			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{"render.PrometheusTLSSecretName"})
+			Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
+			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{render.PrometheusTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 		})
@@ -1008,7 +1009,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			}
 			certificateManager, err := certificatemanager.Create(c, nil, "")
 			Expect(err).NotTo(HaveOccurred())
-			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{"render.PrometheusTLSSecretName"})
+			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{render.PrometheusTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 		})

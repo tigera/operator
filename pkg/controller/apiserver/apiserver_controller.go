@@ -233,6 +233,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	var amazon *operatorv1.AmazonCloudIntegration
 	var managementCluster *operatorv1.ManagementCluster
 	var managementClusterConnection *operatorv1.ManagementClusterConnection
+	var tunnelSecretPassthrough render.Component
 	if variant == operatorv1.TigeraSecureEnterprise {
 		managementCluster, err = utils.GetManagementCluster(ctx, r.client)
 		if err != nil {
@@ -260,6 +261,9 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			if tunnelCASecret == nil {
 				// tunnelCASecret is a secret unaffected by the last two args (dnsNames and clusterDomain).
 				tunnelCASecret, err = certificatemanagement.NewKeyPair(render.VoltronTunnelSecret(), nil, "")
+
+				// Creating the voltron tunnel secret is not (yet) supported by certificate mananger.
+				tunnelSecretPassthrough = render.NewPassthrough(tunnelCASecret.Secret(common.OperatorNamespace()))
 			}
 			if err != nil {
 				log.Error(err, "Unable to get or create the tunnel secret")
@@ -322,6 +326,10 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			},
 		}),
 	}
+	if tunnelSecretPassthrough != nil {
+		components = append(components, tunnelSecretPassthrough)
+	}
+
 	if variant == operatorv1.TigeraSecureEnterprise {
 		packetCaptureCertSecret, err := certificateManager.GetOrCreateKeyPair(
 			r.client,
@@ -359,7 +367,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		components = append(components, pc,
 			rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 				Namespace:       render.PacketCaptureNamespace,
-				ServiceAccounts: []string{render.ApiServerServiceAccountName(variant)},
+				ServiceAccounts: []string{render.PacketCaptureServiceAccountName},
 				KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 					rcertificatemanagement.NewKeyPairOption(packetCaptureCertSecret, true, true),
 				},

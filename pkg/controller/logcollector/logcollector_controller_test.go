@@ -117,10 +117,12 @@ var _ = Describe("LogCollector controller tests", func() {
 			Expect(c.Create(ctx, &v3.LicenseKey{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"}})).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      relasticsearch.PublicCertSecret,
-					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
+			certificateManager, err := certificatemanager.Create(c, nil, "")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
+			kibanaTLS, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, kibanaTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ElasticsearchLogCollectorUserSecret,
@@ -129,8 +131,6 @@ var _ = Describe("LogCollector controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ElasticsearchEksLogForwarderUserSecret,
 					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-			certificateManager, err := certificatemanager.Create(c, nil, "")
-			Expect(err).NotTo(HaveOccurred())
 			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{render.PrometheusTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())

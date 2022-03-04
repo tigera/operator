@@ -295,7 +295,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 		trustedSecretNames = append(trustedSecretNames, render.ComplianceServerCertSecret)
 	}
-	trustedBundle := certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair())
+	trustedBundle := certificateManager.CreateTrustedBundle()
 	for _, secretName := range trustedSecretNames {
 		certificate, err := certificateManager.GetCertificate(r.client, secretName, common.OperatorNamespace())
 		if err != nil {
@@ -379,15 +379,17 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	var tunnelSecret *corev1.Secret
+	var tunnelSecret certificatemanagement.KeyPairInterface
 	var internalTrafficSecret certificatemanagement.KeyPairInterface
 	if managementCluster != nil {
 		// We expect that the secret that holds the certificates for tunnel certificate generation
 		// is already created by the Api Server
-		tunnelSecret = &corev1.Secret{}
-		err = r.client.Get(ctx, client.ObjectKey{Name: render.VoltronTunnelSecretName, Namespace: common.OperatorNamespace()}, tunnelSecret)
-		if err != nil {
-			r.status.SetDegraded("Failed to check for the existence of management-cluster-connection secret", err.Error())
+		tunnelSecret, err = certificateManager.GetKeyPair(r.client, render.VoltronTunnelSecretName, common.OperatorNamespace())
+		if tunnelSecret == nil {
+			r.status.SetDegraded(fmt.Sprintf("Waiting for secret %s in namespace %s to be available", render.VoltronTunnelSecretName, common.OperatorNamespace()), "")
+			return reconcile.Result{}, err
+		} else if err != nil {
+			r.status.SetDegraded(fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.VoltronTunnelSecretName, common.OperatorNamespace()), err.Error())
 			return reconcile.Result{}, nil
 		}
 
@@ -480,6 +482,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(internalTrafficSecret, false, true),
+				rcertificatemanagement.NewKeyPairOption(tunnelSecret, false, true),
 			},
 			TrustedBundle: trustedBundle,
 		}),

@@ -15,7 +15,6 @@
 package kubecontrollers
 
 import (
-	"fmt"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -409,7 +408,6 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	env := []corev1.EnvVar{
 		{Name: "KUBE_CONTROLLERS_CONFIG_NAME", Value: c.kubeControllerConfigName},
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
-		{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: fmt.Sprintf("/%s", render.ManagerInternalTLSSecretName)},
 		{Name: "ENABLED_CONTROLLERS", Value: strings.Join(c.enabledControllers, ",")},
 	}
 
@@ -427,6 +425,9 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 					corev1.EnvVar{Name: "OIDC_AUTH_GROUP_PREFIX", Value: c.cfg.Authentication.Spec.GroupsPrefix},
 				)
 			}
+		}
+		if c.cfg.ManagerInternalSecret != nil {
+			env = append(env, corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: c.cfg.ManagerInternalSecret.VolumeMountCertificateFilePath()})
 		}
 
 		if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {

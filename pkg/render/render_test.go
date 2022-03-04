@@ -424,7 +424,7 @@ func getTyphaNodeTLS(cli client.Client, certificateManager certificatemanager.Ce
 	typhaKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TyphaTLSSecretName, common.OperatorNamespace(), []string{render.FelixCommonName})
 	Expect(err).NotTo(HaveOccurred())
 
-	trustedBundle := certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair(), nodeKeyPair, typhaKeyPair)
+	trustedBundle := certificateManager.CreateTrustedBundle(nodeKeyPair, typhaKeyPair)
 
 	typhaNodeTLS := &render.TyphaNodeTLS{
 		TyphaSecret:   typhaKeyPair,

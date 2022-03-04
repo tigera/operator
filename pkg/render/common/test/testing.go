@@ -164,8 +164,10 @@ func ExpectVolumeMount(vms []v1.VolumeMount, name, path string) {
 	Expect(false).To(BeTrue(), fmt.Sprintf("Missing expected volume mount %s", name))
 }
 
+// CreateCertSecret creates a secret that is not signed by the certificate manager, making it useful for testing legacy
+// operator secrets or secrets that are brought to the cluster by the customer.
 func CreateCertSecret(name, namespace string, dnsNames ...string) *corev1.Secret {
-	cryptoCA, _ := tls.MakeCA(rmeta.TigeraOperatorCAIssuerPrefix)
+	cryptoCA, _ := tls.MakeCA(rmeta.TigeraOperatorCAIssuerPrefix + "@some-hash")
 	cfg, _ := cryptoCA.MakeServerCertForDuration(sets.NewString(dnsNames...), rmeta.DefaultCertificateDuration, tls.SetServerAuth, tls.SetClientAuth)
 	keyContent, crtContent := &bytes.Buffer{}, &bytes.Buffer{}
 	cfg.WriteCertConfig(crtContent, keyContent)

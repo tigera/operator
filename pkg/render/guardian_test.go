@@ -35,20 +35,29 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-var _ = Describe("Rendering tests", func() {
+var _ = FDescribe("Rendering tests", func() {
 	var g render.Component
 	var resources []client.Object
 
 	var renderGuardian = func(i operatorv1.InstallationSpec) {
 		addr := "127.0.0.1:1234"
-		secret, err := certificatemanagement.NewKeyPair(rtest.CreateCertSecret(render.GuardianSecretName, common.OperatorNamespace(), render.GuardianSecretName), []string{""}, "")
-
+		secret := &corev1.Secret{
+			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      render.GuardianSecretName,
+				Namespace: common.OperatorNamespace(),
+			},
+			Data: map[string][]byte{
+				"cert": []byte("foo"),
+				"key":  []byte("bar"),
+			},
+		}
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
-		bundle := certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair())
+		bundle := certificateManager.CreateTrustedBundle()
 
 		cfg := &render.GuardianConfiguration{
 			URL: addr,

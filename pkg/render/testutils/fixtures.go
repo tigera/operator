@@ -51,18 +51,3 @@ var KubeControllersUserSecret = corev1.Secret{
 		"password": []byte("password"),
 	},
 }
-
-var VoltronTunnelSecret = corev1.Secret{
-	TypeMeta: metav1.TypeMeta{
-		Kind:       "Secret",
-		APIVersion: "v1",
-	},
-	ObjectMeta: metav1.ObjectMeta{
-		Name:      render.VoltronTunnelSecretName,
-		Namespace: common.OperatorNamespace(),
-	},
-	Data: map[string][]byte{
-		corev1.TLSCertKey:       []byte("cert"),
-		corev1.TLSPrivateKeyKey: []byte("key"),
-	},
-}

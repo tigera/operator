@@ -28,7 +28,6 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -52,7 +51,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 			cli := fake.NewClientBuilder().WithScheme(scheme).Build()
 			certificateManager, err := certificatemanager.Create(cli, nil, "")
 			Expect(err).NotTo(HaveOccurred())
-			bundle := certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair())
+			bundle := certificateManager.CreateTrustedBundle()
 			secret, err := certificateManager.GetOrCreateKeyPair(cli, ElasticsearchMetricsServerTLSSecret, common.OperatorNamespace(), []string{""})
 			Expect(err).NotTo(HaveOccurred())
 

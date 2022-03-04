@@ -163,7 +163,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		// Verify env
 		expectedEnv := []corev1.EnvVar{
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
-			{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: fmt.Sprintf("/%s", render.ManagerInternalTLSSecretName)},
 			{Name: "ENABLED_CONTROLLERS", Value: "node"},
 			{Name: "KUBE_CONTROLLERS_CONFIG_NAME", Value: "default"},
 		}

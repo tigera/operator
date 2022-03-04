@@ -101,10 +101,11 @@ type mockESClient struct {
 
 var _ = Describe("LogStorage controller", func() {
 	var (
-		cli        client.Client
-		mockStatus *status.MockStatus
-		scheme     *runtime.Scheme
-		ctx        context.Context
+		cli                client.Client
+		mockStatus         *status.MockStatus
+		scheme             *runtime.Scheme
+		ctx                context.Context
+		certificateManager certificatemanager.CertificateManager
 	)
 
 	BeforeEach(func() {
@@ -118,8 +119,10 @@ var _ = Describe("LogStorage controller", func() {
 
 		ctx = context.Background()
 		cli = fake.NewFakeClientWithScheme(scheme)
-		certificateManager, err := certificatemanager.Create(cli, nil, "")
+		var err error
+		certificateManager, err = certificatemanager.Create(cli, nil, "")
 		Expect(err).NotTo(HaveOccurred())
+		Expect(cli.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
 		prometheusTLS, err := certificateManager.GetOrCreateKeyPair(cli, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{render.PrometheusTLSSecretName})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
@@ -546,9 +549,6 @@ var _ = Describe("LogStorage controller", func() {
 
 					// Create public ES and KB secrets
 					secret := &corev1.Secret{}
-					//Expect(cli.Get(ctx, esCertSecretKey, secret)).ShouldNot(HaveOccurred())
-					//esPublicSecret := createPubSecret(relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, secret.Data["tls.crt"], "tls.crt")
-					//Expect(cli.Create(ctx, esPublicSecret)).ShouldNot(HaveOccurred())
 
 					Expect(cli.Get(ctx, kbCertSecretKey, secret)).ShouldNot(HaveOccurred())
 					kbInternalSecret := createPubSecret(render.KibanaInternalCertSecret, render.KibanaNamespace, secret.Data["tls.crt"], "tls.crt")

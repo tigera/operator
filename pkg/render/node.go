@@ -1385,8 +1385,8 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 
 		if c.cfg.PrometheusServerTLS != nil {
 			extraNodeEnv = append(extraNodeEnv,
-				corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERCERTFILE", Value: fmt.Sprintf("/%s/%s", NodePrometheusTLSServerSecret, corev1.TLSCertKey)},
-				corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERKEYFILE", Value: fmt.Sprintf("/%s/%s", NodePrometheusTLSServerSecret, corev1.TLSPrivateKeyKey)},
+				corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERCERTFILE", Value: c.cfg.PrometheusServerTLS.VolumeMountCertificateFilePath()},
+				corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERKEYFILE", Value: c.cfg.PrometheusServerTLS.VolumeMountKeyFilePath()},
 				corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERCAFILE", Value: c.cfg.TLS.TrustedBundle.MountPath()},
 			)
 		}

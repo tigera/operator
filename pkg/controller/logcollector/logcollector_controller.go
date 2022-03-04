@@ -46,7 +46,6 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/monitor"
-	cmcontroller "github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/url"
 )
 
@@ -338,7 +337,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		r.status.SetDegraded("Prometheus secrets are not available yet, waiting until they become available", "")
 		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
 	}
-	trustedBundle := cmcontroller.CreateTrustedBundle(certificateManager.KeyPair(), certificate)
+	trustedBundle := certificateManager.CreateTrustedBundle(certificate)
 
 	certificateManager.AddToStatusManager(r.status, render.LogCollectorNamespace)
 

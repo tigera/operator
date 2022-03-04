@@ -39,7 +39,6 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
-	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -258,7 +257,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{name: render.ManagerUserSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
 			{name: render.ManagerClusterSettingsLayerTigera, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
 			{name: render.ManagerClusterSettingsViewDefault, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
-			{name: render.VoltronTunnelSecretName, ns: "tigera-manager", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-manager", ns: "tigera-manager", group: "", version: "v1", kind: "Service"},
 			{name: "tigera-manager", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: "tigera-manager", ns: "tigera-manager", group: "apps", version: "v1", kind: "Deployment"},
@@ -299,7 +297,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(voltron.VolumeMounts[3].Name).To(Equal(render.ManagerInternalTLSSecretName))
 		Expect(voltron.VolumeMounts[3].MountPath).To(Equal("/internal-manager-tls"))
 		Expect(voltron.VolumeMounts[4].Name).To(Equal(render.VoltronTunnelSecretName))
-		Expect(voltron.VolumeMounts[4].MountPath).To(Equal("/certs/tunnel"))
+		Expect(voltron.VolumeMounts[4].MountPath).To(Equal("/tigera-management-cluster-connection"))
 
 		Expect(len(deployment.Spec.Template.Spec.Volumes)).To(Equal(6))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ManagerTLSSecretName))
@@ -414,7 +412,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
-		bundle = certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair())
+		bundle = certificateManager.CreateTrustedBundle()
 	})
 
 	// renderManager passes in as few parameters as possible to render.Manager without it
@@ -540,7 +538,7 @@ func renderObjects(oidc bool, managementCluster *operatorv1.ManagementCluster, i
 		dexCfg = render.NewDexKeyValidatorConfig(authentication, nil, render.CreateDexTLSSecret("cn"), dns.DefaultClusterDomain)
 	}
 
-	var tunnelSecret *corev1.Secret
+	var tunnelSecret certificatemanagement.KeyPairInterface
 	var internalTraffic certificatemanagement.KeyPairInterface
 	scheme := runtime.NewScheme()
 	Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
@@ -550,8 +548,10 @@ func renderObjects(oidc bool, managementCluster *operatorv1.ManagementCluster, i
 	bundle := certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair())
 
 	if managementCluster != nil {
-		tunnelSecret = &testutils.VoltronTunnelSecret
+		tunnelSecret, err = certificateManager.GetOrCreateKeyPair(cli, render.VoltronTunnelSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
+		Expect(err).NotTo(HaveOccurred())
 		internalTraffic, err = certificateManager.GetOrCreateKeyPair(cli, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
+		Expect(err).NotTo(HaveOccurred())
 	}
 	managerTLS, err := certificateManager.GetOrCreateKeyPair(cli, render.ManagerTLSSecretName, common.OperatorNamespace(), []string{""})
 	Expect(err).NotTo(HaveOccurred())

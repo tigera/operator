@@ -343,7 +343,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	var esLicenseType render.ElasticsearchLicenseType
-	trustedBundle := certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair(), kibanaPublicCertSecret)
+	trustedBundle := certificateManager.CreateTrustedBundle(kibanaPublicCertSecret)
 
 	if managementClusterConnection == nil {
 		if esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger); err != nil {

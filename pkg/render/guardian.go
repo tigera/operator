@@ -17,8 +17,6 @@
 package render
 
 import (
-	"fmt"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -43,6 +41,7 @@ const (
 	GuardianClusterRoleBindingName = GuardianName
 	GuardianDeploymentName         = GuardianName
 	GuardianServiceName            = "tigera-guardian"
+	GuardianVolumeName             = "tigera-guardian-certs"
 	GuardianSecretName             = "tigera-managed-cluster-connection"
 )
 
@@ -58,7 +57,7 @@ type GuardianConfiguration struct {
 	PullSecrets       []*corev1.Secret
 	Openshift         bool
 	Installation      *operatorv1.InstallationSpec
-	TunnelSecret      certificatemanagement.KeyPairInterface
+	TunnelSecret      *corev1.Secret
 	TrustedCertBundle certificatemanagement.TrustedBundle
 }
 
@@ -91,7 +90,7 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		c.clusterRoleBinding(),
 		c.deployment(),
 		c.service(),
-		c.cfg.TunnelSecret.Secret(GuardianNamespace),
+		secret.CopyToNamespace(GuardianNamespace, c.cfg.TunnelSecret)[0],
 		c.cfg.TrustedCertBundle.ConfigMap(GuardianNamespace),
 		// Add tigera-manager service account for impersonation
 		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider),
@@ -236,7 +235,14 @@ func (c *GuardianComponent) deployment() client.Object {
 func (c *GuardianComponent) volumes() []corev1.Volume {
 	return []corev1.Volume{
 		c.cfg.TrustedCertBundle.Volume(),
-		c.cfg.TunnelSecret.Volume(),
+		{
+			Name: GuardianVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: GuardianSecretName,
+				},
+			},
+		},
 	}
 }
 
@@ -247,11 +253,10 @@ func (c *GuardianComponent) container() []corev1.Container {
 			Image: c.image,
 			Env: []corev1.EnvVar{
 				{Name: "GUARDIAN_PORT", Value: "9443"},
-				{Name: "GUARDIAN_CERT_PATH", Value: fmt.Sprintf("/%s", VoltronTunnelSecretName)},
 				{Name: "GUARDIAN_LOGLEVEL", Value: "INFO"},
 				{Name: "GUARDIAN_VOLTRON_URL", Value: c.cfg.URL},
-				{Name: "VOLTRON_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
-				{Name: "VOLTRON_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+				{Name: "GUARDIAN_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+				{Name: "GUARDIAN_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 			},
 			VolumeMounts: c.volumeMounts(),
 			LivenessProbe: &corev1.Probe{
@@ -282,7 +287,11 @@ func (c *GuardianComponent) container() []corev1.Container {
 func (c *GuardianComponent) volumeMounts() []corev1.VolumeMount {
 	mounts := []corev1.VolumeMount{
 		c.cfg.TrustedCertBundle.VolumeMount(),
-		c.cfg.TunnelSecret.VolumeMount(),
+		{
+			Name:      GuardianVolumeName,
+			MountPath: "/certs/",
+			ReadOnly:  true,
+		},
 	}
 
 	return mounts
@@ -290,6 +299,6 @@ func (c *GuardianComponent) volumeMounts() []corev1.VolumeMount {
 
 func (c *GuardianComponent) annotations() map[string]string {
 	annotations := c.cfg.TrustedCertBundle.HashAnnotations()
-	annotations[c.cfg.TunnelSecret.HashAnnotationKey()] = c.cfg.TunnelSecret.HashAnnotationValue()
+	annotations["hash.operator.tigera.io/tigera-managed-cluster-connection"] = rmeta.AnnotationHash(c.cfg.TunnelSecret.Data)
 	return annotations
 }

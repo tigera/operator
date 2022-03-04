@@ -1068,6 +1068,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.status.SetDegraded("Error creating TLS certificate", err.Error())
 			return reconcile.Result{}, err
 		}
+		if nodePrometheusTLS != nil {
+			typhaNodeTLS.TrustedBundle.AddCertificates(nodePrometheusTLS)
+		}
 		prometheusClientCert, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
 		if err != nil {
 			log.Error(err, "Error creating TLS certificate")
@@ -1400,12 +1403,23 @@ func GetOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		} else {
-			data := keyPair.Secret(common.OperatorNamespace()).Data
-			if data != nil {
-				cn, uriSAN = string(data[render.CommonName]), string(data[render.URISAN])
-			}
+
 			if !keyPair.BYO() {
 				cn = commonName
+			} else {
+				// todo: Integrate this with the new certificate manager or find another alternative for uriSAN and cn.
+				secret, err := utils.GetSecret(context.Background(), cli, secretName, common.OperatorNamespace())
+				if err != nil {
+					errMsgs = append(errMsgs, err.Error())
+				} else if secret != nil {
+					data := secret.Data
+					if data != nil {
+						cn, uriSAN = string(data[render.CommonName]), string(data[render.URISAN])
+					}
+				}
+			}
+			if cn == "" && uriSAN == "" {
+				errMsgs = append(errMsgs, fmt.Sprintf("CertPair for Felix does not contain common-name or uri-san"))
 			}
 		}
 		return
@@ -1420,11 +1434,11 @@ func GetOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 		if len(configMap.Data[render.TyphaCABundleName]) == 0 {
 			errMsgs = append(errMsgs, fmt.Sprintf("ConfigMap %q does not have a field named %q", render.TyphaCAConfigMapName, render.TyphaCABundleName))
 		} else {
-			trustedBundle = certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair(), node, typha,
+			trustedBundle = certificateManager.CreateTrustedBundle(node, typha,
 				certificatemanagement.NewCertificate(render.TyphaCAConfigMapName, []byte(configMap.Data[render.TyphaCABundleName]), nil))
 		}
 	} else {
-		trustedBundle = certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair(), node, typha)
+		trustedBundle = certificateManager.CreateTrustedBundle(node, typha)
 	}
 	if len(errMsgs) != 0 {
 		return nil, fmt.Errorf(strings.Join(errMsgs, ";"))

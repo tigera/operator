@@ -72,11 +72,10 @@ const (
 
 // ManagementClusterConnection configuration constants
 const (
-	VoltronName                 = "tigera-voltron"
-	VoltronTunnelSecretName     = "tigera-management-cluster-connection"
-	voltronTunnelHashAnnotation = "hash.operator.tigera.io/voltron-tunnel"
-	defaultVoltronPort          = "9443"
-	defaultTunnelVoltronPort    = "9449"
+	VoltronName              = "tigera-voltron"
+	VoltronTunnelSecretName  = "tigera-management-cluster-connection"
+	defaultVoltronPort       = "9443"
+	defaultTunnelVoltronPort = "9449"
 )
 
 func Manager(cfg *ManagerConfiguration) (Component, error) {
@@ -93,12 +92,8 @@ func Manager(cfg *ManagerConfiguration) (Component, error) {
 	}
 
 	if cfg.ManagementCluster != nil {
-		// Copy tunnelSecret and internalTrafficSecret to TLS secrets
-		// tunnelSecret contains the ca cert to generate guardian certificates
-		// internalTrafficCert contains the cert used to communicated within the management K8S cluster
-		tlsSecrets = append(tlsSecrets, secret.CopyToNamespace(ManagerNamespace, cfg.TunnelSecret)...)
-		tlsAnnotations[voltronTunnelHashAnnotation] = rmeta.AnnotationHash(cfg.TunnelSecret.Data)
 		tlsAnnotations[cfg.InternalTrafficSecret.HashAnnotationKey()] = cfg.InternalTrafficSecret.HashAnnotationValue()
+		tlsAnnotations[cfg.TunnelSecret.HashAnnotationKey()] = cfg.InternalTrafficSecret.HashAnnotationValue()
 	}
 	return &managerComponent{
 		cfg:            cfg,
@@ -119,7 +114,7 @@ type ManagerConfiguration struct {
 	Openshift             bool
 	Installation          *operatorv1.InstallationSpec
 	ManagementCluster     *operatorv1.ManagementCluster
-	TunnelSecret          *corev1.Secret
+	TunnelSecret          certificatemanagement.KeyPairInterface
 	InternalTrafficSecret certificatemanagement.KeyPairInterface
 	ClusterDomain         string
 	ESLicenseType         ElasticsearchLicenseType
@@ -292,15 +287,7 @@ func (c *managerComponent) managerVolumes() []corev1.Volume {
 	if c.cfg.ManagementCluster != nil {
 		v = append(v,
 			c.cfg.InternalTrafficSecret.Volume(),
-			corev1.Volume{
-				// Append volume for tunnel certificate
-				Name: VoltronTunnelSecretName,
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						SecretName: VoltronTunnelSecretName,
-					},
-				},
-			},
+			c.cfg.TunnelSecret.Volume(),
 		)
 	}
 	if c.cfg.KeyValidatorConfig != nil {
@@ -411,12 +398,15 @@ func (c *managerComponent) managerOAuth2EnvVars() []corev1.EnvVar {
 
 // managerProxyContainer returns the container for the manager proxy container.
 func (c *managerComponent) managerProxyContainer() corev1.Container {
-	var keyPath, certPath, intKeyPath, intCertPath string
+	var keyPath, certPath, intKeyPath, intCertPath, tunnelKeyPath, tunnelCertPath string
 	if c.cfg.TLSKeyPair != nil {
 		keyPath, certPath = c.cfg.TLSKeyPair.VolumeMountKeyFilePath(), c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()
 	}
 	if c.cfg.InternalTrafficSecret != nil {
 		intKeyPath, intCertPath = c.cfg.InternalTrafficSecret.VolumeMountKeyFilePath(), c.cfg.InternalTrafficSecret.VolumeMountCertificateFilePath()
+	}
+	if c.cfg.TunnelSecret != nil {
+		tunnelKeyPath, tunnelCertPath = c.cfg.TunnelSecret.VolumeMountKeyFilePath(), c.cfg.TunnelSecret.VolumeMountCertificateFilePath()
 	}
 	env := []corev1.EnvVar{
 		{Name: "VOLTRON_PORT", Value: defaultVoltronPort},
@@ -430,6 +420,8 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		{Name: "VOLTRON_COMPLIANCE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_HTTPS_KEY", Value: keyPath},
 		{Name: "VOLTRON_HTTPS_CERT", Value: certPath},
+		{Name: "VOLTRON_TUNNEL_KEY", Value: tunnelKeyPath},
+		{Name: "VOLTRON_TUNNEL_CERT", Value: tunnelCertPath},
 		{Name: "VOLTRON_INTERNAL_HTTPS_KEY", Value: intKeyPath},
 		{Name: "VOLTRON_INTERNAL_HTTPS_CERT", Value: intCertPath},
 		{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
@@ -464,7 +456,7 @@ func (c *managerComponent) volumeMountsForProxyManager() []corev1.VolumeMount {
 
 	if c.cfg.ManagementCluster != nil {
 		mounts = append(mounts, c.cfg.InternalTrafficSecret.VolumeMount())
-		mounts = append(mounts, corev1.VolumeMount{Name: VoltronTunnelSecretName, MountPath: "/certs/tunnel", ReadOnly: true})
+		mounts = append(mounts, c.cfg.TunnelSecret.VolumeMount())
 	}
 
 	if c.cfg.KeyValidatorConfig != nil {

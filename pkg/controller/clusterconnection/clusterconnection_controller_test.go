@@ -84,7 +84,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		}
 		certificateManager, err := certificatemanager.Create(c, nil, dns.DefaultClusterDomain)
 		Expect(err).NotTo(HaveOccurred())
-
+		Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
 		secret, err := certificateManager.GetOrCreateKeyPair(c, render.GuardianSecretName, common.OperatorNamespace(), []string{"a"})
 		Expect(err).NotTo(HaveOccurred())
 

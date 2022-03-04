@@ -52,7 +52,7 @@ var _ = Describe("compliance rendering tests", func() {
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
-		bundle := certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair())
+		bundle := certificateManager.CreateTrustedBundle()
 		secret, err := certificateManager.GetOrCreateKeyPair(cli, render.ComplianceServerCertSecret, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
 		cfg = &render.ComplianceConfiguration{

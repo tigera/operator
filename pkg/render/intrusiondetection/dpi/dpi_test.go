@@ -178,7 +178,7 @@ var _ = Describe("DPI rendering tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		typhaKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TyphaTLSSecretName, common.OperatorNamespace(), []string{render.FelixCommonName})
 		Expect(err).NotTo(HaveOccurred())
-		trustedBundle := certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair(), nodeKeyPair, typhaKeyPair)
+		trustedBundle := certificateManager.CreateTrustedBundle(nodeKeyPair, typhaKeyPair)
 		typhaNodeTLS = &render.TyphaNodeTLS{
 			TyphaSecret:   typhaKeyPair,
 			NodeSecret:    nodeKeyPair,

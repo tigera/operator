@@ -231,7 +231,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	trustedBundle := certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair())
+	trustedBundle := certificateManager.CreateTrustedBundle()
 	for _, certificateName := range []string{
 		render.NodePrometheusTLSServerSecret,
 		esmetrics.ElasticsearchMetricsServerTLSSecret,

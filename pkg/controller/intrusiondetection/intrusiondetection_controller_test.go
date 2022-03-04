@@ -17,9 +17,10 @@ package intrusiondetection
 import (
 	"context"
 	"fmt"
-	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"time"
 
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
@@ -126,8 +127,14 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		Expect(c.Create(ctx, &operatorv1.LogCollector{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
 
+		certificateManager, err := certificatemanager.Create(c, nil, "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
+		kiibanaTLS, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, kiibanaTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+
 		Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, rtest.CreateCertSecret(relasticsearch.PublicCertSecret, common.OperatorNamespace(), render.GuardianSecretName)))
 		Expect(c.Create(ctx, rtest.CreateCertSecret(render.ElasticsearchIntrusionDetectionUserSecret, common.OperatorNamespace(), render.GuardianSecretName)))
 		Expect(c.Create(ctx, rtest.CreateCertSecret(render.ElasticsearchADJobUserSecret, common.OperatorNamespace(), render.GuardianSecretName)))
 		Expect(c.Create(ctx, rtest.CreateCertSecret(render.ElasticsearchPerformanceHotspotsUserSecret, common.OperatorNamespace(), render.GuardianSecretName)))

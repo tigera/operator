@@ -21,7 +21,6 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/render/monitor"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 func (r *ReconcileLogStorage) createEsMetrics(
@@ -70,7 +69,7 @@ func (r *ReconcileLogStorage) createEsMetrics(
 		r.status.SetDegraded("Prometheus secrets are not available yet, waiting until they become available", "")
 		return reconcile.Result{RequeueAfter: 5 * time.Second}, false, nil
 	}
-	trustedBundle := certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair(), prometheusCertificate)
+	trustedBundle := certificateManager.CreateTrustedBundle(prometheusCertificate)
 
 	serverTLS, err := certificateManager.GetOrCreateKeyPair(
 		r.client,

@@ -69,7 +69,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		prometheusClientKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{render.FelixCommonName})
 		Expect(err).NotTo(HaveOccurred())
-		bundle := certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair())
+		bundle := certificateManager.CreateTrustedBundle()
 		cfg = &monitor.Config{
 			Installation: &operatorv1.InstallationSpec{},
 			PullSecrets: []*corev1.Secret{

@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/openshift/library-go/pkg/crypto"
@@ -30,7 +31,6 @@ var (
 	ErrInvalidCertDNSNames = errors.New("certificate has the wrong DNS names")
 	errNoPrivateKeyPEM     = errors.New("key pair is missing a private key")
 	errNoCertificatePEM    = errors.New("certificate PEM is missing")
-	errCreatedByOldCA      = errors.New("certificate was created by an older ca")
 )
 
 type certificateManager struct {
@@ -48,8 +48,11 @@ type CertificateManager interface {
 	GetOrCreateKeyPair(cli client.Client, secretName, secretNamespace string, dnsNames []string) (certificatemanagement.KeyPairInterface, error)
 	// GetCertificate returns a Certificate. If the certificate is not found, nil is returned.
 	GetCertificate(cli client.Client, secretName, secretNamespace string) (certificatemanagement.CertificateInterface, error)
+	// CreateTrustedBundle creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.
+	CreateTrustedBundle(certificates ...certificatemanagement.CertificateInterface) certificatemanagement.TrustedBundle
 	// AddToStatusManager lets the status manager monitor pending CSRs if the certificate management is enabled.
 	AddToStatusManager(manager status.StatusManager, namespace string)
+	// KeyPair Returns the CA KeyPairInterface, so it can be rendered in the operator namespace.
 	KeyPair() certificatemanagement.KeyPairInterface
 }
 
@@ -138,8 +141,8 @@ func (cm *certificateManager) AddToStatusManager(statusManager status.StatusMana
 
 // GetOrCreateKeyPair returns a KeyPair. If one exists, some checks are performed. Otherwise, a new KeyPair is created.
 func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, secretNamespace string, dnsNames []string) (certificatemanagement.KeyPairInterface, error) {
-	keyPair, x509Cert, err := cm.getKeyPair(cli, secretName, secretNamespace, true)
-	if keyPair != nil && cm.keyPair.CertificateManagement != nil {
+	keyPair, x509Cert, err := cm.getKeyPair(cli, secretName, secretNamespace, false)
+	if keyPair != nil && keyPair.UseCertificateManagement() {
 		return certificateManagementKeyPair(cm, secretName, dnsNames), nil
 	}
 	if err != nil && !kerrors.IsNotFound(err) {
@@ -174,7 +177,7 @@ func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, 
 }
 
 // getKeyPair is an internal convenience method to retrieve a keypair or a certificate.
-func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNamespace string, mustIncludePrivateKey bool) (certificatemanagement.KeyPairInterface, *x509.Certificate, error) {
+func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNamespace string, readCertOnly bool) (certificatemanagement.KeyPairInterface, *x509.Certificate, error) {
 	secret := &corev1.Secret{}
 	err := cli.Get(context.Background(), types.NamespacedName{
 		Name:      secretName,
@@ -183,6 +186,7 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 	if err != nil {
 		if kerrors.IsNotFound(err) {
 			if cm.keyPair.CertificateManagement != nil {
+				// When certificate management is enabled, we expect that in most cases no secret will be present.
 				return certificateManagementKeyPair(cm, secretName, nil), nil, nil
 			}
 			return nil, nil, nil
@@ -190,7 +194,7 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 		return nil, nil, err
 	}
 	keyPEM, certPEM := getKeyCertPEM(secret)
-	if mustIncludePrivateKey {
+	if !readCertOnly {
 		if len(keyPEM) == 0 {
 			return nil, nil, errNoPrivateKeyPEM
 		}
@@ -202,18 +206,33 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 	if err != nil {
 		return nil, nil, err
 	}
+
 	if x509Cert.NotAfter.Before(time.Now()) || x509Cert.NotBefore.After(time.Now()) {
+		if !readCertOnly && strings.HasPrefix(x509Cert.Issuer.CommonName, rmeta.TigeraOperatorCAIssuerPrefix) {
+			if cm.keyPair.CertificateManagement != nil {
+				// When certificate management is enabled, we can simply return a certificate management key pair;
+				// the old secret will be deleted automatically.
+				return certificateManagementKeyPair(cm, secretName, nil), nil, nil
+			}
+			// We return nil, so a new secret will be created for expired (legacy) operator signed secrets.
+			return nil, nil, nil
+		}
+		// We return an error for byo secrets.
 		return nil, nil, fmt.Errorf("secret %s is not valid at this date", secretName)
 	}
 	var issuer certificatemanagement.KeyPairInterface
 	if x509Cert.Issuer.CommonName == rmeta.TigeraOperatorCAIssuerPrefix {
+		if cm.keyPair.CertificateManagement != nil {
+			return certificateManagementKeyPair(cm, secretName, nil), nil, nil
+		}
 		if string(x509Cert.AuthorityKeyId) == string(cm.AuthorityKeyId) {
 			issuer = cm.keyPair
 		} else {
-			if mustIncludePrivateKey {
+			if !readCertOnly {
+				// We want to return nothing, so a new secret will be created to overwrite this one.
 				return nil, nil, nil
 			}
-			return nil, nil, errCreatedByOldCA
+			return nil, nil, fmt.Errorf("certificate %s was created by an older ca", secretName)
 		}
 	}
 	return &certificatemanagement.KeyPair{
@@ -227,13 +246,13 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 
 // GetCertificate returns a Certificate. If the certificate is not found or outdated, a k8s.io NotFound error is returned.
 func (cm *certificateManager) GetCertificate(cli client.Client, secretName, secretNamespace string) (certificatemanagement.CertificateInterface, error) {
-	keyPair, _, err := cm.getKeyPair(cli, secretName, secretNamespace, false)
+	keyPair, _, err := cm.getKeyPair(cli, secretName, secretNamespace, true)
 	return keyPair, err
 }
 
 // GetKeyPair returns an existing KeyPair. If the KeyPair is not found, nil is returned.
 func (cm *certificateManager) GetKeyPair(cli client.Client, secretName, secretNamespace string) (certificatemanagement.KeyPairInterface, error) {
-	keyPair, _, err := cm.getKeyPair(cli, secretName, secretNamespace, true)
+	keyPair, _, err := cm.getKeyPair(cli, secretName, secretNamespace, false)
 	return keyPair, err
 }
 
@@ -248,9 +267,12 @@ func getKeyCertPEM(secret *corev1.Secret) ([]byte, []byte) {
 		legacySecretKeyName   = "key"  // Formerly known as certificatemanagement.ManagerSecretKeyName
 		legacySecretKeyName2  = "apiserver.key"
 		legacySecretCertName2 = "apiserver.crt"
-		legacySecretKeyName3  = "key.key"  // Formerly used for Felix and Typha.
-		legacySecretCertName3 = "cert.crt" // Formerly used for Felix and Typha.
-
+		legacySecretKeyName3  = "key.key"             // Formerly used for Felix and Typha.
+		legacySecretCertName3 = "cert.crt"            // Formerly used for Felix and Typha.
+		legacySecretKeyName4  = "managed-cluster.key" // Used for tunnel secrets
+		legacySecretCertName4 = "managed-cluster.crt"
+		legacySecretKeyName5  = "management-cluster.key"
+		legacySecretCertName5 = "management-cluster.crt"
 	)
 	data := secret.Data
 	for keyField, certField := range map[string]string{
@@ -258,6 +280,8 @@ func getKeyCertPEM(secret *corev1.Secret) ([]byte, []byte) {
 		legacySecretKeyName:     legacySecretCertName,
 		legacySecretKeyName2:    legacySecretCertName2,
 		legacySecretKeyName3:    legacySecretCertName3,
+		legacySecretKeyName4:    legacySecretCertName4,
+		legacySecretKeyName5:    legacySecretCertName5,
 	} {
 		key, cert := data[keyField], data[certField]
 		if len(cert) > 0 {
@@ -283,4 +307,9 @@ func HasExpectedDNSNames(cert *x509.Certificate, expectedDNSNames []string) erro
 		return nil
 	}
 	return ErrInvalidCertDNSNames
+}
+
+// CreateTrustedBundle creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.
+func (cm *certificateManager) CreateTrustedBundle(certificates ...certificatemanagement.CertificateInterface) certificatemanagement.TrustedBundle {
+	return certificatemanagement.CreateTrustedBundle(append([]certificatemanagement.CertificateInterface{cm.keyPair}, certificates...)...)
 }

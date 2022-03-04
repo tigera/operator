@@ -17,9 +17,11 @@ package apiserver
 import (
 	"context"
 	"fmt"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/tigera/operator/pkg/render/common/secret"
 
 	"github.com/stretchr/testify/mock"
 
@@ -27,13 +29,11 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/tls"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/test"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -56,9 +56,8 @@ var _ = Describe("apiserver controller tests", func() {
 		mockStatus            *status.MockStatus
 		installation          *operatorv1.Installation
 		certificateManagement *operatorv1.CertificateManagement
-		certificateManager    certificatemanager.CertificateManager
-		apiSecret             certificatemanagement.KeyPairInterface
-		packetCaptureSecret   certificatemanagement.KeyPairInterface
+		apiSecret             *corev1.Secret
+		packetCaptureSecret   *corev1.Secret
 	)
 
 	BeforeEach(func() {
@@ -94,11 +93,11 @@ var _ = Describe("apiserver controller tests", func() {
 		Expect(cli.Create(ctx, &operatorv1.APIServer{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 		})).ToNot(HaveOccurred())
-		certificateManager, err = certificatemanager.Create(cli, &installation.Spec, dns.DefaultClusterDomain)
+		cryptoCA, err := tls.MakeCA("byo-ca")
 		Expect(err).NotTo(HaveOccurred())
-		apiSecret, err = certificateManager.GetOrCreateKeyPair(cli, "tigera-apiserver-certs", common.OperatorNamespace(), dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(operatorv1.TigeraSecureEnterprise), "tigera-system", dns.DefaultClusterDomain))
+		apiSecret, err = secret.CreateTLSSecret(cryptoCA, "tigera-apiserver-certs", common.OperatorNamespace(), "key.key", "cert.crt", time.Hour, nil, dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(operatorv1.TigeraSecureEnterprise), "tigera-system", dns.DefaultClusterDomain)...)
 		Expect(err).NotTo(HaveOccurred())
-		packetCaptureSecret, err = certificateManager.GetOrCreateKeyPair(cli, render.PacketCaptureCertSecret, common.OperatorNamespace(), dns.GetServiceDNSNames(render.PacketCaptureServiceName, render.PacketCaptureNamespace, dns.DefaultClusterDomain))
+		packetCaptureSecret, err = secret.CreateTLSSecret(cryptoCA, render.PacketCaptureCertSecret, common.OperatorNamespace(), "key.key", "cert.crt", time.Hour, nil, dns.GetServiceDNSNames(render.PacketCaptureServiceName, render.PacketCaptureNamespace, dns.DefaultClusterDomain)...)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Set up a mock status
@@ -280,9 +279,9 @@ var _ = Describe("apiserver controller tests", func() {
 
 			secretName := render.ProjectCalicoApiServerTLSSecretName(operatorv1.TigeraSecureEnterprise)
 
-			Expect(cli.Create(ctx, apiSecret.Secret(common.OperatorNamespace()))).ShouldNot(HaveOccurred())
+			Expect(cli.Create(ctx, apiSecret)).ShouldNot(HaveOccurred())
 
-			Expect(cli.Create(ctx, packetCaptureSecret.Secret(common.OperatorNamespace()))).ShouldNot(HaveOccurred())
+			Expect(cli.Create(ctx, packetCaptureSecret)).ShouldNot(HaveOccurred())
 
 			r := ReconcileAPIServer{
 				client:        cli,

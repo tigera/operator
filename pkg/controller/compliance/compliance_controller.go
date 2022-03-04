@@ -303,7 +303,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, err
 		}
 	}
-	trustedBundle := certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair(), managerInternalTLSSecret)
+	trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret)
 
 	var complianceServerCertSecret certificatemanagement.KeyPairInterface
 	if managementClusterConnection == nil {

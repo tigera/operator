@@ -22,7 +22,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/openshift/library-go/pkg/crypto"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/test"
@@ -54,16 +56,19 @@ var _ = Describe("Test CertificateManagement suite", func() {
 	)
 
 	var (
-		cli                client.Client
-		scheme             *runtime.Scheme
-		installation       *operatorv1.InstallationSpec
-		cm                 *operatorv1.CertificateManagement
-		clusterDomain      = "cluster.local"
-		appDNSNames        = []string{appSecretName}
-		ctx                = context.TODO()
-		certificateManager certificatemanager.CertificateManager
-		legacySecret       *corev1.Secret
-		byoSecret          *corev1.Secret
+		cli                 client.Client
+		scheme              *runtime.Scheme
+		installation        *operatorv1.InstallationSpec
+		cm                  *operatorv1.CertificateManagement
+		clusterDomain       = "cluster.local"
+		appDNSNames         = []string{appSecretName}
+		ctx                 = context.TODO()
+		certificateManager  certificatemanager.CertificateManager
+		expiredSecret       *corev1.Secret
+		legacySecret        *corev1.Secret
+		expiredLegacySecret *corev1.Secret
+		byoSecret           *corev1.Secret
+		expiredByoSecret    *corev1.Secret
 	)
 	BeforeEach(func() {
 		// Create a Kubernetes client.
@@ -93,6 +98,17 @@ var _ = Describe("Test CertificateManagement suite", func() {
 		cryptoCA, err := tls.MakeCA("byo-ca")
 		Expect(err).NotTo(HaveOccurred())
 		byoSecret, err = secret.CreateTLSSecret(cryptoCA, appSecretName, appNs, "key.key", "cert.crt", time.Hour, nil, appSecretName)
+		Expect(err).NotTo(HaveOccurred())
+		expiredByoSecret, err = secret.CreateTLSSecret(cryptoCA, appSecretName, appNs, "key.key", "cert.crt", -time.Hour, nil, appSecretName)
+		Expect(err).NotTo(HaveOccurred())
+
+		legacyCryptoCA, err := tls.MakeCA(rmeta.TigeraOperatorCAIssuerPrefix + "@some-hash")
+		expiredLegacySecret, err = secret.CreateTLSSecret(legacyCryptoCA, appSecretName, appNs, "key", "cert", -time.Hour, nil, appSecretName)
+		Expect(err).NotTo(HaveOccurred())
+
+		ca, err := crypto.GetCAFromBytes(certificateManager.KeyPair().GetCertificatePEM(), certificateManager.KeyPair().Secret("").Data[corev1.TLSPrivateKeyKey])
+		Expect(err).NotTo(HaveOccurred())
+		expiredSecret, err = secret.CreateTLSSecret(ca, appSecretName, appNs, "key", "cert", -time.Hour, nil, appSecretName)
 		Expect(err).NotTo(HaveOccurred())
 
 	})
@@ -198,6 +214,49 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			certificate, err := certificateManager.GetCertificate(cli, appSecretName, appNs)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(certificate).NotTo(BeNil())
+		})
+
+		Describe("test certificate expiry", func() {
+			It("should create a new secret when it has expired", func() {
+				secret := expiredSecret
+				Expect(cli.Create(ctx, secret)).NotTo(HaveOccurred())
+				kp, err := certificateManager.GetOrCreateKeyPair(cli, secret.Name, secret.Namespace, []string{appSecretName})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(kp.GetCertificatePEM()).NotTo(Equal(secret.Data[corev1.TLSCertKey]))
+			})
+
+			It("should create a new secret when a legacy operator secret has expired", func() {
+				secret := expiredLegacySecret
+				Expect(cli.Create(ctx, secret)).NotTo(HaveOccurred())
+				kp, err := certificateManager.GetOrCreateKeyPair(cli, secret.Name, secret.Namespace, []string{appSecretName})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(kp.GetCertificatePEM()).NotTo(Equal(secret.Data[corev1.TLSCertKey]))
+			})
+
+			It("should return an error on byo expired secrets", func() {
+				secret := expiredByoSecret
+				Expect(cli.Create(ctx, secret)).NotTo(HaveOccurred())
+				_, err := certificateManager.GetOrCreateKeyPair(cli, secret.Name, secret.Namespace, []string{appSecretName})
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should ignore the expired secret when certificate management is enabled", func() {
+				secret := expiredSecret
+				Expect(cli.Create(ctx, secret)).NotTo(HaveOccurred())
+				installation.CertificateManagement = cm
+				certificateManagerCM, err := certificatemanager.Create(cli, installation, clusterDomain)
+				_, err = certificateManagerCM.GetOrCreateKeyPair(cli, secret.Name, secret.Namespace, []string{appSecretName})
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return an error on byo expired secrets when certificate management is enabled", func() {
+				secret := expiredByoSecret
+				Expect(cli.Create(ctx, secret)).NotTo(HaveOccurred())
+				installation.CertificateManagement = cm
+				certificateManagerCM, err := certificatemanager.Create(cli, installation, clusterDomain)
+				_, err = certificateManagerCM.GetOrCreateKeyPair(cli, secret.Name, secret.Namespace, []string{appSecretName})
+				Expect(err).To(HaveOccurred())
+			})
 		})
 	})
 
@@ -383,7 +442,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			Expect(legacy.GetIssuer()).NotTo(Equal(certificateManager.KeyPair()))
 
 			By("creating and validating a trusted certificate bundle")
-			trustedBundle := certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair(), cert, cert2, byo, legacy)
+			trustedBundle := certificateManager.CreateTrustedBundle(cert, cert2, byo, legacy)
 			Expect(trustedBundle.Volume()).To(Equal(corev1.Volume{
 				Name: certificatemanagement.TrustedCertConfigMapName,
 				VolumeSource: corev1.VolumeSource{

@@ -28,7 +28,10 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -184,13 +187,17 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	// Copy the secret from the operator namespace to the guardian namespace if it is present.
-	tunnelSecret, err := certificateManager.GetKeyPair(r.Client, render.GuardianSecretName, common.OperatorNamespace())
-	if tunnelSecret == nil || err != nil {
+	tunnelSecret := &corev1.Secret{}
+	err = r.Client.Get(ctx, types.NamespacedName{Name: render.GuardianSecretName, Namespace: common.OperatorNamespace()}, tunnelSecret)
+	if err != nil {
 		r.status.SetDegraded("Error retrieving secrets from guardian namespace", err.Error())
+		if !k8serrors.IsNotFound(err) {
+			return result, nil
+		}
 		return result, err
 	}
 
-	trustedCertBundle := certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair())
+	trustedCertBundle := certificateManager.CreateTrustedBundle()
 	for _, secretName := range []string{render.PacketCaptureCertSecret, render.PrometheusTLSSecretName} {
 		secret, err := certificateManager.GetCertificate(r.Client, secretName, common.OperatorNamespace())
 		if err != nil {

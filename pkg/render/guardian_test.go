@@ -35,7 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-var _ = FDescribe("Rendering tests", func() {
+var _ = Describe("Rendering tests", func() {
 	var g render.Component
 	var resources []client.Object
 

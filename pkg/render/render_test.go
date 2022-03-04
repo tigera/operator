@@ -124,7 +124,7 @@ func allCalicoComponents(
 	return []render.Component{namespaces, secretsAndConfigMaps, render.Typha(typhaCfg), render.Node(nodeCfg), kubecontrollers.NewCalicoKubeControllers(kcCfg), render.Windows(winCfg), nodeCertComponent}, nil
 }
 
-var _ = Describe("Rendering tests", func() {
+var _ = FDescribe("Rendering tests", func() {
 	var instance *operatorv1.InstallationSpec
 	var logBuffer bytes.Buffer
 	var logWriter *bufio.Writer
@@ -212,7 +212,7 @@ var _ = Describe("Rendering tests", func() {
 		instance.Variant = operatorv1.TigeraSecureEnterprise
 		instance.NodeMetricsPort = &nodeMetricsPort
 
-		c, err := allCalicoComponents(k8sServiceEp, instance, &operatorv1.ManagementCluster{}, nil, nil, typhaNodeTLS, internalManagerTLSSecret, nil, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
+		c, err := allCalicoComponents(k8sServiceEp, instance, &operatorv1.ManagementCluster{}, nil, nil, typhaNodeTLS, internalManagerKeyPair, nil, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 
 		expectedResources := []struct {
@@ -252,10 +252,6 @@ var _ = Describe("Rendering tests", func() {
 			{render.ManagerInternalTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
 			{common.KubeControllersDeploymentName, "", "policy", "v1beta1", "PodSecurityPolicy"},
 			{"calico-kube-controllers-metrics", common.CalicoNamespace, "", "v1", "Service"},
-
-			// windows upgrader objects.
-			{common.CalicoWindowsUpgradeResourceName, common.CalicoNamespace, "", "v1", "ServiceAccount"},
-			{common.CalicoWindowsUpgradeResourceName, common.CalicoNamespace, "apps", "v1", "DaemonSet"},
 
 			// Certificate Management objects
 			{certificatemanagement.TrustedCertConfigMapName, common.CalicoNamespace, "", "v1", "ConfigMap"},

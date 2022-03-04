@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
+
 package render
 
 import (
@@ -19,12 +20,13 @@ import (
 	"strconv"
 	"strings"
 
+	oprv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render/common/authentication"
-
-	oprv1 "github.com/tigera/operator/api/v1"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -222,7 +224,7 @@ func (d *dexBaseCfg) RedirectURIs() []string {
 	return redirectURIs
 }
 
-func (d *dexBaseCfg) RequiredConfigMaps(namespace string) []*corev1.ConfigMap {
+func (d *dexBaseCfg) RequiredConfigMaps(string) []*corev1.ConfigMap {
 	return nil
 }
 
@@ -323,7 +325,7 @@ func (d *DexKeyValidatorConfig) RequiredEnv(prefix string) []corev1.EnvVar {
 }
 
 // Append variables that are necessary for using the dex authenticator.
-func (d *dexRelyingPartyConfig) RequiredEnv(prefix string) []corev1.EnvVar {
+func (d *dexRelyingPartyConfig) RequiredEnv(string) []corev1.EnvVar {
 	return nil
 }
 
@@ -350,7 +352,7 @@ func (d *dexConfig) RequiredEnv(string) []corev1.EnvVar {
 
 func (d *dexConfig) RequiredVolumes() []corev1.Volume {
 
-	tlsVolumeSource := CertificateVolumeSource(d.certificateManagement, DexTLSSecretName)
+	tlsVolumeSource := certificatemanagement.CertificateVolumeSource(d.certificateManagement, DexTLSSecretName)
 	defaultMode := int32(420)
 	volumes := []corev1.Volume{
 		{

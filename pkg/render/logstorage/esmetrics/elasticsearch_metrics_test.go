@@ -17,10 +17,14 @@ package esmetrics
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/tigera/operator/pkg/ptr"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
@@ -42,6 +46,14 @@ var _ = Describe("Elasticsearch metrics", func() {
 			}
 
 			esConfig = relasticsearch.NewClusterConfig("cluster", 1, 1, 1)
+			scheme := runtime.NewScheme()
+			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+			cli := fake.NewClientBuilder().WithScheme(scheme).Build()
+			certificateManager, err := certificatemanager.Create(cli, nil, "")
+			Expect(err).NotTo(HaveOccurred())
+			bundle := certificateManager.CreateTrustedBundle()
+			secret, err := certificateManager.GetOrCreateKeyPair(cli, ElasticsearchMetricsServerTLSSecret, common.OperatorNamespace(), []string{""})
+			Expect(err).NotTo(HaveOccurred())
 
 			cfg = &Config{
 				Installation: installation,
@@ -54,12 +66,8 @@ var _ = Describe("Elasticsearch metrics", func() {
 					TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 					ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
 				ClusterDomain: "cluster.local",
-				ServerTLS: &corev1.Secret{
-					TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-					ObjectMeta: metav1.ObjectMeta{Name: ElasticsearchMetricsServerTLSSecret, Namespace: common.OperatorNamespace()}},
-				TrustedBundle: &corev1.ConfigMap{
-					TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
-					ObjectMeta: metav1.ObjectMeta{Name: render.PrometheusCABundle, Namespace: render.ElasticsearchNamespace}},
+				ServerTLS:     secret,
+				TrustedBundle: bundle,
 			}
 		})
 
@@ -86,9 +94,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 				{render.TigeraElasticsearchCertSecret, render.ElasticsearchNamespace, "", "v1", "Secret"},
 				{ElasticsearchMetricsName, render.ElasticsearchNamespace, "", "v1", "Service"},
 				{ElasticsearchMetricsName, render.ElasticsearchNamespace, "apps", "v1", "Deployment"},
-				{render.PrometheusCABundle, render.ElasticsearchNamespace, "", "v1", "ConfigMap"},
 				{ElasticsearchMetricsName, render.ElasticsearchNamespace, "", "v1", "ServiceAccount"},
-				{ElasticsearchMetricsServerTLSSecret, render.ElasticsearchNamespace, "", "v1", "Secret"},
 			}
 			Expect(len(resources)).To(Equal(len(expectedResources)))
 			for i, expectedRes := range expectedResources {
@@ -96,8 +102,6 @@ var _ = Describe("Elasticsearch metrics", func() {
 			}
 			deploy := rtest.GetResource(resources, ElasticsearchMetricsName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			service := rtest.GetResource(resources, ElasticsearchMetricsName, render.ElasticsearchNamespace, "", "v1", "Service").(*corev1.Service)
-			configMap := rtest.GetResource(resources, render.PrometheusCABundle, render.ElasticsearchNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
-			secret := rtest.GetResource(resources, ElasticsearchMetricsServerTLSSecret, render.ElasticsearchNamespace, "", "v1", "Secret").(*corev1.Secret)
 
 			expectedService := &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{
@@ -145,7 +149,9 @@ var _ = Describe("Elasticsearch metrics", func() {
 								Args: []string{"--es.uri=https://$(ELASTIC_USERNAME):$(ELASTIC_PASSWORD)@$(ELASTIC_HOST):$(ELASTIC_PORT)",
 									"--es.all", "--es.indices", "--es.indices_settings", "--es.shards", "--es.cluster_settings",
 									"--es.timeout=30s", "--es.ca=$(ELASTIC_CA)", "--web.listen-address=:9081",
-									"--web.telemetry-path=/metrics", "--tls.key=/tls/tls.key", "--tls.crt=/tls/tls.crt", "--ca.crt=/ca/tls.crt"},
+									"--web.telemetry-path=/metrics", "--tls.key=/tigera-ee-elasticsearch-metrics-tls/tls.key",
+									"--tls.crt=/tigera-ee-elasticsearch-metrics-tls/tls.crt",
+									"--ca.crt=/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 								Env: []corev1.EnvVar{
 									{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
 									{Name: "ELASTIC_SCHEME", Value: "https"},
@@ -191,34 +197,15 @@ var _ = Describe("Elasticsearch metrics", func() {
 									{Name: "ES_CURATOR_BACKEND_CERT", Value: "/etc/ssl/elastic/ca.pem"},
 								},
 								VolumeMounts: []corev1.VolumeMount{
-									{
-										Name:      ElasticsearchMetricsServerTLSSecret,
-										MountPath: "/tls",
-										ReadOnly:  true,
-									},
-									{
-										Name:      render.PrometheusCABundle,
-										MountPath: "/ca",
-										ReadOnly:  true,
-									},
+									cfg.ServerTLS.VolumeMount(),
+									cfg.TrustedBundle.VolumeMount(),
 									{Name: "elastic-ca-cert-volume", MountPath: "/etc/ssl/elastic/"},
 								},
 							}},
 							ServiceAccountName: ElasticsearchMetricsName,
 							Volumes: []corev1.Volume{
-								{
-									Name: ElasticsearchMetricsServerTLSSecret,
-									VolumeSource: corev1.VolumeSource{
-										Secret: &corev1.SecretVolumeSource{SecretName: ElasticsearchMetricsServerTLSSecret, DefaultMode: ptr.Int32ToPtr(420)}},
-								},
-								{
-									Name: render.PrometheusCABundle,
-									VolumeSource: corev1.VolumeSource{
-										ConfigMap: &corev1.ConfigMapVolumeSource{
-											LocalObjectReference: corev1.LocalObjectReference{Name: render.PrometheusCABundle},
-										},
-									},
-								},
+								cfg.ServerTLS.Volume(),
+								cfg.TrustedBundle.Volume(),
 								{
 									Name: "elastic-ca-cert-volume",
 									VolumeSource: corev1.VolumeSource{
@@ -233,12 +220,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 					},
 				},
 			}
-			expectedConfigMap := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: render.PrometheusCABundle, Namespace: render.ElasticsearchNamespace}}
-			expectedSecret := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: ElasticsearchMetricsServerTLSSecret, Namespace: render.ElasticsearchNamespace}}
-
 			Expect(service.Spec).To(Equal(expectedService.Spec))
-			Expect(configMap.Data).To(Equal(expectedConfigMap.Data))
-			Expect(secret.Data).To(Equal(expectedSecret.Data))
 			Expect(deploy.Annotations).To(Equal(expectedDeploy.Annotations))
 			Expect(deploy.Spec.Template.Spec.Volumes).To(Equal(expectedDeploy.Spec.Template.Spec.Volumes))
 			Expect(deploy.Spec.Template.Spec.Containers[0].VolumeMounts).To(Equal(expectedDeploy.Spec.Template.Spec.Containers[0].VolumeMounts))

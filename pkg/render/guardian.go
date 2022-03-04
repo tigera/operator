@@ -29,6 +29,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 // The names of the components related to the Guardian related rendered objects.
@@ -52,13 +53,12 @@ func Guardian(cfg *GuardianConfiguration) Component {
 
 // GuardianConfiguration contains all the config information needed to render the component.
 type GuardianConfiguration struct {
-	URL                  string
-	PullSecrets          []*corev1.Secret
-	Openshift            bool
-	Installation         *operatorv1.InstallationSpec
-	TunnelSecret         *corev1.Secret
-	PacketCaptureSecret  *corev1.Secret
-	PrometheusCertSecret *corev1.Secret
+	URL               string
+	PullSecrets       []*corev1.Secret
+	Openshift         bool
+	Installation      *operatorv1.InstallationSpec
+	TunnelSecret      *corev1.Secret
+	TrustedCertBundle certificatemanagement.TrustedBundle
 }
 
 type GuardianComponent struct {
@@ -91,7 +91,7 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		c.deployment(),
 		c.service(),
 		secret.CopyToNamespace(GuardianNamespace, c.cfg.TunnelSecret)[0],
-		secret.CopyToNamespace(GuardianNamespace, c.cfg.PacketCaptureSecret)[0],
+		c.cfg.TrustedCertBundle.ConfigMap(GuardianNamespace),
 		// Add tigera-manager service account for impersonation
 		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider),
 		managerServiceAccount(),
@@ -102,9 +102,6 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		managerClusterWideTigeraLayer(),
 		managerClusterWideDefaultView(),
 	)
-	if c.cfg.PrometheusCertSecret != nil {
-		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(GuardianNamespace, c.cfg.PrometheusCertSecret)...)...)
-	}
 
 	return objs, nil
 }
@@ -236,7 +233,8 @@ func (c *GuardianComponent) deployment() client.Object {
 }
 
 func (c *GuardianComponent) volumes() []corev1.Volume {
-	volumes := []corev1.Volume{
+	return []corev1.Volume{
+		c.cfg.TrustedCertBundle.Volume(),
 		{
 			Name: GuardianVolumeName,
 			VolumeSource: corev1.VolumeSource{
@@ -245,31 +243,7 @@ func (c *GuardianComponent) volumes() []corev1.Volume {
 				},
 			},
 		},
-		{
-			Name: PacketCaptureCertSecret,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					Items: []corev1.KeyToPath{{
-						Key:  "tls.crt",
-						Path: "tls.crt",
-					}},
-					SecretName: PacketCaptureCertSecret,
-				},
-			},
-		},
 	}
-	if c.cfg.PrometheusCertSecret != nil {
-		volumes = append(volumes, corev1.Volume{
-			Name: PrometheusTLSSecretName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-
-					SecretName: PrometheusTLSSecretName,
-				},
-			},
-		})
-	}
-	return volumes
 }
 
 func (c *GuardianComponent) container() []corev1.Container {
@@ -281,6 +255,8 @@ func (c *GuardianComponent) container() []corev1.Container {
 				{Name: "GUARDIAN_PORT", Value: "9443"},
 				{Name: "GUARDIAN_LOGLEVEL", Value: "INFO"},
 				{Name: "GUARDIAN_VOLTRON_URL", Value: c.cfg.URL},
+				{Name: "GUARDIAN_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+				{Name: "GUARDIAN_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 			},
 			VolumeMounts: c.volumeMounts(),
 			LivenessProbe: &corev1.Probe{
@@ -310,31 +286,19 @@ func (c *GuardianComponent) container() []corev1.Container {
 
 func (c *GuardianComponent) volumeMounts() []corev1.VolumeMount {
 	mounts := []corev1.VolumeMount{
+		c.cfg.TrustedCertBundle.VolumeMount(),
 		{
 			Name:      GuardianVolumeName,
 			MountPath: "/certs/",
 			ReadOnly:  true,
 		},
-		{
-			Name:      PacketCaptureCertSecret,
-			MountPath: "/certs/packetcapture",
-			ReadOnly:  true,
-		},
-	}
-	if c.cfg.PrometheusCertSecret != nil {
-		mounts = append(mounts, corev1.VolumeMount{Name: PrometheusTLSSecretName, MountPath: "/certs/prometheus", ReadOnly: true})
 	}
 
 	return mounts
 }
 
 func (c *GuardianComponent) annotations() map[string]string {
-	var annotations = make(map[string]string)
-
-	annotations[PacketCaptureTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.PacketCaptureSecret.Data)
-
-	if c.cfg.PrometheusCertSecret != nil {
-		annotations[prometheusTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.PrometheusCertSecret.Data)
-	}
+	annotations := c.cfg.TrustedCertBundle.HashAnnotations()
+	annotations["hash.operator.tigera.io/tigera-managed-cluster-connection"] = rmeta.AnnotationHash(c.cfg.TunnelSecret.Data)
 	return annotations
 }

@@ -135,6 +135,8 @@ func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
 		c.apiServiceAccount(),
 		c.apiRole(),
 		c.apiRoleBinding(),
+		c.apiClusterRole(),
+		c.apiClusterRoleBinding(),
 		c.apiService(),
 		c.apiDeployment(),
 	)

@@ -36,7 +36,7 @@ func pgDecorateENVVars(env []corev1.EnvVar, pgUserSecret string, pgCertsPath str
 			ValueFrom: configmap.GetEnvVarSource(pgConfig, PGConfigNameKey, false),
 		},
 		{
-			Name:      "IMAGE_ASSURANCE_DB_USERNAME",
+			Name:      "IMAGE_ASSURANCE_DB_USER_NAME",
 			ValueFrom: secret.GetEnvVarSource(pgUserSecret, PGUserSecretKey, false),
 		},
 		{

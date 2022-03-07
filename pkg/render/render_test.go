@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -124,7 +124,7 @@ func allCalicoComponents(
 	return []render.Component{namespaces, secretsAndConfigMaps, render.Typha(typhaCfg), render.Node(nodeCfg), kubecontrollers.NewCalicoKubeControllers(kcCfg), render.Windows(winCfg), nodeCertComponent}, nil
 }
 
-var _ = FDescribe("Rendering tests", func() {
+var _ = Describe("Rendering tests", func() {
 	var instance *operatorv1.InstallationSpec
 	var logBuffer bytes.Buffer
 	var logWriter *bufio.Writer

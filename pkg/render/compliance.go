@@ -749,10 +749,6 @@ func (c *complianceComponent) complianceServerVolumeMounts() []corev1.VolumeMoun
 		c.cfg.ComplianceServerCertSecret.VolumeMount(c.SupportedOSType()),
 	}
 
-	if c.cfg.KeyValidatorConfig != nil {
-		mounts = append(mounts, c.cfg.KeyValidatorConfig.RequiredVolumeMounts()...)
-	}
-
 	return mounts
 }
 
@@ -761,11 +757,6 @@ func (c *complianceComponent) complianceServerVolumes() []corev1.Volume {
 		c.cfg.ComplianceServerCertSecret.Volume(),
 		c.cfg.TrustedBundle.Volume(),
 	}
-
-	if c.cfg.KeyValidatorConfig != nil {
-		volumes = append(volumes, c.cfg.KeyValidatorConfig.RequiredVolumes()...)
-	}
-
 	return volumes
 }
 

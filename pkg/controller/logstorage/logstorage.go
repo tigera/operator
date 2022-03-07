@@ -23,11 +23,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
@@ -118,24 +116,6 @@ func (r *ReconcileLogStorage) createLogStorage(
 		return reconcile.Result{}, false, finalizerCleanup, nil
 	}
 
-	var dexCfg render.DexRelyingPartyConfig
-	// If the authentication CR is available and it is not configured to use the Tigera OIDC type then configure dex.
-	if authentication != nil && (authentication.Spec.OIDC == nil || authentication.Spec.OIDC.Type != operatorv1.OIDCTypeTigera) {
-		var dexCertSecret *corev1.Secret
-		dexCertSecret = &corev1.Secret{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexCertSecretName, Namespace: common.OperatorNamespace()}, dexCertSecret); err != nil {
-			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
-			return reconcile.Result{}, false, finalizerCleanup, err
-		}
-
-		dexSecret := &corev1.Secret{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexObjectName, Namespace: common.OperatorNamespace()}, dexSecret); err != nil {
-			r.status.SetDegraded("Failed to read dex tls secret", err.Error())
-			return reconcile.Result{}, false, finalizerCleanup, err
-		}
-		dexCfg = render.NewDexRelyingPartyConfig(authentication, dexCertSecret, dexSecret, r.clusterDomain)
-	}
-
 	var baseURL string
 	if authentication != nil && authentication.Spec.ManagerDomain != "" {
 		baseURL = authentication.Spec.ManagerDomain
@@ -166,7 +146,6 @@ func (r *ReconcileLogStorage) createLogStorage(
 		ESService:                   esService,
 		KbService:                   kbService,
 		ClusterDomain:               r.clusterDomain,
-		DexCfg:                      dexCfg,
 		BaseURL:                     baseURL,
 		ElasticLicenseType:          esLicenseType,
 		TrustedBundle:               trustedBundle,

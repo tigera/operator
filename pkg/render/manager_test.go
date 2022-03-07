@@ -228,12 +228,12 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		// Should render the correct resource based on test case.
 		resources := renderObjects(renderConfig{oidc: true, managementCluster: nil, installation: installation})
-		Expect(len(resources)).To(Equal(expectedResourcesNumber + 1)) //Extra tls secret was added.
+		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 		d := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		// tigera-manager volumes/volumeMounts checks.
-		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(5))
+		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(4))
 		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(oidcEnvVar))
-		Expect(len(d.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(2))
+		Expect(len(d.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(1))
 	})
 
 	It("should render multicluster settings properly", func() {
@@ -540,7 +540,7 @@ func renderObjects(roc renderConfig) []client.Object {
 				ManagerDomain: "https://127.0.0.1",
 				OIDC:          &operatorv1.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"}}}
 
-		dexCfg = render.NewDexKeyValidatorConfig(authentication, nil, render.CreateDexTLSSecret("cn"), dns.DefaultClusterDomain)
+		dexCfg = render.NewDexKeyValidatorConfig(authentication, nil, dns.DefaultClusterDomain)
 	}
 
 	var tunnelSecret certificatemanagement.KeyPairInterface

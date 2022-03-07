@@ -21,10 +21,6 @@ type KeyValidatorConfig interface {
 	RequiredAnnotations() map[string]string
 	// RequiredSecrets returns secrets that the KeyValidatorConfig implementation requires.
 	RequiredSecrets(namespace string) []*corev1.Secret
-	// RequiredVolumeMounts returns volume mounts that the KeyValidatorConfig implementation requires.
-	RequiredVolumeMounts() []corev1.VolumeMount
-	// RequiredVolumes returns volumes that the KeyValidatorConfig implementation requires.
-	RequiredVolumes() []corev1.Volume
 }
 
 func NewWellKnownConfig(issuerURL string) (*WellKnownConfig, error) {

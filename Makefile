@@ -769,3 +769,7 @@ test-calico-crds: $(BINDIR)/operator-$(ARCH)
 # fields won't necessarily be in the same order or indentation.
 test-enterprise-crds: $(BINDIR)/operator-$(ARCH)
 	$(BINDIR)/operator-$(ARCH) --print-enterprise-crds all >/dev/null 2>&1
+
+.PHONY: pre-commit
+pre-commit:
+	$(CONTAINERIZED) $(CALICO_BUILD) git-hooks/pre-commit-in-container

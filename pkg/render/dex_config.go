@@ -21,7 +21,6 @@ import (
 	"strings"
 
 	oprv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -42,8 +41,6 @@ const (
 	dexConfigMapAnnotation   = "hash.operator.tigera.io/tigera-dex-config"
 	dexIdpSecretAnnotation   = "hash.operator.tigera.io/tigera-idp-secret"
 	dexSecretAnnotation      = "hash.operator.tigera.io/tigera-dex-secret"
-	dexTLSSecretAnnotation   = "hash.operator.tigera.io/tigera-dex-tls-secret"
-	dexCertSecretAnnotation  = "hash.operator.tigera.io/tigera-dex-cert-secret"
 
 	// Constants related to secrets.
 	serviceAccountSecretField    = "serviceAccountSecret"
@@ -84,54 +81,29 @@ const (
 // DexConfig is a config for DexIdP itself.
 type DexConfig interface {
 	Connector() map[string]interface{}
-	CreateCertSecret() *corev1.Secret
 	RedirectURIs() []string
+	// RequiredVolumeMounts returns volume mounts that the KeyValidatorConfig implementation requires.
+	RequiredVolumeMounts() []corev1.VolumeMount
+	// RequiredVolumes returns volumes that the KeyValidatorConfig implementation requires.
+	RequiredVolumes() []corev1.Volume
 	authentication.KeyValidatorConfig
-}
-
-// DexRelyingPartyConfig is a config for relying parties / applications that use Dex as their IdP.
-type DexRelyingPartyConfig interface {
-	// JWKSURI returns the endpoint for public keys
-	JWKSURI() string
-	// TokenURI returns the endpoint for exchanging tokens
-	TokenURI() string
-	// UserInfoURI returns the endpoint for user info.
-	UserInfoURI() string
-	// ClientSecret returns the secret for Dex' auth endpoint
-	ClientSecret() []byte
-	// BaseURL returns the address where the Manager UI can be found. Ex: https://example.org
-	RequestedScopes() []string
-	// UsernameClaim returns the part of the JWT that represents a unique username.
-	UsernameClaim() string
-	BaseURL() string
-	authentication.KeyValidatorConfig
-}
-
-func NewDexRelyingPartyConfig(
-	authentication *oprv1.Authentication,
-	certSecret *corev1.Secret,
-	dexSecret *corev1.Secret,
-	clusterDomain string) DexRelyingPartyConfig {
-	return &dexRelyingPartyConfig{baseCfg(nil, authentication, nil, dexSecret, nil, certSecret, clusterDomain)}
 }
 
 func NewDexKeyValidatorConfig(
 	authentication *oprv1.Authentication,
 	idpSecret *corev1.Secret,
-	certSecret *corev1.Secret,
 	clusterDomain string) authentication.KeyValidatorConfig {
-	return &DexKeyValidatorConfig{baseCfg(nil, authentication, nil, nil, idpSecret, certSecret, clusterDomain)}
+	return &DexKeyValidatorConfig{baseCfg(nil, authentication, nil, idpSecret, clusterDomain)}
 }
 
 // Create a new DexConfig.
 func NewDexConfig(
 	certificateManagement *oprv1.CertificateManagement,
 	authentication *oprv1.Authentication,
-	tlsSecret *corev1.Secret,
 	dexSecret *corev1.Secret,
 	idpSecret *corev1.Secret,
 	clusterDomain string) DexConfig {
-	return &dexConfig{baseCfg(certificateManagement, authentication, tlsSecret, dexSecret, idpSecret, nil, clusterDomain)}
+	return &dexConfig{baseCfg(certificateManagement, authentication, dexSecret, idpSecret, clusterDomain)}
 }
 
 type DexKeyValidatorConfig struct {
@@ -142,18 +114,12 @@ type dexConfig struct {
 	*dexBaseCfg
 }
 
-type dexRelyingPartyConfig struct {
-	*dexBaseCfg
-}
-
 // Create a struct to hold the base configuration of dex.
 func baseCfg(
 	certificateManagement *oprv1.CertificateManagement,
 	authentication *oprv1.Authentication,
-	tlsSecret *corev1.Secret,
 	dexSecret *corev1.Secret,
 	idpSecret *corev1.Secret,
-	certSecret *corev1.Secret,
 	clusterDomain string) *dexBaseCfg {
 
 	// If the manager domain is not a URL, prepend https://.
@@ -178,10 +144,8 @@ func baseCfg(
 	return &dexBaseCfg{
 		certificateManagement: certificateManagement,
 		authentication:        authentication,
-		tlsSecret:             tlsSecret,
 		idpSecret:             idpSecret,
 		dexSecret:             dexSecret,
-		certSecret:            certSecret,
 		connectorType:         connType,
 		baseURL:               baseUrl,
 		clusterDomain:         clusterDomain,
@@ -191,10 +155,9 @@ func baseCfg(
 type dexBaseCfg struct {
 	certificateManagement *oprv1.CertificateManagement
 	authentication        *oprv1.Authentication
-	tlsSecret             *corev1.Secret
+	tlsSecret             certificatemanagement.KeyPairInterface
 	idpSecret             *corev1.Secret
 	dexSecret             *corev1.Secret
-	certSecret            *corev1.Secret
 	baseURL               string
 	connectorType         string
 	clusterDomain         string
@@ -254,10 +217,7 @@ func (d *dexBaseCfg) RequestedScopes() []string {
 func (d *dexBaseCfg) RequiredSecrets(namespace string) []*corev1.Secret {
 	var secrets []*corev1.Secret
 	if d.tlsSecret != nil {
-		secrets = append(secrets, secret.CopyToNamespace(namespace, d.tlsSecret)...)
-	}
-	if d.certSecret != nil {
-		secrets = append(secrets, secret.CopyToNamespace(namespace, d.certSecret)...)
+		secrets = append(secrets, d.tlsSecret.Secret(namespace))
 	}
 	if d.dexSecret != nil {
 		secrets = append(secrets, secret.CopyToNamespace(namespace, d.dexSecret)...)
@@ -275,7 +235,7 @@ func (d *dexConfig) RequiredAnnotations() map[string]string {
 	}
 
 	if d.tlsSecret != nil {
-		annotations[dexTLSSecretAnnotation] = rmeta.AnnotationHash(d.tlsSecret.Data)
+		annotations[d.tlsSecret.HashAnnotationKey()] = d.tlsSecret.HashAnnotationValue()
 	}
 
 	if d.idpSecret != nil {
@@ -287,23 +247,10 @@ func (d *dexConfig) RequiredAnnotations() map[string]string {
 	return annotations
 }
 
-// RequiredAnnotations returns the annotations that are relevant for a relying party config.
-func (d *dexRelyingPartyConfig) RequiredAnnotations() map[string]string {
-	var annotations = map[string]string{
-		authenticationAnnotation: rmeta.AnnotationHash([]interface{}{d.UsernameClaim(), d.BaseURL(), d.RequestedScopes()}),
-		dexCertSecretAnnotation:  rmeta.AnnotationHash(d.certSecret.Data),
-	}
-	if d.dexSecret != nil {
-		annotations[dexSecretAnnotation] = rmeta.AnnotationHash(d.dexSecret.Data)
-	}
-	return annotations
-}
-
 // RequiredAnnotations returns the annotations that are relevant for a validator config.
 func (d *DexKeyValidatorConfig) RequiredAnnotations() map[string]string {
 	var annotations = map[string]string{
 		authenticationAnnotation: rmeta.AnnotationHash([]interface{}{d.UsernameClaim(), d.BaseURL()}),
-		dexCertSecretAnnotation:  rmeta.AnnotationHash(d.certSecret.Data),
 	}
 	return annotations
 }
@@ -322,11 +269,6 @@ func (d *DexKeyValidatorConfig) RequiredEnv(prefix string) []corev1.EnvVar {
 		{Name: fmt.Sprintf("%sOIDC_AUTH_USERNAME_PREFIX", prefix), Value: d.authentication.Spec.UsernamePrefix},
 		{Name: fmt.Sprintf("%sOIDC_AUTH_GROUPS_PREFIX", prefix), Value: d.authentication.Spec.GroupsPrefix},
 	}
-}
-
-// Append variables that are necessary for using the dex authenticator.
-func (d *dexRelyingPartyConfig) RequiredEnv(string) []corev1.EnvVar {
-	return nil
 }
 
 // Append variables that are necessary for configuring dex.
@@ -386,45 +328,6 @@ func (d *dexConfig) RequiredVolumes() []corev1.Volume {
 	return volumes
 }
 
-// Add volume for Dex TLS secret.
-func (d *DexKeyValidatorConfig) RequiredVolumes() []corev1.Volume {
-	return []corev1.Volume{
-		{
-			Name: DexCertSecretName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: DexCertSecretName,
-					Items: []corev1.KeyToPath{
-						{Key: corev1.TLSCertKey, Path: "tls-dex.crt"},
-					},
-				},
-			},
-		},
-	}
-}
-
-// Add volume for Dex TLS secret.
-func (d *dexRelyingPartyConfig) RequiredVolumes() []corev1.Volume {
-	return []corev1.Volume{
-		{
-			Name: DexCertSecretName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: DexCertSecretName,
-					Items: []corev1.KeyToPath{
-						{Key: corev1.TLSCertKey, Path: "tls-dex.crt"},
-					},
-				},
-			},
-		},
-	}
-}
-
-// AppendDexVolumeMount adds mount for ubi base image trusted cert location
-func (d *DexKeyValidatorConfig) RequiredVolumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{{Name: DexCertSecretName, MountPath: "/etc/ssl/certs"}}
-}
-
 // AppendDexVolumeMount adds mount for ubi base image trusted cert location
 func (d *dexConfig) RequiredVolumeMounts() []corev1.VolumeMount {
 	volumeMounts := []corev1.VolumeMount{
@@ -454,44 +357,6 @@ func (d *dexConfig) RequiredVolumeMounts() []corev1.VolumeMount {
 		})
 	}
 	return volumeMounts
-}
-
-// AppendDexVolumeMount adds mount for ubi base image trusted cert location
-func (d *dexRelyingPartyConfig) RequiredVolumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{{Name: DexCertSecretName, MountPath: "/usr/share/elasticsearch/config/dex/"}}
-}
-
-func (d *dexRelyingPartyConfig) DexIssuer() string {
-	return fmt.Sprintf("%s/dex", d.BaseURL())
-}
-
-func (d *dexRelyingPartyConfig) AuthURI() string {
-	return fmt.Sprintf("%s/dex/auth", d.BaseURL())
-}
-
-func (d *dexRelyingPartyConfig) JWKSURI() string {
-	return fmt.Sprintf(jwksURI, d.clusterDomain)
-}
-
-func (d *dexRelyingPartyConfig) TokenURI() string {
-	return fmt.Sprintf(tokenURI, d.clusterDomain)
-}
-
-func (d *dexRelyingPartyConfig) UserInfoURI() string {
-	return fmt.Sprintf(userInfoURI, d.clusterDomain)
-}
-
-// CreateCertSecret creates the secret containing the certificate that others should mount in order to trust dex.
-func (d *dexConfig) CreateCertSecret() *corev1.Secret {
-	var certBytes []byte
-
-	if d.certificateManagement != nil {
-		certBytes = d.certificateManagement.CACert
-	} else {
-		certBytes = d.tlsSecret.Data[corev1.TLSCertKey]
-	}
-	return CreateCertificateSecret(certBytes, DexCertSecretName, common.OperatorNamespace())
-
 }
 
 // This func prepares the configuration and objects that will be rendered related to the connector and its secrets.

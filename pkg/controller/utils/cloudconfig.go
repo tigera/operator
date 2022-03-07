@@ -2,6 +2,7 @@ package utils
 
 import (
 	"context"
+
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render/common/cloudconfig"
 	corev1 "k8s.io/api/core/v1"

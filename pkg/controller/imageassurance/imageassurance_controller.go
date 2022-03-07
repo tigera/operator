@@ -1,0 +1,378 @@
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+
+package imageassurance
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/options"
+	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/render"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/imageassurance"
+	iarender "github.com/tigera/operator/pkg/render/imageassurance"
+
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
+)
+
+var log = logf.Log.WithName("controller_image_assurance")
+
+// Add creates a new ImageAssurance Controller and adds it to the Manager.
+// The Manager will set fields on the Controller and Start it when the Manager is Started.
+func Add(mgr manager.Manager, opts options.AddOptions) error {
+	var licenseAPIReady = &utils.ReadyFlag{}
+
+	reconciler := newReconciler(mgr, opts, licenseAPIReady)
+
+	c, err := controller.New("imageassurance-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
+	if err != nil {
+		return err
+	}
+
+	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		log.Error(err, "Failed to establish a connection to k8s")
+		return err
+	}
+
+	go utils.WaitToAddLicenseKeyWatch(c, k8sClient, log, licenseAPIReady)
+
+	return add(mgr, c)
+}
+
+// newReconciler returns a new *reconcile.Reconciler.
+func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag) reconcile.Reconciler {
+	r := &ReconcileImageAssurance{
+		client:          mgr.GetClient(),
+		scheme:          mgr.GetScheme(),
+		provider:        opts.DetectedProvider,
+		status:          status.New(mgr.GetClient(), "imageassurance", opts.KubernetesVersion),
+		clusterDomain:   opts.ClusterDomain,
+		licenseAPIReady: licenseAPIReady,
+	}
+	r.status.Run(opts.ShutdownContext)
+	return r
+}
+
+// add adds watches for resources that are available at startup.
+func add(mgr manager.Manager, c controller.Controller) error {
+	var err error
+
+	// Watch for changes to primary resource ImageAssurance.
+	err = c.Watch(&source.Kind{Type: &operatorv1.ImageAssurance{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return err
+	}
+
+	if err = imageset.AddImageSetWatch(c); err != nil {
+		return fmt.Errorf("ImageAssurance-controller failed to watch ImageSet: %w", err)
+	}
+
+	if err = utils.AddNetworkWatch(c); err != nil {
+		log.V(5).Info("Failed to create network watch", "err", err)
+		return fmt.Errorf("ImageAssurance-controller failed to watch Tigera network resource: %v", err)
+	}
+
+	// Watch configmaps created for postgres in operator namespace.
+	for _, cm := range []string{iarender.PGConfigMapName} {
+		if err = utils.AddConfigMapWatch(c, cm, common.OperatorNamespace()); err != nil {
+			return fmt.Errorf("ImageAssurance-controller failed to watch ConfigMap %s: %v", cm, err)
+		}
+	}
+
+	// Watch secrets created for postgres in operator namespace.
+	for _, s := range []string{iarender.PGUserSecretName, iarender.PGCertSecretName, iarender.ManagerCertSecretName,
+		iarender.APICertSecretName} {
+		if err = utils.AddSecretsWatch(c, s, common.OperatorNamespace()); err != nil {
+			return fmt.Errorf("ImageAssurance-controller failed to watch Secret %s: %v", s, err)
+		}
+	}
+
+	return nil
+}
+
+// Blank assignment to verify that ReconcileImageAssurance implements reconcile.Reconciler.
+var _ reconcile.Reconciler = &ReconcileImageAssurance{}
+
+// ReconcileImageAssurance reconciles a ImageAssurance object.
+type ReconcileImageAssurance struct {
+	// This client, initialized using mgr.Client() above, is a split client
+	// that reads objects from the cache and writes to the apiserver.
+	client          client.Client
+	scheme          *runtime.Scheme
+	provider        operatorv1.Provider
+	status          status.StatusManager
+	clusterDomain   string
+	licenseAPIReady *utils.ReadyFlag
+}
+
+// Reconcile reads that state of the cluster for a ImageAssurance object and makes changes
+// based on the state read and what is in the ImageAssurance.Spec.
+func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+	reqLogger.Info("Reconciling ImageAssurance")
+
+	ia, err := getImageAssurance(ctx, r.client)
+
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Request object not found, could have been deleted after reconcile request.
+			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
+			reqLogger.Info("ImageAssurance object not found")
+
+			r.status.OnCRNotFound()
+			return reconcile.Result{}, nil
+		}
+		reqLogger.Error(err, "Error querying for ImageAssurance")
+		r.status.SetDegraded("Error querying for ImageAssurance", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	variant, installation, err := utils.GetInstallation(ctx, r.client)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			reqLogger.Error(err, "Installation not found")
+			r.status.SetDegraded("Installation not found", err.Error())
+			return reconcile.Result{}, nil
+		}
+		reqLogger.Error(err, "Error querying installation")
+		r.status.SetDegraded("Error querying installation", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
+	if err != nil {
+		reqLogger.Error(err, "Error retrieving image pull secrets")
+		r.status.SetDegraded("Error retrieving image pull secrets", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	pgConfig, err := getPGConfig(r.client)
+	if err != nil {
+		reqLogger.Error(err, "Error retrieving postgres configuration")
+		r.status.SetDegraded("Error retrieving postgres configuration", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	pgUserSecret, err := getPGUserSecret(r.client)
+	if err != nil {
+		reqLogger.Error(err, "Error retrieving postgres user secret")
+		r.status.SetDegraded("Error retrieving postgres secret", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	pgCertSecret, err := getPGCertSecret(r.client)
+	if err != nil {
+		reqLogger.Error(err, "Error retrieving postgres cert secret")
+		r.status.SetDegraded("Error retrieving postgres cert secret", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	internalMgrSecret, err := utils.ValidateCertPair(r.client, common.OperatorNamespace(), render.ManagerInternalTLSSecretName,
+		render.ManagerInternalSecretKeyName, render.ManagerInternalSecretCertName)
+
+	if err != nil {
+		reqLogger.Error(err, err.Error())
+		r.status.SetDegraded("Error retrieving internal manager tls secret", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	if internalMgrSecret == nil {
+		reqLogger.Info("Waiting for internal manager tls certificate to be available")
+		r.status.SetDegraded("Waiting for internal manager tls certificate to be available", "")
+		return reconcile.Result{}, nil
+	}
+
+	tlsSecret, err := getAPICertSecret(r.client, r.clusterDomain)
+	if err != nil {
+		reqLogger.Error(err, err.Error())
+		r.status.SetDegraded("Error in ensuring TLS certificate for image-assurance api", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	ch := utils.NewComponentHandler(log, r.client, r.scheme, ia)
+
+	config := &imageassurance.Config{
+		PullSecrets:       pullSecrets,
+		Installation:      installation,
+		OsType:            rmeta.OSTypeLinux,
+		PGConfig:          pgConfig,
+		PGCertSecret:      pgCertSecret,
+		PGUserSecret:      pgUserSecret,
+		TLSSecret:         tlsSecret,
+		InternalMgrSecret: internalMgrSecret,
+	}
+
+	components := []render.Component{render.NewPassthrough([]client.Object{tlsSecret}...)}
+	components = append(components, imageassurance.ImageAssurance(config))
+
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, components...); err != nil {
+		reqLogger.Error(err, "Error with images from ImageSet")
+		r.status.SetDegraded("Error with images from ImageSet", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	// new handler to handle the component.
+	for _, component := range components {
+		if err := ch.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+			reqLogger.Error(err, "Error creating / updating resource")
+			r.status.SetDegraded("Error creating / updating resource", err.Error())
+			return reconcile.Result{}, err
+		}
+	}
+
+	// Clear the degraded bit since we've reached this far.
+	r.status.ClearDegraded()
+
+	if !r.status.IsAvailable() {
+		// Schedule a kick to check again in the near future, hopefully by then things will be available.
+		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+
+	// Everything is available - update the CRD status.
+	ia.Status.State = operatorv1.TigeraStatusReady
+	if err = r.client.Status().Update(ctx, ia); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	return reconcile.Result{}, nil
+}
+
+// getImageAssurance returns the default ImageAssurance instance.
+func getImageAssurance(ctx context.Context, cli client.Client) (*operatorv1.ImageAssurance, error) {
+	instance := &operatorv1.ImageAssurance{}
+	err := cli.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
+	if err != nil {
+		return nil, err
+	}
+
+	return instance, nil
+}
+
+// getPGUserSecret returns the PostgreSQL user secret.
+func getPGUserSecret(client client.Client) (*corev1.Secret, error) {
+	us := &corev1.Secret{}
+	snn := types.NamespacedName{
+		Name:      iarender.PGUserSecretName,
+		Namespace: common.OperatorNamespace(),
+	}
+
+	if err := client.Get(context.Background(), snn, us); err != nil {
+		return nil, fmt.Errorf("failed to read secret %q: %s", iarender.PGUserSecretName, err)
+	}
+
+	if user, ok := us.Data[iarender.PGUserSecretKey]; !ok || len(user) == 0 {
+		return nil, fmt.Errorf("expected secret %q to have a field named %q",
+			iarender.PGUserSecretName, iarender.PGUserSecretKey)
+	}
+
+	if pass, ok := us.Data[iarender.PGUserPassKey]; !ok || len(pass) == 0 {
+		return nil, fmt.Errorf("expected secret %q to have a field named %q",
+			iarender.PGUserSecretName, iarender.PGUserPassKey)
+	}
+
+	return us, nil
+
+}
+
+// getPGCertSecret returns the PostgreSQL server secret.
+func getPGCertSecret(client client.Client) (*corev1.Secret, error) {
+	cs := &corev1.Secret{}
+	snn := types.NamespacedName{
+		Name:      iarender.PGCertSecretName,
+		Namespace: common.OperatorNamespace(),
+	}
+
+	if err := client.Get(context.Background(), snn, cs); err != nil {
+		return nil, fmt.Errorf("failed to read secret %q: %s", iarender.PGCertSecretName, err)
+	}
+
+	if ca, ok := cs.Data[iarender.PGServerCAKey]; !ok || len(ca) == 0 {
+		return nil, fmt.Errorf("expected secret %q to have a field named %q",
+			iarender.PGCertSecretName, iarender.PGServerCAKey)
+	}
+
+	if key, ok := cs.Data[iarender.PGClientKeyKey]; !ok || len(key) == 0 {
+		return nil, fmt.Errorf("expected secret %q to have a field named %q",
+			iarender.PGCertSecretName, iarender.PGClientKeyKey)
+	}
+
+	if cert, ok := cs.Data[iarender.PGClientCertKey]; !ok || len(cert) == 0 {
+		return nil, fmt.Errorf("expected secret %q to have a field named %q",
+			iarender.PGCertSecretName, iarender.PGClientCertKey)
+	}
+
+	return cs, nil
+}
+
+// getAPICertSecret returns the image assurance api tls secret.
+// It returns secret if available otherwise creates a new tls secret and returns it.
+func getAPICertSecret(client client.Client, clusterDomain string) (*corev1.Secret, error) {
+	// note that if secret is not found, ValidateCertPair returns nil, nil
+	secret, err := utils.ValidateCertPair(client, common.OperatorNamespace(), iarender.APICertSecretName,
+		corev1.TLSPrivateKeyKey, corev1.TLSCertKey)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// If secret is found, ensure it has valid DNS names, note that if secret is nil EnsureCertificateSecret creates a new one.
+	svcDNSNames := dns.GetServiceDNSNames(iarender.ResourceNameImageAssuranceAPI, iarender.NameSpaceImageAssurance, clusterDomain)
+	secret, _, err = utils.EnsureCertificateSecret(
+		iarender.APICertSecretName, secret, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, svcDNSNames...,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("error ensuring TLS certificate exists and has valid DNS names %q: %s", render.ManagerInternalTLSSecretName, err)
+	}
+
+	return secret, nil
+}
+
+// getPGConfig returns configuration to connect to PostgreSQL.
+func getPGConfig(client client.Client) (*corev1.ConfigMap, error) {
+	cm := &corev1.ConfigMap{}
+	nn := types.NamespacedName{
+		Name:      iarender.PGConfigMapName,
+		Namespace: common.OperatorNamespace(),
+	}
+
+	if err := client.Get(context.Background(), nn, cm); err != nil {
+		return nil, fmt.Errorf("failed to read secret %q: %s", iarender.PGConfigMapName, err)
+	}
+
+	if host, ok := cm.Data[iarender.PGConfigHostKey]; !ok || len(host) == 0 {
+		return nil, fmt.Errorf("expected configmap %q to have a field named %q",
+			iarender.PGConfigMapName, iarender.PGConfigHostKey)
+	}
+
+	if name, ok := cm.Data[iarender.PGConfigNameKey]; !ok || len(name) == 0 {
+		return nil, fmt.Errorf("expected configmap %q to have a field named %q",
+			iarender.PGConfigMapName, iarender.PGConfigNameKey)
+	}
+
+	if port, ok := cm.Data[iarender.PGConfigPortKey]; !ok || len(port) == 0 {
+		return nil, fmt.Errorf("expected configmap %q to have a field named %q",
+			iarender.PGConfigMapName, iarender.PGConfigPortKey)
+	}
+
+	return cm, nil
+}

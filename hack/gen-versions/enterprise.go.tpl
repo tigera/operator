@@ -250,6 +250,18 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "image-assurance-api" }}
+	ComponentImageAssuranceApi = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
+{{ with index .Components "image-assurance-scanner" }}
+	ComponentImageAssuranceScanner = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "windows" }}
 	ComponentTigeraWindows = component{
 		Version: "{{ .Version }}",
@@ -296,6 +308,8 @@ var (
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
+		ComponentImageAssuranceApi,
+		ComponentImageAssuranceScanner,
 		ComponentTigeraWindows,
 	}
 )

@@ -212,6 +212,16 @@ var (
 		Image:   "tigera/elasticsearch-metrics",
 	}
 
+	ComponentImageAssuranceApi = component{
+		Version: "v3.12.0",
+		Image:   "tigera/image-assurance-api",
+	}
+
+	ComponentImageAssuranceScanner = component{
+		Version: "v3.12.0",
+		Image:   "tigera/image-assurance-scanner",
+	}
+
 	ComponentTigeraWindows = component{
 		Version: "v3.12.0",
 		Image:   "tigera/calico-windows-upgrade",
@@ -256,6 +266,8 @@ var (
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
+		ComponentImageAssuranceApi,
+		ComponentImageAssuranceScanner,
 		ComponentTigeraWindows,
 	}
 )

@@ -25,6 +25,7 @@ import (
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta "k8s.io/api/batch/v1beta1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
@@ -821,6 +822,32 @@ var _ = Describe("Component handler tests", func() {
 			},
 		},
 	)
+
+	It("allows you to replace a secret if the types change", func() {
+		// Please note that a fake client does not behave exactly as it would on K8s:
+		// - A secret without a type in a real cluster automatically becomes type Opaque
+		// - An update where the secret type changes would be rejected in a real cluster, yet the fake client accepts it.
+		// This test serves to purpose of at least verifying that an update of a secret type works without error.
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-secret"},
+			Type:       corev1.SecretTypeOpaque,
+		}
+		fc := &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs: []client.Object{
+				secret,
+			},
+		}
+		err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Name: "my-secret"}, secret)).NotTo(HaveOccurred())
+		Expect(secret.Type).To(Equal(corev1.SecretTypeOpaque))
+		secret.Type = corev1.SecretTypeTLS
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Name: "my-secret"}, secret)).NotTo(HaveOccurred())
+		Expect(secret.Type).To(Equal(corev1.SecretTypeTLS))
+	})
 })
 
 // A fake component that only returns ready and always creates the "test-namespace" Namespace.

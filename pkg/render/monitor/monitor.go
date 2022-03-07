@@ -317,9 +317,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 	}
 
 	if mc.cfg.KeyValidatorConfig != nil {
-		volumeMounts = append(volumeMounts, mc.cfg.KeyValidatorConfig.RequiredVolumeMounts()...)
 		env = append(env, mc.cfg.KeyValidatorConfig.RequiredEnv("")...)
-		volumes = append(volumes, mc.cfg.KeyValidatorConfig.RequiredVolumes()...)
 	}
 
 	return &monitoringv1.Prometheus{

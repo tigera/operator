@@ -125,29 +125,6 @@ const (
 )
 
 const (
-	keystoreInitVolumeName = "elastic-internal-secure-settings"
-	keystoreInitMountPath  = "/mnt/elastic-internal/secure-settings"
-
-	keystoreInitScript = `#!/usr/bin/env bash
-set -eux
-
-echo "Initializing keystore."
-
-# create a keystore in the default data path
-# We use they elasticsearch-keystore list to test if the keystore has been initialized.
-! /usr/share/elasticsearch/bin/elasticsearch-keystore list && /usr/share/elasticsearch/bin/elasticsearch-keystore create
-
-# add all existing secret entries into it
-for filename in  /mnt/elastic-internal/secure-settings/*; do
-	[[ -e "$filename" ]] || continue # glob does not match
-	key=$(basename "$filename")
-	echo "Adding $key to the keystore."
-	/usr/share/elasticsearch/bin/elasticsearch-keystore add-file "$key" "$filename" -f
-done
-
-echo "Keystore initialization successful."
-`
-
 	csrRootCAConfigMapName = "elasticsearch-config"
 )
 
@@ -207,7 +184,6 @@ type ElasticsearchConfiguration struct {
 	ESService                   *corev1.Service
 	KbService                   *corev1.Service
 	ClusterDomain               string
-	DexCfg                      DexRelyingPartyConfig
 	BaseURL                     string // BaseUrl is where the manager is reachable, for setting Kibana publicBaseUrl
 	ElasticLicenseType          ElasticsearchLicenseType
 }
@@ -335,12 +311,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate, es.elasticsearchServiceAccount())
 		toCreate = append(toCreate, es.cfg.ClusterConfig.ConfigMap())
 
-		secureSettings := es.secureSettingsSecret()
-		if len(secureSettings.Data) > 0 {
-			toCreate = append(toCreate, secureSettings)
-		}
-
-		toCreate = append(toCreate, es.elasticsearchCluster(len(secureSettings.Data) > 0))
+		toCreate = append(toCreate, es.elasticsearchCluster())
 
 		// Kibana CRs
 		toCreate = append(toCreate, CreateNamespace(KibanaNamespace, es.cfg.Installation.KubernetesProvider))
@@ -390,10 +361,6 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 			CreateNamespace(ElasticsearchNamespace, es.cfg.Installation.KubernetesProvider),
 			es.elasticsearchExternalService(),
 		)
-	}
-
-	if es.supportsOIDC() {
-		toCreate = append(toCreate, secret.ToRuntimeObjects(es.cfg.DexCfg.RequiredSecrets(ElasticsearchNamespace)...)...)
 	}
 
 	if es.cfg.Installation.CertificateManagement != nil {
@@ -464,9 +431,6 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-jvm-heap-size.html#k8s-jvm-heap-size
 
 	var volumeMounts []corev1.VolumeMount
-	if es.supportsOIDC() {
-		volumeMounts = append(volumeMounts, es.cfg.DexCfg.RequiredVolumeMounts()...)
-	}
 
 	esContainer := corev1.Container{
 		Name: "elasticsearch",
@@ -544,29 +508,8 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	annotations := map[string]string{
 		ElasticsearchTLSHashAnnotation: rmeta.SecretsAnnotationHash(es.cfg.ElasticsearchSecrets...),
 	}
-	if es.supportsOIDC() {
-		initKeystore := corev1.Container{
-			Name:  "elastic-internal-init-keystore",
-			Image: es.esImage,
-			SecurityContext: &corev1.SecurityContext{
-				Privileged: ptr.BoolToPtr(false),
-			},
-			Command: []string{"/usr/bin/env", "bash", "-c", keystoreInitScript},
-			VolumeMounts: []corev1.VolumeMount{{
-				Name:      keystoreInitVolumeName,
-				MountPath: keystoreInitMountPath,
-				ReadOnly:  true,
-			}},
-		}
-		initContainers = append(initContainers, initKeystore)
-		annotations = es.cfg.DexCfg.RequiredAnnotations()
-	}
 
 	var volumes []corev1.Volume
-
-	if es.supportsOIDC() {
-		volumes = es.cfg.DexCfg.RequiredVolumes()
-	}
 
 	var autoMountToken bool
 	if es.cfg.Installation.CertificateManagement != nil {
@@ -727,7 +670,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 }
 
 // render the Elasticsearch CR that the ECK operator uses to create elasticsearch cluster
-func (es elasticsearchComponent) elasticsearchCluster(secureSettings bool) *esv1.Elasticsearch {
+func (es elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
 	elasticsearch := &esv1.Elasticsearch{
 		TypeMeta: metav1.TypeMeta{Kind: "Elasticsearch", APIVersion: "elasticsearch.k8s.elastic.co/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -751,29 +694,7 @@ func (es elasticsearchComponent) elasticsearchCluster(secureSettings bool) *esv1
 		},
 	}
 
-	if secureSettings {
-		elasticsearch.Spec.SecureSettings = []cmnv1.SecretSource{{
-			SecretName: ElasticsearchSecureSettingsSecretName,
-		}}
-	}
-
 	return elasticsearch
-}
-
-func (es elasticsearchComponent) secureSettingsSecret() *corev1.Secret {
-	secureSettings := make(map[string][]byte)
-
-	if es.supportsOIDC() {
-		secureSettings["xpack.security.authc.realms.oidc.oidc1.rp.client_secret"] = es.cfg.DexCfg.ClientSecret()
-	}
-
-	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ElasticsearchSecureSettingsSecretName,
-			Namespace: ElasticsearchNamespace,
-		},
-		Data: secureSettings,
-	}
 }
 
 // Determine the recommended JVM heap size as a string (with appropriate unit suffix) based on
@@ -945,24 +866,6 @@ func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVo
 		"node.data":                   "true",
 		"node.ingest":                 "true",
 		"cluster.max_shards_per_node": 10000,
-	}
-	if es.supportsOIDC() {
-		config["xpack.security.authc.realms.oidc.oidc1"] = map[string]interface{}{
-			"order":                       1,
-			"rp.client_id":                DexClientId,
-			"op.jwkset_path":              es.cfg.DexCfg.JWKSURI(),
-			"op.userinfo_endpoint":        es.cfg.DexCfg.UserInfoURI(),
-			"op.token_endpoint":           es.cfg.DexCfg.TokenURI(),
-			"claims.principal":            es.cfg.DexCfg.UsernameClaim(),
-			"claims.groups":               DefaultGroupsClaim,
-			"rp.response_type":            "code",
-			"rp.requested_scopes":         []string{"openid", "email", "profile", "groups", "offline_access"},
-			"rp.redirect_uri":             fmt.Sprintf("%s/tigera-kibana/api/security/oidc/callback", es.cfg.DexCfg.BaseURL()),
-			"rp.post_logout_redirect_uri": fmt.Sprintf("%s/tigera-kibana/logged_out", es.cfg.DexCfg.BaseURL()),
-			"op.issuer":                   es.cfg.DexCfg.Issuer(),
-			"op.authorization_endpoint":   fmt.Sprintf("%s/dex/auth", es.cfg.DexCfg.BaseURL()),
-			"ssl.certificate_authorities": []string{"/usr/share/elasticsearch/config/dex/tls-dex.crt"},
-		}
 	}
 
 	if es.cfg.Installation.CertificateManagement != nil {
@@ -1272,12 +1175,6 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 			"enabled":        true,
 			"licenseEdition": "enterpriseEdition",
 		},
-	}
-
-	if es.supportsOIDC() {
-		config["xpack.security.authc.providers"] = []string{"oidc", "basic"}
-		config["xpack.security.authc.oidc.realm"] = "oidc1"
-		config["server.xsrf.whitelist"] = []string{"/api/security/oidc/initiate_login"}
 	}
 
 	var initContainers []corev1.Container
@@ -1609,12 +1506,6 @@ func (es elasticsearchComponent) kibanaPodSecurityPolicy() *policyv1beta1.PodSec
 	psp := podsecuritypolicy.NewBasePolicy()
 	psp.GetObjectMeta().SetName("tigera-kibana")
 	return psp
-}
-
-func (es *elasticsearchComponent) supportsOIDC() bool {
-	return (es.cfg.ElasticLicenseType == ElasticsearchLicenseTypeEnterpriseTrial ||
-		es.cfg.ElasticLicenseType == ElasticsearchLicenseTypeEnterprise) &&
-		es.cfg.DexCfg != nil
 }
 
 func (es elasticsearchComponent) oidcUserRole() client.Object {

@@ -264,9 +264,6 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 
 // managerVolumes returns the volumes for the Tigera Secure manager component.
 func (c *managerComponent) managerVolumeMounts() []corev1.VolumeMount {
-	if c.cfg.KeyValidatorConfig != nil {
-		return c.cfg.KeyValidatorConfig.RequiredVolumeMounts()
-	}
 	return []corev1.VolumeMount{}
 }
 
@@ -289,9 +286,6 @@ func (c *managerComponent) managerVolumes() []corev1.Volume {
 			c.cfg.InternalTrafficSecret.Volume(),
 			c.cfg.TunnelSecret.Volume(),
 		)
-	}
-	if c.cfg.KeyValidatorConfig != nil {
-		v = append(v, c.cfg.KeyValidatorConfig.RequiredVolumes()...)
 	}
 
 	return v
@@ -418,6 +412,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		{Name: "VOLTRON_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_COMPLIANCE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+		{Name: "VOLTRON_DEX_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_HTTPS_KEY", Value: keyPath},
 		{Name: "VOLTRON_HTTPS_CERT", Value: certPath},
 		{Name: "VOLTRON_TUNNEL_KEY", Value: tunnelKeyPath},
@@ -459,10 +454,6 @@ func (c *managerComponent) volumeMountsForProxyManager() []corev1.VolumeMount {
 		mounts = append(mounts, c.cfg.TunnelSecret.VolumeMount())
 	}
 
-	if c.cfg.KeyValidatorConfig != nil {
-		mounts = append(mounts, c.cfg.KeyValidatorConfig.RequiredVolumeMounts()...)
-	}
-
 	return mounts
 }
 
@@ -481,7 +472,6 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 
 	if c.cfg.KeyValidatorConfig != nil {
 		env = append(env, c.cfg.KeyValidatorConfig.RequiredEnv("")...)
-		volumeMounts = append(volumeMounts, c.cfg.KeyValidatorConfig.RequiredVolumeMounts()...)
 	}
 
 	return corev1.Container{

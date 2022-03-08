@@ -11,8 +11,8 @@ if [[ ! "${tag}" =~ ^cloud-v[0-9]+\.[0-9]+\.[0-9]+-[0-9]+$ ]]; then
 	exit 1
 fi
 
-if [[ ! "$(git rev-parse --abbrev-ref HEAD)" =~ (release-v*.*|master|cloud-dev) ]]; then
-	echo "not on 'master', 'cloud-dev', or 'release-vX.Y'"
+if [[ ! "$(git rev-parse --abbrev-ref HEAD)" =~ (release-v*.*|master|cloud-dev|cloud-v*.*) ]]; then
+	echo "not on 'master', 'cloud-dev', 'cloud-v*.*', or 'release-vX.Y'"
 	exit 0
 fi
 

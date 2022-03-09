@@ -770,7 +770,7 @@ test-calico-crds: $(BINDIR)/operator-$(ARCH)
 test-enterprise-crds: $(BINDIR)/operator-$(ARCH)
 	$(BINDIR)/operator-$(ARCH) --print-enterprise-crds all >/dev/null 2>&1
 
-# Always install the git hooks to prevent potentiallyproblematic commits.
+# Always install the git hooks to prevent potentially problematic commits.
 hooks_installed:=$(shell ./install-git-hooks)
 
 .PHONY: install-git-hooks

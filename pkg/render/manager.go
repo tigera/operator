@@ -16,7 +16,6 @@ package render
 
 import (
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -149,6 +148,7 @@ type ManagerConfiguration struct {
 	ESLicenseType                 ElasticsearchLicenseType
 	Replicas                      *int32
 	TenantID                      string
+	ManagerCloudResources         ManagerCloudResources
 }
 
 type managerComponent struct {
@@ -234,6 +234,7 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	if c.cfg.PrometheusCertSecret != nil {
 		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.cfg.PrometheusCertSecret)...)...)
 	}
+	objs = c.addCloudResources(objs)
 	objs = append(objs, c.managerDeployment())
 	if c.cfg.KeyValidatorConfig != nil {
 		objs = append(objs, configmap.ToRuntimeObjects(c.cfg.KeyValidatorConfig.RequiredConfigMaps(ManagerNamespace)...)...)
@@ -276,6 +277,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	if c.cfg.PrometheusCertSecret != nil {
 		annotations[prometheusTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.PrometheusCertSecret.Data)
 	}
+
 	// Add a hash of the Secret to ensure if it changes the manager will be
 	// redeployed.	The following secrets are annotated:
 	// manager-tls : cert used for tigera UI
@@ -345,7 +347,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
-			Template: *podTemplate,
+			Template: c.decorateCloudDeploymentSpec(*podTemplate),
 		},
 	}
 	return d
@@ -527,47 +529,7 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 	}
 
 	envs = append(envs, c.managerOAuth2EnvVars()...)
-	envs = setManagerCloudEnvs(envs)
-	return envs
-}
-
-// Do this as a separate function to try to make updates in the future easier.
-func setManagerCloudEnvs(envs []corev1.EnvVar) []corev1.EnvVar {
-	envs = append(envs,
-		corev1.EnvVar{Name: "ENABLE_MANAGED_CLUSTERS_ONLY", Value: "true"},
-		corev1.EnvVar{Name: "LICENSE_EDITION", Value: "cloudEdition"},
-	)
-
-	// move extra env vars into Manager, but sort them alphabetically first,
-	// otherwise, since map iteration is random, they'll be added to the env vars in a random order,
-	// which will cause another reconciliation event when Manager is updated.
-	sortedKeys := []string{}
-	for k := range ManagerExtraEnv {
-		sortedKeys = append(sortedKeys, k)
-	}
-	sort.Strings(sortedKeys)
-
-	for _, key := range sortedKeys {
-		val := ManagerExtraEnv[key]
-		if key == "portalAPIURL" {
-			// support legacy functionality where 'portalAPIURL' was a special field used to set
-			// the portal url and enable support.
-			envs = append(envs,
-				corev1.EnvVar{Name: "CNX_PORTAL_URL", Value: val},
-				corev1.EnvVar{Name: "ENABLE_PORTAL_SUPPORT", Value: "true"})
-			continue
-		}
-
-		if key == "auth0OrgID" {
-			// support legacy functionality where 'auth0OrgID' was a special field used to set
-			// the org ID
-			envs = append(envs, corev1.EnvVar{Name: "CNX_AUTH0_ORG_ID", Value: val})
-			continue
-		}
-
-		envs = append(envs, corev1.EnvVar{Name: key, Value: val})
-	}
-
+	envs = c.setManagerCloudEnvs(envs)
 	return envs
 }
 
@@ -635,14 +597,14 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: "false"})
 	}
 
-	return corev1.Container{
+	return c.decorateCloudVoltronContainer(corev1.Container{
 		Name:            VoltronName,
 		Image:           c.proxyImage,
 		Env:             env,
 		VolumeMounts:    c.volumeMountsForProxyManager(),
 		LivenessProbe:   c.managerProxyProbe(),
 		SecurityContext: podsecuritycontext.NewBaseContext(),
-	}
+	})
 }
 
 func (c *managerComponent) volumeMountsForProxyManager() []corev1.VolumeMount {

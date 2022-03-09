@@ -31,7 +31,6 @@ import (
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
 	"github.com/tigera/operator/pkg/render/common/cloudconfig"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -174,6 +173,11 @@ func add(mgr manager.Manager, c controller.Controller, elasticExternal bool) err
 	err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("manager-controller failed to watch resource: %w", err)
+	}
+
+	err = addCloud(c)
+	if err != nil {
+		return err
 	}
 
 	if !elasticExternal {
@@ -525,6 +529,15 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	var mcr render.ManagerCloudResources
+	var result *reconcile.Result
+	// handle all the resources that are specific to calico cloud.
+	if mcr, result, err = r.handleCloudResources(ctx, reqLogger); err != nil {
+		return reconcile.Result{}, err
+	} else if result != nil {
+		return *result, nil
+	}
+
 	var components []render.Component
 	if tlsSecret != nil && operatorManagedCertSecret {
 		components = append(components, render.NewPassthrough(tlsSecret))
@@ -577,6 +590,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		ESLicenseType:                 elasticLicenseType,
 		Replicas:                      replicas,
 		TenantID:                      tenantId,
+		ManagerCloudResources:         mcr,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

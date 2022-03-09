@@ -271,15 +271,21 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration, kubeContr
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
-			// IPAM resources are manipulated when nodes are deleted.
+			// IPAM resources are manipulated in response to node and block updates, as well as periodic triggers.
 			APIGroups: []string{"crd.projectcalico.org"},
-			Resources: []string{"ippools", "ipreservations"},
+			Resources: []string{"ipreservations"},
 			Verbs:     []string{"list"},
 		},
 		{
 			APIGroups: []string{"crd.projectcalico.org"},
 			Resources: []string{"blockaffinities", "ipamblocks", "ipamhandles", "networksets"},
 			Verbs:     []string{"get", "list", "create", "update", "delete", "watch"},
+		},
+		{
+			// Pools are watched to maintain a mapping of blocks to IP pools.
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{"ippools"},
+			Verbs:     []string{"list", "watch"},
 		},
 		{
 			// Needs access to update clusterinformations.

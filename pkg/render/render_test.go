@@ -124,7 +124,7 @@ func allCalicoComponents(
 	return []render.Component{namespaces, secretsAndConfigMaps, render.Typha(typhaCfg), render.Node(nodeCfg), kubecontrollers.NewCalicoKubeControllers(kcCfg), render.Windows(winCfg), nodeCertComponent}, nil
 }
 
-var _ = FDescribe("Rendering tests", func() {
+var _ = Describe("Rendering tests", func() {
 	var instance *operatorv1.InstallationSpec
 	var logBuffer bytes.Buffer
 	var logWriter *bufio.Writer

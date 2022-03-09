@@ -130,7 +130,7 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling ImageAssurance")
 
-	ia, err := getImageAssurance(ctx, r.client)
+	ia, err := utils.GetImageAssurance(ctx, r.client)
 
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -254,17 +254,6 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 	}
 
 	return reconcile.Result{}, nil
-}
-
-// getImageAssurance returns the default ImageAssurance instance.
-func getImageAssurance(ctx context.Context, cli client.Client) (*operatorv1.ImageAssurance, error) {
-	instance := &operatorv1.ImageAssurance{}
-	err := cli.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
-	if err != nil {
-		return nil, err
-	}
-
-	return instance, nil
 }
 
 // getPGUserSecret returns the PostgreSQL user secret.

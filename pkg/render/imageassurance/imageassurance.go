@@ -14,7 +14,6 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -32,7 +31,6 @@ const (
 	APICertSecretName     = "tigera-image-assurance-api-cert-pair"
 	ManagerCertSecretName = "internal-manager-tls"
 
-	VoltronCertSecretName    = "tigera-image-assurance-api-cert-key"
 	mountPathPostgresCerts   = "/certs/db/"
 	mountPathAPITLSCerts     = "/certs/https/"
 	mountPathManagerTLSCerts = "/manager-tls/"
@@ -120,8 +118,6 @@ func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
 
 	// certificate pair for image assurance api tls
 	objs = append(objs, secret.ToRuntimeObjects(c.config.TLSSecret)...)
-	// passing image assurance api tls cert key to voltron for api->voltron https communication
-	objs = append(objs, c.voltronSecrets(c.config.TLSSecret))
 	// PostgreSQL secret for image assurance api to connect
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(NameSpaceImageAssurance, c.config.PGCertSecret)...)...)
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(NameSpaceImageAssurance, c.config.PGUserSecret)...)...)
@@ -158,14 +154,4 @@ func (c *component) Ready() bool {
 
 func (c *component) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
-}
-
-func (c *component) voltronSecrets(tls *corev1.Secret) *corev1.Secret {
-	return &corev1.Secret{
-		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: VoltronCertSecretName, Namespace: render.ManagerNamespace},
-		Data: map[string][]byte{
-			corev1.TLSCertKey: tls.Data[corev1.TLSCertKey],
-		},
-	}
 }

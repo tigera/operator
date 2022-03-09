@@ -574,6 +574,7 @@ type renderConfig struct {
 	managementCluster       *operatorv1.ManagementCluster
 	installation            *operatorv1.InstallationSpec
 	includeManagerTLSSecret bool
+	imageAssuranceEnabled   bool
 }
 
 func renderObjects(roc renderConfig) []client.Object {
@@ -598,6 +599,12 @@ func renderObjects(roc renderConfig) []client.Object {
 		managerTLS = rtest.CreateCertSecret(render.ManagerTLSSecretName, common.OperatorNamespace())
 	}
 
+	var cloudResources render.ManagerCloudResources
+	if roc.imageAssuranceEnabled {
+		voltronTls := rtest.CreateCertSecret(render.VoltronImageAssuranceSecretName, common.OperatorNamespace())
+		cloudResources.ImageAssuranceResources = &render.ImageAssuranceResources{TlsSecret: voltronTls}
+	}
+
 	esConfigMap := relasticsearch.NewClusterConfig("tenant_id.clusterTestName", 1, 1, 1)
 
 	cfg := &render.ManagerConfiguration{
@@ -614,6 +621,7 @@ func renderObjects(roc renderConfig) []client.Object {
 		ClusterDomain:                 dns.DefaultClusterDomain,
 		ESLicenseType:                 render.ElasticsearchLicenseTypeEnterpriseTrial,
 		Replicas:                      roc.installation.ControlPlaneReplicas,
+		ManagerCloudResources:         cloudResources,
 	}
 	component, err := render.Manager(cfg)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)

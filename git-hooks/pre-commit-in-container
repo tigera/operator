@@ -72,10 +72,6 @@ for filename in $changed_go_files; do
     fi
   fi
   if echo $filename | grep -q '_suite_test.go'; then
-    if ! grep -q 'HookLogrus' "$filename"; then
-      echo "  Test suite doesn't call HookLogrusForGinkgo(): $filename"
-      logrus_hook_check_failed=true
-    fi
     if ! grep -q 'NewJUnitReporter' "$filename"; then
       echo "  Test suite doesn't call NewJUnitReporter(): $filename"
       junit_hook_check_failed=true
@@ -122,17 +118,6 @@ if $focussing_check_failed; then
   echo "'FDescribe' instead of 'It' or 'Describe'."
 fi
 
-if $logrus_hook_check_failed; then
-  echo
-  echo "One or more test suites don't call HookLogrusForGinkgo()."
-  echo "If a suite doesn't call HookLogrusForGinkgo() then its logs won't be"
-  echo "correctly captured during UT runs.  Example:"
-  echo
-  echo 'import "github.com/projectcalico/libcalico-go/lib/testutils"'
-  echo 'func init() {'
-  echo '	testutils.HookLogrusForGinkgo()'
-  echo '}'
-fi
 if $junit_hook_check_failed; then
   echo
   echo "One or more test suites don't call NewJUnitReporter()."

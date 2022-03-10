@@ -49,12 +49,7 @@ func GetKeyValidatorConfig(ctx context.Context, cli client.Client, authenticatio
 				return nil, err
 			}
 		} else {
-			dexTLSSecret := &corev1.Secret{}
-			if err := cli.Get(ctx, types.NamespacedName{Name: render.DexCertSecretName, Namespace: common.OperatorNamespace()}, dexTLSSecret); err != nil {
-				return nil, err
-			}
-
-			keyValidatorConfig = render.NewDexKeyValidatorConfig(authenticationCR, idpSecret, dexTLSSecret, clusterDomain)
+			keyValidatorConfig = render.NewDexKeyValidatorConfig(authenticationCR, idpSecret, clusterDomain)
 		}
 	}
 

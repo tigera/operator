@@ -130,6 +130,7 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 			logCtx.V(2).Info("Failed converting object", "obj", obj)
 			return fmt.Errorf("Failed converting object %+v", obj)
 		}
+
 		// Check to see if the object exists or not.
 		err := c.client.Get(ctx, key, cur)
 		if err != nil {
@@ -155,7 +156,7 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 		logCtx.V(1).Info("Resource already exists, update it")
 
 		// if mergeState returns nil we don't want to update the object
-		if mobj := mergeState(obj, cur); mobj != nil {
+		if mobj := c.mergeState(obj, cur); mobj != nil {
 			switch obj.(type) {
 			case *batchv1.Job:
 				// Jobs can't be updated, they can't only be deleted then created
@@ -216,7 +217,7 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 }
 
 // mergeState returns the object to pass to Update given the current and desired object states.
-func mergeState(desired client.Object, current runtime.Object) client.Object {
+func (c *componentHandler) mergeState(desired client.Object, current runtime.Object) client.Object {
 	currentMeta := current.(metav1.ObjectMetaAccessor).GetObjectMeta()
 	desiredMeta := desired.(metav1.ObjectMetaAccessor).GetObjectMeta()
 
@@ -330,6 +331,14 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 		dui.SetOwnerReferences(cui.GetOwnerReferences())
 		return dui
 	default:
+		// Fill in defaults on the current object and compare to the cluster state. If the spec matches,
+		// then we don't need to update this object in the API.
+		c.scheme.Default(desired)
+		if reflect.DeepEqual(desired, current) {
+			log.V(0).Info("skipping object with no change", "obj", desired)
+			return nil
+		}
+
 		// Default to just using the desired state, with an updated RV.
 		return desired
 	}

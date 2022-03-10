@@ -72,10 +72,6 @@ for filename in $changed_go_files; do
     fi
   fi
   if echo $filename | grep -q '_suite_test.go'; then
-    if ! grep -q 'HookLogrus' "$filename"; then
-      echo "  Test suite doesn't call HookLogrusForGinkgo(): $filename"
-      logrus_hook_check_failed=true
-    fi
     if ! grep -q 'NewJUnitReporter' "$filename"; then
       echo "  Test suite doesn't call NewJUnitReporter(): $filename"
       junit_hook_check_failed=true

@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019,2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,7 +23,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -56,7 +55,7 @@ const (
 	IntrusionDetectionInstallerJobName = "intrusion-detection-es-job-installer"
 	IntrusionDetectionControllerName   = "intrusion-detection-controller"
 
-	ADJobPodTemplateBaseName = "tigera.io.adjob"
+	ADJobPodTemplateBaseName = "tigera.io.detectors"
 )
 
 func IntrusionDetection(cfg *IntrusionDetectionConfiguration) Component {
@@ -84,6 +83,7 @@ type intrusionDetectionComponent struct {
 	cfg               *IntrusionDetectionConfiguration
 	jobInstallerImage string
 	controllerImage   string
+	adJobsImage       string
 }
 
 func (c *intrusionDetectionComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -870,7 +870,6 @@ func (c *intrusionDetectionComponent) intrusionDetectionAnnotations() map[string
 
 func (c *intrusionDetectionComponent) intrusionDetectionADJobsPodTemplate() []client.Object {
 	trainingJobPodTemplate := c.getBaseIntrusionDetectionADJobPodTemplate(ADJobPodTemplateBaseName + ".training")
-
 	detecionADJobPodTemplate := c.getBaseIntrusionDetectionADJobPodTemplate(ADJobPodTemplateBaseName + ".detection")
 
 	return []client.Object{&trainingJobPodTemplate, &detecionADJobPodTemplate}
@@ -915,7 +914,7 @@ func (c *intrusionDetectionComponent) getBaseIntrusionDetectionADJobPodTemplate(
 					{
 						Name: "host-volume",
 						VolumeSource: corev1.VolumeSource{
-							HostPath: &v1.HostPathVolumeSource{
+							HostPath: &corev1.HostPathVolumeSource{
 								Path: "/home/idsuser/anomaly_detection_jobs/models",
 							},
 						},

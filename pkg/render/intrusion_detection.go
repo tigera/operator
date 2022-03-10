@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019,2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,12 +16,14 @@ package render
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,6 +32,8 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/render/common/elasticsearch"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rkibana "github.com/tigera/operator/pkg/render/common/kibana"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -49,6 +53,9 @@ const (
 	ElasticsearchPerformanceHotspotsUserSecret   = "tigera-ee-performance-hotspots-elasticsearch-access"
 
 	IntrusionDetectionInstallerJobName = "intrusion-detection-es-job-installer"
+	IntrusionDetectionControllerName   = "intrusion-detection-controller"
+
+	ADJobPodTemplateBaseName = "tigera.io.detectors"
 )
 
 func IntrusionDetection(cfg *IntrusionDetectionConfiguration) Component {
@@ -76,6 +83,7 @@ type intrusionDetectionComponent struct {
 	cfg               *IntrusionDetectionConfiguration
 	jobInstallerImage string
 	controllerImage   string
+	adJobsImage       string
 }
 
 func (c *intrusionDetectionComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -92,6 +100,11 @@ func (c *intrusionDetectionComponent) ResolveImages(is *operatorv1.ImageSet) err
 	}
 
 	c.controllerImage, err = components.GetReference(components.ComponentIntrusionDetectionController, reg, path, prefix, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	c.adJobsImage, err = components.GetReference(components.ComponentAnomalyDetectionJobs, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -120,6 +133,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(IntrusionDetectionNamespace, c.cfg.PullSecrets...)...)...)
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(IntrusionDetectionNamespace, c.cfg.ESSecrets...)...)...)
 	objs = append(objs, c.globalAlertTemplates()...)
+	objs = append(objs, c.intrusionDetectionADJobsPodTemplate()...)
 
 	if !c.cfg.ManagedCluster {
 		objs = append(objs, c.intrusionDetectionElasticsearchJob())
@@ -271,6 +285,28 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 			},
 			Verbs: []string{
 				"get", "watch",
+			},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"podtemplates"},
+			Verbs:     []string{"get"},
+		},
+		{
+			APIGroups: []string{"apps"},
+			Resources: []string{"deployments"},
+			Verbs:     []string{"get"},
+		},
+		{
+			APIGroups: []string{
+				"batch",
+			},
+			Resources: []string{
+				"cronjobs",
+				"jobs",
+			},
+			Verbs: []string{
+				"get", "list", "watch", "create", "update", "patch", "delete",
 			},
 		},
 	}
@@ -830,4 +866,113 @@ func (c *intrusionDetectionComponent) intrusionDetectionPSPClusterRoleBinding() 
 
 func (c *intrusionDetectionComponent) intrusionDetectionAnnotations() map[string]string {
 	return c.cfg.TrustedCertBundle.HashAnnotations()
+}
+
+func (c *intrusionDetectionComponent) intrusionDetectionADJobsPodTemplate() []client.Object {
+	trainingJobPodTemplate := c.getBaseIntrusionDetectionADJobPodTemplate(ADJobPodTemplateBaseName + ".training")
+	detecionADJobPodTemplate := c.getBaseIntrusionDetectionADJobPodTemplate(ADJobPodTemplateBaseName + ".detection")
+
+	return []client.Object{&trainingJobPodTemplate, &detecionADJobPodTemplate}
+}
+
+func (c *intrusionDetectionComponent) getBaseIntrusionDetectionADJobPodTemplate(podTemplateName string) corev1.PodTemplate {
+	privileged := false
+	if c.cfg.Openshift {
+		privileged = true
+	}
+
+	return corev1.PodTemplate{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "PodTemplate",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: IntrusionDetectionNamespace,
+			Name:      podTemplateName,
+		},
+		Template: corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      podTemplateName,
+				Namespace: IntrusionDetectionNamespace,
+				Labels: map[string]string{
+					"k8s-app": IntrusionDetectionControllerName,
+				},
+			},
+			Spec: corev1.PodSpec{
+				Volumes: []corev1.Volume{
+					{
+						Name: "es-certs",
+						VolumeSource: corev1.VolumeSource{
+							Secret: &corev1.SecretVolumeSource{
+								SecretName: elasticsearch.PublicCertSecret,
+								Items: []corev1.KeyToPath{
+									{Key: "tls.crt", Path: "es-ca.pem"},
+								},
+							},
+						},
+					},
+					{
+						Name: "host-volume",
+						VolumeSource: corev1.VolumeSource{
+							HostPath: &corev1.HostPathVolumeSource{
+								Path: "/home/idsuser/anomaly_detection_jobs/models",
+							},
+						},
+					},
+				},
+				DNSPolicy:          corev1.DNSClusterFirst,
+				ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
+				RestartPolicy:      corev1.RestartPolicyOnFailure,
+				ServiceAccountName: IntrusionDetectionInstallerJobName,
+				Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster),
+				Containers: []corev1.Container{
+					{
+						Name:  "adjobs",
+						Image: c.adJobsImage,
+						SecurityContext: &corev1.SecurityContext{
+							Privileged: &privileged,
+						},
+						Env: []corev1.EnvVar{
+							{
+								Name: "ELASTIC_HOST",
+								// static index 2 refres to - <svc_name>.<ns>.svc format
+								Value: dns.GetServiceDNSNames(ESGatewayServiceName, ElasticsearchNamespace, c.cfg.ClusterDomain)[2],
+							},
+							{
+								Name:  "ELASTIC_PORT",
+								Value: strconv.Itoa(ElasticsearchDefaultPort),
+							},
+							{
+								Name:      "ELASTIC_USER",
+								ValueFrom: secret.GetEnvVarSource(ElasticsearchADJobUserSecret, "username", false),
+							},
+							{
+								Name:      "ELASTIC_PASSWORD",
+								ValueFrom: secret.GetEnvVarSource(ElasticsearchADJobUserSecret, "password", false),
+							},
+							{
+								Name:  "ES_CA_CERT",
+								Value: "/certs/es-ca.pem",
+							},
+						},
+						VolumeMounts: []corev1.VolumeMount{
+							{
+								Name:      "es-certs",
+								MountPath: "/certs/es-ca.pem",
+								SubPath:   "es-ca.pem",
+							},
+							{
+								Name:      "host-volume",
+								MountPath: "/home/idsuser/anomaly_detection_jobs/models",
+							},
+						},
+					},
+				},
+				// ensures the AD pods are all deployed on the same node before a model storage cache is deployed (todo)
+				//  - without a model storage, models created by training jobs are stored on disk suceeeding detection jobs
+				//    need to read the models such that all pods running the AD containers need to run on the same node
+				NodeSelector: c.cfg.Installation.ControlPlaneNodeSelector,
+			},
+		},
+	}
 }

@@ -39,7 +39,7 @@ spec:
                 type: string
               period:
                 description: Period controls how long an alert exception will be active.
-                  It is optional and omitting Peroid will make the alert exception
+                  It is optional and omitting Period will make the alert exception
                   active forever.
                 type: string
               selector:

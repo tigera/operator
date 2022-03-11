@@ -3,7 +3,6 @@ package logstorage
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/go-logr/logr"
 
@@ -67,9 +66,19 @@ func (r *ReconcileLogStorage) createEsMetrics(
 	} else if prometheusCertificate == nil {
 		log.Info("Prometheus secrets are not available yet, waiting until they become available")
 		r.status.SetDegraded("Prometheus secrets are not available yet, waiting until they become available", "")
-		return reconcile.Result{RequeueAfter: 5 * time.Second}, false, nil
+		return reconcile.Result{}, false, nil
 	}
-	trustedBundle := certificateManager.CreateTrustedBundle(prometheusCertificate)
+	esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
+	if err != nil {
+		log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", relasticsearch.PublicCertSecret))
+		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err.Error())
+		return reconcile.Result{}, false, err
+	} else if esgwCertificate == nil {
+		log.Info("Elasticsearch gateway certificate is not available yet, waiting until they become available")
+		r.status.SetDegraded("Elasticsearch gateway certificate are not available yet, waiting until they become available", "")
+		return reconcile.Result{}, false, nil
+	}
+	trustedBundle := certificateManager.CreateTrustedBundle(prometheusCertificate, esgwCertificate)
 
 	serverTLS, err := certificateManager.GetOrCreateKeyPair(
 		r.client,

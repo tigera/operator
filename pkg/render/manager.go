@@ -81,7 +81,6 @@ const (
 func Manager(cfg *ManagerConfiguration) (Component, error) {
 	var tlsSecrets []*corev1.Secret
 	tlsAnnotations := cfg.TrustedCertBundle.HashAnnotations()
-	tlsAnnotations[KibanaTLSHashAnnotation] = rmeta.SecretsAnnotationHash(cfg.KibanaSecrets...)
 	tlsAnnotations[cfg.TLSKeyPair.HashAnnotationKey()] = cfg.TLSKeyPair.HashAnnotationValue()
 
 	if cfg.KeyValidatorConfig != nil {
@@ -106,7 +105,6 @@ func Manager(cfg *ManagerConfiguration) (Component, error) {
 type ManagerConfiguration struct {
 	KeyValidatorConfig    authentication.KeyValidatorConfig
 	ESSecrets             []*corev1.Secret
-	KibanaSecrets         []*corev1.Secret
 	TrustedCertBundle     certificatemanagement.TrustedBundle
 	ESClusterConfig       *relasticsearch.ClusterConfig
 	TLSKeyPair            certificatemanagement.KeyPairInterface
@@ -189,7 +187,6 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, c.managerPodSecurityPolicy())
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.cfg.ESSecrets...)...)...)
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.cfg.KibanaSecrets...)...)...)
 	objs = append(objs, c.managerDeployment())
 	if c.cfg.KeyValidatorConfig != nil {
 		objs = append(objs, configmap.ToRuntimeObjects(c.cfg.KeyValidatorConfig.RequiredConfigMaps(ManagerNamespace)...)...)
@@ -218,7 +215,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 			},
 			Annotations: c.tlsAnnotations,
 		},
-		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
+		Spec: corev1.PodSpec{
 			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 			ServiceAccountName: ManagerServiceAccount,
 			Tolerations:        c.managerTolerations(),
@@ -230,7 +227,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 				c.managerProxyContainer(),
 			},
 			Volumes: c.managerVolumes(),
-		}),
+		},
 	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 
 	if c.cfg.Replicas != nil && *c.cfg.Replicas > 1 {
@@ -264,9 +261,6 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 
 // managerVolumes returns the volumes for the Tigera Secure manager component.
 func (c *managerComponent) managerVolumeMounts() []corev1.VolumeMount {
-	if c.cfg.KeyValidatorConfig != nil {
-		return c.cfg.KeyValidatorConfig.RequiredVolumeMounts()
-	}
 	return []corev1.VolumeMount{}
 }
 
@@ -275,23 +269,12 @@ func (c *managerComponent) managerVolumes() []corev1.Volume {
 	v := []corev1.Volume{
 		c.cfg.TLSKeyPair.Volume(),
 		c.cfg.TrustedCertBundle.Volume(),
-		{
-			Name: KibanaPublicCertSecret,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: KibanaPublicCertSecret,
-				},
-			},
-		},
 	}
 	if c.cfg.ManagementCluster != nil {
 		v = append(v,
 			c.cfg.InternalTrafficSecret.Volume(),
 			c.cfg.TunnelSecret.Volume(),
 		)
-	}
-	if c.cfg.KeyValidatorConfig != nil {
-		v = append(v, c.cfg.KeyValidatorConfig.RequiredVolumes()...)
 	}
 
 	return v
@@ -414,10 +397,11 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		{Name: "VOLTRON_LOGLEVEL", Value: "Info"},
 		{Name: "VOLTRON_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
 		{Name: "VOLTRON_KIBANA_BASE_PATH", Value: fmt.Sprintf("/%s/", KibanaBasePath)},
-		{Name: "VOLTRON_KIBANA_CA_BUNDLE_PATH", Value: "/certs/kibana/tls.crt"},
+		{Name: "VOLTRON_KIBANA_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_COMPLIANCE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+		{Name: "VOLTRON_DEX_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_HTTPS_KEY", Value: keyPath},
 		{Name: "VOLTRON_HTTPS_CERT", Value: certPath},
 		{Name: "VOLTRON_TUNNEL_KEY", Value: tunnelKeyPath},
@@ -450,17 +434,12 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 func (c *managerComponent) volumeMountsForProxyManager() []corev1.VolumeMount {
 	var mounts = []corev1.VolumeMount{
 		{Name: ManagerTLSSecretName, MountPath: "/manager-tls", ReadOnly: true},
-		{Name: KibanaPublicCertSecret, MountPath: "/certs/kibana", ReadOnly: true},
-		c.cfg.TrustedCertBundle.VolumeMount(),
+		c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType()),
 	}
 
 	if c.cfg.ManagementCluster != nil {
-		mounts = append(mounts, c.cfg.InternalTrafficSecret.VolumeMount())
-		mounts = append(mounts, c.cfg.TunnelSecret.VolumeMount())
-	}
-
-	if c.cfg.KeyValidatorConfig != nil {
-		mounts = append(mounts, c.cfg.KeyValidatorConfig.RequiredVolumeMounts()...)
+		mounts = append(mounts, c.cfg.InternalTrafficSecret.VolumeMount(c.SupportedOSType()))
+		mounts = append(mounts, c.cfg.TunnelSecret.VolumeMount(c.SupportedOSType()))
 	}
 
 	return mounts
@@ -473,15 +452,13 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		{Name: "ELASTIC_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
 	}
 
-	var volumeMounts []corev1.VolumeMount
+	volumeMounts := []corev1.VolumeMount{c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType())}
 	if c.cfg.ManagementCluster != nil {
-		volumeMounts = append(volumeMounts, c.cfg.TrustedCertBundle.VolumeMount())
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_CA_PATH", Value: certificatemanagement.TrustedCertBundleMountPath})
 	}
 
 	if c.cfg.KeyValidatorConfig != nil {
 		env = append(env, c.cfg.KeyValidatorConfig.RequiredEnv("")...)
-		volumeMounts = append(volumeMounts, c.cfg.KeyValidatorConfig.RequiredVolumeMounts()...)
 	}
 
 	return corev1.Container{

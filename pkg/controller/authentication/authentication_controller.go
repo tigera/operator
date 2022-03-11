@@ -23,11 +23,15 @@ import (
 
 	oprv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -96,7 +100,8 @@ func add(mgr manager.Manager, r *ReconcileAuthentication) error {
 
 	for _, namespace := range []string{common.OperatorNamespace(), render.DexNamespace} {
 		for _, secretName := range []string{
-			render.DexTLSSecretName, render.DexCertSecretName, render.OIDCSecretName, render.OpenshiftSecretName, render.DexObjectName,
+			render.DexTLSSecretName, render.OIDCSecretName, render.OpenshiftSecretName,
+			render.DexObjectName, certificatemanagement.CASecretName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("%s failed to watch the secret '%s' in '%s' namespace: %w", controllerName, secretName, namespace, err)
@@ -204,18 +209,18 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	}
 
 	// Secret used for TLS between dex and other components.
-	var tlsSecret *corev1.Secret
-	if install.CertificateManagement == nil {
-		tlsSecret = &corev1.Secret{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexTLSSecretName, Namespace: common.OperatorNamespace()}, tlsSecret); err != nil {
-			if errors.IsNotFound(err) {
-				tlsSecret = render.CreateDexTLSSecret(fmt.Sprintf(render.DexCNPattern, r.clusterDomain))
-			} else {
-				log.Error(err, "Failed to read tigera-operator/tigera-dex-tls secret")
-				r.status.SetDegraded("Failed to read tigera-operator/tigera-dex-tls secret", err.Error())
-				return reconcile.Result{}, err
-			}
-		}
+	certificateManager, err := certificatemanager.Create(r.client, install, r.clusterDomain)
+	if err != nil {
+		log.Error(err, "unable to create the Tigera CA")
+		r.status.SetDegraded("Unable to create the Tigera CA", err.Error())
+		return reconcile.Result{}, err
+	}
+	dnsNames := dns.GetServiceDNSNames(render.DexObjectName, render.DexNamespace, r.clusterDomain)
+	tlsKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.DexTLSSecretName, common.OperatorNamespace(), dnsNames)
+	if err != nil {
+		log.Error(err, "Unable to get or create tls key pair")
+		r.status.SetDegraded("Unable to get or create tls key pair", err.Error())
+		return reconcile.Result{}, err
 	}
 
 	// Dex will be configured with the contents of this secret, such as clientID and clientSecret.
@@ -251,7 +256,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	}
 
 	// DexConfig adds convenience methods around dex related objects in k8s and can be used to configure Dex.
-	dexCfg := render.NewDexConfig(install.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, r.clusterDomain)
+	dexCfg := render.NewDexConfig(install.CertificateManagement, authentication, dexSecret, idpSecret, r.clusterDomain)
 
 	// Create a component handler to manage the rendered component.
 	hlr := utils.NewComponentHandler(log, r.client, r.scheme, authentication)
@@ -263,6 +268,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		DexConfig:     dexCfg,
 		ClusterDomain: r.clusterDomain,
 		DeleteDex:     disableDex,
+		TLSKeyPair:    tlsKeyPair,
 	}
 
 	// Render the desired objects from the CRD and create or update them.
@@ -275,10 +281,23 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
-	if err := hlr.CreateOrUpdateOrDelete(context.Background(), component, r.status); err != nil {
-		log.Error(err, "Error creating / updating resource")
-		r.status.SetDegraded("Error creating / updating resource", err.Error())
-		return reconcile.Result{}, err
+	components := []render.Component{
+		component,
+		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+			Namespace:       render.DexNamespace,
+			ServiceAccounts: []string{render.DexObjectName},
+			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+				rcertificatemanagement.NewKeyPairOption(tlsKeyPair, true, true),
+			},
+		}),
+	}
+
+	for _, comp := range components {
+		if err = hlr.CreateOrUpdateOrDelete(context.Background(), comp, r.status); err != nil {
+			log.Error(err, "Error creating / updating resource")
+			r.status.SetDegraded("Error creating / updating resource", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	// Clear the degraded bit if we've reached this far.

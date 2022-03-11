@@ -28,7 +28,7 @@ var ElasticsearchSecret = corev1.Secret{
 		APIVersion: "v1",
 	},
 	ObjectMeta: metav1.ObjectMeta{
-		Name:      render.TigeraElasticsearchCertSecret,
+		Name:      render.TigeraElasticsearchGatewaySecret,
 		Namespace: common.OperatorNamespace(),
 	},
 	Data: map[string][]byte{

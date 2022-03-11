@@ -17,6 +17,7 @@ package esmetrics
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/tigera/operator/pkg/render/common/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -61,10 +62,10 @@ var _ = Describe("Elasticsearch metrics", func() {
 				ESConfig:     esConfig,
 				ESMetricsCredsSecret: &corev1.Secret{
 					TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-					ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
+					ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchGatewaySecret, Namespace: common.OperatorNamespace()}},
 				ESCertSecret: &corev1.Secret{
 					TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-					ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
+					ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchGatewaySecret, Namespace: common.OperatorNamespace()}},
 				ClusterDomain: "cluster.local",
 				ServerTLS:     secret,
 				TrustedBundle: bundle,
@@ -91,7 +92,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 				version string
 				kind    string
 			}{
-				{render.TigeraElasticsearchCertSecret, render.ElasticsearchNamespace, "", "v1", "Secret"},
+				{render.TigeraElasticsearchGatewaySecret, render.ElasticsearchNamespace, "", "v1", "Secret"},
 				{ElasticsearchMetricsName, render.ElasticsearchNamespace, "", "v1", "Service"},
 				{ElasticsearchMetricsName, render.ElasticsearchNamespace, "apps", "v1", "Deployment"},
 				{ElasticsearchMetricsName, render.ElasticsearchNamespace, "", "v1", "ServiceAccount"},
@@ -197,8 +198,8 @@ var _ = Describe("Elasticsearch metrics", func() {
 									{Name: "ES_CURATOR_BACKEND_CERT", Value: "/etc/ssl/elastic/ca.pem"},
 								},
 								VolumeMounts: []corev1.VolumeMount{
-									cfg.ServerTLS.VolumeMount(),
-									cfg.TrustedBundle.VolumeMount(),
+									cfg.ServerTLS.VolumeMount(meta.OSTypeLinux),
+									cfg.TrustedBundle.VolumeMount(meta.OSTypeLinux),
 									{Name: "elastic-ca-cert-volume", MountPath: "/etc/ssl/elastic/"},
 								},
 							}},

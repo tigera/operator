@@ -377,7 +377,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 				"k8s-app": ComplianceControllerName,
 			},
 		},
-		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
+		Spec: corev1.PodSpec{
 			ServiceAccountName: "tigera-compliance-controller",
 			Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster),
 			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
@@ -390,7 +390,10 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 					LivenessProbe: complianceLivenessProbe,
 				}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceControllerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()),
 			},
-		}),
+			Volumes: []corev1.Volume{
+				c.cfg.TrustedBundle.Volume(),
+			},
+		},
 	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 
 	return &appsv1.Deployment{
@@ -499,7 +502,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 					"k8s-app": "compliance-reporter",
 				},
 			},
-			Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
+			Spec: corev1.PodSpec{
 				ServiceAccountName: "tigera-compliance-reporter",
 				Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster),
 				NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
@@ -530,8 +533,9 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 							},
 						},
 					},
+					c.cfg.TrustedBundle.Volume(),
 				},
-			}),
+			},
 		},
 	}
 }
@@ -666,7 +670,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 			},
 			Annotations: complianceAnnotations(c),
 		},
-		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
+		Spec: corev1.PodSpec{
 			ServiceAccountName: "tigera-compliance-server",
 			Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster),
 			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
@@ -710,7 +714,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 				}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceServerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()),
 			},
 			Volumes: c.complianceServerVolumes(),
-		}),
+		},
 	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 
 	return &appsv1.Deployment{
@@ -741,8 +745,8 @@ func (c *complianceComponent) complianceServerPodSecurityPolicy() *policyv1beta1
 
 func (c *complianceComponent) complianceServerVolumeMounts() []corev1.VolumeMount {
 	mounts := []corev1.VolumeMount{
-		c.cfg.TrustedBundle.VolumeMount(),
-		c.cfg.ComplianceServerCertSecret.VolumeMount(),
+		c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()),
+		c.cfg.ComplianceServerCertSecret.VolumeMount(c.SupportedOSType()),
 	}
 
 	if c.cfg.KeyValidatorConfig != nil {
@@ -851,7 +855,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 				"k8s-app": ComplianceSnapshotterName,
 			},
 		},
-		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
+		Spec: corev1.PodSpec{
 			ServiceAccountName: "tigera-compliance-snapshotter",
 			Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster),
 			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
@@ -866,7 +870,10 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceSnapshotterUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()), c.cfg.ESClusterConfig.Replicas(), c.cfg.ESClusterConfig.Shards(),
 				),
 			},
-		}),
+			Volumes: []corev1.Volume{
+				c.cfg.TrustedBundle.Volume(),
+			},
+		},
 	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 
 	return &appsv1.Deployment{
@@ -985,6 +992,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 			Name:         "usr-bin",
 			VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/usr/bin"}},
 		},
+		c.cfg.TrustedBundle.Volume(),
 	}
 
 	// benchmarker needs an extra host path volume mount for GKE for CIS benchmarks
@@ -1005,7 +1013,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 				"k8s-app": "compliance-benchmarker",
 			},
 		},
-		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
+		Spec: corev1.PodSpec{
 			ServiceAccountName: "tigera-compliance-benchmarker",
 			HostPID:            true,
 			Tolerations:        rmeta.TolerateAll,
@@ -1022,7 +1030,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 				),
 			},
 			Volumes: vols,
-		}),
+		},
 	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 
 	return &appsv1.DaemonSet{

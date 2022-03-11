@@ -121,7 +121,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 
 	for _, secretName := range []string{
 		render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret,
-		relasticsearch.PublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret,
+		render.TigeraElasticsearchGatewaySecret, render.S3FluentdSecretName, render.EksLogForwarderSecret,
 		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName, monitor.PrometheusTLSSecretName,
 		render.FluentdPrometheusTLSSecretName} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
@@ -327,17 +327,29 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	certificate, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
+	prometheusCertificate, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
 	if err != nil {
 		log.Error(err, "Failed to get certificate")
 		r.status.SetDegraded("Failed to get certificate", err.Error())
 		return reconcile.Result{}, err
-	} else if certificate == nil {
+	} else if prometheusCertificate == nil {
 		log.Info("Prometheus secrets are not available yet, waiting until they become available")
 		r.status.SetDegraded("Prometheus secrets are not available yet, waiting until they become available", "")
 		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
 	}
-	trustedBundle := certificateManager.CreateTrustedBundle(certificate)
+
+	esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
+	if err != nil {
+		log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", relasticsearch.PublicCertSecret))
+		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err.Error())
+		return reconcile.Result{}, err
+	} else if esgwCertificate == nil {
+		log.Info("Elasticsearch gateway certificate is not available yet, waiting until they become available")
+		r.status.SetDegraded("Elasticsearch gateway certificate are not available yet, waiting until they become available", "")
+		return reconcile.Result{}, nil
+	}
+
+	trustedBundle := certificateManager.CreateTrustedBundle(prometheusCertificate, esgwCertificate)
 
 	certificateManager.AddToStatusManager(r.status, render.LogCollectorNamespace)
 
@@ -511,6 +523,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			Installation:    installation,
 			ClusterDomain:   r.clusterDomain,
 			OSType:          rmeta.OSTypeWindows,
+			TrustedBundle:   trustedBundle,
 		}
 		comp = render.Fluentd(fluentdCfg)
 

@@ -286,7 +286,7 @@ func (c *GuardianComponent) container() []corev1.Container {
 
 func (c *GuardianComponent) volumeMounts() []corev1.VolumeMount {
 	mounts := []corev1.VolumeMount{
-		c.cfg.TrustedCertBundle.VolumeMount(),
+		c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType()),
 		{
 			Name:      GuardianVolumeName,
 			MountPath: "/certs/",

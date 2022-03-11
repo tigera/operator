@@ -56,13 +56,6 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 		return reconcile.Result{}, false, err
 	}
 
-	kubeControllerKibanaPublicCertSecret, err := utils.GetSecret(ctx, r.client, render.KibanaPublicCertSecret, common.OperatorNamespace())
-	if err != nil {
-		log.Error(err, err.Error())
-		r.status.SetDegraded("Failed to get Kibana pub cert secret used by kube controllers", err.Error())
-		return reconcile.Result{}, false, err
-	}
-
 	enableESOIDCWorkaround := false
 	if (authentication != nil && authentication.Spec.OIDC != nil && authentication.Spec.OIDC.Type == operatorv1.OIDCTypeTigera) ||
 		esLicenseType == render.ElasticsearchLicenseTypeBasic {
@@ -85,6 +78,18 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 			return reconcile.Result{}, false, err
 		}
 	}
+	esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
+	if err != nil {
+		log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", relasticsearch.PublicCertSecret))
+		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err.Error())
+		return reconcile.Result{}, false, err
+	} else if esgwCertificate == nil {
+		log.Info("Elasticsearch gateway certificate is not available yet, waiting until they become available")
+		r.status.SetDegraded("Elasticsearch gateway certificate are not available yet, waiting until they become available", "")
+		return reconcile.Result{}, false, nil
+	}
+	trustedBundle := certificateManager.CreateTrustedBundle(esgwCertificate)
+
 	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:                 k8sapi.Endpoint,
 		Installation:                 install,
@@ -95,8 +100,8 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 		Authentication:               authentication,
 		ElasticsearchSecret:          kubeControllerEsPublicCertSecret,
 		KubeControllersGatewaySecret: kubeControllersUserSecret,
-		KibanaSecret:                 kubeControllerKibanaPublicCertSecret,
 		LogStorageExists:             true,
+		TrustedBundle:                trustedBundle,
 	}
 	esKubeControllerComponents := kubecontrollers.NewElasticsearchKubeControllers(&kubeControllersCfg)
 

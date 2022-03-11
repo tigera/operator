@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/render/common/elasticsearch"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -27,9 +29,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -40,7 +40,6 @@ const (
 	DeploymentName        = "tigera-secure-es-gateway"
 	ServiceAccountName    = "tigera-secure-es-gateway"
 	RoleName              = "tigera-secure-es-gateway"
-	VolumeName            = "tigera-secure-es-gateway-certs"
 	ServiceName           = "tigera-secure-es-gateway-http"
 	ElasticsearchPortName = "es-gateway-elasticsearch-port"
 	KibanaPortName        = "es-gateway-kibana-port"
@@ -54,51 +53,28 @@ const (
 )
 
 func EsGateway(c *Config) render.Component {
-	var certSecretsESCopy []*corev1.Secret
-	// Only render the public cert secret in the Operator namespace.
-	secrets := []*corev1.Secret{c.CertSecrets[1]}
-
-	// Copy the Operator namespaced cert secrets to the Elasticsearch namespace.
-	certSecretsESCopy = append(certSecretsESCopy, secret.CopyToNamespace(render.ElasticsearchNamespace, c.CertSecrets...)...)
-	tlsAnnotations := map[string]string{render.ElasticsearchTLSHashAnnotation: rmeta.SecretsAnnotationHash(append(certSecretsESCopy, c.EsInternalCertSecret)...)}
-
-	secrets = append(secrets, certSecretsESCopy...)
-
-	// tigera-secure-kb-http-certs-public, mounted by ES Gateway.
-	secrets = append(secrets, secret.CopyToNamespace(render.ElasticsearchNamespace, c.KibanaInternalCertSecret)...)
-	tlsAnnotations[render.KibanaTLSAnnotationHash] = rmeta.SecretsAnnotationHash(c.KibanaInternalCertSecret)
-
-	secrets = append(secrets, c.KubeControllersUserSecrets...)
-
 	return &esGateway{
-		installation:    c.Installation,
-		pullSecrets:     c.PullSecrets,
-		secrets:         secrets,
-		tlsAnnotations:  tlsAnnotations,
-		clusterDomain:   c.ClusterDomain,
-		esAdminUserName: c.EsAdminUserName,
+		cfg: c,
 	}
 }
 
 type esGateway struct {
 	installation    *operatorv1.InstallationSpec
 	pullSecrets     []*corev1.Secret
-	secrets         []*corev1.Secret
-	tlsAnnotations  map[string]string
 	clusterDomain   string
 	csrImage        string
 	esGatewayImage  string
 	esAdminUserName string
+	cfg             *Config
 }
 
 // Config contains all the config information needed to render the EsGateway component.
 type Config struct {
 	Installation               *operatorv1.InstallationSpec
 	PullSecrets                []*corev1.Secret
-	CertSecrets                []*corev1.Secret
 	KubeControllersUserSecrets []*corev1.Secret
-	KibanaInternalCertSecret   *corev1.Secret
-	EsInternalCertSecret       *corev1.Secret
+	ESGatewayKeyPair           certificatemanagement.KeyPairInterface
+	TrustedBundle              certificatemanagement.TrustedBundle
 	ClusterDomain              string
 	EsAdminUserName            string
 }
@@ -127,15 +103,14 @@ func (e *esGateway) ResolveImages(is *operatorv1.ImageSet) error {
 }
 
 func (e *esGateway) Objects() (toCreate, toDelete []client.Object) {
-	toCreate = append(toCreate, e.esGatewaySecrets()...)
+	toCreate = append(toCreate, secret.ToRuntimeObjects(e.cfg.KubeControllersUserSecrets...)...)
 	toCreate = append(toCreate, e.esGatewayService())
 	toCreate = append(toCreate, e.esGatewayRole())
 	toCreate = append(toCreate, e.esGatewayRoleBinding())
 	toCreate = append(toCreate, e.esGatewayServiceAccount())
 	toCreate = append(toCreate, e.esGatewayDeployment())
-	if e.installation.CertificateManagement != nil {
-		toCreate = append(toCreate, certificatemanagement.CSRClusterRoleBinding(RoleName, render.ElasticsearchNamespace))
-	}
+	// This secret is used by the kube controllers and sent to managed clusters. It is also used by manifests in our docs.
+	toCreate = append(toCreate, render.CreateCertificateSecret(e.cfg.ESGatewayKeyPair.GetCertificatePEM(), elasticsearch.PublicCertSecret, common.OperatorNamespace()))
 	return toCreate, toDelete
 }
 
@@ -192,8 +167,10 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 		{Name: "ES_GATEWAY_LOG_LEVEL", Value: "INFO"},
 		{Name: "ES_GATEWAY_ELASTIC_ENDPOINT", Value: ElasticsearchHTTPSEndpoint},
 		{Name: "ES_GATEWAY_KIBANA_ENDPOINT", Value: KibanaHTTPSEndpoint},
-		{Name: "ES_GATEWAY_HTTPS_CERT", Value: "/certs/https/tls.crt"},
-		{Name: "ES_GATEWAY_HTTPS_KEY", Value: "/certs/https/tls.key"},
+		{Name: "ES_GATEWAY_HTTPS_CERT", Value: e.cfg.ESGatewayKeyPair.VolumeMountCertificateFilePath()},
+		{Name: "ES_GATEWAY_HTTPS_KEY", Value: e.cfg.ESGatewayKeyPair.VolumeMountKeyFilePath()},
+		{Name: "ES_GATEWAY_KIBANA_CLIENT_CERT_PATH", Value: e.cfg.TrustedBundle.MountPath()},
+		{Name: "ES_GATEWAY_ELASTIC_CLIENT_CERT_PATH", Value: e.cfg.TrustedBundle.MountPath()},
 		{Name: "ES_GATEWAY_ELASTIC_USERNAME", Value: e.esAdminUserName},
 		{Name: "ES_GATEWAY_ELASTIC_PASSWORD", ValueFrom: &corev1.EnvVarSource{
 			SecretKeyRef: &corev1.SecretKeySelector{
@@ -205,59 +182,23 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 		}},
 	}
 
-	certVolume := corev1.Volume{
-		Name: VolumeName,
-		VolumeSource: corev1.VolumeSource{
-			Secret: &corev1.SecretVolumeSource{
-				SecretName: render.TigeraElasticsearchCertSecret,
-			},
-		},
-	}
-
 	var initContainers []corev1.Container
-	if e.installation.CertificateManagement != nil {
-		svcDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, e.clusterDomain)
-		svcDNSNames = append(svcDNSNames, dns.GetServiceDNSNames(ServiceName, render.ElasticsearchNamespace, e.clusterDomain)...)
-
-		initContainers = append(initContainers, certificatemanagement.CreateCSRInitContainer(
-			e.installation.CertificateManagement,
-			e.csrImage,
-			VolumeName,
-			ServiceName,
-			corev1.TLSPrivateKeyKey,
-			corev1.TLSCertKey,
-			svcDNSNames,
-			render.ElasticsearchNamespace))
-
-		certVolume.VolumeSource = corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}
+	if e.cfg.ESGatewayKeyPair.UseCertificateManagement() {
+		initContainers = append(initContainers, e.cfg.ESGatewayKeyPair.InitContainer(render.ElasticsearchNamespace))
 	}
 
 	volumes := []corev1.Volume{
-		certVolume,
-		{
-			Name: render.KibanaInternalCertSecret,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: render.KibanaInternalCertSecret,
-				},
-			},
-		},
-		{
-			Name: relasticsearch.InternalCertSecret,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: relasticsearch.InternalCertSecret,
-				},
-			},
-		},
+		e.cfg.ESGatewayKeyPair.Volume(),
+		e.cfg.TrustedBundle.Volume(),
 	}
 
 	volumeMounts := []corev1.VolumeMount{
-		{Name: VolumeName, MountPath: "/certs/https", ReadOnly: true},
-		{Name: render.KibanaInternalCertSecret, MountPath: "/certs/kibana", ReadOnly: true},
-		{Name: relasticsearch.InternalCertSecret, MountPath: "/certs/elasticsearch", ReadOnly: true},
+		e.cfg.ESGatewayKeyPair.VolumeMount(e.SupportedOSType()),
+		e.cfg.TrustedBundle.VolumeMount(e.SupportedOSType()),
 	}
 
+	annotations := e.cfg.TrustedBundle.HashAnnotations()
+	annotations[e.cfg.ESGatewayKeyPair.HashAnnotationKey()] = e.cfg.ESGatewayKeyPair.HashAnnotationValue()
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      DeploymentName,
@@ -265,7 +206,7 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 			Labels: map[string]string{
 				"k8s-app": DeploymentName,
 			},
-			Annotations: e.tlsAnnotations,
+			Annotations: annotations,
 		},
 		Spec: corev1.PodSpec{
 			Tolerations:        e.installation.ControlPlaneTolerations,
@@ -327,14 +268,6 @@ func (e esGateway) esGatewayServiceAccount() *corev1.ServiceAccount {
 			Namespace: render.ElasticsearchNamespace,
 		},
 	}
-}
-
-func (e esGateway) esGatewaySecrets() []client.Object {
-	objs := []client.Object{}
-	for _, s := range e.secrets {
-		objs = append(objs, s)
-	}
-	return objs
 }
 
 func (e esGateway) esGatewayService() *corev1.Service {

@@ -1,15 +1,18 @@
 package certificatemanagement
 
 import (
+	"github.com/tigera/operator/pkg/render/common/meta"
 	corev1 "k8s.io/api/core/v1"
 )
 
 const (
-	CASecretName                = "tigera-ca-private"
-	TrustedCertConfigMapName    = "tigera-ca-bundle"
-	TrustedCertConfigMapKeyName = "tigera-ca-bundle.crt"
-	TrustedCertVolumeMountPath  = "/etc/pki/tls/certs/"
-	TrustedCertBundleMountPath  = "/etc/pki/tls/certs/tigera-ca-bundle.crt"
+	CASecretName                      = "tigera-ca-private"
+	TrustedCertConfigMapName          = "tigera-ca-bundle"
+	TrustedCertConfigMapKeyName       = "tigera-ca-bundle.crt"
+	TrustedCertVolumeMountPath        = "/etc/pki/tls/certs/"
+	TrustedCertVolumeMountPathWindows = "c:/etc/pki/tls/certs/"
+	TrustedCertBundleMountPath        = "/etc/pki/tls/certs/tigera-ca-bundle.crt"
+	TrustedCertBundleMountPathWindows = "c:/etc/pki/tls/certs/tigera-ca-bundle.crt"
 )
 
 // KeyPairInterface wraps a Secret object that contains a private key and a certificate. Whether CertificateManagement is
@@ -20,7 +23,7 @@ type KeyPairInterface interface {
 	// BYO returns true if this KeyPair was provided by the user. If BYO is true, UseCertificateManagement is false.
 	BYO() bool
 	InitContainer(namespace string) corev1.Container
-	VolumeMount() corev1.VolumeMount
+	VolumeMount(osType meta.OSType) corev1.VolumeMount
 	VolumeMountKeyFilePath() string
 	VolumeMountCertificateFilePath() string
 	Volume() corev1.Volume
@@ -42,7 +45,7 @@ type TrustedBundle interface {
 	MountPath() string
 	ConfigMap(namespace string) *corev1.ConfigMap
 	HashAnnotations() map[string]string
-	VolumeMount() corev1.VolumeMount
+	VolumeMount(osType meta.OSType) corev1.VolumeMount
 	Volume() corev1.Volume
 	AddCertificates(certificates ...CertificateInterface)
 }

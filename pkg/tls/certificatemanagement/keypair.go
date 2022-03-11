@@ -83,10 +83,16 @@ func (k *KeyPair) VolumeMountKeyFilePath() string {
 	return fmt.Sprintf("/%s/%s", k.GetName(), corev1.TLSPrivateKeyKey)
 }
 
-func (k *KeyPair) VolumeMount() corev1.VolumeMount {
+func (k *KeyPair) VolumeMount(osType rmeta.OSType) corev1.VolumeMount {
+	var mountPath string
+	if osType == rmeta.OSTypeWindows {
+		mountPath = fmt.Sprintf("c:/%s", k.GetName())
+	} else {
+		mountPath = fmt.Sprintf("/%s", k.GetName())
+	}
 	return corev1.VolumeMount{
 		Name:      k.GetName(),
-		MountPath: fmt.Sprintf("/%s", k.GetName()),
+		MountPath: mountPath,
 		ReadOnly:  true,
 	}
 }

@@ -82,7 +82,7 @@ type KubeControllersConfiguration struct {
 	ManagerInternalSecret        certificatemanagement.KeyPairInterface
 	ElasticsearchSecret          *corev1.Secret
 	KubeControllersGatewaySecret *corev1.Secret
-	KibanaSecret                 *corev1.Secret
+	TrustedBundle                certificatemanagement.TrustedBundle
 }
 
 func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
@@ -483,10 +483,6 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		Volumes:            c.kubeControllersVolumes(),
 	}
 
-	if c.kubeControllerName == EsKubeController {
-		podSpec = relasticsearch.PodSpecDecorate(podSpec)
-	}
-
 	var replicas int32 = 1
 
 	d := appsv1.Deployment{
@@ -579,7 +575,12 @@ func (c *kubeControllersComponent) kubeControllersResources() corev1.ResourceReq
 }
 
 func (c *kubeControllersComponent) annotations() map[string]string {
-	am := map[string]string{}
+	var am map[string]string
+	if c.cfg.TrustedBundle != nil {
+		am = c.cfg.TrustedBundle.HashAnnotations()
+	} else {
+		am = make(map[string]string)
+	}
 	if c.cfg.ManagerInternalSecret != nil {
 		am[c.cfg.ManagerInternalSecret.HashAnnotationKey()] = c.cfg.ManagerInternalSecret.HashAnnotationValue()
 	}
@@ -588,9 +589,6 @@ func (c *kubeControllersComponent) annotations() map[string]string {
 	}
 	if c.cfg.KubeControllersGatewaySecret != nil {
 		am[render.ElasticsearchUserHashAnnotation] = rmeta.AnnotationHash(c.cfg.KubeControllersGatewaySecret.Data)
-	}
-	if c.cfg.KibanaSecret != nil {
-		am[render.KibanaTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.KibanaSecret.Data)
 	}
 	return am
 }
@@ -602,19 +600,23 @@ func (c *kubeControllersComponent) controllersPodSecurityPolicy() *policyv1beta1
 }
 
 func (c *kubeControllersComponent) kubeControllersVolumeMounts() []corev1.VolumeMount {
+	var mounts []corev1.VolumeMount
 	if c.cfg.ManagerInternalSecret != nil {
-		return []corev1.VolumeMount{
-			c.cfg.ManagerInternalSecret.VolumeMount(),
-		}
+		mounts = append(mounts, c.cfg.ManagerInternalSecret.VolumeMount(c.SupportedOSType()))
+	}
+	if c.cfg.TrustedBundle != nil {
+		mounts = append(mounts, c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()))
 	}
 	return []corev1.VolumeMount{}
 }
 
 func (c *kubeControllersComponent) kubeControllersVolumes() []corev1.Volume {
+	var volumes []corev1.Volume
 	if c.cfg.ManagerInternalSecret != nil {
-		return []corev1.Volume{
-			c.cfg.ManagerInternalSecret.Volume(),
-		}
+		volumes = append(volumes, c.cfg.ManagerInternalSecret.Volume())
 	}
-	return []corev1.Volume{}
+	if c.cfg.TrustedBundle != nil {
+		volumes = append(volumes, c.cfg.TrustedBundle.Volume())
+	}
+	return volumes
 }

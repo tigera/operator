@@ -250,7 +250,7 @@ func (pc *packetCaptureApiComponent) initContainers() []corev1.Container {
 
 func (pc *packetCaptureApiComponent) container() corev1.Container {
 	var volumeMounts = []corev1.VolumeMount{
-		pc.cfg.ServerCertSecret.VolumeMount(),
+		pc.cfg.ServerCertSecret.VolumeMount(pc.SupportedOSType()),
 	}
 	env := []corev1.EnvVar{
 		{Name: "PACKETCAPTURE_API_LOG_LEVEL", Value: "Info"},

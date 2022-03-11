@@ -19,18 +19,13 @@ import (
 
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/url"
 
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 )
 
 const (
-	DefaultCertDir         = "/etc/ssl/elastic/"
-	DefaultCertDirWindows  = "c:/etc/ssl/elastic/"
-	DefaultCertPath        = DefaultCertDir + "ca.pem"
-	DefaultCertPathWindows = DefaultCertDirWindows + "ca.pem"
-
 	elasticsearchSecretsAnnotation   = "hash.operator.tigera.io/elasticsearch-secrets"
 	elasticsearchConfigMapAnnotation = "hash.operator.tigera.io/elasticsearch-configmap"
 )
@@ -42,16 +37,16 @@ type Annotatable interface {
 
 func elasticCertDir(osType rmeta.OSType) string {
 	if osType == rmeta.OSTypeWindows {
-		return DefaultCertDirWindows
+		return certificatemanagement.TrustedCertVolumeMountPathWindows
 	}
-	return DefaultCertDir
+	return certificatemanagement.TrustedCertVolumeMountPath
 }
 
 func elasticCertPath(osType rmeta.OSType) string {
 	if osType == rmeta.OSTypeWindows {
-		return DefaultCertPathWindows
+		return certificatemanagement.TrustedCertBundleMountPathWindows
 	}
-	return DefaultCertPath
+	return certificatemanagement.TrustedCertBundleMountPath
 }
 
 func DecorateAnnotations(obj Annotatable, config *ClusterConfig, secrets []*corev1.Secret) Annotatable {
@@ -123,27 +118,7 @@ func ContainerDecorateVolumeMounts(c corev1.Container, osType rmeta.OSType) core
 func DefaultVolumeMount(osType rmeta.OSType) corev1.VolumeMount {
 	certPath := elasticCertDir(osType)
 	return corev1.VolumeMount{
-		Name:      "elastic-ca-cert-volume",
+		Name:      certificatemanagement.TrustedCertConfigMapName,
 		MountPath: certPath,
-	}
-}
-
-func PodSpecDecorate(p corev1.PodSpec) corev1.PodSpec {
-	p.Volumes = append(p.Volumes, DefaultVolume())
-
-	return p
-}
-
-func DefaultVolume() corev1.Volume {
-	return corev1.Volume{
-		Name: "elastic-ca-cert-volume",
-		VolumeSource: v1.VolumeSource{
-			Secret: &v1.SecretVolumeSource{
-				SecretName: PublicCertSecret,
-				Items: []v1.KeyToPath{
-					{Key: "tls.crt", Path: "ca.pem"},
-				},
-			},
-		},
 	}
 }

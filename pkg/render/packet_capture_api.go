@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -266,7 +266,7 @@ func (pc *packetCaptureApiComponent) container() corev1.Container {
 		env = append(env, pc.cfg.KeyValidatorConfig.RequiredEnv("PACKETCAPTURE_API_")...)
 	}
 	if pc.cfg.TrustedBundle != nil {
-		volumeMounts = append(volumeMounts, pc.cfg.TrustedBundle.VolumeMount())
+		volumeMounts = append(volumeMounts, pc.cfg.TrustedBundle.VolumeMount(pc.SupportedOSType()))
 	}
 
 	return corev1.Container{

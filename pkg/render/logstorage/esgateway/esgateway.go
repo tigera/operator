@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -59,13 +59,9 @@ func EsGateway(c *Config) render.Component {
 }
 
 type esGateway struct {
-	installation    *operatorv1.InstallationSpec
-	pullSecrets     []*corev1.Secret
-	clusterDomain   string
-	csrImage        string
-	esGatewayImage  string
-	esAdminUserName string
-	cfg             *Config
+	csrImage       string
+	esGatewayImage string
+	cfg            *Config
 }
 
 // Config contains all the config information needed to render the EsGateway component.
@@ -80,9 +76,9 @@ type Config struct {
 }
 
 func (e *esGateway) ResolveImages(is *operatorv1.ImageSet) error {
-	reg := e.installation.Registry
-	path := e.installation.ImagePath
-	prefix := e.installation.ImagePrefix
+	reg := e.cfg.Installation.Registry
+	path := e.cfg.Installation.ImagePath
+	prefix := e.cfg.Installation.ImagePrefix
 	var err error
 	errMsgs := []string{}
 
@@ -90,8 +86,8 @@ func (e *esGateway) ResolveImages(is *operatorv1.ImageSet) error {
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
-	if e.installation.CertificateManagement != nil {
-		e.csrImage, err = certificatemanagement.ResolveCSRInitImage(e.installation, is)
+	if e.cfg.Installation.CertificateManagement != nil {
+		e.csrImage, err = certificatemanagement.ResolveCSRInitImage(e.cfg.Installation, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
@@ -171,13 +167,15 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 		{Name: "ES_GATEWAY_HTTPS_KEY", Value: e.cfg.ESGatewayKeyPair.VolumeMountKeyFilePath()},
 		{Name: "ES_GATEWAY_KIBANA_CLIENT_CERT_PATH", Value: e.cfg.TrustedBundle.MountPath()},
 		{Name: "ES_GATEWAY_ELASTIC_CLIENT_CERT_PATH", Value: e.cfg.TrustedBundle.MountPath()},
-		{Name: "ES_GATEWAY_ELASTIC_USERNAME", Value: e.esAdminUserName},
+		{Name: "ES_GATEWAY_ELASTIC_CA_BUNDLE_PATH", Value: e.cfg.TrustedBundle.MountPath()},
+		{Name: "ES_GATEWAY_KIBANA_CA_BUNDLE_PATH", Value: e.cfg.TrustedBundle.MountPath()},
+		{Name: "ES_GATEWAY_ELASTIC_USERNAME", Value: e.cfg.EsAdminUserName},
 		{Name: "ES_GATEWAY_ELASTIC_PASSWORD", ValueFrom: &corev1.EnvVarSource{
 			SecretKeyRef: &corev1.SecretKeySelector{
 				LocalObjectReference: corev1.LocalObjectReference{
 					Name: render.ElasticsearchAdminUserSecret,
 				},
-				Key: e.esAdminUserName,
+				Key: e.cfg.EsAdminUserName,
 			},
 		}},
 	}
@@ -209,10 +207,10 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 			Annotations: annotations,
 		},
 		Spec: corev1.PodSpec{
-			Tolerations:        e.installation.ControlPlaneTolerations,
-			NodeSelector:       e.installation.ControlPlaneNodeSelector,
+			Tolerations:        e.cfg.Installation.ControlPlaneTolerations,
+			NodeSelector:       e.cfg.Installation.ControlPlaneNodeSelector,
 			ServiceAccountName: ServiceAccountName,
-			ImagePullSecrets:   secret.GetReferenceList(e.pullSecrets),
+			ImagePullSecrets:   secret.GetReferenceList(e.cfg.PullSecrets),
 			Volumes:            volumes,
 			InitContainers:     initContainers,
 			Containers: []corev1.Container{
@@ -237,7 +235,7 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 		},
 	}
 
-	if e.installation.ControlPlaneReplicas != nil && *e.installation.ControlPlaneReplicas > 1 {
+	if e.cfg.Installation.ControlPlaneReplicas != nil && *e.cfg.Installation.ControlPlaneReplicas > 1 {
 		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity(DeploymentName, render.ElasticsearchNamespace)
 	}
 
@@ -256,7 +254,7 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 			},
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": DeploymentName}},
 			Template: *podTemplate,
-			Replicas: e.installation.ControlPlaneReplicas,
+			Replicas: e.cfg.Installation.ControlPlaneReplicas,
 		},
 	}
 }

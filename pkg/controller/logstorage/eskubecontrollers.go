@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -42,13 +42,6 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 	esLicenseType render.ElasticsearchLicenseType,
 	ctx context.Context,
 ) (reconcile.Result, bool, error) {
-	kubeControllerEsPublicCertSecret, err := utils.GetSecret(ctx, r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
-	if err != nil {
-		log.Error(err, err.Error())
-		r.status.SetDegraded("Failed to get Elasticsearch pub cert secret used by kube controllers", err.Error())
-		return reconcile.Result{}, false, err
-	}
-
 	kubeControllersUserSecret, err := utils.GetSecret(ctx, r.client, kubecontrollers.ElasticsearchKubeControllersUserSecret, common.OperatorNamespace())
 	if err != nil {
 		log.Error(err, err.Error())
@@ -83,10 +76,6 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 		log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", relasticsearch.PublicCertSecret))
 		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err.Error())
 		return reconcile.Result{}, false, err
-	} else if esgwCertificate == nil {
-		log.Info("Elasticsearch gateway certificate is not available yet, waiting until they become available")
-		r.status.SetDegraded("Elasticsearch gateway certificate are not available yet, waiting until they become available", "")
-		return reconcile.Result{}, false, nil
 	}
 	trustedBundle := certificateManager.CreateTrustedBundle(esgwCertificate)
 
@@ -98,7 +87,6 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 		ManagerInternalSecret:        managerInternalTLSSecret,
 		EnabledESOIDCWorkaround:      enableESOIDCWorkaround,
 		Authentication:               authentication,
-		ElasticsearchSecret:          kubeControllerEsPublicCertSecret,
 		KubeControllersGatewaySecret: kubeControllersUserSecret,
 		LogStorageExists:             true,
 		TrustedBundle:                trustedBundle,

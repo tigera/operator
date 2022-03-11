@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -388,6 +388,9 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 					Image:         c.controllerImage,
 					Env:           envVars,
 					LivenessProbe: complianceLivenessProbe,
+					VolumeMounts: []corev1.VolumeMount{
+						c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()),
+					},
 				}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceControllerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()),
 			},
 			Volumes: []corev1.Volume{
@@ -519,6 +522,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 							},
 							VolumeMounts: []corev1.VolumeMount{
 								{MountPath: "/var/log/calico", Name: "var-log-calico"},
+								c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()),
 							},
 						}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceReporterUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()), c.cfg.ESClusterConfig.Replicas(), c.cfg.ESClusterConfig.Shards(),
 					),
@@ -858,6 +862,9 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 						Image:         c.snapshotterImage,
 						Env:           envVars,
 						LivenessProbe: complianceLivenessProbe,
+						VolumeMounts: []corev1.VolumeMount{
+							c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()),
+						},
 					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceSnapshotterUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()), c.cfg.ESClusterConfig.Replicas(), c.cfg.ESClusterConfig.Shards(),
 				),
 			},
@@ -960,6 +967,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 		{Name: "etc-systemd", MountPath: "/etc/systemd", ReadOnly: true},
 		{Name: "etc-kubernetes", MountPath: "/etc/kubernetes", ReadOnly: true},
 		{Name: "usr-bin", MountPath: "/usr/local/bin", ReadOnly: true},
+		c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()),
 	}
 
 	vols := []corev1.Volume{

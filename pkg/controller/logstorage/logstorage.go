@@ -1,3 +1,17 @@
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package logstorage
 
 import (
@@ -6,6 +20,7 @@ import (
 	"net/url"
 
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
@@ -162,9 +177,16 @@ func (r *ReconcileLogStorage) createLogStorage(
 	components = append(components, component,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       render.ElasticsearchNamespace,
-			ServiceAccounts: []string{render.FluentdNodeName},
+			ServiceAccounts: []string{render.ElasticsearchName},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(elasticKeyPair, true, true),
+			},
+			TrustedBundle: trustedBundle,
+		}),
+		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+			Namespace:       render.KibanaNamespace,
+			ServiceAccounts: []string{render.KibanaName},
+			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(kibanaKeyPair, true, true),
 			},
 			TrustedBundle: trustedBundle,

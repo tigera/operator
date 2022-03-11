@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -110,8 +110,13 @@ func ContainerDecorateENVVars(
 }
 
 func ContainerDecorateVolumeMounts(c corev1.Container, osType rmeta.OSType) corev1.Container {
-	c.VolumeMounts = append(c.VolumeMounts, DefaultVolumeMount(osType))
-
+	//mount := DefaultVolumeMount(osType)
+	//for _, m := range c.VolumeMounts {
+	//	if m.Name == mount.Name {
+	//		return c
+	//	}
+	//}
+	//c.VolumeMounts = append(c.VolumeMounts, mount)
 	return c
 }
 

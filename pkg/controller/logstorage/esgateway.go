@@ -1,3 +1,17 @@
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package logstorage
 
 import (
@@ -31,7 +45,7 @@ func (r *ReconcileLogStorage) createEsGateway(
 ) (reconcile.Result, bool, error) {
 	svcDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
 	svcDNSNames = append(svcDNSNames, dns.GetServiceDNSNames(esgateway.ServiceName, render.ElasticsearchNamespace, r.clusterDomain)...)
-	gatewayCertSecret, err := certificateManager.GetOrCreateKeyPair(r.client, render.TigeraElasticsearchGatewaySecret, common.OperatorNamespace(), svcDNSNames)
+	gatewayKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.TigeraElasticsearchGatewaySecret, common.OperatorNamespace(), svcDNSNames)
 	if err != nil {
 		log.Error(err, "Error creating TLS certificate")
 		r.status.SetDegraded("Error creating TLS certificate", err.Error())
@@ -85,6 +99,7 @@ func (r *ReconcileLogStorage) createEsGateway(
 		KubeControllersUserSecrets: []*corev1.Secret{kubeControllersGatewaySecret, kubeControllersVerificationSecret, kubeControllersSecureUserSecret},
 		ClusterDomain:              r.clusterDomain,
 		EsAdminUserName:            esAdminUserName,
+		ESGatewayKeyPair:           gatewayKeyPair,
 	}
 
 	esGatewayComponent := esgateway.EsGateway(cfg)
@@ -99,7 +114,7 @@ func (r *ReconcileLogStorage) createEsGateway(
 		Namespace:       render.ElasticsearchNamespace,
 		ServiceAccounts: []string{esgateway.ServiceAccountName},
 		KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-			rcertificatemanagement.NewKeyPairOption(gatewayCertSecret, true, true),
+			rcertificatemanagement.NewKeyPairOption(gatewayKeyPair, true, true),
 		},
 		TrustedBundle: trustedBundle,
 	})

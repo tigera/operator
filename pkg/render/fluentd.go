@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -488,7 +488,7 @@ func (c *fluentdComponent) container() corev1.Container {
 	envs := c.envvars()
 	volumeMounts := []corev1.VolumeMount{
 		{MountPath: c.path("/var/log/calico"), Name: "var-log-calico"},
-		{MountPath: c.path("/etc/fluentd/elastic"), Name: "elastic-ca-cert-volume"},
+		{MountPath: c.path("/etc/fluentd/elastic"), Name: certificatemanagement.TrustedCertConfigMapName},
 	}
 	if c.cfg.Filters != nil {
 		if c.cfg.Filters.Flow != "" {
@@ -807,7 +807,7 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 	if c.cfg.MetricsServerTLS != nil {
 		volumes = append(volumes, c.cfg.MetricsServerTLS.Volume())
 	}
-	volumes = append(volumes, c.cfg.TrustedBundle.Volume())
+	volumes = append(volumes, trustedBundleVolume(c.cfg.TrustedBundle))
 
 	return volumes
 }
@@ -967,6 +967,16 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 	}
 }
 
+func trustedBundleVolume(bundle certificatemanagement.TrustedBundle) corev1.Volume {
+	volume := bundle.Volume()
+	// We mount the bundle under two names; the standard name and the name for the expected elastic cert.
+	volume.ConfigMap.Items = []corev1.KeyToPath{
+		{Key: certificatemanagement.TrustedCertConfigMapKeyName, Path: certificatemanagement.TrustedCertConfigMapKeyName},
+		{Key: certificatemanagement.TrustedCertConfigMapKeyName, Path: SplunkFluentdSecretCertificateKey},
+	}
+	return volume
+}
+
 func (c *fluentdComponent) eksLogForwarderVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
 		relasticsearch.DefaultVolumeMount(c.cfg.OSType),
@@ -975,7 +985,7 @@ func (c *fluentdComponent) eksLogForwarderVolumeMounts() []corev1.VolumeMount {
 			MountPath: c.path("/fluentd/cloudwatch-logs/"),
 		},
 		{
-			Name:      "elastic-ca-cert-volume",
+			Name:      certificatemanagement.TrustedCertConfigMapName,
 			MountPath: c.path("/etc/fluentd/elastic/"),
 		},
 	}
@@ -983,7 +993,7 @@ func (c *fluentdComponent) eksLogForwarderVolumeMounts() []corev1.VolumeMount {
 
 func (c *fluentdComponent) eksLogForwarderVolumes() []corev1.Volume {
 	return []corev1.Volume{
-		c.cfg.TrustedBundle.Volume(),
+		trustedBundleVolume(c.cfg.TrustedBundle),
 		{
 			Name: "plugin-statefile-dir",
 			VolumeSource: corev1.VolumeSource{

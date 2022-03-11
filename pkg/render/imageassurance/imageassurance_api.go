@@ -154,6 +154,7 @@ func (c *component) apiDeployment() *appsv1.Deployment {
 		{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
 		{Name: "IMAGE_ASSURANCE_HTTPS_CERT", Value: "/certs/https/tls.crt"},
 		{Name: "IMAGE_ASSURANCE_HTTPS_KEY", Value: "/certs/https/tls.key"},
+		{Name: "IMAGE_ASSURANCE_TENANT_KEY", Value: "/tenant-key/encryption_key"},
 	}
 
 	env = pgDecorateENVVars(env, PGUserSecretName, MountPathPostgresCerts, PGConfigMapName)
@@ -165,6 +166,7 @@ func (c *component) apiDeployment() *appsv1.Deployment {
 		{Name: APICertSecretName, MountPath: mountPathAPITLSCerts, ReadOnly: true},
 		{Name: PGCertSecretName, MountPath: MountPathPostgresCerts, ReadOnly: true},
 		{Name: ManagerCertSecretName, MountPath: mountPathManagerTLSCerts, ReadOnly: true},
+		{Name: TenantKeyName, MountPath: MountTenantKey, ReadOnly: true},
 	}
 
 	if c.config.KeyValidatorConfig != nil {

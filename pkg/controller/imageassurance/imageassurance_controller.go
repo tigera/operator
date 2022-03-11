@@ -103,7 +103,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 
 	// Watch secrets created for postgres in operator namespace.
 	for _, s := range []string{imageassurance.PGCertSecretName, imageassurance.ManagerCertSecretName,
-		imageassurance.APICertSecretName, imageassurance.PGAdminUserSecretName} {
+		imageassurance.APICertSecretName, imageassurance.PGAdminUserSecretName, imageassurance.TenantKeyName} {
 		if err = utils.AddSecretsWatch(c, s, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("ImageAssurance-controller failed to watch Secret %s: %v", s, err)
 		}
@@ -251,6 +251,13 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
+	tenantKey, err := getTenantKey(r.client)
+	if err != nil {
+		reqLogger.Error(err, "Error retrieving tenant key")
+		r.status.SetDegraded("Error retrieving tenant key", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	ch := utils.NewComponentHandler(log, r.client, r.scheme, ia)
 
 	needsMigrating, err := needsMigrating(installation, imageSet, migratorJob)
@@ -299,6 +306,7 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		NeedsMigrating:     needsMigrating,
 		ComponentsUp:       componentsUp,
 		KeyValidatorConfig: kvc,
+		TenantKey:          tenantKey,
 	}
 
 	components := []render.Component{render.NewPassthrough([]client.Object{tlsSecret}...)}
@@ -620,4 +628,24 @@ func needsMigrating(installation *operatorv1.InstallationSpec, imageSet *operato
 	}
 
 	return needsMigrating, nil
+}
+
+// getTenantKey returns the image assurance tenant key.
+func getTenantKey(client client.Client) (*corev1.Secret, error) {
+	cs := &corev1.Secret{}
+	snn := types.NamespacedName{
+		Name:      imageassurance.TenantKeyName,
+		Namespace: common.OperatorNamespace(),
+	}
+
+	if err := client.Get(context.Background(), snn, cs); err != nil {
+		return nil, fmt.Errorf("failed to read secret %q: %s", imageassurance.TenantKeyName, err)
+	}
+
+	if ca, ok := cs.Data[imageassurance.EncryptionKeyName]; !ok || len(ca) == 0 {
+		return nil, fmt.Errorf("expected secret %q to have a field named %q",
+			imageassurance.PGCertSecretName, imageassurance.EncryptionKeyName)
+	}
+
+	return cs, nil
 }

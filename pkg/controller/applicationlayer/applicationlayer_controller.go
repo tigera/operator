@@ -341,9 +341,7 @@ func validateApplicationLayer(al *operatorv1.ApplicationLayer) error {
 		al.Spec.WebApplicationFirewall != nil
 
 	// If ApplicationLayer spec exists then one of its features should be set.
-	if !properlyConfigured ||
-		*al.Spec.LogCollection.CollectLogs != operatorv1.L7LogCollectionEnabled &&
-			*al.Spec.WebApplicationFirewall != operatorv1.WAFEnabled {
+	if !properlyConfigured || (*al.Spec.LogCollection.CollectLogs != operatorv1.L7LogCollectionEnabled && *al.Spec.WebApplicationFirewall != operatorv1.WAFEnabled) {
 		return fmt.Errorf("at least one of webApplicationFirewall or logCollection.collectLogs must be specified in ApplicationLayer resource")
 	}
 

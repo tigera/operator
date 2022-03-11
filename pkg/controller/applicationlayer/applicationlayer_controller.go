@@ -304,10 +304,20 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 
 // updateApplicationLayerWithDefaults populates the applicationlayer with defaults.
 func updateApplicationLayerWithDefaults(al *operatorv1.ApplicationLayer) {
-	defaultLogIntervalSeconds := int64(5)
-	defaultLogRequestsPerInterval := int64(-1)
+	var defaultLogIntervalSeconds int64 = 5
+	var defaultLogRequestsPerInterval int64 = -1
+	var defaultLogCollectionDisabled operatorv1.LogCollectionStatusType = operatorv1.L7LogCollectionDisabled
+	var defaultWebApplicationFirewallDisabled operatorv1.WAFStatusType = operatorv1.WAFDisabled
 
-	if al.Spec.LogCollection != nil {
+	if al.Spec.LogCollection == nil {
+		al.Spec.LogCollection = new(operatorv1.LogCollectionSpec)
+	}
+
+	if al.Spec.LogCollection.CollectLogs == nil {
+		al.Spec.LogCollection.CollectLogs = &defaultLogCollectionDisabled
+	}
+
+	if *al.Spec.LogCollection.CollectLogs == operatorv1.L7LogCollectionEnabled {
 		if al.Spec.LogCollection.LogRequestsPerInterval == nil {
 			al.Spec.LogCollection.LogRequestsPerInterval = &defaultLogRequestsPerInterval
 		}
@@ -315,14 +325,26 @@ func updateApplicationLayerWithDefaults(al *operatorv1.ApplicationLayer) {
 			al.Spec.LogCollection.LogIntervalSeconds = &defaultLogIntervalSeconds
 		}
 	}
+
+	if al.Spec.WebApplicationFirewall == nil {
+		al.Spec.WebApplicationFirewall = &defaultWebApplicationFirewallDisabled
+	}
 }
 
 // validateApplicationLayer validates ApplicationLayer
 func validateApplicationLayer(al *operatorv1.ApplicationLayer) error {
 
+	// Just a precaution to make sure it is safe to dereference pointers below.
+	// This is already taken care of in updateApplicationLayerWithDefaults.
+	properlyConfigured := al.Spec.LogCollection != nil &&
+		al.Spec.LogCollection.CollectLogs != nil &&
+		al.Spec.WebApplicationFirewall != nil
+
 	// If ApplicationLayer spec exists then one of its features should be set.
-	if al.Spec.LogCollection == nil && al.Spec.WebApplicationFirewall == nil {
-		return fmt.Errorf("at least one of webApplicationFirewall or logCollector must be specified on ApplicationLayer resource")
+	if !properlyConfigured ||
+		*al.Spec.LogCollection.CollectLogs != operatorv1.L7LogCollectionEnabled &&
+			*al.Spec.WebApplicationFirewall != operatorv1.WAFEnabled {
+		return fmt.Errorf("at least one of webApplicationFirewall or logCollection.collectLogs must be specified in ApplicationLayer resource")
 	}
 
 	return nil

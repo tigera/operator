@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -83,9 +83,9 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				},
 			},
 		},
-		{Name: "ELASTIC_CA", Value: "/etc/ssl/elastic/ca.pem"},
-		{Name: "ES_CA_CERT", Value: "/etc/ssl/elastic/ca.pem"},
-		{Name: "ES_CURATOR_BACKEND_CERT", Value: "/etc/ssl/elastic/ca.pem"},
+		{Name: "ELASTIC_CA", Value: certificatemanagement.TrustedCertBundleMountPath},
+		{Name: "ES_CA_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
+		{Name: "ES_CURATOR_BACKEND_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
 	}
 	var internalManagerTLSSecret certificatemanagement.KeyPairInterface
 
@@ -239,7 +239,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: kubecontrollers.EsKubeControllerRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: kubecontrollers.EsKubeControllerRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: kubecontrollers.EsKubeController, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "Deployment"},
-			{name: render.TigeraElasticsearchCertSecret, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: render.TigeraElasticsearchGatewaySecret, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: kubecontrollers.ElasticsearchKubeControllersUserSecret, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: kubecontrollers.EsKubeControllerPodSecurityPolicy, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: kubecontrollers.EsKubeControllerMetrics, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Service"},
@@ -248,7 +248,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		instance.Variant = operatorv1.TigeraSecureEnterprise
 		cfg.LogStorageExists = true
 		cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
-		cfg.ElasticsearchSecret = &testutils.ElasticsearchSecret
 		cfg.ManagerInternalSecret = internalManagerTLSSecret
 		cfg.MetricsPort = 9094
 		cfg.EnabledESOIDCWorkaround = true
@@ -278,13 +277,13 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(len(dp.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(2))
 		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(render.ManagerInternalTLSSecretName))
 		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/internal-manager-tls"))
-		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal("elastic-ca-cert-volume"))
-		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal("/etc/ssl/elastic/"))
+		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
 
 		Expect(len(dp.Spec.Template.Spec.Volumes)).To(Equal(2))
 		Expect(dp.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ManagerInternalTLSSecretName))
 		Expect(dp.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ManagerInternalTLSSecretName))
-		Expect(dp.Spec.Template.Spec.Volumes[1].Name).To(Equal("elastic-ca-cert-volume"))
+		Expect(dp.Spec.Template.Spec.Volumes[1].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 		Expect(dp.Spec.Template.Spec.Volumes[1].Secret.SecretName).To(Equal(relasticsearch.PublicCertSecret))
 
 		clusterRole := rtest.GetResource(resources, kubecontrollers.EsKubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
@@ -358,7 +357,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: kubecontrollers.EsKubeControllerRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: kubecontrollers.EsKubeControllerRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: kubecontrollers.EsKubeController, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "Deployment"},
-			{name: render.TigeraElasticsearchCertSecret, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: render.TigeraElasticsearchGatewaySecret, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: kubecontrollers.ElasticsearchKubeControllersUserSecret, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: kubecontrollers.EsKubeControllerPodSecurityPolicy, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: kubecontrollers.EsKubeControllerMetrics, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Service"},
@@ -369,7 +368,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cfg.LogStorageExists = true
 		cfg.ManagementCluster = &operatorv1.ManagementCluster{}
 		cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
-		cfg.ElasticsearchSecret = &testutils.ElasticsearchSecret
 		cfg.ManagerInternalSecret = internalManagerTLSSecret
 		cfg.MetricsPort = 9094
 		cfg.EnabledESOIDCWorkaround = true
@@ -398,13 +396,13 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(len(dp.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(2))
 		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(render.ManagerInternalTLSSecretName))
 		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/internal-manager-tls"))
-		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal("elastic-ca-cert-volume"))
-		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal("/etc/ssl/elastic/"))
+		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
 
 		Expect(len(dp.Spec.Template.Spec.Volumes)).To(Equal(2))
 		Expect(dp.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ManagerInternalTLSSecretName))
 		Expect(dp.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ManagerInternalTLSSecretName))
-		Expect(dp.Spec.Template.Spec.Volumes[1].Name).To(Equal("elastic-ca-cert-volume"))
+		Expect(dp.Spec.Template.Spec.Volumes[1].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 		Expect(dp.Spec.Template.Spec.Volumes[1].Secret.SecretName).To(Equal(relasticsearch.PublicCertSecret))
 
 		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:" + components.ComponentTigeraKubeControllers.Version))
@@ -506,7 +504,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cfg.LogStorageExists = true
 		cfg.ManagementCluster = &operatorv1.ManagementCluster{}
 		cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
-		cfg.ElasticsearchSecret = &testutils.ElasticsearchSecret
 		cfg.ManagerInternalSecret = internalManagerTLSSecret
 		cfg.MetricsPort = 9094
 		cfg.EnabledESOIDCWorkaround = true
@@ -547,7 +544,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			cfg.LogStorageExists = true
 			cfg.ManagementCluster = &operatorv1.ManagementCluster{}
 			cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
-			cfg.ElasticsearchSecret = &testutils.ElasticsearchSecret
 			cfg.ManagerInternalSecret = internalManagerTLSSecret
 			cfg.MetricsPort = 9094
 			cfg.EnabledESOIDCWorkaround = true

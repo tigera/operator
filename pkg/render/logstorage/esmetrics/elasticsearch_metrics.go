@@ -158,7 +158,7 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 					},
 					Annotations: annotations,
 				},
-				Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
+				Spec: corev1.PodSpec{
 					Tolerations:        e.cfg.Installation.ControlPlaneTolerations,
 					NodeSelector:       e.cfg.Installation.ControlPlaneNodeSelector,
 					ImagePullSecrets:   secret.GetReferenceList(e.cfg.PullSecrets),
@@ -175,8 +175,8 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 									"--es.timeout=30s", "--es.ca=$(ELASTIC_CA)", "--web.listen-address=:9081",
 									"--web.telemetry-path=/metrics", "--tls.key=/tigera-ee-elasticsearch-metrics-tls/tls.key", "--tls.crt=/tigera-ee-elasticsearch-metrics-tls/tls.crt", fmt.Sprintf("--ca.crt=%s", certificatemanagement.TrustedCertBundleMountPath)},
 								VolumeMounts: []corev1.VolumeMount{
-									e.cfg.ServerTLS.VolumeMount(),
-									e.cfg.TrustedBundle.VolumeMount(),
+									e.cfg.ServerTLS.VolumeMount(e.SupportedOSType()),
+									e.cfg.TrustedBundle.VolumeMount(e.SupportedOSType()),
 								},
 							}, render.DefaultElasticsearchClusterName, ElasticsearchMetricsSecret,
 							e.cfg.ClusterDomain, e.SupportedOSType(),
@@ -186,7 +186,7 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 						e.cfg.ServerTLS.Volume(),
 						e.cfg.TrustedBundle.Volume(),
 					},
-				}),
+				},
 			}, e.cfg.ESConfig, []*corev1.Secret{e.cfg.ESMetricsCredsSecret, e.cfg.ESCertSecret}).(*corev1.PodTemplateSpec),
 		},
 	}

@@ -329,11 +329,16 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		r.status.SetDegraded("Unable to create the Tigera CA", err.Error())
 		return reconcile.Result{}, err
 	}
-	kibanaPublicCertSecret, err := certificateManager.GetCertificate(r.client, render.KibanaPublicCertSecret, common.OperatorNamespace())
+
+	esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
 	if err != nil {
-		reqLogger.Error(err, "Failed to read Kibana public cert secret")
-		r.status.SetDegraded("Failed to read Kibana public cert secret", err.Error())
+		log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", relasticsearch.PublicCertSecret))
+		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err.Error())
 		return reconcile.Result{}, err
+	} else if esgwCertificate == nil {
+		log.Info("Elasticsearch gateway certificate is not available yet, waiting until they become available")
+		r.status.SetDegraded("Elasticsearch gateway certificate are not available yet, waiting until they become available", "")
+		return reconcile.Result{}, nil
 	}
 
 	if !r.dpiAPIReady.IsReady() {
@@ -343,7 +348,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	var esLicenseType render.ElasticsearchLicenseType
-	trustedBundle := certificateManager.CreateTrustedBundle(kibanaPublicCertSecret)
+	trustedBundle := certificateManager.CreateTrustedBundle(esgwCertificate)
 
 	if managementClusterConnection == nil {
 		if esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger); err != nil {
@@ -394,6 +399,9 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		r.status.SetDegraded("Error with Typha/Felix secrets", err.Error())
 		return reconcile.Result{}, err
 	}
+
+	typhaNodeTLS.TrustedBundle.AddCertificates(esgwCertificate)
+
 	dpiList := &v3.DeepPacketInspectionList{}
 	if err := r.client.List(ctx, dpiList); err != nil {
 		r.status.SetDegraded("Failed to retrieve DeepPacketInspection resource", err.Error())

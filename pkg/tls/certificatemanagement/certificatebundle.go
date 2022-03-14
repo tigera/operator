@@ -71,10 +71,16 @@ func (t *trustedBundle) HashAnnotations() map[string]string {
 	return annotations
 }
 
-func (t *trustedBundle) VolumeMount() corev1.VolumeMount {
+func (t *trustedBundle) VolumeMount(osType rmeta.OSType) corev1.VolumeMount {
+	var mountPath string
+	if osType == rmeta.OSTypeWindows {
+		mountPath = TrustedCertVolumeMountPathWindows
+	} else {
+		mountPath = TrustedCertVolumeMountPath
+	}
 	return corev1.VolumeMount{
 		Name:      TrustedCertConfigMapName,
-		MountPath: TrustedCertVolumeMountPath,
+		MountPath: mountPath,
 		ReadOnly:  true,
 	}
 }

@@ -153,6 +153,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 		Elasticsearch:               elasticsearch,
 		Kibana:                      kibana,
 		ClusterConfig:               clusterConfig,
+		ElasticsearchUserSecret:     esAdminUserSecret,
 		ElasticsearchKeyPair:        elasticKeyPair,
 		KibanaKeyPair:               kibanaKeyPair,
 		PullSecrets:                 pullSecrets,

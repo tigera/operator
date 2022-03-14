@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -68,13 +68,12 @@ const (
 	// TigeraKibanaCertSecret is the TLS key pair that is mounted by the Kibana pods.
 	TigeraKibanaCertSecret = "tigera-secure-kibana-cert"
 
-	ElasticsearchName                     = "tigera-secure"
-	ElasticsearchServiceName              = "tigera-secure-es-http"
-	ESGatewayServiceName                  = "tigera-secure-es-gateway-http"
-	ElasticsearchDefaultPort              = 9200
-	ElasticsearchSecureSettingsSecretName = "tigera-elasticsearch-secure-settings"
-	ElasticsearchOperatorUserSecret       = "tigera-ee-operator-elasticsearch-access"
-	ElasticsearchAdminUserSecret          = "tigera-secure-es-elastic-user"
+	ElasticsearchName               = "tigera-secure"
+	ElasticsearchServiceName        = "tigera-secure-es-http"
+	ESGatewayServiceName            = "tigera-secure-es-gateway-http"
+	ElasticsearchDefaultPort        = 9200
+	ElasticsearchOperatorUserSecret = "tigera-ee-operator-elasticsearch-access"
+	ElasticsearchAdminUserSecret    = "tigera-secure-es-elastic-user"
 
 	KibanaName         = "tigera-secure"
 	KibanaNamespace    = "tigera-kibana"
@@ -157,6 +156,7 @@ type ElasticsearchConfiguration struct {
 	Elasticsearch               *esv1.Elasticsearch
 	Kibana                      *kbv1.Kibana
 	ClusterConfig               *relasticsearch.ClusterConfig
+	ElasticsearchUserSecret     *corev1.Secret
 	ElasticsearchKeyPair        certificatemanagement.KeyPairInterface
 	KibanaKeyPair               certificatemanagement.KeyPairInterface
 	PullSecrets                 []*corev1.Secret
@@ -284,6 +284,10 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 		if len(es.cfg.PullSecrets) > 0 {
 			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.cfg.PullSecrets...)...)...)
+		}
+
+		if es.cfg.ElasticsearchUserSecret != nil {
+			toCreate = append(toCreate, es.cfg.ElasticsearchUserSecret)
 		}
 
 		toCreate = append(toCreate, es.elasticsearchServiceAccount())
@@ -484,6 +488,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	initContainers := []corev1.Container{initOSSettingsContainer}
 
 	annotations := map[string]string{
+		ElasticsearchTLSHashAnnotation:                  rmeta.SecretsAnnotationHash(es.cfg.ElasticsearchUserSecret),
 		es.cfg.ElasticsearchKeyPair.HashAnnotationKey(): es.cfg.ElasticsearchKeyPair.HashAnnotationValue(),
 	}
 
@@ -520,12 +525,15 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 				},
 			},
 		}
-
+		initContainers = append(
+			initContainers,
+			initFSContainer)
 		var csrInitContainerHTTP corev1.Container
 		// Add the init container that will issue a CSR for HTTP traffic and mount it in an emptyDir.
 		if es.cfg.ElasticsearchKeyPair.UseCertificateManagement() {
 			csrInitContainerHTTP = es.cfg.ElasticsearchKeyPair.InitContainer(ElasticsearchNamespace)
 			csrInitContainerHTTP.Name = "key-cert-elastic"
+			initContainers = append(initContainers, csrInitContainerHTTP)
 		}
 		httpVolumemount := es.cfg.ElasticsearchKeyPair.VolumeMount(es.SupportedOSType())
 		httpVolumemount.Name = csrVolumeNameHTTP
@@ -541,12 +549,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			dns.GetServiceDNSNames(ElasticsearchServiceName, ElasticsearchNamespace, es.cfg.ClusterDomain),
 			ElasticsearchNamespace)
 		csrInitContainerTransport.Name = "key-cert-elastic-transport"
-
-		initContainers = append(
-			initContainers,
-			initFSContainer,
-			csrInitContainerHTTP,
-			csrInitContainerTransport)
+		initContainers = append(initContainers, csrInitContainerTransport)
 
 		volumes = append(volumes,
 			es.cfg.ElasticsearchKeyPair.Volume(),
@@ -1316,6 +1319,9 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
 									SecurityContext: &corev1.SecurityContext{
 										RunAsNonRoot:             &t,
 										AllowPrivilegeEscalation: &f,
+									},
+									VolumeMounts: []corev1.VolumeMount{
+										es.cfg.TrustedBundle.VolumeMount(es.SupportedOSType()),
 									},
 								}, DefaultElasticsearchClusterName, ElasticsearchCuratorUserSecret, es.cfg.ClusterDomain, es.SupportedOSType()),
 							},

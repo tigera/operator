@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -193,14 +194,14 @@ var _ = Describe("Elasticsearch metrics", func() {
 											},
 										},
 									},
-									{Name: "ELASTIC_CA", Value: "/etc/ssl/elastic/ca.pem"},
-									{Name: "ES_CA_CERT", Value: "/etc/ssl/elastic/ca.pem"},
-									{Name: "ES_CURATOR_BACKEND_CERT", Value: "/etc/ssl/elastic/ca.pem"},
+									{Name: "ELASTIC_CA", Value: certificatemanagement.TrustedCertBundleMountPath},
+									{Name: "ES_CA_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
+									{Name: "ES_CURATOR_BACKEND_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
 								},
 								VolumeMounts: []corev1.VolumeMount{
 									cfg.ServerTLS.VolumeMount(meta.OSTypeLinux),
 									cfg.TrustedBundle.VolumeMount(meta.OSTypeLinux),
-									{Name: "elastic-ca-cert-volume", MountPath: "/etc/ssl/elastic/"},
+									{Name: certificatemanagement.TrustedCertConfigMapName, MountPath: certificatemanagement.TrustedCertVolumeMountPath},
 								},
 							}},
 							ServiceAccountName: ElasticsearchMetricsName,

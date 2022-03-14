@@ -62,7 +62,7 @@ func DecorateAnnotations(obj Annotatable, config *ClusterConfig, secrets []*core
 }
 
 func ContainerDecorate(c corev1.Container, cluster, secret, clusterDomain string, osType rmeta.OSType) corev1.Container {
-	return ContainerDecorateVolumeMounts(ContainerDecorateENVVars(c, cluster, secret, clusterDomain, osType), osType)
+	return ContainerDecorateENVVars(c, cluster, secret, clusterDomain, osType)
 }
 
 func ContainerDecorateIndexCreator(c corev1.Container, replicas, shards int) corev1.Container {
@@ -106,17 +106,6 @@ func ContainerDecorateENVVars(
 	}
 
 	c.Env = append(c.Env, envVars...)
-	return c
-}
-
-func ContainerDecorateVolumeMounts(c corev1.Container, osType rmeta.OSType) corev1.Container {
-	//mount := DefaultVolumeMount(osType)
-	//for _, m := range c.VolumeMounts {
-	//	if m.Name == mount.Name {
-	//		return c
-	//	}
-	//}
-	//c.VolumeMounts = append(c.VolumeMounts, mount)
 	return c
 }
 

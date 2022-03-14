@@ -139,7 +139,7 @@ var (
 		{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
 		{MountPath: "/node-certs", Name: "node-certs", ReadOnly: true},
 		{
-			MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: "elastic-ca-cert-volume",
+			MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName,
 		},
 		{
 			MountPath: "/var/log/calico/snort-alerts", Name: "log-snort-alters",

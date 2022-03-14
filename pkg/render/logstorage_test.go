@@ -92,7 +92,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 			esConfig := relasticsearch.NewClusterConfig("cluster", 1, 1, 1)
 
-			elasticsearchKeyPair, kibanaKeyPair, trustedBundle := getTLS()
+			elasticsearchKeyPair, kibanaKeyPair, trustedBundle := getTLS(installation)
 			cfg = &render.ElasticsearchConfiguration{
 				LogStorage:           logStorage,
 				Installation:         installation,
@@ -268,7 +268,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					KeyAlgorithm:       "ECDSAWithCurve521",
 				}
 
-				cfg.ElasticsearchKeyPair, cfg.KibanaKeyPair, cfg.TrustedBundle = getTLS()
+				cfg.ElasticsearchKeyPair, cfg.KibanaKeyPair, cfg.TrustedBundle = getTLS(cfg.Installation)
 
 				expectedCreateResources := []resourceTestObj{
 					{render.ECKOperatorNamespace, "", &corev1.Namespace{}, nil},
@@ -588,13 +588,14 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				Registry:             "testregistry.com/",
 			}
 			esConfig := relasticsearch.NewClusterConfig("cluster", 1, 1, 1)
-
+			elasticsearchKeyPair, kibanaKeyPair, trustedBundle := getTLS(installation)
 			cfg = &render.ElasticsearchConfiguration{
 				LogStorage:           logStorage,
 				Installation:         installation,
 				ClusterConfig:        esConfig,
-				ElasticsearchKeyPair: nil,
-				KibanaKeyPair:        nil,
+				ElasticsearchKeyPair: elasticsearchKeyPair,
+				KibanaKeyPair:        kibanaKeyPair,
+				TrustedBundle:        trustedBundle,
 				PullSecrets: []*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				},
@@ -1073,13 +1074,14 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			}
 
 			esConfig := relasticsearch.NewClusterConfig("cluster", 1, 1, 1)
-
+			elasticsearchKeyPair, kibanaKeyPair, trustedBundle := getTLS(installation)
 			cfg = &render.ElasticsearchConfiguration{
 				LogStorage:           logStorage,
 				Installation:         installation,
 				ClusterConfig:        esConfig,
-				ElasticsearchKeyPair: nil,
-				KibanaKeyPair:        nil,
+				ElasticsearchKeyPair: elasticsearchKeyPair,
+				KibanaKeyPair:        kibanaKeyPair,
+				TrustedBundle:        trustedBundle,
 				PullSecrets: []*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				},
@@ -1127,11 +1129,11 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 	})
 })
 
-func getTLS() (certificatemanagement.KeyPairInterface, certificatemanagement.KeyPairInterface, certificatemanagement.TrustedBundle) {
+func getTLS(installation *operatorv1.InstallationSpec) (certificatemanagement.KeyPairInterface, certificatemanagement.KeyPairInterface, certificatemanagement.TrustedBundle) {
 	scheme := runtime.NewScheme()
 	Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 	cli := fake.NewClientBuilder().WithScheme(scheme).Build()
-	certificateManager, err := certificatemanager.Create(cli, nil, dns.DefaultClusterDomain)
+	certificateManager, err := certificatemanager.Create(cli, installation, dns.DefaultClusterDomain)
 	Expect(err).NotTo(HaveOccurred())
 	esDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
 	kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, dns.DefaultClusterDomain)
@@ -1184,7 +1186,7 @@ var deleteLogStorageTests = func(managementCluster *operatorv1.ManagementCluster
 				Registry:             "testregistry.com/",
 			}
 			esConfig := relasticsearch.NewClusterConfig("cluster", 1, 1, 1)
-			elasticsearchKeyPair, kibanaKeyPair, trustedBundle := getTLS()
+			elasticsearchKeyPair, kibanaKeyPair, trustedBundle := getTLS(installation)
 
 			cfg = &render.ElasticsearchConfiguration{
 				LogStorage:                  logStorage,

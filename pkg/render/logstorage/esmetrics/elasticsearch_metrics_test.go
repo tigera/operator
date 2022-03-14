@@ -201,22 +201,12 @@ var _ = Describe("Elasticsearch metrics", func() {
 								VolumeMounts: []corev1.VolumeMount{
 									cfg.ServerTLS.VolumeMount(meta.OSTypeLinux),
 									cfg.TrustedBundle.VolumeMount(meta.OSTypeLinux),
-									{Name: certificatemanagement.TrustedCertConfigMapName, MountPath: certificatemanagement.TrustedCertVolumeMountPath},
 								},
 							}},
 							ServiceAccountName: ElasticsearchMetricsName,
 							Volumes: []corev1.Volume{
 								cfg.ServerTLS.Volume(),
 								cfg.TrustedBundle.Volume(),
-								{
-									Name: "elastic-ca-cert-volume",
-									VolumeSource: corev1.VolumeSource{
-										Secret: &corev1.SecretVolumeSource{
-											SecretName: "tigera-secure-es-gateway-http-certs-public",
-											Items:      []corev1.KeyToPath{{Key: "tls.crt", Path: "ca.pem"}},
-										},
-									},
-								},
 							},
 						},
 					},

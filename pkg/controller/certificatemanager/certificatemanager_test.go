@@ -22,6 +22,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/utils/imageset"
+
 	"github.com/openshift/library-go/pkg/crypto"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -52,7 +55,6 @@ var _ = Describe("Test CertificateManagement suite", func() {
 		appSecretName  = "my-app-tls"
 		appSecretName2 = "my-app-tls-2"
 		appNs          = "my-app"
-		csrImageRegex  = `quay\.io/tigera/key-cert-provisioner:(master|release-.*)`
 	)
 
 	var (
@@ -326,7 +328,17 @@ var _ = Describe("Test CertificateManagement suite", func() {
 
 			By("verifying the init container")
 			initContainer := keyPair.InitContainer(appNs)
-			Expect(initContainer.Image).To(MatchRegexp(csrImageRegex))
+			imageSet, err := imageset.GetImageSet(context.Background(), cli, installation.Variant)
+			Expect(err).NotTo(HaveOccurred())
+			expectedImage, err := components.GetReference(
+				components.ComponentCSRInitContainer,
+				installation.Registry,
+				installation.ImagePath,
+				installation.ImagePrefix,
+				imageSet,
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(initContainer.Image).To(Equal(expectedImage))
 			Expect(initContainer.Env).To(ContainElement(corev1.EnvVar{Name: "COMMON_NAME", Value: appSecretName}))
 		})
 

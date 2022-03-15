@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +21,9 @@ import (
 	"context"
 	"strings"
 	"time"
+
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/utils/imageset"
 
 	"github.com/openshift/library-go/pkg/crypto"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -52,7 +55,6 @@ var _ = Describe("Test CertificateManagement suite", func() {
 		appSecretName  = "my-app-tls"
 		appSecretName2 = "my-app-tls-2"
 		appNs          = "my-app"
-		csrImage       = "quay.io/tigera/key-cert-provisioner:master"
 	)
 
 	var (
@@ -326,7 +328,17 @@ var _ = Describe("Test CertificateManagement suite", func() {
 
 			By("verifying the init container")
 			initContainer := keyPair.InitContainer(appNs)
-			Expect(initContainer.Image).To(Equal(csrImage))
+			imageSet, err := imageset.GetImageSet(context.Background(), cli, installation.Variant)
+			Expect(err).NotTo(HaveOccurred())
+			expectedImage, err := components.GetReference(
+				components.ComponentCSRInitContainer,
+				installation.Registry,
+				installation.ImagePath,
+				installation.ImagePrefix,
+				imageSet,
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(initContainer.Image).To(Equal(expectedImage))
 			Expect(initContainer.Env).To(ContainElement(corev1.EnvVar{Name: "COMMON_NAME", Value: appSecretName}))
 		})
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -52,7 +52,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 		appSecretName  = "my-app-tls"
 		appSecretName2 = "my-app-tls-2"
 		appNs          = "my-app"
-		csrImage       = "quay.io/tigera/key-cert-provisioner:master"
+		csrImageRegex  = `quay\.io/tigera/key-cert-provisioner:(master|release-.*)`
 	)
 
 	var (
@@ -326,7 +326,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 
 			By("verifying the init container")
 			initContainer := keyPair.InitContainer(appNs)
-			Expect(initContainer.Image).To(Equal(csrImage))
+			Expect(initContainer.Image).To(MatchRegexp(csrImageRegex))
 			Expect(initContainer.Env).To(ContainElement(corev1.EnvVar{Name: "COMMON_NAME", Value: appSecretName}))
 		})
 

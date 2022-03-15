@@ -37,7 +37,6 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -118,10 +117,9 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	// Watch the given secrets in each both the manager and operator namespaces
 	for _, namespace := range []string{common.OperatorNamespace(), render.ManagerNamespace} {
 		for _, secretName := range []string{
-			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret,
-			render.ElasticsearchManagerUserSecret, render.KibanaPublicCertSecret,
+			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret, render.ElasticsearchManagerUserSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureCertSecret,
-			render.ManagerInternalTLSSecretName, render.DexCertSecretName, render.PrometheusTLSSecretName, certificatemanagement.CASecretName,
+			render.ManagerInternalTLSSecretName, render.PrometheusTLSSecretName, certificatemanagement.CASecretName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("manager-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
@@ -276,7 +274,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	trustedSecretNames := []string{render.PacketCaptureCertSecret, render.PrometheusTLSSecretName}
+	trustedSecretNames := []string{render.PacketCaptureCertSecret, render.PrometheusTLSSecretName, relasticsearch.PublicCertSecret}
 	var installCompliance = utils.IsFeatureActive(license, common.ComplianceFeature)
 	if installCompliance {
 		// Check that compliance is running.
@@ -295,6 +293,20 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 		trustedSecretNames = append(trustedSecretNames, render.ComplianceServerCertSecret)
 	}
+
+	// Fetch the Authentication spec. If present, we use to configure user authentication.
+	authenticationCR, err := utils.GetAuthentication(ctx, r.client)
+	if err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded("Error while fetching Authentication", err.Error())
+		return reconcile.Result{}, err
+	}
+	if authenticationCR != nil && authenticationCR.Status.State != operatorv1.TigeraStatusReady {
+		r.status.SetDegraded("Authentication is not ready", fmt.Sprintf("authenticationCR status: %s", authenticationCR.Status.State))
+		return reconcile.Result{}, nil
+	} else if authenticationCR != nil {
+		trustedSecretNames = append(trustedSecretNames, render.DexTLSSecretName)
+	}
+
 	trustedBundle := certificateManager.CreateTrustedBundle()
 	for _, secretName := range trustedSecretNames {
 		certificate, err := certificateManager.GetCertificate(r.client, secretName, common.OperatorNamespace())
@@ -351,13 +363,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	kibanaPublicCertSecret := &corev1.Secret{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.KibanaPublicCertSecret, Namespace: common.OperatorNamespace()}, kibanaPublicCertSecret); err != nil {
-		reqLogger.Error(err, "Failed to read Kibana public cert secret")
-		r.status.SetDegraded("Failed to read Kibana public cert secret", err.Error())
-		return reconcile.Result{}, err
-	}
-
 	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
 	if err != nil {
 		log.Error(err, "Error reading ManagementCluster")
@@ -405,17 +410,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
-	// Fetch the Authentication spec. If present, we use to configure user authentication.
-	authenticationCR, err := utils.GetAuthentication(ctx, r.client)
-	if err != nil && !errors.IsNotFound(err) {
-		r.status.SetDegraded("Error while fetching Authentication", err.Error())
-		return reconcile.Result{}, err
-	}
-	if authenticationCR != nil && authenticationCR.Status.State != operatorv1.TigeraStatusReady {
-		r.status.SetDegraded("Authentication is not ready", fmt.Sprintf("authenticationCR status: %s", authenticationCR.Status.State))
-		return reconcile.Result{}, nil
-	}
-
 	keyValidatorConfig, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "Failed to process the authentication CR.")
@@ -445,7 +439,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	managerCfg := &render.ManagerConfiguration{
 		KeyValidatorConfig:    keyValidatorConfig,
 		ESSecrets:             esSecrets,
-		KibanaSecrets:         []*corev1.Secret{kibanaPublicCertSecret},
 		TrustedCertBundle:     trustedBundle,
 		ESClusterConfig:       esClusterConfig,
 		TLSKeyPair:            tlsSecret,

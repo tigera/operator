@@ -340,18 +340,6 @@ var _ = Describe("monitor rendering tests", func() {
 
 		dexCfg := render.NewDexKeyValidatorConfig(authentication,
 			nil,
-			&corev1.Secret{
-				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.DexTLSSecretName,
-					Namespace: common.OperatorNamespace(),
-				},
-				Type: corev1.SecretTypeTLS,
-				Data: map[string][]byte{
-					corev1.TLSCertKey:       []byte("cert"),
-					corev1.TLSPrivateKeyKey: []byte("key"),
-				},
-			},
 			dns.DefaultClusterDomain)
 		cfg.KeyValidatorConfig = dexCfg
 		cfg.ServerTLSSecret = prometheusKeyPair
@@ -386,7 +374,6 @@ var _ = Describe("monitor rendering tests", func() {
 			{"prometheus-http-api", common.TigeraPrometheusNamespace, "", "v1", "Service"},
 			{monitor.TigeraPrometheusObjectName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
 			{monitor.TigeraPrometheusObjectName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
-			{name: "tigera-dex-tls", ns: common.TigeraPrometheusNamespace, group: "", version: "v1", kind: "Secret"},
 		}
 
 		Expect(len(toCreate)).To(Equal(len(expectedResources)))

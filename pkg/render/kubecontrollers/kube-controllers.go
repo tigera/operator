@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019,2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package kubecontrollers
 import (
 	"strings"
 
+	"github.com/tigera/operator/pkg/render/common/secret"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -33,7 +34,6 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
-	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -80,9 +80,8 @@ type KubeControllersConfiguration struct {
 	// namespace to be returned by the rendered. Expected that the calling code
 	// take care to pass the same secret on each reconcile where possible.
 	ManagerInternalSecret        certificatemanagement.KeyPairInterface
-	ElasticsearchSecret          *corev1.Secret
 	KubeControllersGatewaySecret *corev1.Secret
-	KibanaSecret                 *corev1.Secret
+	TrustedBundle                certificatemanagement.TrustedBundle
 }
 
 func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
@@ -118,7 +117,6 @@ func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeController
 		kubeControllerName:               KubeController,
 		kubeControllerConfigName:         "default",
 		kubeControllerMetricsName:        KubeControllerMetrics,
-		renderManagerInternalSecret:      cfg.ManagerInternalSecret != nil,
 		kubeControllersRules:             kubeControllerRolePolicyRules,
 		enabledControllers:               enabledControllers,
 	}
@@ -158,17 +156,15 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 	}
 
 	return &kubeControllersComponent{
-		cfg:                                cfg,
-		kubeControllerServiceAccountName:   EsKubeControllerServiceAccount,
-		kubeControllerRoleName:             EsKubeControllerRole,
-		kubeControllerRoleBindingName:      EsKubeControllerRoleBinding,
-		kubeControllerName:                 EsKubeController,
-		kubeControllerConfigName:           "elasticsearch",
-		kubeControllerMetricsName:          EsKubeControllerMetrics,
-		renderElasticsearchSecret:          cfg.ElasticsearchSecret != nil,
-		renderKubeControllersGatewaySecret: cfg.KubeControllersGatewaySecret != nil,
-		kubeControllersRules:               kubeControllerRolePolicyRules,
-		enabledControllers:                 enabledControllers,
+		cfg:                              cfg,
+		kubeControllerServiceAccountName: EsKubeControllerServiceAccount,
+		kubeControllerRoleName:           EsKubeControllerRole,
+		kubeControllerRoleBindingName:    EsKubeControllerRoleBinding,
+		kubeControllerName:               EsKubeController,
+		kubeControllerConfigName:         "elasticsearch",
+		kubeControllerMetricsName:        EsKubeControllerMetrics,
+		kubeControllersRules:             kubeControllerRolePolicyRules,
+		enabledControllers:               enabledControllers,
 	}
 }
 
@@ -185,10 +181,6 @@ type kubeControllersComponent struct {
 	kubeControllerName               string
 	kubeControllerConfigName         string
 	kubeControllerMetricsName        string
-
-	renderElasticsearchSecret          bool
-	renderManagerInternalSecret        bool
-	renderKubeControllersGatewaySecret bool
 
 	kubeControllersRules []rbacv1.PolicyRule
 
@@ -220,16 +212,7 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 		c.controllersDeployment(),
 	}
 	objectsToDelete := []client.Object{}
-	if c.renderManagerInternalSecret {
-		objectsToCreate = append(objectsToCreate, c.cfg.ManagerInternalSecret.Secret(common.CalicoNamespace))
-	}
-
-	if c.renderElasticsearchSecret {
-		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
-			secret.CopyToNamespace(common.CalicoNamespace, c.cfg.ElasticsearchSecret)...)...)
-	}
-
-	if c.renderKubeControllersGatewaySecret {
+	if c.cfg.KubeControllersGatewaySecret != nil {
 		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
 			secret.CopyToNamespace(common.CalicoNamespace, c.cfg.KubeControllersGatewaySecret)...)...)
 	}
@@ -483,10 +466,6 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		Volumes:            c.kubeControllersVolumes(),
 	}
 
-	if c.kubeControllerName == EsKubeController {
-		podSpec = relasticsearch.PodSpecDecorate(podSpec)
-	}
-
 	var replicas int32 = 1
 
 	d := appsv1.Deployment{
@@ -579,18 +558,17 @@ func (c *kubeControllersComponent) kubeControllersResources() corev1.ResourceReq
 }
 
 func (c *kubeControllersComponent) annotations() map[string]string {
-	am := map[string]string{}
+	var am map[string]string
+	if c.cfg.TrustedBundle != nil {
+		am = c.cfg.TrustedBundle.HashAnnotations()
+	} else {
+		am = make(map[string]string)
+	}
 	if c.cfg.ManagerInternalSecret != nil {
 		am[c.cfg.ManagerInternalSecret.HashAnnotationKey()] = c.cfg.ManagerInternalSecret.HashAnnotationValue()
 	}
-	if c.cfg.ElasticsearchSecret != nil {
-		am[render.TlsSecretHashAnnotation] = rmeta.AnnotationHash(c.cfg.ElasticsearchSecret.Data)
-	}
 	if c.cfg.KubeControllersGatewaySecret != nil {
 		am[render.ElasticsearchUserHashAnnotation] = rmeta.AnnotationHash(c.cfg.KubeControllersGatewaySecret.Data)
-	}
-	if c.cfg.KibanaSecret != nil {
-		am[render.KibanaTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.KibanaSecret.Data)
 	}
 	return am
 }
@@ -602,19 +580,23 @@ func (c *kubeControllersComponent) controllersPodSecurityPolicy() *policyv1beta1
 }
 
 func (c *kubeControllersComponent) kubeControllersVolumeMounts() []corev1.VolumeMount {
+	var mounts []corev1.VolumeMount
 	if c.cfg.ManagerInternalSecret != nil {
-		return []corev1.VolumeMount{
-			c.cfg.ManagerInternalSecret.VolumeMount(),
-		}
+		mounts = append(mounts, c.cfg.ManagerInternalSecret.VolumeMount(c.SupportedOSType()))
 	}
-	return []corev1.VolumeMount{}
+	if c.cfg.TrustedBundle != nil {
+		mounts = append(mounts, c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()))
+	}
+	return mounts
 }
 
 func (c *kubeControllersComponent) kubeControllersVolumes() []corev1.Volume {
+	var volumes []corev1.Volume
 	if c.cfg.ManagerInternalSecret != nil {
-		return []corev1.Volume{
-			c.cfg.ManagerInternalSecret.Volume(),
-		}
+		volumes = append(volumes, c.cfg.ManagerInternalSecret.Volume())
 	}
-	return []corev1.Volume{}
+	if c.cfg.TrustedBundle != nil {
+		volumes = append(volumes, c.cfg.TrustedBundle.Volume())
+	}
+	return volumes
 }

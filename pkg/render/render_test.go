@@ -249,7 +249,6 @@ var _ = Describe("Rendering tests", func() {
 			{common.KubeControllersDeploymentName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
 			{common.KubeControllersDeploymentName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
 			{common.KubeControllersDeploymentName, common.CalicoNamespace, "apps", "v1", "Deployment"},
-			{render.ManagerInternalTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
 			{common.KubeControllersDeploymentName, "", "policy", "v1beta1", "PodSecurityPolicy"},
 			{"calico-kube-controllers-metrics", common.CalicoNamespace, "", "v1", "Service"},
 

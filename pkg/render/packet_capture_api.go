@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -54,6 +54,7 @@ type PacketCaptureApiConfiguration struct {
 	Installation       *operatorv1.InstallationSpec
 	KeyValidatorConfig authentication.KeyValidatorConfig
 	ServerCertSecret   certificatemanagement.KeyPairInterface
+	TrustedBundle      certificatemanagement.TrustedBundle
 	ClusterDomain      string
 }
 
@@ -105,6 +106,9 @@ func (pc *packetCaptureApiComponent) Objects() ([]client.Object, []client.Object
 		objs = append(objs, configmap.ToRuntimeObjects(pc.cfg.KeyValidatorConfig.RequiredConfigMaps(PacketCaptureNamespace)...)...)
 	}
 
+	if pc.cfg.TrustedBundle != nil {
+		objs = append(objs, pc.cfg.TrustedBundle.ConfigMap(PacketCaptureNamespace))
+	}
 	return objs, nil
 }
 
@@ -250,7 +254,7 @@ func (pc *packetCaptureApiComponent) initContainers() []corev1.Container {
 
 func (pc *packetCaptureApiComponent) container() corev1.Container {
 	var volumeMounts = []corev1.VolumeMount{
-		pc.cfg.ServerCertSecret.VolumeMount(),
+		pc.cfg.ServerCertSecret.VolumeMount(pc.SupportedOSType()),
 	}
 	env := []corev1.EnvVar{
 		{Name: "PACKETCAPTURE_API_LOG_LEVEL", Value: "Info"},
@@ -260,7 +264,9 @@ func (pc *packetCaptureApiComponent) container() corev1.Container {
 
 	if pc.cfg.KeyValidatorConfig != nil {
 		env = append(env, pc.cfg.KeyValidatorConfig.RequiredEnv("PACKETCAPTURE_API_")...)
-		volumeMounts = append(volumeMounts, pc.cfg.KeyValidatorConfig.RequiredVolumeMounts()...)
+	}
+	if pc.cfg.TrustedBundle != nil {
+		volumeMounts = append(volumeMounts, pc.cfg.TrustedBundle.VolumeMount(pc.SupportedOSType()))
 	}
 
 	return corev1.Container{
@@ -293,8 +299,8 @@ func (pc *packetCaptureApiComponent) volumes() []corev1.Volume {
 		pc.cfg.ServerCertSecret.Volume(),
 	}
 
-	if pc.cfg.KeyValidatorConfig != nil {
-		volumes = append(volumes, pc.cfg.KeyValidatorConfig.RequiredVolumes()...)
+	if pc.cfg.TrustedBundle != nil {
+		volumes = append(volumes, pc.cfg.TrustedBundle.Volume())
 	}
 
 	return volumes

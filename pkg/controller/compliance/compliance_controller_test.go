@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -133,7 +134,16 @@ var _ = Describe("Compliance controller tests", func() {
 		Expect(c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchComplianceReporterUserSecret, Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchComplianceSnapshotterUserSecret, Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchComplianceServerUserSecret, Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
+
+		scheme := runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
+		certificateManager, err := certificatemanager.Create(cli, nil, dns.DefaultClusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+		esDNSNames := dns.GetServiceDNSNames(render.TigeraElasticsearchGatewaySecret, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
+		gwKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, esDNSNames)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, gwKeyPair.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 		// Apply the compliance CR to the fake cluster.
 		cr = &operatorv1.Compliance{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}}

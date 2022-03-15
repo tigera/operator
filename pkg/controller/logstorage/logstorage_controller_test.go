@@ -230,6 +230,7 @@ var _ = Describe("LogStorage controller", func() {
 						mockStatus.On("AddDaemonsets", mock.Anything).Return()
 						mockStatus.On("AddDeployments", mock.Anything).Return()
 						mockStatus.On("AddStatefulSets", mock.Anything).Return()
+						mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
 						mockStatus.On("AddCronJobs", mock.Anything)
 						mockStatus.On("OnCRNotFound").Return()
 						mockStatus.On("ClearDegraded")
@@ -255,7 +256,7 @@ var _ = Describe("LogStorage controller", func() {
 
 				Context("LogStorage exists", func() {
 					BeforeEach(func() {
-						setUpLogStorageComponents(cli, ctx, storageClassName, nil)
+						setUpLogStorageComponents(cli, ctx, storageClassName, nil, certificateManager)
 						mockStatus.On("OnCRFound").Return()
 					})
 
@@ -274,6 +275,7 @@ var _ = Describe("LogStorage controller", func() {
 						mockStatus.On("AddDaemonsets", mock.Anything).Return()
 						mockStatus.On("AddDeployments", mock.Anything).Return()
 						mockStatus.On("AddStatefulSets", mock.Anything).Return()
+						mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
 						mockStatus.On("AddCronJobs", mock.Anything)
 						mockStatus.On("ClearDegraded", mock.Anything).Return()
 						mockStatus.On("ReadyToMonitor")
@@ -351,6 +353,7 @@ var _ = Describe("LogStorage controller", func() {
 					mockStatus.On("AddDaemonsets", mock.Anything)
 					mockStatus.On("AddDeployments", mock.Anything)
 					mockStatus.On("AddStatefulSets", mock.Anything)
+					mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
 					mockStatus.On("AddCronJobs", mock.Anything)
 					mockStatus.On("OnCRFound").Return()
 					mockStatus.On("ReadyToMonitor")
@@ -1321,13 +1324,14 @@ var _ = Describe("LogStorage controller", func() {
 							ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultTSEEInstanceKey.Name},
 						})).NotTo(HaveOccurred())
 
-					setUpLogStorageComponents(cli, ctx, "", nil)
+					setUpLogStorageComponents(cli, ctx, "", nil, certificateManager)
 
 					mockStatus = &status.MockStatus{}
 					mockStatus.On("Run").Return()
 					mockStatus.On("AddDaemonsets", mock.Anything)
 					mockStatus.On("AddDeployments", mock.Anything)
 					mockStatus.On("AddStatefulSets", mock.Anything)
+					mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 					mockStatus.On("AddCronJobs", mock.Anything)
 					mockStatus.On("ClearDegraded", mock.Anything)
 					mockStatus.On("OnCRFound").Return()
@@ -1469,7 +1473,7 @@ var _ = Describe("LogStorage controller", func() {
 	})
 })
 
-func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageClass string, managementClusterConnection *operatorv1.ManagementClusterConnection) {
+func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageClass string, managementClusterConnection *operatorv1.ManagementClusterConnection, certificateManager certificatemanager.CertificateManager) {
 	if storageClass == "" {
 		Expect(cli.Create(ctx, &storagev1.StorageClass{
 			ObjectMeta: metav1.ObjectMeta{
@@ -1506,6 +1510,12 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 	setLogStorageFinalizer(ls)
 
 	By("creating all the components needed for LogStorage to be available")
+	trustedBundle := certificateManager.CreateTrustedBundle()
+	esKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TigeraElasticsearchInternalCertSecret, common.OperatorNamespace(), []string{render.TigeraElasticsearchInternalCertSecret})
+	Expect(err).NotTo(HaveOccurred())
+	esPublic, err := certificateManager.GetOrCreateKeyPair(cli, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{render.TigeraElasticsearchInternalCertSecret})
+	Expect(err).NotTo(HaveOccurred())
+	cli.Create(context.Background(), esPublic.Secret(common.OperatorNamespace()))
 
 	var replicas int32 = 2
 	cfg := &render.ElasticsearchConfiguration{
@@ -1519,7 +1529,8 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 		Elasticsearch:               &esv1.Elasticsearch{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}},
 		Kibana:                      &kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaName, Namespace: render.KibanaNamespace}},
 		ClusterConfig:               relasticsearch.NewClusterConfig("cluster", 1, 1, 1),
-		ElasticsearchKeyPair:        nil,
+		ElasticsearchKeyPair:        esKeyPair,
+		TrustedBundle:               trustedBundle,
 		PullSecrets: []*corev1.Secret{
 			{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 		},

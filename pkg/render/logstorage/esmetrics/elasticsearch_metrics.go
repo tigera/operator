@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2002 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -50,7 +50,6 @@ type Config struct {
 	PullSecrets          []*corev1.Secret
 	ESConfig             *relasticsearch.ClusterConfig
 	ESMetricsCredsSecret *corev1.Secret
-	ESCertSecret         *corev1.Secret
 	ClusterDomain        string
 	ServerTLS            certificatemanagement.KeyPairInterface
 	TrustedBundle        certificatemanagement.TrustedBundle
@@ -187,7 +186,7 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 						e.cfg.TrustedBundle.Volume(),
 					},
 				},
-			}, e.cfg.ESConfig, []*corev1.Secret{e.cfg.ESMetricsCredsSecret, e.cfg.ESCertSecret}).(*corev1.PodTemplateSpec),
+			}, e.cfg.ESConfig, []*corev1.Secret{e.cfg.ESMetricsCredsSecret}).(*corev1.PodTemplateSpec),
 		},
 	}
 }

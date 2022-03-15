@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -88,17 +88,7 @@ func ElasticsearchSecrets(ctx context.Context, userSecretNames []string, cli cli
 
 		esUserSecrets = append(esUserSecrets, esUserSecret)
 	}
-
-	esCertSecret := &corev1.Secret{}
-	err := cli.Get(ctx, types.NamespacedName{
-		Name:      relasticsearch.PublicCertSecret,
-		Namespace: common.OperatorNamespace(),
-	}, esCertSecret)
-	if err != nil {
-		return nil, err
-	}
-
-	return append(esUserSecrets, esCertSecret), nil
+	return esUserSecrets, nil
 }
 
 // GetElasticsearchClusterConfig retrieves the config map containing the elasticsearch configuration values, such as the

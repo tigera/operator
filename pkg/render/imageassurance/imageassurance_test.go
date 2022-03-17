@@ -9,6 +9,8 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/imageassurance"
@@ -26,8 +28,8 @@ var _ = Describe("Image Assurance Render", func() {
 		pgAdminUserSecret  corev1.Secret
 		pgUserSecret       corev1.Secret
 		pgServerCertSecret corev1.Secret
-		tlsSecrets         *corev1.Secret
-		mgrSecrets         *corev1.Secret
+		tlsSecrets         corev1.Secret
+		mgrSecrets         corev1.Secret
 		pgConfig           corev1.ConfigMap
 	)
 
@@ -93,7 +95,7 @@ var _ = Describe("Image Assurance Render", func() {
 		}
 
 		// relies on secrets in operator namespace
-		tlsSecrets = &corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		tlsSecrets = corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      imageassurance.APICertSecretName,
 				Namespace: common.OperatorNamespace(),
@@ -101,7 +103,7 @@ var _ = Describe("Image Assurance Render", func() {
 			Data: map[string][]byte{"tls.key": []byte("tlskey"), "tls.cert": []byte("tlscert")},
 		}
 
-		mgrSecrets = &corev1.Secret{
+		mgrSecrets = corev1.Secret{
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      imageassurance.ManagerCertSecretName,
@@ -111,15 +113,16 @@ var _ = Describe("Image Assurance Render", func() {
 		}
 	})
 
-	It("should render all resources with default image assurance configuration", func() {
+	type expectedResource struct {
+		name    string
+		ns      string
+		group   string
+		version string
+		kind    string
+	}
 
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
+	var resources = func(enableOIDC bool) []expectedResource {
+		res := []expectedResource{
 			{name: imageassurance.NameSpaceImageAssurance, ns: "", group: "", version: "v1", kind: "Namespace"},
 
 			// secrets
@@ -156,6 +159,155 @@ var _ = Describe("Image Assurance Render", func() {
 			{name: imageassurance.ResourceNameImageAssuranceCAW, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "RoleBinding"},
 			{name: imageassurance.ResourceNameImageAssuranceCAW, ns: imageassurance.NameSpaceImageAssurance, group: "apps", version: "v1", kind: "Deployment"},
 		}
+		if enableOIDC {
+			var oidc = []expectedResource{
+				{name: "tigera-dex-tls", ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
+			}
+			res = append(res, oidc...)
+		}
+		return res
+
+	}
+
+	var apiExpectedENV = func(enableOIDC bool) []corev1.EnvVar {
+		env := []corev1.EnvVar{
+			{Name: "IMAGE_ASSURANCE_HTTPS_CERT", Value: "/certs/https/tls.crt"},
+			{Name: "IMAGE_ASSURANCE_HTTPS_KEY", Value: "/certs/https/tls.key"},
+			{Name: "IMAGE_ASSURANCE_DB_SSL_ROOT_CERT", Value: "/certs/db/server-ca"},
+			{Name: "IMAGE_ASSURANCE_DB_SSL_CERT", Value: "/certs/db/client-cert"},
+			{Name: "IMAGE_ASSURANCE_DB_SSL_KEY", Value: "/certs/db/client-key"},
+			{Name: "IMAGE_ASSURANCE_PORT", Value: "5557"},
+			{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
+			{Name: "IMAGE_ASSURANCE_DB_HOST_ADDR", Value: "",
+				ValueFrom: &corev1.EnvVarSource{
+					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: imageassurance.PGConfigMapName,
+						},
+						Key: imageassurance.PGConfigHostKey,
+					},
+				},
+			},
+			{Name: "IMAGE_ASSURANCE_DB_PORT", Value: "",
+				ValueFrom: &corev1.EnvVarSource{
+					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: imageassurance.PGConfigMapName,
+						},
+						Key: imageassurance.PGConfigPortKey,
+					},
+				},
+			},
+			{Name: "IMAGE_ASSURANCE_DB_NAME", Value: "",
+				ValueFrom: &corev1.EnvVarSource{
+					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: imageassurance.PGConfigMapName,
+						},
+						Key: imageassurance.PGConfigNameKey,
+					},
+				},
+			},
+			{Name: "IMAGE_ASSURANCE_DB_USER_NAME", Value: "",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: imageassurance.PGUserSecretName,
+						},
+						Key: imageassurance.PGUserSecretKey,
+					},
+				},
+			},
+			{Name: "IMAGE_ASSURANCE_DB_PASSWORD", Value: "",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: imageassurance.PGUserSecretName,
+						},
+						Key: imageassurance.PGUserPassKey,
+					},
+				},
+			},
+			{Name: "IMAGE_ASSURANCE_ORGANIZATION_ID", Value: "",
+				ValueFrom: &corev1.EnvVarSource{
+					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: imageassurance.PGConfigMapName,
+						},
+						Key: imageassurance.PGConfigOrgIDKey,
+					},
+				},
+			},
+		}
+
+		if enableOIDC {
+			env = append(env, []corev1.EnvVar{
+				{
+					Name:  "IMAGE_ASSURANCE_DEX_ENABLED",
+					Value: "true",
+				},
+				{
+					Name:  "IMAGE_ASSURANCE_DEX_URL",
+					Value: "https://tigera-dex.tigera-dex.svc.cluster.local:5556/",
+				},
+				{
+					Name:  "IMAGE_ASSURANCE_OIDC_AUTH_ENABLED",
+					Value: "true",
+				},
+				{
+					Name:  "IMAGE_ASSURANCE_OIDC_AUTH_ISSUER",
+					Value: "https://127.0.0.1/dex",
+				},
+				{
+					Name:  "IMAGE_ASSURANCE_OIDC_AUTH_JWKSURL",
+					Value: "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/keys",
+				},
+				{
+					Name:  "IMAGE_ASSURANCE_OIDC_AUTH_CLIENT_ID",
+					Value: "tigera-manager",
+				},
+				{
+					Name:  "IMAGE_ASSURANCE_OIDC_AUTH_USERNAME_CLAIM",
+					Value: "email",
+				},
+				{
+					Name:  "IMAGE_ASSURANCE_OIDC_AUTH_GROUPS_CLAIM",
+					Value: "groups",
+				},
+				{
+					Name:  "IMAGE_ASSURANCE_OIDC_AUTH_USERNAME_PREFIX",
+					Value: "",
+				},
+				{
+					Name:  "IMAGE_ASSURANCE_OIDC_AUTH_GROUPS_PREFIX",
+					Value: "",
+				},
+			}...)
+		}
+
+		return env
+	}
+
+	var apiExpectedVolMounts = func(enableOIDC bool) []corev1.VolumeMount {
+		vms := []corev1.VolumeMount{
+			{Name: imageassurance.APICertSecretName, MountPath: "/certs/https/"},
+			{Name: imageassurance.PGCertSecretName, MountPath: "/certs/db/"},
+			{Name: imageassurance.ManagerCertSecretName, MountPath: "/manager-tls/"},
+		}
+		if enableOIDC {
+			vms = append(vms, corev1.VolumeMount{
+				Name:      "tigera-dex-tls-crt",
+				ReadOnly:  false,
+				MountPath: "/etc/ssl/certs",
+			})
+		}
+
+		return vms
+	}
+
+	It("should render all resources with default image assurance configuration", func() {
+
+		expectedResources := resources(false)
 		// Should render the correct resources.
 		component := imageassurance.ImageAssurance(&imageassurance.Config{
 			PullSecrets:       nil,
@@ -165,8 +317,8 @@ var _ = Describe("Image Assurance Render", func() {
 			PGAdminUserSecret: &pgAdminUserSecret,
 			PGUserSecret:      &pgUserSecret,
 			PGConfig:          &pgConfig,
-			TLSSecret:         tlsSecrets,
-			InternalMgrSecret: mgrSecrets,
+			TLSSecret:         &tlsSecrets,
+			InternalMgrSecret: &mgrSecrets,
 			NeedsMigrating:    false,
 			ComponentsUp:      false,
 		})
@@ -315,75 +467,7 @@ var _ = Describe("Image Assurance Render", func() {
 		Expect(len(api.Containers)).To(Equal(1))
 
 		apiEnvs := api.Containers[0].Env
-		apiExpectedENV := []corev1.EnvVar{
-			{Name: "IMAGE_ASSURANCE_HTTPS_CERT", Value: "/certs/https/tls.crt"},
-			{Name: "IMAGE_ASSURANCE_HTTPS_KEY", Value: "/certs/https/tls.key"},
-			{Name: "IMAGE_ASSURANCE_DB_SSL_ROOT_CERT", Value: "/certs/db/server-ca"},
-			{Name: "IMAGE_ASSURANCE_DB_SSL_CERT", Value: "/certs/db/client-cert"},
-			{Name: "IMAGE_ASSURANCE_DB_SSL_KEY", Value: "/certs/db/client-key"},
-			{Name: "IMAGE_ASSURANCE_PORT", Value: "5557"},
-			{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
-			{Name: "IMAGE_ASSURANCE_DB_HOST_ADDR", Value: "",
-				ValueFrom: &corev1.EnvVarSource{
-					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: imageassurance.PGConfigMapName,
-						},
-						Key: imageassurance.PGConfigHostKey,
-					},
-				},
-			},
-			{Name: "IMAGE_ASSURANCE_DB_PORT", Value: "",
-				ValueFrom: &corev1.EnvVarSource{
-					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: imageassurance.PGConfigMapName,
-						},
-						Key: imageassurance.PGConfigPortKey,
-					},
-				},
-			},
-			{Name: "IMAGE_ASSURANCE_DB_NAME", Value: "",
-				ValueFrom: &corev1.EnvVarSource{
-					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: imageassurance.PGConfigMapName,
-						},
-						Key: imageassurance.PGConfigNameKey,
-					},
-				},
-			},
-			{Name: "IMAGE_ASSURANCE_DB_USER_NAME", Value: "",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: imageassurance.PGUserSecretName,
-						},
-						Key: imageassurance.PGUserSecretKey,
-					},
-				},
-			},
-			{Name: "IMAGE_ASSURANCE_DB_PASSWORD", Value: "",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: imageassurance.PGUserSecretName,
-						},
-						Key: imageassurance.PGUserPassKey,
-					},
-				},
-			},
-			{Name: "IMAGE_ASSURANCE_ORGANIZATION_ID", Value: "",
-				ValueFrom: &corev1.EnvVarSource{
-					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: imageassurance.PGConfigMapName,
-						},
-						Key: imageassurance.PGConfigOrgIDKey,
-					},
-				},
-			},
-		}
+		apiExpectedENV := apiExpectedENV(false)
 
 		Expect(len(apiExpectedENV)).To(Equal(len(api.Containers[0].Env)))
 		for _, expected := range apiExpectedENV {
@@ -393,11 +477,7 @@ var _ = Describe("Image Assurance Render", func() {
 		Expect(*api.Containers[0].SecurityContext.Privileged).To(BeTrue())
 
 		apiVMs := api.Containers[0].VolumeMounts
-		apiExpectedVMs := []corev1.VolumeMount{
-			{Name: imageassurance.APICertSecretName, MountPath: "/certs/https/"},
-			{Name: imageassurance.PGCertSecretName, MountPath: "/certs/db/"},
-			{Name: imageassurance.ManagerCertSecretName, MountPath: "/manager-tls/"},
-		}
+		apiExpectedVMs := apiExpectedVolMounts(false)
 
 		Expect(len(apiExpectedVMs)).To(Equal(len(apiVMs)))
 		for _, expected := range apiExpectedVMs {
@@ -532,8 +612,8 @@ var _ = Describe("Image Assurance Render", func() {
 			PGAdminUserSecret: &pgAdminUserSecret,
 			PGUserSecret:      &pgUserSecret,
 			PGConfig:          &pgConfig,
-			TLSSecret:         tlsSecrets,
-			InternalMgrSecret: mgrSecrets,
+			TLSSecret:         &tlsSecrets,
+			InternalMgrSecret: &mgrSecrets,
 			NeedsMigrating:    true,
 			ComponentsUp:      false,
 		})
@@ -572,8 +652,8 @@ var _ = Describe("Image Assurance Render", func() {
 			PGAdminUserSecret: &pgAdminUserSecret,
 			PGUserSecret:      &pgUserSecret,
 			PGConfig:          &pgConfig,
-			TLSSecret:         tlsSecrets,
-			InternalMgrSecret: mgrSecrets,
+			TLSSecret:         &tlsSecrets,
+			InternalMgrSecret: &mgrSecrets,
 			NeedsMigrating:    true,
 			ComponentsUp:      true,
 		})
@@ -588,4 +668,69 @@ var _ = Describe("Image Assurance Render", func() {
 			i++
 		}
 	})
+
+	It("should API resource correctly with Authentication Enabled", func() {
+		// Should render the correct resources.
+		var authentication *operatorv1.Authentication
+		authentication = &operatorv1.Authentication{
+			Spec: operatorv1.AuthenticationSpec{
+				ManagerDomain: "https://127.0.0.1",
+				OIDC:          &operatorv1.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"}}}
+
+		var dexCfg = render.NewDexKeyValidatorConfig(authentication, nil, render.CreateDexTLSSecret("cn"), dns.DefaultClusterDomain)
+
+		component := imageassurance.ImageAssurance(&imageassurance.Config{
+			PullSecrets:        nil,
+			Installation:       installation,
+			OsType:             rmeta.OSTypeLinux,
+			PGCertSecret:       &pgServerCertSecret,
+			PGAdminUserSecret:  &pgAdminUserSecret,
+			PGUserSecret:       &pgUserSecret,
+			PGConfig:           &pgConfig,
+			TLSSecret:          &tlsSecrets,
+			InternalMgrSecret:  &mgrSecrets,
+			KeyValidatorConfig: dexCfg,
+			NeedsMigrating:     false,
+			ComponentsUp:       false,
+		})
+		expectedResources := resources(true)
+		resources, _ := component.Objects()
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+		// Should render the correct resources.
+		i := 0
+		for _, expectedRes := range expectedResources {
+			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			i++
+		}
+
+		// Check rendering of api deployment.
+		adp := rtest.GetResource(resources, imageassurance.ResourceNameImageAssuranceAPI, imageassurance.NameSpaceImageAssurance,
+			"apps", "v1", "Deployment").(*appsv1.Deployment)
+		api := adp.Spec.Template.Spec
+
+		Expect(api.HostNetwork).To(BeFalse())
+		Expect(api.HostIPC).To(BeFalse())
+		Expect(api.DNSPolicy).To(Equal(corev1.DNSClusterFirst))
+		Expect(len(api.Containers)).To(Equal(1))
+
+		apiEnvs := api.Containers[0].Env
+		apiExpectedENV := apiExpectedENV(true)
+
+		Expect(len(apiExpectedENV)).To(Equal(len(api.Containers[0].Env)))
+		for _, expected := range apiExpectedENV {
+			rtest.ExpectEnv(apiEnvs, expected.Name, expected.Value)
+		}
+
+		apiVMs := api.Containers[0].VolumeMounts
+		apiExpectedVMs := apiExpectedVolMounts(true)
+
+		Expect(len(apiExpectedVMs)).To(Equal(len(apiVMs)))
+		for _, expected := range apiExpectedVMs {
+			rtest.ExpectVolumeMount(apiVMs, expected.Name, expected.MountPath)
+		}
+
+	})
+
 })

@@ -9,6 +9,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/authentication"
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -74,9 +75,10 @@ type Config struct {
 	PGUserSecret      *corev1.Secret
 	PGCertSecret      *corev1.Secret
 	// ConfigMap contains database host, port, name.
-	PGConfig          *corev1.ConfigMap
-	TLSSecret         *corev1.Secret
-	InternalMgrSecret *corev1.Secret
+	PGConfig           *corev1.ConfigMap
+	TLSSecret          *corev1.Secret
+	InternalMgrSecret  *corev1.Secret
+	KeyValidatorConfig authentication.KeyValidatorConfig
 
 	NeedsMigrating bool
 	ComponentsUp   bool
@@ -208,6 +210,11 @@ func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
 		c.cawRoleBinding(),
 		c.cawDeployment(),
 	)
+
+	if c.config.KeyValidatorConfig != nil {
+		objs = append(objs, secret.ToRuntimeObjects(c.config.KeyValidatorConfig.RequiredSecrets(NameSpaceImageAssurance)...)...)
+		objs = append(objs, configmap.ToRuntimeObjects(c.config.KeyValidatorConfig.RequiredConfigMaps(NameSpaceImageAssurance)...)...)
+	}
 
 	return objs, nil
 }

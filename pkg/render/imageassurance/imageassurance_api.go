@@ -58,8 +58,13 @@ func (c *component) apiClusterRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"get", "list", "watch"},
 			},
 			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"authenticationreviews"},
+				APIGroups: []string{"authentication.k8s.io"},
+				Resources: []string{"tokenreviews"},
+				Verbs:     []string{"create"},
+			},
+			{
+				APIGroups: []string{"authorization.k8s.io"},
+				Resources: []string{"subjectaccessreviews"},
 				Verbs:     []string{"create"},
 			},
 		},
@@ -156,6 +161,17 @@ func (c *component) apiDeployment() *appsv1.Deployment {
 	terminationGracePeriod := int64(30)
 	privileged := true
 
+	volumeMounts := []corev1.VolumeMount{
+		{Name: APICertSecretName, MountPath: mountPathAPITLSCerts, ReadOnly: true},
+		{Name: PGCertSecretName, MountPath: MountPathPostgresCerts, ReadOnly: true},
+		{Name: ManagerCertSecretName, MountPath: mountPathManagerTLSCerts, ReadOnly: true},
+	}
+
+	if c.config.KeyValidatorConfig != nil {
+		env = append(env, c.config.KeyValidatorConfig.RequiredEnv("IMAGE_ASSURANCE_")...)
+		volumeMounts = append(volumeMounts, c.config.KeyValidatorConfig.RequiredVolumeMounts()...)
+	}
+
 	container := corev1.Container{
 		Name:            ResourceNameImageAssuranceAPI,
 		Image:           c.config.apiImage,
@@ -174,11 +190,7 @@ func (c *component) apiDeployment() *appsv1.Deployment {
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: &privileged,
 		},
-		VolumeMounts: []corev1.VolumeMount{
-			{Name: APICertSecretName, MountPath: mountPathAPITLSCerts, ReadOnly: true},
-			{Name: PGCertSecretName, MountPath: MountPathPostgresCerts, ReadOnly: true},
-			{Name: ManagerCertSecretName, MountPath: mountPathManagerTLSCerts, ReadOnly: true},
-		},
+		VolumeMounts: volumeMounts,
 	}
 
 	podSpec := corev1.PodSpec{
@@ -265,6 +277,10 @@ func (c *component) apiVolumes() []corev1.Volume {
 			},
 		},
 	})
+
+	if c.config.KeyValidatorConfig != nil {
+		volumes = append(volumes, c.config.KeyValidatorConfig.RequiredVolumes()...)
+	}
 
 	return volumes
 }

@@ -308,10 +308,59 @@ spec:
                 description: 'DNSLogsLatency indicates to include measurements of
                   DNS request/response latency in each DNS log. [Default: true]'
                 type: boolean
+              dnsPacketsNfqueueID:
+                description: 'DNSPacketsNfqueueID is the NFQUEUE ID to use for capturing
+                  DNS packets to ensure programming IPSets occurs before the response
+                  is released. Used when DNSPolicyMode is DelayDNSPacket. [Default:
+                  101]'
+                type: integer
+              dnsPacketsNfqueueMaxHoldDuration:
+                description: 'DNSPacketsNfqueueMaxHoldDuration is the max length of
+                  time to hold on to a DNS response while waiting for the the dataplane
+                  to be programmed. Used when DNSPolicyMode is DelayDNSPacket. [Default:
+                  3s]'
+                type: string
+              dnsPacketsNfqueueSize:
+                description: 'DNSPacketsNfqueueSize is the size of the NFQUEUE for
+                  captured DNS packets. This is the maximum number of DNS packets
+                  that may be queued awaiting programming in the dataplane. Used when
+                  DNSPolicyMode is DelayDNSPacket. [Default: 100]'
+                type: integer
+              dnsPolicyMode:
+                description: "DNSPolicyMode specifies how DNS policy programming will
+                  be handled. - DelayDeniedPacket: Felix delays any denied packet
+                  that traversed a policy that included egress domain matches,                      but
+                  did not match. The packet is released after a fixed time, or after
+                  the destination IP                      address was programmed.
+                  - DelayDNSResponse:  Felix delays any DNS response until related
+                  IPSets are programmed. This introduces some                      latency
+                  to all DNS packets (even when no IPSet programming is required),
+                  but it ensures                      policy hit statistics are accurate.
+                  This is the recommended setting when you are making use                      of
+                  staged policies or policy rule hit statistics. - NoDelay:           Felix
+                  does not introduce any delay to the packets. DNS rules may not have
+                  been programmed by                      the time the first packet
+                  traverses the policy rules. Client applications need to handle                      reconnection
+                  attempts if initial connection attempts fail. This may be problematic
+                  for some                      applications or for very low DNS TTLs.
+                  \n On Windows, or when using the eBPF dataplane, this setting is
+                  ignored and \"NoDelay\" is always used. \n [Default: DelayDeniedPacket]"
+                enum:
+                - NoDelay
+                - DelayDeniedPacket
+                - DelayDNSResponse
+                type: string
               dnsPolicyNfqueueID:
                 description: 'DNSPolicyNfqueueID is the NFQUEUE ID to use for DNS
                   Policy re-evaluation when the domains IP hasn''t been programmed
-                  to ipsets yet. [Default: 100]'
+                  to ipsets yet. Used when DNSPolicyMode is DelayDeniedPacket. [Default:
+                  100]'
+                type: integer
+              dnsPolicyNfqueueSize:
+                description: 'DNSPolicyNfqueueID is the size of the NFQUEUE for DNS
+                  policy re-evaluation. This is the maximum number of denied packets
+                  that may be queued up pending re-evaluation. Used when DNSPolicyMode
+                  is DelayDeniedPacket. [Default: 100]'
                 type: integer
               dnsTrustedServers:
                 description: 'The DNS servers that Felix should trust. Each entry
@@ -481,6 +530,11 @@ spec:
                 description: FlowLogsFileDirectory sets the directory where flow logs
                   files are stored.
                 type: string
+              flowLogsFileDomainsLimit:
+                description: 'FlowLogsFileDomainsLimit is used to configure the number
+                  of (destination) domains to include in the flow log. The domains
+                  are only included at aggregation level 0 or 1. [Default: 5]'
+                type: integer
               flowLogsFileEnabled:
                 description: FlowLogsFileEnabled when set to true, enables logging
                   flow logs to a file. If false no flow logging to file will occur.

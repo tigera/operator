@@ -1,6 +1,6 @@
 // Copyright (c) 2022 Tigera, Inc. All rights reserved.
 
-package manager
+package intrusiondetection
 
 import (
 	"context"
@@ -19,24 +19,24 @@ import (
 )
 
 func addCloudWatch(c controller.Controller) error {
-	if err := utils.AddImageAssuranceWatch(c, render.ManagerNamespace); err != nil {
+	if err := utils.AddImageAssuranceWatch(c, render.IntrusionDetectionNamespace); err != nil {
 		return err
 	}
 	return nil
 }
 
 // handleCloudResources returns managerCloudResources.
-// It returns a non-nil reconcile.Result when it's waiting for resources to be available.
-func (r *ReconcileManager) handleCloudResources(ctx context.Context, reqLogger logr.Logger) (render.ManagerCloudResources, *reconcile.Result, error) {
-	mcr := render.ManagerCloudResources{}
+// It returns a non-nil reconcile.Result when it's waiting for resources to be available
+func (r *ReconcileIntrusionDetection) handleCloudResources(ctx context.Context, reqLogger logr.Logger) (render.IntrusionDetectionCloudResources, *reconcile.Result, error) {
+	idcr := render.IntrusionDetectionCloudResources{}
 	if _, err := utils.GetImageAssurance(ctx, r.client); err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.Info("Image Assurance CR is not found, continuing without enabling Image Assurance")
-			return mcr, nil, nil
+			return idcr, nil, nil
 		}
 		reqLogger.Error(err, "failed to check for Image Assurance existence")
 		r.status.SetDegraded("failed to check for Image Assurance existence: %s", err.Error())
-		return mcr, nil, err
+		return idcr, nil, err
 	}
 
 	// get tls secret for image assurance api communication
@@ -44,15 +44,23 @@ func (r *ReconcileManager) handleCloudResources(ctx context.Context, reqLogger l
 	if err != nil {
 		reqLogger.Error(err, fmt.Sprintf("failed to retrieve secret %s", iarender.APICertSecretName))
 		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve secret %s", iarender.APICertSecretName), err.Error())
-		return mcr, nil, err
+		return idcr, nil, err
 	} else if secret == nil {
 		reqLogger.Info(fmt.Sprintf("waiting for secret '%s' to become available", iarender.APICertSecretName))
 		r.status.SetDegraded(fmt.Sprintf("waiting for secret '%s' to become available", iarender.APICertSecretName), "")
-		return mcr, &reconcile.Result{}, nil
+		return idcr, &reconcile.Result{}, nil
 	}
 
-	mcr.ImageAssuranceResources = &rcimageassurance.Resources{TLSSecret: secret}
+	// get image assurance configuration config map
+	cm, err := utils.GetImageAssuranceConfigurationConfigMap(r.client)
+	if err != nil {
+		reqLogger.Error(err, fmt.Sprintf("failed to retrieve configmap: %s", rcimageassurance.ConfigurationConfigMapName))
+		r.status.SetDegraded(fmt.Sprintf("failed to retrieve configmap: %s", rcimageassurance.ConfigurationConfigMapName), err.Error())
+		return idcr, nil, err
+	}
+
+	idcr.ImageAssuranceResources = &rcimageassurance.Resources{ConfigurationConfigMap: cm, TLSSecret: secret}
 	reqLogger.Info("Successfully processed resources for Image Assurance")
 
-	return mcr, nil, nil
+	return idcr, nil, nil
 }

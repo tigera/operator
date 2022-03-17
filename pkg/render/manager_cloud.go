@@ -1,41 +1,38 @@
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+
 package render
 
 import (
 	"sort"
 
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/secret"
-
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-)
 
-const (
-	VoltronImageAssuranceSecretName = "tigera-image-assurance-api-cert"
-	ImageAssuranceCertAnnotation    = "hash.operator.tigera.io/image-assurance-tls"
+	rcimageassurance "github.com/tigera/operator/pkg/render/common/imageassurance"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
 // ManagerCloudResources contains all the resource needed for cloud manager.
 type ManagerCloudResources struct {
-	ImageAssuranceResources *ImageAssuranceResources
-}
-
-// ImageAssuranceResources contains all the resource needed for image assurance.
-type ImageAssuranceResources struct {
-	TlsSecret *corev1.Secret
+	ImageAssuranceResources *rcimageassurance.Resources
 }
 
 func (c *managerComponent) decorateCloudVoltronContainer(container corev1.Container) corev1.Container {
 	// if image assurance is enabled add env needed for it.
-	if c.cfg.ManagerCloudResources.ImageAssuranceResources != nil {
+	if c.cfg.CloudResources.ImageAssuranceResources != nil {
 		container.Env = append(container.Env,
 			corev1.EnvVar{Name: "VOLTRON_ENABLE_IMAGE_ASSURANCE", Value: "true"},
-			corev1.EnvVar{Name: "VOLTRON_IMAGE_ASSURANCE_ENDPOINT", Value: "https://tigera-image-assurance-api.tigera-image-assurance.svc:9443"},
-			corev1.EnvVar{Name: "VOLTRON_IMAGE_ASSURANCE_CA_BUNDLE_PATH", Value: "/certs/bast/tls.crt"},
+			corev1.EnvVar{Name: "VOLTRON_IMAGE_ASSURANCE_CA_BUNDLE_PATH", Value: rcimageassurance.CABundlePath},
+			corev1.EnvVar{Name: "VOLTRON_IMAGE_ASSURANCE_ENDPOINT", Value: rcimageassurance.APIEndpoint},
 		)
 		container.VolumeMounts = append(container.VolumeMounts,
-			corev1.VolumeMount{Name: VoltronImageAssuranceSecretName, MountPath: "/certs/bast", ReadOnly: true},
+			corev1.VolumeMount{
+				MountPath: rcimageassurance.CAMountPath,
+				Name:      rcimageassurance.ImageAssuranceSecretName,
+				ReadOnly:  true,
+			},
 		)
 	}
 	return container
@@ -43,18 +40,18 @@ func (c *managerComponent) decorateCloudVoltronContainer(container corev1.Contai
 
 func (c *managerComponent) decorateCloudDeploymentSpec(templateSpec corev1.PodTemplateSpec) corev1.PodTemplateSpec {
 	// if image assurance is enabled add env needed for it.
-	if c.cfg.ManagerCloudResources.ImageAssuranceResources != nil {
-		templateSpec.ObjectMeta.Annotations[ImageAssuranceCertAnnotation] = rmeta.AnnotationHash(c.cfg.ManagerCloudResources.ImageAssuranceResources.TlsSecret.Data)
+	if c.cfg.CloudResources.ImageAssuranceResources != nil {
+		templateSpec.ObjectMeta.Annotations[rcimageassurance.ImageAssuranceCertHashAnnotation] = rmeta.AnnotationHash(c.cfg.CloudResources.ImageAssuranceResources.TLSSecret.Data)
 		templateSpec.Spec.Volumes = append(templateSpec.Spec.Volumes,
 			corev1.Volume{
-				Name: VoltronImageAssuranceSecretName,
+				Name: rcimageassurance.ImageAssuranceSecretName,
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
 						Items: []corev1.KeyToPath{{
 							Key:  "tls.crt",
 							Path: "tls.crt",
 						}},
-						SecretName: VoltronImageAssuranceSecretName,
+						SecretName: rcimageassurance.ImageAssuranceSecretName,
 					},
 				},
 			})
@@ -64,8 +61,14 @@ func (c *managerComponent) decorateCloudDeploymentSpec(templateSpec corev1.PodTe
 
 func (c *managerComponent) addCloudResources(objs []client.Object) []client.Object {
 	// if image assurance is enabled add corresponding resources.
-	if c.cfg.ManagerCloudResources.ImageAssuranceResources != nil {
-		objs = append(objs, secret.ToRuntimeObjects(c.voltronImageAssuranceSecret(c.cfg.ManagerCloudResources.ImageAssuranceResources.TlsSecret))...)
+	if c.cfg.CloudResources.ImageAssuranceResources != nil {
+		objs = append(objs, secret.ToRuntimeObjects(&corev1.Secret{
+			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: rcimageassurance.ImageAssuranceSecretName, Namespace: ManagerNamespace},
+			Data: map[string][]byte{
+				corev1.TLSCertKey: c.cfg.CloudResources.ImageAssuranceResources.TLSSecret.Data[corev1.TLSCertKey],
+			},
+		})...)
 	}
 
 	return objs
@@ -79,7 +82,7 @@ func (c *managerComponent) setManagerCloudEnvs(envs []corev1.EnvVar) []corev1.En
 	)
 
 	// extra cloud specific env vars needed for image assurance
-	if c.cfg.ManagerCloudResources.ImageAssuranceResources != nil {
+	if c.cfg.CloudResources.ImageAssuranceResources != nil {
 		envs = append(envs,
 			corev1.EnvVar{Name: "ENABLE_IMAGE_ASSURANCE_SUPPORT", Value: "true"},
 			corev1.EnvVar{Name: "CNX_IMAGE_ASSURANCE_API_URL", Value: "/bast/v1"},
@@ -116,14 +119,4 @@ func (c *managerComponent) setManagerCloudEnvs(envs []corev1.EnvVar) []corev1.En
 	}
 
 	return envs
-}
-
-func (c *managerComponent) voltronImageAssuranceSecret(tls *corev1.Secret) *corev1.Secret {
-	return &corev1.Secret{
-		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: VoltronImageAssuranceSecretName, Namespace: ManagerNamespace},
-		Data: map[string][]byte{
-			corev1.TLSCertKey: tls.Data[corev1.TLSCertKey],
-		},
-	}
 }

@@ -182,7 +182,7 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
-	configurationConfigMap, err := getConfigurationConfigMap(r.client)
+	configurationConfigMap, err := utils.GetImageAssuranceConfigurationConfigMap(r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.Error(err, fmt.Sprintf("%s ConfigMap not found", rcimageassurance.ConfigurationConfigMapName))
@@ -540,25 +540,6 @@ func getPGConfig(client client.Client) (*corev1.ConfigMap, error) {
 	if orgName, ok := cm.Data[imageassurance.PGConfigOrgNameKey]; !ok || len(orgName) == 0 {
 		return nil, fmt.Errorf("expected configmap %q to have a field named %q",
 			imageassurance.PGConfigMapName, imageassurance.PGConfigOrgNameKey)
-	}
-
-	return cm, nil
-}
-
-func getConfigurationConfigMap(client client.Client) (*corev1.ConfigMap, error) {
-	cm := &corev1.ConfigMap{}
-	nn := types.NamespacedName{
-		Name:      rcimageassurance.ConfigurationConfigMapName,
-		Namespace: common.OperatorNamespace(),
-	}
-
-	if err := client.Get(context.Background(), nn, cm); err != nil {
-		return nil, fmt.Errorf("failed to read secret %q: %s", rcimageassurance.ConfigurationConfigMapName, err)
-	}
-
-	if orgID, ok := cm.Data[rcimageassurance.ConfigurationConfigMapOrgIDKey]; !ok || len(orgID) == 0 {
-		return nil, fmt.Errorf("expected configmap %q to have a field named %q",
-			rcimageassurance.ConfigurationConfigMapName, rcimageassurance.ConfigurationConfigMapOrgIDKey)
 	}
 
 	return cm, nil

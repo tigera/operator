@@ -6,13 +6,15 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rcimageassurance "github.com/tigera/operator/pkg/render/common/imageassurance"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 )
 
 var _ = Describe("Tigera Secure Cloud Manager rendering tests", func() {
@@ -42,7 +44,7 @@ var _ = Describe("Tigera Secure Cloud Manager rendering tests", func() {
 			{name: render.ComplianceServerCertSecret, ns: render.ManagerNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: render.PacketCaptureCertSecret, ns: render.ManagerNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: render.PrometheusTLSSecretName, ns: render.ManagerNamespace, group: "", version: "v1", kind: "Secret"},
-			{name: render.VoltronImageAssuranceSecretName, ns: render.ManagerNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: rcimageassurance.ImageAssuranceSecretName, ns: render.ManagerNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-manager", ns: render.ManagerNamespace, group: "apps", version: "v1", kind: "Deployment"},
 		}
 
@@ -85,12 +87,12 @@ var _ = Describe("Tigera Secure Cloud Manager rendering tests", func() {
 		Expect(dpSpec.Volumes[4].Secret.SecretName).To(Equal(render.PrometheusTLSSecretName))
 		Expect(dpSpec.Volumes[5].Name).To(Equal("elastic-ca-cert-volume"))
 		Expect(dpSpec.Volumes[5].Secret.SecretName).To(Equal(relasticsearch.PublicCertSecret))
-		Expect(dpSpec.Volumes[6].Name).To(Equal(render.VoltronImageAssuranceSecretName))
-		Expect(dpSpec.Volumes[6].Secret.SecretName).To(Equal(render.VoltronImageAssuranceSecretName))
+		Expect(dpSpec.Volumes[6].Name).To(Equal(rcimageassurance.ImageAssuranceSecretName))
+		Expect(dpSpec.Volumes[6].Secret.SecretName).To(Equal(rcimageassurance.ImageAssuranceSecretName))
 
 		// deployment should have an annotation for image assurance cert.
 		Expect(deployment.Spec.Template.Annotations).Should(HaveKey(
-			render.ImageAssuranceCertAnnotation,
+			rcimageassurance.ImageAssuranceCertHashAnnotation,
 		))
 
 		// in addition to default volumes mounts, voltron should have an extra volume mount for bast certs
@@ -105,7 +107,7 @@ var _ = Describe("Tigera Secure Cloud Manager rendering tests", func() {
 		Expect(voltron.VolumeMounts[3].MountPath).To(Equal("/certs/packetcapture"))
 		Expect(voltron.VolumeMounts[4].Name).To(Equal(render.PrometheusTLSSecretName))
 		Expect(voltron.VolumeMounts[4].MountPath).To(Equal("/certs/prometheus"))
-		Expect(voltron.VolumeMounts[5].Name).To(Equal(render.VoltronImageAssuranceSecretName))
+		Expect(voltron.VolumeMounts[5].Name).To(Equal(rcimageassurance.ImageAssuranceSecretName))
 		Expect(voltron.VolumeMounts[5].MountPath).To(Equal("/certs/bast"))
 
 		// voltron should contain Image assurance related variables.

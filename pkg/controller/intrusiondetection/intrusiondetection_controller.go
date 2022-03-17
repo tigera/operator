@@ -177,6 +177,10 @@ func add(mgr manager.Manager, c controller.Controller, elasticExternal bool) err
 		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
 	}
 
+	if err = addCloudWatch(c); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to add watches for cloud resources: %w", err)
+	}
+
 	if elasticExternal {
 		if err = utils.AddConfigMapWatch(c, cloudconfig.CloudConfigConfigMapName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch the ConfigMap resource: %v", err)
@@ -369,6 +373,15 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		}
 	}
 
+	var idcr render.IntrusionDetectionCloudResources
+	var result *reconcile.Result
+	// handle all the resources that are specific to calico cloud.
+	if idcr, result, err = r.handleCloudResources(ctx, reqLogger); err != nil {
+		return reconcile.Result{}, err
+	} else if result != nil {
+		return *result, nil
+	}
+
 	tenantId := ""
 	if r.elasticExternal {
 		cloudConfig, err := utils.GetCloudConfig(ctx, r.client)
@@ -406,6 +419,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		HasNoLicense:             hasNoLicense,
 		ManagerInternalTLSSecret: managerInternalTLSSecret,
 		TenantId:                 tenantId,
+		CloudResources:           idcr,
 	}
 	component := render.IntrusionDetection(intrusionDetectionCfg)
 

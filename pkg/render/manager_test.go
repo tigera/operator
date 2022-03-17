@@ -30,6 +30,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rcimageassurance "github.com/tigera/operator/pkg/render/common/imageassurance"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
@@ -601,8 +602,8 @@ func renderObjects(roc renderConfig) []client.Object {
 
 	var cloudResources render.ManagerCloudResources
 	if roc.imageAssuranceEnabled {
-		voltronTls := rtest.CreateCertSecret(render.VoltronImageAssuranceSecretName, common.OperatorNamespace())
-		cloudResources.ImageAssuranceResources = &render.ImageAssuranceResources{TlsSecret: voltronTls}
+		voltronTls := rtest.CreateCertSecret(rcimageassurance.ImageAssuranceSecretName, common.OperatorNamespace())
+		cloudResources.ImageAssuranceResources = &rcimageassurance.Resources{TLSSecret: voltronTls}
 	}
 
 	esConfigMap := relasticsearch.NewClusterConfig("tenant_id.clusterTestName", 1, 1, 1)
@@ -621,7 +622,7 @@ func renderObjects(roc renderConfig) []client.Object {
 		ClusterDomain:                 dns.DefaultClusterDomain,
 		ESLicenseType:                 render.ElasticsearchLicenseTypeEnterpriseTrial,
 		Replicas:                      roc.installation.ControlPlaneReplicas,
-		ManagerCloudResources:         cloudResources,
+		CloudResources:                cloudResources,
 	}
 	component, err := render.Manager(cfg)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)

@@ -231,6 +231,13 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
+	tenantKey, err := getTenantKey(r.client)
+	if err != nil {
+		reqLogger.Error(err, "Error retrieving tenant key")
+		r.status.SetDegraded("Error retrieving tenant key", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	migratorJob, err := getMigratorJob(r.client)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
@@ -248,13 +255,6 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 	if err = imageset.ValidateImageSet(imageSet); err != nil {
 		reqLogger.Error(err, err.Error())
 		r.status.SetDegraded("Error validating image set", err.Error())
-		return reconcile.Result{}, err
-	}
-
-	tenantKey, err := getTenantKey(r.client)
-	if err != nil {
-		reqLogger.Error(err, "Error retrieving tenant key")
-		r.status.SetDegraded("Error retrieving tenant key", err.Error())
 		return reconcile.Result{}, err
 	}
 

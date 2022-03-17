@@ -75,6 +75,7 @@ func (c *component) cawDeployment() *appsv1.Deployment {
 
 	env := []corev1.EnvVar{
 		{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
+		{Name: "IMAGE_ASSURANCE_TENANT_ENCRYPTION_KEY", Value: "/tenant-key/encryption_key"},
 	}
 
 	env = pgDecorateENVVars(env, PGUserSecretName, MountPathPostgresCerts, PGConfigMapName)
@@ -98,6 +99,7 @@ func (c *component) cawDeployment() *appsv1.Deployment {
 		Env: env,
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: PGCertSecretName, MountPath: MountPathPostgresCerts, ReadOnly: true},
+			{Name: TenantKeyName, MountPath: MountTenantKey, ReadOnly: true},
 		},
 	}
 
@@ -155,6 +157,15 @@ func (c *component) cawVolumes() []corev1.Volume {
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName:  PGCertSecretName,
+					DefaultMode: &defaultMode,
+				},
+			},
+		},
+		{
+			Name: TenantKeyName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName:  TenantKeyName,
 					DefaultMode: &defaultMode,
 				},
 			},

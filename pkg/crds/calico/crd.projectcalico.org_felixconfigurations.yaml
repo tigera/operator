@@ -1,3 +1,5 @@
+
+---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -116,37 +118,6 @@ spec:
                   logs are emitted to the BPF trace pipe, accessible with the command
                   `tc exec bpf debug`. [Default: Off].'
                 type: string
-              bpfMapSizeConntrack:
-                description: 'BPFMapSizeConntrack sets the size for the conntrack
-                  map.  This map must be large enough to hold an entry for each active
-                  connection.  Warning: changing the size of the conntrack map can
-                  cause disruption.'
-                type: integer
-              bpfMapSizeIPSets:
-                description: BPFMapSizeIPSets sets the size for ipsets map.  The IP
-                  sets map must be large enough to hold an entry for each endpoint
-                  matched by every selector in the source/destination matches in network
-                  policy.  Selectors such as "all()" can result in large numbers of
-                  entries (one entry per endpoint in that case).
-                type: integer
-              bpfMapSizeNATAffinity:
-                type: integer
-              bpfMapSizeNATBackend:
-                description: BPFMapSizeNATBackend sets the size for nat back end map.
-                  This is the total number of endpoints. This is mostly more than
-                  the size of the number of services.
-                type: integer
-              bpfMapSizeNATFrontend:
-                description: BPFMapSizeNATFrontend sets the size for nat front end
-                  map. FrontendMap should be large enough to hold an entry for each
-                  nodeport, external IP and each port in each service.
-                type: integer
-              bpfMapSizeRoute:
-                description: BPFMapSizeRoute sets the size for the routes map.  The
-                  routes map should be large enough to hold one entry per workload
-                  and a handful of entries per host (enough to cover its own IPs and
-                  tunnel IPs).
-                type: integer
               bpfPSNATPorts:
                 anyOf:
                 - type: integer
@@ -537,9 +508,9 @@ spec:
                   routes. - CalicoIPAM: the default - use IPAM data to construct routes.'
                 type: string
               routeTableRange:
-                description: Deprecated in favor of RouteTableRanges. Calico programs
-                  additional Linux route tables for various purposes. RouteTableRange
-                  specifies the indices of the route tables that Calico should use.
+                description: Calico programs additional Linux route tables for various
+                  purposes.  RouteTableRange specifies the indices of the route tables
+                  that Calico should use.
                 properties:
                   max:
                     type: integer
@@ -549,21 +520,6 @@ spec:
                 - max
                 - min
                 type: object
-              routeTableRanges:
-                description: Calico programs additional Linux route tables for various
-                  purposes. RouteTableRanges specifies a set of table index ranges
-                  that Calico should use. Deprecates`RouteTableRange`, overrides `RouteTableRange`.
-                items:
-                  properties:
-                    max:
-                      type: integer
-                    min:
-                      type: integer
-                  required:
-                  - max
-                  - min
-                  type: object
-                type: array
               serviceLoopPrevention:
                 description: 'When service IP advertisement is enabled, prevent routing
                   loops to service IPs that are not in use, by dropping or rejecting
@@ -616,10 +572,6 @@ spec:
               wireguardInterfaceName:
                 description: 'WireguardInterfaceName specifies the name to use for
                   the Wireguard interface. [Default: wg.calico]'
-                type: string
-              wireguardKeepAlive:
-                description: 'WireguardKeepAlive controls Wireguard PersistentKeepalive
-                  option. Set 0 to disable. [Default: 0]'
                 type: string
               wireguardListeningPort:
                 description: 'WireguardListeningPort controls the listening port used

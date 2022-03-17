@@ -184,7 +184,7 @@ var _ = Describe("Image Assurance Render", func() {
 		env := []corev1.EnvVar{
 			{Name: "IMAGE_ASSURANCE_HTTPS_CERT", Value: "/certs/https/tls.crt"},
 			{Name: "IMAGE_ASSURANCE_HTTPS_KEY", Value: "/certs/https/tls.key"},
-			{Name: "IMAGE_ASSURANCE_TENANT_KEY", Value: "/tenant-key/encryption_key"},
+			{Name: "IMAGE_ASSURANCE_TENANT_ENCRYPTION_KEY", Value: "/tenant-key/encryption_key"},
 			{Name: "IMAGE_ASSURANCE_DB_SSL_ROOT_CERT", Value: "/certs/db/server-ca"},
 			{Name: "IMAGE_ASSURANCE_DB_SSL_CERT", Value: "/certs/db/client-cert"},
 			{Name: "IMAGE_ASSURANCE_DB_SSL_KEY", Value: "/certs/db/client-key"},
@@ -511,7 +511,7 @@ var _ = Describe("Image Assurance Render", func() {
 		scannerEnv := scanner.Containers[0].Env
 		scannerExpectedENV := []corev1.EnvVar{
 			{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
-			{Name: "IMAGE_ASSURANCE_TENANT_KEY", Value: "/tenant-key/encryption_key"},
+			{Name: "IMAGE_ASSURANCE_TENANT_ENCRYPTION_KEY", Value: "/tenant-key/encryption_key"},
 			{Name: "IMAGE_ASSURANCE_DB_SSL_ROOT_CERT", Value: "/certs/db/server-ca"},
 			{Name: "IMAGE_ASSURANCE_DB_SSL_CERT", Value: "/certs/db/client-cert"},
 			{Name: "IMAGE_ASSURANCE_DB_SSL_KEY", Value: "/certs/db/client-key"},

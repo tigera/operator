@@ -76,7 +76,7 @@ func (c *component) scannerDeployment() *appsv1.Deployment {
 	env := []corev1.EnvVar{
 		{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
 		{Name: "IMAGE_ASSURANCE_SCANNER_RETRIES", Value: "3"},
-		{Name: "IMAGE_ASSURANCE_TENANT_KEY", Value: "/tenant-key/encryption_key"},
+		{Name: "IMAGE_ASSURANCE_TENANT_ENCRYPTION_KEY", Value: "/tenant-key/encryption_key"},
 	}
 
 	env = pgDecorateENVVars(env, PGUserSecretName, MountPathPostgresCerts, PGConfigMapName)
@@ -162,6 +162,15 @@ func (c *component) scannerVolumes() []corev1.Volume {
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName:  PGCertSecretName,
+					DefaultMode: &defaultMode,
+				},
+			},
+		},
+		{
+			Name: TenantKeyName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName:  TenantKeyName,
 					DefaultMode: &defaultMode,
 				},
 			},

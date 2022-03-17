@@ -114,8 +114,10 @@ const (
 //   4. Once the calico-node ClusterRoleBinding finalizer is removed we have cleaned up everything
 //      necessary so we can remove the Installation finalizer and we're done.
 
-var log = logf.Log.WithName("controller_installation")
-var openshiftNetworkConfig = "cluster"
+var (
+	log                    = logf.Log.WithName("controller_installation")
+	openshiftNetworkConfig = "cluster"
+)
 
 // Add creates a new Installation Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -294,7 +296,7 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 			return fmt.Errorf("tigera-installation-controller failed to watch secret '%s' in '%s' namespace: %w", render.ManagerInternalTLSSecretName, common.OperatorNamespace(), err)
 		}
 
-		//watch for change to primary resource LogCollector
+		// watch for change to primary resource LogCollector
 		err = c.Watch(&source.Kind{Type: &operator.LogCollector{}}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
@@ -679,7 +681,7 @@ func fillDefaults(instance *operator.Installation) error {
 	}
 
 	// Default rolling update parameters.
-	var one = intstr.FromInt(1)
+	one := intstr.FromInt(1)
 	if instance.Spec.NodeUpdateStrategy.RollingUpdate == nil {
 		instance.Spec.NodeUpdateStrategy.RollingUpdate = &apps.RollingUpdateDaemonSet{}
 	}
@@ -1166,7 +1168,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		l := corev1.PodList{}
 		err := r.client.List(ctx, &l,
 			client.MatchingLabels(map[string]string{
-				"k8s-app": kubecontrollers.KubeController}),
+				"k8s-app": kubecontrollers.KubeController,
+			}),
 			client.InNamespace(common.CalicoNamespace))
 		if err != nil {
 			r.SetDegraded("Failed to query for KubeController pods", err, reqLogger)
@@ -1177,6 +1180,22 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			nodeTerminating = true
 		}
 	}
+
+	// Determine the felix health port to use. Prefer the configuration from FelixConfiguration,
+	// but default to 9099.
+	felixHealthPort := 9099
+	if felixConfiguration.Spec.HealthPort != nil {
+		felixHealthPort = *felixConfiguration.Spec.HealthPort
+	}
+	if cfg.FelixHealthPort == nil {
+		// No health port configured. Default it.
+		port := 9099
+		if cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
+			port = 9199
+		}
+		cfg.FelixHealthPort = &port
+	}
+
 	// Build a configuration for rendering calico/node.
 	nodeCfg := render.NodeConfiguration{
 		K8sServiceEp:            k8sapi.Endpoint,
@@ -1192,6 +1211,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		MigrateNamespaces:       needNsMigration,
 		Terminating:             nodeTerminating,
 		PrometheusServerTLS:     nodePrometheusTLS,
+		FelixHealthPort:         felixHealthPort,
 	}
 	components = append(components, render.Node(&nodeCfg))
 

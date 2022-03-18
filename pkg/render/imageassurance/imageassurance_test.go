@@ -708,6 +708,7 @@ var _ = Describe("Image Assurance Render", func() {
 			KeyValidatorConfig: dexCfg,
 			NeedsMigrating:     false,
 			ComponentsUp:       false,
+			TenantKey:          &tenantKey,
 		})
 		expectedResources := resources(true)
 		resources, _ := component.Objects()

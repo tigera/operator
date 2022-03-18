@@ -1,3 +1,17 @@
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package certificatemanager
 
 import (
@@ -232,7 +246,9 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 				// We want to return nothing, so a new secret will be created to overwrite this one.
 				return nil, nil, nil
 			}
-			return nil, nil, fmt.Errorf("certificate %s was created by an older ca", secretName)
+			// We treat the certificate as a BYO secret, because this may be a certificate created by a management cluster
+			// and used inside a managed cluster. If it is not, it should get updated automatically when readCertOnly=false.
+			issuer = nil
 		}
 	}
 	return &certificatemanagement.KeyPair{

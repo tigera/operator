@@ -227,6 +227,11 @@ var (
 		Image:   "tigera/image-assurance-db-migrator",
 	}
 
+	ComponentImageAssuranceCAW = component{
+		Version: "master",
+		Image:   "tigera/image-assurance-caw",
+	}
+
 	ComponentTigeraWindows = component{
 		Version: "v3.12.0",
 		Image:   "tigera/calico-windows-upgrade",
@@ -274,6 +279,7 @@ var (
 		ComponentImageAssuranceApi,
 		ComponentImageAssuranceScanner,
 		ComponentImageAssuranceDBMigrator,
+		ComponentImageAssuranceCAW,
 		ComponentTigeraWindows,
 	}
 )

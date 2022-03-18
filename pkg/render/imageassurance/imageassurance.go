@@ -22,6 +22,7 @@ const (
 	ResourceNameImageAssuranceAPI        = "tigera-image-assurance-api"
 	ResourceNameImageAssuranceScanner    = "tigera-image-assurance-scanner"
 	ResourceNameImageAssuranceDBMigrator = "tigera-image-assurance-db-migrator"
+	ResourceNameImageAssuranceCAW        = "tigera-image-assurance-caw"
 
 	PGConfigMapName  = "tigera-image-assurance-postgres"
 	PGCertSecretName = "tigera-image-assurance-postgres-cert"
@@ -85,6 +86,7 @@ type Config struct {
 	apiImage      string
 	scannerImage  string
 	migratorImage string
+	cawImage      string
 }
 
 type component struct {
@@ -118,6 +120,11 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
+	c.config.cawImage, err = components.GetReference(components.ComponentImageAssuranceCAW, reg, path, prefix, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
 	if len(errMsgs) != 0 {
 		return fmt.Errorf(strings.Join(errMsgs, ","))
 	}
@@ -140,6 +147,7 @@ func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
 			c.migratorJob(),
 			c.apiDeployment(),
 			c.scannerDeployment(),
+			c.cawDeployment(),
 		}
 	}
 
@@ -191,6 +199,14 @@ func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
 		c.scannerRole(),
 		c.scannerRoleBinding(),
 		c.scannerDeployment(),
+	)
+
+	// caw resources
+	objs = append(objs,
+		c.cawServiceAccount(),
+		c.cawRole(),
+		c.cawRoleBinding(),
+		c.cawDeployment(),
 	)
 
 	return objs, nil

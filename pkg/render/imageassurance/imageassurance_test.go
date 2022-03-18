@@ -150,6 +150,11 @@ var _ = Describe("Image Assurance Render", func() {
 			{name: imageassurance.ResourceNameImageAssuranceScanner, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "Role"},
 			{name: imageassurance.ResourceNameImageAssuranceScanner, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "RoleBinding"},
 			{name: imageassurance.ResourceNameImageAssuranceScanner, ns: imageassurance.NameSpaceImageAssurance, group: "apps", version: "v1", kind: "Deployment"},
+
+			{name: imageassurance.ResourceNameImageAssuranceCAW, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: imageassurance.ResourceNameImageAssuranceCAW, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "Role"},
+			{name: imageassurance.ResourceNameImageAssuranceCAW, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "RoleBinding"},
+			{name: imageassurance.ResourceNameImageAssuranceCAW, ns: imageassurance.NameSpaceImageAssurance, group: "apps", version: "v1", kind: "Deployment"},
 		}
 		// Should render the correct resources.
 		component := imageassurance.ImageAssurance(&imageassurance.Config{
@@ -191,7 +196,7 @@ var _ = Describe("Image Assurance Render", func() {
 			{Name: "IMAGE_ASSURANCE_DB_SSL_ROOT_CERT", Value: "/certs/db/server-ca"},
 			{Name: "IMAGE_ASSURANCE_DB_SSL_CERT", Value: "/certs/db/client-cert"},
 			{Name: "IMAGE_ASSURANCE_DB_SSL_KEY", Value: "/certs/db/client-key"},
-			{Name: "IMAGE_ASSURANCE_LOGLEVEL", Value: "INFO"},
+			{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
 			{Name: "IMAGE_ASSURANCE_DB_HOST_ADDR", Value: "",
 				ValueFrom: &corev1.EnvVarSource{
 					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
@@ -317,7 +322,7 @@ var _ = Describe("Image Assurance Render", func() {
 			{Name: "IMAGE_ASSURANCE_DB_SSL_CERT", Value: "/certs/db/client-cert"},
 			{Name: "IMAGE_ASSURANCE_DB_SSL_KEY", Value: "/certs/db/client-key"},
 			{Name: "IMAGE_ASSURANCE_PORT", Value: "5557"},
-			{Name: "IMAGE_ASSURANCE_LOGLEVEL", Value: "INFO"},
+			{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
 			{Name: "IMAGE_ASSURANCE_DB_HOST_ADDR", Value: "",
 				ValueFrom: &corev1.EnvVarSource{
 					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
@@ -411,7 +416,7 @@ var _ = Describe("Image Assurance Render", func() {
 
 		scannerEnv := scanner.Containers[0].Env
 		scannerExpectedENV := []corev1.EnvVar{
-			{Name: "IMAGE_ASSURANCE_LOGLEVEL", Value: "INFO"},
+			{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
 			{Name: "IMAGE_ASSURANCE_DB_SSL_ROOT_CERT", Value: "/certs/db/server-ca"},
 			{Name: "IMAGE_ASSURANCE_DB_SSL_CERT", Value: "/certs/db/client-cert"},
 			{Name: "IMAGE_ASSURANCE_DB_SSL_KEY", Value: "/certs/db/client-key"},
@@ -544,7 +549,7 @@ var _ = Describe("Image Assurance Render", func() {
 		}
 	})
 
-	It("should delete the scanner and api deployments, along with the migrator job when the NeedsMigrating and ComponentsUp are both true", func() {
+	It("should delete the scanner, caw and api deployments, along with the migrator job when the NeedsMigrating and ComponentsUp are both true", func() {
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -555,6 +560,7 @@ var _ = Describe("Image Assurance Render", func() {
 			{name: imageassurance.ResourceNameImageAssuranceDBMigrator, ns: imageassurance.NameSpaceImageAssurance, group: "batch", version: "v1", kind: "Job"},
 			{name: imageassurance.ResourceNameImageAssuranceAPI, ns: imageassurance.NameSpaceImageAssurance, group: "apps", version: "v1", kind: "Deployment"},
 			{name: imageassurance.ResourceNameImageAssuranceScanner, ns: imageassurance.NameSpaceImageAssurance, group: "apps", version: "v1", kind: "Deployment"},
+			{name: imageassurance.ResourceNameImageAssuranceCAW, ns: imageassurance.NameSpaceImageAssurance, group: "apps", version: "v1", kind: "Deployment"},
 		}
 
 		// Should delete the correct resources.

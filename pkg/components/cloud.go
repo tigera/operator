@@ -17,7 +17,8 @@ import "fmt"
 
 // Default registries for Calico and Tigera.
 const (
-	CloudRegistry = "gcr.io/tigera-tesla/"
+	CloudRegistry          = "gcr.io/tigera-tesla/"
+	ImageAssuranceRegistry = "gcr.io/unique-caldron-775/cnx"
 )
 
 var ElasticExternal bool = false
@@ -31,6 +32,8 @@ func cloudRegistry(c component, registry, version string) (string, string) {
 		switch c {
 		case ComponentEsProxy, ComponentIntrusionDetectionController, ComponentTigeraKubeControllers:
 			registry = CloudRegistry
+		case ComponentImageAssuranceApi, ComponentImageAssuranceScanner, ComponentImageAssuranceDBMigrator, ComponentImageAssuranceCAW:
+			registry = ImageAssuranceRegistry
 		}
 	}
 	switch c {

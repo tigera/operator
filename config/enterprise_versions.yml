@@ -132,3 +132,6 @@ components:
   image-assurance-db-migrator:
     image: tigera/image-assurance-db-migrator
     version: master
+  image-assurance-caw:
+    image: tigera/image-assurance-caw
+    version: master

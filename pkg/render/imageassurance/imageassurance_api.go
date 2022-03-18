@@ -146,7 +146,7 @@ func (c *component) apiDeployment() *appsv1.Deployment {
 
 	env := []corev1.EnvVar{
 		{Name: "IMAGE_ASSURANCE_PORT", Value: "5557"},
-		{Name: "IMAGE_ASSURANCE_LOGLEVEL", Value: "INFO"},
+		{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
 		{Name: "IMAGE_ASSURANCE_HTTPS_CERT", Value: "/certs/https/tls.crt"},
 		{Name: "IMAGE_ASSURANCE_HTTPS_KEY", Value: "/certs/https/tls.key"},
 	}

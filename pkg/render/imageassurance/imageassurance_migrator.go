@@ -75,7 +75,7 @@ func (c *component) migratorJob() *batchv1.Job {
 	}
 
 	env := []corev1.EnvVar{
-		{Name: "IMAGE_ASSURANCE_LOGLEVEL", Value: "INFO"},
+		{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
 		{
 			Name:      "IMAGE_ASSURANCE_ORGANIZATION_NAME",
 			ValueFrom: configmap.GetEnvVarSource(PGConfigMapName, PGConfigOrgNameKey, false),

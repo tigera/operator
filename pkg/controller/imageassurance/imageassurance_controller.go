@@ -533,6 +533,12 @@ func componentsUp(client client.Client) (bool, error) {
 		Namespace: imageassurance.NameSpaceImageAssurance,
 	}
 
+	cawDeployment := &appsv1.Deployment{}
+	cawName := types.NamespacedName{
+		Name:      imageassurance.ResourceNameImageAssuranceCAW,
+		Namespace: imageassurance.NameSpaceImageAssurance,
+	}
+
 	if err := client.Get(context.Background(), apiName, apiDeployment); err != nil {
 		if !errors.IsNotFound(err) {
 			return false, err
@@ -542,6 +548,14 @@ func componentsUp(client client.Client) (bool, error) {
 	}
 
 	if err := client.Get(context.Background(), scannerName, scannerDeployment); err != nil {
+		if !errors.IsNotFound(err) {
+			return false, err
+		}
+	} else {
+		return true, nil
+	}
+
+	if err := client.Get(context.Background(), cawName, cawDeployment); err != nil {
 		if !errors.IsNotFound(err) {
 			return false, err
 		}

@@ -32,6 +32,7 @@ import (
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -231,6 +232,7 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 		},
 		Spec: monitoringv1.AlertmanagerSpec{
 			Image:            &mc.alertmanagerImage,
+			ImagePullPolicy:  v1.PullIfNotPresent,
 			ImagePullSecrets: secret.GetReferenceList(mc.cfg.PullSecrets),
 			Replicas:         ptr.Int32ToPtr(3),
 			Version:          components.ComponentCoreOSAlertmanager.Version,
@@ -337,8 +339,9 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				{
-					Name:  "authn-proxy",
-					Image: mc.prometheusServiceImage,
+					Name:            "authn-proxy",
+					Image:           mc.prometheusServiceImage,
+					ImagePullPolicy: v1.PullIfNotPresent,
 					Ports: []corev1.ContainerPort{
 						{
 							ContainerPort: PrometheusProxyPort,

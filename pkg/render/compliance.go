@@ -33,6 +33,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -384,10 +385,11 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorate(corev1.Container{
-					Name:          ComplianceControllerName,
-					Image:         c.controllerImage,
-					Env:           envVars,
-					LivenessProbe: complianceLivenessProbe,
+					Name:            ComplianceControllerName,
+					Image:           c.controllerImage,
+					ImagePullPolicy: v1.PullIfNotPresent,
+					Env:             envVars,
+					LivenessProbe:   complianceLivenessProbe,
 				}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceControllerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()),
 			},
 		}),
@@ -507,10 +509,11 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 				Containers: []corev1.Container{
 					relasticsearch.ContainerDecorateIndexCreator(
 						relasticsearch.ContainerDecorate(corev1.Container{
-							Name:          "reporter",
-							Image:         c.reporterImage,
-							Env:           envVars,
-							LivenessProbe: complianceLivenessProbe,
+							Name:            "reporter",
+							Image:           c.reporterImage,
+							ImagePullPolicy: v1.PullIfNotPresent,
+							Env:             envVars,
+							LivenessProbe:   complianceLivenessProbe,
 							SecurityContext: &corev1.SecurityContext{
 								Privileged: &privileged,
 							},
@@ -674,9 +677,10 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorate(corev1.Container{
-					Name:  ComplianceServerName,
-					Image: c.serverImage,
-					Env:   envVars,
+					Name:            ComplianceServerName,
+					Image:           c.serverImage,
+					ImagePullPolicy: v1.PullIfNotPresent,
+					Env:             envVars,
 					LivenessProbe: &corev1.Probe{
 						Handler: corev1.Handler{
 							HTTPGet: &corev1.HTTPGetAction{
@@ -859,10 +863,11 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorateIndexCreator(
 					relasticsearch.ContainerDecorate(corev1.Container{
-						Name:          ComplianceSnapshotterName,
-						Image:         c.snapshotterImage,
-						Env:           envVars,
-						LivenessProbe: complianceLivenessProbe,
+						Name:            ComplianceSnapshotterName,
+						Image:           c.snapshotterImage,
+						ImagePullPolicy: v1.PullIfNotPresent,
+						Env:             envVars,
+						LivenessProbe:   complianceLivenessProbe,
 					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceSnapshotterUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()), c.cfg.ESClusterConfig.Replicas(), c.cfg.ESClusterConfig.Shards(),
 				),
 			},
@@ -1013,11 +1018,12 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorateIndexCreator(
 					relasticsearch.ContainerDecorate(corev1.Container{
-						Name:          "compliance-benchmarker",
-						Image:         c.benchmarkerImage,
-						Env:           envVars,
-						VolumeMounts:  volMounts,
-						LivenessProbe: complianceLivenessProbe,
+						Name:            "compliance-benchmarker",
+						Image:           c.benchmarkerImage,
+						ImagePullPolicy: v1.PullIfNotPresent,
+						Env:             envVars,
+						VolumeMounts:    volMounts,
+						LivenessProbe:   complianceLivenessProbe,
 					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceBenchmarkerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()), c.cfg.ESClusterConfig.Replicas(), c.cfg.ESClusterConfig.Shards(),
 				),
 			},

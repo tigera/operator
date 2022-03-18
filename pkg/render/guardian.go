@@ -19,6 +19,7 @@ package render
 import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -249,8 +250,9 @@ func (c *GuardianComponent) volumes() []corev1.Volume {
 func (c *GuardianComponent) container() []corev1.Container {
 	return []corev1.Container{
 		{
-			Name:  GuardianDeploymentName,
-			Image: c.image,
+			Name:            GuardianDeploymentName,
+			Image:           c.image,
+			ImagePullPolicy: v1.PullIfNotPresent,
 			Env: []corev1.EnvVar{
 				{Name: "GUARDIAN_PORT", Value: "9443"},
 				{Name: "GUARDIAN_LOGLEVEL", Value: "INFO"},

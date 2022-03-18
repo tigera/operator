@@ -213,13 +213,18 @@ var (
 	}
 
 	ComponentImageAssuranceApi = component{
-		Version: "v3.12.0",
+		Version: "master",
 		Image:   "tigera/image-assurance-api",
 	}
 
 	ComponentImageAssuranceScanner = component{
-		Version: "v3.12.0",
+		Version: "master",
 		Image:   "tigera/image-assurance-scanner",
+	}
+
+	ComponentImageAssuranceDBMigrator = component{
+		Version: "master",
+		Image:   "tigera/image-assurance-db-migrator",
 	}
 
 	ComponentTigeraWindows = component{
@@ -268,6 +273,7 @@ var (
 		ComponentESGateway,
 		ComponentImageAssuranceApi,
 		ComponentImageAssuranceScanner,
+		ComponentImageAssuranceDBMigrator,
 		ComponentTigeraWindows,
 	}
 )

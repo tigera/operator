@@ -151,7 +151,7 @@ func (c *component) apiDeployment() *appsv1.Deployment {
 		{Name: "IMAGE_ASSURANCE_HTTPS_KEY", Value: "/certs/https/tls.key"},
 	}
 
-	env = pgDecorateENVVars(env, PGUserSecretName, mountPathPostgresCerts, PGConfigMapName)
+	env = pgDecorateENVVars(env, PGUserSecretName, MountPathPostgresCerts, PGConfigMapName)
 
 	terminationGracePeriod := int64(30)
 	privileged := true
@@ -176,7 +176,7 @@ func (c *component) apiDeployment() *appsv1.Deployment {
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: APICertSecretName, MountPath: mountPathAPITLSCerts, ReadOnly: true},
-			{Name: PGCertSecretName, MountPath: mountPathPostgresCerts, ReadOnly: true},
+			{Name: PGCertSecretName, MountPath: MountPathPostgresCerts, ReadOnly: true},
 			{Name: ManagerCertSecretName, MountPath: mountPathManagerTLSCerts, ReadOnly: true},
 		},
 	}

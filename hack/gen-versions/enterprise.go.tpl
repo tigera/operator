@@ -262,6 +262,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "image-assurance-db-migrator" }}
+	ComponentImageAssuranceDBMigrator = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "windows" }}
 	ComponentTigeraWindows = component{
 		Version: "{{ .Version }}",
@@ -310,6 +316,7 @@ var (
 		ComponentESGateway,
 		ComponentImageAssuranceApi,
 		ComponentImageAssuranceScanner,
+		ComponentImageAssuranceDBMigrator,
 		ComponentTigeraWindows,
 	}
 )

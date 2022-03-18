@@ -13,9 +13,11 @@ const (
 	PGUserSecretKey = "username"
 	PGUserPassKey   = "password"
 
-	PGConfigHostKey = "host"
-	PGConfigNameKey = "name"
-	PGConfigPortKey = "port"
+	PGConfigHostKey    = "host"
+	PGConfigNameKey    = "name"
+	PGConfigPortKey    = "port"
+	PGConfigOrgIDKey   = "dbOrgID"
+	PGConfigOrgNameKey = "dbOrgName"
 
 	PGServerCAKey   = "server-ca"
 	PGClientCertKey = "client-cert"
@@ -54,6 +56,10 @@ func pgDecorateENVVars(env []corev1.EnvVar, pgUserSecret string, pgCertsPath str
 		{
 			Name:  "IMAGE_ASSURANCE_DB_SSL_KEY",
 			Value: pgCertsPath + PGClientKeyKey,
+		},
+		{
+			Name:      "IMAGE_ASSURANCE_ORGANIZATION_ID",
+			ValueFrom: configmap.GetEnvVarSource(pgConfig, PGConfigOrgIDKey, false),
 		},
 	}
 	env = append(env, envVars...)

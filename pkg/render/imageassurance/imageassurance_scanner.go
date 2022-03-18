@@ -78,7 +78,7 @@ func (c *component) scannerDeployment() *appsv1.Deployment {
 		{Name: "IMAGE_ASSURANCE_SCANNER_RETRIES", Value: "3"},
 	}
 
-	env = pgDecorateENVVars(env, PGUserSecretName, mountPathPostgresCerts, PGConfigMapName)
+	env = pgDecorateENVVars(env, PGUserSecretName, MountPathPostgresCerts, PGConfigMapName)
 
 	terminationGracePeriod := int64(30)
 	isPrivileged := true
@@ -102,7 +102,7 @@ func (c *component) scannerDeployment() *appsv1.Deployment {
 			Privileged: &isPrivileged,
 		},
 		VolumeMounts: []corev1.VolumeMount{
-			{Name: PGCertSecretName, MountPath: mountPathPostgresCerts, ReadOnly: true},
+			{Name: PGCertSecretName, MountPath: MountPathPostgresCerts, ReadOnly: true},
 		},
 	}
 

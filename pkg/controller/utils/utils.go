@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -117,6 +118,14 @@ func AddServiceWatch(c controller.Controller, name, namespace string) error {
 		TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	})
+}
+
+func AddJobWatch(c controller.Controller, name, namespace string) error {
+	job := &batchv1.Job{
+		TypeMeta:   metav1.TypeMeta{Kind: "Job", APIVersion: "V1"},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+	}
+	return AddNamespacedWatch(c, job)
 }
 
 func WaitToAddLicenseKeyWatch(controller controller.Controller, client kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {

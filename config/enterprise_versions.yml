@@ -125,7 +125,10 @@ components:
     version: v3.12.0
   image-assurance-api:
     image: tigera/image-assurance-api
-    version: v3.12.0
+    version: master
   image-assurance-scanner:
     image: tigera/image-assurance-scanner
-    version: v3.12.0
+    version: master
+  image-assurance-db-migrator:
+    image: tigera/image-assurance-db-migrator
+    version: master

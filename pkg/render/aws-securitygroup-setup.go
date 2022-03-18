@@ -17,6 +17,7 @@ package render
 import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -93,9 +94,10 @@ func (c *awsSGSetupComponent) setupJob() *batchv1.Job {
 					HostNetwork:        true,
 					Tolerations:        rmeta.TolerateAll,
 					Containers: []corev1.Container{{
-						Name:  "aws-security-group-setup",
-						Image: c.image,
-						Args:  []string{"--aws-sg-setup"},
+						Name:            "aws-security-group-setup",
+						Image:           c.image,
+						ImagePullPolicy: v1.PullIfNotPresent,
+						Args:            []string{"--aws-sg-setup"},
 						Env: []corev1.EnvVar{
 							{
 								Name:  "OPENSHIFT",

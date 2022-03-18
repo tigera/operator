@@ -17,6 +17,7 @@ package render
 import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -266,6 +267,7 @@ func (pc *packetCaptureApiComponent) container() corev1.Container {
 	return corev1.Container{
 		Name:            PacketCaptureContainerName,
 		Image:           pc.image,
+		ImagePullPolicy: v1.PullIfNotPresent,
 		LivenessProbe:   pc.healthProbe(),
 		ReadinessProbe:  pc.healthProbe(),
 		SecurityContext: podsecuritycontext.NewBaseContext(),

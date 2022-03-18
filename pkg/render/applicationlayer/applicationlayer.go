@@ -36,6 +36,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -223,8 +224,9 @@ func (c *component) containers() []corev1.Container {
 	var containers []corev1.Container
 
 	proxy := corev1.Container{
-		Name:  ProxyContainerName,
-		Image: c.config.proxyImage,
+		Name:            ProxyContainerName,
+		Image:           c.config.proxyImage,
+		ImagePullPolicy: v1.PullIfNotPresent,
 		Command: []string{
 			"envoy", "-c", "/etc/envoy/envoy-config.yaml",
 		},
@@ -245,10 +247,11 @@ func (c *component) containers() []corev1.Container {
 	if c.config.LogsEnabled {
 		// Log collection specific container
 		collector := corev1.Container{
-			Name:         L7CollectorContainerName,
-			Image:        c.config.collectorImage,
-			Env:          c.collectorEnv(),
-			VolumeMounts: c.collectorVolMounts(),
+			Name:            L7CollectorContainerName,
+			Image:           c.config.collectorImage,
+			ImagePullPolicy: v1.PullIfNotPresent,
+			Env:             c.collectorEnv(),
+			VolumeMounts:    c.collectorVolMounts(),
 		}
 		containers = append(containers, collector)
 	}
@@ -256,8 +259,9 @@ func (c *component) containers() []corev1.Container {
 	if c.config.WAFEnabled {
 		// Web Application Firewall (WAF) specific container
 		dikastes := corev1.Container{
-			Name:  DikastesContainerName,
-			Image: c.config.dikastesImage,
+			Name:            DikastesContainerName,
+			Image:           c.config.dikastesImage,
+			ImagePullPolicy: v1.PullIfNotPresent,
 			Command: []string{
 				"/dikastes",
 				"server",

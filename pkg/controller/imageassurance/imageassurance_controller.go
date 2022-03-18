@@ -116,6 +116,11 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	if err = utils.AddJobWatch(c, imageassurance.ResourceNameImageAssuranceDBMigrator, imageassurance.NameSpaceImageAssurance); err != nil {
 		return fmt.Errorf("ImageAssurance-controller failed to watch Job %s: %v", imageassurance.ResourceNameImageAssuranceDBMigrator, err)
 	}
+	// Watch for changes to authentication
+	err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("ImageAssurance-controller failed to watch resource: %w", err)
+	}
 
 	return nil
 }
@@ -262,18 +267,38 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{RequeueAfter: 20 * time.Second}, err
 	}
 
+	// Fetch the Authentication spec. If present, we use to configure user authentication.
+	authenticationCR, err := utils.GetAuthentication(ctx, r.client)
+	if err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded("Error querying Authentication", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	if authenticationCR != nil && authenticationCR.Status.State != operatorv1.TigeraStatusReady {
+		r.status.SetDegraded("Authentication is not ready", fmt.Sprintf("authenticationCR status: %s", authenticationCR.Status.State))
+		return reconcile.Result{}, nil
+	}
+
+	kvc, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.clusterDomain)
+	if err != nil {
+		log.Error(err, "Failed to process the authentication CR.")
+		r.status.SetDegraded("Failed to process the authentication CR.", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	config := &imageassurance.Config{
-		PullSecrets:       pullSecrets,
-		Installation:      installation,
-		OsType:            rmeta.OSTypeLinux,
-		PGConfig:          pgConfig,
-		PGAdminUserSecret: pgAdminUserSecret,
-		PGCertSecret:      pgCertSecret,
-		PGUserSecret:      pgUserSecret,
-		TLSSecret:         tlsSecret,
-		InternalMgrSecret: internalMgrSecret,
-		NeedsMigrating:    needsMigrating,
-		ComponentsUp:      componentsUp,
+		PullSecrets:        pullSecrets,
+		Installation:       installation,
+		OsType:             rmeta.OSTypeLinux,
+		PGConfig:           pgConfig,
+		PGAdminUserSecret:  pgAdminUserSecret,
+		PGCertSecret:       pgCertSecret,
+		PGUserSecret:       pgUserSecret,
+		TLSSecret:          tlsSecret,
+		InternalMgrSecret:  internalMgrSecret,
+		NeedsMigrating:     needsMigrating,
+		ComponentsUp:       componentsUp,
+		KeyValidatorConfig: kvc,
 	}
 
 	components := []render.Component{render.NewPassthrough([]client.Object{tlsSecret}...)}

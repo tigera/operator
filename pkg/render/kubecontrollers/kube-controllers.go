@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019,2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -342,19 +342,19 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 			Verbs:     []string{"get", "watch"},
 		},
 		{
-			APIGroups: []string{"projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"deeppacketinspections"},
 			Verbs:     []string{"get", "watch", "list"},
 		},
 		{
 			APIGroups: []string{"crd.projectcalico.org"},
-			Resources: []string{"deeppacketinspections"},
-			Verbs:     []string{"get"},
+			Resources: []string{"deeppacketinspections/status"},
+			Verbs:     []string{"update"},
 		},
 		{
 			APIGroups: []string{"crd.projectcalico.org"},
-			Resources: []string{"deeppacketinspections/status"},
-			Verbs:     []string{"update"},
+			Resources: []string{"packetcaptures"},
+			Verbs:     []string{"get", "list", "update"},
 		},
 	}
 

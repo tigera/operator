@@ -146,6 +146,7 @@ func (c *component) apiDeployment() *appsv1.Deployment {
 		pgUserHashAnnotation:      rmeta.AnnotationHash(c.config.PGUserSecret.Data),
 		pgCertsHashAnnotation:     rmeta.AnnotationHash(c.config.PGCertSecret.Data),
 		managerCertHashAnnotation: rmeta.AnnotationHash(c.config.InternalMgrSecret.Data),
+		tenantKeyHashAnnotation:   rmeta.AnnotationHash(c.config.TenantKey.Data),
 		apiCertHashAnnotation:     c.config.tlsHash,
 	}
 

@@ -53,6 +53,7 @@ const (
 	pgAdminUserHashAnnotation = "hash.operator.tigera.io/pgadminuser"
 	apiCertHashAnnotation     = "hash.operator.tigera.io/apicerts"
 	managerCertHashAnnotation = "hash.operator.tigera.io/managercerts"
+	tenantKeyHashAnnotation   = "hash.operator.tigera.io/tenantkey"
 )
 
 func ImageAssurance(

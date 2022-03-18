@@ -632,6 +632,7 @@ var _ = Describe("Image Assurance Render", func() {
 			InternalMgrSecret: &mgrSecrets,
 			NeedsMigrating:    true,
 			ComponentsUp:      false,
+			TenantKey:         &tenantKey,
 		})
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -672,6 +673,7 @@ var _ = Describe("Image Assurance Render", func() {
 			InternalMgrSecret: &mgrSecrets,
 			NeedsMigrating:    true,
 			ComponentsUp:      true,
+			TenantKey:         &tenantKey,
 		})
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		_, resources := component.Objects()

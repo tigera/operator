@@ -68,9 +68,10 @@ func (c *component) cawRoleBinding() *rbacv1.RoleBinding {
 func (c *component) cawDeployment() *appsv1.Deployment {
 
 	annots := map[string]string{
-		pgConfigHashAnnotation: rmeta.AnnotationHash(c.config.PGConfig.Data),
-		pgUserHashAnnotation:   rmeta.AnnotationHash(c.config.PGUserSecret.Data),
-		pgCertsHashAnnotation:  rmeta.AnnotationHash(c.config.PGCertSecret.Data),
+		pgConfigHashAnnotation:  rmeta.AnnotationHash(c.config.PGConfig.Data),
+		pgUserHashAnnotation:    rmeta.AnnotationHash(c.config.PGUserSecret.Data),
+		pgCertsHashAnnotation:   rmeta.AnnotationHash(c.config.PGCertSecret.Data),
+		tenantKeyHashAnnotation: rmeta.AnnotationHash(c.config.TenantKey.Data),
 	}
 
 	env := []corev1.EnvVar{

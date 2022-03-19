@@ -43,17 +43,17 @@ const (
 	mountPathAPITLSCerts     = "/certs/https/"
 	mountPathManagerTLSCerts = "/manager-tls/"
 
-	TenantKeyName     = "tigera-secure-bast-tenant-key"
-	EncryptionKeyName = "encryption_key"
-	MountTenantKey    = "/tenant-key/"
+	TenantKeySecretName  = "tigera-secure-bast-tenant-key"
+	EncryptionKey        = "encryption_key"
+	MountTenantKeySecret = "/tenant-key/"
 
-	pgConfigHashAnnotation    = "hash.operator.tigera.io/pgconfig"
-	pgUserHashAnnotation      = "hash.operator.tigera.io/pguser"
-	pgCertsHashAnnotation     = "hash.operator.tigera.io/pgcerts"
-	pgAdminUserHashAnnotation = "hash.operator.tigera.io/pgadminuser"
-	apiCertHashAnnotation     = "hash.operator.tigera.io/apicerts"
-	managerCertHashAnnotation = "hash.operator.tigera.io/managercerts"
-	tenantKeyHashAnnotation   = "hash.operator.tigera.io/tenantkey"
+	pgConfigHashAnnotation        = "hash.operator.tigera.io/pgconfig"
+	pgUserHashAnnotation          = "hash.operator.tigera.io/pguser"
+	pgCertsHashAnnotation         = "hash.operator.tigera.io/pgcerts"
+	pgAdminUserHashAnnotation     = "hash.operator.tigera.io/pgadminuser"
+	apiCertHashAnnotation         = "hash.operator.tigera.io/apicerts"
+	managerCertHashAnnotation     = "hash.operator.tigera.io/managercerts"
+	tenantKeySecretHashAnnotation = "hash.operator.tigera.io/tenantkeysecret"
 )
 
 func ImageAssurance(
@@ -84,7 +84,7 @@ type Config struct {
 	TLSSecret          *corev1.Secret
 	InternalMgrSecret  *corev1.Secret
 	KeyValidatorConfig authentication.KeyValidatorConfig
-	TenantKey          *corev1.Secret
+	TenantKeySecret    *corev1.Secret
 
 	NeedsMigrating bool
 	ComponentsUp   bool
@@ -189,7 +189,7 @@ func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
 	objs = append(objs, secret.ToRuntimeObjects(c.config.TLSSecret)...)
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(NameSpaceImageAssurance, c.config.InternalMgrSecret)...)...)
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(NameSpaceImageAssurance, c.config.TenantKey)...)...)
+	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(NameSpaceImageAssurance, c.config.TenantKeySecret)...)...)
 
 	// api resources
 	objs = append(objs,

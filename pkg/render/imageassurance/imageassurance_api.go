@@ -142,12 +142,12 @@ func (c component) apiService() *corev1.Service {
 func (c *component) apiDeployment() *appsv1.Deployment {
 
 	annots := map[string]string{
-		pgConfigHashAnnotation:    rmeta.AnnotationHash(c.config.PGConfig.Data),
-		pgUserHashAnnotation:      rmeta.AnnotationHash(c.config.PGUserSecret.Data),
-		pgCertsHashAnnotation:     rmeta.AnnotationHash(c.config.PGCertSecret.Data),
-		managerCertHashAnnotation: rmeta.AnnotationHash(c.config.InternalMgrSecret.Data),
-		tenantKeyHashAnnotation:   rmeta.AnnotationHash(c.config.TenantKey.Data),
-		apiCertHashAnnotation:     c.config.tlsHash,
+		pgConfigHashAnnotation:        rmeta.AnnotationHash(c.config.PGConfig.Data),
+		pgUserHashAnnotation:          rmeta.AnnotationHash(c.config.PGUserSecret.Data),
+		pgCertsHashAnnotation:         rmeta.AnnotationHash(c.config.PGCertSecret.Data),
+		managerCertHashAnnotation:     rmeta.AnnotationHash(c.config.InternalMgrSecret.Data),
+		tenantKeySecretHashAnnotation: rmeta.AnnotationHash(c.config.TenantKeySecret.Data),
+		apiCertHashAnnotation:         c.config.tlsHash,
 	}
 
 	env := []corev1.EnvVar{
@@ -167,7 +167,7 @@ func (c *component) apiDeployment() *appsv1.Deployment {
 		{Name: APICertSecretName, MountPath: mountPathAPITLSCerts, ReadOnly: true},
 		{Name: PGCertSecretName, MountPath: MountPathPostgresCerts, ReadOnly: true},
 		{Name: ManagerCertSecretName, MountPath: mountPathManagerTLSCerts, ReadOnly: true},
-		{Name: TenantKeyName, MountPath: MountTenantKey, ReadOnly: true},
+		{Name: TenantKeySecretName, MountPath: MountTenantKeySecret, ReadOnly: true},
 	}
 
 	if c.config.KeyValidatorConfig != nil {
@@ -278,10 +278,10 @@ func (c *component) apiVolumes() []corev1.Volume {
 			},
 		},
 		{
-			Name: TenantKeyName,
+			Name: TenantKeySecretName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName:  TenantKeyName,
+					SecretName:  TenantKeySecretName,
 					DefaultMode: &defaultMode,
 				},
 			},

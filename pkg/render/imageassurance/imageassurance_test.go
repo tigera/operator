@@ -31,7 +31,7 @@ var _ = Describe("Image Assurance Render", func() {
 		tlsSecrets         corev1.Secret
 		mgrSecrets         corev1.Secret
 		pgConfig           corev1.ConfigMap
-		tenantKey          corev1.Secret
+		tenantKeySecret    corev1.Secret
 	)
 
 	BeforeEach(func() {
@@ -113,10 +113,10 @@ var _ = Describe("Image Assurance Render", func() {
 			Data: map[string][]byte{"tls.key": []byte("mgrkey"), "tls.cert": []byte("mgrcert")},
 		}
 
-		tenantKey = corev1.Secret{
+		tenantKeySecret = corev1.Secret{
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      imageassurance.TenantKeyName,
+				Name:      imageassurance.TenantKeySecretName,
 				Namespace: common.OperatorNamespace(),
 			},
 			Data: map[string][]byte{"encryption_key": []byte("encryption_key")},
@@ -150,7 +150,7 @@ var _ = Describe("Image Assurance Render", func() {
 			// image assurance adp resources
 			{name: imageassurance.APICertSecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
 			{name: imageassurance.ManagerCertSecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
-			{name: imageassurance.TenantKeyName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
+			{name: imageassurance.TenantKeySecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
 
 			{name: imageassurance.ResourceNameImageAssuranceAPI, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: imageassurance.ResourceNameImageAssuranceAPI, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "Role"},
@@ -305,7 +305,7 @@ var _ = Describe("Image Assurance Render", func() {
 			{Name: imageassurance.APICertSecretName, MountPath: "/certs/https/"},
 			{Name: imageassurance.PGCertSecretName, MountPath: "/certs/db/"},
 			{Name: imageassurance.ManagerCertSecretName, MountPath: "/manager-tls/"},
-			{Name: imageassurance.TenantKeyName, MountPath: "/tenant-key/"},
+			{Name: imageassurance.TenantKeySecretName, MountPath: "/tenant-key/"},
 		}
 		if enableOIDC {
 			vms = append(vms, corev1.VolumeMount{
@@ -334,7 +334,7 @@ var _ = Describe("Image Assurance Render", func() {
 			InternalMgrSecret: &mgrSecrets,
 			NeedsMigrating:    false,
 			ComponentsUp:      false,
-			TenantKey:         &tenantKey,
+			TenantKeySecret:   &tenantKeySecret,
 		})
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -588,7 +588,7 @@ var _ = Describe("Image Assurance Render", func() {
 		scannerVMs := scanner.Containers[0].VolumeMounts
 		scannerExpectedVMs := []corev1.VolumeMount{
 			{Name: imageassurance.PGCertSecretName, MountPath: "/certs/db/"},
-			{Name: imageassurance.TenantKeyName, MountPath: "/tenant-key/"},
+			{Name: imageassurance.TenantKeySecretName, MountPath: "/tenant-key/"},
 		}
 
 		Expect(len(scannerVMs)).To(Equal(len(scannerVMs)))
@@ -632,7 +632,7 @@ var _ = Describe("Image Assurance Render", func() {
 			InternalMgrSecret: &mgrSecrets,
 			NeedsMigrating:    true,
 			ComponentsUp:      false,
-			TenantKey:         &tenantKey,
+			TenantKeySecret:   &tenantKeySecret,
 		})
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -673,7 +673,7 @@ var _ = Describe("Image Assurance Render", func() {
 			InternalMgrSecret: &mgrSecrets,
 			NeedsMigrating:    true,
 			ComponentsUp:      true,
-			TenantKey:         &tenantKey,
+			TenantKeySecret:   &tenantKeySecret,
 		})
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		_, resources := component.Objects()
@@ -710,7 +710,7 @@ var _ = Describe("Image Assurance Render", func() {
 			KeyValidatorConfig: dexCfg,
 			NeedsMigrating:     false,
 			ComponentsUp:       false,
-			TenantKey:          &tenantKey,
+			TenantKeySecret:    &tenantKeySecret,
 		})
 		expectedResources := resources(true)
 		resources, _ := component.Objects()

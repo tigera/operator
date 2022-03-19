@@ -68,10 +68,10 @@ func (c *component) scannerRoleBinding() *rbacv1.RoleBinding {
 func (c *component) scannerDeployment() *appsv1.Deployment {
 
 	annots := map[string]string{
-		pgConfigHashAnnotation:  rmeta.AnnotationHash(c.config.PGConfig.Data),
-		pgUserHashAnnotation:    rmeta.AnnotationHash(c.config.PGUserSecret.Data),
-		pgCertsHashAnnotation:   rmeta.AnnotationHash(c.config.PGCertSecret.Data),
-		tenantKeyHashAnnotation: rmeta.AnnotationHash(c.config.TenantKey.Data),
+		pgConfigHashAnnotation:        rmeta.AnnotationHash(c.config.PGConfig.Data),
+		pgUserHashAnnotation:          rmeta.AnnotationHash(c.config.PGUserSecret.Data),
+		pgCertsHashAnnotation:         rmeta.AnnotationHash(c.config.PGCertSecret.Data),
+		tenantKeySecretHashAnnotation: rmeta.AnnotationHash(c.config.TenantKeySecret.Data),
 	}
 
 	env := []corev1.EnvVar{
@@ -105,7 +105,7 @@ func (c *component) scannerDeployment() *appsv1.Deployment {
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: PGCertSecretName, MountPath: MountPathPostgresCerts, ReadOnly: true},
-			{Name: TenantKeyName, MountPath: MountTenantKey, ReadOnly: true},
+			{Name: TenantKeySecretName, MountPath: MountTenantKeySecret, ReadOnly: true},
 		},
 	}
 
@@ -168,10 +168,10 @@ func (c *component) scannerVolumes() []corev1.Volume {
 			},
 		},
 		{
-			Name: TenantKeyName,
+			Name: TenantKeySecretName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName:  TenantKeyName,
+					SecretName:  TenantKeySecretName,
 					DefaultMode: &defaultMode,
 				},
 			},

@@ -146,7 +146,7 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 			rbacv1.PolicyRule{
 				APIGroups: []string{"rbac.authorization.k8s.io"},
 				Resources: []string{"clusterroles", "clusterrolebindings"},
-				Verbs:     []string{"watch", "list", "get", "create"},
+				Verbs:     []string{"watch", "list", "get", "create", "update"},
 			},
 		)
 	}

@@ -4,6 +4,12 @@ name: Initial Pipeline
 execution_time_limit:
   hours: 4
 
+auto_cancel:
+  running:
+    when: "branch != 'master'"
+  queued:
+    when: "branch != 'master'"
+
 agent:
   machine:
     type: e1-standard-8

@@ -103,7 +103,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 
 	// Watch secrets created for postgres in operator namespace.
 	for _, s := range []string{imageassurance.PGCertSecretName, imageassurance.ManagerCertSecretName,
-		imageassurance.APICertSecretName, imageassurance.PGAdminUserSecretName} {
+		imageassurance.APICertSecretName, imageassurance.PGAdminUserSecretName, imageassurance.TenantEncryptionKeySecretName} {
 		if err = utils.AddSecretsWatch(c, s, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("ImageAssurance-controller failed to watch Secret %s: %v", s, err)
 		}
@@ -231,6 +231,13 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
+	tenantEncryptionKeySecret, err := getTenantEncryptionKeySecret(r.client)
+	if err != nil {
+		reqLogger.Error(err, "Error retrieving tenant key")
+		r.status.SetDegraded("Error retrieving tenant key", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	migratorJob, err := getMigratorJob(r.client)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
@@ -287,18 +294,19 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 	}
 
 	config := &imageassurance.Config{
-		PullSecrets:        pullSecrets,
-		Installation:       installation,
-		OsType:             rmeta.OSTypeLinux,
-		PGConfig:           pgConfig,
-		PGAdminUserSecret:  pgAdminUserSecret,
-		PGCertSecret:       pgCertSecret,
-		PGUserSecret:       pgUserSecret,
-		TLSSecret:          tlsSecret,
-		InternalMgrSecret:  internalMgrSecret,
-		NeedsMigrating:     needsMigrating,
-		ComponentsUp:       componentsUp,
-		KeyValidatorConfig: kvc,
+		PullSecrets:               pullSecrets,
+		Installation:              installation,
+		OsType:                    rmeta.OSTypeLinux,
+		PGConfig:                  pgConfig,
+		PGAdminUserSecret:         pgAdminUserSecret,
+		PGCertSecret:              pgCertSecret,
+		PGUserSecret:              pgUserSecret,
+		TLSSecret:                 tlsSecret,
+		InternalMgrSecret:         internalMgrSecret,
+		NeedsMigrating:            needsMigrating,
+		ComponentsUp:              componentsUp,
+		KeyValidatorConfig:        kvc,
+		TenantEncryptionKeySecret: tenantEncryptionKeySecret,
 	}
 
 	components := []render.Component{render.NewPassthrough([]client.Object{tlsSecret}...)}
@@ -620,4 +628,24 @@ func needsMigrating(installation *operatorv1.InstallationSpec, imageSet *operato
 	}
 
 	return needsMigrating, nil
+}
+
+// getTenantEncryptionKeySecret returns the image assurance tenant key.
+func getTenantEncryptionKeySecret(client client.Client) (*corev1.Secret, error) {
+	cs := &corev1.Secret{}
+	snn := types.NamespacedName{
+		Name:      imageassurance.TenantEncryptionKeySecretName,
+		Namespace: common.OperatorNamespace(),
+	}
+
+	if err := client.Get(context.Background(), snn, cs); err != nil {
+		return nil, fmt.Errorf("failed to read secret %q: %s", imageassurance.TenantEncryptionKeySecretName, err)
+	}
+
+	if ca, ok := cs.Data[imageassurance.EncryptionKey]; !ok || len(ca) == 0 {
+		return nil, fmt.Errorf("expected secret %q to have a field named %q",
+			imageassurance.PGCertSecretName, imageassurance.EncryptionKey)
+	}
+
+	return cs, nil
 }

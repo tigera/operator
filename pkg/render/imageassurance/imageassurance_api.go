@@ -142,11 +142,12 @@ func (c component) apiService() *corev1.Service {
 func (c *component) apiDeployment() *appsv1.Deployment {
 
 	annots := map[string]string{
-		pgConfigHashAnnotation:    rmeta.AnnotationHash(c.config.PGConfig.Data),
-		pgUserHashAnnotation:      rmeta.AnnotationHash(c.config.PGUserSecret.Data),
-		pgCertsHashAnnotation:     rmeta.AnnotationHash(c.config.PGCertSecret.Data),
-		managerCertHashAnnotation: rmeta.AnnotationHash(c.config.InternalMgrSecret.Data),
-		apiCertHashAnnotation:     c.config.tlsHash,
+		pgConfigHashAnnotation:        rmeta.AnnotationHash(c.config.PGConfig.Data),
+		pgUserHashAnnotation:          rmeta.AnnotationHash(c.config.PGUserSecret.Data),
+		pgCertsHashAnnotation:         rmeta.AnnotationHash(c.config.PGCertSecret.Data),
+		managerCertHashAnnotation:     rmeta.AnnotationHash(c.config.InternalMgrSecret.Data),
+		tenantKeySecretHashAnnotation: rmeta.AnnotationHash(c.config.TenantEncryptionKeySecret.Data),
+		apiCertHashAnnotation:         c.config.tlsHash,
 	}
 
 	env := []corev1.EnvVar{
@@ -154,6 +155,7 @@ func (c *component) apiDeployment() *appsv1.Deployment {
 		{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
 		{Name: "IMAGE_ASSURANCE_HTTPS_CERT", Value: "/certs/https/tls.crt"},
 		{Name: "IMAGE_ASSURANCE_HTTPS_KEY", Value: "/certs/https/tls.key"},
+		{Name: "IMAGE_ASSURANCE_TENANT_ENCRYPTION_KEY", Value: "/tenant-key/encryption_key"},
 	}
 
 	env = pgDecorateENVVars(env, PGUserSecretName, MountPathPostgresCerts, PGConfigMapName)
@@ -165,6 +167,7 @@ func (c *component) apiDeployment() *appsv1.Deployment {
 		{Name: APICertSecretName, MountPath: mountPathAPITLSCerts, ReadOnly: true},
 		{Name: PGCertSecretName, MountPath: MountPathPostgresCerts, ReadOnly: true},
 		{Name: ManagerCertSecretName, MountPath: mountPathManagerTLSCerts, ReadOnly: true},
+		{Name: TenantEncryptionKeySecretName, MountPath: MountTenantEncryptionKeySecret, ReadOnly: true},
 	}
 
 	if c.config.KeyValidatorConfig != nil {
@@ -240,43 +243,50 @@ func (c *component) apiDeployment() *appsv1.Deployment {
 func (c *component) apiVolumes() []corev1.Volume {
 	defaultMode := int32(420)
 
-	var volumes []corev1.Volume
-
-	volumes = append(volumes, corev1.Volume{
-		Name: APICertSecretName,
-		VolumeSource: corev1.VolumeSource{
-			Secret: &corev1.SecretVolumeSource{
-				SecretName:  APICertSecretName,
-				DefaultMode: &defaultMode,
-			},
-		},
-	})
-
-	volumes = append(volumes, corev1.Volume{
-		Name: PGCertSecretName,
-		VolumeSource: corev1.VolumeSource{
-			Secret: &corev1.SecretVolumeSource{
-				SecretName:  PGCertSecretName,
-				DefaultMode: &defaultMode,
-			},
-		},
-	})
-
-	volumes = append(volumes, corev1.Volume{
-		Name: ManagerCertSecretName,
-		VolumeSource: corev1.VolumeSource{
-			Secret: &corev1.SecretVolumeSource{
-				DefaultMode: &defaultMode,
-				Items: []corev1.KeyToPath{
-					{
-						Key:  "cert",
-						Path: "cert",
-					},
+	volumes := []corev1.Volume{
+		{
+			Name: APICertSecretName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName:  APICertSecretName,
+					DefaultMode: &defaultMode,
 				},
-				SecretName: ManagerCertSecretName,
 			},
 		},
-	})
+		{
+			Name: PGCertSecretName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName:  PGCertSecretName,
+					DefaultMode: &defaultMode,
+				},
+			},
+		},
+		{
+			Name: ManagerCertSecretName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					DefaultMode: &defaultMode,
+					Items: []corev1.KeyToPath{
+						{
+							Key:  "cert",
+							Path: "cert",
+						},
+					},
+					SecretName: ManagerCertSecretName,
+				},
+			},
+		},
+		{
+			Name: TenantEncryptionKeySecretName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName:  TenantEncryptionKeySecretName,
+					DefaultMode: &defaultMode,
+				},
+			},
+		},
+	}
 
 	if c.config.KeyValidatorConfig != nil {
 		volumes = append(volumes, c.config.KeyValidatorConfig.RequiredVolumes()...)

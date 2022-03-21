@@ -68,14 +68,16 @@ func (c *component) scannerRoleBinding() *rbacv1.RoleBinding {
 func (c *component) scannerDeployment() *appsv1.Deployment {
 
 	annots := map[string]string{
-		pgConfigHashAnnotation: rmeta.AnnotationHash(c.config.PGConfig.Data),
-		pgUserHashAnnotation:   rmeta.AnnotationHash(c.config.PGUserSecret.Data),
-		pgCertsHashAnnotation:  rmeta.AnnotationHash(c.config.PGCertSecret.Data),
+		pgConfigHashAnnotation:        rmeta.AnnotationHash(c.config.PGConfig.Data),
+		pgUserHashAnnotation:          rmeta.AnnotationHash(c.config.PGUserSecret.Data),
+		pgCertsHashAnnotation:         rmeta.AnnotationHash(c.config.PGCertSecret.Data),
+		tenantKeySecretHashAnnotation: rmeta.AnnotationHash(c.config.TenantEncryptionKeySecret.Data),
 	}
 
 	env := []corev1.EnvVar{
 		{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
 		{Name: "IMAGE_ASSURANCE_SCANNER_RETRIES", Value: "3"},
+		{Name: "IMAGE_ASSURANCE_TENANT_ENCRYPTION_KEY", Value: "/tenant-key/encryption_key"},
 	}
 
 	env = pgDecorateENVVars(env, PGUserSecretName, MountPathPostgresCerts, PGConfigMapName)
@@ -103,6 +105,7 @@ func (c *component) scannerDeployment() *appsv1.Deployment {
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: PGCertSecretName, MountPath: MountPathPostgresCerts, ReadOnly: true},
+			{Name: TenantEncryptionKeySecretName, MountPath: MountTenantEncryptionKeySecret, ReadOnly: true},
 		},
 	}
 
@@ -160,6 +163,15 @@ func (c *component) scannerVolumes() []corev1.Volume {
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName:  PGCertSecretName,
+					DefaultMode: &defaultMode,
+				},
+			},
+		},
+		{
+			Name: TenantEncryptionKeySecretName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName:  TenantEncryptionKeySecretName,
 					DefaultMode: &defaultMode,
 				},
 			},

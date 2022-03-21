@@ -119,6 +119,12 @@ var _ = Describe("Image Assurance Controller", func() {
 				"client-key":  []byte("client-key"),
 			},
 		})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.TenantEncryptionKeySecretName, Namespace: common.OperatorNamespace()},
+			Data: map[string][]byte{
+				"encryption_key": []byte("encryption_key"),
+			},
+		})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.PGConfigMapName, Namespace: common.OperatorNamespace()},
 			Data: map[string]string{

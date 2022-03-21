@@ -429,12 +429,12 @@ func getAdminPGUserSecret(client client.Client) (*corev1.Secret, error) {
 
 	if user, ok := us.Data[imageassurance.PGUserSecretKey]; !ok || len(user) == 0 {
 		return nil, fmt.Errorf("expected secret %q to have a field named %q",
-			imageassurance.PGUserSecretName, imageassurance.PGUserSecretKey)
+			imageassurance.PGAdminUserSecretName, imageassurance.PGUserSecretKey)
 	}
 
 	if pass, ok := us.Data[imageassurance.PGUserPassKey]; !ok || len(pass) == 0 {
 		return nil, fmt.Errorf("expected secret %q to have a field named %q",
-			imageassurance.PGUserSecretName, imageassurance.PGUserPassKey)
+			imageassurance.PGAdminUserSecretName, imageassurance.PGUserPassKey)
 	}
 
 	return us, nil

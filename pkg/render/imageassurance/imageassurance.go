@@ -80,9 +80,9 @@ type Config struct {
 	PGUserSecret      *corev1.Secret
 	PGCertSecret      *corev1.Secret
 	// ConfigMap contains database host, port, name.
-	PGConfig           *corev1.ConfigMap
-	TLSSecret          *corev1.Secret
-	InternalMgrSecret  *corev1.Secret
+	PGConfig                  *corev1.ConfigMap
+	TLSSecret                 *corev1.Secret
+	InternalMgrSecret         *corev1.Secret
 	KeyValidatorConfig        authentication.KeyValidatorConfig
 	TenantEncryptionKeySecret *corev1.Secret
 

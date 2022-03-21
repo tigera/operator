@@ -120,7 +120,7 @@ var _ = Describe("Image Assurance Controller", func() {
 			},
 		})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.TenantKeySecretName, Namespace: common.OperatorNamespace()},
+			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.TenantEncryptionKeySecretName, Namespace: common.OperatorNamespace()},
 			Data: map[string][]byte{
 				"encryption_key": []byte("encryption_key"),
 			},

@@ -43,9 +43,9 @@ const (
 	mountPathAPITLSCerts     = "/certs/https/"
 	mountPathManagerTLSCerts = "/manager-tls/"
 
-	TenantKeySecretName  = "tigera-secure-bast-tenant-key"
-	EncryptionKey        = "encryption_key"
-	MountTenantKeySecret = "/tenant-key/"
+	TenantEncryptionKeySecretName  = "tigera-secure-bast-tenant-key"
+	EncryptionKey                  = "encryption_key"
+	MountTenantEncryptionKeySecret = "/tenant-key/"
 
 	pgConfigHashAnnotation        = "hash.operator.tigera.io/pgconfig"
 	pgUserHashAnnotation          = "hash.operator.tigera.io/pguser"
@@ -83,8 +83,8 @@ type Config struct {
 	PGConfig           *corev1.ConfigMap
 	TLSSecret          *corev1.Secret
 	InternalMgrSecret  *corev1.Secret
-	KeyValidatorConfig authentication.KeyValidatorConfig
-	TenantKeySecret    *corev1.Secret
+	KeyValidatorConfig        authentication.KeyValidatorConfig
+	TenantEncryptionKeySecret *corev1.Secret
 
 	NeedsMigrating bool
 	ComponentsUp   bool
@@ -189,7 +189,7 @@ func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
 	objs = append(objs, secret.ToRuntimeObjects(c.config.TLSSecret)...)
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(NameSpaceImageAssurance, c.config.InternalMgrSecret)...)...)
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(NameSpaceImageAssurance, c.config.TenantKeySecret)...)...)
+	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(NameSpaceImageAssurance, c.config.TenantEncryptionKeySecret)...)...)
 
 	// api resources
 	objs = append(objs,

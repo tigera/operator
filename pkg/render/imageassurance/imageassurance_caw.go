@@ -71,7 +71,7 @@ func (c *component) cawDeployment() *appsv1.Deployment {
 		pgConfigHashAnnotation:        rmeta.AnnotationHash(c.config.PGConfig.Data),
 		pgUserHashAnnotation:          rmeta.AnnotationHash(c.config.PGUserSecret.Data),
 		pgCertsHashAnnotation:         rmeta.AnnotationHash(c.config.PGCertSecret.Data),
-		tenantKeySecretHashAnnotation: rmeta.AnnotationHash(c.config.TenantKeySecret.Data),
+		tenantKeySecretHashAnnotation: rmeta.AnnotationHash(c.config.TenantEncryptionKeySecret.Data),
 	}
 
 	env := []corev1.EnvVar{
@@ -100,7 +100,7 @@ func (c *component) cawDeployment() *appsv1.Deployment {
 		Env: env,
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: PGCertSecretName, MountPath: MountPathPostgresCerts, ReadOnly: true},
-			{Name: TenantKeySecretName, MountPath: MountTenantKeySecret, ReadOnly: true},
+			{Name: TenantEncryptionKeySecretName, MountPath: MountTenantEncryptionKeySecret, ReadOnly: true},
 		},
 	}
 
@@ -163,10 +163,10 @@ func (c *component) cawVolumes() []corev1.Volume {
 			},
 		},
 		{
-			Name: TenantKeySecretName,
+			Name: TenantEncryptionKeySecretName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName:  TenantKeySecretName,
+					SecretName:  TenantEncryptionKeySecretName,
 					DefaultMode: &defaultMode,
 				},
 			},

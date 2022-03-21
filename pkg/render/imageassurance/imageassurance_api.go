@@ -146,7 +146,7 @@ func (c *component) apiDeployment() *appsv1.Deployment {
 		pgUserHashAnnotation:          rmeta.AnnotationHash(c.config.PGUserSecret.Data),
 		pgCertsHashAnnotation:         rmeta.AnnotationHash(c.config.PGCertSecret.Data),
 		managerCertHashAnnotation:     rmeta.AnnotationHash(c.config.InternalMgrSecret.Data),
-		tenantKeySecretHashAnnotation: rmeta.AnnotationHash(c.config.TenantKeySecret.Data),
+		tenantKeySecretHashAnnotation: rmeta.AnnotationHash(c.config.TenantEncryptionKeySecret.Data),
 		apiCertHashAnnotation:         c.config.tlsHash,
 	}
 
@@ -167,7 +167,7 @@ func (c *component) apiDeployment() *appsv1.Deployment {
 		{Name: APICertSecretName, MountPath: mountPathAPITLSCerts, ReadOnly: true},
 		{Name: PGCertSecretName, MountPath: MountPathPostgresCerts, ReadOnly: true},
 		{Name: ManagerCertSecretName, MountPath: mountPathManagerTLSCerts, ReadOnly: true},
-		{Name: TenantKeySecretName, MountPath: MountTenantKeySecret, ReadOnly: true},
+		{Name: TenantEncryptionKeySecretName, MountPath: MountTenantEncryptionKeySecret, ReadOnly: true},
 	}
 
 	if c.config.KeyValidatorConfig != nil {
@@ -278,10 +278,10 @@ func (c *component) apiVolumes() []corev1.Volume {
 			},
 		},
 		{
-			Name: TenantKeySecretName,
+			Name: TenantEncryptionKeySecretName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName:  TenantKeySecretName,
+					SecretName:  TenantEncryptionKeySecretName,
 					DefaultMode: &defaultMode,
 				},
 			},

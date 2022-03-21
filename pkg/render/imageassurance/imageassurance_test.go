@@ -24,14 +24,14 @@ import (
 
 var _ = Describe("Image Assurance Render", func() {
 	var (
-		installation       *operatorv1.InstallationSpec
-		pgAdminUserSecret  corev1.Secret
-		pgUserSecret       corev1.Secret
-		pgServerCertSecret corev1.Secret
-		tlsSecrets         corev1.Secret
-		mgrSecrets         corev1.Secret
-		pgConfig           corev1.ConfigMap
-		tenantKeySecret    corev1.Secret
+		installation              *operatorv1.InstallationSpec
+		pgAdminUserSecret         corev1.Secret
+		pgUserSecret              corev1.Secret
+		pgServerCertSecret        corev1.Secret
+		tlsSecrets                corev1.Secret
+		mgrSecrets                corev1.Secret
+		pgConfig                  corev1.ConfigMap
+		tenantEncryptionKeySecret corev1.Secret
 	)
 
 	BeforeEach(func() {
@@ -113,10 +113,10 @@ var _ = Describe("Image Assurance Render", func() {
 			Data: map[string][]byte{"tls.key": []byte("mgrkey"), "tls.cert": []byte("mgrcert")},
 		}
 
-		tenantKeySecret = corev1.Secret{
+		tenantEncryptionKeySecret = corev1.Secret{
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      imageassurance.TenantKeySecretName,
+				Name:      imageassurance.TenantEncryptionKeySecretName,
 				Namespace: common.OperatorNamespace(),
 			},
 			Data: map[string][]byte{"encryption_key": []byte("encryption_key")},
@@ -150,7 +150,7 @@ var _ = Describe("Image Assurance Render", func() {
 			// image assurance adp resources
 			{name: imageassurance.APICertSecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
 			{name: imageassurance.ManagerCertSecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
-			{name: imageassurance.TenantKeySecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
+			{name: imageassurance.TenantEncryptionKeySecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
 
 			{name: imageassurance.ResourceNameImageAssuranceAPI, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: imageassurance.ResourceNameImageAssuranceAPI, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "Role"},
@@ -305,7 +305,7 @@ var _ = Describe("Image Assurance Render", func() {
 			{Name: imageassurance.APICertSecretName, MountPath: "/certs/https/"},
 			{Name: imageassurance.PGCertSecretName, MountPath: "/certs/db/"},
 			{Name: imageassurance.ManagerCertSecretName, MountPath: "/manager-tls/"},
-			{Name: imageassurance.TenantKeySecretName, MountPath: "/tenant-key/"},
+			{Name: imageassurance.TenantEncryptionKeySecretName, MountPath: "/tenant-key/"},
 		}
 		if enableOIDC {
 			vms = append(vms, corev1.VolumeMount{
@@ -323,18 +323,18 @@ var _ = Describe("Image Assurance Render", func() {
 		expectedResources := resources(false)
 		// Should render the correct resources.
 		component := imageassurance.ImageAssurance(&imageassurance.Config{
-			PullSecrets:       nil,
-			Installation:      installation,
-			OsType:            rmeta.OSTypeLinux,
-			PGCertSecret:      &pgServerCertSecret,
-			PGAdminUserSecret: &pgAdminUserSecret,
-			PGUserSecret:      &pgUserSecret,
-			PGConfig:          &pgConfig,
-			TLSSecret:         &tlsSecrets,
-			InternalMgrSecret: &mgrSecrets,
-			NeedsMigrating:    false,
-			ComponentsUp:      false,
-			TenantKeySecret:   &tenantKeySecret,
+			PullSecrets:               nil,
+			Installation:              installation,
+			OsType:                    rmeta.OSTypeLinux,
+			PGCertSecret:              &pgServerCertSecret,
+			PGAdminUserSecret:         &pgAdminUserSecret,
+			PGUserSecret:              &pgUserSecret,
+			PGConfig:                  &pgConfig,
+			TLSSecret:                 &tlsSecrets,
+			InternalMgrSecret:         &mgrSecrets,
+			NeedsMigrating:            false,
+			ComponentsUp:              false,
+			TenantEncryptionKeySecret: &tenantEncryptionKeySecret,
 		})
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -588,7 +588,7 @@ var _ = Describe("Image Assurance Render", func() {
 		scannerVMs := scanner.Containers[0].VolumeMounts
 		scannerExpectedVMs := []corev1.VolumeMount{
 			{Name: imageassurance.PGCertSecretName, MountPath: "/certs/db/"},
-			{Name: imageassurance.TenantKeySecretName, MountPath: "/tenant-key/"},
+			{Name: imageassurance.TenantEncryptionKeySecretName, MountPath: "/tenant-key/"},
 		}
 
 		Expect(len(scannerVMs)).To(Equal(len(scannerVMs)))
@@ -621,18 +621,18 @@ var _ = Describe("Image Assurance Render", func() {
 		}
 		// Should render the correct resources.
 		component := imageassurance.ImageAssurance(&imageassurance.Config{
-			PullSecrets:       nil,
-			Installation:      installation,
-			OsType:            rmeta.OSTypeLinux,
-			PGCertSecret:      &pgServerCertSecret,
-			PGAdminUserSecret: &pgAdminUserSecret,
-			PGUserSecret:      &pgUserSecret,
-			PGConfig:          &pgConfig,
-			TLSSecret:         &tlsSecrets,
-			InternalMgrSecret: &mgrSecrets,
-			NeedsMigrating:    true,
-			ComponentsUp:      false,
-			TenantKeySecret:   &tenantKeySecret,
+			PullSecrets:               nil,
+			Installation:              installation,
+			OsType:                    rmeta.OSTypeLinux,
+			PGCertSecret:              &pgServerCertSecret,
+			PGAdminUserSecret:         &pgAdminUserSecret,
+			PGUserSecret:              &pgUserSecret,
+			PGConfig:                  &pgConfig,
+			TLSSecret:                 &tlsSecrets,
+			InternalMgrSecret:         &mgrSecrets,
+			NeedsMigrating:            true,
+			ComponentsUp:              false,
+			TenantEncryptionKeySecret: &tenantEncryptionKeySecret,
 		})
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -662,18 +662,18 @@ var _ = Describe("Image Assurance Render", func() {
 
 		// Should delete the correct resources.
 		component := imageassurance.ImageAssurance(&imageassurance.Config{
-			PullSecrets:       nil,
-			Installation:      installation,
-			OsType:            rmeta.OSTypeLinux,
-			PGCertSecret:      &pgServerCertSecret,
-			PGAdminUserSecret: &pgAdminUserSecret,
-			PGUserSecret:      &pgUserSecret,
-			PGConfig:          &pgConfig,
-			TLSSecret:         &tlsSecrets,
-			InternalMgrSecret: &mgrSecrets,
-			NeedsMigrating:    true,
-			ComponentsUp:      true,
-			TenantKeySecret:   &tenantKeySecret,
+			PullSecrets:               nil,
+			Installation:              installation,
+			OsType:                    rmeta.OSTypeLinux,
+			PGCertSecret:              &pgServerCertSecret,
+			PGAdminUserSecret:         &pgAdminUserSecret,
+			PGUserSecret:              &pgUserSecret,
+			PGConfig:                  &pgConfig,
+			TLSSecret:                 &tlsSecrets,
+			InternalMgrSecret:         &mgrSecrets,
+			NeedsMigrating:            true,
+			ComponentsUp:              true,
+			TenantEncryptionKeySecret: &tenantEncryptionKeySecret,
 		})
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		_, resources := component.Objects()
@@ -698,19 +698,19 @@ var _ = Describe("Image Assurance Render", func() {
 		var dexCfg = render.NewDexKeyValidatorConfig(authentication, nil, render.CreateDexTLSSecret("cn"), dns.DefaultClusterDomain)
 
 		component := imageassurance.ImageAssurance(&imageassurance.Config{
-			PullSecrets:        nil,
-			Installation:       installation,
-			OsType:             rmeta.OSTypeLinux,
-			PGCertSecret:       &pgServerCertSecret,
-			PGAdminUserSecret:  &pgAdminUserSecret,
-			PGUserSecret:       &pgUserSecret,
-			PGConfig:           &pgConfig,
-			TLSSecret:          &tlsSecrets,
-			InternalMgrSecret:  &mgrSecrets,
-			KeyValidatorConfig: dexCfg,
-			NeedsMigrating:     false,
-			ComponentsUp:       false,
-			TenantKeySecret:    &tenantKeySecret,
+			PullSecrets:               nil,
+			Installation:              installation,
+			OsType:                    rmeta.OSTypeLinux,
+			PGCertSecret:              &pgServerCertSecret,
+			PGAdminUserSecret:         &pgAdminUserSecret,
+			PGUserSecret:              &pgUserSecret,
+			PGConfig:                  &pgConfig,
+			TLSSecret:                 &tlsSecrets,
+			InternalMgrSecret:         &mgrSecrets,
+			KeyValidatorConfig:        dexCfg,
+			NeedsMigrating:            false,
+			ComponentsUp:              false,
+			TenantEncryptionKeySecret: &tenantEncryptionKeySecret,
 		})
 		expectedResources := resources(true)
 		resources, _ := component.Objects()

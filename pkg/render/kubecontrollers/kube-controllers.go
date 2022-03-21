@@ -510,11 +510,9 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      c.kubeControllerName,
-					Namespace: common.CalicoNamespace,
-					Labels: map[string]string{
-						"k8s-app": c.kubeControllerName,
-					},
+					Name:        c.kubeControllerName,
+					Namespace:   common.CalicoNamespace,
+					Labels:      c.kubeControllersLabels(),
 					Annotations: c.annotations(),
 				},
 				Spec: podSpec,
@@ -576,6 +574,13 @@ func (c *kubeControllersComponent) prometheusService() *corev1.Service {
 // kubeControllerResources creates the kube-controller's resource requirements.
 func (c *kubeControllersComponent) kubeControllersResources() corev1.ResourceRequirements {
 	return rmeta.GetResourceRequirements(c.cfg.Installation, operatorv1.ComponentNameKubeControllers)
+}
+
+// kubeControllersLabels creates the kubeController's label.
+func (c *kubeControllersComponent) kubeControllersLabels() map[string]string {
+	labels := rmeta.GetLabels(c.cfg.Installation, operatorv1.ComponentNameKubeControllers)
+	labels["k8s-app"] = c.kubeControllerName
+	return labels
 }
 
 func (c *kubeControllersComponent) annotations() map[string]string {

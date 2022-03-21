@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019,2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -343,6 +343,10 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 	for _, resource := range instance.Spec.ComponentResources {
 		if _, ok := validComponentNames[resource.ComponentName]; !ok {
 			return fmt.Errorf("Installation spec.ComponentResources.ComponentName %s is not supported", resource.ComponentName)
+		}
+
+		if _, found := resource.Labels["k8s-app"]; found {
+			return fmt.Errorf("Installation spec.ComponentResources.labels k8s-app key is not allowed")
 		}
 	}
 

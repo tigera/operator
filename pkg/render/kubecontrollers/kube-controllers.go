@@ -148,6 +148,14 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 				Resources: []string{"clusterroles", "clusterrolebindings"},
 				Verbs:     []string{"watch", "list", "get", "create", "update"},
 			},
+			// Kube-controllers needs permissions for the image assurance resources since it creates service accounts
+			// and role bindings to a role that grants permissions to image assurance resources (you can't give
+			// permissions to something you don't have permissions for).
+			rbacv1.PolicyRule{
+				APIGroups: []string{"imageassurance.tigera.io"},
+				Resources: []string{"organizations"},
+				Verbs:     []string{"get"},
+			},
 		)
 	}
 

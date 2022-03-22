@@ -44,13 +44,17 @@ ifeq ($(ARCH),aarch64)
         override ARCH=arm64
 endif
 ifeq ($(ARCH),x86_64)
-    override ARCH=amd64
+        override ARCH=amd64
 endif
 
 # Required to prevent `FROM SCRATCH` from pulling an amd64 image in the build phase.
 ifeq ($(ARCH),arm64)
 	TARGET_PLATFORM=arm64/v8
-else
+endif
+ifeq ($(ARCH),ppc64le)
+	TARGET_PLATFORM=ppc64le
+endif
+ifeq ($(ARCH),amd64)
 	TARGET_PLATFORM=amd64
 endif
 EXTRA_DOCKER_ARGS += --platform=linux/$(TARGET_PLATFORM)

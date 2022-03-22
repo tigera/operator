@@ -119,12 +119,25 @@ func GetResourceRequirements(i *operatorv1.InstallationSpec, name operatorv1.Com
 }
 
 // GetLabels retrieves the component Labels from the installation. If it doesn't exist, it
-// returns an empty Labels map.
+// returns an empty map[string]string.
 func GetLabels(i *operatorv1.InstallationSpec, name operatorv1.ComponentName) map[string]string {
 	if i.ComponentResources != nil {
 		for _, cr := range i.ComponentResources {
 			if cr.ComponentName == name && cr.Labels != nil {
 				return cr.Labels
+			}
+		}
+	}
+	return map[string]string{}
+}
+
+// GetAnnotations retrieves the component annotations from the installation. If it doesn't exist, it
+// returns an empty map[string]string.
+func GetAnnotations(i *operatorv1.InstallationSpec, name operatorv1.ComponentName) map[string]string {
+	if i.ComponentResources != nil {
+		for _, cr := range i.ComponentResources {
+			if cr.ComponentName == name && cr.Annotations != nil {
+				return cr.Annotations
 			}
 		}
 	}

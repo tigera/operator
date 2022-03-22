@@ -309,6 +309,12 @@ spec:
                   description: The ComponentResource struct associates a ResourceRequirements
                     with a component by name
                   properties:
+                    annotations:
+                      additionalProperties:
+                        type: string
+                      description: Annotations allow setting annotations for the Pod
+                        on this component.
+                      type: object
                     componentName:
                       description: ComponentName is an enum which identifies the component
                       enum:
@@ -1061,6 +1067,12 @@ spec:
                       description: The ComponentResource struct associates a ResourceRequirements
                         with a component by name
                       properties:
+                        annotations:
+                          additionalProperties:
+                            type: string
+                          description: Annotations allow setting annotations for the
+                            Pod on this component.
+                          type: object
                         componentName:
                           description: ComponentName is an enum which identifies the
                             component

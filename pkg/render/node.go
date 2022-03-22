@@ -679,6 +679,11 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 		annotations[bgpLayoutHashAnnotation] = rmeta.AnnotationHash(c.cfg.BGPLayouts.Data)
 	}
 
+	// Include annotations from the installation
+	for k, v := range rmeta.GetAnnotations(c.cfg.Installation, operatorv1.ComponentNameNode) {
+		annotations[k] = v
+	}
+
 	if c.cfg.Installation.FlexVolumePath != "None" {
 		initContainers = append(initContainers, c.flexVolumeContainer())
 	}

@@ -200,6 +200,9 @@ type ComponentResource struct {
 	// Labels allow setting labels for the Pod on this component.
 	// +optional
 	Labels map[string]string `json:"labels,omitempty"`
+	// Annotations allow setting annotations for the Pod on this component.
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
 // Provider represents a particular provider or flavor of Kubernetes. Valid options

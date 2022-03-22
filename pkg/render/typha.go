@@ -353,6 +353,11 @@ func (c *typhaComponent) typhaDeployment() *appsv1.Deployment {
 		annotations["prometheus.io/port"] = fmt.Sprintf("%d", *c.cfg.Installation.TyphaMetricsPort)
 	}
 
+	// Include annotations from the installation
+	for k, v := range rmeta.GetAnnotations(c.cfg.Installation, operatorv1.ComponentNameTypha) {
+		annotations[k] = v
+	}
+
 	// Allow tolerations to be overwritten by the end-user.
 	tolerations := rmeta.TolerateAll
 	if len(c.cfg.Installation.ControlPlaneTolerations) != 0 {

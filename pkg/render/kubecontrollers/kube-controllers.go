@@ -597,6 +597,9 @@ func (c *kubeControllersComponent) annotations() map[string]string {
 	if c.cfg.KibanaSecret != nil {
 		am[render.KibanaTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.KibanaSecret.Data)
 	}
+	for k, v := range rmeta.GetAnnotations(c.cfg.Installation, operatorv1.ComponentNameKubeControllers) {
+		am[k] = v
+	}
 	return am
 }
 

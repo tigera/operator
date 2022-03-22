@@ -11,6 +11,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	rcimageassurance "github.com/tigera/operator/pkg/render/common/imageassurance"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/imageassurance"
@@ -31,6 +32,7 @@ var _ = Describe("Image Assurance Render", func() {
 		tlsSecrets                corev1.Secret
 		mgrSecrets                corev1.Secret
 		pgConfig                  corev1.ConfigMap
+		config                    corev1.ConfigMap
 		tenantEncryptionKeySecret corev1.Secret
 	)
 
@@ -79,6 +81,17 @@ var _ = Describe("Image Assurance Render", func() {
 				"port":      "1234",
 				"dbOrgID":   "tenant123",
 				"dbOrgName": "tenantName",
+			},
+		}
+
+		config = corev1.ConfigMap{
+			TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      rcimageassurance.ConfigurationConfigMapName,
+				Namespace: common.OperatorNamespace(),
+			},
+			Data: map[string]string{
+				"organizationID": "tenant123",
 			},
 		}
 
@@ -140,6 +153,7 @@ var _ = Describe("Image Assurance Render", func() {
 			{name: imageassurance.PGUserSecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
 			{name: imageassurance.PGAdminUserSecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
 			{name: imageassurance.PGConfigMapName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ConfigMap"},
+			{name: rcimageassurance.ConfigurationConfigMapName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ConfigMap"},
 
 			// image assurance db migrator resources
 			{name: imageassurance.ResourceNameImageAssuranceDBMigrator, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ServiceAccount"},
@@ -240,16 +254,7 @@ var _ = Describe("Image Assurance Render", func() {
 					},
 				},
 			},
-			{Name: "IMAGE_ASSURANCE_ORGANIZATION_ID", Value: "",
-				ValueFrom: &corev1.EnvVarSource{
-					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: imageassurance.PGConfigMapName,
-						},
-						Key: imageassurance.PGConfigOrgIDKey,
-					},
-				},
-			},
+			rcimageassurance.EnvOrganizationID(),
 		}
 
 		if enableOIDC {
@@ -330,6 +335,7 @@ var _ = Describe("Image Assurance Render", func() {
 			PGAdminUserSecret:         &pgAdminUserSecret,
 			PGUserSecret:              &pgUserSecret,
 			PGConfig:                  &pgConfig,
+			ConfigurationConfigMap:    &config,
 			TLSSecret:                 &tlsSecrets,
 			InternalMgrSecret:         &mgrSecrets,
 			NeedsMigrating:            false,
@@ -413,16 +419,7 @@ var _ = Describe("Image Assurance Render", func() {
 					},
 				},
 			},
-			{Name: "IMAGE_ASSURANCE_ORGANIZATION_ID", Value: "",
-				ValueFrom: &corev1.EnvVarSource{
-					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: imageassurance.PGConfigMapName,
-						},
-						Key: imageassurance.PGConfigOrgIDKey,
-					},
-				},
-			},
+			rcimageassurance.EnvOrganizationID(),
 			{Name: "IMAGE_ASSURANCE_ORGANIZATION_NAME", Value: "",
 				ValueFrom: &corev1.EnvVarSource{
 					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
@@ -566,16 +563,7 @@ var _ = Describe("Image Assurance Render", func() {
 					},
 				},
 			},
-			{Name: "IMAGE_ASSURANCE_ORGANIZATION_ID", Value: "",
-				ValueFrom: &corev1.EnvVarSource{
-					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: imageassurance.PGConfigMapName,
-						},
-						Key: imageassurance.PGConfigOrgIDKey,
-					},
-				},
-			},
+			rcimageassurance.EnvOrganizationID(),
 		}
 
 		Expect(len(scannerExpectedENV)).To(Equal(len(scannerEnv)))
@@ -612,6 +600,7 @@ var _ = Describe("Image Assurance Render", func() {
 			{name: imageassurance.PGUserSecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
 			{name: imageassurance.PGAdminUserSecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
 			{name: imageassurance.PGConfigMapName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ConfigMap"},
+			{name: rcimageassurance.ConfigurationConfigMapName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ConfigMap"},
 
 			// image assurance db migrator resources
 			{name: imageassurance.ResourceNameImageAssuranceDBMigrator, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ServiceAccount"},
@@ -628,6 +617,7 @@ var _ = Describe("Image Assurance Render", func() {
 			PGAdminUserSecret:         &pgAdminUserSecret,
 			PGUserSecret:              &pgUserSecret,
 			PGConfig:                  &pgConfig,
+			ConfigurationConfigMap:    &config,
 			TLSSecret:                 &tlsSecrets,
 			InternalMgrSecret:         &mgrSecrets,
 			NeedsMigrating:            true,
@@ -669,6 +659,7 @@ var _ = Describe("Image Assurance Render", func() {
 			PGAdminUserSecret:         &pgAdminUserSecret,
 			PGUserSecret:              &pgUserSecret,
 			PGConfig:                  &pgConfig,
+			ConfigurationConfigMap:    &config,
 			TLSSecret:                 &tlsSecrets,
 			InternalMgrSecret:         &mgrSecrets,
 			NeedsMigrating:            true,
@@ -705,6 +696,7 @@ var _ = Describe("Image Assurance Render", func() {
 			PGAdminUserSecret:         &pgAdminUserSecret,
 			PGUserSecret:              &pgUserSecret,
 			PGConfig:                  &pgConfig,
+			ConfigurationConfigMap:    &config,
 			TLSSecret:                 &tlsSecrets,
 			InternalMgrSecret:         &mgrSecrets,
 			KeyValidatorConfig:        dexCfg,

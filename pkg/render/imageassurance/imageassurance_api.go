@@ -3,6 +3,7 @@
 package imageassurance
 
 import (
+	rcimageassurance "github.com/tigera/operator/pkg/render/common/imageassurance"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -151,6 +152,7 @@ func (c *component) apiDeployment() *appsv1.Deployment {
 	}
 
 	env := []corev1.EnvVar{
+		rcimageassurance.EnvOrganizationID(),
 		{Name: "IMAGE_ASSURANCE_PORT", Value: "5557"},
 		{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
 		{Name: "IMAGE_ASSURANCE_HTTPS_CERT", Value: "/certs/https/tls.crt"},

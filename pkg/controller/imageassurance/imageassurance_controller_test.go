@@ -16,6 +16,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	rcimageassurance "github.com/tigera/operator/pkg/render/common/imageassurance"
 	"github.com/tigera/operator/pkg/render/imageassurance"
 	"github.com/tigera/operator/test"
 
@@ -132,6 +133,13 @@ var _ = Describe("Image Assurance Controller", func() {
 				"port":      "1234",
 				"dbOrgID":   "tenant123",
 				"dbOrgName": "tenant name",
+			},
+		})).NotTo(HaveOccurred())
+
+		Expect(c.Create(ctx, &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: rcimageassurance.ConfigurationConfigMapName, Namespace: common.OperatorNamespace()},
+			Data: map[string]string{
+				"organizationID": "tenant123",
 			},
 		})).NotTo(HaveOccurred())
 

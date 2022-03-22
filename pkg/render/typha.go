@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -353,6 +353,11 @@ func (c *typhaComponent) typhaDeployment() *appsv1.Deployment {
 		annotations["prometheus.io/port"] = fmt.Sprintf("%d", *c.cfg.Installation.TyphaMetricsPort)
 	}
 
+	// Include annotations from the installation
+	for k, v := range rmeta.GetAnnotations(c.cfg.Installation, operatorv1.ComponentNameTypha) {
+		annotations[k] = v
+	}
+
 	// Allow tolerations to be overwritten by the end-user.
 	tolerations := rmeta.TolerateAll
 	if len(c.cfg.Installation.ControlPlaneTolerations) != 0 {
@@ -382,9 +387,7 @@ func (c *typhaComponent) typhaDeployment() *appsv1.Deployment {
 			RevisionHistoryLimit: &revisionHistoryLimit,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						AppLabelName: TyphaK8sAppName,
-					},
+					Labels:      c.typhaLabels(),
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
@@ -453,6 +456,13 @@ func (c *typhaComponent) typhaContainer() corev1.Container {
 // typhaResources creates the typha's resource requirements.
 func (c *typhaComponent) typhaResources() corev1.ResourceRequirements {
 	return rmeta.GetResourceRequirements(c.cfg.Installation, operatorv1.ComponentNameTypha)
+}
+
+// typhaLabels creates the typha's label.
+func (c *typhaComponent) typhaLabels() map[string]string {
+	labels := rmeta.GetLabels(c.cfg.Installation, operatorv1.ComponentNameTypha)
+	labels[AppLabelName] = TyphaK8sAppName
+	return labels
 }
 
 // typhaEnvVars creates the typha's envvars.

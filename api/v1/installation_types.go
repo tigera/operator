@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020,2022 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -195,7 +195,14 @@ type ComponentResource struct {
 	// +kubebuilder:validation:Enum=Node;Typha;KubeControllers
 	ComponentName ComponentName `json:"componentName"`
 	// ResourceRequirements allows customization of limits and requests for compute resources such as cpu and memory.
+	// +optional
 	ResourceRequirements *v1.ResourceRequirements `json:"resourceRequirements"`
+	// Labels allow setting labels for the Pod on this component.
+	// +optional
+	Labels map[string]string `json:"labels,omitempty"`
+	// Annotations allow setting annotations for the Pod on this component.
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
 // Provider represents a particular provider or flavor of Kubernetes. Valid options

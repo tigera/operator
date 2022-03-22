@@ -80,6 +80,7 @@ type Config struct {
 	PGUserSecret      *corev1.Secret
 	PGCertSecret      *corev1.Secret
 	// ConfigMap contains database host, port, name.
+	ConfigurationConfigMap    *corev1.ConfigMap
 	PGConfig                  *corev1.ConfigMap
 	TLSSecret                 *corev1.Secret
 	InternalMgrSecret         *corev1.Secret
@@ -169,7 +170,9 @@ func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
 	objs = append(objs, secret.ToRuntimeObjects(c.config.PGUserSecret)...)
 	// Admin PostgreSQL user, only used by the migrator.
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(NameSpaceImageAssurance, c.config.PGAdminUserSecret)...)...)
-	objs = append(objs, configmap.ToRuntimeObjects(configmap.CopyToNamespace(NameSpaceImageAssurance, c.config.PGConfig)...)...)
+	objs = append(objs, configmap.ToRuntimeObjects(
+		configmap.CopyToNamespace(NameSpaceImageAssurance, c.config.PGConfig, c.config.ConfigurationConfigMap)...,
+	)...)
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(NameSpaceImageAssurance, c.config.PullSecrets...)...)...)
 

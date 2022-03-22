@@ -16,6 +16,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	rcimageassurance "github.com/tigera/operator/pkg/render/common/imageassurance"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/imageassurance"
 
@@ -95,7 +96,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	// Watch configmaps created for postgres in operator namespace.
-	for _, cm := range []string{imageassurance.PGConfigMapName} {
+	for _, cm := range []string{imageassurance.PGConfigMapName, rcimageassurance.ConfigurationConfigMapName} {
 		if err = utils.AddConfigMapWatch(c, cm, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("ImageAssurance-controller failed to watch ConfigMap %s: %v", cm, err)
 		}
@@ -181,6 +182,19 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
+	configurationConfigMap, err := getConfigurationConfigMap(r.client)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			reqLogger.Error(err, fmt.Sprintf("%s ConfigMap not found", rcimageassurance.ConfigurationConfigMapName))
+			r.status.SetDegraded(fmt.Sprintf("%s ConfigMap not found", rcimageassurance.ConfigurationConfigMapName), err.Error())
+			return reconcile.Result{}, nil
+		}
+
+		reqLogger.Error(err, "Error retrieving image assurance configuration")
+		r.status.SetDegraded("Error retrieving image assurance configuration", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	pgConfig, err := getPGConfig(r.client)
 	if err != nil {
 		reqLogger.Error(err, "Error retrieving postgres configuration")
@@ -188,7 +202,7 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
-	pgUserSecret, err := getOrCreatePGUserSecret(r.client, pgConfig.Data[imageassurance.PGConfigOrgIDKey])
+	pgUserSecret, err := getOrCreatePGUserSecret(r.client, configurationConfigMap.Data[rcimageassurance.ConfigurationConfigMapOrgIDKey])
 	if err != nil {
 		reqLogger.Error(err, "Error retrieving postgres user secret")
 		r.status.SetDegraded("Error retrieving postgres secret", err.Error())
@@ -297,6 +311,7 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		PullSecrets:               pullSecrets,
 		Installation:              installation,
 		OsType:                    rmeta.OSTypeLinux,
+		ConfigurationConfigMap:    configurationConfigMap,
 		PGConfig:                  pgConfig,
 		PGAdminUserSecret:         pgAdminUserSecret,
 		PGCertSecret:              pgCertSecret,
@@ -522,14 +537,28 @@ func getPGConfig(client client.Client) (*corev1.ConfigMap, error) {
 			imageassurance.PGConfigMapName, imageassurance.PGConfigPortKey)
 	}
 
-	if orgID, ok := cm.Data[imageassurance.PGConfigOrgIDKey]; !ok || len(orgID) == 0 {
-		return nil, fmt.Errorf("expected configmap %q to have a field named %q",
-			imageassurance.PGConfigMapName, imageassurance.PGConfigOrgIDKey)
-	}
-
 	if orgName, ok := cm.Data[imageassurance.PGConfigOrgNameKey]; !ok || len(orgName) == 0 {
 		return nil, fmt.Errorf("expected configmap %q to have a field named %q",
 			imageassurance.PGConfigMapName, imageassurance.PGConfigOrgNameKey)
+	}
+
+	return cm, nil
+}
+
+func getConfigurationConfigMap(client client.Client) (*corev1.ConfigMap, error) {
+	cm := &corev1.ConfigMap{}
+	nn := types.NamespacedName{
+		Name:      rcimageassurance.ConfigurationConfigMapName,
+		Namespace: common.OperatorNamespace(),
+	}
+
+	if err := client.Get(context.Background(), nn, cm); err != nil {
+		return nil, fmt.Errorf("failed to read secret %q: %s", rcimageassurance.ConfigurationConfigMapName, err)
+	}
+
+	if orgID, ok := cm.Data[rcimageassurance.ConfigurationConfigMapOrgIDKey]; !ok || len(orgID) == 0 {
+		return nil, fmt.Errorf("expected configmap %q to have a field named %q",
+			rcimageassurance.ConfigurationConfigMapName, rcimageassurance.ConfigurationConfigMapOrgIDKey)
 	}
 
 	return cm, nil

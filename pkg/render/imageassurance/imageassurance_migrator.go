@@ -3,6 +3,7 @@ package imageassurance
 import (
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render/common/configmap"
+	rcimageassurance "github.com/tigera/operator/pkg/render/common/imageassurance"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 
@@ -75,6 +76,7 @@ func (c *component) migratorJob() *batchv1.Job {
 	}
 
 	env := []corev1.EnvVar{
+		rcimageassurance.EnvOrganizationID(),
 		{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
 		{
 			Name:      "IMAGE_ASSURANCE_ORGANIZATION_NAME",

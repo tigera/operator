@@ -3,6 +3,7 @@
 package imageassurance
 
 import (
+	rcimageassurance "github.com/tigera/operator/pkg/render/common/imageassurance"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -75,6 +76,7 @@ func (c *component) cawDeployment() *appsv1.Deployment {
 	}
 
 	env := []corev1.EnvVar{
+		rcimageassurance.EnvOrganizationID(),
 		{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
 		{Name: "IMAGE_ASSURANCE_TENANT_ENCRYPTION_KEY", Value: "/tenant-key/encryption_key"},
 	}

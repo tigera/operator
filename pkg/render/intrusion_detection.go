@@ -125,6 +125,10 @@ func (c *intrusionDetectionComponent) SupportedOSType() rmeta.OSType {
 func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
 		CreateNamespace(IntrusionDetectionNamespace, c.cfg.Installation.KubernetesProvider),
+	}
+	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(IntrusionDetectionNamespace, c.cfg.PullSecrets...)...)...)
+
+	objs = append(objs,
 		c.intrusionDetectionServiceAccount(),
 		c.intrusionDetectionJobServiceAccount(),
 		c.intrusionDetectionClusterRole(),
@@ -133,7 +137,6 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		c.intrusionDetectionRoleBinding(),
 		c.intrusionDetectionDeployment(),
 	}
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(IntrusionDetectionNamespace, c.cfg.PullSecrets...)...)...)
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(IntrusionDetectionNamespace, c.cfg.ESSecrets...)...)...)
 	objs = append(objs, c.globalAlertTemplates()...)
 	objs = append(objs, c.intrusionDetectionADJobsPodTemplate()...)

@@ -76,8 +76,7 @@ var _ = Describe("Image Assurance Controller", func() {
 		Expect(c.Create(ctx, &operatorv1.Installation{
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
 			Spec: operatorv1.InstallationSpec{
-				Variant:  operatorv1.TigeraSecureEnterprise,
-				Registry: "some.registry.org/",
+				Variant: operatorv1.TigeraSecureEnterprise,
 			},
 			Status: operatorv1.InstallationStatus{
 				Variant: operatorv1.TigeraSecureEnterprise,
@@ -202,7 +201,8 @@ var _ = Describe("Image Assurance Controller", func() {
 
 		Expect(test.GetResource(c, &api)).To(BeNil())
 		Expect(api.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(api.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s",
+		Expect(api.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("%s%s%s",
+			components.ImageAssuranceRegistry,
 			components.ComponentImageAssuranceApi.Image, "@sha256:123")))
 
 		By("ensuring that ImageAssurance scanner resources created properly")
@@ -215,7 +215,8 @@ var _ = Describe("Image Assurance Controller", func() {
 		}
 		Expect(test.GetResource(c, &scanner)).To(BeNil())
 		Expect(scanner.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(scanner.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s",
+		Expect(scanner.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("%s%s%s",
+			components.ImageAssuranceRegistry,
 			components.ComponentImageAssuranceScanner.Image, "@sha256:123")))
 
 		By("ensuring that ImageAssurance caw resources created properly")
@@ -228,7 +229,8 @@ var _ = Describe("Image Assurance Controller", func() {
 		}
 		Expect(test.GetResource(c, &caw)).To(BeNil())
 		Expect(caw.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(caw.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s",
+		Expect(caw.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("%s%s%s",
+			components.ImageAssuranceRegistry,
 			components.ComponentImageAssuranceCAW.Image, "@sha256:123")))
 
 	})
@@ -304,7 +306,8 @@ var _ = Describe("Image Assurance Controller", func() {
 
 		Expect(test.GetResource(c, &api)).To(BeNil())
 		Expect(api.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(api.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s",
+		Expect(api.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("%s%s%s",
+			components.ImageAssuranceRegistry,
 			components.ComponentImageAssuranceApi.Image, "@sha256:123")))
 
 		By("ensuring that ImageAssurance scanner resources created properly")
@@ -317,8 +320,8 @@ var _ = Describe("Image Assurance Controller", func() {
 		}
 		Expect(test.GetResource(c, &scanner)).To(BeNil())
 		Expect(scanner.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(scanner.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s",
-			components.ComponentImageAssuranceScanner.Image, "@sha256:123")))
+		Expect(scanner.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("%s%s%s",
+			components.ImageAssuranceRegistry, components.ComponentImageAssuranceScanner.Image, "@sha256:123")))
 
 		By("ensuring that ImageAssurance caw resources created properly")
 		caw := appsv1.Deployment{
@@ -330,7 +333,7 @@ var _ = Describe("Image Assurance Controller", func() {
 		}
 		Expect(test.GetResource(c, &caw)).To(BeNil())
 		Expect(caw.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(caw.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s",
+		Expect(caw.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf(components.ImageAssuranceRegistry+"%s%s",
 			components.ComponentImageAssuranceCAW.Image, "@sha256:123")))
 
 		By("updating the Job image name something different ")

@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019,2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
+	utilvalidation "k8s.io/apimachinery/pkg/util/validation"
 )
 
 // validateCustomResource validates that the given custom resource is correct. This
@@ -344,6 +345,22 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		if _, ok := validComponentNames[resource.ComponentName]; !ok {
 			return fmt.Errorf("Installation spec.ComponentResources.ComponentName %s is not supported", resource.ComponentName)
 		}
+
+		if _, found := resource.Labels["k8s-app"]; found {
+			return fmt.Errorf("Installation spec.ComponentResources.labels k8s-app key in %s is not allowed", resource.ComponentName)
+		}
+
+		for k, v := range resource.Labels {
+
+			if errs := utilvalidation.IsQualifiedName(k); len(errs) != 0 {
+				return fmt.Errorf("Installation spec.ComponentResources.labels key %s in %s is invalid. %s", k, resource.ComponentName, strings.Join(errs, ";"))
+			}
+
+			if errs := utilvalidation.IsValidLabelValue(v); len(errs) != 0 {
+				return fmt.Errorf("Installation spec.ComponentResources.labels value %s in %s is invalid. %s", v, resource.ComponentName, strings.Join(errs, ";"))
+			}
+		}
+
 	}
 
 	// Verify that we are running in non-privileged mode only with the appropriate feature set

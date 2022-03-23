@@ -516,11 +516,9 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      c.kubeControllerName,
-					Namespace: common.CalicoNamespace,
-					Labels: map[string]string{
-						"k8s-app": c.kubeControllerName,
-					},
+					Name:        c.kubeControllerName,
+					Namespace:   common.CalicoNamespace,
+					Labels:      c.kubeControllersLabels(),
 					Annotations: c.annotations(),
 				},
 				Spec: podSpec,
@@ -584,6 +582,13 @@ func (c *kubeControllersComponent) kubeControllersResources() corev1.ResourceReq
 	return rmeta.GetResourceRequirements(c.cfg.Installation, operatorv1.ComponentNameKubeControllers)
 }
 
+// kubeControllersLabels creates the kubeController's label.
+func (c *kubeControllersComponent) kubeControllersLabels() map[string]string {
+	labels := rmeta.GetLabels(c.cfg.Installation, operatorv1.ComponentNameKubeControllers)
+	labels["k8s-app"] = c.kubeControllerName
+	return labels
+}
+
 func (c *kubeControllersComponent) annotations() map[string]string {
 	am := map[string]string{}
 	if c.cfg.ManagerInternalSecret != nil {
@@ -597,6 +602,9 @@ func (c *kubeControllersComponent) annotations() map[string]string {
 	}
 	if c.cfg.KibanaSecret != nil {
 		am[render.KibanaTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.KibanaSecret.Data)
+	}
+	for k, v := range rmeta.GetAnnotations(c.cfg.Installation, operatorv1.ComponentNameKubeControllers) {
+		am[k] = v
 	}
 	return am
 }

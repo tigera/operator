@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -679,6 +679,11 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 		annotations[bgpLayoutHashAnnotation] = rmeta.AnnotationHash(c.cfg.BGPLayouts.Data)
 	}
 
+	// Include annotations from the installation
+	for k, v := range rmeta.GetAnnotations(c.cfg.Installation, operatorv1.ComponentNameNode) {
+		annotations[k] = v
+	}
+
 	if c.cfg.Installation.FlexVolumePath != "None" {
 		initContainers = append(initContainers, c.flexVolumeContainer())
 	}
@@ -734,9 +739,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": CalicoNodeObjectName}},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"k8s-app": CalicoNodeObjectName,
-					},
+					Labels:      c.nodeLabels(),
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
@@ -1053,6 +1056,13 @@ func (c *nodeComponent) nodeContainer() corev1.Container {
 // nodeResources creates the node's resource requirements.
 func (c *nodeComponent) nodeResources() corev1.ResourceRequirements {
 	return rmeta.GetResourceRequirements(c.cfg.Installation, operatorv1.ComponentNameNode)
+}
+
+// nodeLabels creates the node's label.
+func (c *nodeComponent) nodeLabels() map[string]string {
+	labels := rmeta.GetLabels(c.cfg.Installation, operatorv1.ComponentNameNode)
+	labels["k8s-app"] = CalicoNodeObjectName
+	return labels
 }
 
 // nodeVolumeMounts creates the node's volume mounts.

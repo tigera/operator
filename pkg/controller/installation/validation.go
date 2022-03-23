@@ -18,11 +18,17 @@ import (
 	"fmt"
 	"net"
 	"path"
+	"regexp"
 	"strings"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
+)
+
+var (
+	labelKeyRe   = regexp.MustCompile(`^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*\/?)?([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]$`)
+	labelValueRe = regexp.MustCompile(`^([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]$`)
 )
 
 // validateCustomResource validates that the given custom resource is correct. This
@@ -340,14 +346,26 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		operatorv1.ComponentNameTypha:           {},
 	}
 
+	labelsURL := "https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#syntax-and-character-set"
 	for _, resource := range instance.Spec.ComponentResources {
 		if _, ok := validComponentNames[resource.ComponentName]; !ok {
 			return fmt.Errorf("Installation spec.ComponentResources.ComponentName %s is not supported", resource.ComponentName)
 		}
 
 		if _, found := resource.Labels["k8s-app"]; found {
-			return fmt.Errorf("Installation spec.ComponentResources.labels k8s-app key is not allowed")
+			return fmt.Errorf("Installation spec.ComponentResources.labels k8s-app key in %s is not allowed. Any other key name should be used %s", resource.ComponentName, labelsURL)
 		}
+
+		for k, v := range resource.Labels {
+			if !labelKeyRe.MatchString(k) {
+				return fmt.Errorf("Installation spec.ComponentResources.labels key %s in %s is invalid. More info: %s", k, resource.ComponentName, labelsURL)
+			}
+
+			if !labelValueRe.MatchString(v) {
+				return fmt.Errorf("Installation spec.ComponentResources.labels value %s in %s is invalid. More info: %s", v, resource.ComponentName, labelsURL)
+			}
+		}
+
 	}
 
 	// Verify that we are running in non-privileged mode only with the appropriate feature set

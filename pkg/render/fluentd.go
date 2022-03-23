@@ -20,7 +20,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -538,7 +537,6 @@ func (c *fluentdComponent) container() corev1.Container {
 	return relasticsearch.ContainerDecorateENVVars(corev1.Container{
 		Name:            "fluentd",
 		Image:           c.image,
-		ImagePullPolicy: v1.PullIfNotPresent,
 		Env:             envs,
 		SecurityContext: &corev1.SecurityContext{Privileged: &isPrivileged},
 		VolumeMounts:    volumeMounts,
@@ -957,19 +955,17 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 					ServiceAccountName: eksLogForwarderName,
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					InitContainers: []corev1.Container{relasticsearch.ContainerDecorateENVVars(corev1.Container{
-						Name:            eksLogForwarderName + "-startup",
-						Image:           c.image,
-						ImagePullPolicy: v1.PullIfNotPresent,
-						Command:         []string{c.path("/bin/eks-log-forwarder-startup")},
-						Env:             envVars,
-						VolumeMounts:    c.eksLogForwarderVolumeMounts(),
+						Name:         eksLogForwarderName + "-startup",
+						Image:        c.image,
+						Command:      []string{c.path("/bin/eks-log-forwarder-startup")},
+						Env:          envVars,
+						VolumeMounts: c.eksLogForwarderVolumeMounts(),
 					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchEksLogForwarderUserSecret, c.cfg.ClusterDomain, c.cfg.OSType)},
 					Containers: []corev1.Container{relasticsearch.ContainerDecorateENVVars(corev1.Container{
-						Name:            eksLogForwarderName,
-						Image:           c.image,
-						ImagePullPolicy: v1.PullIfNotPresent,
-						Env:             envVars,
-						VolumeMounts:    c.eksLogForwarderVolumeMounts(),
+						Name:         eksLogForwarderName,
+						Image:        c.image,
+						Env:          envVars,
+						VolumeMounts: c.eksLogForwarderVolumeMounts(),
 					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchEksLogForwarderUserSecret, c.cfg.ClusterDomain, c.cfg.OSType)},
 					Volumes: c.eksLogForwarderVolumes(),
 				},

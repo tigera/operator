@@ -34,7 +34,6 @@ import (
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -199,9 +198,8 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 
 		return []corev1.Container{
 			{
-				Name:            render.PacketCaptureContainerName,
-				Image:           fmt.Sprintf("%s%s:%s", components.TigeraRegistry, components.ComponentPacketCapture.Image, components.ComponentPacketCapture.Version),
-				ImagePullPolicy: v1.PullIfNotPresent,
+				Name:  render.PacketCaptureContainerName,
+				Image: fmt.Sprintf("%s%s:%s", components.TigeraRegistry, components.ComponentPacketCapture.Image, components.ComponentPacketCapture.Version),
 				SecurityContext: &corev1.SecurityContext{
 					RunAsNonRoot:             ptr.BoolToPtr(true),
 					AllowPrivilegeEscalation: ptr.BoolToPtr(false),

@@ -19,7 +19,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -437,11 +436,10 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	}
 
 	container := corev1.Container{
-		Name:            c.kubeControllerName,
-		Image:           c.image,
-		ImagePullPolicy: v1.PullIfNotPresent,
-		Env:             env,
-		Resources:       c.kubeControllersResources(),
+		Name:      c.kubeControllerName,
+		Image:     c.image,
+		Env:       env,
+		Resources: c.kubeControllersResources(),
 		ReadinessProbe: &corev1.Probe{
 			PeriodSeconds: int32(10),
 			Handler: corev1.Handler{

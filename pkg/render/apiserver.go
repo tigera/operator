@@ -20,7 +20,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -847,11 +846,10 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	}
 
 	apiServer := corev1.Container{
-		Name:            name,
-		Image:           c.apiServerImage,
-		ImagePullPolicy: v1.PullIfNotPresent,
-		Args:            c.startUpArgs(),
-		Env:             env,
+		Name:  name,
+		Image: c.apiServerImage,
+		Args:  c.startUpArgs(),
+		Env:   env,
 		// Needed for permissions to write to the audit log
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: &isPrivileged,
@@ -929,10 +927,9 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 	}
 
 	container := corev1.Container{
-		Name:            "tigera-queryserver",
-		Image:           c.queryServerImage,
-		ImagePullPolicy: v1.PullIfNotPresent,
-		Env:             env,
+		Name:  "tigera-queryserver",
+		Image: c.queryServerImage,
+		Env:   env,
 		LivenessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{

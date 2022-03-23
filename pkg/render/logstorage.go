@@ -32,7 +32,6 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -531,8 +530,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			Privileged: ptr.BoolToPtr(true),
 			RunAsUser:  ptr.Int64ToPtr(0),
 		},
-		Image:           es.esImage,
-		ImagePullPolicy: v1.PullIfNotPresent,
+		Image: es.esImage,
 		Command: []string{
 			"/bin/sh",
 		},
@@ -549,9 +547,8 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	}
 	if es.supportsOIDC() {
 		initKeystore := corev1.Container{
-			Name:            "elastic-internal-init-keystore",
-			Image:           es.esImage,
-			ImagePullPolicy: v1.PullIfNotPresent,
+			Name:  "elastic-internal-init-keystore",
+			Image: es.esImage,
 			SecurityContext: &corev1.SecurityContext{
 				Privileged: ptr.BoolToPtr(false),
 			},
@@ -578,9 +575,8 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		// If certificate management is used, we need to override a mounting options for this init container.
 		initFSName := "elastic-internal-init-filesystem"
 		initFSContainer := corev1.Container{
-			Name:            initFSName,
-			Image:           es.esImage,
-			ImagePullPolicy: v1.PullIfNotPresent,
+			Name:  initFSName,
+			Image: es.esImage,
 			SecurityContext: &corev1.SecurityContext{
 				Privileged: ptr.BoolToPtr(false),
 			},
@@ -695,8 +691,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: ptr.BoolToPtr(false),
 		},
-		Image:           es.esImage,
-		ImagePullPolicy: v1.PullIfNotPresent,
+		Image: es.esImage,
 		Command: []string{
 			"/bin/sh",
 		},
@@ -1199,9 +1194,8 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 					NodeSelector:       es.cfg.Installation.ControlPlaneNodeSelector,
 					Tolerations:        es.cfg.Installation.ControlPlaneTolerations,
 					Containers: []corev1.Container{{
-						Image:           es.esOperatorImage,
-						ImagePullPolicy: v1.PullIfNotPresent,
-						Name:            "manager",
+						Image: es.esOperatorImage,
+						Name:  "manager",
 						// Verbosity level of logs. -2=Error, -1=Warn, 0=Info, 0 and above=Debug
 						Args: []string{
 							"manager",
@@ -1448,11 +1442,10 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
 							Tolerations:  es.cfg.Installation.ControlPlaneTolerations,
 							Containers: []corev1.Container{
 								relasticsearch.ContainerDecorate(corev1.Container{
-									Name:            EsCuratorName,
-									Image:           es.curatorImage,
-									ImagePullPolicy: v1.PullIfNotPresent,
-									Env:             es.curatorEnvVars(),
-									LivenessProbe:   elasticCuratorLivenessProbe,
+									Name:          EsCuratorName,
+									Image:         es.curatorImage,
+									Env:           es.curatorEnvVars(),
+									LivenessProbe: elasticCuratorLivenessProbe,
 									SecurityContext: &corev1.SecurityContext{
 										RunAsNonRoot:             &t,
 										AllowPrivilegeEscalation: &f,

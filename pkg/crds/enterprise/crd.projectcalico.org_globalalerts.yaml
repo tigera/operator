@@ -111,7 +111,6 @@ spec:
                   for the fields. [Default: UserDefined]'
                 type: string
             required:
-            - dataSet
             - description
             - severity
             type: object

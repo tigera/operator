@@ -148,7 +148,7 @@ type ManagerConfiguration struct {
 	ESLicenseType                 ElasticsearchLicenseType
 	Replicas                      *int32
 	TenantID                      string
-	ManagerCloudResources         ManagerCloudResources
+	CloudResources                ManagerCloudResources
 }
 
 type managerComponent struct {

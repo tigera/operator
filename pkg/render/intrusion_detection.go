@@ -70,6 +70,7 @@ type IntrusionDetectionConfiguration struct {
 	HasNoLicense             bool
 	ManagerInternalTLSSecret *corev1.Secret
 	TenantId                 string
+	CloudResources           IntrusionDetectionCloudResources
 }
 
 type intrusionDetectionComponent struct {
@@ -136,6 +137,8 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 			c.intrusionDetectionPSPClusterRole(),
 			c.intrusionDetectionPSPClusterRoleBinding())
 	}
+
+	objs = c.addCloudResources(objs)
 
 	if c.cfg.HasNoLicense {
 		return nil, objs
@@ -403,7 +406,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionDeployment() *appsv1.Dep
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{"k8s-app": "intrusion-detection-controller"},
 			},
-			Template: *c.deploymentPodTemplate(),
+			Template: c.decorateIntrusionDetectionCloudDeploymentSpec(*c.deploymentPodTemplate()),
 		},
 	}
 }
@@ -525,7 +528,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 		})
 	}
 
-	return corev1.Container{
+	return c.decorateIntrusionDetectionContainer(corev1.Container{
 		Name:  "controller",
 		Image: c.controllerImage,
 		Env:   envs,
@@ -545,7 +548,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 			Privileged: &privileged,
 		},
 		VolumeMounts: volumeMounts,
-	}
+	})
 }
 
 // Determine whether this component's configuration has syslog forwarding enabled or not.

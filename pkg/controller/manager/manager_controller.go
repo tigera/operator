@@ -175,9 +175,8 @@ func add(mgr manager.Manager, c controller.Controller, elasticExternal bool) err
 		return fmt.Errorf("manager-controller failed to watch resource: %w", err)
 	}
 
-	err = addCloud(c)
-	if err != nil {
-		return err
+	if err = addCloudWatch(c); err != nil {
+		return fmt.Errorf("manager-controller failed to add watches for cloud resources: %w", err)
 	}
 
 	if !elasticExternal {
@@ -590,7 +589,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		ESLicenseType:                 elasticLicenseType,
 		Replicas:                      replicas,
 		TenantID:                      tenantId,
-		ManagerCloudResources:         mcr,
+		CloudResources:                mcr,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

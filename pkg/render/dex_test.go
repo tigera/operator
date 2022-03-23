@@ -6,6 +6,10 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -31,8 +35,6 @@ var _ = Describe("dex rendering tests", func() {
 
 		var (
 			authentication *operatorv1.Authentication
-			tlsSecret      *corev1.Secret
-			certSecret     *corev1.Secret
 			dexSecret      *corev1.Secret
 			idpSecret      *corev1.Secret
 			pullSecrets    []*corev1.Secret
@@ -41,6 +43,14 @@ var _ = Describe("dex rendering tests", func() {
 		)
 
 		BeforeEach(func() {
+			scheme := runtime.NewScheme()
+			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+			cli := fake.NewClientBuilder().WithScheme(scheme).Build()
+			certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
+			Expect(err).NotTo(HaveOccurred())
+			dnsNames := dns.GetServiceDNSNames(render.DexObjectName, render.DexNamespace, clusterDomain)
+			tlsKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.DexTLSSecretName, common.OperatorNamespace(), dnsNames)
+			Expect(err).NotTo(HaveOccurred())
 			installation := &operatorv1.InstallationSpec{
 				ControlPlaneReplicas: &replicas,
 				KubernetesProvider:   operatorv1.ProviderNone,
@@ -58,8 +68,6 @@ var _ = Describe("dex rendering tests", func() {
 				},
 			}
 
-			tlsSecret = render.CreateDexTLSSecret("tigera-dex.tigera-dex.svc.cluster.local")
-			certSecret = render.CreateCertificateSecret(tlsSecret.Data[corev1.TLSCertKey], render.DexCertSecretName, common.OperatorNamespace())
 			dexSecret = render.CreateDexClientSecret()
 			idpSecret = &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
@@ -84,13 +92,14 @@ var _ = Describe("dex rendering tests", func() {
 
 			replicas = 2
 
-			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName)
+			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, dexSecret, idpSecret, clusterName)
 
 			cfg = &render.DexComponentConfiguration{
 				PullSecrets:   pullSecrets,
 				Installation:  installation,
 				DexConfig:     dexCfg,
 				ClusterDomain: clusterName,
+				TLSKeyPair:    tlsKeyPair,
 			}
 		})
 
@@ -112,11 +121,8 @@ var _ = Describe("dex rendering tests", func() {
 				{render.DexObjectName, "", rbac, "v1", "ClusterRole"},
 				{render.DexObjectName, "", rbac, "v1", "ClusterRoleBinding"},
 				{render.DexObjectName, render.DexNamespace, "", "v1", "ConfigMap"},
-				{render.DexTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
 				{render.DexObjectName, common.OperatorNamespace(), "", "v1", "Secret"},
 				{render.OIDCSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
-				{render.DexCertSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
-				{render.DexTLSSecretName, render.DexNamespace, "", "v1", "Secret"},
 				{render.DexObjectName, render.DexNamespace, "", "v1", "Secret"},
 				{render.OIDCSecretName, render.DexNamespace, "", "v1", "Secret"},
 				{pullSecretName, render.DexNamespace, "", "v1", "Secret"},
@@ -128,17 +134,13 @@ var _ = Describe("dex rendering tests", func() {
 			Expect(len(resources)).To(Equal(len(expectedResources)))
 		})
 
-		DescribeTable("should render the cluster name properly in the validator and rp configs", func(clusterDomain string) {
-			validatorConfig := render.NewDexKeyValidatorConfig(authentication, idpSecret, certSecret, clusterDomain)
+		DescribeTable("should render the cluster name properly in the validator", func(clusterDomain string) {
+			validatorConfig := render.NewDexKeyValidatorConfig(authentication, idpSecret, clusterDomain)
 			validatorEnv := validatorConfig.RequiredEnv("")
 
 			expectedUrl := fmt.Sprintf("https://tigera-dex.tigera-dex.svc.%s:5556", clusterDomain)
 			Expect(validatorEnv[1].Value).To(Equal(expectedUrl + "/"))
 			Expect(validatorEnv[4].Value).To(Equal(expectedUrl + "/dex/keys"))
-
-			rpConfig := render.NewDexRelyingPartyConfig(authentication, certSecret, dexSecret, clusterDomain)
-			Expect(rpConfig.UserInfoURI()).To(Equal(expectedUrl + "/dex/userinfo"))
-			Expect(rpConfig.TokenURI()).To(Equal(expectedUrl + "/dex/token"))
 		},
 			Entry("default cluster domain", dns.DefaultClusterDomain),
 			Entry("custom cluster domain", "custom.internal"),
@@ -161,7 +163,7 @@ var _ = Describe("dex rendering tests", func() {
 
 		It("should render all resources for a certificate management", func() {
 			cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{}
-			cfg.DexConfig = render.NewDexConfig(cfg.Installation.CertificateManagement, authentication, tlsSecret, dexSecret, idpSecret, clusterName)
+			cfg.DexConfig = render.NewDexConfig(cfg.Installation.CertificateManagement, authentication, dexSecret, idpSecret, clusterName)
 
 			component := render.Dex(cfg)
 			resources, _ := component.Objects()
@@ -179,11 +181,8 @@ var _ = Describe("dex rendering tests", func() {
 				{render.DexObjectName, "", rbac, "v1", "ClusterRole"},
 				{render.DexObjectName, "", rbac, "v1", "ClusterRoleBinding"},
 				{render.DexObjectName, render.DexNamespace, "", "v1", "ConfigMap"},
-				{render.DexTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
 				{render.DexObjectName, common.OperatorNamespace(), "", "v1", "Secret"},
 				{render.OIDCSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
-				{render.DexCertSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
-				{render.DexTLSSecretName, render.DexNamespace, "", "v1", "Secret"},
 				{render.DexObjectName, render.DexNamespace, "", "v1", "Secret"},
 				{render.OIDCSecretName, render.DexNamespace, "", "v1", "Secret"},
 				{pullSecretName, render.DexNamespace, "", "v1", "Secret"},

@@ -167,6 +167,27 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 				if err := c.client.Create(ctx, obj); err != nil {
 					return err
 				}
+			case *v1.Secret:
+				objSecret := obj.(*v1.Secret)
+				curSecret := cur.(*v1.Secret)
+				// Secret types are immutable, we need to delete the old version if the type has changed. If the
+				// object type is unset, it will result in SecretTypeOpaque, so this difference can be excluded.
+				if objSecret.Type != curSecret.Type &&
+					!(len(objSecret.Type) == 0 && curSecret.Type == v1.SecretTypeOpaque) {
+					if err := c.client.Delete(ctx, obj); err != nil {
+						logCtx.WithValues("key", key).Info("Failed to delete secret for recreation.")
+						return err
+					}
+					obj.SetResourceVersion("")
+					if err := c.client.Create(ctx, obj); err != nil {
+						return err
+					}
+				} else {
+					if err := c.client.Update(ctx, mobj); err != nil {
+						logCtx.WithValues("key", key).Info("Failed to update object.")
+						return err
+					}
+				}
 			default:
 				if err := c.client.Update(ctx, mobj); err != nil {
 					logCtx.WithValues("key", key).Info("Failed to update object.")

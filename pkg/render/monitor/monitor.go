@@ -311,15 +311,13 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		mc.cfg.TrustedCertBundle.Volume(),
 	}
 	volumeMounts := []corev1.VolumeMount{
-		mc.cfg.ServerTLSSecret.VolumeMount(),
-		mc.cfg.ClientTLSSecret.VolumeMount(),
-		mc.cfg.TrustedCertBundle.VolumeMount(),
+		mc.cfg.ServerTLSSecret.VolumeMount(mc.SupportedOSType()),
+		mc.cfg.ClientTLSSecret.VolumeMount(mc.SupportedOSType()),
+		mc.cfg.TrustedCertBundle.VolumeMount(mc.SupportedOSType()),
 	}
 
 	if mc.cfg.KeyValidatorConfig != nil {
-		volumeMounts = append(volumeMounts, mc.cfg.KeyValidatorConfig.RequiredVolumeMounts()...)
 		env = append(env, mc.cfg.KeyValidatorConfig.RequiredEnv("")...)
-		volumes = append(volumes, mc.cfg.KeyValidatorConfig.RequiredVolumes()...)
 	}
 
 	return &monitoringv1.Prometheus{

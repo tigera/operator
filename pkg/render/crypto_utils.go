@@ -58,22 +58,6 @@ func VoltronTunnelSecret() *corev1.Secret {
 	}
 }
 
-func CreateDexTLSSecret(dexCommonName string) *corev1.Secret {
-	key, cert := createSelfSignedSecret(dexCommonName, []string{dexCommonName})
-	return &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      DexTLSSecretName,
-			Namespace: common.OperatorNamespace(),
-		},
-		Type: corev1.SecretTypeTLS,
-		Data: map[string][]byte{
-			corev1.TLSCertKey:       []byte(cert),
-			corev1.TLSPrivateKeyKey: []byte(key),
-		},
-	}
-}
-
 // Secrets to establish a tunnel between Voltron and Guardian
 // Differs from other secrets in the way that it needs a DNS name and KeyUsage.
 func createSelfSignedSecret(cn string, altNames []string) (string, string) {

@@ -33,7 +33,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/render/common/elasticsearch"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rkibana "github.com/tigera/operator/pkg/render/common/kibana"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -1171,7 +1170,7 @@ func (c *intrusionDetectionComponent) getBaseIntrusionDetectionADJobPodTemplate(
 						Name: "es-certs",
 						VolumeSource: corev1.VolumeSource{
 							Secret: &corev1.SecretVolumeSource{
-								SecretName: elasticsearch.PublicCertSecret,
+								SecretName: relasticsearch.PublicCertSecret,
 								Items: []corev1.KeyToPath{
 									{Key: "tls.crt", Path: "es-ca.pem"},
 								},

@@ -147,8 +147,9 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 }
 
 // handleIPv6 is a migration handler which ensures that IPv6 is configured as expected.
-// since the operator itself does not support IPv6, we verify that IPv6 is disabled.
 func handleIPv6(c *components, _ *operatorv1.Installation) error {
+	// For IPv6
+	// - need IPAM assign_ipv6 to be true
 	if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "FELIX_IPV6SUPPORT", "false"); err != nil {
 		return err
 	}
@@ -382,17 +383,9 @@ func handleNonCalicoCNI(c *components, install *operatorv1.Installation) error {
 	return nil
 }
 
-// getAutoDetection auto-detects the IP and Network using the requested
-// detection method.
-func handleAutoDetectionMethod(c *components, install *operatorv1.Installation) error {
-	method, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "IP_AUTODETECTION_METHOD")
-	if err != nil {
-		return err
-	}
-	if method == nil {
-		return nil
-	}
-
+// getAutoDetectionMethod gets the corresponding NodeAddressAutodetection for
+// the given method or returns an error.
+func getAutoDetectionMethod(method *string) (*operatorv1.NodeAddressAutodetection, error) {
 	const (
 		AutodetectionMethodFirst         = "first-found"
 		AutodetectionMethodCanReach      = "can-reach="
@@ -405,51 +398,64 @@ func handleAutoDetectionMethod(c *components, install *operatorv1.Installation) 
 	// first-found
 	if *method == "" || *method == AutodetectionMethodFirst {
 		var t = true
-		install.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operatorv1.NodeAddressAutodetection{FirstFound: &t}
-		return nil
+		return &operatorv1.NodeAddressAutodetection{FirstFound: &t}, nil
 	}
 
 	// interface
 	if strings.HasPrefix(*method, AutodetectionMethodInterface) {
 		ifStr := strings.TrimPrefix(*method, AutodetectionMethodInterface)
-		install.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operatorv1.NodeAddressAutodetection{Interface: ifStr}
-		return nil
+		return &operatorv1.NodeAddressAutodetection{Interface: ifStr}, nil
 	}
 
 	// can-reach
 	if strings.HasPrefix(*method, AutodetectionMethodCanReach) {
 		dest := strings.TrimPrefix(*method, AutodetectionMethodCanReach)
-		install.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operatorv1.NodeAddressAutodetection{CanReach: dest}
-		return nil
+		return &operatorv1.NodeAddressAutodetection{CanReach: dest}, nil
 	}
 
 	// skip-interface
 	if strings.HasPrefix(*method, AutodetectionMethodSkipInterface) {
 		ifStr := strings.TrimPrefix(*method, AutodetectionMethodSkipInterface)
-		install.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operatorv1.NodeAddressAutodetection{SkipInterface: ifStr}
-		return nil
+		return &operatorv1.NodeAddressAutodetection{SkipInterface: ifStr}, nil
 	}
 
 	// cidr=
 	if strings.HasPrefix(*method, AutodetectionMethodCIDR) {
 		ifStr := strings.TrimPrefix(*method, AutodetectionMethodCIDR)
 		cidrs := strings.Split(ifStr, ",")
-		install.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operatorv1.NodeAddressAutodetection{CIDRS: cidrs}
-		return nil
+		return &operatorv1.NodeAddressAutodetection{CIDRS: cidrs}, nil
 	}
 
 	// kubernetes-internal-ip
 	if *method == "" || *method == AutodetectionMethodNodeIP {
 		var k = operatorv1.NodeInternalIP
-		install.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operatorv1.NodeAddressAutodetection{Kubernetes: &k}
+		return &operatorv1.NodeAddressAutodetection{Kubernetes: &k}, nil
+	}
+
+	return nil, fmt.Errorf("invalid IP autodetection method")
+}
+
+// handleAutoDetectionMethod updates the installation with the IP autodetection
+// method if defined.
+func handleAutoDetectionMethod(c *components, install *operatorv1.Installation) error {
+	method, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "IP_AUTODETECTION_METHOD")
+	if err != nil {
+		return err
+	}
+	if method == nil {
 		return nil
 	}
 
-	return ErrIncompatibleCluster{
-		err:       fmt.Sprintf("IP_AUTODETECTION_METHOD=%s is not supported", *method),
-		component: ComponentCalicoNode,
-		fix:       "remove the IP_AUTODETECTION_METHOD env var or set it to 'first-found', 'can-reach=*', 'interface=*', 'cidr=*', or 'skip-interface=*'",
+	addrMethod, err := getAutoDetectionMethod(method)
+	if err != nil {
+		return ErrIncompatibleCluster{
+			err:       fmt.Sprintf("IP_AUTODETECTION_METHOD=%s is not supported", *method),
+			component: ComponentCalicoNode,
+			fix:       "remove the IP_AUTODETECTION_METHOD env var or set it to 'first-found', 'can-reach=*', 'interface=*', 'skip-interface=*', 'cidr=*', or 'kubernetes-internal-ip'",
+		}
 	}
+	install.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = addrMethod
+	return nil
 }
 
 func getCNIPlugin(c *components) (operatorv1.CNIPluginType, error) {

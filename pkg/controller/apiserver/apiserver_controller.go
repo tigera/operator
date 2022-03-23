@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -124,11 +124,20 @@ func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 		}
 	}
 
-	for _, secretName := range []string{"calico-apiserver-certs", "tigera-apiserver-certs", render.PacketCaptureCertSecret,
-		certificatemanagement.CASecretName, render.DexTLSSecretName} {
-		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
-			return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
-		}
+	// Watch for certificate changes. We watch both secrets in case the user is switching between variants.
+	if err = utils.AddSecretsWatch(c, "calico-apiserver-certs", common.OperatorNamespace()); err != nil {
+		return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
+	}
+	if err = utils.AddSecretsWatch(c, "tigera-apiserver-certs", common.OperatorNamespace()); err != nil {
+		return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
+	}
+
+	if err = utils.AddSecretsWatch(c, render.PacketCaptureCertSecret, common.OperatorNamespace()); err != nil {
+		return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
+	}
+
+	if err = utils.AddSecretsWatch(c, certificatemanagement.CASecretName, common.OperatorNamespace()); err != nil {
+		return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 	}
 
 	if err = imageset.AddImageSetWatch(c); err != nil {

@@ -19,7 +19,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -168,10 +167,9 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 					Containers: []corev1.Container{
 						relasticsearch.ContainerDecorate(
 							corev1.Container{
-								Name:            ElasticsearchMetricsName,
-								Image:           e.esMetricsImage,
-								ImagePullPolicy: v1.PullIfNotPresent,
-								Command:         []string{"/bin/elasticsearch_exporter"},
+								Name:    ElasticsearchMetricsName,
+								Image:   e.esMetricsImage,
+								Command: []string{"/bin/elasticsearch_exporter"},
 								Args: []string{"--es.uri=https://$(ELASTIC_USERNAME):$(ELASTIC_PASSWORD)@$(ELASTIC_HOST):$(ELASTIC_PORT)",
 									"--es.all", "--es.indices", "--es.indices_settings", "--es.shards", "--es.cluster_settings",
 									"--es.timeout=30s", "--es.ca=$(ELASTIC_CA)", "--web.listen-address=:9081",

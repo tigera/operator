@@ -22,7 +22,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -301,10 +300,9 @@ func (c *amazonCloudIntegrationComponent) container() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:            AmazonCloudIntegrationComponentName,
-		Image:           c.image,
-		ImagePullPolicy: v1.PullIfNotPresent,
-		Env:             env,
+		Name:  AmazonCloudIntegrationComponentName,
+		Image: c.image,
+		Env:   env,
 		// Needed for permissions to write to the audit log
 		SecurityContext: &corev1.SecurityContext{
 			RunAsNonRoot:             ptr.BoolToPtr(true),

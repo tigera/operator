@@ -99,10 +99,11 @@ var _ = Describe("Node rendering tests", func() {
 
 		// Create a default configuration.
 		cfg = render.NodeConfiguration{
-			K8sServiceEp:  k8sServiceEp,
-			Installation:  defaultInstance,
-			TLS:           typhaNodeTLS,
-			ClusterDomain: defaultClusterDomain,
+			K8sServiceEp:    k8sServiceEp,
+			Installation:    defaultInstance,
+			TLS:             typhaNodeTLS,
+			ClusterDomain:   defaultClusterDomain,
+			FelixHealthPort: 9099,
 		}
 	})
 
@@ -2783,6 +2784,7 @@ var _ = Describe("Node rendering tests", func() {
 		func(isOpenshift, isEnterprise bool, bgpOption operatorv1.BGPOption) {
 			if isOpenshift {
 				defaultInstance.KubernetesProvider = operatorv1.ProviderOpenShift
+				cfg.FelixHealthPort = 9199
 			}
 
 			if isEnterprise {
@@ -2960,7 +2962,7 @@ func verifyProbesAndLifecycle(ds *appsv1.DaemonSet, isOpenshift, isEnterprise bo
 			break
 		}
 	}
-	Expect(found).To(BeTrue())
+	ExpectWithOffset(1, found).To(BeTrue())
 
 	switch {
 	case !bgp:
@@ -2971,13 +2973,13 @@ func verifyProbesAndLifecycle(ds *appsv1.DaemonSet, isOpenshift, isEnterprise bo
 		expectedReadiness.Exec.Command = []string{"/bin/calico-node", "-bird-ready", "-felix-ready", "-bgp-metrics-ready"}
 	}
 
-	Expect(ds.Spec.Template.Spec.Containers[0].ReadinessProbe).To(Equal(expectedReadiness))
-	Expect(ds.Spec.Template.Spec.Containers[0].LivenessProbe).To(Equal(expectedLiveness))
+	ExpectWithOffset(1, ds.Spec.Template.Spec.Containers[0].ReadinessProbe).To(Equal(expectedReadiness))
+	ExpectWithOffset(1, ds.Spec.Template.Spec.Containers[0].LivenessProbe).To(Equal(expectedLiveness))
 
 	expectedLifecycle := &corev1.Lifecycle{
 		PreStop: &corev1.Handler{Exec: &corev1.ExecAction{Command: []string{"/bin/calico-node", "-shutdown"}}},
 	}
-	Expect(ds.Spec.Template.Spec.Containers[0].Lifecycle).To(Equal(expectedLifecycle))
+	ExpectWithOffset(1, ds.Spec.Template.Spec.Containers[0].Lifecycle).To(Equal(expectedLifecycle))
 
-	Expect(int(*ds.Spec.Template.Spec.TerminationGracePeriodSeconds)).To(Equal(5))
+	ExpectWithOffset(1, int(*ds.Spec.Template.Spec.TerminationGracePeriodSeconds)).To(Equal(5))
 }

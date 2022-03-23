@@ -1181,21 +1181,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	// Determine the felix health port to use. Prefer the configuration from FelixConfiguration,
-	// but default to 9099.
-	felixHealthPort := 9099
-	if felixConfiguration.Spec.HealthPort != nil {
-		felixHealthPort = *felixConfiguration.Spec.HealthPort
-	}
-	if cfg.FelixHealthPort == nil {
-		// No health port configured. Default it.
-		port := 9099
-		if cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
-			port = 9199
-		}
-		cfg.FelixHealthPort = &port
-	}
-
 	// Build a configuration for rendering calico/node.
 	nodeCfg := render.NodeConfiguration{
 		K8sServiceEp:            k8sapi.Endpoint,
@@ -1211,7 +1196,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		MigrateNamespaces:       needNsMigration,
 		Terminating:             nodeTerminating,
 		PrometheusServerTLS:     nodePrometheusTLS,
-		FelixHealthPort:         felixHealthPort,
+		FelixHealthPort:         *felixConfiguration.Spec.HealthPort,
 	}
 	components = append(components, render.Node(&nodeCfg))
 
@@ -1510,6 +1495,18 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 			}
 		}
 	}
+
+	// Determine the felix health port to use. Prefer the configuration from FelixConfiguration,
+	// but default to 9099 (or 9199 on OpenShift). We will also write back whatever we select to FelixConfiguration.
+	felixHealthPort := 9099
+	if install.Spec.KubernetesProvider == operator.ProviderOpenShift {
+		felixHealthPort = 9199
+	}
+	if fc.Spec.HealthPort == nil {
+		fc.Spec.HealthPort = &felixHealthPort
+		updated = true
+	}
+
 	if !updated {
 		return nil
 	}

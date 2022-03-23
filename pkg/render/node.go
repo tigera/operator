@@ -106,20 +106,12 @@ type NodeConfiguration struct {
 	BGPLayouts *corev1.ConfigMap
 
 	// The health port that Felix should bind to. The controller reads FelixConfiguration
-	// and sets this. If not set, a default will be chosen.
-	FelixHealthPort *int
+	// and sets this.
+	FelixHealthPort int
 }
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
 func Node(cfg *NodeConfiguration) Component {
-	if cfg.FelixHealthPort == nil {
-		// No health port configured. Default it.
-		port := 9099
-		if cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
-			port = 9199
-		}
-		cfg.FelixHealthPort = &port
-	}
 	return &nodeComponent{cfg: cfg}
 }
 

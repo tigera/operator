@@ -309,6 +309,12 @@ spec:
                   description: The ComponentResource struct associates a ResourceRequirements
                     with a component by name
                   properties:
+                    annotations:
+                      additionalProperties:
+                        type: string
+                      description: Annotations allow setting annotations for the Pod
+                        on this component.
+                      type: object
                     componentName:
                       description: ComponentName is an enum which identifies the component
                       enum:
@@ -316,6 +322,12 @@ spec:
                       - Typha
                       - KubeControllers
                       type: string
+                    labels:
+                      additionalProperties:
+                        type: string
+                      description: Labels allow setting labels for the Pod on this
+                        component.
+                      type: object
                     resourceRequirements:
                       description: ResourceRequirements allows customization of limits
                         and requests for compute resources such as cpu and memory.
@@ -346,7 +358,6 @@ spec:
                       type: object
                   required:
                   - componentName
-                  - resourceRequirements
                   type: object
                 type: array
               controlPlaneNodeSelector:
@@ -1056,6 +1067,12 @@ spec:
                       description: The ComponentResource struct associates a ResourceRequirements
                         with a component by name
                       properties:
+                        annotations:
+                          additionalProperties:
+                            type: string
+                          description: Annotations allow setting annotations for the
+                            Pod on this component.
+                          type: object
                         componentName:
                           description: ComponentName is an enum which identifies the
                             component
@@ -1064,6 +1081,12 @@ spec:
                           - Typha
                           - KubeControllers
                           type: string
+                        labels:
+                          additionalProperties:
+                            type: string
+                          description: Labels allow setting labels for the Pod on
+                            this component.
+                          type: object
                         resourceRequirements:
                           description: ResourceRequirements allows customization of
                             limits and requests for compute resources such as cpu
@@ -1095,7 +1118,6 @@ spec:
                           type: object
                       required:
                       - componentName
-                      - resourceRequirements
                       type: object
                     type: array
                   controlPlaneNodeSelector:

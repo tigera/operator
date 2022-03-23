@@ -33,7 +33,6 @@ import (
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -927,12 +926,11 @@ func (c *nodeComponent) cniContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:            "install-cni",
-		Image:           c.cniImage,
-		ImagePullPolicy: v1.PullIfNotPresent,
-		Command:         []string{"/opt/cni/bin/install"},
-		Env:             cniEnv,
-		VolumeMounts:    cniVolumeMounts,
+		Name:         "install-cni",
+		Image:        c.cniImage,
+		Command:      []string{"/opt/cni/bin/install"},
+		Env:          cniEnv,
+		VolumeMounts: cniVolumeMounts,
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: ptr.BoolToPtr(true),
 		},
@@ -947,10 +945,9 @@ func (c *nodeComponent) flexVolumeContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:            "flexvol-driver",
-		Image:           c.flexvolImage,
-		ImagePullPolicy: v1.PullIfNotPresent,
-		VolumeMounts:    flexVolumeMounts,
+		Name:         "flexvol-driver",
+		Image:        c.flexvolImage,
+		VolumeMounts: flexVolumeMounts,
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: ptr.BoolToPtr(true),
 		},
@@ -974,10 +971,9 @@ func (c *nodeComponent) bpffsInitContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:            "mount-bpffs",
-		Image:           c.nodeImage,
-		ImagePullPolicy: v1.PullIfNotPresent,
-		VolumeMounts:    mounts,
+		Name:         "mount-bpffs",
+		Image:        c.nodeImage,
+		VolumeMounts: mounts,
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: ptr.BoolToPtr(true),
 		},
@@ -1047,7 +1043,6 @@ func (c *nodeComponent) nodeContainer() corev1.Container {
 	return corev1.Container{
 		Name:            CalicoNodeObjectName,
 		Image:           c.nodeImage,
-		ImagePullPolicy: v1.PullIfNotPresent,
 		Resources:       c.nodeResources(),
 		SecurityContext: sc,
 		Env:             c.nodeEnvVars(),
@@ -1587,9 +1582,8 @@ func (c *nodeComponent) hostPathInitContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:            "hostpath-init",
-		Image:           c.nodeImage,
-		ImagePullPolicy: v1.PullIfNotPresent,
+		Name:  "hostpath-init",
+		Image: c.nodeImage,
 		Env: []corev1.EnvVar{
 			{Name: "NODE_USER_ID", Value: "999"},
 		},

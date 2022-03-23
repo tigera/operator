@@ -32,7 +32,6 @@ import (
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -338,9 +337,8 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				{
-					Name:            "authn-proxy",
-					Image:           mc.prometheusServiceImage,
-					ImagePullPolicy: v1.PullIfNotPresent,
+					Name:  "authn-proxy",
+					Image: mc.prometheusServiceImage,
 					Ports: []corev1.ContainerPort{
 						{
 							ContainerPort: PrometheusProxyPort,

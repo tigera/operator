@@ -19,7 +19,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -444,15 +443,14 @@ func (c *typhaComponent) typhaContainer() corev1.Container {
 	lp, rp := c.livenessReadinessProbes()
 
 	return corev1.Container{
-		Name:            "calico-typha",
-		Image:           c.typhaImage,
-		ImagePullPolicy: v1.PullIfNotPresent,
-		Resources:       c.typhaResources(),
-		Env:             c.typhaEnvVars(),
-		VolumeMounts:    c.typhaVolumeMounts(),
-		Ports:           c.typhaPorts(),
-		LivenessProbe:   lp,
-		ReadinessProbe:  rp,
+		Name:           "calico-typha",
+		Image:          c.typhaImage,
+		Resources:      c.typhaResources(),
+		Env:            c.typhaEnvVars(),
+		VolumeMounts:   c.typhaVolumeMounts(),
+		Ports:          c.typhaPorts(),
+		LivenessProbe:  lp,
+		ReadinessProbe: rp,
 	}
 }
 

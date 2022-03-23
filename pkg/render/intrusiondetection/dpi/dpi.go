@@ -26,7 +26,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -165,12 +164,11 @@ func (d *dpiComponent) dpiContainer() corev1.Container {
 	}
 
 	dpiContainer := corev1.Container{
-		Name:            DeepPacketInspectionName,
-		Image:           d.dpiImage,
-		ImagePullPolicy: v1.PullIfNotPresent,
-		Resources:       *d.cfg.IntrusionDetection.Spec.ComponentResources[0].ResourceRequirements,
-		Env:             d.dpiEnvVars(),
-		VolumeMounts:    d.dpiVolumeMounts(),
+		Name:         DeepPacketInspectionName,
+		Image:        d.dpiImage,
+		Resources:    *d.cfg.IntrusionDetection.Spec.ComponentResources[0].ResourceRequirements,
+		Env:          d.dpiEnvVars(),
+		VolumeMounts: d.dpiVolumeMounts(),
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: &privileged,
 		},

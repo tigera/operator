@@ -20,7 +20,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -277,11 +276,10 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				{
-					Name:            DeploymentName,
-					Image:           e.esGatewayImage,
-					ImagePullPolicy: v1.PullIfNotPresent,
-					Env:             envVars,
-					VolumeMounts:    volumeMounts,
+					Name:         DeploymentName,
+					Image:        e.esGatewayImage,
+					Env:          envVars,
+					VolumeMounts: volumeMounts,
 					ReadinessProbe: &corev1.Probe{
 						Handler: corev1.Handler{
 							HTTPGet: &corev1.HTTPGetAction{

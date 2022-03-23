@@ -38,7 +38,6 @@ import (
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -368,7 +367,6 @@ func (c *managerComponent) managerContainer() corev1.Container {
 	tm := corev1.Container{
 		Name:            "tigera-manager",
 		Image:           c.managerImage,
-		ImagePullPolicy: v1.PullIfNotPresent,
 		Env:             c.managerEnvVars(),
 		LivenessProbe:   c.managerProbe(),
 		SecurityContext: podsecuritycontext.NewBaseContext(),
@@ -440,7 +438,6 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 	return corev1.Container{
 		Name:            VoltronName,
 		Image:           c.proxyImage,
-		ImagePullPolicy: v1.PullIfNotPresent,
 		Env:             env,
 		VolumeMounts:    c.volumeMountsForProxyManager(),
 		LivenessProbe:   c.managerProxyProbe(),
@@ -488,7 +485,6 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 	return corev1.Container{
 		Name:            "tigera-es-proxy",
 		Image:           c.esProxyImage,
-		ImagePullPolicy: v1.PullIfNotPresent,
 		LivenessProbe:   c.managerEsProxyProbe(),
 		SecurityContext: podsecuritycontext.NewBaseContext(),
 		Env:             env,

@@ -23,7 +23,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -203,9 +202,8 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() corev1.Co
 	kScheme, kHost, kPort, _ := url.ParseEndpoint(rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain))
 	secretName := ElasticsearchIntrusionDetectionJobUserSecret
 	return corev1.Container{
-		Name:            "elasticsearch-job-installer",
-		Image:           c.jobInstallerImage,
-		ImagePullPolicy: v1.PullIfNotPresent,
+		Name:  "elasticsearch-job-installer",
+		Image: c.jobInstallerImage,
 		Env: []corev1.EnvVar{
 			{
 				Name:  "KIBANA_HOST",
@@ -522,10 +520,9 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 	}
 
 	return corev1.Container{
-		Name:            "controller",
-		Image:           c.controllerImage,
-		ImagePullPolicy: v1.PullIfNotPresent,
-		Env:             envs,
+		Name:  "controller",
+		Image: c.controllerImage,
+		Env:   envs,
 		// Needed for permissions to write to the audit log
 		LivenessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
@@ -1208,9 +1205,8 @@ func (c *intrusionDetectionComponent) getBaseIntrusionDetectionADJobPodTemplate(
 				Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster),
 				Containers: []corev1.Container{
 					{
-						Name:            "adjobs",
-						Image:           c.adJobsImage,
-						ImagePullPolicy: v1.PullIfNotPresent,
+						Name:  "adjobs",
+						Image: c.adJobsImage,
 						SecurityContext: &corev1.SecurityContext{
 							Privileged: &privileged,
 						},

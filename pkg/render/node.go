@@ -104,6 +104,10 @@ type NodeConfiguration struct {
 	// TODO: The controller should pass the contents, the renderer should build its own
 	// configmap, rather than this "copy" semantic.
 	BGPLayouts *corev1.ConfigMap
+
+	// The health port that Felix should bind to. The controller reads FelixConfiguration
+	// and sets this.
+	FelixHealthPort int
 }
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
@@ -212,7 +216,6 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 
 	if c.cfg.Terminating {
 		return objsToKeep, append(objs, objsToDelete...)
-
 	}
 	return objs, objsToDelete
 }
@@ -518,7 +521,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
 	}
 
 	// Build the CNI configuration json.
-	var config = fmt.Sprintf(`{
+	config := fmt.Sprintf(`{
   "name": "k8s-pod-network",
   "cniVersion": "0.3.1",
   "plugins": [
@@ -1473,7 +1476,7 @@ func (c *nodeComponent) nodeLifecycle() *corev1.Lifecycle {
 // nodeLivenessReadinessProbes creates the node's liveness and readiness probes.
 func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Probe) {
 	// Determine liveness and readiness configuration for node.
-	livenessPort := intstr.FromInt(9099)
+	livenessPort := intstr.FromInt(c.cfg.FelixHealthPort)
 	readinessCmd := []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}
 
 	// Want to check for BGP metrics server if this is enterprise
@@ -1484,11 +1487,6 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Pr
 	// If not using BGP or using VPP, don't check bird status (or bgp metrics server for enterprise).
 	if !bgpEnabled(c.cfg.Installation) || c.vppDataplaneEnabled() {
 		readinessCmd = []string{"/bin/calico-node", "-felix-ready"}
-	}
-
-	// For Openshift, we need a different port since our default port is already in use.
-	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
-		livenessPort = intstr.FromInt(9199)
 	}
 
 	lp := &corev1.Probe{

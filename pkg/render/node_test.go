@@ -253,8 +253,8 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env).To(ConsistOf(expectedCNIEnv))
 
 		// Verify volumes.
-		var fileOrCreate = corev1.HostPathFileOrCreate
-		var dirOrCreate = corev1.HostPathDirectoryOrCreate
+		fileOrCreate := corev1.HostPathFileOrCreate
+		dirOrCreate := corev1.HostPathDirectoryOrCreate
 		expectedVols := []corev1.Volume{
 			{Name: "lib-modules", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/lib/modules"}}},
 			{Name: "var-run-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/calico"}}},
@@ -476,9 +476,9 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env).To(ConsistOf(expectedCNIEnv))
 
 		// Verify volumes.
-		var fileOrCreate = corev1.HostPathFileOrCreate
-		var dirOrCreate = corev1.HostPathDirectoryOrCreate
-		var dirMustExist = corev1.HostPathDirectory
+		fileOrCreate := corev1.HostPathFileOrCreate
+		dirOrCreate := corev1.HostPathDirectoryOrCreate
+		dirMustExist := corev1.HostPathDirectory
 		expectedVols := []corev1.Volume{
 			{Name: "lib-modules", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/lib/modules"}}},
 			{Name: "var-run-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/calico"}}},
@@ -770,8 +770,8 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(mountBpffs).To(BeNil())
 
 		// Verify volumes.
-		var fileOrCreate = corev1.HostPathFileOrCreate
-		var dirOrCreate = corev1.HostPathDirectoryOrCreate
+		fileOrCreate := corev1.HostPathFileOrCreate
+		dirOrCreate := corev1.HostPathDirectoryOrCreate
 		expectedVols := []corev1.Volume{
 			{Name: "lib-modules", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/lib/modules"}}},
 			{Name: "var-run", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run"}}},
@@ -977,8 +977,8 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env).To(ConsistOf(expectedCNIEnv))
 
 		// Verify volumes.
-		var fileOrCreate = corev1.HostPathFileOrCreate
-		var dirOrCreate = corev1.HostPathDirectoryOrCreate
+		fileOrCreate := corev1.HostPathFileOrCreate
+		dirOrCreate := corev1.HostPathDirectoryOrCreate
 		expectedVols := []corev1.Volume{
 			{Name: "lib-modules", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/lib/modules"}}},
 			{Name: "var-run-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/calico"}}},
@@ -1122,8 +1122,8 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_POD_SECURITY_GROUP")})))
 
 		// Verify volumes.
-		var fileOrCreate = corev1.HostPathFileOrCreate
-		var dirOrCreate = corev1.HostPathDirectoryOrCreate
+		fileOrCreate := corev1.HostPathFileOrCreate
+		dirOrCreate := corev1.HostPathDirectoryOrCreate
 		expectedVols := []corev1.Volume{
 			{Name: "lib-modules", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/lib/modules"}}},
 			{Name: "var-run-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/calico"}}},
@@ -1382,8 +1382,8 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env).To(ConsistOf(expectedCNIEnv))
 
 		// Verify volumes.
-		var fileOrCreate = corev1.HostPathFileOrCreate
-		var dirOrCreate = corev1.HostPathDirectoryOrCreate
+		fileOrCreate := corev1.HostPathFileOrCreate
+		dirOrCreate := corev1.HostPathDirectoryOrCreate
 		expectedVols := []corev1.Volume{
 			{Name: "lib-modules", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/lib/modules"}}},
 			{Name: "var-run-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/calico"}}},
@@ -1524,8 +1524,8 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_POD_SECURITY_GROUP")})))
 
 		// Verify volumes.
-		var fileOrCreate = corev1.HostPathFileOrCreate
-		var dirOrCreate = corev1.HostPathDirectoryOrCreate
+		fileOrCreate := corev1.HostPathFileOrCreate
+		dirOrCreate := corev1.HostPathDirectoryOrCreate
 		expectedVols := []corev1.Volume{
 			{Name: "lib-modules", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/lib/modules"}}},
 			{Name: "var-run-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/calico"}}},
@@ -1591,6 +1591,7 @@ var _ = Describe("Node rendering tests", func() {
 
 		defaultInstance.FlexVolumePath = "/etc/kubernetes/kubelet-plugins/volume/exec/"
 		defaultInstance.KubernetesProvider = operatorv1.ProviderOpenShift
+		cfg.FelixHealthPort = 9199
 		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
@@ -1611,8 +1612,8 @@ var _ = Describe("Node rendering tests", func() {
 
 		// Verify volumes. In particular, we want to make sure the flexvol-driver-host volume uses the right
 		// host path for flexvolume drivers.
-		var fileOrCreate = corev1.HostPathFileOrCreate
-		var dirOrCreate = corev1.HostPathDirectoryOrCreate
+		fileOrCreate := corev1.HostPathFileOrCreate
+		dirOrCreate := corev1.HostPathDirectoryOrCreate
 		expectedVols := []corev1.Volume{
 			{Name: "lib-modules", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/lib/modules"}}},
 			{Name: "var-run-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/calico"}}},
@@ -1706,6 +1707,7 @@ var _ = Describe("Node rendering tests", func() {
 		defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
 		defaultInstance.KubernetesProvider = operatorv1.ProviderOpenShift
 		cfg.NodeReporterMetricsPort = 9081
+		cfg.FelixHealthPort = 9199
 
 		component := render.Node(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -1946,7 +1948,6 @@ var _ = Describe("Node rendering tests", func() {
 			ds := dsResource.(*appsv1.DaemonSet)
 			rtest.ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "IP_AUTODETECTION_METHOD", "cidr=10.0.1.0/24,10.0.2.0/24")
 		})
-
 	})
 
 	It("should include updates needed for the core upgrade", func() {
@@ -2938,12 +2939,14 @@ func verifyProbesAndLifecycle(ds *appsv1.DaemonSet, isOpenshift, isEnterprise bo
 		TimeoutSeconds: 5,
 		PeriodSeconds:  10,
 	}
-	expectedLiveness := &corev1.Probe{Handler: corev1.Handler{
-		HTTPGet: &corev1.HTTPGetAction{
-			Host: "localhost",
-			Path: "/liveness",
-			Port: intstr.FromInt(9099),
-		}},
+	expectedLiveness := &corev1.Probe{
+		Handler: corev1.Handler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Host: "localhost",
+				Path: "/liveness",
+				Port: intstr.FromInt(9099),
+			},
+		},
 		TimeoutSeconds: 10,
 	}
 

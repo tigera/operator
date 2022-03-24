@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -41,11 +40,18 @@ import (
 )
 
 var (
-	log                    = logf.Log.WithName("tls")
-	ErrInvalidCertDNSNames = errors.New("certificate has the wrong DNS names")
-	errNoPrivateKeyPEM     = errors.New("key pair is missing a private key")
-	errNoCertificatePEM    = errors.New("certificate PEM is missing")
+	log = logf.Log.WithName("tls")
 )
+
+func ErrInvalidCertDNSNames(secretName, secretNamespace string) error {
+	return fmt.Errorf("certificate %s/%s has the wrong DNS names", secretNamespace, secretName)
+}
+func errNoPrivateKeyPEM(secretName, secretNamespace string) error {
+	return fmt.Errorf("key pair %s/%s is missing a private key", secretNamespace, secretName)
+}
+func errNoCertificatePEM(secretName, secretNamespace string) error {
+	return fmt.Errorf("certificate PEM is missing for %s/%s ", secretNamespace, secretName)
+}
 
 type certificateManager struct {
 	*x509.Certificate
@@ -162,7 +168,7 @@ func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, 
 	if err != nil && !kerrors.IsNotFound(err) {
 		return nil, err
 	} else if keyPair != nil {
-		err = HasExpectedDNSNames(x509Cert, dnsNames)
+		err = HasExpectedDNSNames(secretName, secretNamespace, x509Cert, dnsNames)
 		if err == nil {
 			return keyPair, nil
 		} else if keyPair.BYO() {
@@ -210,11 +216,11 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 	keyPEM, certPEM := getKeyCertPEM(secret)
 	if !readCertOnly {
 		if len(keyPEM) == 0 {
-			return nil, nil, errNoPrivateKeyPEM
+			return nil, nil, errNoPrivateKeyPEM(secretName, secretNamespace)
 		}
 	}
 	if len(certPEM) == 0 {
-		return nil, nil, errNoCertificatePEM
+		return nil, nil, errNoCertificatePEM(secretName, secretNamespace)
 	}
 	x509Cert, err := certificatemanagement.ParseCertificate(certPEM)
 	if err != nil {
@@ -317,12 +323,12 @@ func certificateManagementKeyPair(ca *certificateManager, secretName string, dns
 	}
 }
 
-func HasExpectedDNSNames(cert *x509.Certificate, expectedDNSNames []string) error {
+func HasExpectedDNSNames(secretName, secretNamespace string, cert *x509.Certificate, expectedDNSNames []string) error {
 	dnsNames := sets.NewString(cert.DNSNames...)
 	if dnsNames.HasAll(expectedDNSNames...) {
 		return nil
 	}
-	return ErrInvalidCertDNSNames
+	return ErrInvalidCertDNSNames(secretName, secretNamespace)
 }
 
 // CreateTrustedBundle creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.

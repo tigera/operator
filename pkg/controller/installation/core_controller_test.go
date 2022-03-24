@@ -1022,10 +1022,15 @@ var _ = Describe("Testing core-controller installation", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
-			// Check that with non-AWS CNI no FelixConfiguration is created
+			// We should get a felix configuration with the health port defaulted (but nothing else).
 			fc := &crdv1.FelixConfiguration{}
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
-			Expect(err).Should(HaveOccurred())
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(fc.Spec.HealthPort).NotTo(BeNil())
+			Expect(*fc.Spec.HealthPort).To(Equal(9099))
+
+			// This is only set on EKS / GKE.
+			Expect(fc.Spec.RouteTableRange).To(BeNil())
 		})
 
 		It("should Reconcile with AWS CNI config", func() {

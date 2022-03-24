@@ -15,15 +15,25 @@
 package certificatemanager
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+)
+
+//
+//import (
+"context"
+"fmt"
+
+"github.com/tigera/operator/pkg/controller/options"
+"github.com/tigera/operator/pkg/controller/status"
+"k8s.io/apimachinery/pkg/runtime"
+"sigs.k8s.io/controller-runtime/pkg/client"
+"sigs.k8s.io/controller-runtime/pkg/manager"
+"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 // Add creates a new certificate manager Controller and adds it to the Manager.

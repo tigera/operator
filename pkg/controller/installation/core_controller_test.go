@@ -429,7 +429,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-kube-controllers")
 			Expect(controller).ToNot(BeNil())
 			Expect(controller.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
+				fmt.Sprintf("some.registry.org/%s:tesla-%s",
 					components.ComponentTigeraKubeControllers.Image,
 					components.ComponentTigeraKubeControllers.Version)))
 

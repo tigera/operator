@@ -11,38 +11,25 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package components
 
 import "fmt"
 
-// Default registries for Calico and Tigera.
-const (
-	CloudRegistry          = "gcr.io/tigera-tesla/"
-	ImageAssuranceRegistry = "gcr.io/unique-caldron-775/cnx/"
-)
-
-var ElasticExternal bool = false
-
 func cloudRegistry(c component, registry, version string) (string, string) {
-	// We want to deploy Image Assurance regardless of whether the setup is ElasticExternal or not.
-	switch c {
-	case ComponentImageAssuranceApi, ComponentImageAssuranceScanner, ComponentImageAssuranceDBMigrator, ComponentImageAssuranceCAW:
-		registry = ImageAssuranceRegistry
-	}
-
-	// If not external ES then use regular images
-	if !ElasticExternal {
-		return registry, version
-	}
 	if registry == "" || registry == UseDefault {
 		switch c {
 		case ComponentEsProxy, ComponentIntrusionDetectionController, ComponentTigeraKubeControllers:
 			registry = CloudRegistry
+		case ComponentImageAssuranceApi, ComponentImageAssuranceScanner, ComponentImageAssuranceDBMigrator, ComponentImageAssuranceCAW:
+			registry = ImageAssuranceRegistry
 		}
 	}
+
 	switch c {
 	case ComponentEsProxy, ComponentIntrusionDetectionController, ComponentTigeraKubeControllers:
 		version = fmt.Sprintf("tesla-%s", version)
 	}
+
 	return registry, version
 }

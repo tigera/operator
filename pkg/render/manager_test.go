@@ -92,7 +92,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		var voltron = deployment.Spec.Template.Spec.Containers[2]
 
 		Expect(manager.Image).Should(Equal(components.TigeraRegistry + "tigera/cnx-manager:" + components.ComponentManager.Version))
-		Expect(esProxy.Image).Should(Equal(components.TigeraRegistry + "tigera/es-proxy:" + components.ComponentEsProxy.Version))
+		Expect(esProxy.Image).Should(Equal(components.CloudRegistry + "tigera/es-proxy:tesla-" + components.ComponentEsProxy.Version))
 		Expect(voltron.Image).Should(Equal(components.TigeraRegistry + "tigera/voltron:" + components.ComponentManagerProxy.Version))
 
 		Expect(esProxy.Env).Should(ContainElements(

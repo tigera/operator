@@ -204,7 +204,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "controller")
 			Expect(controller).ToNot(BeNil())
 			Expect(controller.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
+				fmt.Sprintf("some.registry.org/%s:tesla-%s",
 					components.ComponentIntrusionDetectionController.Image,
 					components.ComponentIntrusionDetectionController.Version)))
 

@@ -93,19 +93,54 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 		}
 	}
 
-	// IP
-	if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "IP", "autodetect"); err != nil {
+	ip, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "IP")
+	if err != nil {
 		return err
 	}
 
-	// IP_AUTODETECTION_METHOD
-	if err := handleIPAutoDetectionMethod(c, install); err != nil {
-		return err
+	// IP can be 'autodetect', 'none', or not defined.
+	if ip == nil || *ip == "autodetect" {
+		if err := handleIPAutoDetectionMethod(c, install); err != nil {
+			return err
+		}
+	} else if ip != nil && *ip == "none" {
+		c.node.ignoreEnv(containerCalicoNode, "IP_AUTODETECTION_METHOD")
+	} else {
+		return ErrIncompatibleCluster{
+			err:       fmt.Sprintf("IP=%s is not supported", *ip),
+			component: ComponentCalicoNode,
+			fix:       fmt.Sprintf("remove the IP env var or set it to 'none' or 'autodetect', depending on your cluster configuration"),
+		}
 	}
 
-	// IP6_AUTODETECTION_METHOD
-	if err := handleIPv6AutoDetectionMethod(c, install); err != nil {
+	ip6, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "IP6")
+	if err != nil {
 		return err
+	}
+	// IP6 can be 'autodetect', 'none', or not defined.
+	if ip6 != nil {
+		if *ip6 == "none" {
+			if err := c.node.assertEnvIsSet(ctx, c.client, containerCalicoNode, "FELIX_IPV6SUPPORT", "false"); err != nil {
+				return err
+			}
+		} else if *ip6 == "autodetect" {
+			if err := handleIPv6AutoDetectionMethod(c, install); err != nil {
+				return err
+			}
+			if err := c.node.assertEnvIsSet(ctx, c.client, containerCalicoNode, "FELIX_IPV6SUPPORT", "true"); err != nil {
+				return err
+			}
+		} else {
+			return ErrIncompatibleCluster{
+				err:       fmt.Sprintf("IP6=%s is not supported", *ip),
+				component: ComponentCalicoNode,
+				fix:       fmt.Sprintf("remove the IP6 env var or set it to 'none' or 'autodetect', depending on your cluster configuration"),
+			}
+		}
+	} else {
+		if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "FELIX_IPV6SUPPORT", "false"); err != nil {
+			return err
+		}
 	}
 
 	// CNI portmap plugin
@@ -147,23 +182,6 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 			fix:       "disable 'AllowIPForwarding' in the CNI configuration",
 		}
 	}
-
-	return nil
-}
-
-// handleIPv6 is a migration handler which ensures that IPv6 is configured as expected.
-func handleIPv6(c *components, _ *operatorv1.Installation) error {
-	// For IPv6
-	// - need IPAM assign_ipv6 to be true
-	if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "FELIX_IPV6SUPPORT", "false"); err != nil {
-		return err
-	}
-
-	if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "IP6", "none"); err != nil {
-		return err
-	}
-
-	c.node.ignoreEnv(containerCalicoNode, "IP6_AUTODETECTION_METHOD")
 
 	return nil
 }

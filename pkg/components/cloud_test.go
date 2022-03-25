@@ -22,12 +22,6 @@ import (
 )
 
 var _ = Describe("test external ES GetReference", func() {
-	BeforeEach(func() {
-		ElasticExternal = true
-	})
-	AfterEach(func() {
-		ElasticExternal = false
-	})
 	Context("check esproxy", func() {
 		It("should render a es-proxy image correctly", func() {
 			Expect(GetReference(ComponentEsProxy, "", "", "", nil)).To(Equal("gcr.io/tigera-tesla/tigera/es-proxy:tesla-" + ComponentEsProxy.Version))

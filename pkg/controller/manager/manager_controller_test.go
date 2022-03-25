@@ -518,7 +518,7 @@ var _ = Describe("Manager controller tests", func() {
 			esproxy := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-es-proxy")
 			Expect(esproxy).ToNot(BeNil())
 			Expect(esproxy.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
+				fmt.Sprintf("some.registry.org/%s:tesla-%s",
 					components.ComponentEsProxy.Image,
 					components.ComponentEsProxy.Version)))
 			vltrn := test.GetContainer(d.Spec.Template.Spec.Containers, render.VoltronName)

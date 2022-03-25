@@ -104,11 +104,9 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 		LogStorageExists:             true,
 	}
 
-	// Multi-tenancy modifications.
-	if r.elasticExternal {
-		if result, proceed, err := r.esKubeControllersAddCloudModificationsToConfig(&kubeControllersCfg, reqLogger, ctx); err != nil || !proceed {
-			return result, proceed, err
-		}
+	// Add calico cloud modifications.
+	if result, proceed, err := r.esKubeControllersAddCloudModificationsToConfig(&kubeControllersCfg, reqLogger, ctx); err != nil || !proceed {
+		return result, proceed, err
 	}
 
 	esKubeControllerComponents := kubecontrollers.NewElasticsearchKubeControllers(&kubeControllersCfg)

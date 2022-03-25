@@ -67,13 +67,26 @@ func (r *ReconcileLogStorage) esKubeControllersAddCloudModificationsToConfig(
 	reqLogger logr.Logger,
 	ctx context.Context,
 ) (reconcile.Result, bool, error) {
-	cloudConfig, err := r.getCloudConfig(reqLogger, ctx)
-	if cloudConfig == nil || err != nil {
+	if r.elasticExternal {
+		cloudConfig, err := r.getCloudConfig(reqLogger, ctx)
+		if cloudConfig == nil || err != nil {
+			return reconcile.Result{}, false, err
+		}
+
+		if cloudConfig.TenantId() != "" {
+			c.TenantId = cloudConfig.TenantId()
+		}
+	}
+
+	imageAssurance, err := utils.GetImageAssurance(ctx, r.client)
+	if err != nil && !errors.IsNotFound(err) {
+		log.Error(err, "Error reading ImageAssurance")
+		r.status.SetDegraded("Error reading ImageAssurance", err.Error())
 		return reconcile.Result{}, false, err
 	}
 
-	if cloudConfig.TenantId() != "" {
-		c.TenantId = cloudConfig.TenantId()
+	c.CloudConfig = kubecontrollers.CloudConfig{
+		ImageAssurance: imageAssurance,
 	}
 
 	return reconcile.Result{}, true, nil

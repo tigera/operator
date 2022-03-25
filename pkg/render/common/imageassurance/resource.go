@@ -21,4 +21,5 @@ const (
 type Resources struct {
 	ConfigurationConfigMap *corev1.ConfigMap
 	TLSSecret              *corev1.Secret
+	ImageAssuranceToken    []byte
 }

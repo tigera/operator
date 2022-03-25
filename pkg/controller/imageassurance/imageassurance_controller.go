@@ -117,6 +117,11 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	if err = utils.AddJobWatch(c, imageassurance.ResourceNameImageAssuranceDBMigrator, imageassurance.NameSpaceImageAssurance); err != nil {
 		return fmt.Errorf("ImageAssurance-controller failed to watch Job %s: %v", imageassurance.ResourceNameImageAssuranceDBMigrator, err)
 	}
+
+	if err = utils.AddClusterRoleWatch(c, imageassurance.AdmissionControllerAPIClusterRoleName); err != nil {
+		return fmt.Errorf("ImageAssurance-controller failed to watch Cluster role %s: %v", imageassurance.ResourceNameImageAssuranceDBMigrator, err)
+	}
+
 	// Watch for changes to authentication
 	err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {

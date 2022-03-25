@@ -46,7 +46,9 @@ const (
 	ElasticsearchADJobUserSecret                 = "tigera-ee-ad-job-elasticsearch-access"
 	ElasticsearchPerformanceHotspotsUserSecret   = "tigera-ee-performance-hotspots-elasticsearch-access"
 
-	IntrusionDetectionInstallerJobName = "intrusion-detection-es-job-installer"
+	IntrusionDetectionInstallerJobName                           = "intrusion-detection-es-job-installer"
+	IntrusionDetectionControllerClusterRoleName                  = "intrusion-detection-controller"
+	IntrusionDetectionControllerImageAssuranceAPIClusterRoleName = "intrusion-detection-controller-images-assurance-api"
 )
 
 func IntrusionDetection(cfg *IntrusionDetectionConfiguration) Component {
@@ -317,7 +319,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "intrusion-detection-controller",
+			Name: IntrusionDetectionControllerClusterRoleName,
 		},
 		Rules: rules,
 	}

@@ -187,6 +187,22 @@ var _ = Describe("Cloud Intrusion Detection Controller tests", func() {
 				Data: map[string][]byte{"tls.key": []byte("tlskey"), "tls.crt": []byte("tlscrt")},
 			})).NotTo(HaveOccurred())
 
+			Expect(c.Create(ctx, &corev1.ServiceAccount{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tigera-image-assurance-intrusion-detection-controller-api-access",
+					Namespace: "tigera-operator",
+				},
+				Secrets: []corev1.ObjectReference{{Name: "sa-secret"}},
+			})).NotTo(HaveOccurred())
+
+			Expect(c.Create(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "sa-secret",
+					Namespace: "tigera-operator",
+				},
+				Data: map[string][]byte{"token": []byte("token")},
+			})).NotTo(HaveOccurred())
+
 			Expect(c.Create(ctx, &operatorv1.ImageAssurance{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: utils.DefaultTSEEInstanceKey.Name,

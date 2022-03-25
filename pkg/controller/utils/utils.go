@@ -20,9 +20,11 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -128,6 +130,14 @@ func AddJobWatch(c controller.Controller, name, namespace string) error {
 	return AddNamespacedWatch(c, job)
 }
 
+func AddClusterRoleWatch(c controller.Controller, name string) error {
+	clusterRole := &rbacv1.ClusterRole{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "V1"},
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+	}
+	return AddClusterResourceWatch(c, clusterRole)
+}
+
 func WaitToAddLicenseKeyWatch(controller controller.Controller, client kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
 	WaitToAddResourceWatch(controller, client, log, flag, &v3.LicenseKey{TypeMeta: metav1.TypeMeta{Kind: v3.KindLicenseKey}})
 }
@@ -158,6 +168,25 @@ func AddNamespacedWatch(c controller.Controller, obj client.Object, metaMatches 
 				return false
 			}
 			return e.Object.GetNamespace() == objMeta.GetNamespace()
+		},
+	}
+	return c.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{}, pred)
+}
+
+// AddClusterResourceWatch creates a watch on the given cluster scoped object. If a name is provided, then it will
+// use predicates to only return matching objects. If they are not, then all events of the provided kind
+// will be generated.
+func AddClusterResourceWatch(c controller.Controller, obj client.Object, metaMatches ...MetaMatch) error {
+	objMeta := obj.(metav1.ObjectMetaAccessor).GetObjectMeta()
+	pred := predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			return objMeta.GetName() != "" && e.Object.GetName() != objMeta.GetName()
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			return objMeta.GetName() != "" && e.ObjectNew.GetName() != objMeta.GetName()
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			return objMeta.GetName() != "" && e.Object.GetName() != objMeta.GetName()
 		},
 	}
 	return c.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{}, pred)

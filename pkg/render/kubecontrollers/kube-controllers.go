@@ -65,7 +65,6 @@ type KubeControllersConfiguration struct {
 	ManagementCluster           *operatorv1.ManagementCluster
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
 	Authentication              *operatorv1.Authentication
-
 	// Whether or not the LogStorage CRD is present in the cluster.
 	LogStorageExists bool
 
@@ -82,6 +81,8 @@ type KubeControllersConfiguration struct {
 	KibanaSecret                 *corev1.Secret
 
 	TenantId string
+
+	CloudConfig CloudConfig
 }
 
 func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
@@ -163,6 +164,8 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 	if cfg.ManagementCluster != nil {
 		enabledControllers = append(enabledControllers, "managedcluster")
 	}
+
+	enabledControllers = append(enabledControllers, cloudEnabledControllers(cfg)...)
 
 	return &kubeControllersComponent{
 		cfg:                                cfg,
@@ -441,7 +444,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 
 	defaultMode := int32(420)
 
-	container := corev1.Container{
+	container := c.cloudDecorateContainer(corev1.Container{
 		Name:      c.kubeControllerName,
 		Image:     c.image,
 		Env:       env,
@@ -473,7 +476,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 			TimeoutSeconds: 10,
 		},
 		VolumeMounts: kubeControllersVolumeMounts(c.cfg.ManagerInternalSecret),
-	}
+	})
 
 	if c.kubeControllerName == EsKubeController {
 		container = relasticsearch.ContainerDecorate(container, render.DefaultElasticsearchClusterName,

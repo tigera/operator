@@ -458,7 +458,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 	if c.cfg.ManagedCluster {
 		envVars := []corev1.EnvVar{
 			{Name: "DISABLE_ALERTS", Value: "yes"},
-			{Name: "DISABLE_ANOMALY_DETECTION", Value: "true"},
+			{Name: "DISABLE_ANOMALY_DETECTION", Value: "yes"},
 		}
 		container.Env = append(container.Env, envVars...)
 	}

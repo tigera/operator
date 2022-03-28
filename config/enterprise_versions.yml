@@ -128,5 +128,5 @@ components:
     image: tigera/envoy
     version: release-calient-v3.13
   dikastes:
-    image: tigera/app-policy
+    image: tigera/dikastes
     version: release-calient-v3.13

@@ -22,6 +22,7 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
+	v1 "k8s.io/api/core/v1"
 	kscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -66,5 +67,28 @@ var _ = Describe("convert bpf config", func() {
 		comps.client = fake.NewFakeClientWithScheme(scheme)
 		err := handleBPF(&comps, i)
 		Expect(err).To(HaveOccurred())
+	})
+
+	It("converts bpfenabled env var set to true", func() {
+		comps.client = fake.NewFakeClientWithScheme(scheme, f)
+		comps.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+			Name:  "FELIX_BPFENABLED",
+			Value: "true",
+		}}
+		err := handleBPF(&comps, i)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(*i.Spec.CalicoNetwork.LinuxDataplane).To(BeEquivalentTo(operatorv1.LinuxDataplaneBPF))
+		Expect(i.Spec.CalicoNetwork.HostPorts).To(BeNil())
+	})
+
+	It("converts bpfenabled env var set to false", func() {
+		comps.client = fake.NewFakeClientWithScheme(scheme, f)
+		comps.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+			Name:  "FELIX_BPFENABLED",
+			Value: "false",
+		}}
+		err := handleBPF(&comps, i)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(i.Spec.CalicoNetwork).To(BeNil())
 	})
 })

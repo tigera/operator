@@ -16,6 +16,7 @@ package convert
 
 import (
 	"fmt"
+	"strings"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
@@ -25,16 +26,23 @@ import (
 // handleBPF is a migration handler which ensures BPF configuration is carried forward.
 func handleBPF(c *components, install *operatorv1.Installation) error {
 	felixConfiguration := &crdv1.FelixConfiguration{}
+	bpf := operatorv1.LinuxDataplaneBPF
 	err := c.client.Get(ctx, types.NamespacedName{Name: "default"}, felixConfiguration)
 	if err != nil {
 		return fmt.Errorf("error reading felixconfiguration %w", err)
 	}
-	if felixConfiguration.Spec.BPFEnabled != nil && *felixConfiguration.Spec.BPFEnabled {
+
+	bpfEnabled, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_BPFENABLED")
+	if err != nil {
+		return fmt.Errorf("error reading FELIX_BPFENABLED env var %w", err)
+	}
+
+	if felixConfiguration.Spec.BPFEnabled != nil && *felixConfiguration.Spec.BPFEnabled ||
+		bpfEnabled != nil && strings.ToLower(*bpfEnabled) == "true" {
 		if install.Spec.CalicoNetwork == nil {
 			install.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{}
 		}
 
-		bpf := operatorv1.LinuxDataplaneBPF
 		install.Spec.CalicoNetwork.LinuxDataplane = &bpf
 		install.Spec.CalicoNetwork.HostPorts = nil
 	}

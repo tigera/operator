@@ -85,7 +85,10 @@ func (c *intrusionDetectionComponent) addCloudResources(objs []client.Object) []
 			},
 		})...)
 
-		objs = append(objs, configmap.ToRuntimeObjects(configmap.CopyToNamespace(IntrusionDetectionNamespace, c.cfg.CloudResources.ImageAssuranceResources.ConfigurationConfigMap)...)...)
+		objs = append(objs, configmap.ToRuntimeObjects(configmap.CopyToNamespace(IntrusionDetectionNamespace,
+			c.cfg.CloudResources.ImageAssuranceResources.ConfigurationConfigMap)...)...)
+
+		objs = append(objs, c.imageAssuranceAPIClusterRole())
 		objs = append(objs, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "image-assurance-api-token",

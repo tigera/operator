@@ -48,7 +48,7 @@ const (
 
 	IntrusionDetectionInstallerJobName                           = "intrusion-detection-es-job-installer"
 	IntrusionDetectionControllerClusterRoleName                  = "intrusion-detection-controller"
-	IntrusionDetectionControllerImageAssuranceAPIClusterRoleName = "intrusion-detection-controller-images-assurance-api"
+	IntrusionDetectionControllerImageAssuranceAPIClusterRoleName = "intrusion-detection-controller-image-assurance-api"
 )
 
 func IntrusionDetection(cfg *IntrusionDetectionConfiguration) Component {

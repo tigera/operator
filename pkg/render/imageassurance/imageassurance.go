@@ -221,6 +221,11 @@ func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
 		c.cawDeployment(),
 	)
 
+	// admission controller resources
+	objs = append(objs,
+		c.admissionControllerClusterRole(),
+	)
+
 	if c.config.KeyValidatorConfig != nil {
 		objs = append(objs, secret.ToRuntimeObjects(c.config.KeyValidatorConfig.RequiredSecrets(NameSpaceImageAssurance)...)...)
 		objs = append(objs, configmap.ToRuntimeObjects(c.config.KeyValidatorConfig.RequiredConfigMaps(NameSpaceImageAssurance)...)...)

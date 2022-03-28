@@ -4,6 +4,7 @@ package render
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -30,6 +31,14 @@ func (c *intrusionDetectionComponent) decorateIntrusionDetectionContainer(contai
 					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{Name: rcimageassurance.ConfigurationConfigMapName},
 						Key:                  rcimageassurance.ConfigurationConfigMapOrgIDKey,
+					},
+				}},
+			corev1.EnvVar{
+				Name: "IMAGE_ASSURANCE_API_TOKEN",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "image-assurance-api-token"},
+						Key:                  "token",
 					},
 				}},
 		)
@@ -77,7 +86,39 @@ func (c *intrusionDetectionComponent) addCloudResources(objs []client.Object) []
 		})...)
 
 		objs = append(objs, configmap.ToRuntimeObjects(configmap.CopyToNamespace(IntrusionDetectionNamespace, c.cfg.CloudResources.ImageAssuranceResources.ConfigurationConfigMap)...)...)
+		objs = append(objs, &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "image-assurance-api-token",
+				Namespace: IntrusionDetectionNamespace,
+			},
+			Data: map[string][]byte{
+				"token": c.cfg.CloudResources.ImageAssuranceResources.ImageAssuranceToken,
+			},
+		})
 	}
 
 	return objs
+}
+
+func (c *intrusionDetectionComponent) imageAssuranceAPIClusterRole() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: IntrusionDetectionControllerImageAssuranceAPIClusterRoleName,
+		},
+		Rules: []rbacv1.PolicyRule{{
+			APIGroups: []string{
+				"imageassurance.tigera.io",
+			},
+			Resources: []string{
+				"organizations",
+			},
+			Verbs: []string{
+				"get",
+			},
+			ResourceNames: []string{
+				c.cfg.CloudResources.ImageAssuranceResources.ConfigurationConfigMap.Data[rcimageassurance.ConfigurationConfigMapOrgIDKey],
+			},
+		}},
+	}
 }

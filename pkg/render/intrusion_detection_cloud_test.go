@@ -89,6 +89,7 @@ var _ = Describe("Tigera Secure Cloud Intrusion Detection Controller rendering t
 			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-image-assurance-api-cert", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-image-assurance-config", ns: "tigera-intrusion-detection", group: "", version: "", kind: ""},
+			{name: "image-assurance-api-token", ns: "tigera-intrusion-detection", group: "", version: "", kind: ""},
 		}
 
 		Expect(len(resources)).To(Equal(len(expectedResources)))

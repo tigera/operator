@@ -183,6 +183,7 @@ var _ = Describe("Image Assurance Render", func() {
 			{name: imageassurance.ResourceNameImageAssuranceCAW, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "Role"},
 			{name: imageassurance.ResourceNameImageAssuranceCAW, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "RoleBinding"},
 			{name: imageassurance.ResourceNameImageAssuranceCAW, ns: imageassurance.NameSpaceImageAssurance, group: "apps", version: "v1", kind: "Deployment"},
+			{name: imageassurance.AdmissionControllerAPIClusterRoleName, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
 		}
 		if enableOIDC {
 			var oidc = []expectedResource{

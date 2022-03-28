@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -104,21 +104,22 @@ func Manager(cfg *ManagerConfiguration) (Component, error) {
 
 // ManagerConfiguration contains all the config information needed to render the component.
 type ManagerConfiguration struct {
-	KeyValidatorConfig    authentication.KeyValidatorConfig
-	ESSecrets             []*corev1.Secret
-	KibanaSecrets         []*corev1.Secret
-	TrustedCertBundle     certificatemanagement.TrustedBundle
-	ESClusterConfig       *relasticsearch.ClusterConfig
-	TLSKeyPair            certificatemanagement.KeyPairInterface
-	PullSecrets           []*corev1.Secret
-	Openshift             bool
-	Installation          *operatorv1.InstallationSpec
-	ManagementCluster     *operatorv1.ManagementCluster
-	TunnelSecret          certificatemanagement.KeyPairInterface
-	InternalTrafficSecret certificatemanagement.KeyPairInterface
-	ClusterDomain         string
-	ESLicenseType         ElasticsearchLicenseType
-	Replicas              *int32
+	KeyValidatorConfig      authentication.KeyValidatorConfig
+	ESSecrets               []*corev1.Secret
+	KibanaSecrets           []*corev1.Secret
+	TrustedCertBundle       certificatemanagement.TrustedBundle
+	ESClusterConfig         *relasticsearch.ClusterConfig
+	TLSKeyPair              certificatemanagement.KeyPairInterface
+	PullSecrets             []*corev1.Secret
+	Openshift               bool
+	Installation            *operatorv1.InstallationSpec
+	ManagementCluster       *operatorv1.ManagementCluster
+	TunnelSecret            certificatemanagement.KeyPairInterface
+	InternalTrafficSecret   certificatemanagement.KeyPairInterface
+	ClusterDomain           string
+	ESLicenseType           ElasticsearchLicenseType
+	Replicas                *int32
+	ComplianceFeatureActive bool
 }
 
 type managerComponent struct {
@@ -427,14 +428,11 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
 		{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
 		{Name: "VOLTRON_DEFAULT_FORWARD_SERVER", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc:9200"},
+		{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: fmt.Sprintf("%v", c.cfg.ComplianceFeatureActive)},
 	}
 
 	if c.cfg.KeyValidatorConfig != nil {
 		env = append(env, c.cfg.KeyValidatorConfig.RequiredEnv("VOLTRON_")...)
-	}
-
-	if _, ok := c.cfg.TrustedCertBundle.HashAnnotations()[complianceServerTLSHashAnnotation]; !ok {
-		env = append(env, corev1.EnvVar{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: "false"})
 	}
 
 	return corev1.Container{

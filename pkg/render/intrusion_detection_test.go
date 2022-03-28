@@ -236,6 +236,8 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			secretName string
 			secretKey  string
 		}{
+			{"CLUSTER_NAME", cfg.ESClusterConfig.ClusterName(), "", ""},
+			{"MULTI_CLUSTER_FORWARDING_CA", cfg.TrustedCertBundle.MountPath(), "", ""},
 			{"IDS_ENABLE_EVENT_FORWARDING", "true", "", ""},
 		}
 		for _, expected := range expectedEnvs {
@@ -319,7 +321,12 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		}
 
 		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(idc.Spec.Template.Spec.Containers[0].Env).To(ContainElements(corev1.EnvVar{Name: "DISABLE_ALERTS", Value: "yes"}, corev1.EnvVar{Name: "DISABLE_ANOMALY_DETECTION", Value: "yes"}))
+		Expect(idc.Spec.Template.Spec.Containers[0].Env).To(ContainElements(
+			corev1.EnvVar{Name: "CLUSTER_NAME", Value: cfg.ESClusterConfig.ClusterName()},
+			corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: cfg.TrustedCertBundle.MountPath()},
+			corev1.EnvVar{Name: "DISABLE_ALERTS", Value: "yes"},
+			corev1.EnvVar{Name: "DISABLE_ANOMALY_DETECTION", Value: "yes"},
+		))
 
 		clusterRole := rtest.GetResource(resources, "intrusion-detection-controller", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(clusterRole.Rules).NotTo(ConsistOf([]rbacv1.PolicyRule{

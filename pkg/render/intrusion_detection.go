@@ -496,7 +496,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 		},
 		{
 			Name:  "MULTI_CLUSTER_FORWARDING_CA",
-			Value: c.cfg.ESClusterConfig.ClusterName(),
+			Value: c.cfg.TrustedCertBundle.MountPath(),
 		},
 	}
 

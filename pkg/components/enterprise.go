@@ -162,7 +162,7 @@ var (
 
 	ComponentDikastes = component{
 		Version: "master",
-		Image:   "tigera/app-policy",
+		Image:   "tigera/dikastes",
 	}
 
 	ComponentCoreOSPrometheus = component{

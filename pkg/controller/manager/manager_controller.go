@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -443,21 +443,22 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	managerCfg := &render.ManagerConfiguration{
-		KeyValidatorConfig:    keyValidatorConfig,
-		ESSecrets:             esSecrets,
-		KibanaSecrets:         []*corev1.Secret{kibanaPublicCertSecret},
-		TrustedCertBundle:     trustedBundle,
-		ESClusterConfig:       esClusterConfig,
-		TLSKeyPair:            tlsSecret,
-		PullSecrets:           pullSecrets,
-		Openshift:             r.provider == operatorv1.ProviderOpenShift,
-		Installation:          installation,
-		ManagementCluster:     managementCluster,
-		TunnelSecret:          tunnelSecret,
-		InternalTrafficSecret: internalTrafficSecret,
-		ClusterDomain:         r.clusterDomain,
-		ESLicenseType:         elasticLicenseType,
-		Replicas:              replicas,
+		KeyValidatorConfig:      keyValidatorConfig,
+		ESSecrets:               esSecrets,
+		KibanaSecrets:           []*corev1.Secret{kibanaPublicCertSecret},
+		TrustedCertBundle:       trustedBundle,
+		ESClusterConfig:         esClusterConfig,
+		TLSKeyPair:              tlsSecret,
+		PullSecrets:             pullSecrets,
+		Openshift:               r.provider == operatorv1.ProviderOpenShift,
+		Installation:            installation,
+		ManagementCluster:       managementCluster,
+		TunnelSecret:            tunnelSecret,
+		InternalTrafficSecret:   internalTrafficSecret,
+		ClusterDomain:           r.clusterDomain,
+		ESLicenseType:           elasticLicenseType,
+		Replicas:                replicas,
+		ComplianceFeatureActive: installCompliance,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

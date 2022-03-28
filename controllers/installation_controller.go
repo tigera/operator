@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"github.com/go-logr/logr"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -43,12 +44,9 @@ type InstallationReconciler struct {
 //}
 
 func (r *InstallationReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
-	return installation.Add(mgr, opts)
-	//if err != nil {
-	//	return err
-	//}
+	if err := certificatemanager.Add(mgr, opts); err != nil {
+		return err
+	}
 
-	//return ctrl.NewControllerManagedBy(mgr).
-	//	For(&operatorv1.Installation{}).
-	//	Complete(r)
+	return installation.Add(mgr, opts)
 }

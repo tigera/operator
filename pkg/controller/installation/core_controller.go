@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -954,7 +954,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	var managerInternalTLSSecret certificatemanagement.KeyPairInterface
 	if instance.Spec.Variant == operator.TigeraSecureEnterprise && managementCluster != nil {
 		dnsNames := append(dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain), render.ManagerServiceIP)
-		managerInternalTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, render.ManagerInternalTLSSecretName, common.CalicoNamespace, dnsNames)
+		managerInternalTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), dnsNames)
 		if err != nil {
 			r.status.SetDegraded(fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err.Error())
 			return reconcile.Result{}, err
@@ -1200,8 +1200,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			Namespace:       common.CalicoNamespace,
 			ServiceAccounts: []string{render.CalicoNodeObjectName, render.TyphaServiceAccountName},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-				// this controller is responsible for rendering the tigera-ca-private secret.
-				rcertificatemanagement.NewKeyPairOption(certificateManager.KeyPair(), true, false),
 				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(nodePrometheusTLS, true, true),
 				rcertificatemanagement.NewKeyPairOption(managerInternalTLSSecret, true, true),

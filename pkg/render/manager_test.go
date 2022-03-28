@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -57,7 +57,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	expectedDNSNames = append(expectedDNSNames, "localhost")
 
 	It("should render all resources for a default configuration", func() {
-		resources := renderObjects(renderConfig{oidc: false, managementCluster: nil, installation: installation})
+		resources := renderObjects(renderConfig{oidc: false, managementCluster: nil, installation: installation, complianceFeatureActive: true})
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -109,6 +109,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(voltron.VolumeMounts[2].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 		Expect(voltron.VolumeMounts[2].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
 
+		Expect(voltron.Env).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: "true"}))
+
 		Expect(len(deployment.Spec.Template.Spec.Volumes)).To(Equal(4))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ManagerTLSSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ManagerTLSSecretName))
@@ -118,6 +120,12 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal(relasticsearch.PublicCertSecret))
 		Expect(deployment.Spec.Template.Spec.Volumes[3].Name).To(Equal("elastic-ca-cert-volume"))
 		Expect(deployment.Spec.Template.Spec.Volumes[3].Secret.SecretName).To(Equal(relasticsearch.PublicCertSecret))
+	})
+
+	It("should not proxy compliance if the feature is not active", func() {
+		resources := renderObjects(renderConfig{oidc: false, managementCluster: nil, installation: installation, complianceFeatureActive: false})
+		voltron := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment).Spec.Template.Spec.Containers[2]
+		Expect(voltron.Env).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: "false"}))
 	})
 
 	It("should ensure cnx policy recommendation support is always set to true", func() {
@@ -538,9 +546,10 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 })
 
 type renderConfig struct {
-	oidc              bool
-	managementCluster *operatorv1.ManagementCluster
-	installation      *operatorv1.InstallationSpec
+	oidc                    bool
+	managementCluster       *operatorv1.ManagementCluster
+	installation            *operatorv1.InstallationSpec
+	complianceFeatureActive bool
 }
 
 func renderObjects(roc renderConfig) []client.Object {
@@ -574,17 +583,18 @@ func renderObjects(roc renderConfig) []client.Object {
 
 	esConfigMap := relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 	cfg := &render.ManagerConfiguration{
-		KeyValidatorConfig:    dexCfg,
-		TrustedCertBundle:     bundle,
-		ESClusterConfig:       esConfigMap,
-		TLSKeyPair:            managerTLS,
-		Installation:          roc.installation,
-		ManagementCluster:     roc.managementCluster,
-		TunnelSecret:          tunnelSecret,
-		InternalTrafficSecret: internalTraffic,
-		ClusterDomain:         dns.DefaultClusterDomain,
-		ESLicenseType:         render.ElasticsearchLicenseTypeEnterpriseTrial,
-		Replicas:              roc.installation.ControlPlaneReplicas,
+		KeyValidatorConfig:      dexCfg,
+		TrustedCertBundle:       bundle,
+		ESClusterConfig:         esConfigMap,
+		TLSKeyPair:              managerTLS,
+		Installation:            roc.installation,
+		ManagementCluster:       roc.managementCluster,
+		TunnelSecret:            tunnelSecret,
+		InternalTrafficSecret:   internalTraffic,
+		ClusterDomain:           dns.DefaultClusterDomain,
+		ESLicenseType:           render.ElasticsearchLicenseTypeEnterpriseTrial,
+		Replicas:                roc.installation.ControlPlaneReplicas,
+		ComplianceFeatureActive: roc.complianceFeatureActive,
 	}
 	component, err := render.Manager(cfg)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)

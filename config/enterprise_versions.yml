@@ -135,3 +135,6 @@ components:
   image-assurance-caw:
     image: tigera/image-assurance-caw
     version: master
+  sasha:
+    image: tigera/sasha
+    version: master

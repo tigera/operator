@@ -232,6 +232,11 @@ var (
 		Image:   "tigera/image-assurance-caw",
 	}
 
+	ComponentSasha = component{
+		Version: "master",
+		Image:   "tigera/sasha",
+	}
+
 	ComponentTigeraWindows = component{
 		Version: "v3.12.0",
 		Image:   "tigera/calico-windows-upgrade",
@@ -281,5 +286,6 @@ var (
 		ComponentImageAssuranceDBMigrator,
 		ComponentImageAssuranceCAW,
 		ComponentTigeraWindows,
+		ComponentSasha,
 	}
 )

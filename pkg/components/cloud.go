@@ -23,6 +23,8 @@ func cloudRegistry(c component, registry, version string) (string, string) {
 			registry = CloudRegistry
 		case ComponentImageAssuranceApi, ComponentImageAssuranceScanner, ComponentImageAssuranceDBMigrator, ComponentImageAssuranceCAW:
 			registry = ImageAssuranceRegistry
+		case ComponentSasha:
+			registry = RuntimeSecurityRegistry
 		}
 	}
 

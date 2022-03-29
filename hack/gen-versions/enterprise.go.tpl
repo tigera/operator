@@ -274,6 +274,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "sasha" }}
+	ComponentSasha = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "windows" }}
 	ComponentTigeraWindows = component{
 		Version: "{{ .Version }}",
@@ -325,5 +331,6 @@ var (
 		ComponentImageAssuranceDBMigrator,
 		ComponentImageAssuranceCAW,
 		ComponentTigeraWindows,
+		ComponentSasha,
 	}
 )

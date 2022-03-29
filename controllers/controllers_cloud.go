@@ -16,6 +16,12 @@ func addCloudControllersToManager(mgr ctrl.Manager, options options.AddOptions) 
 	}).SetupWithManager(mgr, options); err != nil {
 		return fmt.Errorf("failed to create controller %s: %v", "ImageAssurance", err)
 	}
-
+	if err := (&RuntimeSecurityReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("RuntimeSecurity"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr, options); err != nil {
+		return fmt.Errorf("failed to create controller %s: %v", "RuntimeSecurity", err)
+	}
 	return nil
 }

@@ -23,7 +23,7 @@ import (
 const (
 	NameSpaceRuntimeSecurity            = "tigera-runtime-security"
 	ElasticsearchSashaJobUserSecretName = "tigera-ee-sasha-elasticsearch-access"
-	ResourceNameSashaJob                = "tigera-ee-sasha-job"
+	ResourceNameSashaJob                = "tigera-ee-sasha"
 )
 
 func RuntimeSecurity(

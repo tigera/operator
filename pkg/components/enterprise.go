@@ -162,7 +162,7 @@ var (
 
 	ComponentDikastes = component{
 		Version: "release-calient-v3.13",
-		Image:   "tigera/app-policy",
+		Image:   "tigera/dikastes",
 	}
 
 	ComponentCoreOSPrometheus = component{

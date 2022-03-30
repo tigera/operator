@@ -64,10 +64,11 @@ var _ = Describe("Typha rendering tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		typhaNodeTLS = getTyphaNodeTLS(cli, certificateManager)
 		cfg = render.TyphaConfiguration{
-			K8sServiceEp:  k8sServiceEp,
-			TLS:           typhaNodeTLS,
-			Installation:  installation,
-			ClusterDomain: defaultClusterDomain,
+			K8sServiceEp:    k8sServiceEp,
+			TLS:             typhaNodeTLS,
+			Installation:    installation,
+			ClusterDomain:   defaultClusterDomain,
+			FelixHealthPort: 9099,
 		}
 	})
 

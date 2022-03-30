@@ -59,6 +59,10 @@ type TyphaConfiguration struct {
 	AmazonCloudIntegration *operatorv1.AmazonCloudIntegration
 	MigrateNamespaces      bool
 	ClusterDomain          string
+
+	// The health port that Felix is bound to. We configure Typha to bind to the port
+	// that is one less.
+	FelixHealthPort int
 }
 
 // Typha creates the typha daemonset and other resources for the daemonset to operate normally.
@@ -521,7 +525,9 @@ func (c *typhaComponent) typhaEnvVars() []corev1.EnvVar {
 // livenessReadinessProbes creates the typha's liveness and readiness probes.
 func (c *typhaComponent) livenessReadinessProbes() (*corev1.Probe, *corev1.Probe) {
 	// Determine liveness and readiness configuration for typha.
-	port := intstr.FromInt(9098)
+	// We use the felix health port, minus one, to determine the port to use for Typha.
+	// This isn't ideal, but allows for some control of the typha port.
+	port := intstr.FromInt(c.cfg.FelixHealthPort - 1)
 	lp := &corev1.Probe{
 		Handler: corev1.Handler{
 			HTTPGet: &corev1.HTTPGetAction{

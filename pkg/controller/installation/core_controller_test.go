@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -679,6 +679,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 		var internalManagerTLSSecret *corev1.Secret
 		var expectedDNSNames []string
+		var certificateManager certificatemanager.CertificateManager
 
 		BeforeEach(func() {
 			// The schema contains all objects that should be known to the fake client when the test runs.
@@ -792,7 +793,8 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			expectedDNSNames = dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
 			expectedDNSNames = append(expectedDNSNames, "localhost")
-			certificateManager, err := certificatemanager.Create(c, nil, "")
+			var err error
+			certificateManager, err = certificatemanager.Create(c, nil, "")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
 			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{render.PrometheusTLSSecretName})
@@ -816,12 +818,9 @@ var _ = Describe("Testing core-controller installation", func() {
 
 		It("should replace the internal manager TLS cert secret if its DNS names are invalid", func() {
 			// Create a internal manager TLS secret with old DNS name.
-			oldSecret, err := secret.CreateTLSSecret(nil,
-				render.ManagerInternalTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey,
-				rmeta.DefaultCertificateDuration, nil, "tigera-manager.tigera-manager.svc",
-			)
+			oldKp, err := certificateManager.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{"tigera-manager.tigera-manager.svc"})
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(c.Create(ctx, oldSecret)).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, oldKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())

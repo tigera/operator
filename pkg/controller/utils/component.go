@@ -114,7 +114,7 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 		ensureOSSchedulingRestrictions(obj, osType)
 
 		// Make sure any objects with images also have an image pull policy.
-		setImagePullPolicy(obj)
+		modifyPodSpec(obj, setImagePullPolicy)
 
 		// Keep track of some objects so we can report on their status.
 		switch obj.(type) {
@@ -338,43 +338,37 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 	}
 }
 
-// getPodSpecsFromObject is a helper for pulling out pod specifications from an arbitrary object.
-func getPodSpecsFromObject(obj client.Object) []*v1.PodSpec {
+// modifyPodSpec is a helper for pulling out pod specifications from an arbitrary object.
+func modifyPodSpec(obj client.Object, f func(*v1.PodSpec)) {
 	switch obj.(type) {
 	case *v1.PodTemplate:
-		return []*v1.PodSpec{&obj.(*v1.PodTemplate).Template.Spec}
+		f(&obj.(*v1.PodTemplate).Template.Spec)
 	case *apps.Deployment:
-		return []*v1.PodSpec{&obj.(*apps.Deployment).Spec.Template.Spec}
+		f(&obj.(*apps.Deployment).Spec.Template.Spec)
 	case *apps.DaemonSet:
-		return []*v1.PodSpec{&obj.(*apps.DaemonSet).Spec.Template.Spec}
+		f(&obj.(*apps.DaemonSet).Spec.Template.Spec)
 	case *apps.StatefulSet:
-		return []*v1.PodSpec{&obj.(*apps.StatefulSet).Spec.Template.Spec}
+		f(&obj.(*apps.StatefulSet).Spec.Template.Spec)
 	case *batchv1beta.CronJob:
-		return []*v1.PodSpec{&obj.(*batchv1beta.CronJob).Spec.JobTemplate.Spec.Template.Spec}
+		f(&obj.(*batchv1beta.CronJob).Spec.JobTemplate.Spec.Template.Spec)
 	case *batchv1.Job:
-		return []*v1.PodSpec{&obj.(*batchv1.Job).Spec.Template.Spec}
+		f(&obj.(*batchv1.Job).Spec.Template.Spec)
 	case *kbv1.Kibana:
-		return []*v1.PodSpec{&obj.(*kbv1.Kibana).Spec.PodTemplate.Spec}
+		f(&obj.(*kbv1.Kibana).Spec.PodTemplate.Spec)
 	case *esv1.Elasticsearch:
 		// elasticsearch resource describes multiple nodeSets which each have a pod spec.
-		var podSpecs []*v1.PodSpec
 		nodeSets := obj.(*esv1.Elasticsearch).Spec.NodeSets
 		for i := range nodeSets {
-			podSpecs = append(podSpecs, &nodeSets[i].PodTemplate.Spec)
+			f(&nodeSets[i].PodTemplate.Spec)
 		}
-		return podSpecs
-	default:
-		return nil
 	}
 }
 
 // setImagePullPolicy ensures that an image pull policy is set if not set already.
-func setImagePullPolicy(obj client.Object) {
-	for _, podSpec := range getPodSpecsFromObject(obj) {
-		for _, c := range podSpec.Containers {
-			if len(c.ImagePullPolicy) == 0 {
-				c.ImagePullPolicy = v1.PullIfNotPresent
-			}
+func setImagePullPolicy(podSpec *v1.PodSpec) {
+	for i := range podSpec.Containers {
+		if len(podSpec.Containers[i].ImagePullPolicy) == 0 {
+			podSpec.Containers[i].ImagePullPolicy = v1.PullIfNotPresent
 		}
 	}
 }
@@ -403,12 +397,14 @@ func ensureOSSchedulingRestrictions(obj client.Object, osType rmeta.OSType) {
 		return
 	}
 
-	for _, podSpec := range getPodSpecsFromObject(obj) {
+	// Handle objects that do use a v1.PodSpec.
+	f := func(podSpec *v1.PodSpec) {
 		if podSpec.NodeSelector == nil {
 			podSpec.NodeSelector = make(map[string]string)
 		}
 		podSpec.NodeSelector["kubernetes.io/os"] = string(osType)
 	}
+	modifyPodSpec(obj, f)
 }
 
 // mergeMaps merges current and desired maps. If both current and desired maps contain the same key, the

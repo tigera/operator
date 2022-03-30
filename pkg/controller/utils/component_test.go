@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package utils_test
+package utils
 
 import (
 	"context"
@@ -41,7 +41,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
@@ -57,19 +56,20 @@ const (
 	fakeComponentLabelValue      = "labelvalue"
 )
 
-var log = logf.Log.WithName("test_utils_logger")
-
 var _ = Describe("Component handler tests", func() {
+
 	var (
 		c        client.Client
 		instance *operatorv1.Manager
 		ctx      context.Context
 		scheme   *runtime.Scheme
 		sm       status.StatusManager
-		handler  utils.ComponentHandler
+		handler  ComponentHandler
 	)
 
 	BeforeEach(func() {
+		log := logf.Log.WithName("test_utils_logger")
+
 		// Create a Kubernetes client.
 		scheme = runtime.NewScheme()
 		err := apis.AddToScheme(scheme)
@@ -89,7 +89,7 @@ var _ = Describe("Component handler tests", func() {
 			TypeMeta:   metav1.TypeMeta{Kind: "Manager", APIVersion: "operator.tigera.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 		}
-		handler = utils.NewComponentHandler(log, c, scheme, instance)
+		handler = NewComponentHandler(log, c, scheme, instance)
 	})
 
 	It("merges annotations and reconciles only operator added annotations", func() {
@@ -387,6 +387,63 @@ var _ = Describe("Component handler tests", func() {
 		c.Get(ctx, nsKey, ns)
 		Expect(ns.GetLabels()).To(Equal(expectedLabels))
 	})
+
+	DescribeTable("ensuring ImagePullPolicy is set", func(obj client.Object) {
+		modifyPodSpec(obj, setImagePullPolicy)
+
+		switch o := obj.(type) {
+		case *apps.Deployment:
+			for _, c := range o.Spec.Template.Spec.Containers {
+				Expect(c.ImagePullPolicy).To(Equal(v1.PullIfNotPresent))
+			}
+		case *apps.DaemonSet:
+			for _, c := range o.Spec.Template.Spec.Containers {
+				Expect(c.ImagePullPolicy).To(Equal(v1.PullIfNotPresent))
+			}
+		default:
+			Expect(true).To(Equal(false), "Unexpected kind in test")
+		}
+
+	},
+		TableEntry{
+			Description: "set ImagePullPolicy on a DaemonSet",
+			Parameters: []interface{}{
+				&apps.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
+					Spec: apps.DaemonSetSpec{
+						Template: v1.PodTemplateSpec{
+							Spec: v1.PodSpec{
+								NodeSelector: map[string]string{},
+								Containers: []v1.Container{
+									{Image: "foo"},
+									{Image: "bar"},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		TableEntry{
+			Description: "set ImagePullPolicy on a Deployment",
+			Parameters: []interface{}{
+				&apps.Deployment{
+					ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
+					Spec: apps.DeploymentSpec{
+						Template: v1.PodTemplateSpec{
+							Spec: v1.PodSpec{
+								NodeSelector: map[string]string{},
+								Containers: []v1.Container{
+									{Image: "foo"},
+									{Image: "bar"},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	)
 
 	DescribeTable("ensuring os node selectors", func(component render.Component, key client.ObjectKey, obj client.Object, expectedNodeSelectors map[string]string) {
 		Expect(handler.CreateOrUpdateOrDelete(ctx, component, sm)).ShouldNot(HaveOccurred())

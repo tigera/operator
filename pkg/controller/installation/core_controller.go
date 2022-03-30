@@ -1156,6 +1156,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		AmazonCloudIntegration: aci,
 		MigrateNamespaces:      needNsMigration,
 		ClusterDomain:          r.clusterDomain,
+		FelixHealthPort:        *felixConfiguration.Spec.HealthPort,
 	}
 	components = append(components, render.Typha(&typhaCfg))
 

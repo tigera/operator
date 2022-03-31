@@ -471,6 +471,14 @@ spec:
                   "true" or "false" will force the feature, empty or omitted values
                   are auto-detected.
                 type: string
+              floatingIPs:
+                default: Disabled
+                description: FloatingIPs configures whether or not Felix will program
+                  floating IP addresses.
+                enum:
+                - Enabled
+                - Disabled
+                type: string
               flowLogsAggregationThresholdBytes:
                 description: FlowLogsAggregationThresholdBytes is used specify how
                   far behind the external pipeline that reads flow logs can be. Default

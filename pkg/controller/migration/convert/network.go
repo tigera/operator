@@ -130,6 +130,10 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 			if err := c.node.assertEnvIsSet(ctx, c.client, containerCalicoNode, "FELIX_IPV6SUPPORT", "true"); err != nil {
 				return err
 			}
+			if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "CALICO_ROUTER_ID", "hash"); err != nil {
+				return err
+			}
+
 		} else {
 			return ErrIncompatibleCluster{
 				err:       fmt.Sprintf("IP6=%s is not supported", *ip),
@@ -139,6 +143,14 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 		}
 	} else {
 		if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "FELIX_IPV6SUPPORT", "false"); err != nil {
+			return err
+		}
+	}
+
+	// If IPv6 only, check that CALICO_ROUTER_ID, if defined, is set to `hash` since node
+	// will be rendered with CALICO_ROUTER_ID="hash".
+	if install.Spec.CalicoNetwork.NodeAddressAutodetectionV6 != nil && install.Spec.CalicoNetwork.NodeAddressAutodetectionV4 == nil {
+		if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "CALICO_ROUTER_ID", "hash"); err != nil {
 			return err
 		}
 	}

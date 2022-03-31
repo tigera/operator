@@ -403,6 +403,8 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			r.status.SetDegraded(fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.ManagerInternalTLSSecretName, common.OperatorNamespace()), err.Error())
 			return reconcile.Result{}, nil
 		}
+		// Es-proxy needs to trust Voltron for cross-cluster requests.
+		trustedBundle.AddCertificates(internalTrafficSecret)
 	}
 
 	// Fetch the Authentication spec. If present, we use to configure user authentication.

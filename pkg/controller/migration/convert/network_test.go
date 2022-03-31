@@ -593,11 +593,32 @@ var _ = Describe("Convert network tests", func() {
 			Expect(cfg).ToNot(BeNil())
 		}
 	},
-		Entry("should not error if IP6=none", []corev1.EnvVar{{Name: "IP6", Value: "none"}, {Name: "FELIX_IPV6SUPPORT", Value: "false"}}, false),
-		Entry("should error if IP6=none but FELIX_IPV6SUPPORT=true", []corev1.EnvVar{{Name: "IP6", Value: "none"}, {Name: "FELIX_IPV6SUPPORT", Value: "true"}}, true),
+		Entry("should not error if IP6=none", []corev1.EnvVar{
+			{Name: "IP6", Value: "none"},
+			{Name: "FELIX_IPV6SUPPORT", Value: "false"}}, false),
+		Entry("should error if IP6=none but FELIX_IPV6SUPPORT=true", []corev1.EnvVar{
+			{Name: "IP6", Value: "none"},
+			{Name: "FELIX_IPV6SUPPORT", Value: "true"}}, true),
 		Entry("should error if IP6=none but FELIX_IPV6SUPPORT is undefined", []corev1.EnvVar{{Name: "IP6", Value: "none"}}, true),
 		Entry("should not error if FELIX_IPV6SUPPORT is false", []corev1.EnvVar{{Name: "FELIX_IPV6SUPPORT", Value: "false"}}, false),
 		Entry("should error if FELIX_IPV6SUPPORT is true", []corev1.EnvVar{{Name: "FELIX_IPV6SUPPORT", Value: "true"}}, true),
+		Entry("should allow IPv6 only",
+			[]corev1.EnvVar{
+				{Name: "IP", Value: "none"},
+				{Name: "IP6", Value: "autodetect"},
+				{Name: "FELIX_IPV6SUPPORT", Value: "true"}}, false),
+		Entry("should error if IPv6 only and CALICO_ROUTER_ID is not `hash`",
+			[]corev1.EnvVar{
+				{Name: "IP", Value: "none"},
+				{Name: "IP6", Value: "autodetect"},
+				{Name: "FELIX_IPV6SUPPORT", Value: "true"},
+				{Name: "CALICO_ROUTER_ID", Value: "not hash"}}, true),
+		Entry("should allow dual-stack",
+			[]corev1.EnvVar{
+				{Name: "IP", Value: "autodetect"},
+				{Name: "IP6", Value: "autodetect"},
+				{Name: "FELIX_IPV6SUPPORT", Value: "true"}}, false),
+		Entry("should error if IPv6 only and CALICO_ROUTER_ID is undefined", []corev1.EnvVar{{Name: "FELIX_IPV6SUPPORT", Value: "true"}}, true),
 	)
 
 	Describe("handle IP_AUTODETECTION_METHOD env", func() {

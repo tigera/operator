@@ -88,6 +88,7 @@ func allCalicoComponents(
 		LogCollector:            logCollector,
 		BirdTemplates:           bt,
 		MigrateNamespaces:       up,
+		FelixHealthPort:         9099,
 	}
 	typhaCfg := &render.TyphaConfiguration{
 		K8sServiceEp:           k8sServiceEp,
@@ -96,6 +97,7 @@ func allCalicoComponents(
 		ClusterDomain:          clusterDomain,
 		AmazonCloudIntegration: aci,
 		MigrateNamespaces:      up,
+		FelixHealthPort:        9099,
 	}
 	kcCfg := &kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:                k8sServiceEp,

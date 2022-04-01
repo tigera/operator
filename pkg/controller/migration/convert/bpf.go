@@ -36,7 +36,7 @@ func copyK8sServicesEPConfigMap(c *components) error {
 		Namespace: "kube-system",
 	}
 	if err := c.client.Get(ctx, cmNamespacedName, cm); err != nil {
-		return fmt.Errorf("Failed read to ConfigMap %q: %s", cmName, err)
+		return fmt.Errorf("failed read to configMap %q: %s", cmName, err)
 	}
 	host := cm.Data["KUBERNETES_SERVICE_HOST"]
 	port := cm.Data["KUBERNETES_SERVICE_PORT"]

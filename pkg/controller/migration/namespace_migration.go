@@ -251,10 +251,9 @@ func (m *CoreNamespaceMigration) Run(ctx context.Context, log logr.Logger) error
 		return fmt.Errorf("failed to delete kube-system typha Deployment: %s", err.Error())
 	}
 	log.V(1).Info("kube-system typha deployment deleted")
-	if err := m.deleteKubeSystemServiceEndPointCm(ctx); err != nil {
+	if err := m.deleteKubeSystemServiceEndPointConfigMap(ctx, log); err != nil {
 		return fmt.Errorf("failed to delete kube-system k8sServicesEndpoint ConfigMap: %s", err.Error())
 	}
-	log.V(1).Info("kube-system services endpoint configmap deleted")
 	log.Info("Namespace migration complete")
 
 	return nil
@@ -364,12 +363,16 @@ func (m *CoreNamespaceMigration) CleanupMigration(ctx context.Context) error {
 	return nil
 }
 
-// deleteKubeSystemServiceEndPointCm deletes the kubernetes-services-endpoint configmap
+// deleteKubeSystemServiceEndPointConfigMap deletes the kubernetes-services-endpoint configmap
 // in the kube-system namespace
-func (m *CoreNamespaceMigration) deleteKubeSystemServiceEndPointCm(ctx context.Context) error {
+func (m *CoreNamespaceMigration) deleteKubeSystemServiceEndPointConfigMap(ctx context.Context, log logr.Logger) error {
 	err := m.client.CoreV1().ConfigMaps(kubeSystem).Delete(ctx, k8sServicesEndpointConfigMap, metav1.DeleteOptions{})
-	if err != nil && !apierrs.IsNotFound(err) {
-		return err
+	if err != nil {
+		if !apierrs.IsNotFound(err) {
+			return err
+		}
+	} else {
+		log.V(1).Info("kube-system services endpoint configmap deleted")
 	}
 	return nil
 }

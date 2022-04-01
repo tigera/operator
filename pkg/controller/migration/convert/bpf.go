@@ -53,7 +53,7 @@ func copyK8sServicesEPConfigMap(c *components) error {
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("Failed to create configmap %q in tigera-operator ns %s", cmName, err)
+		return fmt.Errorf("failed to create configmap %q in tigera-operator ns %s", cmName, err)
 	}
 	return nil
 }

@@ -32,17 +32,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-var cmName = render.K8sSvcEndpointConfigMapName
-var cmData = map[string]string{"KUBERNETES_SERVICE_HOST": "1.1.1.1",
-	"KUBERNETES_SERVICE_PORT": "1234"}
-
-var endPointCM = &corev1.ConfigMap{
-	ObjectMeta: metav1.ObjectMeta{
-		Name:      cmName,
-		Namespace: "kube-system",
-	},
-	Data: cmData,
-}
+var (
+	cmName = render.K8sSvcEndpointConfigMapName
+	cmData = map[string]string{"KUBERNETES_SERVICE_HOST": "1.1.1.1",
+		"KUBERNETES_SERVICE_PORT": "1234"}
+	endPointCM = &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      cmName,
+			Namespace: "kube-system",
+		},
+		Data: cmData,
+	}
+)
 
 func getEndPointCM(c *components, ns string) (error, map[string]string) {
 	cm := &corev1.ConfigMap{}
@@ -69,10 +70,10 @@ var _ = Describe("convert bpf config", func() {
 		comps = emptyComponents()
 		i = &operatorv1.Installation{}
 		f = emptyFelixConfig()
+		Expect(apis.AddToScheme(scheme)).ToNot(HaveOccurred())
 	})
 
 	It("converts bpfenabled felixconfig set to true", func() {
-		Expect(apis.AddToScheme(scheme)).ToNot(HaveOccurred())
 		bpfEnabled := true
 		f.Spec.BPFEnabled = &bpfEnabled
 		comps.client = fake.NewFakeClientWithScheme(scheme, endPointCM, f)
@@ -86,7 +87,6 @@ var _ = Describe("convert bpf config", func() {
 	})
 
 	It("converts bpfenabled felixconfig set to false", func() {
-		Expect(apis.AddToScheme(scheme)).ToNot(HaveOccurred())
 		bpfEnabled := false
 		f.Spec.BPFEnabled = &bpfEnabled
 		comps.client = fake.NewFakeClientWithScheme(scheme, endPointCM, f)
@@ -102,7 +102,6 @@ var _ = Describe("convert bpf config", func() {
 	})
 
 	It("check with no felixconfig", func() {
-		Expect(apis.AddToScheme(scheme)).ToNot(HaveOccurred())
 		comps.client = fake.NewFakeClientWithScheme(scheme, endPointCM)
 		err := handleBPF(&comps, i)
 		Expect(err).To(HaveOccurred())
@@ -144,7 +143,6 @@ var _ = Describe("convert bpf config", func() {
 	})
 
 	It("returns error when configmap is not present", func() {
-		Expect(apis.AddToScheme(scheme)).ToNot(HaveOccurred())
 		bpfEnabled := true
 		f.Spec.BPFEnabled = &bpfEnabled
 		comps.client = fake.NewFakeClientWithScheme(scheme, f)

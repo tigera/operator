@@ -58,6 +58,8 @@ const (
 	nodeDaemonSetName            = "calico-node"
 	kubeControllerDeploymentName = "calico-kube-controllers"
 
+	k8sServicesEndpointConfigMap = "kubernetes-services-endpoint"
+
 	defaultMaxUnavailable int32 = 1
 )
 
@@ -248,6 +250,10 @@ func (m *CoreNamespaceMigration) Run(ctx context.Context, log logr.Logger) error
 	if err := m.deleteKubeSystemTypha(ctx); err != nil {
 		return fmt.Errorf("failed to delete kube-system typha Deployment: %s", err.Error())
 	}
+	log.V(1).Info("kube-system typha deployment deleted")
+	if err := m.deleteKubeSystemServiceEndPointConfigMap(ctx, log); err != nil {
+		return fmt.Errorf("failed to delete kube-system k8sServicesEndpoint ConfigMap: %s", err.Error())
+	}
 	log.Info("Namespace migration complete")
 
 	return nil
@@ -354,6 +360,20 @@ func (m *CoreNamespaceMigration) CleanupMigration(ctx context.Context) error {
 	close(m.stopCh)
 
 	m.migrationComplete = true
+	return nil
+}
+
+// deleteKubeSystemServiceEndPointConfigMap deletes the kubernetes-services-endpoint configmap
+// in the kube-system namespace
+func (m *CoreNamespaceMigration) deleteKubeSystemServiceEndPointConfigMap(ctx context.Context, log logr.Logger) error {
+	err := m.client.CoreV1().ConfigMaps(kubeSystem).Delete(ctx, k8sServicesEndpointConfigMap, metav1.DeleteOptions{})
+	if err != nil {
+		if !apierrs.IsNotFound(err) {
+			return err
+		}
+	} else {
+		log.V(1).Info("kube-system services endpoint configmap deleted")
+	}
 	return nil
 }
 

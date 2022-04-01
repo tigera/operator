@@ -55,11 +55,6 @@ func copyK8sServicesEPConfigMap(c *components) error {
 	if err != nil {
 		return fmt.Errorf("Failed to create configmap %q in tigera-operator ns %s", cmName, err)
 	}
-
-	err = c.client.Delete(ctx, &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Namespace: "kube-system", Name: cmName}})
-	if err != nil {
-		return fmt.Errorf("failed to delete configmap %q in kube-system ns %s", cmName, err)
-	}
 	return nil
 }
 

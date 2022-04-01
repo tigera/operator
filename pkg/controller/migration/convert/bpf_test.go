@@ -83,9 +83,6 @@ var _ = Describe("convert bpf config", func() {
 		err, data := getEndPointCM(&comps, common.OperatorNamespace())
 		Expect(err).ToNot(HaveOccurred())
 		Expect(data).To(Equal(cmData))
-		err, data = getEndPointCM(&comps, "kube-system")
-		Expect(err).To(HaveOccurred())
-		Expect(data).To(BeNil())
 	})
 
 	It("converts bpfenabled felixconfig set to false", func() {
@@ -127,9 +124,6 @@ var _ = Describe("convert bpf config", func() {
 		err, data := getEndPointCM(&comps, common.OperatorNamespace())
 		Expect(err).ToNot(HaveOccurred())
 		Expect(data).To(Equal(cmData))
-		err, data = getEndPointCM(&comps, "kube-system")
-		Expect(err).To(HaveOccurred())
-		Expect(data).To(BeNil())
 	})
 
 	It("converts bpfenabled env var set to false", func() {

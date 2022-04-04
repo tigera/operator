@@ -35,7 +35,7 @@ func (c *component) admissionControllerClusterRole() *rbacv1.ClusterRole {
 					"imageassurance.tigera.io",
 				},
 				Resources: []string{
-					"registries", "repositories",
+					"registries", "repositories", "images",
 				},
 				Verbs: []string{
 					"get", "list",

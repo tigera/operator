@@ -29,6 +29,18 @@ func (c *component) admissionControllerClusterRole() *rbacv1.ClusterRole {
 			ResourceNames: []string{
 				c.config.ConfigurationConfigMap.Data[rcimageassurance.ConfigurationConfigMapOrgIDKey],
 			},
-		}},
+		},
+			{
+				APIGroups: []string{
+					"imageassurance.tigera.io",
+				},
+				Resources: []string{
+					"registries", "repositories",
+				},
+				Verbs: []string{
+					"get", "list",
+				},
+			},
+		},
 	}
 }

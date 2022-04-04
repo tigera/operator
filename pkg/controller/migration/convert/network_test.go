@@ -599,7 +599,7 @@ var _ = Describe("Convert network tests", func() {
 		Entry("should error if IP6=none but FELIX_IPV6SUPPORT=true", []corev1.EnvVar{
 			{Name: "IP6", Value: "none"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "true"}}, true),
-		Entry("should error if IP6=none but FELIX_IPV6SUPPORT is undefined", []corev1.EnvVar{{Name: "IP6", Value: "none"}}, true),
+		Entry("should not error if IP6=none and FELIX_IPV6SUPPORT is undefined", []corev1.EnvVar{{Name: "IP6", Value: "none"}}, false),
 		Entry("should not error if FELIX_IPV6SUPPORT is false", []corev1.EnvVar{{Name: "FELIX_IPV6SUPPORT", Value: "false"}}, false),
 		Entry("should error if FELIX_IPV6SUPPORT is true", []corev1.EnvVar{{Name: "FELIX_IPV6SUPPORT", Value: "true"}}, true),
 		Entry("should allow IPv6 only",

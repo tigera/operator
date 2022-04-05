@@ -113,6 +113,9 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 		// system as specified by the osType.
 		ensureOSSchedulingRestrictions(obj, osType)
 
+		// Make sure any objects with images also have an image pull policy.
+		modifyPodSpec(obj, setImagePullPolicy)
+
 		// Keep track of some objects so we can report on their status.
 		switch obj.(type) {
 		case *apps.Deployment:
@@ -335,6 +338,41 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 	}
 }
 
+// modifyPodSpec is a helper for pulling out pod specifications from an arbitrary object.
+func modifyPodSpec(obj client.Object, f func(*v1.PodSpec)) {
+	switch obj.(type) {
+	case *v1.PodTemplate:
+		f(&obj.(*v1.PodTemplate).Template.Spec)
+	case *apps.Deployment:
+		f(&obj.(*apps.Deployment).Spec.Template.Spec)
+	case *apps.DaemonSet:
+		f(&obj.(*apps.DaemonSet).Spec.Template.Spec)
+	case *apps.StatefulSet:
+		f(&obj.(*apps.StatefulSet).Spec.Template.Spec)
+	case *batchv1beta.CronJob:
+		f(&obj.(*batchv1beta.CronJob).Spec.JobTemplate.Spec.Template.Spec)
+	case *batchv1.Job:
+		f(&obj.(*batchv1.Job).Spec.Template.Spec)
+	case *kbv1.Kibana:
+		f(&obj.(*kbv1.Kibana).Spec.PodTemplate.Spec)
+	case *esv1.Elasticsearch:
+		// elasticsearch resource describes multiple nodeSets which each have a pod spec.
+		nodeSets := obj.(*esv1.Elasticsearch).Spec.NodeSets
+		for i := range nodeSets {
+			f(&nodeSets[i].PodTemplate.Spec)
+		}
+	}
+}
+
+// setImagePullPolicy ensures that an image pull policy is set if not set already.
+func setImagePullPolicy(podSpec *v1.PodSpec) {
+	for i := range podSpec.Containers {
+		if len(podSpec.Containers[i].ImagePullPolicy) == 0 {
+			podSpec.Containers[i].ImagePullPolicy = v1.PullIfNotPresent
+		}
+	}
+}
+
 // ensureOSSchedulingRestrictions ensures that if obj is a type that creates pods and if osType is not OSTypeAny that a
 // node selector is set on the pod template for the "kubernetes.io/os" label to ensure that the pod is scheduled
 // on a node running an operating system as specified by osType.
@@ -343,28 +381,8 @@ func ensureOSSchedulingRestrictions(obj client.Object, osType rmeta.OSType) {
 		return
 	}
 
-	var podSpecs []*v1.PodSpec
+	// Some object types don't have a v1.PodSpec an instead use a custom spec. Handle those here.
 	switch obj.(type) {
-	case *v1.PodTemplate:
-		podSpecs = []*v1.PodSpec{&obj.(*v1.PodTemplate).Template.Spec}
-	case *apps.Deployment:
-		podSpecs = []*v1.PodSpec{&obj.(*apps.Deployment).Spec.Template.Spec}
-	case *apps.DaemonSet:
-		podSpecs = []*v1.PodSpec{&obj.(*apps.DaemonSet).Spec.Template.Spec}
-	case *apps.StatefulSet:
-		podSpecs = []*v1.PodSpec{&obj.(*apps.StatefulSet).Spec.Template.Spec}
-	case *batchv1beta.CronJob:
-		podSpecs = []*v1.PodSpec{&obj.(*batchv1beta.CronJob).Spec.JobTemplate.Spec.Template.Spec}
-	case *batchv1.Job:
-		podSpecs = []*v1.PodSpec{&obj.(*batchv1.Job).Spec.Template.Spec}
-	case *kbv1.Kibana:
-		podSpecs = []*v1.PodSpec{&obj.(*kbv1.Kibana).Spec.PodTemplate.Spec}
-	case *esv1.Elasticsearch:
-		// elasticsearch resource describes multiple nodeSets which each have a nodeSelector.
-		nodeSets := obj.(*esv1.Elasticsearch).Spec.NodeSets
-		for i := range nodeSets {
-			podSpecs = append(podSpecs, &nodeSets[i].PodTemplate.Spec)
-		}
 	case *monitoringv1.Alertmanager:
 		// Prometheus operator types don't have a template spec which is of v1.PodSpec type.
 		// We can't add it to the podSpecs list and assign osType in the for loop below.
@@ -377,16 +395,16 @@ func ensureOSSchedulingRestrictions(obj client.Object, osType rmeta.OSType) {
 		podSpec := &obj.(*monitoringv1.Prometheus).Spec
 		podSpec.NodeSelector = map[string]string{"kubernetes.io/os": string(osType)}
 		return
-	default:
-		return
 	}
 
-	for _, podSpec := range podSpecs {
+	// Handle objects that do use a v1.PodSpec.
+	f := func(podSpec *v1.PodSpec) {
 		if podSpec.NodeSelector == nil {
 			podSpec.NodeSelector = make(map[string]string)
 		}
 		podSpec.NodeSelector["kubernetes.io/os"] = string(osType)
 	}
+	modifyPodSpec(obj, f)
 }
 
 // mergeMaps merges current and desired maps. If both current and desired maps contain the same key, the

@@ -273,6 +273,12 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		return fmt.Errorf("tigera-installation-controller failed to watch FelixConfiguration resource: %w", err)
 	}
 
+	// Watch for changes to BGPConfiguration.
+	err = c.Watch(&source.Kind{Type: &crdv1.BGPConfiguration{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("tigera-installation-controller failed to watch BGPConfiguration resource: %w", err)
+	}
+
 	if r.enterpriseCRDsExist {
 		// Watch for changes to primary resource ManagementCluster
 		err = c.Watch(&source.Kind{Type: &operator.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
@@ -1182,6 +1188,16 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	// Fetch any existing default BGPConfiguration object.
+	bgpConfiguration := &crdv1.BGPConfiguration{}
+	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, bgpConfiguration)
+	if err != nil && !apierrors.IsNotFound(err) {
+		r.SetDegraded("Unable to read BGPConfiguration", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// TODO , any default settings need to be added on bgpconfig object and update back ?
+
 	// Build a configuration for rendering calico/node.
 	nodeCfg := render.NodeConfiguration{
 		K8sServiceEp:            k8sapi.Endpoint,
@@ -1198,6 +1214,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		Terminating:             nodeTerminating,
 		PrometheusServerTLS:     nodePrometheusTLS,
 		FelixHealthPort:         *felixConfiguration.Spec.HealthPort,
+		BindMode:				 bgpConfiguration.Spec.BindMode,
 	}
 	components = append(components, render.Node(&nodeCfg))
 

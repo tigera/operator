@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1377,9 +1377,16 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			APIGroups: []string{"lma.tigera.io"},
 			Resources: []string{"*"},
 			ResourceNames: []string{
-				"flows", "audit*", "l7", "events", "dns", "kibana_login",
+				"flows", "audit*", "l7", "dns", "kibana_login",
 			},
 			Verbs: []string{"get"},
+		})
+		// Read and write access to events.
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"lma.tigera.io"},
+			Resources:     []string{"*"},
+			ResourceNames: []string{"events"},
+			Verbs:         []string{"get", "update"},
 		})
 	}
 

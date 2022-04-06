@@ -78,6 +78,7 @@ func (c *component) cawDeployment() *appsv1.Deployment {
 	env := []corev1.EnvVar{
 		rcimageassurance.EnvOrganizationID(),
 		{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
+		{Name: "IMAGE_ASSURANCE_DB_LOG_LEVEL", Value: "WARN"},
 		{Name: "IMAGE_ASSURANCE_TENANT_ENCRYPTION_KEY", Value: "/tenant-key/encryption_key"},
 	}
 

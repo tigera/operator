@@ -16,6 +16,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -24,6 +25,10 @@ const (
 	NameSpaceRuntimeSecurity            = "tigera-runtime-security"
 	ElasticsearchSashaJobUserSecretName = "tigera-ee-sasha-elasticsearch-access"
 	ResourceNameSashaJob                = "tigera-ee-sasha"
+	ResourceSashaDefaultCPULimit        = "1"
+	ResourceSashaDefaultMemoryLimit     = "1Gi"
+	ResourceSashaDefaultCPURequest      = "100m"
+	ResourceSashaDefaultMemoryRequest   = "100Mi"
 )
 
 func RuntimeSecurity(
@@ -148,6 +153,16 @@ func (c *component) sashaCronJob() *batchv1.CronJob {
 									Image:   c.config.sashaImage,
 									Command: []string{"python3", "-m", "sasha.main"},
 									Env:     envVars,
+									Resources: corev1.ResourceRequirements{
+										Limits: corev1.ResourceList{
+											corev1.ResourceCPU:    resource.MustParse(ResourceSashaDefaultCPULimit),
+											corev1.ResourceMemory: resource.MustParse(ResourceSashaDefaultMemoryLimit),
+										},
+										Requests: corev1.ResourceList{
+											corev1.ResourceCPU:    resource.MustParse(ResourceSashaDefaultCPURequest),
+											corev1.ResourceMemory: resource.MustParse(ResourceSashaDefaultMemoryRequest),
+										},
+									},
 								},
 									c.config.ESClusterConfig.ClusterName(),
 									ElasticsearchSashaJobUserSecretName,

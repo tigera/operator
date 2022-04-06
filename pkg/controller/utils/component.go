@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -112,6 +112,8 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 		// Ensure that if the object is something the creates a pod that it is scheduled on nodes running the operating
 		// system as specified by the osType.
 		ensureOSSchedulingRestrictions(obj, osType)
+
+		setStandardSelectorAndLabels(obj)
 
 		// Keep track of some objects so we can report on their status.
 		switch obj.(type) {
@@ -387,6 +389,51 @@ func ensureOSSchedulingRestrictions(obj client.Object, osType rmeta.OSType) {
 		}
 		podSpec.NodeSelector["kubernetes.io/os"] = string(osType)
 	}
+}
+
+// setStandardSelectorAndLabels will set the k8s-app and app.kubernetes.io/name Labels on the podTemplates
+// for Deployments and Daemonsets. If there is no Selector specified a selector will also be added
+// that selects the k8s-app label.
+func setStandardSelectorAndLabels(obj client.Object) {
+	var podTemplate *v1.PodTemplateSpec
+	var name string
+	switch obj.(type) {
+	case *apps.Deployment:
+		d := obj.(*apps.Deployment)
+		name = d.ObjectMeta.Name
+		if d.ObjectMeta.Labels == nil {
+			d.ObjectMeta.Labels = make(map[string]string)
+		}
+		d.ObjectMeta.Labels["k8s-app"] = name
+		d.ObjectMeta.Labels["app.kubernetes.io/name"] = name
+		if d.Spec.Selector == nil {
+			d.Spec.Selector = &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"k8s-app": name,
+				},
+			}
+		}
+		podTemplate = &d.Spec.Template
+	case *apps.DaemonSet:
+		d := obj.(*apps.DaemonSet)
+		name = d.ObjectMeta.Name
+		if d.Spec.Selector == nil {
+			d.Spec.Selector = &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"k8s-app": name,
+				},
+			}
+		}
+		podTemplate = &d.Spec.Template
+	default:
+		return
+	}
+
+	if podTemplate.ObjectMeta.Labels == nil {
+		podTemplate.ObjectMeta.Labels = make(map[string]string)
+	}
+	podTemplate.ObjectMeta.Labels["k8s-app"] = name
+	podTemplate.ObjectMeta.Labels["app.kubernetes.io/name"] = name
 }
 
 // mergeMaps merges current and desired maps. If both current and desired maps contain the same key, the

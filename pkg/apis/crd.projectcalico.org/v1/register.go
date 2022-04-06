@@ -40,6 +40,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&FelixConfigurationList{},
 		&KubeControllersConfiguration{},
 		&KubeControllersConfigurationList{},
+		&BGPConfiguration{},
+		&BGPConfigurationList{},
 	)
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return nil

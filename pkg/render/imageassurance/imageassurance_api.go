@@ -155,7 +155,7 @@ func (c *component) apiDeployment() *appsv1.Deployment {
 		rcimageassurance.EnvOrganizationID(),
 		{Name: "IMAGE_ASSURANCE_PORT", Value: "5557"},
 		{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
-		{Name: "IMAGE_ASSURANCE_DB_LOG_LEVEL", Value: "WARN"},
+		{Name: "IMAGE_ASSURANCE_DB_LOG_LEVEL", Value: "SILENT"},
 		{Name: "IMAGE_ASSURANCE_HTTPS_CERT", Value: "/certs/https/tls.crt"},
 		{Name: "IMAGE_ASSURANCE_HTTPS_KEY", Value: "/certs/https/tls.key"},
 		{Name: "IMAGE_ASSURANCE_TENANT_ENCRYPTION_KEY", Value: "/tenant-key/encryption_key"},

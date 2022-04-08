@@ -22,16 +22,6 @@ import (
 	k8sv1 "k8s.io/api/core/v1"
 )
 
-const (
-	Group               = "projectcalico.org"
-	VersionCurrent      = "v1"
-	GroupVersionCurrent = Group + "/" + VersionCurrent
-)
-const (
-	KindBGPConfiguration     = "BGPConfiguration"
-	KindBGPConfigurationList = "BGPConfigurationList"
-)
-
 // +genclient:nonNamespaced
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
@@ -144,13 +134,3 @@ type BGPPassword struct {
 	SecretKeyRef *k8sv1.SecretKeySelector `json:"secretKeyRef,omitempty"`
 }
 
-// New BGPConfiguration creates a new (zeroed) BGPConfiguration struct with the TypeMetadata
-// initialized to the current version.
-func NewBGPConfiguration() *BGPConfiguration {
-	return &BGPConfiguration{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       KindBGPConfiguration,
-			APIVersion: GroupVersionCurrent,
-		},
-	}
-}

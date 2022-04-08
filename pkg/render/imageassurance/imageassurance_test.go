@@ -205,7 +205,7 @@ var _ = Describe("Image Assurance Render", func() {
 			{Name: "IMAGE_ASSURANCE_DB_SSL_KEY", Value: "/certs/db/client-key"},
 			{Name: "IMAGE_ASSURANCE_PORT", Value: "5557"},
 			{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
-			{Name: "IMAGE_ASSURANCE_DB_LOG_LEVEL", Value: "WARN"},
+			{Name: "IMAGE_ASSURANCE_DB_LOG_LEVEL", Value: "SILENT"},
 			{Name: "IMAGE_ASSURANCE_DB_HOST_ADDR", Value: "",
 				ValueFrom: &corev1.EnvVarSource{
 					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
@@ -371,7 +371,7 @@ var _ = Describe("Image Assurance Render", func() {
 			{Name: "IMAGE_ASSURANCE_DB_SSL_CERT", Value: "/certs/db/client-cert"},
 			{Name: "IMAGE_ASSURANCE_DB_SSL_KEY", Value: "/certs/db/client-key"},
 			{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
-			{Name: "IMAGE_ASSURANCE_DB_LOG_LEVEL", Value: "WARN"},
+			{Name: "IMAGE_ASSURANCE_DB_LOG_LEVEL", Value: "SILENT"},
 			{Name: "IMAGE_ASSURANCE_DB_HOST_ADDR", Value: "",
 				ValueFrom: &corev1.EnvVarSource{
 					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
@@ -511,7 +511,7 @@ var _ = Describe("Image Assurance Render", func() {
 		scannerEnv := scanner.Containers[0].Env
 		scannerExpectedENV := []corev1.EnvVar{
 			{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
-			{Name: "IMAGE_ASSURANCE_DB_LOG_LEVEL", Value: "WARN"},
+			{Name: "IMAGE_ASSURANCE_DB_LOG_LEVEL", Value: "SILENT"},
 			{Name: "IMAGE_ASSURANCE_TENANT_ENCRYPTION_KEY", Value: "/tenant-key/encryption_key"},
 			{Name: "IMAGE_ASSURANCE_DB_SSL_ROOT_CERT", Value: "/certs/db/server-ca"},
 			{Name: "IMAGE_ASSURANCE_DB_SSL_CERT", Value: "/certs/db/client-cert"},

@@ -291,7 +291,7 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration, kubeContr
 			// Needs access to update clusterinformations.
 			APIGroups: []string{"crd.projectcalico.org"},
 			Resources: []string{"clusterinformations"},
-			Verbs:     []string{"get", "create", "update"},
+			Verbs:     []string{"get", "create", "update", "list", "watch"},
 		},
 		{
 			// Needs to manage hostendpoints.

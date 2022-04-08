@@ -30,6 +30,7 @@ import (
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	ocsv1 "github.com/openshift/api/security/v1"
+	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -878,6 +879,154 @@ var _ = Describe("Component handler tests", func() {
 			},
 		},
 	)
+
+	Context("common labels and labelselector", func() {
+		It("updates daemonsets", func() {
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{&apps.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-daemonset",
+						Namespace: "test-namespace",
+					},
+					Spec: apps.DaemonSetSpec{
+						Template: corev1.PodTemplateSpec{},
+					},
+				}},
+			}
+
+			err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+			Expect(err).To(BeNil())
+
+			By("checking that the daemonset is created and labels are added")
+			expectedLabels := map[string]string{
+				"k8s-app":                "test-daemonset",
+				"app.kubernetes.io/name": "test-daemonset",
+			}
+			expectedSelector := metav1.LabelSelector{
+				MatchLabels: map[string]string{"k8s-app": "test-daemonset"},
+			}
+			key := client.ObjectKey{
+				Name:      "test-daemonset",
+				Namespace: "test-namespace",
+			}
+			ds := &apps.DaemonSet{}
+			c.Get(ctx, key, ds)
+			Expect(ds.Spec.Template.GetLabels()).To(Equal(expectedLabels))
+			Expect(*ds.Spec.Selector).To(Equal(expectedSelector))
+		})
+		It("does not change LabelSelector on daemonsets", func() {
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{&apps.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-daemonset",
+						Namespace: "test-namespace",
+					},
+					Spec: apps.DaemonSetSpec{
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"preset-key": "preset-value",
+							},
+						},
+						Template: corev1.PodTemplateSpec{},
+					},
+				}},
+			}
+
+			err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+			Expect(err).To(BeNil())
+
+			expectedLabels := map[string]string{
+				"k8s-app":                "test-daemonset",
+				"app.kubernetes.io/name": "test-daemonset",
+			}
+			expectedSelector := metav1.LabelSelector{
+				MatchLabels: map[string]string{"preset-key": "preset-value"},
+			}
+			key := client.ObjectKey{
+				Name:      "test-daemonset",
+				Namespace: "test-namespace",
+			}
+			ds := &apps.DaemonSet{}
+			c.Get(ctx, key, ds)
+			Expect(ds.Spec.Template.GetLabels()).To(Equal(expectedLabels))
+			Expect(*ds.Spec.Selector).To(Equal(expectedSelector))
+		})
+		It("updates deployments", func() {
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{&apps.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-deployment",
+						Namespace: "test-namespace",
+					},
+					Spec: apps.DeploymentSpec{
+						Template: corev1.PodTemplateSpec{},
+					},
+				}},
+			}
+
+			err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+			Expect(err).To(BeNil())
+
+			expectedLabels := map[string]string{
+				"k8s-app":                "test-deployment",
+				"app.kubernetes.io/name": "test-deployment",
+			}
+			expectedSelector := metav1.LabelSelector{
+				MatchLabels: map[string]string{"k8s-app": "test-deployment"},
+			}
+			key := client.ObjectKey{
+				Name:      "test-deployment",
+				Namespace: "test-namespace",
+			}
+			d := &apps.Deployment{}
+			c.Get(ctx, key, d)
+			Expect(d.GetLabels()).To(Equal(expectedLabels))
+			Expect(d.Spec.Template.GetLabels()).To(Equal(expectedLabels))
+			Expect(*d.Spec.Selector).To(Equal(expectedSelector))
+		})
+		It("does not change LabelSelector on deployments", func() {
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{&apps.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-deployment",
+						Namespace: "test-namespace",
+					},
+					Spec: apps.DeploymentSpec{
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"preset-key": "preset-value",
+							},
+						},
+						Template: corev1.PodTemplateSpec{},
+					},
+				}},
+			}
+
+			err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+			Expect(err).To(BeNil())
+
+			expectedLabels := map[string]string{
+				"k8s-app":                "test-deployment",
+				"app.kubernetes.io/name": "test-deployment",
+			}
+			expectedSelector := metav1.LabelSelector{
+				MatchLabels: map[string]string{"preset-key": "preset-value"},
+			}
+			key := client.ObjectKey{
+				Name:      "test-deployment",
+				Namespace: "test-namespace",
+			}
+			d := &apps.Deployment{}
+			c.Get(ctx, key, d)
+			Expect(d.GetLabels()).To(Equal(expectedLabels))
+			Expect(d.Spec.Template.GetLabels()).To(Equal(expectedLabels))
+			Expect(*d.Spec.Selector).To(Equal(expectedSelector))
+		})
+	})
 })
 
 // A fake component that only returns ready and always creates the "test-namespace" Namespace.

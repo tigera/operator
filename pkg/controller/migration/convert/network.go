@@ -149,7 +149,7 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 	// Custom router ID values are only used for manual calico-node deployments and not
 	// applicable to calico-node running as a daemonset.
 	// In IPv6-only mode, calico-node will be rendered with CALICO_ROUTER_ID="hash".
-	if install.Spec.CalicoNetwork.NodeAddressAutodetectionV6 != nil && install.Spec.CalicoNetwork.NodeAddressAutodetectionV4 == nil {
+	if ip6 != nil && *ip6 == "autodetect" && ip != nil && *ip == "none" {
 		if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "CALICO_ROUTER_ID", "hash"); err != nil {
 			return err
 		}

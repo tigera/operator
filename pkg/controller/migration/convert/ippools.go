@@ -68,6 +68,9 @@ func handleIPPools(c *components, install *operatorv1.Installation) error {
 
 	// If IPAM is calico then check that the assign_ipv* fields match the IPPools that have been detected
 	if c.cni.CalicoConfig != nil && c.cni.CalicoConfig.IPAM.Type == "calico-ipam" {
+		// A v4 pool is always created, even if AssignIpv4 is false. However, if
+		// no v4 pool exists and AssignIpv4 is false then we do not need to
+		// raise an error.
 		if c.cni.CalicoConfig.IPAM.AssignIpv4 == nil || strings.ToLower(*c.cni.CalicoConfig.IPAM.AssignIpv4) == "true" {
 			if v4pool == nil {
 				return ErrIncompatibleCluster{
@@ -76,15 +79,8 @@ func handleIPPools(c *components, install *operatorv1.Installation) error {
 					fix:       "create an IPv4 pool or set assign_ipv4=false",
 				}
 			}
-		} else {
-			if v4pool != nil {
-				return ErrIncompatibleCluster{
-					err:       "CNI config indicates assign_ipv4=false but an IPv4 pool was found",
-					component: ComponentCNIConfig,
-					fix:       "delete the IPv4 pool or set assign_ipv4=false",
-				}
-			}
 		}
+
 		if c.cni.CalicoConfig.IPAM.AssignIpv6 != nil && strings.ToLower(*c.cni.CalicoConfig.IPAM.AssignIpv6) == "true" {
 			if v6pool == nil {
 				return ErrIncompatibleCluster{

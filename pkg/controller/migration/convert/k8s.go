@@ -108,10 +108,14 @@ func assertEnvIsSet(ctx context.Context, client client.Client, spec corev1.PodSp
 	}
 
 	if value == nil || strings.ToLower(*value) != expectedValue {
+		v := "<undefined>"
+		if value != nil {
+			v = *value
+		}
 		return ErrIncompatibleCluster{
-			err:       fmt.Sprintf("%s=%s is not supported", key, *value),
+			err:       fmt.Sprintf("%s=%s is not supported", key, v),
 			component: component,
-			fix:       fmt.Sprintf("remove the %s env var or set it to '%s'", key, expectedValue),
+			fix:       fmt.Sprintf("set the %s env var to '%s'", key, expectedValue),
 		}
 	}
 

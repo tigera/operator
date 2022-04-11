@@ -1708,15 +1708,16 @@ func mergePlatformPodCIDRs(i *operator.Installation, platformCIDRs []string) err
 		// Empty IPPools list so nothing to do.
 		return nil
 	} else {
-		// Pools are configured on the Installation. Make sure they are compatible with
-		// the configuration set in the underlying Kubernetes platform.
-		for _, pool := range i.Spec.CalicoNetwork.IPPools {
+		// Make sure IP pools configured are compatible with the configured pod
+		// subnets. Note that IPv4 pools might exist even for IPv6-only
+		// clusters.
+		for _, c := range platformCIDRs {
 			within := false
-			for _, c := range platformCIDRs {
+			for _, pool := range i.Spec.CalicoNetwork.IPPools {
 				within = within || cidrWithinCidr(c, pool.CIDR)
 			}
 			if !within {
-				return fmt.Errorf("IPPool %v is not within the platform's configured pod network CIDR(s) %v", pool.CIDR, platformCIDRs)
+				return fmt.Errorf("No IPPool matches the platform's configured pod network CIDR %v", c)
 			}
 		}
 	}

@@ -334,7 +334,8 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 	}
 	if c.installation.KubernetesProvider != operator.ProviderOpenShift {
 		// Allow access to the pod security policy in case this is enforced on the cluster
-		role.Rules = append(role.Rules, rbacv1.PolicyRule{APIGroups: []string{"policy"},
+		role.Rules = append(role.Rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
 			Resources:     []string{"podsecuritypolicies"},
 			Verbs:         []string{"use"},
 			ResourceNames: []string{common.TyphaDeploymentName},
@@ -508,6 +509,7 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 	}
 
 	typhaEnv := []v1.EnvVar{
+		{Name: "TYPHA_SERVERMAXFALLBEHINDSECS", Value: "600"},
 		{Name: "TYPHA_LOGSEVERITYSCREEN", Value: "info"},
 		{Name: "TYPHA_LOGFILEPATH", Value: "none"},
 		{Name: "TYPHA_LOGSEVERITYSYS", Value: "none"},
@@ -545,7 +547,8 @@ func (c *typhaComponent) typhaEnvVars() []v1.EnvVar {
 		if c.installation.CalicoNetwork != nil && c.installation.CalicoNetwork.MultiInterfaceMode != nil {
 			typhaEnv = append(typhaEnv, v1.EnvVar{
 				Name:  "MULTI_INTERFACE_MODE",
-				Value: c.installation.CalicoNetwork.MultiInterfaceMode.Value()})
+				Value: c.installation.CalicoNetwork.MultiInterfaceMode.Value(),
+			})
 		}
 	}
 
@@ -628,10 +631,11 @@ func (c *typhaComponent) affinity() (aff *v1.Affinity) {
 		if c.installation.TyphaAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil && len(c.installation.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution) == 0 {
 			return nil
 		}
-		aff = &v1.Affinity{NodeAffinity: &v1.NodeAffinity{
-			RequiredDuringSchedulingIgnoredDuringExecution:  c.installation.TyphaAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution,
-			PreferredDuringSchedulingIgnoredDuringExecution: c.installation.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
-		},
+		aff = &v1.Affinity{
+			NodeAffinity: &v1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution:  c.installation.TyphaAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution,
+				PreferredDuringSchedulingIgnoredDuringExecution: c.installation.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
+			},
 		}
 
 	}

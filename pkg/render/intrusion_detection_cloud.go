@@ -115,6 +115,9 @@ func (c *intrusionDetectionComponent) imageAssuranceAPIClusterRole() *rbacv1.Clu
 			},
 			Resources: []string{
 				"organizations",
+				"registries",
+				"repositories",
+				"images",
 			},
 			Verbs: []string{
 				"get",

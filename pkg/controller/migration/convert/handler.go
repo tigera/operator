@@ -29,7 +29,6 @@ var handlers = []handler{
 	checkTypha,
 	handleAddonManager,
 	handleNetwork,
-	handleIPv6,
 	handleCore,
 	handleAnnotations,
 	handleNodeSelectors,

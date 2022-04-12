@@ -77,13 +77,21 @@ func handleIPPools(c *components, install *operatorv1.Installation) error {
 				}
 			}
 		} else {
-			if v4pool != nil {
+			// If assign_ipv4="false" then remove any discovered IPv4 pools.
+			// Since we must have an IPv6 pool here, replace the operator
+			// pools with the IPv6 pool.
+			// This is needed because the operator renders IPAM config
+			// based on the presence of initial ippools in the installation CR.
+			ipv6Pool := render.GetIPv6Pool(install.Spec.CalicoNetwork.IPPools)
+			if ipv6Pool == nil {
 				return ErrIncompatibleCluster{
-					err:       "CNI config indicates assign_ipv4=false but an IPv4 pool was found",
+					err:       "CNI config indicates assign_ipv6=true but there were no valid IPv6 pools found",
 					component: ComponentCNIConfig,
-					fix:       "delete the IPv4 pool or set assign_ipv4=false",
+					fix:       "create an IPv6 pool or set assign_ipv6=false",
 				}
 			}
+
+			install.Spec.CalicoNetwork.IPPools = []operatorv1.IPPool{*ipv6Pool}
 		}
 		if c.cni.CalicoConfig.IPAM.AssignIpv6 != nil && strings.ToLower(*c.cni.CalicoConfig.IPAM.AssignIpv6) == "true" {
 			if v6pool == nil {

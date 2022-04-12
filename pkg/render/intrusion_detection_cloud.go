@@ -115,9 +115,6 @@ func (c *intrusionDetectionComponent) imageAssuranceAPIClusterRole() *rbacv1.Clu
 			},
 			Resources: []string{
 				"organizations",
-				"registries",
-				"repositories",
-				"images",
 			},
 			Verbs: []string{
 				"get",
@@ -126,6 +123,19 @@ func (c *intrusionDetectionComponent) imageAssuranceAPIClusterRole() *rbacv1.Clu
 				c.cfg.CloudResources.ImageAssuranceResources.ConfigurationConfigMap.Data[rcimageassurance.ConfigurationConfigMapOrgIDKey],
 			},
 		},
+			{
+				APIGroups: []string{
+					"imageassurance.tigera.io",
+				},
+				Resources: []string{
+					"registries",
+					"repositories",
+					"images",
+				},
+				Verbs: []string{
+					"get",
+				},
+			},
 			{
 				APIGroups: []string{
 					"imageassurance.tigera.io",

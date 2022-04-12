@@ -1356,6 +1356,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
 			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
+			{Name: "FELIX_WIREGUARDHOSTENCRYPTIONENABLED", Value: "false"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		// Expect the SECURITY_GROUP env variables to not be set

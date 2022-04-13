@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	kscheme "k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -103,12 +104,6 @@ var _ = Describe("Convert network tests", func() {
 			Expect(*cfg.Spec.CalicoNetwork.BGP).To(Equal(operatorv1.BGPEnabled))
 		})
 		It("should convert Calico v3.15 manifest", func() {
-			v4pool = crdv1.NewIPPool()
-			v4pool.Spec = crdv1.IPPoolSpec{
-				CIDR:        "192.168.4.0/24",
-				IPIPMode:    crdv1.IPIPModeAlways,
-				NATOutgoing: true,
-			}
 			c := fake.NewFakeClientWithScheme(scheme, append([]runtime.Object{v4pool, emptyFelixConfig()}, calicoDefaultConfig()...)...)
 			cfg, err := Convert(ctx, c)
 			Expect(err).NotTo(HaveOccurred())
@@ -181,6 +176,215 @@ var _ = Describe("Convert network tests", func() {
 			Expect(cfg.Spec.CNI.Type).To(Equal(operatorv1.PluginCalico))
 			Expect(cfg.Spec.CNI.IPAM.Type).To(Equal(operatorv1.IPAMPluginCalico))
 			Expect(*cfg.Spec.CalicoNetwork.BGP).To(Equal(operatorv1.BGPDisabled))
+		})
+		It("migrate default with IPv6 explicitly disabled", func() {
+			ds := emptyNodeSpec()
+			ds.Spec.Template.Spec.Containers[0].Env = append(ds.Spec.Template.Spec.Containers[0].Env,
+				corev1.EnvVar{
+					Name:  "IP6",
+					Value: "none",
+				},
+				corev1.EnvVar{
+					Name:  "FELIX_IPV6SUPPORT",
+					Value: "false",
+				},
+			)
+			c := fake.NewFakeClientWithScheme(scheme, emptyNodeSpec(), emptyKubeControllerSpec(), v4pool, emptyFelixConfig())
+			cfg, err := Convert(ctx, c)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cfg).ToNot(BeNil())
+			Expect(cfg.Spec.CNI.Type).To(Equal(operatorv1.PluginCalico))
+			Expect(cfg.Spec.CNI.IPAM.Type).To(Equal(operatorv1.IPAMPluginCalico))
+			Expect(*cfg.Spec.CalicoNetwork.BGP).To(Equal(operatorv1.BGPEnabled))
+
+			expectedV4pool, err := convertPool(*v4pool)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cfg.Spec.CalicoNetwork.IPPools).To(ContainElements(expectedV4pool))
+		})
+
+		It("migrate default dual stack config", func() {
+			// This is the minimal dual stack config as outlined in our docs.
+			ds := emptyNodeSpec()
+			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
+				Name:  "CNI_NETWORK_CONFIG",
+				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam", "assign_ipv4":"true", "assign_ipv6":"true"}}`,
+			}}
+
+			ds.Spec.Template.Spec.Containers[0].Env = append(ds.Spec.Template.Spec.Containers[0].Env,
+				corev1.EnvVar{
+					Name:  "IP6",
+					Value: "autodetect",
+				},
+				corev1.EnvVar{
+					Name:  "FELIX_IPV6SUPPORT",
+					Value: "true",
+				},
+			)
+
+			c := fake.NewFakeClientWithScheme(scheme, v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			cfg, err := Convert(ctx, c)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cfg).ToNot(BeNil())
+			Expect(cfg.Spec.CNI.Type).To(Equal(operatorv1.PluginCalico))
+			Expect(cfg.Spec.CNI.IPAM.Type).To(Equal(operatorv1.IPAMPluginCalico))
+			Expect(*cfg.Spec.CalicoNetwork.BGP).To(Equal(operatorv1.BGPEnabled))
+
+			expectedV4pool, err := convertPool(*v4pool)
+			Expect(err).ToNot(HaveOccurred())
+			expectedV6pool, err := convertPool(*v6pool)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cfg.Spec.CalicoNetwork.IPPools).To(ContainElements(expectedV4pool, expectedV6pool))
+		})
+		It("fails migrating default dual stack config if missing pools", func() {
+			// This is the minimal dual stack config as outlined in our docs.
+			ds := emptyNodeSpec()
+			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
+				Name:  "CNI_NETWORK_CONFIG",
+				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam", "assign_ipv4":"true", "assign_ipv6":"true"}}`,
+			}}
+
+			ds.Spec.Template.Spec.Containers[0].Env = append(ds.Spec.Template.Spec.Containers[0].Env,
+				corev1.EnvVar{
+					Name:  "IP6",
+					Value: "autodetect",
+				},
+				corev1.EnvVar{
+					Name:  "FELIX_IPV6SUPPORT",
+					Value: "true",
+				},
+			)
+
+			c := fake.NewFakeClientWithScheme(scheme, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			cfg, err := Convert(ctx, c)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(Equal("CNI config indicates assign_ipv4=true but there were no valid IPv4 pools found. To fix it, create an IPv4 pool or set assign_ipv4=false on cni-config"))
+			Expect(cfg).To(BeNil())
+
+			c = fake.NewFakeClientWithScheme(scheme, v4pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			cfg, err = Convert(ctx, c)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(Equal("CNI config indicates assign_ipv6=true but there were no valid IPv6 pools found. To fix it, create an IPv6 pool or set assign_ipv6=false on cni-config"))
+			Expect(cfg).To(BeNil())
+		})
+		It("migrate default IPv6 only config", func() {
+			ds := emptyNodeSpec()
+			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
+				Name:  "CNI_NETWORK_CONFIG",
+				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam", "assign_ipv4":"false", "assign_ipv6":"true"}}`,
+			}}
+
+			ds.Spec.Template.Spec.Containers[0].Env = append(ds.Spec.Template.Spec.Containers[0].Env,
+				corev1.EnvVar{
+					Name:  "IP6",
+					Value: "autodetect",
+				},
+				corev1.EnvVar{
+					Name:  "FELIX_IPV6SUPPORT",
+					Value: "true",
+				},
+			)
+
+			runTest := func(c client.WithWatch) {
+				cfg, err := Convert(ctx, c)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(cfg).ToNot(BeNil())
+				Expect(cfg.Spec.CNI.Type).To(Equal(operatorv1.PluginCalico))
+				Expect(cfg.Spec.CNI.IPAM.Type).To(Equal(operatorv1.IPAMPluginCalico))
+				Expect(*cfg.Spec.CalicoNetwork.BGP).To(Equal(operatorv1.BGPEnabled))
+
+				expectedV6pool, err := convertPool(*v6pool)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(cfg.Spec.CalicoNetwork.IPPools).To(ContainElements(expectedV6pool))
+			}
+
+			// Run test with both pools. calico-node will create a v4 pool by default.
+			// But the operator migration will remove the v4 pool from the installation cr.
+			bothPools := fake.NewFakeClientWithScheme(scheme, v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			runTest(bothPools)
+
+			// Run test but with only v6 pool
+			ipv6Only := fake.NewFakeClientWithScheme(scheme, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			runTest(ipv6Only)
+		})
+		It("fails migrating default IPv6 only config if missing pool", func() {
+			ds := emptyNodeSpec()
+			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
+				Name:  "CNI_NETWORK_CONFIG",
+				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam", "assign_ipv4":"false", "assign_ipv6":"true"}}`,
+			}}
+
+			ds.Spec.Template.Spec.Containers[0].Env = append(ds.Spec.Template.Spec.Containers[0].Env,
+				corev1.EnvVar{
+					Name:  "IP6",
+					Value: "autodetect",
+				},
+				corev1.EnvVar{
+					Name:  "FELIX_IPV6SUPPORT",
+					Value: "true",
+				},
+			)
+
+			// no pools at all
+			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			cfg, err := Convert(ctx, c)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(Equal("CNI config indicates assign_ipv6=true but there were no valid IPv6 pools found. To fix it, create an IPv6 pool or set assign_ipv6=false on cni-config"))
+			Expect(cfg).To(BeNil())
+
+			// IPv4 pool only
+			c = fake.NewFakeClientWithScheme(scheme, ds, v4pool, emptyKubeControllerSpec(), emptyFelixConfig())
+			cfg, err = Convert(ctx, c)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(Equal("CNI config indicates assign_ipv6=true but there were no valid IPv6 pools found. To fix it, create an IPv6 pool or set assign_ipv6=false on cni-config"))
+			Expect(cfg).To(BeNil())
+		})
+		It("migrate default IPv6 only config with IPv4 disabled", func() {
+			ds := emptyNodeSpec()
+			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
+				Name:  "CNI_NETWORK_CONFIG",
+				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam", "assign_ipv4":"false", "assign_ipv6":"true"}}`,
+			}}
+
+			ds.Spec.Template.Spec.Containers[0].Env = append(ds.Spec.Template.Spec.Containers[0].Env,
+				corev1.EnvVar{
+					Name:  "IP",
+					Value: "none",
+				},
+				corev1.EnvVar{
+					Name:  "IP6",
+					Value: "autodetect",
+				},
+				corev1.EnvVar{
+					Name:  "CALICO_ROUTER_ID",
+					Value: "hash",
+				},
+				corev1.EnvVar{
+					Name:  "FELIX_IPV6SUPPORT",
+					Value: "true",
+				},
+			)
+
+			runTest := func(c client.WithWatch) {
+				cfg, err := Convert(ctx, c)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(cfg).ToNot(BeNil())
+				Expect(cfg.Spec.CNI.Type).To(Equal(operatorv1.PluginCalico))
+				Expect(cfg.Spec.CNI.IPAM.Type).To(Equal(operatorv1.IPAMPluginCalico))
+				Expect(*cfg.Spec.CalicoNetwork.BGP).To(Equal(operatorv1.BGPEnabled))
+
+				expectedV6pool, err := convertPool(*v6pool)
+				Expect(err).ToNot(HaveOccurred())
+				Expect(cfg.Spec.CalicoNetwork.IPPools).To(ContainElements(expectedV6pool))
+			}
+
+			// Run test with both pools. calico-node will create a v4 pool by default.
+			// But the operator migration will remove the v4 pool from the installation cr.
+			bothPools := fake.NewFakeClientWithScheme(scheme, v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			runTest(bothPools)
+
+			// Run test but with only v6 pool
+			ipv6Only := fake.NewFakeClientWithScheme(scheme, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			runTest(ipv6Only)
 		})
 
 		DescribeTable("test invalid ipam and backend",
@@ -538,9 +742,12 @@ var _ = Describe("Convert network tests", func() {
 		})
 	})
 
-	DescribeTable("handle IPv6", func(envVars []corev1.EnvVar, errorExpected bool) {
+	DescribeTable("handle IPv6 config errors", func(envVars []corev1.EnvVar, errorExpected bool) {
 		ds := emptyNodeSpec()
 		ds.Spec.Template.Spec.Containers[0].Env = append(ds.Spec.Template.Spec.Containers[0].Env, envVars...)
+		// The calico-node ds has a v4 pool to satisfy the migration controller.
+		// The tests here are only testing the IPv6-related env var migration
+		// validation so the defined pools don't matter.
 		c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig())
 		cfg, err := Convert(ctx, c)
 		if errorExpected {
@@ -551,33 +758,64 @@ var _ = Describe("Convert network tests", func() {
 			Expect(cfg).ToNot(BeNil())
 		}
 	},
-		Entry("should not error if IP6=none", []corev1.EnvVar{
-			{Name: "IP6", Value: "none"},
-			{Name: "FELIX_IPV6SUPPORT", Value: "false"}}, false),
+		Entry("should error if implicitly IPv4 only and FELIX_IPV6SUPPORT=true", []corev1.EnvVar{{Name: "FELIX_IPV6SUPPORT", Value: "true"}}, true),
+		Entry("should error if explicitlyIPv4 only and FELIX_IPV6SUPPORT=true", []corev1.EnvVar{
+			{Name: "IP", Value: "autodetect"},
+			{Name: "FELIX_IPV6SUPPORT", Value: "true"}}, true),
 		Entry("should error if IP6=none but FELIX_IPV6SUPPORT=true", []corev1.EnvVar{
 			{Name: "IP6", Value: "none"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "true"}}, true),
 		Entry("should not error if IP6=none and FELIX_IPV6SUPPORT is undefined", []corev1.EnvVar{{Name: "IP6", Value: "none"}}, false),
-		Entry("should not error if FELIX_IPV6SUPPORT is false", []corev1.EnvVar{{Name: "FELIX_IPV6SUPPORT", Value: "false"}}, false),
-		Entry("should error if FELIX_IPV6SUPPORT is true", []corev1.EnvVar{{Name: "FELIX_IPV6SUPPORT", Value: "true"}}, true),
-		Entry("should allow IPv6 only",
-			[]corev1.EnvVar{
-				{Name: "IP", Value: "none"},
-				{Name: "IP6", Value: "autodetect"},
-				{Name: "FELIX_IPV6SUPPORT", Value: "true"}}, false),
-		Entry("should error if IPv6 only and CALICO_ROUTER_ID is not `hash`",
+		Entry("should error if IPv4 only and FELIX_IPV6SUPPORT=true", []corev1.EnvVar{{Name: "FELIX_IPV6SUPPORT", Value: "true"}}, true),
+		Entry("should error if IPv6 only and CALICO_ROUTER_ID != `hash`",
 			[]corev1.EnvVar{
 				{Name: "IP", Value: "none"},
 				{Name: "IP6", Value: "autodetect"},
 				{Name: "FELIX_IPV6SUPPORT", Value: "true"},
 				{Name: "CALICO_ROUTER_ID", Value: "not hash"}}, true),
-		Entry("should allow dual-stack",
-			[]corev1.EnvVar{
-				{Name: "IP", Value: "autodetect"},
-				{Name: "IP6", Value: "autodetect"},
-				{Name: "FELIX_IPV6SUPPORT", Value: "true"}}, false),
-		Entry("should error if IPv6 only and CALICO_ROUTER_ID is undefined", []corev1.EnvVar{{Name: "FELIX_IPV6SUPPORT", Value: "true"}}, true),
 	)
+
+	It("handle both IP_AUTODETECTION_METHOD and IP6_AUTODETECTION_METHOD", func() {
+		ds := emptyNodeSpec()
+		ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
+			Name:  "CNI_NETWORK_CONFIG",
+			Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam", "assign_ipv4":"true", "assign_ipv6":"true"}}`,
+		}}
+
+		ds.Spec.Template.Spec.Containers[0].Env = append(ds.Spec.Template.Spec.Containers[0].Env,
+			corev1.EnvVar{
+				Name:  "IP",
+				Value: "autodetect",
+			},
+			corev1.EnvVar{
+				Name:  "IP6",
+				Value: "autodetect",
+			},
+			corev1.EnvVar{
+				Name:  "FELIX_IPV6SUPPORT",
+				Value: "true",
+			},
+		)
+
+		ds.Spec.Template.Spec.Containers[0].Env = append(ds.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{
+			Name:  "IP_AUTODETECTION_METHOD",
+			Value: "can-reach=8.8.8.8",
+		})
+
+		ds.Spec.Template.Spec.Containers[0].Env = append(ds.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{
+			Name:  "IP6_AUTODETECTION_METHOD",
+			Value: "interface=ens*",
+		})
+
+		c := fake.NewFakeClientWithScheme(scheme, v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+		cfg, err := Convert(ctx, c)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(cfg).ToNot(BeNil())
+		Expect(cfg.Spec.CalicoNetwork.NodeAddressAutodetectionV4).NotTo(BeNil())
+		Expect(cfg.Spec.CalicoNetwork.NodeAddressAutodetectionV4.CanReach).To(Equal("8.8.8.8"))
+		Expect(cfg.Spec.CalicoNetwork.NodeAddressAutodetectionV6).NotTo(BeNil())
+		Expect(cfg.Spec.CalicoNetwork.NodeAddressAutodetectionV6.Interface).To(Equal("ens*"))
+	})
 
 	Describe("handle IP_AUTODETECTION_METHOD env", func() {
 		var ds *appsv1.DaemonSet

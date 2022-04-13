@@ -32,6 +32,9 @@ func handleIPPools(c *components, install *operatorv1.Installation) error {
 	if err != nil {
 		return err
 	}
+
+	var operatorV6Pool operatorv1.IPPool
+
 	// Only if there is at least one v4 or v6 pool will we initialize CalicoNetwork
 	if v4pool != nil || v6pool != nil {
 		if install.Spec.CalicoNetwork == nil {
@@ -55,14 +58,14 @@ func handleIPPools(c *components, install *operatorv1.Installation) error {
 		}
 
 		if render.GetIPv6Pool(install.Spec.CalicoNetwork.IPPools) == nil && v6pool != nil {
-			pool, err := convertPool(*v6pool)
+			operatorV6Pool, err = convertPool(*v6pool)
 			if err != nil {
 				return ErrIncompatibleCluster{
 					err:       fmt.Sprintf("failed to convert IPPool %s, %s ", v6pool.Name, err),
 					component: ComponentIPPools,
 				}
 			}
-			install.Spec.CalicoNetwork.IPPools = append(install.Spec.CalicoNetwork.IPPools, pool)
+			install.Spec.CalicoNetwork.IPPools = append(install.Spec.CalicoNetwork.IPPools, operatorV6Pool)
 		}
 	}
 
@@ -82,8 +85,7 @@ func handleIPPools(c *components, install *operatorv1.Installation) error {
 			// pools with the IPv6 pool.
 			// This is needed because the operator renders IPAM config
 			// based on the presence of initial ippools in the installation CR.
-			ipv6Pool := render.GetIPv6Pool(install.Spec.CalicoNetwork.IPPools)
-			if ipv6Pool == nil {
+			if v6pool == nil {
 				return ErrIncompatibleCluster{
 					err:       "CNI config indicates assign_ipv6=true but there were no valid IPv6 pools found",
 					component: ComponentCNIConfig,
@@ -91,7 +93,7 @@ func handleIPPools(c *components, install *operatorv1.Installation) error {
 				}
 			}
 
-			install.Spec.CalicoNetwork.IPPools = []operatorv1.IPPool{*ipv6Pool}
+			install.Spec.CalicoNetwork.IPPools = []operatorv1.IPPool{operatorV6Pool}
 		}
 		if c.cni.CalicoConfig.IPAM.AssignIpv6 != nil && strings.ToLower(*c.cni.CalicoConfig.IPAM.AssignIpv6) == "true" {
 			if v6pool == nil {

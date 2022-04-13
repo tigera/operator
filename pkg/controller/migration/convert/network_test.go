@@ -35,6 +35,7 @@ func int32Ptr(x int32) *int32 {
 var _ = Describe("Convert network tests", func() {
 	var ctx = context.Background()
 	var v4pool *crdv1.IPPool
+	var v6pool *crdv1.IPPool
 	var scheme *runtime.Scheme
 	BeforeEach(func() {
 		scheme = kscheme.Scheme
@@ -42,8 +43,17 @@ var _ = Describe("Convert network tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		v4pool = crdv1.NewIPPool()
+		v4pool.Name = "test-ipv4-pool"
 		v4pool.Spec = crdv1.IPPoolSpec{
 			CIDR:        "192.168.4.0/24",
+			IPIPMode:    crdv1.IPIPModeAlways,
+			NATOutgoing: true,
+		}
+
+		v6pool = crdv1.NewIPPool()
+		v6pool.Name = "test-ipv6-pool"
+		v6pool.Spec = crdv1.IPPoolSpec{
+			CIDR:        "2001:db8::1/120",
 			IPIPMode:    crdv1.IPIPModeAlways,
 			NATOutgoing: true,
 		}
@@ -674,16 +684,8 @@ var _ = Describe("Convert network tests", func() {
 
 	Describe("handle IP6_AUTODETECTION_METHOD env", func() {
 		var ds *appsv1.DaemonSet
-		var pool *crdv1.IPPool
 
 		BeforeEach(func() {
-			pool = crdv1.NewIPPool()
-			pool.Spec = crdv1.IPPoolSpec{
-				CIDR:        "2001:db8::1/120",
-				IPIPMode:    crdv1.IPIPModeAlways,
-				NATOutgoing: true,
-			}
-
 			ds = emptyNodeSpec()
 			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name:  "CNI_NETWORK_CONFIG",
@@ -691,6 +693,10 @@ var _ = Describe("Convert network tests", func() {
 			}}
 
 			ds.Spec.Template.Spec.Containers[0].Env = append(ds.Spec.Template.Spec.Containers[0].Env,
+				corev1.EnvVar{
+					Name:  "IP",
+					Value: "none",
+				},
 				corev1.EnvVar{
 					Name:  "IP6",
 					Value: "autodetect",
@@ -709,7 +715,7 @@ var _ = Describe("Convert network tests", func() {
 					Value: "cidr=2001:20::8/64",
 				},
 			)
-			c := fake.NewFakeClientWithScheme(scheme, pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			c := fake.NewFakeClientWithScheme(scheme, v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
 			cfg, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
@@ -723,7 +729,7 @@ var _ = Describe("Convert network tests", func() {
 					Value: "first-found",
 				})
 
-			c := fake.NewFakeClientWithScheme(scheme, pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			c := fake.NewFakeClientWithScheme(scheme, v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
 			cfg, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
@@ -739,7 +745,7 @@ var _ = Describe("Convert network tests", func() {
 				},
 			)
 
-			c := fake.NewFakeClientWithScheme(scheme, pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			c := fake.NewFakeClientWithScheme(scheme, v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
 			cfg, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
@@ -754,7 +760,7 @@ var _ = Describe("Convert network tests", func() {
 				},
 			)
 
-			c := fake.NewFakeClientWithScheme(scheme, pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			c := fake.NewFakeClientWithScheme(scheme, v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
 			cfg, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
@@ -769,7 +775,7 @@ var _ = Describe("Convert network tests", func() {
 				},
 			)
 
-			c := fake.NewFakeClientWithScheme(scheme, pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			c := fake.NewFakeClientWithScheme(scheme, v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
 			cfg, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
@@ -784,7 +790,7 @@ var _ = Describe("Convert network tests", func() {
 				},
 			)
 
-			c := fake.NewFakeClientWithScheme(scheme, pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			c := fake.NewFakeClientWithScheme(scheme, v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
 			cfg, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
@@ -799,7 +805,7 @@ var _ = Describe("Convert network tests", func() {
 				},
 			)
 
-			c := fake.NewFakeClientWithScheme(scheme, pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			c := fake.NewFakeClientWithScheme(scheme, v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
 			cfg, err := Convert(ctx, c)
 			Expect(err).To(HaveOccurred())
 			Expect(cfg).To(BeNil())

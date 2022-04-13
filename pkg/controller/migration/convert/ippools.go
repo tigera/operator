@@ -32,6 +32,9 @@ func handleIPPools(c *components, install *operatorv1.Installation) error {
 	if err != nil {
 		return err
 	}
+
+	var operatorV6Pool operatorv1.IPPool
+
 	// Only if there is at least one v4 or v6 pool will we initialize CalicoNetwork
 	if v4pool != nil || v6pool != nil {
 		if install.Spec.CalicoNetwork == nil {
@@ -55,14 +58,14 @@ func handleIPPools(c *components, install *operatorv1.Installation) error {
 		}
 
 		if render.GetIPv6Pool(install.Spec.CalicoNetwork.IPPools) == nil && v6pool != nil {
-			pool, err := convertPool(*v6pool)
+			operatorV6Pool, err = convertPool(*v6pool)
 			if err != nil {
 				return ErrIncompatibleCluster{
 					err:       fmt.Sprintf("failed to convert IPPool %s, %s ", v6pool.Name, err),
 					component: ComponentIPPools,
 				}
 			}
-			install.Spec.CalicoNetwork.IPPools = append(install.Spec.CalicoNetwork.IPPools, pool)
+			install.Spec.CalicoNetwork.IPPools = append(install.Spec.CalicoNetwork.IPPools, operatorV6Pool)
 		}
 	}
 
@@ -77,13 +80,20 @@ func handleIPPools(c *components, install *operatorv1.Installation) error {
 				}
 			}
 		} else {
-			if v4pool != nil {
+			// If assign_ipv4="false" then remove any discovered IPv4 pools.
+			// Since we must have an IPv6 pool here, replace the operator
+			// pools with the IPv6 pool.
+			// This is needed because the operator renders IPAM config
+			// based on the presence of initial ippools in the installation CR.
+			if v6pool == nil {
 				return ErrIncompatibleCluster{
-					err:       "CNI config indicates assign_ipv4=false but an IPv4 pool was found",
+					err:       "CNI config indicates assign_ipv6=true but there were no valid IPv6 pools found",
 					component: ComponentCNIConfig,
-					fix:       "delete the IPv4 pool or set assign_ipv4=false",
+					fix:       "create an IPv6 pool or set assign_ipv6=false",
 				}
 			}
+
+			install.Spec.CalicoNetwork.IPPools = []operatorv1.IPPool{operatorV6Pool}
 		}
 		if c.cni.CalicoConfig.IPAM.AssignIpv6 != nil && strings.ToLower(*c.cni.CalicoConfig.IPAM.AssignIpv6) == "true" {
 			if v6pool == nil {

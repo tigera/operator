@@ -93,14 +93,66 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 		}
 	}
 
-	// IP
-	if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "IP", "autodetect"); err != nil {
+	ip, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "IP")
+	if err != nil {
 		return err
 	}
 
-	// IP_AUTODETECTION_METHOD
-	if err := handleAutoDetectionMethod(c, install); err != nil {
+	// IP can be 'autodetect', 'none', or not defined.
+	if ip == nil || *ip == "autodetect" {
+		if err := handleIPAutoDetectionMethod(c, install); err != nil {
+			return err
+		}
+	} else if ip != nil && *ip == "none" {
+		c.node.ignoreEnv(containerCalicoNode, "IP_AUTODETECTION_METHOD")
+	} else {
+		return ErrIncompatibleCluster{
+			err:       fmt.Sprintf("IP=%s is not supported", *ip),
+			component: ComponentCalicoNode,
+			fix:       fmt.Sprintf("remove the IP env var or set it to 'none' or 'autodetect', depending on your cluster configuration"),
+		}
+	}
+
+	ip6, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "IP6")
+	if err != nil {
 		return err
+	}
+	// IP6 can be 'autodetect', 'none', or not defined.
+	if ip6 != nil {
+		if *ip6 == "none" {
+			// If IP6=none then if FELIX_IPV6SUPPORT is set it must be false.
+			if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "FELIX_IPV6SUPPORT", "false"); err != nil {
+				return err
+			}
+		} else if *ip6 == "autodetect" {
+			if err := handleIPv6AutoDetectionMethod(c, install); err != nil {
+				return err
+			}
+			// If IP6=autodetect then if FELIX_IPV6SUPPORT is set it must be true.
+			if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "FELIX_IPV6SUPPORT", "true"); err != nil {
+				return err
+			}
+		} else {
+			return ErrIncompatibleCluster{
+				err:       fmt.Sprintf("IP6=%s is not supported", *ip),
+				component: ComponentCalicoNode,
+				fix:       fmt.Sprintf("remove the IP6 env var or set it to 'none' or 'autodetect', depending on your cluster configuration"),
+			}
+		}
+	} else {
+		if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "FELIX_IPV6SUPPORT", "false"); err != nil {
+			return err
+		}
+	}
+
+	// If IPv6 only, check that CALICO_ROUTER_ID, if defined, is set to `hash`.
+	// Custom router ID values are only used for manual calico-node deployments and not
+	// applicable to calico-node running as a daemonset.
+	// In IPv6-only mode, calico-node will be rendered with CALICO_ROUTER_ID="hash".
+	if ip6 != nil && *ip6 == "autodetect" && ip != nil && *ip == "none" {
+		if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "CALICO_ROUTER_ID", "hash"); err != nil {
+			return err
+		}
 	}
 
 	// CNI portmap plugin
@@ -142,22 +194,6 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 			fix:       "disable 'AllowIPForwarding' in the CNI configuration",
 		}
 	}
-
-	return nil
-}
-
-// handleIPv6 is a migration handler which ensures that IPv6 is configured as expected.
-// since the operator itself does not support IPv6, we verify that IPv6 is disabled.
-func handleIPv6(c *components, _ *operatorv1.Installation) error {
-	if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "FELIX_IPV6SUPPORT", "false"); err != nil {
-		return err
-	}
-
-	if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "IP6", "none"); err != nil {
-		return err
-	}
-
-	c.node.ignoreEnv(containerCalicoNode, "IP6_AUTODETECTION_METHOD")
 
 	return nil
 }
@@ -382,17 +418,9 @@ func handleNonCalicoCNI(c *components, install *operatorv1.Installation) error {
 	return nil
 }
 
-// getAutoDetection auto-detects the IP and Network using the requested
-// detection method.
-func handleAutoDetectionMethod(c *components, install *operatorv1.Installation) error {
-	method, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "IP_AUTODETECTION_METHOD")
-	if err != nil {
-		return err
-	}
-	if method == nil {
-		return nil
-	}
-
+// getAutoDetectionMethod gets the corresponding NodeAddressAutodetection for
+// the given method or returns an error.
+func getAutoDetectionMethod(method *string) (*operatorv1.NodeAddressAutodetection, error) {
 	const (
 		AutodetectionMethodFirst         = "first-found"
 		AutodetectionMethodCanReach      = "can-reach="
@@ -405,51 +433,85 @@ func handleAutoDetectionMethod(c *components, install *operatorv1.Installation) 
 	// first-found
 	if *method == "" || *method == AutodetectionMethodFirst {
 		var t = true
-		install.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operatorv1.NodeAddressAutodetection{FirstFound: &t}
-		return nil
+		return &operatorv1.NodeAddressAutodetection{FirstFound: &t}, nil
 	}
 
 	// interface
 	if strings.HasPrefix(*method, AutodetectionMethodInterface) {
 		ifStr := strings.TrimPrefix(*method, AutodetectionMethodInterface)
-		install.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operatorv1.NodeAddressAutodetection{Interface: ifStr}
-		return nil
+		return &operatorv1.NodeAddressAutodetection{Interface: ifStr}, nil
 	}
 
 	// can-reach
 	if strings.HasPrefix(*method, AutodetectionMethodCanReach) {
 		dest := strings.TrimPrefix(*method, AutodetectionMethodCanReach)
-		install.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operatorv1.NodeAddressAutodetection{CanReach: dest}
-		return nil
+		return &operatorv1.NodeAddressAutodetection{CanReach: dest}, nil
 	}
 
 	// skip-interface
 	if strings.HasPrefix(*method, AutodetectionMethodSkipInterface) {
 		ifStr := strings.TrimPrefix(*method, AutodetectionMethodSkipInterface)
-		install.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operatorv1.NodeAddressAutodetection{SkipInterface: ifStr}
-		return nil
+		return &operatorv1.NodeAddressAutodetection{SkipInterface: ifStr}, nil
 	}
 
 	// cidr=
 	if strings.HasPrefix(*method, AutodetectionMethodCIDR) {
 		ifStr := strings.TrimPrefix(*method, AutodetectionMethodCIDR)
 		cidrs := strings.Split(ifStr, ",")
-		install.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operatorv1.NodeAddressAutodetection{CIDRS: cidrs}
-		return nil
+		return &operatorv1.NodeAddressAutodetection{CIDRS: cidrs}, nil
 	}
 
 	// kubernetes-internal-ip
 	if *method == "" || *method == AutodetectionMethodNodeIP {
 		var k = operatorv1.NodeInternalIP
-		install.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operatorv1.NodeAddressAutodetection{Kubernetes: &k}
-		return nil
+		return &operatorv1.NodeAddressAutodetection{Kubernetes: &k}, nil
 	}
 
-	return ErrIncompatibleCluster{
-		err:       fmt.Sprintf("IP_AUTODETECTION_METHOD=%s is not supported", *method),
-		component: ComponentCalicoNode,
-		fix:       "remove the IP_AUTODETECTION_METHOD env var or set it to 'first-found', 'can-reach=*', 'interface=*', 'cidr=*', or 'skip-interface=*'",
+	return nil, fmt.Errorf("invalid IP autodetection method")
+}
+
+// handleIPAutoDetectionMethod updates the installation with the IP autodetection
+// method if defined.
+func handleIPAutoDetectionMethod(c *components, install *operatorv1.Installation) error {
+	method, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "IP_AUTODETECTION_METHOD")
+	if err != nil {
+		return err
 	}
+	if method == nil {
+		return nil
+	}
+	addrMethod, err := getAutoDetectionMethod(method)
+	if err != nil {
+		return ErrIncompatibleCluster{
+			err:       fmt.Sprintf("IP_AUTODETECTION_METHOD=%s is not supported", *method),
+			component: ComponentCalicoNode,
+			fix:       "remove the IP_AUTODETECTION_METHOD env var or set it to 'first-found', 'can-reach=*', 'interface=*', 'skip-interface=*', 'cidr=*', or 'kubernetes-internal-ip'",
+		}
+	}
+	install.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = addrMethod
+	return nil
+}
+
+// handleIPv6AutoDetectionMethod updates the installation with the IPv6 autodetection
+// method if defined.
+func handleIPv6AutoDetectionMethod(c *components, install *operatorv1.Installation) error {
+	method, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "IP6_AUTODETECTION_METHOD")
+	if err != nil {
+		return err
+	}
+	if method == nil {
+		return nil
+	}
+	addrMethod, err := getAutoDetectionMethod(method)
+	if err != nil {
+		return ErrIncompatibleCluster{
+			err:       fmt.Sprintf("IP6_AUTODETECTION_METHOD=%s is not supported", *method),
+			component: ComponentCalicoNode,
+			fix:       "remove the IP6_AUTODETECTION_METHOD env var or set it to 'first-found', 'can-reach=*', 'interface=*', 'skip-interface=*', 'cidr=*', or 'kubernetes-internal-ip'",
+		}
+	}
+	install.Spec.CalicoNetwork.NodeAddressAutodetectionV6 = addrMethod
+	return nil
 }
 
 func getCNIPlugin(c *components) (operatorv1.CNIPluginType, error) {

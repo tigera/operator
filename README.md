@@ -85,12 +85,12 @@ To tear down the cluster:
 These steps assume that you already have installed the operator in a Calico (Enterprise) cluster after following either 
 docs.projectcalico.org or docs.tigera.io. To verify, run `kubectl get deployment -n tigera-operator tigera-operator`. 
 You should see an existing deployment. 
+The steps also assume that you have setup your docker such that you can push to a registry.
 
 These are the steps:
 1. Make your own code changes to this repository.
 2. Create the binaries and a docker image.
    ```bash
-   make build
    make image
    ```
    The output will show you the docker tag that was just created. (For example: `Successfully tagged tigera/operator:latest-amd64`.)

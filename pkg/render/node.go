@@ -1337,11 +1337,15 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 			// We also need to configure a non-default trusted DNS server, since there's no kube-dns.
 			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"})
 		}
-	// For AKS and EKS/CalicoCNI, we must explicitly ask felix to add host IP's to wireguard ifaces
+	// For AKS/AzureVNET and EKS/VPCCNI, we must explicitly ask felix to add host IP's to wireguard ifaces
 	case operatorv1.ProviderAKS:
-		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_WIREGUARDHOSTENCRYPTIONENABLED", Value: "true"})
+		if c.cfg.Installation.CNI.Type == operatorv1.PluginAzureVNET {
+			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_WIREGUARDHOSTENCRYPTIONENABLED", Value: "true"})
+		}
 	case operatorv1.ProviderEKS:
-		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_WIREGUARDHOSTENCRYPTIONENABLED", Value: "true"})
+		if c.cfg.Installation.CNI.Type == operatorv1.PluginAmazonVPC {
+			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_WIREGUARDHOSTENCRYPTIONENABLED", Value: "true"})
+		}
 	}
 
 	switch c.cfg.Installation.CNI.Type {

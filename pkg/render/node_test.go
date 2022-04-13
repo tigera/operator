@@ -898,7 +898,6 @@ var _ = Describe("Node rendering tests", func() {
 					Optional: &optional,
 				},
 			}},
-			{Name: "FELIX_WIREGUARDHOSTENCRYPTIONENABLED", Value: "true"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		// Expect the SECURITY_GROUP env variables to not be set
@@ -1346,7 +1345,6 @@ var _ = Describe("Node rendering tests", func() {
 					Optional: &optional,
 				},
 			}},
-			{Name: "FELIX_WIREGUARDHOSTENCRYPTIONENABLED", Value: "true"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		// Expect the SECURITY_GROUP env variables to not be set

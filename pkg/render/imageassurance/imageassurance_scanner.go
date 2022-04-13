@@ -15,9 +15,9 @@ import (
 
 const (
 	scannerRequestCPU    = "250m"
-	scannerRequestMemory = "512Mi"
+	scannerRequestMemory = "4Gi"
 	scannerLimitCPU      = "1"
-	scannerLimitMemory   = "1.5Gi"
+	scannerLimitMemory   = "4Gi"
 )
 
 func (c *component) scannerServiceAccount() *corev1.ServiceAccount {

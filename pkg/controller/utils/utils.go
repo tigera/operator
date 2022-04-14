@@ -243,7 +243,22 @@ func ValidateCertPair(client client.Client, namespace, certPairSecretName, keyNa
 		}
 	}
 
+	// In v1.26 we normalized the fields for all TLS secrets to those specified in the core/v1 library. For clusters
+	// downgraded from >=v1.26 to <1.26, we need to make sure secrets are still compatible. Downgrades can happen
+	// when users convert an OSS operator installation to a Calico Cloud cluster.
+	_, certFound := secret.Data[certName]
+	coreCert, coreCertFound := secret.Data[corev1.TLSCertKey]
+	if !certFound && coreCertFound {
+		secret.Data[certName] = coreCert
+	}
+
 	if keyName != "" {
+		_, keyFound := secret.Data[keyName]
+		coreKey, coreKeyFound := secret.Data[corev1.TLSPrivateKeyKey]
+		if !keyFound && coreKeyFound {
+			secret.Data[keyName] = coreKey
+		}
+
 		if val, ok := secret.Data[keyName]; !ok || len(val) == 0 {
 			return secret, fmt.Errorf("Secret %q does not have a field named %q", certPairSecretName, keyName)
 		}

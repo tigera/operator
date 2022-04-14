@@ -1416,7 +1416,12 @@ func (r *ReconcileInstallation) GetTyphaNodeTLSConfig() (*render.TyphaNodeTLS, e
 			_, okCN := node.Data[render.CommonName]
 			_, okUS := node.Data[render.URISAN]
 			if !(okCN || okUS) {
-				errMsgs = append(errMsgs, fmt.Sprintf("CertPair for Felix does not contain common-name or uri-san"))
+				if node.Data[corev1.TLSCertKey] != nil {
+					// This is a cluster downgraded from v1.26+, where the common name is assumed to be render.FelixCommonName.
+					node.Data[render.CommonName] = []byte(render.FelixCommonName)
+				} else {
+					errMsgs = append(errMsgs, fmt.Sprintf("CertPair for Felix does not contain common-name or uri-san"))
+				}
 			}
 		}
 	}
@@ -1436,8 +1441,25 @@ func (r *ReconcileInstallation) GetTyphaNodeTLSConfig() (*render.TyphaNodeTLS, e
 			_, okCN := typha.Data[render.CommonName]
 			_, okUS := typha.Data[render.URISAN]
 			if !(okCN || okUS) {
-				errMsgs = append(errMsgs, fmt.Sprintf("CertPair for Typha does not contain common-name or uri-san"))
+				if typha.Data[corev1.TLSCertKey] != nil {
+					// This is a cluster downgraded from v1.26+, where the common name is assumed to be render.TyphaCommonName.
+					typha.Data[render.CommonName] = []byte(render.TyphaCommonName)
+				} else {
+					errMsgs = append(errMsgs, fmt.Sprintf("CertPair for Typha does not contain common-name or uri-san"))
+				}
 			}
+		}
+	}
+
+	if ca == nil && typha != nil && typha.Data[corev1.TLSCertKey] != nil && node != nil && node.Data[corev1.TLSCertKey] != nil {
+		// This is a cluster downgraded from v1.26+, where the configmap is no longer automatically created.
+		// We can create a compatible configmap by combining the PEM data of both certificates.
+		ca = &corev1.ConfigMap{
+			TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: render.TyphaCAConfigMapName, Namespace: common.OperatorNamespace()},
+			Data: map[string]string{
+				render.TyphaCABundleName: fmt.Sprintf("# certificate: node-certs\n%s\n\n# certificate: node-certs\n%s", string(typha.Data[corev1.TLSCertKey]), string(node.Data[corev1.TLSCertKey])),
+			},
 		}
 	}
 

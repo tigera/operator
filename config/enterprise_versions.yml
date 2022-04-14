@@ -4,7 +4,7 @@ components:
     version: v3.12.0
   cnx-manager:
     image: tigera/cnx-manager
-    version: v3.12.0
+    version: v3.12.2
   voltron:
     image: tigera/voltron
     version: v3.12.0
@@ -16,7 +16,7 @@ components:
     version: v3.12.0
   cnx-kube-controllers:
     image: tigera/kube-controllers
-    version: v3.12.0
+    version: v3.12.2
   typha:
     image: tigera/typha
     version: v3.12.0
@@ -56,7 +56,7 @@ components:
     version: v3.12.0
   intrusion-detection-controller:
     image: tigera/intrusion-detection-controller
-    version: v3.12.0
+    version: v3.12.2
   compliance-controller:
     image: tigera/compliance-controller
     version: v3.12.0
@@ -125,16 +125,16 @@ components:
     version: v3.12.0
   image-assurance-api:
     image: tigera/image-assurance-api
-    version: master
+    version: v0.9.0
   image-assurance-scanner:
     image: tigera/image-assurance-scanner
-    version: master
+    version: v0.9.0
   image-assurance-db-migrator:
     image: tigera/image-assurance-db-migrator
-    version: master
+    version: v0.9.0
   image-assurance-caw:
     image: tigera/image-assurance-caw
-    version: master
+    version: v0.9.0
   sasha:
     image: tigera/sasha
-    version: master
+    version: update-misp-add-test-hashes

@@ -113,7 +113,7 @@ var (
 	}
 
 	ComponentIntrusionDetectionController = component{
-		Version: "v3.12.0",
+		Version: "v3.12.2",
 		Image:   "tigera/intrusion-detection-controller",
 	}
 
@@ -123,7 +123,7 @@ var (
 	}
 
 	ComponentManager = component{
-		Version: "tesla-v3.12.0",
+		Version: "tesla-v3.12.2",
 		Image:   "tigera/cnx-manager",
 	}
 
@@ -183,7 +183,7 @@ var (
 	}
 
 	ComponentTigeraKubeControllers = component{
-		Version: "v3.12.0",
+		Version: "v3.12.2",
 		Image:   "tigera/kube-controllers",
 	}
 
@@ -213,27 +213,27 @@ var (
 	}
 
 	ComponentImageAssuranceApi = component{
-		Version: "master",
+		Version: "v0.9.0",
 		Image:   "tigera/image-assurance-api",
 	}
 
 	ComponentImageAssuranceScanner = component{
-		Version: "master",
+		Version: "v0.9.0",
 		Image:   "tigera/image-assurance-scanner",
 	}
 
 	ComponentImageAssuranceDBMigrator = component{
-		Version: "master",
+		Version: "v0.9.0",
 		Image:   "tigera/image-assurance-db-migrator",
 	}
 
 	ComponentImageAssuranceCAW = component{
-		Version: "master",
+		Version: "v0.9.0",
 		Image:   "tigera/image-assurance-caw",
 	}
 
 	ComponentSasha = component{
-		Version: "master",
+		Version: "update-misp-add-test-hashes",
 		Image:   "tigera/sasha",
 	}
 

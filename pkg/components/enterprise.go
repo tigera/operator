@@ -88,7 +88,7 @@ var (
 	}
 
 	ComponentEsProxy = component{
-		Version: "v3.12.1-0-pre-release",
+		Version: "v3.12.2",
 		Image:   "tigera/es-proxy",
 	}
 

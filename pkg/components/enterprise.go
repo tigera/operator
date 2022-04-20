@@ -63,7 +63,7 @@ var (
 	}
 
 	ComponentElasticTseeInstaller = component{
-		Version: "v3.12.0",
+		Version: "v3.12.3-1",
 		Image:   "tigera/intrusion-detection-job-installer",
 	}
 
@@ -113,7 +113,7 @@ var (
 	}
 
 	ComponentIntrusionDetectionController = component{
-		Version: "v3.12.2",
+		Version: "v3.12.3-1",
 		Image:   "tigera/intrusion-detection-controller",
 	}
 
@@ -233,7 +233,7 @@ var (
 	}
 
 	ComponentSasha = component{
-		Version: "update-misp-add-test-hashes",
+		Version: "v0.10.0-0.dev-14-g45ec57aa02c1-amd64",
 		Image:   "tigera/sasha",
 	}
 

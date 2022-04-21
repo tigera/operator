@@ -32,7 +32,6 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -48,7 +47,6 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -166,7 +164,6 @@ var log = logf.Log.WithName("render")
 
 // LogStorage renders the components necessary for kibana and elasticsearch
 func LogStorage(cfg *ElasticsearchConfiguration) Component {
-
 	var kibanaSecrets []*corev1.Secret
 
 	if cfg.KibanaCertSecret != nil {
@@ -174,12 +171,11 @@ func LogStorage(cfg *ElasticsearchConfiguration) Component {
 		kibanaSecrets = append(kibanaSecrets, secret.CopyToNamespace(KibanaNamespace, cfg.KibanaCertSecret)...)
 
 		if cfg.Installation.CertificateManagement != nil {
-
 			kibanaSecrets = append(kibanaSecrets,
 				CreateCertificateSecret(cfg.Installation.CertificateManagement.CACert, relasticsearch.InternalCertSecret, KibanaNamespace),
 				CreateCertificateSecret(cfg.Installation.CertificateManagement.CACert, KibanaInternalCertSecret, common.OperatorNamespace()))
 		} else if cfg.KibanaInternalCertSecret != nil {
-			//copy the valid cert to operator namespace.
+			// copy the valid cert to operator namespace.
 			kibanaSecrets = append(kibanaSecrets, secret.CopyToNamespace(common.OperatorNamespace(), cfg.KibanaInternalCertSecret)...)
 		}
 	}
@@ -311,13 +307,10 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		// Apply the pod security policies for all providers except OpenShift
 		if es.cfg.Provider != operatorv1.ProviderOpenShift {
 			toCreate = append(toCreate,
-				es.eckOperatorPodSecurityPolicy(),
 				es.elasticsearchClusterRoleBinding(),
 				es.elasticsearchClusterRole(),
-				es.elasticsearchPodSecurityPolicy(),
 				es.kibanaClusterRoleBinding(),
-				es.kibanaClusterRole(),
-				es.kibanaPodSecurityPolicy())
+				es.kibanaClusterRole())
 		}
 
 		toCreate = append(toCreate, es.eckOperatorStatefulSet())
@@ -367,8 +360,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 			if es.cfg.Provider != operatorv1.ProviderOpenShift {
 				toCreate = append(toCreate,
 					es.curatorClusterRole(),
-					es.curatorClusterRoleBinding(),
-					es.curatorPodSecurityPolicy())
+					es.curatorClusterRoleBinding())
 			}
 
 			toCreate = append(toCreate, es.curatorCronJob())
@@ -636,12 +628,14 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 				Name: csrVolumeNameHTTP,
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				}},
+				},
+			},
 			corev1.Volume{
 				Name: csrVolumeNameTransport,
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				}},
+				},
+			},
 		)
 		// Make the pod mount the serviceaccount token of tigera-elasticsearch. On behalf of it, CSRs will be submitted.
 		autoMountToken = true
@@ -1136,7 +1130,6 @@ func (es elasticsearchComponent) eckOperatorServiceAccount() *corev1.ServiceAcco
 }
 
 // creating this service account without any role bindings to stop curator getting associated with default SA
-// This allows us to create stricter PodSecurityPolicy for the curator as PSP are based on service account.
 func (es elasticsearchComponent) esCuratorServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1240,12 +1233,6 @@ func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
 	}
 }
 
-func (es elasticsearchComponent) eckOperatorPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(ECKOperatorName)
-	return psp
-}
-
 func (es elasticsearchComponent) kibanaServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1308,12 +1295,16 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 			corev1.Volume{
 				Name: csrVolumeNameHTTP,
 				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{}}},
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
 			// Volume where we place the ca cert.
 			corev1.Volume{
 				Name: caVolumeName,
 				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{}}})
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			})
 	}
 
 	count := int32(1)
@@ -1398,9 +1389,9 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 }
 
 func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
-	var f = false
-	var t = true
-	var elasticCuratorLivenessProbe = &corev1.Probe{
+	f := false
+	t := true
+	elasticCuratorLivenessProbe := &corev1.Probe{
 		Handler: corev1.Handler{
 			Exec: &corev1.ExecAction{
 				Command: []string{
@@ -1511,12 +1502,6 @@ func (es elasticsearchComponent) curatorClusterRoleBinding() *rbacv1.ClusterRole
 	}
 }
 
-func (es elasticsearchComponent) curatorPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(EsCuratorName)
-	return psp
-}
-
 func (es elasticsearchComponent) elasticsearchClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1554,21 +1539,6 @@ func (es elasticsearchComponent) elasticsearchClusterRoleBinding() *rbacv1.Clust
 	}
 }
 
-func (es elasticsearchComponent) elasticsearchPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	trueBool := true
-	ptrBoolTrue := &trueBool
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName("tigera-elasticsearch")
-	psp.Spec.Privileged = true
-	psp.Spec.AllowPrivilegeEscalation = ptrBoolTrue
-	psp.Spec.RequiredDropCapabilities = nil
-	psp.Spec.AllowedCapabilities = []corev1.Capability{
-		corev1.Capability("CAP_CHOWN"),
-	}
-	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
-	return psp
-}
-
 func (es elasticsearchComponent) kibanaClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1604,12 +1574,6 @@ func (es elasticsearchComponent) kibanaClusterRoleBinding() *rbacv1.ClusterRoleB
 			},
 		},
 	}
-}
-
-func (es elasticsearchComponent) kibanaPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName("tigera-kibana")
-	return psp
 }
 
 func (es *elasticsearchComponent) supportsOIDC() bool {

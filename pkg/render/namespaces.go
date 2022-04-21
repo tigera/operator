@@ -78,8 +78,24 @@ func CreateNamespace(name string, provider operatorv1.Provider) *corev1.Namespac
 	ns := &corev1.Namespace{
 		TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        name,
-			Labels:      map[string]string{"name": name},
+			Name: name,
+			Labels: map[string]string{
+				"name": name,
+
+				// Include common standard labels.
+				// https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels/
+				"app.kubernetes.io/name":       name,
+				"app.kubernetes.io/part-of":    "calico",
+				"app.kubernetes.io/managed-by": "tigera-operator",
+
+				// Configure pod security standards. By default, all namespaces should be using
+				// the restrictive standard.
+				// https://kubernetes.io/docs/concepts/security/pod-security-standards/
+				"pod-security.kubernetes.io/enforce":         "restricted",
+				"pod-security.kubernetes.io/enforce-version": "latest",
+				"pod-security.kubernetes.io/warn":            "restricted",
+				"pod-security.kubernetes.io/warn-version":    "latest",
+			},
 			Annotations: map[string]string{},
 		},
 	}

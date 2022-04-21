@@ -21,7 +21,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -35,7 +34,6 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -161,9 +159,6 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.authReaderRoleBinding)
 	globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.webhookReaderClusterRole)
 	globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.webhookReaderClusterRoleBinding)
-	if !c.cfg.Openshift {
-		globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.apiServerPodSecurityPolicy)
-	}
 
 	// Namespaced objects that are common between Calico and Calico Enterprise. They don't need to be explicitly
 	// deleted, since they will be garbage collected on namespace deletion.
@@ -309,7 +304,6 @@ func (c *apiServerComponent) delegateAuthClusterRoleBinding() (client.Object, cl
 				Name: nameToDelete,
 			},
 		}
-
 }
 
 // authReaderRoleBinding creates a rolebinding that allows the API server to access the
@@ -355,7 +349,6 @@ func (c *apiServerComponent) authReaderRoleBinding() (client.Object, client.Obje
 				Namespace: "kube-system",
 			},
 		}
-
 }
 
 // apiServerServiceAccount creates the service account used by the API server.
@@ -582,7 +575,6 @@ func (c *apiServerComponent) authClusterRoleBinding() (client.Object, client.Obj
 				Name: nameToDelete,
 			},
 		}
-
 }
 
 // webhookReaderClusterRole returns a ClusterRole to read MutatingWebhookConfigurations and ValidatingWebhookConfigurations and an
@@ -668,7 +660,6 @@ func (c *apiServerComponent) webhookReaderClusterRoleBinding() (client.Object, c
 			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: nameToDelete},
 		}
-
 }
 
 // apiServerService creates a service backed by the API server and - for enterprise - query server.
@@ -706,7 +697,6 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 				TargetPort: intstr.FromInt(queryServerPort),
 			},
 		)
-
 	}
 	return s
 }
@@ -1001,36 +991,6 @@ func (c *apiServerComponent) tolerations() []corev1.Toleration {
 		return rmeta.TolerateAll
 	}
 	return append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster)
-}
-
-// apiServerPodSecurityPolicy returns a PSP to create and a PSP to delete based on variant.
-//
-// Both Calico and Calico Enterprise, with different names.
-func (c *apiServerComponent) apiServerPodSecurityPolicy() (client.Object, client.Object) {
-	var name, nameToDelete string
-	enterpriseName := "tigera-apiserver"
-	ossName := "calico-apiserver"
-
-	switch c.cfg.Installation.Variant {
-	case operatorv1.TigeraSecureEnterprise:
-		name = enterpriseName
-		nameToDelete = ossName
-	case operatorv1.Calico:
-		name = ossName
-		nameToDelete = enterpriseName
-	}
-
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(name)
-	psp.Spec.Privileged = false
-	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(false)
-	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
-	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
-
-	pspToDelete := podsecuritypolicy.NewBasePolicy()
-	pspToDelete.GetObjectMeta().SetName(nameToDelete)
-
-	return psp, pspToDelete
 }
 
 // networkPolicy returns a NP to allow traffic to the API server. This prevents it from

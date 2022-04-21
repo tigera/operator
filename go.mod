@@ -5,7 +5,7 @@ go 1.16
 require (
 	github.com/aws/aws-sdk-go v1.25.37
 	github.com/cloudflare/cfssl v1.4.1
-	github.com/containernetworking/cni v0.8.0
+	github.com/containernetworking/cni v1.0.1
 	github.com/elastic/cloud-on-k8s v0.0.0-20210914143041-4f367c381636
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-ldap/ldap v3.0.3+incompatible

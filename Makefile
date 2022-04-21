@@ -84,7 +84,7 @@ endif
 
 # list of arches *not* to build when doing *-all
 #    until s390x works correctly
-EXCLUDEARCH ?= s390x
+EXCLUDEARCH ?= s390x arm64
 VALIDARCHES = $(filter-out $(EXCLUDEARCH),$(ARCHES))
 
 # We need CGO to leverage Boring SSL.  However, the cross-compile doesn't support CGO yet.

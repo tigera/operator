@@ -19,7 +19,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -32,25 +31,22 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
-	KubeController                  = "calico-kube-controllers"
-	KubeControllerServiceAccount    = "calico-kube-controllers"
-	KubeControllerRole              = "calico-kube-controllers"
-	KubeControllerRoleBinding       = "calico-kube-controllers"
-	KubeControllerPodSecurityPolicy = "calico-kube-controllers"
-	KubeControllerMetrics           = "calico-kube-controllers-metrics"
+	KubeController               = "calico-kube-controllers"
+	KubeControllerServiceAccount = "calico-kube-controllers"
+	KubeControllerRole           = "calico-kube-controllers"
+	KubeControllerRoleBinding    = "calico-kube-controllers"
+	KubeControllerMetrics        = "calico-kube-controllers-metrics"
 
-	EsKubeController                  = "es-calico-kube-controllers"
-	EsKubeControllerServiceAccount    = "calico-kube-controllers"
-	EsKubeControllerRole              = "es-calico-kube-controllers"
-	EsKubeControllerRoleBinding       = "es-calico-kube-controllers"
-	EsKubeControllerPodSecurityPolicy = "es-calico-kube-controllers"
-	EsKubeControllerMetrics           = "es-calico-kube-controllers-metrics"
+	EsKubeController               = "es-calico-kube-controllers"
+	EsKubeControllerServiceAccount = "calico-kube-controllers"
+	EsKubeControllerRole           = "es-calico-kube-controllers"
+	EsKubeControllerRoleBinding    = "es-calico-kube-controllers"
+	EsKubeControllerMetrics        = "es-calico-kube-controllers-metrics"
 
 	ElasticsearchKubeControllersUserSecret             = "tigera-ee-kube-controllers-elasticsearch-access"
 	ElasticsearchKubeControllersUserName               = "tigera-ee-kube-controllers"
@@ -232,10 +228,6 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 	if c.renderKubeControllersGatewaySecret {
 		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
 			secret.CopyToNamespace(common.CalicoNamespace, c.cfg.KubeControllersGatewaySecret)...)...)
-	}
-
-	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
-		objectsToCreate = append(objectsToCreate, c.controllersPodSecurityPolicy())
 	}
 
 	if c.cfg.MetricsPort != 0 {
@@ -599,12 +591,6 @@ func (c *kubeControllersComponent) annotations() map[string]string {
 		am[render.KibanaTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.KibanaSecret.Data)
 	}
 	return am
-}
-
-func (c *kubeControllersComponent) controllersPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(c.kubeControllerName)
-	return psp
 }
 
 func (c *kubeControllersComponent) kubeControllersVolumeMounts() []corev1.VolumeMount {

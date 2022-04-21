@@ -29,11 +29,9 @@ import (
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -201,10 +199,6 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 
 	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderDockerEE {
 		objs = append(objs, c.clusterAdminClusterRoleBinding())
-	}
-
-	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
-		objs = append(objs, c.nodePodSecurityPolicy())
 	}
 
 	objs = append(objs, c.nodeDaemonset(cniConfig))
@@ -1544,23 +1538,6 @@ func (c *nodeComponent) nodeMetricsService() *corev1.Service {
 			},
 		},
 	}
-}
-
-func (c *nodeComponent) nodePodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(common.NodeDaemonSetName)
-	psp.Spec.Privileged = true
-	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(true)
-	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
-	psp.Spec.HostNetwork = true
-	// CollectProcessPath feature in logCollectorSpec requires access to hostPID
-	// Hence setting hostPID to true in the calico-node PSP, for this feature
-	// to work with PSP turned on
-	if c.collectProcessPathEnabled() {
-		psp.Spec.HostPID = true
-	}
-	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
-	return psp
 }
 
 // hostPathInitContainer creates an init container that changes the permissions on hostPath volumes

@@ -33,12 +33,10 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -185,9 +183,6 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	// If we're running on openshift, we need to add in an SCC.
 	if c.cfg.Openshift {
 		objs = append(objs, c.securityContextConstraints())
-	} else {
-		// If we're not running openshift, we need to add pod security policies.
-		objs = append(objs, c.managerPodSecurityPolicy())
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.cfg.ESSecrets...)...)...)
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.cfg.KibanaSecrets...)...)...)
@@ -385,7 +380,8 @@ func (c *managerComponent) managerOAuth2EnvVars() []corev1.EnvVar {
 	} else {
 		envs = []corev1.EnvVar{
 			{Name: "CNX_WEB_AUTHENTICATION_TYPE", Value: "OIDC"},
-			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: c.cfg.KeyValidatorConfig.ClientID()}}
+			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: c.cfg.KeyValidatorConfig.ClientID()},
+		}
 
 		switch c.cfg.KeyValidatorConfig.(type) {
 		case *DexKeyValidatorConfig:
@@ -446,7 +442,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 }
 
 func (c *managerComponent) volumeMountsForProxyManager() []corev1.VolumeMount {
-	var mounts = []corev1.VolumeMount{
+	mounts := []corev1.VolumeMount{
 		{Name: ManagerTLSSecretName, MountPath: "/manager-tls", ReadOnly: true},
 		{Name: KibanaPublicCertSecret, MountPath: "/certs/kibana", ReadOnly: true},
 		c.cfg.TrustedCertBundle.VolumeMount(),
@@ -697,12 +693,6 @@ func (c *managerComponent) getTLSObjects() []client.Object {
 	}
 
 	return objs
-}
-
-func (c *managerComponent) managerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName("tigera-manager")
-	return psp
 }
 
 // managerClusterWideSettingsGroup returns a UISettingsGroup with the description "cluster-wide settings"

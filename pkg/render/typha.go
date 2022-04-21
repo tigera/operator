@@ -20,7 +20,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -32,7 +31,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 )
 
 const (
@@ -105,10 +103,6 @@ func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
 		c.typhaRoleBinding(),
 		c.typhaService(),
 		c.typhaPodDisruptionBudget(),
-	}
-
-	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
-		objs = append(objs, c.typhaPodSecurityPolicy())
 	}
 
 	// Add deployment last, as it may depend on the creation of previous objects in the list.
@@ -328,7 +322,8 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 	}
 	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
 		// Allow access to the pod security policy in case this is enforced on the cluster
-		role.Rules = append(role.Rules, rbacv1.PolicyRule{APIGroups: []string{"policy"},
+		role.Rules = append(role.Rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
 			Resources:     []string{"podsecuritypolicies"},
 			Verbs:         []string{"use"},
 			ResourceNames: []string{common.TyphaDeploymentName},
@@ -495,7 +490,8 @@ func (c *typhaComponent) typhaEnvVars() []corev1.EnvVar {
 		if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
 			typhaEnv = append(typhaEnv, corev1.EnvVar{
 				Name:  "MULTI_INTERFACE_MODE",
-				Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
+				Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value(),
+			})
 		}
 	}
 
@@ -577,13 +573,6 @@ func (c *typhaComponent) typhaService() *corev1.Service {
 	}
 }
 
-func (c *typhaComponent) typhaPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(common.TyphaDeploymentName)
-	psp.Spec.HostNetwork = true
-	return psp
-}
-
 // affinity sets the user-specified typha affinity if specified.
 func (c *typhaComponent) affinity() (aff *corev1.Affinity) {
 	if c.cfg.Installation.TyphaAffinity != nil && c.cfg.Installation.TyphaAffinity.NodeAffinity != nil {
@@ -591,10 +580,11 @@ func (c *typhaComponent) affinity() (aff *corev1.Affinity) {
 		if c.cfg.Installation.TyphaAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil && len(c.cfg.Installation.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution) == 0 {
 			return nil
 		}
-		aff = &corev1.Affinity{NodeAffinity: &corev1.NodeAffinity{
-			RequiredDuringSchedulingIgnoredDuringExecution:  c.cfg.Installation.TyphaAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution,
-			PreferredDuringSchedulingIgnoredDuringExecution: c.cfg.Installation.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
-		},
+		aff = &corev1.Affinity{
+			NodeAffinity: &corev1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution:  c.cfg.Installation.TyphaAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution,
+				PreferredDuringSchedulingIgnoredDuringExecution: c.cfg.Installation.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
+			},
 		}
 
 	}

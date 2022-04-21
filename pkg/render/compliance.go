@@ -27,13 +27,11 @@ import (
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -198,13 +196,6 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 
 	if c.cfg.Openshift {
 		complianceObjs = append(complianceObjs, c.complianceBenchmarkerSecurityContextConstraints())
-	} else {
-		complianceObjs = append(complianceObjs,
-			c.complianceBenchmarkerPodSecurityPolicy(),
-			c.complianceControllerPodSecurityPolicy(),
-			c.complianceReporterPodSecurityPolicy(),
-			c.complianceServerPodSecurityPolicy(),
-			c.complianceSnapshotterPodSecurityPolicy())
 	}
 
 	// Need to grant cluster admin permissions in DockerEE to the controller since a pod starting pods with
@@ -226,8 +217,10 @@ func (c *complianceComponent) Ready() bool {
 	return true
 }
 
-var complianceBoolTrue = true
-var complianceReplicas int32 = 1
+var (
+	complianceBoolTrue       = true
+	complianceReplicas int32 = 1
+)
 
 const complianceServerPort = 5443
 
@@ -413,12 +406,6 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 	}
 }
 
-func (c *complianceComponent) complianceControllerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(ComplianceControllerName)
-	return psp
-}
-
 func (c *complianceComponent) complianceReporterServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
@@ -534,14 +521,6 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 			}),
 		},
 	}
-}
-
-func (c *complianceComponent) complianceReporterPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName("compliance-reporter")
-	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
-	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
-	return psp
 }
 
 func (c *complianceComponent) complianceServerServiceAccount() *corev1.ServiceAccount {
@@ -733,12 +712,6 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 	}
 }
 
-func (c *complianceComponent) complianceServerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(ComplianceServerName)
-	return psp
-}
-
 func (c *complianceComponent) complianceServerVolumeMounts() []corev1.VolumeMount {
 	mounts := []corev1.VolumeMount{
 		c.cfg.TrustedBundle.VolumeMount(),
@@ -784,26 +757,31 @@ func (c *complianceComponent) complianceSnapshotterClusterRole() *rbacv1.Cluster
 	rules := []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{"networking.k8s.io", "authentication.k8s.io", ""},
-			Resources: []string{"networkpolicies", "nodes", "namespaces", "pods", "serviceaccounts",
-				"endpoints", "services"},
+			Resources: []string{
+				"networkpolicies", "nodes", "namespaces", "pods", "serviceaccounts",
+				"endpoints", "services",
+			},
 			Verbs: []string{"get", "list"},
 		},
 		{
 			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"globalnetworkpolicies", "tier.globalnetworkpolicies",
+			Resources: []string{
+				"globalnetworkpolicies", "tier.globalnetworkpolicies",
 				"stagedglobalnetworkpolicies", "tier.stagedglobalnetworkpolicies",
 				"networkpolicies", "tier.networkpolicies",
 				"stagednetworkpolicies", "tier.stagednetworkpolicies",
 				"stagedkubernetesnetworkpolicies",
 				"tiers", "hostendpoints",
-				"globalnetworksets", "networksets"},
+				"globalnetworksets", "networksets",
+			},
 			Verbs: []string{"get", "list"},
 		},
 	}
 
 	if !c.cfg.Openshift {
 		// Allow access to the pod security policy in case this is enforced on the cluster
-		rules = append(rules, rbacv1.PolicyRule{APIGroups: []string{"policy"},
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
 			Resources:     []string{"podsecuritypolicies"},
 			Verbs:         []string{"use"},
 			ResourceNames: []string{ComplianceSnapshotterName},
@@ -889,12 +867,6 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 	}
 }
 
-func (c *complianceComponent) complianceSnapshotterPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(ComplianceSnapshotterName)
-	return psp
-}
-
 func (c *complianceComponent) complianceBenchmarkerServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
@@ -918,7 +890,8 @@ func (c *complianceComponent) complianceBenchmarkerClusterRole() *rbacv1.Cluster
 
 	if !c.cfg.Openshift {
 		// Allow access to the pod security policy in case this is enforced on the cluster
-		rules = append(rules, rbacv1.PolicyRule{APIGroups: []string{"policy"},
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
 			Resources:     []string{"podsecuritypolicies"},
 			Verbs:         []string{"use"},
 			ResourceNames: []string{"compliance-benchmarker"},
@@ -1061,37 +1034,6 @@ func (c *complianceComponent) complianceBenchmarkerSecurityContextConstraints() 
 		},
 		Volumes: []ocsv1.FSType{"*"},
 	}
-}
-
-func (c *complianceComponent) complianceBenchmarkerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName("compliance-benchmarker")
-	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
-	psp.Spec.AllowedHostPaths = []policyv1beta1.AllowedHostPath{
-		{
-			PathPrefix: "/var/lib/etcd",
-			ReadOnly:   true,
-		},
-		{
-			PathPrefix: "/etc/systemd",
-			ReadOnly:   true,
-		},
-		{
-			PathPrefix: "/etc/kubernetes",
-			ReadOnly:   true,
-		},
-		{
-			PathPrefix: "/usr/bin",
-			ReadOnly:   true,
-		},
-		{
-			PathPrefix: "/var/lib/kubelet",
-			ReadOnly:   true,
-		},
-	}
-	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
-	psp.Spec.HostPID = true
-	return psp
 }
 
 func (c *complianceComponent) complianceGlobalReportInventory() *v3.GlobalReportType {

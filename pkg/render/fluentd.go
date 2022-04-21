@@ -20,7 +20,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -30,7 +29,6 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -248,8 +246,7 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 		if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
 			objs = append(objs,
 				c.eksLogForwarderClusterRole(),
-				c.eksLogForwarderClusterRoleBinding(),
-				c.eksLogForwarderPodSecurityPolicy())
+				c.eksLogForwarderClusterRoleBinding())
 		}
 		objs = append(objs, c.eksLogForwarderServiceAccount(),
 			c.eksLogForwarderSecret(),
@@ -261,8 +258,7 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift && c.cfg.OSType == rmeta.OSTypeLinux {
 		objs = append(objs,
 			c.fluentdClusterRole(),
-			c.fluentdClusterRoleBinding(),
-			c.fluentdPodSecurityPolicy())
+			c.fluentdClusterRoleBinding())
 	}
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.cfg.ESSecrets...)...)...)
@@ -529,7 +525,7 @@ func (c *fluentdComponent) container() corev1.Container {
 	}
 
 	isPrivileged := false
-	//On OpenShift Fluentd needs privileged access to access logs on host path volume
+	// On OpenShift Fluentd needs privileged access to access logs on host path volume
 	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
 		isPrivileged = true
 	}
@@ -586,7 +582,8 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		s3 := c.cfg.LogCollector.Spec.AdditionalStores.S3
 		if s3 != nil {
 			envs = append(envs,
-				corev1.EnvVar{Name: "AWS_KEY_ID",
+				corev1.EnvVar{
+					Name: "AWS_KEY_ID",
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{
@@ -594,8 +591,10 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 							},
 							Key: S3KeyIdName,
 						},
-					}},
-				corev1.EnvVar{Name: "AWS_SECRET_KEY",
+					},
+				},
+				corev1.EnvVar{
+					Name: "AWS_SECRET_KEY",
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{
@@ -603,7 +602,8 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 							},
 							Key: S3KeySecretName,
 						},
-					}},
+					},
+				},
 				corev1.EnvVar{Name: "S3_STORAGE", Value: "true"},
 				corev1.EnvVar{Name: "S3_BUCKET_NAME", Value: s3.BucketName},
 				corev1.EnvVar{Name: "AWS_REGION", Value: s3.Region},
@@ -619,7 +619,8 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 				corev1.EnvVar{Name: "SYSLOG_PORT", Value: port},
 				corev1.EnvVar{Name: "SYSLOG_PROTOCOL", Value: proto},
 				corev1.EnvVar{Name: "SYSLOG_FLUSH_INTERVAL", Value: fluentdDefaultFlush},
-				corev1.EnvVar{Name: "SYSLOG_HOSTNAME",
+				corev1.EnvVar{
+					Name: "SYSLOG_HOSTNAME",
 					ValueFrom: &corev1.EnvVarSource{
 						FieldRef: &corev1.ObjectFieldSelector{
 							FieldPath: "spec.nodeName",
@@ -666,7 +667,8 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		if splunk != nil {
 			proto, host, port, _ := url.ParseEndpoint(splunk.Endpoint)
 			envs = append(envs,
-				corev1.EnvVar{Name: "SPLUNK_HEC_TOKEN",
+				corev1.EnvVar{
+					Name: "SPLUNK_HEC_TOKEN",
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{
@@ -674,7 +676,8 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 							},
 							Key: SplunkFluentdSecretTokenKey,
 						},
-					}},
+					},
+				},
 				corev1.EnvVar{Name: "SPLUNK_FLOW_LOG", Value: "true"},
 				corev1.EnvVar{Name: "SPLUNK_AUDIT_LOG", Value: "true"},
 				corev1.EnvVar{Name: "SPLUNK_DNS_LOG", Value: "true"},
@@ -817,24 +820,6 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 	}
 
 	return volumes
-}
-
-func (c *fluentdComponent) fluentdPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(c.fluentdName())
-	psp.Spec.RequiredDropCapabilities = nil
-	psp.Spec.AllowedCapabilities = []corev1.Capability{
-		corev1.Capability("CAP_CHOWN"),
-	}
-	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
-	psp.Spec.AllowedHostPaths = []policyv1beta1.AllowedHostPath{
-		{
-			PathPrefix: c.path("/var/log/calico"),
-			ReadOnly:   false,
-		},
-	}
-	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
-	return psp
 }
 
 func (c *fluentdComponent) fluentdClusterRoleBinding() *rbacv1.ClusterRoleBinding {
@@ -998,13 +983,6 @@ func (c *fluentdComponent) eksLogForwarderVolumes() []corev1.Volume {
 			},
 		},
 	}
-}
-
-func (c *fluentdComponent) eksLogForwarderPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy()
-	psp.GetObjectMeta().SetName(eksLogForwarderName)
-	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
-	return psp
 }
 
 func (c *fluentdComponent) eksLogForwarderClusterRoleBinding() *rbacv1.ClusterRoleBinding {

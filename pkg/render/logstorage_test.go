@@ -19,7 +19,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1beta "k8s.io/api/batch/v1beta1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -130,13 +129,10 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{"elastic-operator", "", &rbacv1.ClusterRole{}, nil},
 					{"elastic-operator", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"elastic-operator", render.ECKOperatorNamespace, &corev1.ServiceAccount{}, nil},
-					{render.ECKOperatorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRole{}, nil},
-					{"tigera-elasticsearch", "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{"tigera-kibana", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"tigera-kibana", "", &rbacv1.ClusterRole{}, nil},
-					{"tigera-kibana", "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{render.ECKOperatorName, render.ECKOperatorNamespace, &appsv1.StatefulSet{}, nil},
 					{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
 					{"tigera-pull-secret", render.ElasticsearchNamespace, &corev1.Secret{}, nil},
@@ -185,7 +181,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				Expect(resources.Memory().String()).To(Equal("4Gi"))
 				Expect(esContainer.Env[0].Value).To(Equal("-Xms2G -Xmx2G"))
 
-				//Check that the expected config made it's way to the Elastic CR
+				// Check that the expected config made it's way to the Elastic CR
 				Expect(nodeSet.Config.Data).Should(Equal(map[string]interface{}{
 					"node.master":                 "true",
 					"node.data":                   "true",
@@ -216,13 +212,10 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{"elastic-operator", "", &rbacv1.ClusterRole{}, nil},
 					{"elastic-operator", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"elastic-operator", render.ECKOperatorNamespace, &corev1.ServiceAccount{}, nil},
-					{render.ECKOperatorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRole{}, nil},
-					{"tigera-elasticsearch", "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{"tigera-kibana", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"tigera-kibana", "", &rbacv1.ClusterRole{}, nil},
-					{"tigera-kibana", "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{render.ECKOperatorName, render.ECKOperatorNamespace, &appsv1.StatefulSet{}, nil},
 					{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
 					{"tigera-pull-secret", render.ElasticsearchNamespace, &corev1.Secret{}, nil},
@@ -264,7 +257,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			})
 
 			It("should render an elasticsearchComponent with certificate management enabled", func() {
-
 				cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{
 					CACert:             []byte("my-cert"),
 					SignerName:         "my signer name",
@@ -277,13 +269,10 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{"elastic-operator", "", &rbacv1.ClusterRole{}, nil},
 					{"elastic-operator", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"elastic-operator", render.ECKOperatorNamespace, &corev1.ServiceAccount{}, nil},
-					{render.ECKOperatorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRole{}, nil},
-					{"tigera-elasticsearch", "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{"tigera-kibana", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"tigera-kibana", "", &rbacv1.ClusterRole{}, nil},
-					{"tigera-kibana", "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{render.ECKOperatorName, render.ECKOperatorNamespace, &appsv1.StatefulSet{}, nil},
 					{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
 					{"tigera-pull-secret", render.ElasticsearchNamespace, &corev1.Secret{}, nil},
@@ -347,13 +336,10 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{"elastic-operator", "", &rbacv1.ClusterRole{}, nil},
 					{"elastic-operator", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"elastic-operator", render.ECKOperatorNamespace, &corev1.ServiceAccount{}, nil},
-					{render.ECKOperatorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRole{}, nil},
-					{"tigera-elasticsearch", "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{"tigera-kibana", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"tigera-kibana", "", &rbacv1.ClusterRole{}, nil},
-					{"tigera-kibana", "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{render.ECKOperatorName, render.ECKOperatorNamespace, &appsv1.StatefulSet{}, nil},
 					{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
 					{"tigera-pull-secret", render.ElasticsearchNamespace, &corev1.Secret{}, nil},
@@ -374,7 +360,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{render.EsCuratorServiceAccount, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
 					{render.EsCuratorName, "", &rbacv1.ClusterRole{}, nil},
 					{render.EsCuratorName, "", &rbacv1.ClusterRoleBinding{}, nil},
-					{render.EsCuratorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{render.EsCuratorName, render.ElasticsearchNamespace, &batchv1beta.CronJob{}, nil},
 					{render.EsManagerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
 					{render.EsManagerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
@@ -1114,18 +1099,20 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
 							NodeSelectorTerms: []corev1.NodeSelectorTerm{
 								{
-									MatchExpressions: []corev1.NodeSelectorRequirement{{
-										Key:      "failure-domain.beta.kubernetes.io/zone",
-										Operator: corev1.NodeSelectorOpIn,
-										Values:   []string{"us-west-2b"},
-									},
+									MatchExpressions: []corev1.NodeSelectorRequirement{
+										{
+											Key:      "failure-domain.beta.kubernetes.io/zone",
+											Operator: corev1.NodeSelectorOpIn,
+											Values:   []string{"us-west-2b"},
+										},
 										{
 											Key:      "some-rack-label.kubernetes.io/rack",
 											Operator: corev1.NodeSelectorOpIn,
 											Values:   []string{"rack1"},
 										},
 									},
-								}},
+								},
+							},
 						},
 					}))
 					Expect(nodeSets[1].Config.Data).Should(Equal(map[string]interface{}{

@@ -51,7 +51,7 @@ var _ = Describe("Typha rendering tests", func() {
 		// desired configuration.
 		installation = &operatorv1.InstallationSpec{
 			KubernetesProvider: operatorv1.ProviderNone,
-			//Variant ProductVariant `json:"variant,omitempty"`
+			// Variant ProductVariant `json:"variant,omitempty"`
 			Registry: registry,
 			CNI: &operatorv1.CNISpec{
 				Type: operatorv1.PluginCalico,
@@ -86,7 +86,6 @@ var _ = Describe("Typha rendering tests", func() {
 			{name: "calico-typha", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 			{name: "calico-typha", ns: "calico-system", group: "policy", version: "v1", kind: "PodDisruptionBudget"},
-			{name: "calico-typha", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: "calico-typha", ns: "calico-system", group: "apps", version: "v1", kind: "Deployment"},
 		}
 
@@ -125,7 +124,6 @@ var _ = Describe("Typha rendering tests", func() {
 			{name: "calico-typha", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 			{name: "calico-typha", ns: "calico-system", group: "policy", version: "v1", kind: "PodDisruptionBudget"},
-			{name: "calico-typha", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: "calico-typha", ns: "calico-system", group: "apps", version: "v1", kind: "Deployment"},
 		}
 
@@ -162,7 +160,6 @@ var _ = Describe("Typha rendering tests", func() {
 			{name: "calico-typha", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 			{name: "calico-typha", ns: "calico-system", group: "policy", version: "v1", kind: "PodDisruptionBudget"},
-			{name: "calico-typha", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: "calico-typha", ns: "calico-system", group: "apps", version: "v1", kind: "Deployment"},
 		}
 
@@ -295,7 +292,6 @@ var _ = Describe("Typha rendering tests", func() {
 			{name: "calico-typha", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 			{name: "calico-typha", ns: "calico-system", group: "policy", version: "v1", kind: "PodDisruptionBudget"},
-			{name: "calico-typha", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			{name: "calico-typha", ns: "calico-system", group: "apps", version: "v1", kind: "Deployment"},
 		}
 

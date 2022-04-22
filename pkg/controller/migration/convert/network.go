@@ -145,13 +145,28 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 		}
 	}
 
-	// If IPv6 only, check that CALICO_ROUTER_ID, if defined, is set to `hash`.
+	// If IPv6 only and bird backend is used, check that CALICO_ROUTER_ID, if defined, is set to `hash`.
 	// Custom router ID values are only used for manual calico-node deployments and not
 	// applicable to calico-node running as a daemonset.
 	// In IPv6-only mode, calico-node will be rendered with CALICO_ROUTER_ID="hash".
 	if ip6 != nil && *ip6 == "autodetect" && ip != nil && *ip == "none" {
-		if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "CALICO_ROUTER_ID", "hash"); err != nil {
-			return err
+		if install.Spec.CalicoNetwork.BGP != nil && *install.Spec.CalicoNetwork.BGP == operatorv1.BGPEnabled {
+			if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "CALICO_ROUTER_ID", "hash"); err != nil {
+				return err
+			}
+		} else {
+			// IPv6-only clusters with BGP disabled should not have CALICO_ROUTER_ID set.
+			routerID, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "CALICO_ROUTER_ID")
+			if err != nil {
+				return err
+			}
+			if routerID != nil {
+				return ErrIncompatibleCluster{
+					err:       "CNI config indicates an IPv6-only VXLAN cluster but CALICO_ROUTER_ID is only used for BGP-enabled clusters",
+					component: ComponentCNIConfig,
+					fix:       "remove the CALICO_ROUTER_ID env var",
+				}
+			}
 		}
 	}
 

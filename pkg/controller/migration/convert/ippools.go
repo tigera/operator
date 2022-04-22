@@ -114,6 +114,33 @@ func handleIPPools(c *components, install *operatorv1.Installation) error {
 		}
 	}
 
+	// If IPv6 only and bird backend is used, check that CALICO_ROUTER_ID, if defined, is set to `hash`.
+	// Custom router ID values are only used for manual calico-node deployments and not
+	// applicable to calico-node running as a daemonset.
+	// In IPv6-only mode, calico-node will be rendered with CALICO_ROUTER_ID="hash".
+	ip6, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "IP6")
+	if err != nil {
+		return err
+	}
+	ip, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "IP")
+	if err != nil {
+		return err
+	}
+	if operatorV6Pool.CIDR != "" && ip6 != nil && *ip6 == "autodetect" && ip != nil && *ip == "none" {
+		encap := operatorV6Pool.Encapsulation
+		if encap != operatorv1.EncapsulationVXLAN && encap != operatorv1.EncapsulationVXLANCrossSubnet {
+			if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "CALICO_ROUTER_ID", "hash"); err != nil {
+				return err
+			}
+		} else {
+			return ErrIncompatibleCluster{
+				err:       "CNI config indicates an IPv6-only VXLAN cluster but CALICO_ROUTER_ID is only used for BGP clusters",
+				component: ComponentCNIConfig,
+				fix:       "remove the CALICO_ROUTER_ID env var",
+			}
+		}
+	}
+
 	// Ignore the initial pool variables (other than CIDR), we'll pick up everything we need from the datastore
 	// V4
 	c.node.ignoreEnv("calico-node", "CALICO_IPV4POOL_CIDR")

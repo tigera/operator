@@ -137,4 +137,4 @@ components:
     version: v0.9.0
   sasha:
     image: tigera/sasha
-    version: v0.10.0-0.dev-14-g45ec57aa02c1-amd64
+    version: v0.9.0-amd64

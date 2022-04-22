@@ -55,7 +55,6 @@ var _ = Describe("Convert network tests", func() {
 		v6pool.Name = "test-ipv6-pool"
 		v6pool.Spec = crdv1.IPPoolSpec{
 			CIDR:        "2001:db8::1/120",
-			IPIPMode:    crdv1.IPIPModeAlways,
 			NATOutgoing: true,
 		}
 	})
@@ -385,6 +384,117 @@ var _ = Describe("Convert network tests", func() {
 			// Run test but with only v6 pool
 			ipv6Only := fake.NewFakeClientWithScheme(scheme, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
 			runTest(ipv6Only)
+		})
+		It("migrate IPv6-only config with VXLAN", func() {
+			// This is the minimal dual stack config as outlined in our docs.
+			ds := emptyNodeSpec()
+			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
+				Name:  "CNI_NETWORK_CONFIG",
+				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam", "assign_ipv4":"false", "assign_ipv6":"true"}}`,
+			}}
+			ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
+				Name:  "CALICO_NETWORKING_BACKEND",
+				Value: "vxlan",
+			}}
+
+			ds.Spec.Template.Spec.Containers[0].Env = append(ds.Spec.Template.Spec.Containers[0].Env,
+				corev1.EnvVar{
+					Name:  "IP6",
+					Value: "autodetect",
+				},
+				corev1.EnvVar{
+					Name:  "FELIX_IPV6SUPPORT",
+					Value: "true",
+				},
+			)
+
+			v6pool.Spec.IPIPMode = crdv1.IPIPModeNever
+			v6pool.Spec.VXLANMode = crdv1.VXLANModeAlways
+			c := fake.NewFakeClientWithScheme(scheme, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			cfg, err := Convert(ctx, c)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cfg).ToNot(BeNil())
+			Expect(cfg.Spec.CNI.Type).To(Equal(operatorv1.PluginCalico))
+			Expect(cfg.Spec.CNI.IPAM.Type).To(Equal(operatorv1.IPAMPluginCalico))
+			Expect(*cfg.Spec.CalicoNetwork.BGP).To(Equal(operatorv1.BGPDisabled))
+
+			expectedV6pool, err := convertPool(*v6pool)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cfg.Spec.CalicoNetwork.IPPools).To(ContainElements(expectedV6pool))
+		})
+		It("migrate dual stack config with VXLAN", func() {
+			// This is the minimal dual stack config as outlined in our docs.
+			ds := emptyNodeSpec()
+			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
+				Name:  "CNI_NETWORK_CONFIG",
+				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam", "assign_ipv4":"true", "assign_ipv6":"true"}}`,
+			}}
+			ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
+				Name:  "CALICO_NETWORKING_BACKEND",
+				Value: "vxlan",
+			}}
+
+			ds.Spec.Template.Spec.Containers[0].Env = append(ds.Spec.Template.Spec.Containers[0].Env,
+				corev1.EnvVar{
+					Name:  "IP6",
+					Value: "autodetect",
+				},
+				corev1.EnvVar{
+					Name:  "FELIX_IPV6SUPPORT",
+					Value: "true",
+				},
+			)
+
+			v4pool.Spec.IPIPMode = crdv1.IPIPModeNever
+			v4pool.Spec.VXLANMode = crdv1.VXLANModeAlways
+			v6pool.Spec.IPIPMode = crdv1.IPIPModeNever
+			v6pool.Spec.VXLANMode = crdv1.VXLANModeAlways
+			c := fake.NewFakeClientWithScheme(scheme, v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			cfg, err := Convert(ctx, c)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cfg).ToNot(BeNil())
+			Expect(cfg.Spec.CNI.Type).To(Equal(operatorv1.PluginCalico))
+			Expect(cfg.Spec.CNI.IPAM.Type).To(Equal(operatorv1.IPAMPluginCalico))
+			Expect(*cfg.Spec.CalicoNetwork.BGP).To(Equal(operatorv1.BGPDisabled))
+
+			expectedV4pool, err := convertPool(*v4pool)
+			Expect(err).ToNot(HaveOccurred())
+			expectedV6pool, err := convertPool(*v6pool)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cfg.Spec.CalicoNetwork.IPPools).To(ContainElements(expectedV4pool, expectedV6pool))
+		})
+		It("fails if IPv6-only VXLAN config has CALICO_ROUTER_ID defined", func() {
+			ds := emptyNodeSpec()
+			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
+				Name:  "CNI_NETWORK_CONFIG",
+				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam", "assign_ipv4":"false", "assign_ipv6":"true"}}`,
+			}}
+
+			ds.Spec.Template.Spec.Containers[0].Env = append(ds.Spec.Template.Spec.Containers[0].Env,
+				corev1.EnvVar{
+					Name:  "IP",
+					Value: "none",
+				},
+				corev1.EnvVar{
+					Name:  "IP6",
+					Value: "autodetect",
+				},
+				corev1.EnvVar{
+					Name:  "CALICO_ROUTER_ID",
+					Value: "hash",
+				},
+				corev1.EnvVar{
+					Name:  "FELIX_IPV6SUPPORT",
+					Value: "true",
+				},
+			)
+
+			v6pool.Spec.IPIPMode = crdv1.IPIPModeNever
+			v6pool.Spec.VXLANMode = crdv1.VXLANModeAlways
+			c := fake.NewFakeClientWithScheme(scheme, v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			cfg, err := Convert(ctx, c)
+			Expect(err).To(HaveOccurred())
+			Expect(cfg).To(BeNil())
 		})
 
 		DescribeTable("test invalid ipam and backend",

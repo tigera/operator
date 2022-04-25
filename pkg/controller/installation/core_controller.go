@@ -1196,8 +1196,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// TODO , any default settings need to be added on bgpconfig object and update back ?
-
 	// Build a configuration for rendering calico/node.
 	nodeCfg := render.NodeConfiguration{
 		K8sServiceEp:            k8sapi.Endpoint,

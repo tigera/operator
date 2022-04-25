@@ -45,7 +45,7 @@ const (
 	birdTemplateHashAnnotation        = "hash.operator.tigera.io/bird-templates"
 	nodeCniConfigAnnotation           = "hash.operator.tigera.io/cni-config"
 	bgpLayoutHashAnnotation           = "hash.operator.tigera.io/bgp-layout"
-	bgpBindModeHashAnnotation         = "hash.operator.tigera.io/bgpBindMode"
+	bgpBindModeHashAnnotation         = "hash.operator.tigera.io/bgp-bind-mode"
 	CSRLabelCalicoSystem              = "calico-system"
 	BGPLayoutConfigMapName            = "bgp-layout"
 	BGPLayoutConfigMapKey             = "earlyNetworkConfiguration"
@@ -110,7 +110,8 @@ type NodeConfiguration struct {
 	// and sets this.
 	FelixHealthPort int
 
-	// The bindMode
+	// The bindMode read from the default BGPConfiguration. Used to trigger rolling updates
+	// should this value change.
 	BindMode string
 }
 

@@ -52,6 +52,7 @@ var ignoredImages = map[string]struct{}{
 	"busybox":           {},
 	"calico/api":        {},
 	"libcalico-go":      {},
+	"csi-driver":        {},
 }
 
 type Release struct {

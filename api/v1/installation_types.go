@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -604,6 +604,9 @@ type InstallationStatus struct {
 	// Computed is the final installation including overlaid resources.
 	// +optional
 	Computed *InstallationSpec `json:"computed,omitempty"`
+
+	// Available, Progressing, or Degraded.
+	Conditions []TigeraStatusCondition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true

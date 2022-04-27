@@ -265,6 +265,11 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 
 // managerVolumes returns the volumes for the Tigera Secure manager component.
 func (c *managerComponent) managerVolumeMounts() []corev1.VolumeMount {
+	if c.cfg.KeyValidatorConfig != nil {
+		trustedVolumeMount := c.cfg.TrustedCertBundle.VolumeMount()
+		trustedVolumeMount.MountPath = "/etc/ssl/certs/"
+		return []corev1.VolumeMount{trustedVolumeMount}
+	}
 	return []corev1.VolumeMount{}
 }
 

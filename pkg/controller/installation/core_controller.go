@@ -772,9 +772,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// update Installation with defaults
 	if err := updateInstallationWithDefaults(ctx, r.client, instance, r.autoDetectedProvider); err != nil {
 		r.updateInstallationDegraded("Error querying installation", err, instance, ctx, reqLogger)
-		if err := r.client.Status().Update(ctx, instance); err != nil {
-			return reconcile.Result{}, err
-		}
 		return reconcile.Result{}, err
 	}
 
@@ -1811,6 +1808,6 @@ func (r *ReconcileInstallation) updateInstallationDegraded(reason string, err er
 	}
 
 	if err := r.client.Status().Update(ctx, instance); err != nil {
-		log.WithValues("reason", err).Info("Failed to update tigera status")
+		log.WithValues("reason", err).Info("Failed to update Installation status")
 	}
 }

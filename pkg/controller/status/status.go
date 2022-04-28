@@ -113,6 +113,7 @@ type statusManager struct {
 	// get/delete calls to the API server.
 	crExists bool
 
+	// Conditions represents the latest observed set of conditions for this component. A component may be one or more of
 	// Available, Progressing, or Degraded.
 	conditions []operator.TigeraStatusCondition
 }
@@ -698,7 +699,6 @@ func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondi
 	// Save the ts in the status manager
 	m.conditions = ts.Status.Conditions
 
-	// If nothing has changed, we don't need to update in the API.
 	// If nothing has changed, we don't need to update in the API.
 	if reflect.DeepEqual(ts.Status.Conditions, old.Status.Conditions) {
 		return

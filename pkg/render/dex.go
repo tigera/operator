@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
+
 package render
 
 import (
@@ -21,7 +22,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/dns"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
@@ -38,20 +38,11 @@ import (
 )
 
 const (
-	// Manifest object variables
-	DexNamespace  = "tigera-dex"
-	DexObjectName = "tigera-dex"
-	DexPort       = 5556
-	// This is the secret containing just a cert that a client should mount in order to trust Dex.
-	DexCertSecretName = "tigera-dex-tls-crt"
-	// This is the secret that Dex mounts, containing a key and a cert.
+	DexNamespace     = "tigera-dex"
+	DexObjectName    = "tigera-dex"
+	DexPort          = 5556
 	DexTLSSecretName = "tigera-dex-tls"
-
-	// Constants related to Dex configurations
-	DexClientId = "tigera-manager"
-
-	// Common name to add to the Dex TLS secret.
-	DexCNPattern = "tigera-dex.tigera-dex.svc.%s"
+	DexClientId      = "tigera-manager"
 )
 
 func Dex(cfg *DexComponentConfiguration) Component {
@@ -70,6 +61,7 @@ type DexComponentConfiguration struct {
 	DexConfig     DexConfig
 	ClusterDomain string
 	DeleteDex     bool
+	TLSKeyPair    certificatemanagement.KeyPairInterface
 }
 
 type dexComponent struct {
@@ -125,7 +117,6 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, secret.ToRuntimeObjects(c.cfg.DexConfig.RequiredSecrets(common.OperatorNamespace())...)...)
 	}
 
-	objs = append(objs, c.cfg.DexConfig.CreateCertSecret())
 	objs = append(objs, secret.ToRuntimeObjects(c.cfg.DexConfig.RequiredSecrets(DexNamespace)...)...)
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(DexNamespace, c.cfg.PullSecrets...)...)...)
 
@@ -140,7 +131,6 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 	return objs, nil
 }
 
-// Method to satisfy the Component interface.
 func (c *dexComponent) Ready() bool {
 	return true
 }
@@ -196,18 +186,11 @@ func (c *dexComponent) clusterRoleBinding() client.Object {
 
 func (c *dexComponent) deployment() client.Object {
 	var initContainers []corev1.Container
-	if c.cfg.Installation.CertificateManagement != nil {
-		initContainers = append(initContainers, certificatemanagement.CreateCSRInitContainer(
-			c.cfg.Installation.CertificateManagement,
-			c.csrInitImage,
-			"tls",
-			DexObjectName,
-			corev1.TLSPrivateKeyKey,
-			corev1.TLSCertKey,
-			dns.GetServiceDNSNames(DexObjectName, DexNamespace, c.cfg.ClusterDomain),
-			DexNamespace))
+	if c.cfg.TLSKeyPair.UseCertificateManagement() {
+		initContainers = append(initContainers, c.cfg.TLSKeyPair.InitContainer(DexNamespace))
 	}
-
+	annotations := c.cfg.DexConfig.RequiredAnnotations()
+	annotations[c.cfg.TLSKeyPair.HashAnnotationKey()] = c.cfg.TLSKeyPair.HashAnnotationValue()
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -234,7 +217,7 @@ func (c *dexComponent) deployment() client.Object {
 					Labels: map[string]string{
 						"k8s-app": DexObjectName,
 					},
-					Annotations: c.cfg.DexConfig.RequiredAnnotations(),
+					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
 					NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
@@ -258,11 +241,10 @@ func (c *dexComponent) deployment() client.Object {
 									ContainerPort: DexPort,
 								},
 							},
-
-							VolumeMounts: c.cfg.DexConfig.RequiredVolumeMounts(),
+							VolumeMounts: append(c.cfg.DexConfig.RequiredVolumeMounts(), c.cfg.TLSKeyPair.VolumeMount()),
 						},
 					},
-					Volumes: c.cfg.DexConfig.RequiredVolumes(),
+					Volumes: append(c.cfg.DexConfig.RequiredVolumes(), c.cfg.TLSKeyPair.Volume()),
 				},
 			},
 		},

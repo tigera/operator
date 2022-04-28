@@ -268,7 +268,7 @@ func (c *managerComponent) managerVolumeMounts() []corev1.VolumeMount {
 	if c.cfg.KeyValidatorConfig != nil {
 		trustedVolumeMount := c.cfg.TrustedCertBundle.VolumeMount()
 		trustedVolumeMount.MountPath = "/etc/ssl/certs/"
-		return []corev1.VolumeMount{trustedVolumeMount}
+		return append(c.cfg.KeyValidatorConfig.RequiredVolumeMounts(), trustedVolumeMount)
 	}
 	return []corev1.VolumeMount{}
 }
@@ -292,6 +292,9 @@ func (c *managerComponent) managerVolumes() []corev1.Volume {
 			c.cfg.InternalTrafficSecret.Volume(),
 			c.cfg.TunnelSecret.Volume(),
 		)
+	}
+	if c.cfg.KeyValidatorConfig != nil {
+		v = append(v, c.cfg.KeyValidatorConfig.RequiredVolumes()...)
 	}
 
 	return v

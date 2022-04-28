@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -58,9 +58,7 @@ const (
 	BindPWSecretField            = "bindPW"
 
 	// OIDC well-known-config related constants.
-	jwksURI     = "https://tigera-dex.tigera-dex.svc.%s:5556/dex/keys"
-	tokenURI    = "https://tigera-dex.tigera-dex.svc.%s:5556/dex/token"
-	userInfoURI = "https://tigera-dex.tigera-dex.svc.%s:5556/dex/userinfo"
+	jwksURI = "https://tigera-dex.tigera-dex.svc.%s:5556/dex/keys"
 
 	// Env related constants.
 	googleAdminEmailEnv = "ADMIN_EMAIL"
@@ -108,6 +106,14 @@ func NewDexConfig(
 
 type DexKeyValidatorConfig struct {
 	*dexBaseCfg
+}
+
+func (d *DexKeyValidatorConfig) RequiredVolumeMounts() []corev1.VolumeMount {
+	return []corev1.VolumeMount{}
+}
+
+func (d *DexKeyValidatorConfig) RequiredVolumes() []corev1.Volume {
+	return []corev1.Volume{}
 }
 
 type dexConfig struct {

@@ -121,7 +121,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret,
 			render.ElasticsearchManagerUserSecret, render.KibanaPublicCertSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureCertSecret,
-			render.ManagerInternalTLSSecretName, render.DexCertSecretName, render.PrometheusTLSSecretName, certificatemanagement.CASecretName,
+			render.ManagerInternalTLSSecretName, render.PrometheusTLSSecretName, certificatemanagement.CASecretName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("manager-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
@@ -295,6 +295,20 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 		trustedSecretNames = append(trustedSecretNames, render.ComplianceServerCertSecret)
 	}
+
+	// Fetch the Authentication spec. If present, we use to configure user authentication.
+	authenticationCR, err := utils.GetAuthentication(ctx, r.client)
+	if err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded("Error while fetching Authentication", err.Error())
+		return reconcile.Result{}, err
+	}
+	if authenticationCR != nil && authenticationCR.Status.State != operatorv1.TigeraStatusReady {
+		r.status.SetDegraded("Authentication is not ready", fmt.Sprintf("authenticationCR status: %s", authenticationCR.Status.State))
+		return reconcile.Result{}, nil
+	} else if authenticationCR != nil {
+		trustedSecretNames = append(trustedSecretNames, render.DexTLSSecretName)
+	}
+
 	trustedBundle := certificateManager.CreateTrustedBundle()
 	for _, secretName := range trustedSecretNames {
 		certificate, err := certificateManager.GetCertificate(r.client, secretName, common.OperatorNamespace())
@@ -405,17 +419,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 		// Es-proxy needs to trust Voltron for cross-cluster requests.
 		trustedBundle.AddCertificates(internalTrafficSecret)
-	}
-
-	// Fetch the Authentication spec. If present, we use to configure user authentication.
-	authenticationCR, err := utils.GetAuthentication(ctx, r.client)
-	if err != nil && !errors.IsNotFound(err) {
-		r.status.SetDegraded("Error while fetching Authentication", err.Error())
-		return reconcile.Result{}, err
-	}
-	if authenticationCR != nil && authenticationCR.Status.State != operatorv1.TigeraStatusReady {
-		r.status.SetDegraded("Authentication is not ready", fmt.Sprintf("authenticationCR status: %s", authenticationCR.Status.State))
-		return reconcile.Result{}, nil
 	}
 
 	keyValidatorConfig, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.clusterDomain)

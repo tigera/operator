@@ -605,6 +605,7 @@ type InstallationStatus struct {
 	// +optional
 	Computed *InstallationSpec `json:"computed,omitempty"`
 
+	// Conditions represents the latest observed set of conditions for this component. A component may be one or more of
 	// Available, Progressing, or Degraded.
 	Conditions []TigeraStatusCondition `json:"conditions,omitempty"`
 }

@@ -399,10 +399,6 @@ func (m *statusManager) SetDegraded(reason, msg string) {
 	m.degraded = true
 	m.explicitDegradedReason = reason
 	m.explicitDegradedMsg = msg
-
-	//m.conditions = []operator.TigeraStatusCondition{
-	//	{Type: operator.ComponentDegraded, Status: operator.ConditionTrue, Reason: reason, Message: msg},
-	//}
 }
 
 // ClearDegraded clears degraded state.

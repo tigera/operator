@@ -696,7 +696,7 @@ func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondi
 			ts.Status.Conditions = append(ts.Status.Conditions, condition)
 		}
 	}
-	// Save the ts in the status manager
+	// Save the ts conditions in the status manager for updating installation CR.
 	m.conditions = ts.Status.Conditions
 
 	// If nothing has changed, we don't need to update in the API.

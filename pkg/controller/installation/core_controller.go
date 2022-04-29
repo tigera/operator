@@ -1349,9 +1349,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		instance.Status.ImageSet = imageSet.Name
 	}
 	instance.Status.Computed = &instance.Spec
-	//instance.Status.Conditions = r.status.Conditions()
 
-	// Update the installation status from the tigerastatus
+	// Update the installation status conditions from the tigerastatus.
 	r.updateInstallationStatus(instance, r.status.Conditions())
 
 	if err = r.client.Status().Update(ctx, instance); err != nil {
@@ -1394,7 +1393,7 @@ func (r *ReconcileInstallation) SetDegraded(ctx context.Context, instance *opera
 	log.Error(err, reason)
 	r.status.SetDegraded(reason, err.Error())
 
-	// Status is needed to update the installation Status conditions
+	// Status is needed to update the installation Status conditions.
 	if reflect.DeepEqual(instance.Status, operator.InstallationStatus{}) {
 		instance.Status = operator.InstallationStatus{}
 		if err := r.client.Status().Update(ctx, instance); err != nil {
@@ -1403,7 +1402,7 @@ func (r *ReconcileInstallation) SetDegraded(ctx context.Context, instance *opera
 		}
 	}
 
-	// There are places where err object could be empty
+	// There are places where error object could be passed empty.
 	msg := ""
 	if err != nil {
 		msg = err.Error()

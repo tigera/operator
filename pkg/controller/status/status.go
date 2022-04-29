@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -76,6 +76,7 @@ type StatusManager interface {
 	IsProgressing() bool
 	IsDegraded() bool
 	ReadyToMonitor()
+	Conditions() []operator.TigeraStatusCondition
 }
 
 type statusManager struct {
@@ -111,6 +112,10 @@ type statusManager struct {
 	// to determine whether we need to call Delete() on the object, without sending unnecessary
 	// get/delete calls to the API server.
 	crExists bool
+
+	// Conditions represents the latest observed set of conditions for this component. A component may be one or more of
+	// Available, Progressing, or Degraded.
+	conditions []operator.TigeraStatusCondition
 }
 
 func New(client client.Client, component string, kubernetesVersion *common.VersionInfo) StatusManager {
@@ -691,6 +696,8 @@ func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondi
 			ts.Status.Conditions = append(ts.Status.Conditions, condition)
 		}
 	}
+	// Save the ts conditions in the status manager for updating installation CR.
+	m.conditions = ts.Status.Conditions
 
 	// If nothing has changed, we don't need to update in the API.
 	if reflect.DeepEqual(ts.Status.Conditions, old.Status.Conditions) {
@@ -878,4 +885,8 @@ func hasPendingCSRUsingCertV1beta1(ctx context.Context, cli client.Client, label
 		}
 	}
 	return false, nil
+}
+
+func (m *statusManager) Conditions() []operator.TigeraStatusCondition {
+	return m.conditions
 }

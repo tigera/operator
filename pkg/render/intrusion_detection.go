@@ -27,6 +27,7 @@ import (
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -54,11 +55,18 @@ const (
 	IntrusionDetectionInstallerJobName = "intrusion-detection-es-job-installer"
 	IntrusionDetectionControllerName   = "intrusion-detection-controller"
 
-	ADJobPodTemplateBaseName = "tigera.io.detectors"
-
+	ADJobPodTemplateBaseName     = "tigera.io.detectors"
 	adDetectionJobsDefaultPeriod = 15 * time.Minute
 	adDetectorPrefixName         = "tigera.io.detector."
+	ADDetectorsModelResourceName = "models"
+
+	ADAPIObjectName     = "anomaly-detection-api"
+	ADAPIObjectPortName = "anomaly-detection-api-https"
+
+	ADAPIPort = 8080
 )
+
+var adAPIReplicas int32 = 1
 
 func IntrusionDetection(cfg *IntrusionDetectionConfiguration) Component {
 	return &intrusionDetectionComponent{
@@ -68,24 +76,26 @@ func IntrusionDetection(cfg *IntrusionDetectionConfiguration) Component {
 
 // IntrusionDetectionConfiguration contains all the config information needed to render the component.
 type IntrusionDetectionConfiguration struct {
-	LogCollector      *operatorv1.LogCollector
-	ESSecrets         []*corev1.Secret
-	Installation      *operatorv1.InstallationSpec
-	ESClusterConfig   *relasticsearch.ClusterConfig
-	PullSecrets       []*corev1.Secret
-	Openshift         bool
-	ClusterDomain     string
-	ESLicenseType     ElasticsearchLicenseType
-	ManagedCluster    bool
-	HasNoLicense      bool
-	TrustedCertBundle certificatemanagement.TrustedBundle
+	LogCollector                       *operatorv1.LogCollector
+	ESSecrets                          []*corev1.Secret
+	Installation                       *operatorv1.InstallationSpec
+	ESClusterConfig                    *relasticsearch.ClusterConfig
+	PullSecrets                        []*corev1.Secret
+	Openshift                          bool
+	ClusterDomain                      string
+	ESLicenseType                      ElasticsearchLicenseType
+	ManagedCluster                     bool
+	HasNoLicense                       bool
+	TrustedCertBundle                  certificatemanagement.TrustedBundle
+	IntrusionDetectionServerCertSecret certificatemanagement.KeyPairInterface
 }
 
 type intrusionDetectionComponent struct {
 	cfg               *IntrusionDetectionConfiguration
 	jobInstallerImage string
 	controllerImage   string
-	adJobsImage       string
+	adDetectorsImage  string
+	adAPIImage        string
 }
 
 func (c *intrusionDetectionComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -106,7 +116,12 @@ func (c *intrusionDetectionComponent) ResolveImages(is *operatorv1.ImageSet) err
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.adJobsImage, err = components.GetReference(components.ComponentAnomalyDetectionJobs, reg, path, prefix, is)
+	c.adDetectorsImage, err = components.GetReference(components.ComponentAnomalyDetectionJobs, reg, path, prefix, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	c.adAPIImage, err = components.GetReference(components.ComponentAnomalyDetectionAPI, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -136,9 +151,31 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		c.intrusionDetectionRoleBinding(),
 		c.intrusionDetectionDeployment(),
 	)
+
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(IntrusionDetectionNamespace, c.cfg.ESSecrets...)...)...)
 	objs = append(objs, c.globalAlertTemplates()...)
-	objs = append(objs, c.intrusionDetectionADJobsPodTemplate()...)
+
+	// AD Related deployment only for management/standalone cluster
+	if !c.cfg.ManagedCluster {
+		// Service + Deployment + RBAC for AD API
+		objs = append(objs,
+			c.getADAPIServiceAccount(),
+			c.getADAPIAccessRole(),
+			c.getADAPIAccessRoleBonBinding(),
+		)
+		objs = append(objs,
+			c.getADAPIService(),
+			c.getADAPIDeployment(),
+		)
+
+		// RBAC for AD Detector Pods
+		objs = append(objs,
+			c.getADDetectorServiceAccount(),
+			c.getADDetectorAccessRole(),
+			c.getADDetectorRoleBinding(),
+		)
+		objs = append(objs, c.getADDetectorPodTemplates()...)
+	}
 
 	if !c.cfg.ManagedCluster {
 		objs = append(objs, c.intrusionDetectionElasticsearchJob())
@@ -1146,14 +1183,248 @@ func (c *intrusionDetectionComponent) intrusionDetectionAnnotations() map[string
 	return c.cfg.TrustedCertBundle.HashAnnotations()
 }
 
-func (c *intrusionDetectionComponent) intrusionDetectionADJobsPodTemplate() []client.Object {
-	trainingJobPodTemplate := c.getBaseIntrusionDetectionADJobPodTemplate(ADJobPodTemplateBaseName + ".training")
-	detecionADJobPodTemplate := c.getBaseIntrusionDetectionADJobPodTemplate(ADJobPodTemplateBaseName + ".detection")
+// AD API RBAC for accessing token and subject access reviews for AD Pod token verification
+func (c *intrusionDetectionComponent) getADAPIServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ADAPIObjectName,
+			Namespace: IntrusionDetectionNamespace,
+		},
+	}
+}
+
+func (c *intrusionDetectionComponent) getADAPIAccessRole() *rbacv1.Role {
+	return &rbacv1.Role{
+		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ADAPIObjectName,
+			Namespace: IntrusionDetectionNamespace,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{
+					"authentication.k8s.io",
+				},
+				Resources: []string{
+					"tokenreviews",
+					"subjectaccessreviews",
+				},
+				Verbs: []string{
+					"create",
+				},
+			},
+		},
+	}
+}
+
+func (c *intrusionDetectionComponent) getADAPIAccessRoleBonBinding() *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ADAPIObjectName,
+			Namespace: IntrusionDetectionNamespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     ADAPIObjectName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      ADAPIObjectName,
+				Namespace: IntrusionDetectionNamespace,
+			},
+		},
+	}
+}
+
+// AD API Service and Deployment
+func (c *intrusionDetectionComponent) getADAPIService() *corev1.Service {
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ADAPIObjectName,
+			Namespace: IntrusionDetectionNamespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: map[string]string{
+				"k8s-app": ADAPIObjectName,
+			},
+			Ports: []corev1.ServicePort{
+				{
+					Name: ADAPIObjectPortName,
+					Port: ADAPIPort,
+					TargetPort: intstr.IntOrString{
+						Type:   intstr.Int,
+						IntVal: ADAPIPort,
+					},
+					Protocol: corev1.ProtocolTCP,
+				},
+			},
+			Type: corev1.ServiceTypeClusterIP,
+		},
+	}
+}
+
+func (c *intrusionDetectionComponent) getADAPIDeployment() *appsv1.Deployment {
+	adAPIStorageVolumePath := "/storage"
+	adAPIStorageVolumeName := "volume-storage"
+	envVars := []corev1.EnvVar{
+		{Name: "LOG_LEVEL", Value: "info"},
+		{Name: "STORAGE_PATH", Value: adAPIStorageVolumePath},
+	}
+
+	return &appsv1.Deployment{
+		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ADAPIObjectName,
+			Namespace: IntrusionDetectionNamespace,
+			Labels: map[string]string{
+				"k8s-app": ADAPIObjectName,
+			},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &adAPIReplicas,
+			Strategy: appsv1.DeploymentStrategy{
+				Type: appsv1.RecreateDeploymentStrategyType,
+			},
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": ADAPIObjectName}},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      ADAPIObjectName,
+					Namespace: IntrusionDetectionNamespace,
+					Labels: map[string]string{
+						"k8s-app": ADAPIObjectName,
+					},
+				},
+				Spec: corev1.PodSpec{
+					ServiceAccountName: ADAPIObjectName,
+					Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster),
+					NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
+					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
+					Volumes: []corev1.Volume{
+						{
+							Name: adAPIStorageVolumeName,
+							VolumeSource: corev1.VolumeSource{
+								EmptyDir: &corev1.EmptyDirVolumeSource{},
+							},
+						},
+					},
+					Containers: []corev1.Container{
+						{
+							Name:  ADAPIObjectName,
+							Image: c.adAPIImage,
+							Env:   envVars,
+							LivenessProbe: &corev1.Probe{
+								Handler: corev1.Handler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path:   "/health",
+										Port:   intstr.FromInt(complianceServerPort),
+										Scheme: corev1.URISchemeHTTPS,
+									},
+								},
+								InitialDelaySeconds: 5,
+								PeriodSeconds:       10,
+								FailureThreshold:    5,
+							},
+							ReadinessProbe: &corev1.Probe{
+								Handler: corev1.Handler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path:   "/health",
+										Port:   intstr.FromInt(complianceServerPort),
+										Scheme: corev1.URISchemeHTTPS,
+									},
+								},
+								InitialDelaySeconds: 5,
+								PeriodSeconds:       10,
+								FailureThreshold:    5,
+							},
+							Command: []string{"/anomaly-detection-api"},
+							VolumeMounts: []corev1.VolumeMount{
+								c.cfg.TrustedCertBundle.VolumeMount(),
+								c.cfg.IntrusionDetectionServerCertSecret.VolumeMount(),
+								{
+									MountPath: adAPIStorageVolumePath,
+									Name:      adAPIStorageVolumeName,
+									ReadOnly:  false,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+// AD Detector PodTemplate  with RBAC
+func (c *intrusionDetectionComponent) getADDetectorServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ADJobPodTemplateBaseName,
+			Namespace: IntrusionDetectionNamespace,
+		},
+	}
+}
+
+func (c *intrusionDetectionComponent) getADDetectorAccessRole() *rbacv1.Role {
+	return &rbacv1.Role{
+		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ADJobPodTemplateBaseName,
+			Namespace: IntrusionDetectionNamespace,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{
+					ADJobPodTemplateBaseName,
+				},
+				Resources: []string{
+					ADDetectorsModelResourceName,
+				},
+				Verbs: []string{
+					"get",
+					"create",
+					"update",
+				},
+			},
+		},
+	}
+}
+
+func (c *intrusionDetectionComponent) getADDetectorRoleBinding() *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ADJobPodTemplateBaseName,
+			Namespace: IntrusionDetectionNamespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     ADJobPodTemplateBaseName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      ADJobPodTemplateBaseName,
+				Namespace: IntrusionDetectionNamespace,
+			},
+		},
+	}
+}
+
+func (c *intrusionDetectionComponent) getADDetectorPodTemplates() []client.Object {
+	trainingJobPodTemplate := c.getBaseADDetectorsPodTemplate(ADJobPodTemplateBaseName + ".training")
+	detecionADJobPodTemplate := c.getBaseADDetectorsPodTemplate(ADJobPodTemplateBaseName + ".detection")
 
 	return []client.Object{&trainingJobPodTemplate, &detecionADJobPodTemplate}
 }
 
-func (c *intrusionDetectionComponent) getBaseIntrusionDetectionADJobPodTemplate(podTemplateName string) corev1.PodTemplate {
+func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateName string) corev1.PodTemplate {
 	privileged := false
 	if c.cfg.Openshift {
 		privileged = true
@@ -1201,12 +1472,12 @@ func (c *intrusionDetectionComponent) getBaseIntrusionDetectionADJobPodTemplate(
 				DNSPolicy:          corev1.DNSClusterFirst,
 				ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 				RestartPolicy:      corev1.RestartPolicyOnFailure,
-				ServiceAccountName: IntrusionDetectionInstallerJobName,
+				ServiceAccountName: ADJobPodTemplateBaseName,
 				Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster),
 				Containers: []corev1.Container{
 					{
 						Name:  "adjobs",
-						Image: c.adJobsImage,
+						Image: c.adDetectorsImage,
 						SecurityContext: &corev1.SecurityContext{
 							Privileged: &privileged,
 						},
@@ -1246,10 +1517,6 @@ func (c *intrusionDetectionComponent) getBaseIntrusionDetectionADJobPodTemplate(
 						},
 					},
 				},
-				// ensures the AD pods are all deployed on the same node before a model storage cache is deployed (todo)
-				//  - without a model storage, models created by training jobs are stored on disk suceeeding detection jobs
-				//    need to read the models such that all pods running the AD containers need to run on the same node
-				NodeSelector: c.cfg.Installation.ControlPlaneNodeSelector,
 			},
 		},
 	}

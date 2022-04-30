@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -552,8 +552,8 @@ func (mc *monitorComponent) serviceMonitorCalicoNode() *monitoringv1.ServiceMoni
 
 func (mc *monitorComponent) tlsConfig(serverName string) *monitoringv1.TLSConfig {
 	return &monitoringv1.TLSConfig{
-		KeyFile:  fmt.Sprintf(mc.cfg.ClientTLSSecret.VolumeMountKeyFilePath()),
-		CertFile: fmt.Sprintf(mc.cfg.ClientTLSSecret.VolumeMountCertificateFilePath()),
+		KeyFile:  mc.cfg.ClientTLSSecret.VolumeMountKeyFilePath(),
+		CertFile: mc.cfg.ClientTLSSecret.VolumeMountCertificateFilePath(),
 		CAFile:   mc.cfg.TrustedCertBundle.MountPath(),
 		SafeTLSConfig: monitoringv1.SafeTLSConfig{
 			ServerName: serverName,

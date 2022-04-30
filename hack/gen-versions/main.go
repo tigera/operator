@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,9 +18,7 @@ import (
 	"flag"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 )
 
 const (
@@ -87,12 +85,4 @@ func run(versionsPath, tpl, defaultRegistry string) error {
 	}
 
 	return render(tpl, vz)
-}
-
-func getGcrBearer() string {
-	t, err := exec.Command("gcloud", "auth", "print-access-token").CombinedOutput()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(t))
 }

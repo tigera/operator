@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -189,7 +189,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		return reconcile.Result{}, err
 	}
 	if variant == "" {
-		r.status.SetDegraded(fmt.Sprintf("Waiting for Installation to be ready"), "")
+		r.status.SetDegraded("Waiting for Installation to be ready", "")
 		return reconcile.Result{}, nil
 	}
 	ns := rmeta.APIServerNamespace(variant)

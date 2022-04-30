@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -65,13 +65,6 @@ func ProjectCalicoApiServerServiceName(v operatorv1.ProductVariant) string {
 }
 
 func ApiServerServiceAccountName(v operatorv1.ProductVariant) string {
-	if v == operatorv1.Calico {
-		return "calico-apiserver"
-	}
-	return "tigera-apiserver"
-}
-
-func csrRolebindingName(v operatorv1.ProductVariant) string {
 	if v == operatorv1.Calico {
 		return "calico-apiserver"
 	}
@@ -213,7 +206,6 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	// Compile the final arrays based on the variant.
-	objsToCreate := []client.Object{}
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		// Create any enterprise specific objects.
 		globalObjects = append(globalObjects, globalEnterpriseObjects...)
@@ -234,7 +226,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		objsToDelete = append(objsToDelete, globalEnterpriseObjects...)
 	}
 
-	objsToCreate = append(globalObjects, namespacedObjects...)
+	objsToCreate := append(globalObjects, namespacedObjects...)
 	return objsToCreate, objsToDelete
 }
 

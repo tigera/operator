@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -63,7 +63,7 @@ var _ = Describe("authentication controller tests", func() {
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
 		ctx = context.Background()
-		cli = fake.NewFakeClientWithScheme(scheme)
+		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
 
 		// Set up a mock status
 		mockStatus = &status.MockStatus{}
@@ -283,6 +283,7 @@ var _ = Describe("authentication controller tests", func() {
 
 		if nameAttrEmpty {
 			err = cli.Get(ctx, client.ObjectKey{Name: auth.GetName()}, auth)
+			Expect(err).ToNot(HaveOccurred())
 			Expect(auth.Spec.LDAP.UserSearch.NameAttribute).To(Equal(defaultNameAttribute))
 		}
 	},

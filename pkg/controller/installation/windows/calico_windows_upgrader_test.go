@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -67,7 +67,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		Expect(operator.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 		// Create a client that will have a crud interface of k8s objects.
-		client = fake.NewFakeClientWithScheme(scheme)
+		client = fake.NewClientBuilder().WithScheme(scheme).Build()
 
 		cs = kfake.NewSimpleClientset()
 		mockStatus = &status.MockStatus{}

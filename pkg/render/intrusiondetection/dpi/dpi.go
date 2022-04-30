@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -321,15 +321,6 @@ func (d *dpiComponent) dpiClusterRole() *rbacv1.ClusterRole {
 		})
 	}
 	return role
-}
-
-func (d *dpiComponent) dpiNamespace() *corev1.Namespace {
-	return &corev1.Namespace{
-		TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: DeepPacketInspectionNamespace,
-		},
-	}
 }
 
 func (d *dpiComponent) dpiAnnotations() map[string]string {

@@ -149,7 +149,6 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		render.ManagerInternalTLSSecretName,
 		render.NodeTLSSecretName,
 		render.TyphaTLSSecretName,
-		render.ADAPITLSSecretName,
 		certificatemanagement.CASecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
@@ -435,7 +434,10 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       render.IntrusionDetectionNamespace,
 			ServiceAccounts: []string{render.IntrusionDetectionName},
-			TrustedBundle:   trustedBundle,
+			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+				rcertificatemanagement.NewKeyPairOption(intrusionDetectionCfg.ADAPIServerCertSecret, false, true),
+			},
+			TrustedBundle: trustedBundle,
 		}),
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       dpi.DeepPacketInspectionNamespace,

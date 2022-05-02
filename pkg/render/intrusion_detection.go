@@ -64,7 +64,7 @@ const (
 	ADAPIObjectPortName = "anomaly-detection-api-https"
 	ADAPITLSSecretName  = "anomaly-detection-api-tls"
 
-	ADAPIPort = 8080
+	adAPIPort = 8080
 )
 
 var adAPIReplicas int32 = 1
@@ -1256,10 +1256,10 @@ func (c *intrusionDetectionComponent) getADAPIService() *corev1.Service {
 			Ports: []corev1.ServicePort{
 				{
 					Name: ADAPIObjectPortName,
-					Port: ADAPIPort,
+					Port: adAPIPort,
 					TargetPort: intstr.IntOrString{
 						Type:   intstr.Int,
-						IntVal: ADAPIPort,
+						IntVal: adAPIPort,
 					},
 					Protocol: corev1.ProtocolTCP,
 				},
@@ -1326,7 +1326,7 @@ func (c *intrusionDetectionComponent) getADAPIDeployment() *appsv1.Deployment {
 								Handler: corev1.Handler{
 									HTTPGet: &corev1.HTTPGetAction{
 										Path:   "/health",
-										Port:   intstr.FromInt(complianceServerPort),
+										Port:   intstr.FromInt(adAPIPort),
 										Scheme: corev1.URISchemeHTTPS,
 									},
 								},
@@ -1338,7 +1338,7 @@ func (c *intrusionDetectionComponent) getADAPIDeployment() *appsv1.Deployment {
 								Handler: corev1.Handler{
 									HTTPGet: &corev1.HTTPGetAction{
 										Path:   "/health",
-										Port:   intstr.FromInt(complianceServerPort),
+										Port:   intstr.FromInt(adAPIPort),
 										Scheme: corev1.URISchemeHTTPS,
 									},
 								},

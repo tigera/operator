@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,10 +29,12 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
+	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -336,6 +338,20 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
+	serverTLSSecret, err := certificateManager.GetOrCreateKeyPair(r.client, render.ADAPITLSSecretName, common.OperatorNamespace(), dns.GetServiceDNSNames(monitor.PrometheusHTTPAPIServiceName, common.TigeraPrometheusNamespace, r.clusterDomain))
+	if err != nil {
+		log.Error(err, "Error creating TLS certificate")
+		r.status.SetDegraded("Error creating TLS certificate", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	clientTLSSecret, err := certificateManager.GetOrCreateKeyPair(r.client, render.ADAPITLSClientSecretName, common.OperatorNamespace(), []string{monitor.PrometheusClientTLSSecretName})
+	if err != nil {
+		log.Error(err, "Error creating TLS certificate")
+		r.status.SetDegraded("Error creating TLS certificate", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	if !r.dpiAPIReady.IsReady() {
 		log.Info("Waiting for DeepPacketInspection API to be ready")
 		r.status.SetDegraded("Waiting for DeepPacketInspection API to be ready", "")
@@ -368,17 +384,19 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	// Render the desired objects from the CRD and create or update them.
 	var hasNoLicense = !utils.IsFeatureActive(license, common.ThreatDefenseFeature)
 	intrusionDetectionCfg := &render.IntrusionDetectionConfiguration{
-		LogCollector:      lc,
-		ESSecrets:         esSecrets,
-		Installation:      network,
-		ESClusterConfig:   esClusterConfig,
-		PullSecrets:       pullSecrets,
-		Openshift:         r.provider == operatorv1.ProviderOpenShift,
-		ClusterDomain:     r.clusterDomain,
-		ESLicenseType:     esLicenseType,
-		ManagedCluster:    managementClusterConnection != nil,
-		HasNoLicense:      hasNoLicense,
-		TrustedCertBundle: trustedBundle,
+		LogCollector:          lc,
+		ESSecrets:             esSecrets,
+		Installation:          network,
+		ESClusterConfig:       esClusterConfig,
+		PullSecrets:           pullSecrets,
+		Openshift:             r.provider == operatorv1.ProviderOpenShift,
+		ClusterDomain:         r.clusterDomain,
+		ESLicenseType:         esLicenseType,
+		ManagedCluster:        managementClusterConnection != nil,
+		HasNoLicense:          hasNoLicense,
+		TrustedCertBundle:     trustedBundle,
+		ADAPIServerCertSecret: serverTLSSecret,
+		ADAPIClientCertSecret: clientTLSSecret,
 	}
 	comp := render.IntrusionDetection(intrusionDetectionCfg)
 

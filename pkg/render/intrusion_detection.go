@@ -162,7 +162,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		objs = append(objs,
 			c.getADAPIServiceAccount(),
 			c.getADAPIAccessRole(),
-			c.getADAPIAccessRoleBonBinding(),
+			c.getADAPIAccessRoleBinding(),
 		)
 		objs = append(objs,
 			c.getADAPIService(),
@@ -1219,7 +1219,7 @@ func (c *intrusionDetectionComponent) getADAPIAccessRole() *rbacv1.Role {
 	}
 }
 
-func (c *intrusionDetectionComponent) getADAPIAccessRoleBonBinding() *rbacv1.RoleBinding {
+func (c *intrusionDetectionComponent) getADAPIAccessRoleBinding() *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{

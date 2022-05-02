@@ -34,7 +34,6 @@ import (
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
-	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -150,6 +149,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		render.ManagerInternalTLSSecretName,
 		render.NodeTLSSecretName,
 		render.TyphaTLSSecretName,
+		render.ADAPITLSSecretName,
 		certificatemanagement.CASecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
@@ -176,6 +176,10 @@ func add(mgr manager.Manager, c controller.Controller) error {
 
 	if err = utils.AddConfigMapWatch(c, render.TyphaCAConfigMapName, common.OperatorNamespace()); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
+	}
+
+	if err = utils.AddSecretsWatch(c, render.ADAPITLSSecretName, render.IntrusionDetectionNamespace); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
 	}
 
 	return nil
@@ -338,16 +342,10 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	serverTLSSecret, err := certificateManager.GetOrCreateKeyPair(r.client, render.ADAPITLSSecretName, common.OperatorNamespace(), dns.GetServiceDNSNames(monitor.PrometheusHTTPAPIServiceName, common.TigeraPrometheusNamespace, r.clusterDomain))
+	adAPIServerTLSSecret, err := certificateManager.GetOrCreateKeyPair(r.client, render.ADAPITLSSecretName, common.OperatorNamespace(),
+		dns.GetServiceDNSNames(render.ADAPIObjectName, render.IntrusionDetectionNamespace, r.clusterDomain))
 	if err != nil {
-		log.Error(err, "Error creating TLS certificate")
-		r.status.SetDegraded("Error creating TLS certificate", err.Error())
-		return reconcile.Result{}, err
-	}
-
-	clientTLSSecret, err := certificateManager.GetOrCreateKeyPair(r.client, render.ADAPITLSClientSecretName, common.OperatorNamespace(), []string{monitor.PrometheusClientTLSSecretName})
-	if err != nil {
-		log.Error(err, "Error creating TLS certificate")
+		log.Error(err, "Error creating Anomaly Detection API TLS certificate")
 		r.status.SetDegraded("Error creating TLS certificate", err.Error())
 		return reconcile.Result{}, err
 	}
@@ -395,8 +393,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		ManagedCluster:        managementClusterConnection != nil,
 		HasNoLicense:          hasNoLicense,
 		TrustedCertBundle:     trustedBundle,
-		ADAPIServerCertSecret: serverTLSSecret,
-		ADAPIClientCertSecret: clientTLSSecret,
+		ADAPIServerCertSecret: adAPIServerTLSSecret,
 	}
 	comp := render.IntrusionDetection(intrusionDetectionCfg)
 

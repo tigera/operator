@@ -60,10 +60,9 @@ const (
 	adDetectorPrefixName         = "tigera.io.detector."
 	ADDetectorsModelResourceName = "models"
 
-	ADAPIObjectName          = "anomaly-detection-api"
-	ADAPIObjectPortName      = "anomaly-detection-api-https"
-	ADAPITLSSecretName       = "anomaly-detection-api-tls"
-	ADAPITLSClientSecretName = "anomaly-detection-api-client-tls"
+	ADAPIObjectName     = "anomaly-detection-api"
+	ADAPIObjectPortName = "anomaly-detection-api-https"
+	ADAPITLSSecretName  = "anomaly-detection-api-tls"
 
 	ADAPIPort = 8080
 )
@@ -90,7 +89,6 @@ type IntrusionDetectionConfiguration struct {
 	HasNoLicense          bool
 	TrustedCertBundle     certificatemanagement.TrustedBundle
 	ADAPIServerCertSecret certificatemanagement.KeyPairInterface
-	ADAPIClientCertSecret certificatemanagement.KeyPairInterface
 }
 
 type intrusionDetectionComponent struct {
@@ -1312,7 +1310,6 @@ func (c *intrusionDetectionComponent) getADAPIDeployment() *appsv1.Deployment {
 					Volumes: []corev1.Volume{
 						c.cfg.TrustedCertBundle.Volume(),
 						c.cfg.ADAPIServerCertSecret.Volume(),
-						c.cfg.ADAPIClientCertSecret.Volume(),
 						{
 							Name: adAPIStorageVolumeName,
 							VolumeSource: corev1.VolumeSource{
@@ -1353,7 +1350,6 @@ func (c *intrusionDetectionComponent) getADAPIDeployment() *appsv1.Deployment {
 							VolumeMounts: []corev1.VolumeMount{
 								c.cfg.TrustedCertBundle.VolumeMount(),
 								c.cfg.ADAPIServerCertSecret.VolumeMount(),
-								c.cfg.ADAPIClientCertSecret.VolumeMount(),
 								{
 									MountPath: adAPIStorageVolumePath,
 									Name:      adAPIStorageVolumeName,

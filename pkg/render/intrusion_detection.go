@@ -60,8 +60,10 @@ const (
 	adDetectorPrefixName         = "tigera.io.detector."
 	ADDetectorsModelResourceName = "models"
 
-	ADAPIObjectName     = "anomaly-detection-api"
-	ADAPIObjectPortName = "anomaly-detection-api-https"
+	ADAPIObjectName          = "anomaly-detection-api"
+	ADAPIObjectPortName      = "anomaly-detection-api-https"
+	ADAPITLSSecretName       = "anomaly-detection-api-tls"
+	ADAPITLSClientSecretName = "anomaly-detection-api-client-tls"
 
 	ADAPIPort = 8080
 )
@@ -76,18 +78,19 @@ func IntrusionDetection(cfg *IntrusionDetectionConfiguration) Component {
 
 // IntrusionDetectionConfiguration contains all the config information needed to render the component.
 type IntrusionDetectionConfiguration struct {
-	LogCollector                       *operatorv1.LogCollector
-	ESSecrets                          []*corev1.Secret
-	Installation                       *operatorv1.InstallationSpec
-	ESClusterConfig                    *relasticsearch.ClusterConfig
-	PullSecrets                        []*corev1.Secret
-	Openshift                          bool
-	ClusterDomain                      string
-	ESLicenseType                      ElasticsearchLicenseType
-	ManagedCluster                     bool
-	HasNoLicense                       bool
-	TrustedCertBundle                  certificatemanagement.TrustedBundle
-	IntrusionDetectionServerCertSecret certificatemanagement.KeyPairInterface
+	LogCollector          *operatorv1.LogCollector
+	ESSecrets             []*corev1.Secret
+	Installation          *operatorv1.InstallationSpec
+	ESClusterConfig       *relasticsearch.ClusterConfig
+	PullSecrets           []*corev1.Secret
+	Openshift             bool
+	ClusterDomain         string
+	ESLicenseType         ElasticsearchLicenseType
+	ManagedCluster        bool
+	HasNoLicense          bool
+	TrustedCertBundle     certificatemanagement.TrustedBundle
+	ADAPIServerCertSecret certificatemanagement.KeyPairInterface
+	ADAPIClientCertSecret certificatemanagement.KeyPairInterface
 }
 
 type intrusionDetectionComponent struct {
@@ -1274,6 +1277,8 @@ func (c *intrusionDetectionComponent) getADAPIDeployment() *appsv1.Deployment {
 	envVars := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "STORAGE_PATH", Value: adAPIStorageVolumePath},
+		{Name: "TLS_KEY", Value: c.cfg.ADAPIServerCertSecret.VolumeMountKeyFilePath()},
+		{Name: "TLS_CERT", Value: c.cfg.ADAPIServerCertSecret.VolumeMountCertificateFilePath()},
 	}
 
 	return &appsv1.Deployment{
@@ -1305,6 +1310,9 @@ func (c *intrusionDetectionComponent) getADAPIDeployment() *appsv1.Deployment {
 					NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					Volumes: []corev1.Volume{
+						c.cfg.TrustedCertBundle.Volume(),
+						c.cfg.ADAPIServerCertSecret.Volume(),
+						c.cfg.ADAPIClientCertSecret.Volume(),
 						{
 							Name: adAPIStorageVolumeName,
 							VolumeSource: corev1.VolumeSource{
@@ -1344,7 +1352,8 @@ func (c *intrusionDetectionComponent) getADAPIDeployment() *appsv1.Deployment {
 							Command: []string{"/anomaly-detection-api"},
 							VolumeMounts: []corev1.VolumeMount{
 								c.cfg.TrustedCertBundle.VolumeMount(),
-								c.cfg.IntrusionDetectionServerCertSecret.VolumeMount(),
+								c.cfg.ADAPIServerCertSecret.VolumeMount(),
+								c.cfg.ADAPIClientCertSecret.VolumeMount(),
 								{
 									MountPath: adAPIStorageVolumePath,
 									Name:      adAPIStorageVolumeName,

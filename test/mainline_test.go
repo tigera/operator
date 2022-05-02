@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -113,7 +113,7 @@ var _ = Describe("Mainline component function tests", func() {
 				return fmt.Errorf("No nodes found")
 			}
 			for _, n := range nodes.Items {
-				for k, _ := range n.ObjectMeta.Annotations {
+				for k := range n.ObjectMeta.Annotations {
 					if strings.Contains(k, "projectcalico") {
 						delete(n.ObjectMeta.Annotations, k)
 					}

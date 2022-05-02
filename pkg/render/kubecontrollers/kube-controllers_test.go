@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -166,7 +166,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{Name: "ENABLED_CONTROLLERS", Value: "node"},
 			{Name: "KUBE_CONTROLLERS_CONFIG_NAME", Value: "default"},
 		}
-		expectedEnv = append(expectedEnv)
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedEnv))
 
 		// Verify tolerations.

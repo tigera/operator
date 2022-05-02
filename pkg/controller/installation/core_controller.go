@@ -1386,10 +1386,7 @@ func readMTUFile() (int, error) {
 
 func calicoDirectoryExists() bool {
 	_, err := os.Stat("/var/lib/calico")
-	if err != nil {
-		return false
-	}
-	return true
+	return err == nil
 }
 
 func (r *ReconcileInstallation) SetDegraded(reason string, err error, log logr.Logger) {
@@ -1425,7 +1422,7 @@ func GetOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 				}
 			}
 			if cn == "" && uriSAN == "" {
-				errMsgs = append(errMsgs, fmt.Sprintf("CertPair for Felix does not contain common-name or uri-san"))
+				errMsgs = append(errMsgs, "CertPair for Felix does not contain common-name or uri-san")
 			}
 		}
 		return
@@ -1614,7 +1611,7 @@ func isOpenshiftOnAws(install *operator.Installation, ctx context.Context, clien
 	if err := client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, &infra); err != nil {
 		return false, fmt.Errorf("Unable to read OpenShift infrastructure configuration: %s", err.Error())
 	}
-	return (infra.Status.Platform == "AWS"), nil
+	return (infra.Status.PlatformStatus.Type == "AWS"), nil
 }
 
 func updateInstallationForOpenshiftNetwork(i *operator.Installation, o *configv1.Network) error {

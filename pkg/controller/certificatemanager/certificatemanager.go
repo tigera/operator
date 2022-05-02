@@ -126,6 +126,9 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 		} else {
 			privateKeyPEM, certificatePEM = caSecret.Data[corev1.TLSPrivateKeyKey], caSecret.Data[corev1.TLSCertKey]
 			cryptoCA, err = crypto.GetCAFromBytes(certificatePEM, privateKeyPEM)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	x509Cert, err := certificatemanagement.ParseCertificate(certificatePEM)

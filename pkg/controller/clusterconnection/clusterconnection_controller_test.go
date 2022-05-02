@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -60,7 +60,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		err := operatorv1.SchemeBuilder.AddToScheme(scheme)
 		Expect(err).NotTo(HaveOccurred())
-		c = fake.NewFakeClientWithScheme(scheme)
+		c = fake.NewClientBuilder().WithScheme(scheme).Build()
 		ctx = context.Background()
 		mockStatus = &status.MockStatus{}
 		mockStatus.On("Run").Return()
@@ -93,9 +93,12 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 
 		promSecret, err := certificateManager.GetOrCreateKeyPair(c, render.PrometheusTLSSecretName, common.OperatorNamespace(), []string{"a"})
 		Expect(err).NotTo(HaveOccurred())
-		c.Create(ctx, secret.Secret(common.OperatorNamespace()))
-		c.Create(ctx, pcSecret.Secret(common.OperatorNamespace()))
-		c.Create(ctx, promSecret.Secret(common.OperatorNamespace()))
+		err = c.Create(ctx, secret.Secret(common.OperatorNamespace()))
+		Expect(err).NotTo(HaveOccurred())
+		err = c.Create(ctx, pcSecret.Secret(common.OperatorNamespace()))
+		Expect(err).NotTo(HaveOccurred())
+		err = c.Create(ctx, promSecret.Secret(common.OperatorNamespace()))
+		Expect(err).NotTo(HaveOccurred())
 
 		By("applying the required prerequisites")
 		// Create a ManagementClusterConnection in the k8s client.

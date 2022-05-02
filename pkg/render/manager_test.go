@@ -53,9 +53,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	installation := &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas}
 	const expectedResourcesNumber = 11
 
-	expectedDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
-	expectedDNSNames = append(expectedDNSNames, "localhost")
-
 	It("should render all resources for a default configuration", func() {
 		resources := renderObjects(renderConfig{oidc: false, managementCluster: nil, installation: installation, complianceFeatureActive: true})
 

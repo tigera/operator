@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -145,7 +145,7 @@ func isDockerEE(ctx context.Context, c kubernetes.Interface) (bool, error) {
 		return false, err
 	}
 	for _, n := range masterNodes.Items {
-		for l, _ := range n.Labels {
+		for l := range n.Labels {
 			if strings.HasPrefix(l, "com.docker.ucp") {
 				return true, nil
 			}

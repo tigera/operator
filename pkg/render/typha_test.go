@@ -51,7 +51,7 @@ var _ = Describe("Typha rendering tests", func() {
 		// desired configuration.
 		installation = &operatorv1.InstallationSpec{
 			KubernetesProvider: operatorv1.ProviderNone,
-			//Variant ProductVariant `json:"variant,omitempty"`
+			// Variant ProductVariant `json:"variant,omitempty"`
 			Registry: registry,
 			CNI: &operatorv1.CNISpec{
 				Type: operatorv1.PluginCalico,
@@ -190,6 +190,36 @@ var _ = Describe("Typha rendering tests", func() {
 		for _, v := range expectedEnvVars {
 			Expect(tc.Env).To(ContainElement(v))
 		}
+	})
+
+	It("should properly configure a non-default typha health port", func() {
+		// Set a non-default health port.
+		cfg.FelixHealthPort = 7878
+
+		component := render.Typha(&cfg)
+		resources, _ := component.Objects()
+
+		depResource := rtest.GetResource(resources, "calico-typha", "calico-system", "apps", "v1", "Deployment")
+		Expect(depResource).ToNot(BeNil())
+		deployment := depResource.(*appsv1.Deployment)
+
+		passed := false
+		for _, container := range deployment.Spec.Template.Spec.Containers {
+			if container.Name == "calico-typha" {
+				Expect(container.LivenessProbe.HTTPGet.Port.IntVal).To(Equal(int32(7877)))
+				for _, env := range container.Env {
+					if env.Name == "TYPHA_HEALTHPORT" {
+						Expect(env.Value).To(Equal("7877"))
+
+						// Found both expected fields, and they match.
+						passed = true
+						break
+					}
+				}
+				break
+			}
+		}
+		Expect(passed).To(Equal(true), "Typha healthport configuration missing an expected field")
 	})
 
 	It("should render resourcerequirements", func() {

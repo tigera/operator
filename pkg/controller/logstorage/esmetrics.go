@@ -16,7 +16,6 @@ package logstorage
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -49,37 +48,39 @@ func (r *ReconcileLogStorage) createEsMetrics(
 ) (reconcile.Result, bool, error) {
 	esMetricsSecret, err := utils.GetSecret(context.Background(), r.client, esmetrics.ElasticsearchMetricsSecret, common.OperatorNamespace())
 	if err != nil {
+		reqLogger.Error(err, "Failed to retrieve Elasticsearch metrics user secret.")
 		r.status.SetDegraded("Failed to retrieve Elasticsearch metrics user secret.", err.Error())
 		return reconcile.Result{}, false, err
 	} else if esMetricsSecret == nil {
+		reqLogger.Info("Waiting for elasticsearch metrics secrets to become available")
 		r.status.SetDegraded("Waiting for elasticsearch metrics secrets to become available", "")
-		err = fmt.Errorf("waiting for elasticsearch metrics secrets to become available")
-		return reconcile.Result{}, false, err
+		return reconcile.Result{}, false, nil
 	}
 
 	publicCertSecretESCopy, err := utils.GetSecret(context.Background(), r.client, relasticsearch.PublicCertSecret, render.ElasticsearchNamespace)
 	if err != nil {
+		reqLogger.Error(err, "Failed to retrieve Elasticsearch public cert secret.")
 		r.status.SetDegraded("Failed to retrieve Elasticsearch public cert secret.", err.Error())
 		return reconcile.Result{}, false, err
 	} else if publicCertSecretESCopy == nil {
+		reqLogger.Info("Waiting for elasticsearch public cert secret to become available")
 		r.status.SetDegraded("Waiting for elasticsearch public cert secret to become available", "")
-		err = fmt.Errorf("waiting for elasticsearch public cert secret to become available")
-		return reconcile.Result{}, false, err
+		return reconcile.Result{}, false, nil
 	}
 
 	certificateManager, err := certificatemanager.Create(r.client, install, r.clusterDomain)
 	if err != nil {
-		log.Error(err, "unable to create the Tigera CA")
+		reqLogger.Error(err, "unable to create the Tigera CA")
 		r.status.SetDegraded("Unable to create the Tigera CA", err.Error())
 		return reconcile.Result{}, false, err
 	}
 	prometheusCertificate, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
 	if err != nil {
-		log.Error(err, "Failed to get certificate")
+		reqLogger.Error(err, "Failed to get certificate")
 		r.status.SetDegraded("Failed to get certificate", err.Error())
 		return reconcile.Result{}, false, err
 	} else if prometheusCertificate == nil {
-		log.Info("Prometheus secrets are not available yet, waiting until they become available")
+		reqLogger.Info("Prometheus secrets are not available yet, waiting until they become available")
 		r.status.SetDegraded("Prometheus secrets are not available yet, waiting until they become available", "")
 		return reconcile.Result{RequeueAfter: 5 * time.Second}, false, nil
 	}
@@ -91,7 +92,7 @@ func (r *ReconcileLogStorage) createEsMetrics(
 		common.OperatorNamespace(),
 		dns.GetServiceDNSNames(esmetrics.ElasticsearchMetricsName, render.ElasticsearchNamespace, clusterDomain))
 	if err != nil {
-		log.Error(err, "Error finding or creating TLS certificate")
+		reqLogger.Error(err, "Error finding or creating TLS certificate")
 		r.status.SetDegraded("Error finding or creating TLS certificate", err.Error())
 		return reconcile.Result{}, false, err
 	}

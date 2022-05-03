@@ -117,9 +117,9 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			{name: render.ADAPIObjectName, ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: render.ADAPIObjectName, ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "Service"},
 			{name: render.ADAPIObjectName, ns: "tigera-intrusion-detection", group: "apps", version: "v1", kind: "Deployment"},
-			{name: render.ADJobPodTemplateBaseName, ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: render.ADJobPodTemplateBaseName, ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
-			{name: render.ADJobPodTemplateBaseName, ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: render.ADJobPodTemplateBaseName + ".training", ns: render.IntrusionDetectionNamespace, group: "", version: "v1", kind: "PodTemplate"},
 			{name: render.ADJobPodTemplateBaseName + ".detection", ns: render.IntrusionDetectionNamespace, group: "", version: "v1", kind: "PodTemplate"},
 			{name: "intrusion-detection-es-job-installer", ns: "tigera-intrusion-detection", group: "batch", version: "v1", kind: "Job"},
@@ -174,21 +174,21 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal(adAPIKeyPair.VolumeMount().MountPath))
 
 		// Check all Role for respective AD API SAs
-		detectorsRole := rtest.GetResource(resources, render.ADJobPodTemplateBaseName, render.IntrusionDetectionNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
+		detectorsRole := rtest.GetResource(resources, "anomaly-detectors", render.IntrusionDetectionNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
 		Expect(len(detectorsRole.Rules)).To(Equal(1))
 		Expect(detectorsRole.Rules[0].APIGroups).To(ConsistOf(render.ADJobPodTemplateBaseName))
 		Expect(detectorsRole.Rules[0].Resources).To(ConsistOf(render.ADDetectorsModelResourceName))
 		Expect(detectorsRole.Rules[0].Verbs).To(ConsistOf("get", "create", "update"))
 
-		detectorsRoleBinding := rtest.GetResource(resources, render.ADJobPodTemplateBaseName, render.IntrusionDetectionNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
+		detectorsRoleBinding := rtest.GetResource(resources, "anomaly-detectors", render.IntrusionDetectionNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
 		Expect(detectorsRoleBinding.RoleRef).To(Equal(rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "Role",
-			Name:     render.ADJobPodTemplateBaseName,
+			Name:     "anomaly-detectors",
 		}))
 		Expect(detectorsRoleBinding.Subjects).To(ConsistOf(rbacv1.Subject{
 			Kind:      "ServiceAccount",
-			Name:      render.ADJobPodTemplateBaseName,
+			Name:      "anomaly-detectors",
 			Namespace: render.IntrusionDetectionNamespace,
 		}))
 
@@ -272,9 +272,9 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			{name: render.ADAPIObjectName, ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: render.ADAPIObjectName, ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "Service"},
 			{name: render.ADAPIObjectName, ns: "tigera-intrusion-detection", group: "apps", version: "v1", kind: "Deployment"},
-			{name: render.ADJobPodTemplateBaseName, ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: render.ADJobPodTemplateBaseName, ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
-			{name: render.ADJobPodTemplateBaseName, ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: render.ADJobPodTemplateBaseName + ".training", ns: render.IntrusionDetectionNamespace, group: "", version: "v1", kind: "PodTemplate"},
 			{name: render.ADJobPodTemplateBaseName + ".detection", ns: render.IntrusionDetectionNamespace, group: "", version: "v1", kind: "PodTemplate"},
 			{name: "intrusion-detection-es-job-installer", ns: "tigera-intrusion-detection", group: "batch", version: "v1", kind: "Job"},

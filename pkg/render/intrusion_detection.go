@@ -56,8 +56,9 @@ const (
 	IntrusionDetectionControllerName   = "intrusion-detection-controller"
 
 	ADJobPodTemplateBaseName     = "tigera.io.detectors"
-	adDetectionJobsDefaultPeriod = 15 * time.Minute
 	adDetectorPrefixName         = "tigera.io.detector."
+	adDetectorServiceAccountName = "anomaly-detectors"
+	adDetectionJobsDefaultPeriod = 15 * time.Minute
 	ADDetectorsModelResourceName = "models"
 
 	ADAPIObjectName     = "anomaly-detection-api"
@@ -160,22 +161,22 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 	if !c.cfg.ManagedCluster {
 		// Service + Deployment + RBAC for AD API
 		objs = append(objs,
-			c.getADAPIServiceAccount(),
+			c.adAPIServiceAccount(),
 			c.getADAPIAccessRole(),
-			c.getADAPIAccessRoleBinding(),
+			c.adAPIAccessRoleBinding(),
 		)
 		objs = append(objs,
-			c.getADAPIService(),
-			c.getADAPIDeployment(),
+			c.adAPIService(),
+			c.adAPIDeployment(),
 		)
 
 		// RBAC for AD Detector Pods
 		objs = append(objs,
-			c.getADDetectorServiceAccount(),
-			c.getADDetectorAccessRole(),
-			c.getADDetectorRoleBinding(),
+			c.adDetectorServiceAccount(),
+			c.adDetectorAccessRole(),
+			c.adDetectorRoleBinding(),
 		)
-		objs = append(objs, c.getADDetectorPodTemplates()...)
+		objs = append(objs, c.adDetectorPodTemplates()...)
 	}
 
 	if !c.cfg.ManagedCluster {
@@ -1175,7 +1176,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionAnnotations() map[string
 }
 
 // AD API RBAC for accessing token and subject access reviews for AD Pod token verification
-func (c *intrusionDetectionComponent) getADAPIServiceAccount() *corev1.ServiceAccount {
+func (c *intrusionDetectionComponent) adAPIServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1209,7 +1210,7 @@ func (c *intrusionDetectionComponent) getADAPIAccessRole() *rbacv1.Role {
 	}
 }
 
-func (c *intrusionDetectionComponent) getADAPIAccessRoleBinding() *rbacv1.RoleBinding {
+func (c *intrusionDetectionComponent) adAPIAccessRoleBinding() *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1232,7 +1233,7 @@ func (c *intrusionDetectionComponent) getADAPIAccessRoleBinding() *rbacv1.RoleBi
 }
 
 // AD API Service and Deployment
-func (c *intrusionDetectionComponent) getADAPIService() *corev1.Service {
+func (c *intrusionDetectionComponent) adAPIService() *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1259,7 +1260,7 @@ func (c *intrusionDetectionComponent) getADAPIService() *corev1.Service {
 	}
 }
 
-func (c *intrusionDetectionComponent) getADAPIDeployment() *appsv1.Deployment {
+func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 	adAPIStorageVolumePath := "/storage"
 	adAPIStorageVolumeName := "volume-storage"
 	envVars := []corev1.EnvVar{
@@ -1355,21 +1356,21 @@ func (c *intrusionDetectionComponent) getADAPIDeployment() *appsv1.Deployment {
 }
 
 // AD Detector PodTemplate  with RBAC
-func (c *intrusionDetectionComponent) getADDetectorServiceAccount() *corev1.ServiceAccount {
+func (c *intrusionDetectionComponent) adDetectorServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ADJobPodTemplateBaseName,
+			Name:      adDetectorServiceAccountName,
 			Namespace: IntrusionDetectionNamespace,
 		},
 	}
 }
 
-func (c *intrusionDetectionComponent) getADDetectorAccessRole() *rbacv1.Role {
+func (c *intrusionDetectionComponent) adDetectorAccessRole() *rbacv1.Role {
 	return &rbacv1.Role{
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ADJobPodTemplateBaseName,
+			Name:      adDetectorServiceAccountName,
 			Namespace: IntrusionDetectionNamespace,
 		},
 		Rules: []rbacv1.PolicyRule{
@@ -1390,29 +1391,29 @@ func (c *intrusionDetectionComponent) getADDetectorAccessRole() *rbacv1.Role {
 	}
 }
 
-func (c *intrusionDetectionComponent) getADDetectorRoleBinding() *rbacv1.RoleBinding {
+func (c *intrusionDetectionComponent) adDetectorRoleBinding() *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ADJobPodTemplateBaseName,
+			Name:      adDetectorServiceAccountName,
 			Namespace: IntrusionDetectionNamespace,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "Role",
-			Name:     ADJobPodTemplateBaseName,
+			Name:     adDetectorServiceAccountName,
 		},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      ADJobPodTemplateBaseName,
+				Name:      adDetectorServiceAccountName,
 				Namespace: IntrusionDetectionNamespace,
 			},
 		},
 	}
 }
 
-func (c *intrusionDetectionComponent) getADDetectorPodTemplates() []client.Object {
+func (c *intrusionDetectionComponent) adDetectorPodTemplates() []client.Object {
 	trainingJobPodTemplate := c.getBaseADDetectorsPodTemplate(ADJobPodTemplateBaseName + ".training")
 	detecionADJobPodTemplate := c.getBaseADDetectorsPodTemplate(ADJobPodTemplateBaseName + ".detection")
 
@@ -1467,7 +1468,7 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 				DNSPolicy:          corev1.DNSClusterFirst,
 				ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 				RestartPolicy:      corev1.RestartPolicyOnFailure,
-				ServiceAccountName: ADJobPodTemplateBaseName,
+				ServiceAccountName: adDetectorServiceAccountName,
 				Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster),
 				Containers: []corev1.Container{
 					{

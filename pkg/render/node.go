@@ -1357,8 +1357,8 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "IP6_AUTODETECTION_METHOD", Value: v6Method})
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_IPV6SUPPORT", Value: "true"})
 
-		// Set CALICO_ROUTER_ID to "hash" if IPv6 only.
-		if v4Method == "" {
+		// Set CALICO_ROUTER_ID to "hash" for IPv6-only with BGP enabled.
+		if v4Method == "" && bgpEnabled(c.cfg.Installation) {
 			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_ROUTER_ID", Value: "hash"})
 		}
 	} else {

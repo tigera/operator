@@ -84,51 +84,35 @@ var _ = Describe("Installation validation tests", func() {
 	})
 
 	It("should allow IPv6 VXLAN", func() {
-		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
-			{
-				CIDR:          "1eef::/64",
-				NATOutgoing:   operator.NATOutgoingEnabled,
-				Encapsulation: operator.EncapsulationVXLAN,
-				NodeSelector:  "all()",
-			},
+		encaps := []operator.EncapsulationType{operator.EncapsulationVXLAN, operator.EncapsulationVXLANCrossSubnet}
+		for _, vxlanMode := range encaps {
+			instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+				{
+					CIDR:          "1eef::/64",
+					NATOutgoing:   operator.NATOutgoingEnabled,
+					Encapsulation: vxlanMode,
+					NodeSelector:  "all()",
+				},
+			}
+			err := validateCustomResource(instance)
+			Expect(err).To(BeNil())
 		}
-		err := validateCustomResource(instance)
-		Expect(err).To(BeNil())
-
-		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
-			{
-				CIDR:          "1eef::/64",
-				NATOutgoing:   operator.NATOutgoingEnabled,
-				Encapsulation: operator.EncapsulationVXLANCrossSubnet,
-				NodeSelector:  "all()",
-			},
-		}
-		err = validateCustomResource(instance)
-		Expect(err).To(BeNil())
 	})
 
 	It("should prevent IPv6 if IPIP is enabled", func() {
-		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
-			{
-				CIDR:          "1eef::/64",
-				NATOutgoing:   operator.NATOutgoingEnabled,
-				Encapsulation: operator.EncapsulationIPIP,
-				NodeSelector:  "all()",
-			},
+		encaps := []operator.EncapsulationType{operator.EncapsulationIPIP, operator.EncapsulationIPIPCrossSubnet}
+		for _, ipipMode := range encaps {
+			instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+				{
+					CIDR:          "1eef::/64",
+					NATOutgoing:   operator.NATOutgoingEnabled,
+					Encapsulation: ipipMode,
+					NodeSelector:  "all()",
+				},
+			}
+			err := validateCustomResource(instance)
+			Expect(err).To(MatchError("IPIP encapsulation is not supported by IPv6 pools, but it is set for 1eef::/64"))
 		}
-		err := validateCustomResource(instance)
-		Expect(err).To(MatchError("IPIP encapsulation is not supported by IPv6 pools, but it is set for 1eef::/64"))
-
-		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
-			{
-				CIDR:          "1eef::/64",
-				NATOutgoing:   operator.NATOutgoingEnabled,
-				Encapsulation: operator.EncapsulationIPIPCrossSubnet,
-				NodeSelector:  "all()",
-			},
-		}
-		err = validateCustomResource(instance)
-		Expect(err).To(MatchError("IPIP encapsulation is not supported by IPv6 pools, but it is set for 1eef::/64"))
 	})
 
 	It("should prevent multiple node address autodetection methods", func() {

@@ -1295,9 +1295,12 @@ func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: ADAPIObjectName,
-					Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster),
-					NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
-					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
+					// setting tolerations, nodeselector as the node affinity setting respecting
+					// the control plane tagged node as the centeralized node for anomaly
+					// detection storage
+					Tolerations:      c.cfg.Installation.ControlPlaneTolerations,
+					NodeSelector:     c.cfg.Installation.ControlPlaneNodeSelector,
+					ImagePullSecrets: secret.GetReferenceList(c.cfg.PullSecrets),
 					Volumes: []corev1.Volume{
 						c.cfg.TrustedCertBundle.Volume(),
 						c.cfg.ADAPIServerCertSecret.Volume(),
@@ -1456,14 +1459,7 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 							},
 						},
 					},
-					{
-						Name: "host-volume",
-						VolumeSource: corev1.VolumeSource{
-							HostPath: &corev1.HostPathVolumeSource{
-								Path: "/home/idsuser/anomaly_detection_jobs/models",
-							},
-						},
-					},
+					c.cfg.ADAPIServerCertSecret.Volume(),
 				},
 				DNSPolicy:          corev1.DNSClusterFirst,
 				ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
@@ -1510,6 +1506,7 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 								Name:      "host-volume",
 								MountPath: "/home/idsuser/anomaly_detection_jobs/models",
 							},
+							c.cfg.ADAPIServerCertSecret.VolumeMount(),
 						},
 					},
 				},

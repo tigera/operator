@@ -417,7 +417,7 @@ var _ = Describe("Convert network tests", func() {
 
 			v6pool.Spec.IPIPMode = crdv1.IPIPModeNever
 			v6pool.Spec.VXLANMode = crdv1.VXLANModeAlways
-			c := fake.NewFakeClientWithScheme(scheme, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
@@ -456,7 +456,7 @@ var _ = Describe("Convert network tests", func() {
 			v4pool.Spec.VXLANMode = crdv1.VXLANModeAlways
 			v6pool.Spec.IPIPMode = crdv1.IPIPModeNever
 			v6pool.Spec.VXLANMode = crdv1.VXLANModeAlways
-			c := fake.NewFakeClientWithScheme(scheme, v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())

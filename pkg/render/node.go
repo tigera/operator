@@ -1357,13 +1357,9 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "IP6_AUTODETECTION_METHOD", Value: v6Method})
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_IPV6SUPPORT", Value: "true"})
 
-		// Set CALICO_ROUTER_ID to "hash" for IPv6 only with BGP.
-		if v4Method == "" {
-			v6pool := GetIPv6Pool(c.cfg.Installation.CalicoNetwork.IPPools)
-			encap := v6pool.Encapsulation
-			if v6pool != nil && (encap != operatorv1.EncapsulationVXLAN && encap != operatorv1.EncapsulationVXLANCrossSubnet) {
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_ROUTER_ID", Value: "hash"})
-			}
+		// Set CALICO_ROUTER_ID to "hash" for IPv6-only with BGP enabled.
+		if v4Method == "" && bgpEnabled(c.cfg.Installation) {
+			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_ROUTER_ID", Value: "hash"})
 		}
 	} else {
 		// IPv6 Auto-detection is disabled.

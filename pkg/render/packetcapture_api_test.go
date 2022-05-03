@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -100,13 +100,6 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 			{name: render.PacketCaptureServiceName, ns: render.PacketCaptureNamespace, group: "", version: "v1", kind: "Service"},
 		}
 
-		if enableOIDC {
-			var oidc = []expectedResource{
-				{name: "tigera-dex-tls", ns: render.PacketCaptureNamespace, group: "", version: "v1", kind: "Secret"},
-			}
-			resources = append(resources, oidc...)
-		}
-
 		return resources
 
 	}
@@ -174,7 +167,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 	}
 
 	// Generate expected volume mounts
-	var expectedVolumeMounts = func(enableOIDC bool) []corev1.VolumeMount {
+	var expectedVolumeMounts = func() []corev1.VolumeMount {
 		var volumeMounts = []corev1.VolumeMount{
 			{
 				Name:      render.PacketCaptureCertSecret,
@@ -182,18 +175,11 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 				ReadOnly:  true,
 			},
 		}
-		if enableOIDC {
-			volumeMounts = append(volumeMounts, corev1.VolumeMount{
-				Name:      "tigera-dex-tls-crt",
-				ReadOnly:  false,
-				MountPath: "/etc/ssl/certs",
-			})
-		}
 		return volumeMounts
 	}
 	// Generate expected containers
 	var expectedContainers = func(enableOIDC bool) []corev1.Container {
-		var volumeMounts = expectedVolumeMounts(enableOIDC)
+		var volumeMounts = expectedVolumeMounts()
 		var envVars = expectedEnvVars(enableOIDC)
 
 		return []corev1.Container{
@@ -233,7 +219,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 	}
 
 	// Generate expected volumes
-	var expectedVolumes = func(useCSR, enableOIDC bool) []corev1.Volume {
+	var expectedVolumes = func(useCSR bool) []corev1.Volume {
 		var volumes []corev1.Volume
 		if useCSR {
 			volumes = append(volumes, corev1.Volume{
@@ -254,19 +240,6 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 				},
 			})
 
-		}
-		if enableOIDC {
-			volumes = append(volumes, corev1.Volume{
-				Name: render.DexCertSecretName,
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						SecretName: render.DexCertSecretName,
-						Items: []corev1.KeyToPath{
-							{Key: corev1.TLSCertKey, Path: "tls-dex.crt"},
-						},
-					},
-				},
-			})
 		}
 
 		return volumes
@@ -292,7 +265,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		}
 
 		// Check volumes
-		Expect(deployment.Spec.Template.Spec.Volumes).To(ConsistOf(expectedVolumes(useCSR, enableOIDC)))
+		Expect(deployment.Spec.Template.Spec.Volumes).To(ConsistOf(expectedVolumes(useCSR)))
 
 		// Check annotations
 		if !useCSR {
@@ -372,6 +345,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 		installation := operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{CACert: cert}}
 		certificateManager, err := certificatemanager.Create(cli, &installation, clusterDomain)
+		Expect(err).NotTo(HaveOccurred())
 		secret, err = certificateManager.GetOrCreateKeyPair(cli, render.PacketCaptureCertSecret, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
 
@@ -380,13 +354,12 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 	})
 
 	It("should render all resources for an installation with oidc configured", func() {
-		var authentication *operatorv1.Authentication
-		authentication = &operatorv1.Authentication{
+		authentication := &operatorv1.Authentication{
 			Spec: operatorv1.AuthenticationSpec{
 				ManagerDomain: "https://127.0.0.1",
 				OIDC:          &operatorv1.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"}}}
 
-		var dexCfg = render.NewDexKeyValidatorConfig(authentication, nil, render.CreateDexTLSSecret("cn"), dns.DefaultClusterDomain)
+		var dexCfg = render.NewDexKeyValidatorConfig(authentication, nil, dns.DefaultClusterDomain)
 		var resources = renderPacketCapture(defaultInstallation, dexCfg)
 
 		checkPacketCaptureResources(resources, false, true)

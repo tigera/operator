@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -664,6 +664,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		By("Validating the newly created tunnel secret")
 		tunnelCASecret, err := certificatemanagement.NewKeyPair(render.VoltronTunnelSecret(), nil, "")
+		Expect(err).ToNot(HaveOccurred())
 
 		// Use the x509 package to validate that the cert was signed with the privatekey
 		validateTunnelSecret(tunnelCASecret.Secret(""))

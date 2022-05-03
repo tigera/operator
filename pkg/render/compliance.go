@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -58,8 +58,6 @@ const (
 	ElasticsearchCuratorUserSecret               = "tigera-ee-curator-elasticsearch-access"
 
 	ComplianceServerCertSecret = "tigera-compliance-server-tls"
-
-	complianceServerTLSHashAnnotation = "hash.operator.tigera.io/tigera-compliance-server-tls"
 )
 
 func Compliance(cfg *ComplianceConfiguration) (Component, error) {
@@ -745,10 +743,6 @@ func (c *complianceComponent) complianceServerVolumeMounts() []corev1.VolumeMoun
 		c.cfg.ComplianceServerCertSecret.VolumeMount(),
 	}
 
-	if c.cfg.KeyValidatorConfig != nil {
-		mounts = append(mounts, c.cfg.KeyValidatorConfig.RequiredVolumeMounts()...)
-	}
-
 	return mounts
 }
 
@@ -757,11 +751,6 @@ func (c *complianceComponent) complianceServerVolumes() []corev1.Volume {
 		c.cfg.ComplianceServerCertSecret.Volume(),
 		c.cfg.TrustedBundle.Volume(),
 	}
-
-	if c.cfg.KeyValidatorConfig != nil {
-		volumes = append(volumes, c.cfg.KeyValidatorConfig.RequiredVolumes()...)
-	}
-
 	return volumes
 }
 

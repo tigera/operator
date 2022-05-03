@@ -607,16 +607,6 @@ func syslogEventsForwardingVolumeMount() corev1.VolumeMount {
 	}
 }
 
-func (c *intrusionDetectionComponent) imagePullSecrets() []client.Object {
-	secrets := []client.Object{}
-	for _, s := range c.cfg.PullSecrets {
-		s.ObjectMeta = metav1.ObjectMeta{Name: s.Name, Namespace: IntrusionDetectionNamespace}
-
-		secrets = append(secrets, s)
-	}
-	return secrets
-}
-
 func (c *intrusionDetectionComponent) globalAlertTemplates() []client.Object {
 	globalAlertTemplates := []client.Object{
 		&v3.GlobalAlertTemplate{

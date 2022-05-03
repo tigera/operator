@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -54,7 +54,7 @@ var _ = Describe("Status reporting tests", func() {
 		Expect(certV1.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		err := apis.AddToScheme(scheme)
 		Expect(err).NotTo(HaveOccurred())
-		client = fake.NewFakeClientWithScheme(scheme)
+		client = fake.NewClientBuilder().WithScheme(scheme).Build()
 
 		sm = New(client, "test-component", &common.VersionInfo{Major: 1, Minor: 19}).(*statusManager)
 		Expect(sm.IsAvailable()).To(BeFalse())
@@ -63,7 +63,7 @@ var _ = Describe("Status reporting tests", func() {
 		Expect(certV1beta1.AddToScheme(oldScheme)).ShouldNot(HaveOccurred())
 		err = apis.AddToScheme(oldScheme)
 		Expect(err).NotTo(HaveOccurred())
-		oldVersionClient = fake.NewFakeClientWithScheme(oldScheme)
+		oldVersionClient = fake.NewClientBuilder().WithScheme(oldScheme).Build()
 
 		oldVersionSm = New(oldVersionClient, "test-component", &common.VersionInfo{Major: 1, Minor: 18}).(*statusManager)
 		Expect(oldVersionSm.IsAvailable()).To(BeFalse())

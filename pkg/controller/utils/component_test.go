@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import (
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta "k8s.io/api/batch/v1beta1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
@@ -80,7 +81,7 @@ var _ = Describe("Component handler tests", func() {
 		Expect(batchv1beta.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
-		c = fake.NewFakeClientWithScheme(scheme)
+		c = fake.NewClientBuilder().WithScheme(scheme).Build()
 		ctx = context.Background()
 		sm = status.New(c, "fake-component", &common.VersionInfo{Major: 1, Minor: 19})
 
@@ -116,7 +117,7 @@ var _ = Describe("Component handler tests", func() {
 			Name: "test-namespace",
 		}
 		ns := &v1.Namespace{}
-		c.Get(ctx, nsKey, ns)
+		_ = c.Get(ctx, nsKey, ns)
 		Expect(ns.GetAnnotations()).To(Equal(expectedAnnotations))
 
 		By("ovewriting the namespace with SCC annotations")
@@ -134,7 +135,8 @@ var _ = Describe("Component handler tests", func() {
 			Name: "test-namespace",
 		}
 		ns = &v1.Namespace{}
-		c.Get(ctx, nsKey, ns)
+		err = c.Get(ctx, nsKey, ns)
+		Expect(err).To(BeNil())
 		Expect(ns.GetAnnotations()).To(Equal(expectedAnnotations))
 
 		// Re-initialize the fake component. Object metadata gets modified as part of CreateOrUpdate, leading
@@ -161,7 +163,8 @@ var _ = Describe("Component handler tests", func() {
 			fakeComponentAnnotationKey: fakeComponentAnnotationValue,
 		}
 		ns = &v1.Namespace{}
-		c.Get(ctx, nsKey, ns)
+		err = c.Get(ctx, nsKey, ns)
+		Expect(err).To(BeNil())
 		Expect(ns.GetAnnotations()).To(Equal(expectedAnnotations))
 
 		By("changing a desired annotation")
@@ -171,7 +174,8 @@ var _ = Describe("Component handler tests", func() {
 			fakeComponentAnnotationKey: "not-present",
 		}
 		ns.Annotations = annotations
-		c.Update(ctx, ns)
+		err = c.Update(ctx, ns)
+		Expect(err).To(BeNil())
 
 		By("checking that the namespace is updated with new modified annotation")
 		expectedAnnotations = map[string]string{
@@ -183,7 +187,8 @@ var _ = Describe("Component handler tests", func() {
 			Name: "test-namespace",
 		}
 		ns = &v1.Namespace{}
-		c.Get(ctx, nsKey, ns)
+		err = c.Get(ctx, nsKey, ns)
+		Expect(err).To(BeNil())
 		Expect(ns.GetAnnotations()).To(Equal(expectedAnnotations))
 
 		// Re-initialize the fake component. Object metadata gets modified as part of CreateOrUpdate, leading
@@ -211,7 +216,8 @@ var _ = Describe("Component handler tests", func() {
 			fakeComponentAnnotationKey: fakeComponentAnnotationValue,
 		}
 		ns = &v1.Namespace{}
-		c.Get(ctx, nsKey, ns)
+		err = c.Get(ctx, nsKey, ns)
+		Expect(err).To(BeNil())
 		Expect(ns.GetAnnotations()).To(Equal(expectedAnnotations))
 	})
 
@@ -246,7 +252,8 @@ var _ = Describe("Component handler tests", func() {
 			Name: "test.test-settings",
 		}
 		ui := &v3.UISettings{}
-		c.Get(ctx, uiKey, ui)
+		err = c.Get(ctx, uiKey, ui)
+		Expect(err).To(BeNil())
 		Expect(ui.OwnerReferences).To(HaveLen(1))
 		Expect(ui.OwnerReferences[0].Name).To(Equal("owner"))
 
@@ -259,7 +266,8 @@ var _ = Describe("Component handler tests", func() {
 
 		By("checking that the uisettings is updated with description, but ownerref is not modified")
 		ui = &v3.UISettings{}
-		c.Get(ctx, uiKey, ui)
+		err = c.Get(ctx, uiKey, ui)
+		Expect(err).To(BeNil())
 		Expect(ui.OwnerReferences).To(HaveLen(1))
 		Expect(ui.OwnerReferences[0].Name).To(Equal("owner"))
 		Expect(ui.Spec.Description).To(Equal("another test"))
@@ -289,7 +297,8 @@ var _ = Describe("Component handler tests", func() {
 			Name: "test-namespace",
 		}
 		ns := &v1.Namespace{}
-		c.Get(ctx, nsKey, ns)
+		err = c.Get(ctx, nsKey, ns)
+		Expect(err).To(BeNil())
 		Expect(ns.GetLabels()).To(Equal(expectedLabels))
 
 		By("ovewriting the namespace with extra label")
@@ -307,7 +316,8 @@ var _ = Describe("Component handler tests", func() {
 			Name: "test-namespace",
 		}
 		ns = &v1.Namespace{}
-		c.Get(ctx, nsKey, ns)
+		err = c.Get(ctx, nsKey, ns)
+		Expect(err).To(BeNil())
 		Expect(ns.GetLabels()).To(Equal(expectedLabels))
 
 		// Re-initialize the fake component. Object metadata gets modified as part of CreateOrUpdate, leading
@@ -334,7 +344,8 @@ var _ = Describe("Component handler tests", func() {
 			fakeComponentLabelKey: fakeComponentLabelValue,
 		}
 		ns = &v1.Namespace{}
-		c.Get(ctx, nsKey, ns)
+		err = c.Get(ctx, nsKey, ns)
+		Expect(err).To(BeNil())
 		Expect(ns.GetLabels()).To(Equal(expectedLabels))
 
 		By("changing a desired label")
@@ -344,7 +355,8 @@ var _ = Describe("Component handler tests", func() {
 			fakeComponentLabelKey: "not-present",
 		}
 		ns.ObjectMeta.Labels = labels
-		c.Update(ctx, ns)
+		err = c.Update(ctx, ns)
+		Expect(err).To(BeNil())
 
 		By("checking that the namespace is updated with new modified label")
 		expectedLabels = map[string]string{
@@ -356,7 +368,8 @@ var _ = Describe("Component handler tests", func() {
 			Name: "test-namespace",
 		}
 		ns = &v1.Namespace{}
-		c.Get(ctx, nsKey, ns)
+		err = c.Get(ctx, nsKey, ns)
+		Expect(err).To(BeNil())
 		Expect(ns.GetLabels()).To(Equal(expectedLabels))
 
 		// Re-initialize the fake component. Object metadata gets modified as part of CreateOrUpdate, leading
@@ -384,7 +397,8 @@ var _ = Describe("Component handler tests", func() {
 			fakeComponentLabelKey: fakeComponentLabelValue,
 		}
 		ns = &v1.Namespace{}
-		c.Get(ctx, nsKey, ns)
+		err = c.Get(ctx, nsKey, ns)
+		Expect(err).To(BeNil())
 		Expect(ns.GetLabels()).To(Equal(expectedLabels))
 	})
 
@@ -450,32 +464,32 @@ var _ = Describe("Component handler tests", func() {
 		Expect(c.Get(ctx, key, obj)).ShouldNot(HaveOccurred())
 
 		var nodeSelectors map[string]string
-		switch obj.(type) {
+		switch x := obj.(type) {
 		case *v1.PodTemplate:
-			nodeSelectors = obj.(*v1.PodTemplate).Template.Spec.NodeSelector
+			nodeSelectors = x.Template.Spec.NodeSelector
 		case *apps.Deployment:
-			nodeSelectors = obj.(*apps.Deployment).Spec.Template.Spec.NodeSelector
+			nodeSelectors = x.Spec.Template.Spec.NodeSelector
 		case *apps.DaemonSet:
-			nodeSelectors = obj.(*apps.DaemonSet).Spec.Template.Spec.NodeSelector
+			nodeSelectors = x.Spec.Template.Spec.NodeSelector
 		case *apps.StatefulSet:
-			nodeSelectors = obj.(*apps.StatefulSet).Spec.Template.Spec.NodeSelector
+			nodeSelectors = x.Spec.Template.Spec.NodeSelector
 		case *batchv1beta.CronJob:
-			nodeSelectors = obj.(*batchv1beta.CronJob).Spec.JobTemplate.Spec.Template.Spec.NodeSelector
+			nodeSelectors = x.Spec.JobTemplate.Spec.Template.Spec.NodeSelector
 		case *batchv1.Job:
-			nodeSelectors = obj.(*batchv1.Job).Spec.Template.Spec.NodeSelector
+			nodeSelectors = x.Spec.Template.Spec.NodeSelector
 		case *kbv1.Kibana:
-			nodeSelectors = obj.(*kbv1.Kibana).Spec.PodTemplate.Spec.NodeSelector
+			nodeSelectors = x.Spec.PodTemplate.Spec.NodeSelector
 		case *esv1.Elasticsearch:
 			// elasticsearch resource describes multiple nodeSets which each have a nodeSelector.
-			nodeSets := obj.(*esv1.Elasticsearch).Spec.NodeSets
+			nodeSets := x.Spec.NodeSets
 			for _, ns := range nodeSets {
 				Expect(ns.PodTemplate.Spec.NodeSelector).Should(Equal(expectedNodeSelectors))
 			}
 			return
 		case *monitoringv1.Alertmanager:
-			nodeSelectors = obj.(*monitoringv1.Alertmanager).Spec.NodeSelector
+			nodeSelectors = x.Spec.NodeSelector
 		case *monitoringv1.Prometheus:
-			nodeSelectors = obj.(*monitoringv1.Prometheus).Spec.NodeSelector
+			nodeSelectors = x.Spec.NodeSelector
 		default:
 			Expect(fmt.Errorf("unexpected type passed to test")).ToNot(HaveOccurred())
 		}
@@ -878,6 +892,32 @@ var _ = Describe("Component handler tests", func() {
 			},
 		},
 	)
+
+	It("allows you to replace a secret if the types change", func() {
+		// Please note that a fake client does not behave exactly as it would on K8s:
+		// - A secret without a type in a real cluster automatically becomes type Opaque
+		// - An update where the secret type changes would be rejected in a real cluster, yet the fake client accepts it.
+		// This test serves to purpose of at least verifying that an update of a secret type works without error.
+		secret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-secret"},
+			Type:       corev1.SecretTypeOpaque,
+		}
+		fc := &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs: []client.Object{
+				secret,
+			},
+		}
+		err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Name: "my-secret"}, secret)).NotTo(HaveOccurred())
+		Expect(secret.Type).To(Equal(corev1.SecretTypeOpaque))
+		secret.Type = corev1.SecretTypeTLS
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Name: "my-secret"}, secret)).NotTo(HaveOccurred())
+		Expect(secret.Type).To(Equal(corev1.SecretTypeTLS))
+	})
 })
 
 // A fake component that only returns ready and always creates the "test-namespace" Namespace.

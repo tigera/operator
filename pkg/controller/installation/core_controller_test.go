@@ -328,7 +328,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(operator.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 			// Create a client that will have a crud interface of k8s objects.
-			c = fake.NewFakeClientWithScheme(scheme)
+			c = fake.NewClientBuilder().WithScheme(scheme).Build()
 			ctx, cancel = context.WithCancel(context.Background())
 
 			// Create a fake clientset for the autoscaler.
@@ -691,7 +691,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(operator.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 			// Create a client that will have a crud interface of k8s objects.
-			c = fake.NewFakeClientWithScheme(scheme)
+			c = fake.NewClientBuilder().WithScheme(scheme).Build()
 			ctx, cancel = context.WithCancel(context.Background())
 
 			// Create a fake clientset for the autoscaler.
@@ -916,7 +916,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(operator.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 			// Create a client that will have a crud interface of k8s objects.
-			c = fake.NewFakeClientWithScheme(scheme)
+			c = fake.NewClientBuilder().WithScheme(scheme).Build()
 			ctx, cancel = context.WithCancel(context.Background())
 
 			// Create a fake clientset for the autoscaler.
@@ -1071,6 +1071,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				},
 			}
 			err := c.Create(ctx, fc)
+			Expect(err).ShouldNot(HaveOccurred())
 			cr.Spec.CNI = &operator.CNISpec{Type: operator.PluginAmazonVPC}
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			_, err = r.Reconcile(ctx, reconcile.Request{})
@@ -1095,6 +1096,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				},
 			}
 			err := c.Create(ctx, fc)
+			Expect(err).ShouldNot(HaveOccurred())
 			cr.Spec.CNI = &operator.CNISpec{Type: operator.PluginAmazonVPC}
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			_, err = r.Reconcile(ctx, reconcile.Request{})

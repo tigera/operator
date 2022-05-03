@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -69,21 +69,13 @@ var (
 	kbObjKey          = client.ObjectKey{Name: render.KibanaName, Namespace: render.KibanaNamespace}
 	curatorObjKey     = types.NamespacedName{Namespace: render.ElasticsearchNamespace, Name: render.EsCuratorName}
 
-	esCertSecretKey        = client.ObjectKey{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}
-	esCertSecretOperKey    = client.ObjectKey{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}
-	esCertPubSecretKey     = client.ObjectKey{Name: relasticsearch.PublicCertSecret, Namespace: render.ElasticsearchNamespace}
-	esCertPubSecretOperKey = client.ObjectKey{Name: relasticsearch.PublicCertSecret, Namespace: common.OperatorNamespace()}
+	esCertSecretKey     = client.ObjectKey{Name: render.TigeraElasticsearchCertSecret, Namespace: render.ElasticsearchNamespace}
+	esCertSecretOperKey = client.ObjectKey{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}
 
-	kbCertSecretKey        = client.ObjectKey{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}
-	kbCertSecretOperKey    = client.ObjectKey{Name: render.TigeraKibanaCertSecret, Namespace: common.OperatorNamespace()}
-	kbCertPubSecretKey     = client.ObjectKey{Name: render.KibanaPublicCertSecret, Namespace: render.KibanaNamespace}
-	kbCertPubSecretOperKey = client.ObjectKey{Name: render.KibanaPublicCertSecret, Namespace: common.OperatorNamespace()}
-
-	esPublicCertObjMeta       = metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: render.ElasticsearchNamespace}
-	kbPublicCertObjMeta       = metav1.ObjectMeta{Name: render.KibanaPublicCertSecret, Namespace: render.KibanaNamespace}
+	kbCertSecretKey           = client.ObjectKey{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}
+	kbCertSecretOperKey       = client.ObjectKey{Name: render.TigeraKibanaCertSecret, Namespace: common.OperatorNamespace()}
 	curatorUsrSecretObjMeta   = metav1.ObjectMeta{Name: render.ElasticsearchCuratorUserSecret, Namespace: common.OperatorNamespace()}
 	esMetricsUsrSecretObjMeta = metav1.ObjectMeta{Name: esmetrics.ElasticsearchMetricsSecret, Namespace: common.OperatorNamespace()}
-	operatorUsrSecretObjMeta  = metav1.ObjectMeta{Name: render.ElasticsearchOperatorUserSecret, Namespace: common.OperatorNamespace()}
 	storageClassName          = "test-storage-class"
 
 	esDNSNames         = dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
@@ -118,7 +110,7 @@ var _ = Describe("LogStorage controller", func() {
 		Expect(admissionv1beta1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
 		ctx = context.Background()
-		cli = fake.NewFakeClientWithScheme(scheme)
+		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
 		var err error
 		certificateManager, err = certificatemanager.Create(cli, nil, "")
 		Expect(err).NotTo(HaveOccurred())
@@ -453,7 +445,7 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: curatorUsrSecretObjMeta})).ShouldNot(HaveOccurred())
 
 					mockStatus.On("SetDegraded", "Waiting for elasticsearch metrics secrets to become available", "").Return()
-					result, err = r.Reconcile(ctx, reconcile.Request{})
+					_, err = r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 
 					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: esMetricsUsrSecretObjMeta})).ShouldNot(HaveOccurred())
@@ -485,7 +477,6 @@ var _ = Describe("LogStorage controller", func() {
 					})).ToNot(HaveOccurred())
 
 					Expect(cli.Create(ctx, render.CreateDexClientSecret())).ToNot(HaveOccurred())
-					Expect(cli.Create(ctx, render.CreateCertificateSecret([]byte(""), render.DexCertSecretName, common.OperatorNamespace()))).ToNot(HaveOccurred())
 
 					Expect(cli.Create(ctx, &storagev1.StorageClass{
 						ObjectMeta: metav1.ObjectMeta{
@@ -751,7 +742,7 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
 
 					mockStatus.On("SetDegraded", "Waiting for curator secrets to become available", "").Return()
-					result, err = r.Reconcile(ctx, reconcile.Request{})
+					_, err = r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 
 					By("confirming elasticsearch certs were updated and have the expected DNS names")
@@ -1608,18 +1599,16 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 	Expect(cli.Create(ctx, ls)).ShouldNot(HaveOccurred())
 	createObj, _ := component.Objects()
 	for _, obj := range createObj {
-		switch obj.(type) {
+		switch x := obj.(type) {
 		case *esv1.Elasticsearch:
 			By("setting the Elasticsearch status to operational so we pass the Elasticsearch ready check")
-			es := obj.(*esv1.Elasticsearch)
-			es.Status.Phase = esv1.ElasticsearchReadyPhase
-			obj = es
+			x.Status.Phase = esv1.ElasticsearchReadyPhase
+			obj = x
 
 		case *kbv1.Kibana:
 			By("setting the Kibana status to operational so we pass the Kibana ready check")
-			kb := obj.(*kbv1.Kibana)
-			kb.Status.AssociationStatus = cmnv1.AssociationEstablished
-			obj = kb
+			x.Status.AssociationStatus = cmnv1.AssociationEstablished
+			obj = x
 		}
 
 		Expect(cli.Create(ctx, obj)).ShouldNot(HaveOccurred())

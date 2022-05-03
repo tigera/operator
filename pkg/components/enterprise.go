@@ -254,6 +254,7 @@ var (
 		ComponentFluentdWindows,
 		ComponentGuardian,
 		ComponentIntrusionDetectionController,
+		ComponentAnomalyDetectionAPI,
 		ComponentAnomalyDetectionJobs,
 		ComponentKibana,
 		ComponentManager,

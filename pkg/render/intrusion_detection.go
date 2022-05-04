@@ -59,6 +59,7 @@ const (
 	adDetectorPrefixName         = "tigera.io.detector."
 	adDetectorServiceAccountName = "anomaly-detectors"
 	adDetectionJobsDefaultPeriod = 15 * time.Minute
+	ADResourceGroup              = "detectors.tigera.io"
 	ADDetectorsModelResourceName = "models"
 
 	ADAPIObjectName     = "anomaly-detection-api"
@@ -1324,9 +1325,6 @@ func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 										Scheme: corev1.URISchemeHTTPS,
 									},
 								},
-								InitialDelaySeconds: 5,
-								PeriodSeconds:       10,
-								FailureThreshold:    5,
 							},
 							ReadinessProbe: &corev1.Probe{
 								Handler: corev1.Handler{
@@ -1336,9 +1334,6 @@ func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 										Scheme: corev1.URISchemeHTTPS,
 									},
 								},
-								InitialDelaySeconds: 5,
-								PeriodSeconds:       10,
-								FailureThreshold:    5,
 							},
 							Command: []string{"/anomaly-detection-api"},
 							VolumeMounts: []corev1.VolumeMount{

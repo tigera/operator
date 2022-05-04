@@ -1212,7 +1212,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		Terminating:             nodeTerminating,
 		PrometheusServerTLS:     nodePrometheusTLS,
 		FelixHealthPort:         *felixConfiguration.Spec.HealthPort,
-		BindMode:				 bgpConfiguration.Spec.BindMode,
+		BindMode:                bgpConfiguration.Spec.BindMode,
 	}
 	components = append(components, render.Node(&nodeCfg))
 

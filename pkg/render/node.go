@@ -45,6 +45,7 @@ const (
 	birdTemplateHashAnnotation        = "hash.operator.tigera.io/bird-templates"
 	nodeCniConfigAnnotation           = "hash.operator.tigera.io/cni-config"
 	bgpLayoutHashAnnotation           = "hash.operator.tigera.io/bgp-layout"
+	bgpBindModeHashAnnotation         = "hash.operator.tigera.io/bgp-bind-mode"
 	CSRLabelCalicoSystem              = "calico-system"
 	BGPLayoutConfigMapName            = "bgp-layout"
 	BGPLayoutConfigMapKey             = "earlyNetworkConfiguration"
@@ -108,6 +109,10 @@ type NodeConfiguration struct {
 	// The health port that Felix should bind to. The controller reads FelixConfiguration
 	// and sets this.
 	FelixHealthPort int
+
+	// The bindMode read from the default BGPConfiguration. Used to trigger rolling updates
+	// should this value change.
+	BindMode string
 }
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
@@ -723,6 +728,11 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 				},
 			},
 		}
+	}
+
+	// Include the annotation of BindMode
+	if c.cfg.BindMode != "" {
+		annotations[bgpBindModeHashAnnotation] = rmeta.AnnotationHash(c.cfg.BindMode)
 	}
 
 	// Determine the name to use for the calico/node daemonset. For mixed-mode, we run the enterprise DaemonSet

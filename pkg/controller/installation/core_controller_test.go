@@ -604,6 +604,32 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(test.GetResource(c, &inst)).To(BeNil())
 			Expect(inst.Status.ImageSet).To(Equal("enterprise-" + components.EnterpriseRelease))
 		})
+
+		It("should be able to use TLS secrets that are created in a v1.26+ cluster", func() {
+			By("Creating a node-certs secret as it would be automatically generated in v1.26")
+			nodeCertificate, err := secret.CreateTLSSecret(nil, render.NodeTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey, time.Second, nil, render.FelixCommonName)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, nodeCertificate)).NotTo(HaveOccurred())
+
+			By("Creating a typha-certs secret as it would be automatically generated in v1.26")
+			typhaCertificate, err := secret.CreateTLSSecret(nil, render.TyphaTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey, time.Second, nil, render.TyphaCommonName)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("Verifying that a typhaNodeTLS can still be created after a downgrade")
+			Expect(c.Create(ctx, typhaCertificate)).NotTo(HaveOccurred())
+			typhaNodeTLS, err := r.GetTyphaNodeTLSConfig()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(typhaNodeTLS.TyphaSecret).NotTo(BeNil())
+			Expect(typhaNodeTLS.TyphaSecret.Data[render.TLSSecretKeyName]).NotTo(BeEmpty())
+			Expect(typhaNodeTLS.TyphaSecret.Data[render.TLSSecretCertName]).NotTo(BeEmpty())
+			Expect(typhaNodeTLS.TyphaSecret.Data[render.CommonName]).NotTo(BeEmpty())
+			Expect(typhaNodeTLS.NodeSecret).NotTo(BeNil())
+			Expect(typhaNodeTLS.NodeSecret.Data[render.TLSSecretKeyName]).NotTo(BeEmpty())
+			Expect(typhaNodeTLS.NodeSecret.Data[render.TLSSecretCertName]).NotTo(BeEmpty())
+			Expect(typhaNodeTLS.NodeSecret.Data[render.CommonName]).NotTo(BeEmpty())
+			Expect(typhaNodeTLS.CAConfigMap).NotTo(BeNil())
+			Expect(typhaNodeTLS.CAConfigMap.Data[render.TyphaCABundleName]).NotTo(BeEmpty())
+		})
 	})
 
 	Context("Docker Enterprise defaults", func() {

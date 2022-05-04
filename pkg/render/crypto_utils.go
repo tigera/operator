@@ -22,10 +22,9 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"math/big"
-	mrand "math/rand"
-	"strings"
 	"time"
 
+	calicrypto "github.com/tigera/operator/pkg/crypto"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -116,17 +115,6 @@ func template(cn string, altNames []string) *x509.Certificate {
 	}
 }
 
-func generatePassword(length int) string {
-	mrand.Seed(time.Now().UnixNano())
-	chars := []rune("ABCDEFGHIJKLMNOPQRSTUVWXYZ" +
-		"abcdefghijklmnopqrstuvwxyz0123456789")
-	var b strings.Builder
-	for i := 0; i < length; i++ {
-		b.WriteRune(chars[mrand.Intn(len(chars))])
-	}
-	return b.String()
-}
-
 func CreateDexClientSecret() *corev1.Secret {
 	return &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
@@ -135,7 +123,7 @@ func CreateDexClientSecret() *corev1.Secret {
 			Namespace: common.OperatorNamespace(),
 		},
 		Data: map[string][]byte{
-			ClientSecretSecretField: []byte(generatePassword(24)),
+			ClientSecretSecretField: []byte(calicrypto.GeneratePassword(24)),
 		},
 	}
 }

@@ -62,7 +62,6 @@ var _ = Describe("Convert network tests", func() {
 		v6pool.Name = "test-ipv6-pool"
 		v6pool.Spec = crdv1.IPPoolSpec{
 			CIDR:        "2001:db8::1/120",
-			IPIPMode:    crdv1.IPIPModeAlways,
 			NATOutgoing: true,
 		}
 	})
@@ -392,6 +391,84 @@ var _ = Describe("Convert network tests", func() {
 			// Run test but with only v6 pool
 			ipv6Only := fake.NewClientBuilder().WithScheme(scheme).WithObjects(v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
 			runTest(ipv6Only)
+		})
+		It("migrate IPv6-only config with VXLAN", func() {
+			// This is the minimal dual stack config as outlined in our docs.
+			ds := emptyNodeSpec()
+			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
+				Name:  "CNI_NETWORK_CONFIG",
+				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam", "assign_ipv4":"false", "assign_ipv6":"true"}}`,
+			}}
+			ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
+				Name:  "CALICO_NETWORKING_BACKEND",
+				Value: "vxlan",
+			}}
+
+			ds.Spec.Template.Spec.Containers[0].Env = append(ds.Spec.Template.Spec.Containers[0].Env,
+				corev1.EnvVar{
+					Name:  "IP6",
+					Value: "autodetect",
+				},
+				corev1.EnvVar{
+					Name:  "FELIX_IPV6SUPPORT",
+					Value: "true",
+				},
+			)
+
+			v6pool.Spec.IPIPMode = crdv1.IPIPModeNever
+			v6pool.Spec.VXLANMode = crdv1.VXLANModeAlways
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
+			cfg, err := Convert(ctx, c)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cfg).ToNot(BeNil())
+			Expect(cfg.Spec.CNI.Type).To(Equal(operatorv1.PluginCalico))
+			Expect(cfg.Spec.CNI.IPAM.Type).To(Equal(operatorv1.IPAMPluginCalico))
+			Expect(*cfg.Spec.CalicoNetwork.BGP).To(Equal(operatorv1.BGPDisabled))
+
+			expectedV6pool, err := convertPool(*v6pool)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cfg.Spec.CalicoNetwork.IPPools).To(ContainElements(expectedV6pool))
+		})
+		It("migrate dual stack config with VXLAN", func() {
+			// This is the minimal dual stack config as outlined in our docs.
+			ds := emptyNodeSpec()
+			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
+				Name:  "CNI_NETWORK_CONFIG",
+				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam", "assign_ipv4":"true", "assign_ipv6":"true"}}`,
+			}}
+			ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
+				Name:  "CALICO_NETWORKING_BACKEND",
+				Value: "vxlan",
+			}}
+
+			ds.Spec.Template.Spec.Containers[0].Env = append(ds.Spec.Template.Spec.Containers[0].Env,
+				corev1.EnvVar{
+					Name:  "IP6",
+					Value: "autodetect",
+				},
+				corev1.EnvVar{
+					Name:  "FELIX_IPV6SUPPORT",
+					Value: "true",
+				},
+			)
+
+			v4pool.Spec.IPIPMode = crdv1.IPIPModeNever
+			v4pool.Spec.VXLANMode = crdv1.VXLANModeAlways
+			v6pool.Spec.IPIPMode = crdv1.IPIPModeNever
+			v6pool.Spec.VXLANMode = crdv1.VXLANModeAlways
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
+			cfg, err := Convert(ctx, c)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cfg).ToNot(BeNil())
+			Expect(cfg.Spec.CNI.Type).To(Equal(operatorv1.PluginCalico))
+			Expect(cfg.Spec.CNI.IPAM.Type).To(Equal(operatorv1.IPAMPluginCalico))
+			Expect(*cfg.Spec.CalicoNetwork.BGP).To(Equal(operatorv1.BGPDisabled))
+
+			expectedV4pool, err := convertPool(*v4pool)
+			Expect(err).ToNot(HaveOccurred())
+			expectedV6pool, err := convertPool(*v6pool)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cfg.Spec.CalicoNetwork.IPPools).To(ContainElements(expectedV4pool, expectedV6pool))
 		})
 
 		DescribeTable("test invalid ipam and backend",
@@ -774,12 +851,20 @@ var _ = Describe("Convert network tests", func() {
 			{Name: "FELIX_IPV6SUPPORT", Value: "true"}}, true),
 		Entry("should not error if IP6=none and FELIX_IPV6SUPPORT is undefined", []corev1.EnvVar{{Name: "IP6", Value: "none"}}, false),
 		Entry("should error if IPv4 only and FELIX_IPV6SUPPORT=true", []corev1.EnvVar{{Name: "FELIX_IPV6SUPPORT", Value: "true"}}, true),
-		Entry("should error if IPv6 only and CALICO_ROUTER_ID != `hash`",
+		Entry("should error if IPv6 only with bird and CALICO_ROUTER_ID != `hash`",
 			[]corev1.EnvVar{
 				{Name: "IP", Value: "none"},
 				{Name: "IP6", Value: "autodetect"},
 				{Name: "FELIX_IPV6SUPPORT", Value: "true"},
+				{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
 				{Name: "CALICO_ROUTER_ID", Value: "not hash"}}, true),
+		Entry("should error if IPv6 only with vxlan and CALICO_ROUTER_ID == `hash`",
+			[]corev1.EnvVar{
+				{Name: "IP", Value: "none"},
+				{Name: "IP6", Value: "autodetect"},
+				{Name: "FELIX_IPV6SUPPORT", Value: "true"},
+				{Name: "CALICO_NETWORKING_BACKEND", Value: "vxlan"},
+				{Name: "CALICO_ROUTER_ID", Value: "hash"}}, true),
 	)
 
 	It("handle both IP_AUTODETECTION_METHOD and IP6_AUTODETECTION_METHOD", func() {

@@ -134,10 +134,10 @@ func (c *component) migratorJob() *batchv1.Job {
 		TerminationGracePeriodSeconds: ptr.Int64ToPtr(20),
 		Containers:                    []corev1.Container{container},
 		Volumes:                       c.migratorVolumes(),
-		RestartPolicy:                 corev1.RestartPolicyNever,
+		RestartPolicy:                 corev1.RestartPolicyOnFailure,
 	}
 
-	backoffLimit := int32(3)
+	backoffLimit := int32(30)
 	j := batchv1.Job{
 		TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
 		ObjectMeta: metav1.ObjectMeta{

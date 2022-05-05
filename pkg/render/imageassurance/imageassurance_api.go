@@ -21,7 +21,7 @@ const (
 	apiLimitMemory   = "150Mi"
 
 	ApiDBMaxOpenConn = "3"
-	ApiDBMaxIdleConn = "3"
+	ApiDBMaxIdleConn = "0"
 )
 
 func (c *component) apiServiceAccount() *corev1.ServiceAccount {

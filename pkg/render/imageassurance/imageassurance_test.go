@@ -455,6 +455,14 @@ var _ = Describe("Image Assurance Render", func() {
 					},
 				},
 			},
+			{
+				Name: "IMAGE_ASSURANCE_DB_MAX_OPEN_CONNECTIONS",
+				Value: imageassurance.MigratorDBMaxOpenConn,
+			},
+			{
+				Name: "IMAGE_ASSURANCE_DB_MAX_IDLE_CONNECTIONS",
+				Value: imageassurance.MigratorDBMaxIdleConn,
+			},
 		}
 
 		Expect(len(migratorExpectedENV)).To(Equal(len(migrator.Containers[0].Env)))

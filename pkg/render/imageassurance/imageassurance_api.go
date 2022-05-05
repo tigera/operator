@@ -19,6 +19,9 @@ const (
 	apiRequestMemory = "50Mi"
 	apiLimitCPU      = "0.75"
 	apiLimitMemory   = "150Mi"
+
+	ApiDBMaxOpenConn = "3"
+	ApiDBMaxIdleConn = "0"
 )
 
 func (c *component) apiServiceAccount() *corev1.ServiceAccount {
@@ -162,6 +165,10 @@ func (c *component) apiDeployment() *appsv1.Deployment {
 	}
 
 	env = pgDecorateENVVars(env, PGUserSecretName, MountPathPostgresCerts, PGConfigMapName)
+
+	env = append(env,
+		corev1.EnvVar{Name: "IMAGE_ASSURANCE_DB_MAX_OPEN_CONNECTIONS", Value: ApiDBMaxOpenConn},
+		corev1.EnvVar{Name: "IMAGE_ASSURANCE_DB_MAX_IDLE_CONNECTIONS", Value: ApiDBMaxIdleConn})
 
 	terminationGracePeriod := int64(30)
 	privileged := true

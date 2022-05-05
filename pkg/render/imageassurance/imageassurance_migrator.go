@@ -19,6 +19,9 @@ const (
 	migratorRequestMemory = "50Mi"
 	migratorLimitCPU      = "0.75"
 	migratorLimitMemory   = "150Mi"
+
+	MigratorDBMaxOpenConn = "2"
+	MigratorDBMaxIdleConn = "0"
 )
 
 func (c *component) migratorServiceAccount() *corev1.ServiceAccount {
@@ -90,6 +93,14 @@ func (c *component) migratorJob() *batchv1.Job {
 		{
 			Name:      "IMAGE_ASSURANCE_TENANT_PASSWORD",
 			ValueFrom: secret.GetEnvVarSource(PGUserSecretName, PGUserPassKey, false),
+		},
+		{
+			Name:  "IMAGE_ASSURANCE_DB_MAX_OPEN_CONNECTIONS",
+			Value: MigratorDBMaxOpenConn,
+		},
+		{
+			Name:  "IMAGE_ASSURANCE_DB_MAX_IDLE_CONNECTIONS",
+			Value: MigratorDBMaxIdleConn,
 		},
 	}
 

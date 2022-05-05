@@ -256,6 +256,8 @@ var _ = Describe("Image Assurance Render", func() {
 					},
 				},
 			},
+			{Name: "IMAGE_ASSURANCE_DB_MAX_OPEN_CONNECTIONS", Value: imageassurance.ApiDBMaxOpenConn},
+			{Name: "IMAGE_ASSURANCE_DB_MAX_IDLE_CONNECTIONS", Value: imageassurance.ApiDBMaxIdleConn},
 			rcimageassurance.EnvOrganizationID(),
 		}
 
@@ -452,6 +454,14 @@ var _ = Describe("Image Assurance Render", func() {
 						Key: imageassurance.PGUserPassKey,
 					},
 				},
+			},
+			{
+				Name:  "IMAGE_ASSURANCE_DB_MAX_OPEN_CONNECTIONS",
+				Value: imageassurance.MigratorDBMaxOpenConn,
+			},
+			{
+				Name:  "IMAGE_ASSURANCE_DB_MAX_IDLE_CONNECTIONS",
+				Value: imageassurance.MigratorDBMaxIdleConn,
 			},
 		}
 

@@ -133,7 +133,7 @@ var (
 	}
 
 	ComponentTigeraNode = component{
-		Version: "v3.7.0",
+		Version: "v3.7.0-1",
 		Image:   "tigera/cnx-node",
 	}
 

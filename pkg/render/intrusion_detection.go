@@ -163,7 +163,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		// Service + Deployment + RBAC for AD API
 		objs = append(objs,
 			c.adAPIServiceAccount(),
-			c.getADAPIAccessRole(),
+			c.adAPIAccessClusterRole(),
 			c.adAPIAccessRoleBinding(),
 		)
 		objs = append(objs,
@@ -1187,40 +1187,36 @@ func (c *intrusionDetectionComponent) adAPIServiceAccount() *corev1.ServiceAccou
 	}
 }
 
-func (c *intrusionDetectionComponent) getADAPIAccessRole() *rbacv1.Role {
-	return &rbacv1.Role{
-		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+func (c *intrusionDetectionComponent) adAPIAccessClusterRole() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ADAPIObjectName,
-			Namespace: IntrusionDetectionNamespace,
+			Name: ADAPIObjectName,
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
-				APIGroups: []string{
-					"authentication.k8s.io",
-				},
-				Resources: []string{
-					"tokenreviews",
-					"subjectaccessreviews",
-				},
-				Verbs: []string{
-					"create",
-				},
+				APIGroups: []string{"authorization.k8s.io"},
+				Resources: []string{"subjectaccessreviews"},
+				Verbs:     []string{"create"},
+			},
+			{
+				APIGroups: []string{"authentication.k8s.io"},
+				Resources: []string{"tokenreviews"},
+				Verbs:     []string{"create"},
 			},
 		},
 	}
 }
 
-func (c *intrusionDetectionComponent) adAPIAccessRoleBinding() *rbacv1.RoleBinding {
-	return &rbacv1.RoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+func (c *intrusionDetectionComponent) adAPIAccessRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ADAPIObjectName,
-			Namespace: IntrusionDetectionNamespace,
+			Name: ADAPIObjectName,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "Role",
+			Kind:     "ClusterRole",
 			Name:     ADAPIObjectName,
 		},
 		Subjects: []rbacv1.Subject{
@@ -1374,7 +1370,7 @@ func (c *intrusionDetectionComponent) adDetectorAccessRole() *rbacv1.Role {
 		Rules: []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{
-					ADJobPodTemplateBaseName,
+					ADResourceGroup,
 				},
 				Resources: []string{
 					ADDetectorsModelResourceName,
@@ -1496,10 +1492,6 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 								Name:      "es-certs",
 								MountPath: "/certs/es-ca.pem",
 								SubPath:   "es-ca.pem",
-							},
-							{
-								Name:      "host-volume",
-								MountPath: "/home/idsuser/anomaly_detection_jobs/models",
 							},
 							c.cfg.ADAPIServerCertSecret.VolumeMount(),
 						},

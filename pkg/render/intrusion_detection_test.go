@@ -113,8 +113,8 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			{name: "tigera.io.detector.l7-latency", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.process-restarts", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: render.ADAPIObjectName, ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: render.ADAPIObjectName, ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
-			{name: render.ADAPIObjectName, ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+			{name: render.ADAPIObjectName, group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: render.ADAPIObjectName, group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: render.ADAPIObjectName, ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "Service"},
 			{name: render.ADAPIObjectName, ns: "tigera-intrusion-detection", group: "apps", version: "v1", kind: "Deployment"},
 			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
@@ -176,7 +176,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		// Check all Role for respective AD API SAs
 		detectorsRole := rtest.GetResource(resources, "anomaly-detectors", render.IntrusionDetectionNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
 		Expect(len(detectorsRole.Rules)).To(Equal(1))
-		Expect(detectorsRole.Rules[0].APIGroups).To(ConsistOf(render.ADJobPodTemplateBaseName))
+		Expect(detectorsRole.Rules[0].APIGroups).To(ConsistOf(render.ADResourceGroup))
 		Expect(detectorsRole.Rules[0].Resources).To(ConsistOf(render.ADDetectorsModelResourceName))
 		Expect(detectorsRole.Rules[0].Verbs).To(ConsistOf("get", "create", "update"))
 
@@ -192,19 +192,22 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			Namespace: render.IntrusionDetectionNamespace,
 		}))
 
-		adAPIRole := rtest.GetResource(resources, render.ADAPIObjectName, render.IntrusionDetectionNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
-		Expect(len(adAPIRole.Rules)).To(Equal(1))
-		Expect(adAPIRole.Rules[0].APIGroups).To(ConsistOf("authentication.k8s.io"))
-		Expect(adAPIRole.Rules[0].Resources).To(ConsistOf("tokenreviews", "subjectaccessreviews"))
-		Expect(adAPIRole.Rules[0].Verbs).To(ConsistOf("create"))
+		adAPIClusterRole := rtest.GetResource(resources, render.ADAPIObjectName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(len(adAPIClusterRole.Rules)).To(Equal(2))
+		Expect(adAPIClusterRole.Rules[0].APIGroups).To(ConsistOf("authorization.k8s.io"))
+		Expect(adAPIClusterRole.Rules[0].Resources).To(ConsistOf("subjectaccessreviews"))
+		Expect(adAPIClusterRole.Rules[0].Verbs).To(ConsistOf("create"))
+		Expect(adAPIClusterRole.Rules[1].APIGroups).To(ConsistOf("authentication.k8s.io"))
+		Expect(adAPIClusterRole.Rules[1].Resources).To(ConsistOf("tokenreviews"))
+		Expect(adAPIClusterRole.Rules[1].Verbs).To(ConsistOf("create"))
 
-		adAPIRoleBinding := rtest.GetResource(resources, render.ADAPIObjectName, render.IntrusionDetectionNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
-		Expect(adAPIRoleBinding.RoleRef).To(Equal(rbacv1.RoleRef{
+		adAPIClusterRoleBinding := rtest.GetResource(resources, render.ADAPIObjectName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+		Expect(adAPIClusterRoleBinding.RoleRef).To(Equal(rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "Role",
+			Kind:     "ClusterRole",
 			Name:     render.ADAPIObjectName,
 		}))
-		Expect(adAPIRoleBinding.Subjects).To(ConsistOf(rbacv1.Subject{
+		Expect(adAPIClusterRoleBinding.Subjects).To(ConsistOf(rbacv1.Subject{
 			Kind:      "ServiceAccount",
 			Name:      render.ADAPIObjectName,
 			Namespace: render.IntrusionDetectionNamespace,
@@ -268,8 +271,8 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			{name: "tigera.io.detector.l7-latency", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: "tigera.io.detector.process-restarts", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
 			{name: render.ADAPIObjectName, ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: render.ADAPIObjectName, ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
-			{name: render.ADAPIObjectName, ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+			{name: render.ADAPIObjectName, group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: render.ADAPIObjectName, group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: render.ADAPIObjectName, ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "Service"},
 			{name: render.ADAPIObjectName, ns: "tigera-intrusion-detection", group: "apps", version: "v1", kind: "Deployment"},
 			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},

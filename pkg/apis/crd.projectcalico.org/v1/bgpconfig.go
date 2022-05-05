@@ -137,4 +137,3 @@ type BGPPassword struct {
 	// Selects a key of a secret in the node pod's namespace.
 	SecretKeyRef *k8sv1.SecretKeySelector `json:"secretKeyRef,omitempty"`
 }
-

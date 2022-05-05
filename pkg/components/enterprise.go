@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -123,6 +123,11 @@ var (
 	ComponentAnomalyDetectionJobs = component{
 		Version: "master",
 		Image:   "tigera/anomaly_detection_jobs",
+	}
+
+	ComponentAnomalyDetectionAPI = component{
+		Version: "master",
+		Image:   "tigera/anomaly-detection-api",
 	}
 
 	ComponentKibana = component{
@@ -250,6 +255,7 @@ var (
 		ComponentGuardian,
 		ComponentIntrusionDetectionController,
 		ComponentAnomalyDetectionJobs,
+		ComponentAnomalyDetectionAPI,
 		ComponentKibana,
 		ComponentManager,
 		ComponentDex,

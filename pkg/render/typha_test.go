@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -305,6 +305,31 @@ var _ = Describe("Typha rendering tests", func() {
 		d := dResource.(*appsv1.Deployment)
 		na := d.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution
 		Expect(na).To(Equal(rst))
+	})
+
+	It("should render zone affinity by default", func() {
+		expected := corev1.WeightedPodAffinityTerm{
+			PodAffinityTerm: corev1.PodAffinityTerm{
+				LabelSelector: &metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      "k8s-app",
+							Operator: metav1.LabelSelectorOpIn,
+							Values:   []string{"calico-typha"},
+						},
+					},
+				},
+				TopologyKey: "topology.kubernetes.io/zone",
+			},
+		}
+		component := render.Typha(&cfg)
+		resources, _ := component.Objects()
+		dResource := rtest.GetResource(resources, "calico-typha", "calico-system", "apps", "v1", "Deployment")
+		Expect(dResource).ToNot(BeNil())
+		d := dResource.(*appsv1.Deployment)
+		paa := d.Spec.Template.Spec.Affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution
+		Expect(paa).To(HaveLen(1))
+		Expect(paa[0]).To(Equal(expected))
 	})
 
 	It("should render all resources when certificate management is enabled", func() {

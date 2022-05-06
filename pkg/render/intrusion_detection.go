@@ -174,6 +174,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		// RBAC for AD Detector Pods
 		objs = append(objs,
 			c.adDetectorServiceAccount(),
+			c.adDetectorSecret(),
 			c.adDetectorAccessRole(),
 			c.adDetectorRoleBinding(),
 		)
@@ -423,6 +424,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionRole() *rbacv1.Role {
 		},
 	}
 }
+
 func (c *intrusionDetectionComponent) intrusionDetectionRoleBinding() *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -1360,6 +1362,23 @@ func (c *intrusionDetectionComponent) adDetectorServiceAccount() *corev1.Service
 	}
 }
 
+// adDetectorSecret creates an external statuc secret resource associated with
+// anomaly-detectors service account to for the podtemplate to reference instead
+// of the one dynamically created with the ServiceAccount
+func (c *intrusionDetectionComponent) adDetectorSecret() *corev1.Secret {
+	return &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      adDetectorServiceAccountName,
+			Namespace: IntrusionDetectionNamespace,
+			Annotations: map[string]string{
+				corev1.ServiceAccountNameKey: adDetectorServiceAccountName,
+			},
+		},
+		Type: corev1.SecretTypeServiceAccountToken,
+	}
+}
+
 func (c *intrusionDetectionComponent) adDetectorAccessRole() *rbacv1.Role {
 	return &rbacv1.Role{
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -1481,6 +1500,10 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 							{
 								Name:      "ELASTIC_PASSWORD",
 								ValueFrom: secret.GetEnvVarSource(ElasticsearchADJobUserSecret, "password", false),
+							},
+							{
+								Name:      "AD_API_TOKEN",
+								ValueFrom: secret.GetEnvVarSource(adDetectorServiceAccountName, "token", false),
 							},
 							{
 								Name:  "ES_CA_CERT",

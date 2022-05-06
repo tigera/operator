@@ -2051,6 +2051,24 @@ var _ = Describe("Node rendering tests", func() {
 				// Enabled is the default so we don't set
 				// NAT_OUTGOING if it is enabled.
 			}),
+		Entry("Pool with VXLAN enabled (IPv6)",
+			operatorv1.IPPool{
+				CIDR:          "fc00::/48",
+				Encapsulation: operatorv1.EncapsulationVXLAN,
+			},
+			map[string]string{
+				"CALICO_IPV6POOL_CIDR":  "fc00::/48",
+				"CALICO_IPV6POOL_VXLAN": "Always",
+			}),
+		Entry("Pool with VXLAN cross subnet enabled (IPv6)",
+			operatorv1.IPPool{
+				CIDR:          "fc00::/48",
+				Encapsulation: operatorv1.EncapsulationVXLANCrossSubnet,
+			},
+			map[string]string{
+				"CALICO_IPV6POOL_CIDR":  "fc00::/48",
+				"CALICO_IPV6POOL_VXLAN": "CrossSubnet",
+			}),
 		Entry("Pool with nat outgoing disabled (IPv6)",
 			operatorv1.IPPool{
 				CIDR:        "fc00::/48",

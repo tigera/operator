@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -605,6 +605,28 @@ func (c *typhaComponent) affinity() (aff *corev1.Affinity) {
 			},
 		}
 
+	}
+	if aff == nil {
+		aff = &corev1.Affinity{}
+	}
+	aff.PodAntiAffinity = &corev1.PodAntiAffinity{
+		PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
+			{
+				Weight: 1,
+				PodAffinityTerm: corev1.PodAffinityTerm{
+					LabelSelector: &metav1.LabelSelector{
+						MatchExpressions: []metav1.LabelSelectorRequirement{
+							{
+								Key:      AppLabelName,
+								Operator: metav1.LabelSelectorOpIn,
+								Values:   []string{TyphaK8sAppName},
+							},
+						},
+					},
+					TopologyKey: "topology.kubernetes.io/zone",
+				},
+			},
+		},
 	}
 	return aff
 }

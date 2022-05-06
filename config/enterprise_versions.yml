@@ -61,6 +61,9 @@ components:
   anomaly_detection_jobs:
     image: tigera/anomaly_detection_jobs
     version: master
+  anomaly-detection-api:
+    image: tigera/anomaly-detection-api
+    version: master
   compliance-controller:
     image: tigera/compliance-controller
     version: master

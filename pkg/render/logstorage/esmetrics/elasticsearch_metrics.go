@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -50,7 +50,6 @@ type Config struct {
 	PullSecrets          []*corev1.Secret
 	ESConfig             *relasticsearch.ClusterConfig
 	ESMetricsCredsSecret *corev1.Secret
-	ESCertSecret         *corev1.Secret
 	ClusterDomain        string
 	ServerTLS            certificatemanagement.KeyPairInterface
 	TrustedBundle        certificatemanagement.TrustedBundle
@@ -150,7 +149,7 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: annotations,
 				},
-				Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
+				Spec: corev1.PodSpec{
 					Tolerations:        e.cfg.Installation.ControlPlaneTolerations,
 					NodeSelector:       e.cfg.Installation.ControlPlaneNodeSelector,
 					ImagePullSecrets:   secret.GetReferenceList(e.cfg.PullSecrets),
@@ -167,8 +166,8 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 									"--es.timeout=30s", "--es.ca=$(ELASTIC_CA)", "--web.listen-address=:9081",
 									"--web.telemetry-path=/metrics", "--tls.key=/tigera-ee-elasticsearch-metrics-tls/tls.key", "--tls.crt=/tigera-ee-elasticsearch-metrics-tls/tls.crt", fmt.Sprintf("--ca.crt=%s", certificatemanagement.TrustedCertBundleMountPath)},
 								VolumeMounts: []corev1.VolumeMount{
-									e.cfg.ServerTLS.VolumeMount(),
-									e.cfg.TrustedBundle.VolumeMount(),
+									e.cfg.ServerTLS.VolumeMount(e.SupportedOSType()),
+									e.cfg.TrustedBundle.VolumeMount(e.SupportedOSType()),
 								},
 							}, render.DefaultElasticsearchClusterName, ElasticsearchMetricsSecret,
 							e.cfg.ClusterDomain, e.SupportedOSType(),
@@ -178,8 +177,8 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 						e.cfg.ServerTLS.Volume(),
 						e.cfg.TrustedBundle.Volume(),
 					},
-				}),
-			}, e.cfg.ESConfig, []*corev1.Secret{e.cfg.ESMetricsCredsSecret, e.cfg.ESCertSecret}).(*corev1.PodTemplateSpec),
+				},
+			}, e.cfg.ESConfig, []*corev1.Secret{e.cfg.ESMetricsCredsSecret}).(*corev1.PodTemplateSpec),
 		},
 	}
 }

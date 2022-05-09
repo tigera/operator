@@ -412,12 +412,9 @@ func (c *fluentdComponent) packetCaptureApiRoleBinding() *rbacv1.RoleBinding {
 func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 	var terminationGracePeriod int64 = 0
 	maxUnavailable := intstr.FromInt(1)
-	var annots map[string]string
-	if c.cfg.TrustedBundle != nil {
-		annots = c.cfg.TrustedBundle.HashAnnotations()
-	} else {
-		annots = make(map[string]string)
-	}
+
+	annots := c.cfg.TrustedBundle.HashAnnotations()
+
 	if c.cfg.MetricsServerTLS != nil {
 		annots[c.cfg.MetricsServerTLS.HashAnnotationKey()] = c.cfg.MetricsServerTLS.HashAnnotationValue()
 	}
@@ -439,7 +436,7 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 		ObjectMeta: metav1.ObjectMeta{
 			Annotations: annots,
 		},
-		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
+		Spec: corev1.PodSpec{
 			NodeSelector:                  map[string]string{},
 			Tolerations:                   c.tolerations(),
 			ImagePullSecrets:              secret.GetReferenceList(c.cfg.PullSecrets),
@@ -448,7 +445,7 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 			Containers:                    []corev1.Container{c.container()},
 			Volumes:                       c.volumes(),
 			ServiceAccountName:            c.fluentdNodeName(),
-		}),
+		},
 	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 
 	ds := &appsv1.DaemonSet{
@@ -487,7 +484,7 @@ func (c *fluentdComponent) container() corev1.Container {
 	envs := c.envvars()
 	volumeMounts := []corev1.VolumeMount{
 		{MountPath: c.path("/var/log/calico"), Name: "var-log-calico"},
-		{MountPath: c.path("/etc/fluentd/elastic"), Name: "elastic-ca-cert-volume"},
+		{MountPath: c.path("/etc/fluentd/elastic"), Name: certificatemanagement.TrustedCertConfigMapName},
 	}
 	if c.cfg.Filters != nil {
 		if c.cfg.Filters.Flow != "" {
@@ -516,12 +513,10 @@ func (c *fluentdComponent) container() corev1.Container {
 			})
 	}
 
-	if c.cfg.TrustedBundle != nil {
-		volumeMounts = append(volumeMounts, c.cfg.TrustedBundle.VolumeMount())
-	}
+	volumeMounts = append(volumeMounts, c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()))
 
 	if c.cfg.MetricsServerTLS != nil {
-		volumeMounts = append(volumeMounts, c.cfg.MetricsServerTLS.VolumeMount())
+		volumeMounts = append(volumeMounts, c.cfg.MetricsServerTLS.VolumeMount(c.SupportedOSType()))
 	}
 
 	isPrivileged := false
@@ -710,7 +705,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		corev1.EnvVar{Name: "ELASTIC_BGP_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
 	)
 
-	if c.cfg.TrustedBundle != nil {
+	if c.SupportedOSType() != rmeta.OSTypeWindows {
 		envs = append(envs,
 			corev1.EnvVar{Name: "CA_CRT_PATH", Value: c.cfg.TrustedBundle.MountPath()},
 			corev1.EnvVar{Name: "TLS_KEY_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountKeyFilePath()},
@@ -808,9 +803,7 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 	if c.cfg.MetricsServerTLS != nil {
 		volumes = append(volumes, c.cfg.MetricsServerTLS.Volume())
 	}
-	if c.cfg.TrustedBundle != nil {
-		volumes = append(volumes, c.cfg.TrustedBundle.Volume())
-	}
+	volumes = append(volumes, trustedBundleVolume(c.cfg.TrustedBundle))
 
 	return volumes
 }
@@ -970,6 +963,16 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 	}
 }
 
+func trustedBundleVolume(bundle certificatemanagement.TrustedBundle) corev1.Volume {
+	volume := bundle.Volume()
+	// We mount the bundle under two names; the standard name and the name for the expected elastic cert.
+	volume.ConfigMap.Items = []corev1.KeyToPath{
+		{Key: certificatemanagement.TrustedCertConfigMapKeyName, Path: certificatemanagement.TrustedCertConfigMapKeyName},
+		{Key: certificatemanagement.TrustedCertConfigMapKeyName, Path: SplunkFluentdSecretCertificateKey},
+	}
+	return volume
+}
+
 func (c *fluentdComponent) eksLogForwarderVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
 		relasticsearch.DefaultVolumeMount(c.cfg.OSType),
@@ -978,7 +981,7 @@ func (c *fluentdComponent) eksLogForwarderVolumeMounts() []corev1.VolumeMount {
 			MountPath: c.path("/fluentd/cloudwatch-logs/"),
 		},
 		{
-			Name:      "elastic-ca-cert-volume",
+			Name:      certificatemanagement.TrustedCertConfigMapName,
 			MountPath: c.path("/etc/fluentd/elastic/"),
 		},
 	}
@@ -986,7 +989,7 @@ func (c *fluentdComponent) eksLogForwarderVolumeMounts() []corev1.VolumeMount {
 
 func (c *fluentdComponent) eksLogForwarderVolumes() []corev1.Volume {
 	return []corev1.Volume{
-		relasticsearch.DefaultVolume(),
+		trustedBundleVolume(c.cfg.TrustedBundle),
 		{
 			Name: "plugin-statefile-dir",
 			VolumeSource: corev1.VolumeSource{

@@ -207,7 +207,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: map[string]string{"job-name": IntrusionDetectionInstallerJobName},
 		},
-		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
+		Spec: corev1.PodSpec{
 			Tolerations:      c.cfg.Installation.ControlPlaneTolerations,
 			NodeSelector:     c.cfg.Installation.ControlPlaneNodeSelector,
 			RestartPolicy:    corev1.RestartPolicyOnFailure,
@@ -218,7 +218,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 			},
 			Volumes:            []corev1.Volume{c.cfg.TrustedCertBundle.Volume()},
 			ServiceAccountName: IntrusionDetectionInstallerJobName,
-		}),
+		},
 	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 
 	return &batchv1.Job{
@@ -280,7 +280,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() corev1.Co
 				Value: c.cfg.ESClusterConfig.ClusterName(),
 			},
 		},
-		VolumeMounts: []corev1.VolumeMount{c.cfg.TrustedCertBundle.VolumeMount()},
+		VolumeMounts: []corev1.VolumeMount{c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType())},
 	}
 }
 
@@ -507,7 +507,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 			Namespace:   IntrusionDetectionNamespace,
 			Annotations: c.intrusionDetectionAnnotations(),
 		},
-		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
+		Spec: corev1.PodSpec{
 			Tolerations:        c.cfg.Installation.ControlPlaneTolerations,
 			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 			ServiceAccountName: IntrusionDetectionName,
@@ -516,7 +516,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 				container,
 			},
 			Volumes: volumes,
-		}),
+		},
 	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 }
 
@@ -537,7 +537,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 	// If syslog forwarding is enabled then set the necessary ENV var and volume mount to
 	// write logs for Fluentd.
 	volumeMounts := []corev1.VolumeMount{
-		c.cfg.TrustedCertBundle.VolumeMount(),
+		c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType()),
 	}
 	if c.syslogForwardingIsEnabled() {
 		envs = append(envs,

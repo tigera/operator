@@ -1,12 +1,24 @@
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package common
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 
-	"github.com/go-logr/logr"
 	"golang.org/x/crypto/bcrypt"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -16,11 +28,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/crypto"
-	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 )
 
 const (
@@ -102,71 +110,6 @@ func CreateKubeControllersSecrets(ctx context.Context, esAdminUserSecret *corev1
 	}
 
 	return kubeControllersGatewaySecret, kubeControllersVerificationSecret, kubeControllersSecureUserSecret, nil
-}
-
-// GetESGatewayCertificateSecrets retrieves certificate secrets needed for ES Gateway to run or for
-// components to communicate with Elasticsearch/Kibana through ES Gateway. The order of the secrets returned are:
-// 1) The certificate/key secret to be mounted by ES Gateway and used to authenticate requests before
-// proxying to Elasticsearch/Kibana (in the operator namespace). If the user didn't create this secret, it is created.
-// 2) The certificate mounted by other clients that connect to Elasticsearch/Kibana through ES Gateway (in the operator namespace).
-// The final return value is used to indicate that the certificate secret was provided by the customer. This
-// ensures that we do not re-render the secret in the Operator Namespace and overwrite the OwnerReference.
-func GetESGatewayCertificateSecrets(ctx context.Context, instl *operatorv1.InstallationSpec, cli client.Client, clusterDomain string, log logr.Logger) (*corev1.Secret, *corev1.Secret, bool, error) {
-	var publicCertSecret *corev1.Secret
-
-	svcDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, clusterDomain)
-	svcDNSNames = append(svcDNSNames, dns.GetServiceDNSNames(esgateway.ServiceName, render.ElasticsearchNamespace, clusterDomain)...)
-
-	// Get the secret - might be nil
-	oprKeyCert, err := utils.GetSecret(ctx, cli, render.TigeraElasticsearchCertSecret, common.OperatorNamespace())
-	if err != nil {
-		return nil, nil, false, err
-	}
-
-	// Ensure that cert is valid.
-	oprKeyCert, _, err = utils.EnsureCertificateSecret(render.TigeraElasticsearchCertSecret, oprKeyCert, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, svcDNSNames...)
-	if err != nil {
-		return nil, nil, false, err
-	}
-
-	// Three different certificate issuers are possible:
-	// - The operator self-signed certificate
-	// - A user's BYO keypair for Elastic (uncommon)
-	// - The issuer that is provided through the certificate management feature.
-	keyCertIssuer, err := utils.GetCertificateIssuer(oprKeyCert.Data[corev1.TLSCertKey])
-	if err != nil {
-		return nil, nil, false, err
-	}
-	customerProvidedCert := !utils.IsOperatorIssued(keyCertIssuer)
-
-	// If Certificate management is enabled, we only want to trust the CA cert and let the init container handle private key generation.
-	if instl.CertificateManagement != nil {
-		cmCa := instl.CertificateManagement.CACert
-		cmIssuer, err := utils.GetCertificateIssuer(cmCa)
-		if err != nil {
-			return nil, nil, false, err
-		}
-
-		// If the issuer of the current secret is not the same as the certificate management issuer and also is not
-		// issued by the tigera-operator, it means that it is added to this cluster by the customer. This is not supported
-		// in combination with certificate management.
-		if customerProvidedCert && cmIssuer != keyCertIssuer {
-			return nil, nil, false, fmt.Errorf("certificate management does not support custom Elasticsearch secrets, please delete secret %s/%s or disable certificate management", oprKeyCert.Namespace, oprKeyCert.Name)
-		}
-
-		oprKeyCert.Data[corev1.TLSCertKey] = instl.CertificateManagement.CACert
-		publicCertSecret = render.CreateCertificateSecret(instl.CertificateManagement.CACert, relasticsearch.PublicCertSecret, common.OperatorNamespace())
-	} else {
-		publicCertSecret = render.CreateCertificateSecret(oprKeyCert.Data[corev1.TLSCertKey], relasticsearch.PublicCertSecret, common.OperatorNamespace())
-	}
-
-	return oprKeyCert, publicCertSecret, customerProvidedCert, nil
-}
-
-// DeleteInvalidECKManagedPublicCertSecret deletes the given ECK managed cert secret.
-func DeleteInvalidECKManagedPublicCertSecret(ctx context.Context, secret *corev1.Secret, cli client.Client, log logr.Logger) error {
-	log.Info(fmt.Sprintf("Deleting invalid cert secret %q in %q namespace", secret.Name, secret.Namespace))
-	return cli.Delete(ctx, secret)
 }
 
 func CalculateFlowShards(nodesSpecifications *operatorv1.Nodes, defaultShards int) int {

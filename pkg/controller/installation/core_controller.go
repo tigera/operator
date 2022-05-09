@@ -756,6 +756,21 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	terminating := (instance.DeletionTimestamp != nil)
 	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
 
+	// Changes for updating installation status conditions
+	if request.Name == "calico" && request.Namespace == "" {
+		ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: "calico"}}
+		err := r.client.Get(context.TODO(), types.NamespacedName{Name: "calico"}, ts)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+		r.updateInstallationStatus(instance, ts.Status.Conditions)
+		if err := r.client.Status().Update(ctx, instance); err != nil {
+			log.WithValues("reason", err).Info("Failed to create Installation status for setting degraded condition")
+			return reconcile.Result{}, err
+		}
+		return reconcile.Result{}, nil
+	}
+
 	// Mark CR found so we can report converter problems via tigerastatus
 	r.status.OnCRFound()
 
@@ -1808,5 +1823,50 @@ func setInstallationFinalizer(i *operator.Installation) {
 func removeInstallationFinalizer(i *operator.Installation) {
 	if stringsutil.StringInSlice(CalicoFinalizer, i.GetFinalizers()) {
 		i.SetFinalizers(stringsutil.RemoveStringInSlice(CalicoFinalizer, i.GetFinalizers()))
+	}
+}
+
+func (r *ReconcileInstallation) updateInstallationStatus(instance *operator.Installation, conditions []operator.TigeraStatusCondition) {
+	if instance.Status.Conditions == nil {
+		instance.Status.Conditions = []metav1.Condition{}
+	}
+
+	for _, condition := range conditions {
+		found := false
+
+		ctype := string(condition.Type)
+		if condition.Type == operator.ComponentAvailable {
+			ctype = "Ready"
+		}
+		status := metav1.ConditionUnknown
+		if condition.Status == operator.ConditionTrue {
+			status = metav1.ConditionTrue
+		} else if condition.Status == operator.ConditionFalse {
+			status = metav1.ConditionFalse
+		}
+		ic := metav1.Condition{
+			Type:               ctype,
+			Status:             status,
+			LastTransitionTime: condition.LastTransitionTime,
+		}
+
+		if len(condition.Reason) > 0 {
+			ic.Reason = condition.Reason
+		}
+		if len(condition.Message) > 0 {
+			ic.Message = condition.Message
+		}
+
+		for i, c := range instance.Status.Conditions {
+			if condition.Type == operator.ComponentAvailable && c.Type == "Ready" ||
+				condition.Type == operator.ComponentDegraded && c.Type == "Degraded" ||
+				condition.Type == operator.ComponentProgressing && c.Type == "Progressing" {
+				instance.Status.Conditions[i] = ic
+				found = true
+			}
+		}
+		if !found {
+			instance.Status.Conditions = append(instance.Status.Conditions, ic)
+		}
 	}
 }

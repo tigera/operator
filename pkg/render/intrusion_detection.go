@@ -1501,7 +1501,7 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 								ValueFrom: secret.GetEnvVarSource(ElasticsearchADJobUserSecret, "password", false),
 							},
 							{
-								Name: "MODEL_STORAGE_HOST",
+								Name: "MODEL_STORAGE_API_HOST",
 								// static index 2 refres to - <svc_name>.<ns>.svc format
 								Value: dns.GetServiceDNSNames(ADAPIObjectName, IntrusionDetectionNamespace, c.cfg.ClusterDomain)[2],
 							},

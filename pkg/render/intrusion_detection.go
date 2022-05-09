@@ -65,8 +65,7 @@ const (
 	ADAPIObjectName     = "anomaly-detection-api"
 	ADAPIObjectPortName = "anomaly-detection-api-https"
 	ADAPITLSSecretName  = "anomaly-detection-api-tls"
-
-	adAPIPort = 8080
+	adAPIPort           = 8080
 )
 
 var adAPIReplicas int32 = 1
@@ -1505,6 +1504,10 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 								Name: "MODEL_STORAGE_HOST",
 								// static index 2 refres to - <svc_name>.<ns>.svc format
 								Value: dns.GetServiceDNSNames(ADAPIObjectName, IntrusionDetectionNamespace, c.cfg.ClusterDomain)[2],
+							},
+							{
+								Name:  "MODEL_STORAGE_API_PORT",
+								Value: strconv.Itoa(adAPIPort),
 							},
 							{
 								Name:  "MODEL_STORAGE_CLIENT_CERT",

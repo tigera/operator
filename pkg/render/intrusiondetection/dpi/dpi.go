@@ -130,7 +130,7 @@ func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 			},
 			Annotations: d.dpiAnnotations(),
 		},
-		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
+		Spec: corev1.PodSpec{
 			Tolerations:                   rmeta.TolerateAll,
 			ImagePullSecrets:              secret.GetReferenceList(d.cfg.PullSecrets),
 			ServiceAccountName:            DeepPacketInspectionName,
@@ -141,7 +141,7 @@ func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 			InitContainers: initContainers,
 			Containers:     []corev1.Container{d.dpiContainer()},
 			Volumes:        d.dpiVolumes(),
-		}),
+		},
 	}, d.cfg.ESClusterConfig, d.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 	return &appsv1.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
@@ -226,8 +226,8 @@ func (d *dpiComponent) dpiEnvVars() []corev1.EnvVar {
 
 func (d *dpiComponent) dpiVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
-		d.cfg.TyphaNodeTLS.TrustedBundle.VolumeMount(),
-		d.cfg.TyphaNodeTLS.NodeSecret.VolumeMount(),
+		d.cfg.TyphaNodeTLS.TrustedBundle.VolumeMount(d.SupportedOSType()),
+		d.cfg.TyphaNodeTLS.NodeSecret.VolumeMount(d.SupportedOSType()),
 		{MountPath: "/var/log/calico/snort-alerts", Name: "log-snort-alters"},
 	}
 }

@@ -1,3 +1,17 @@
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package logstorage
 
 import (
@@ -6,6 +20,11 @@ import (
 	"net/url"
 
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/dns"
+	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	apps "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -54,12 +73,12 @@ func (r *ReconcileLogStorage) createLogStorage(
 	hdler utils.ComponentHandler,
 	reqLogger logr.Logger,
 	ctx context.Context,
+	certificateManager certificatemanager.CertificateManager,
 ) (reconcile.Result, bool, bool, error) {
-	var esInternalCertSecret, esCertSecret *corev1.Secret
-	var kbCertSecret, kbInternalCertSecret *corev1.Secret
-	var kbOperatorManagedCertSecret bool
+	var elasticKeyPair, kibanaKeyPair certificatemanagement.KeyPairInterface
 	var err error
 	finalizerCleanup := false
+	var trustedBundle certificatemanagement.TrustedBundle
 
 	if managementClusterConnection == nil {
 		// Check if there is a StorageClass available to run Elasticsearch on.
@@ -75,17 +94,20 @@ func (r *ReconcileLogStorage) createLogStorage(
 			return reconcile.Result{}, false, finalizerCleanup, err
 		}
 
-		if esCertSecret, esInternalCertSecret, err = r.getElasticsearchCertificateSecrets(ctx, install); err != nil {
+		esDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
+		if elasticKeyPair, err = certificateManager.GetOrCreateKeyPair(r.client, render.TigeraElasticsearchInternalCertSecret, common.OperatorNamespace(), esDNSNames); err != nil {
 			reqLogger.Error(err, err.Error())
 			r.status.SetDegraded("Failed to create Elasticsearch secrets", err.Error())
 			return reconcile.Result{}, false, finalizerCleanup, err
 		}
 
-		if kbCertSecret, kbOperatorManagedCertSecret, kbInternalCertSecret, err = r.kibanaInternalSecrets(ctx, install); err != nil {
+		kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
+		if kibanaKeyPair, err = certificateManager.GetOrCreateKeyPair(r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames); err != nil {
 			reqLogger.Error(err, err.Error())
-			r.status.SetDegraded("Failed to create kibana secrets", err.Error())
+			r.status.SetDegraded("Failed to create Kibana secrets", err.Error())
 			return reconcile.Result{}, false, finalizerCleanup, err
 		}
+		trustedBundle = certificateManager.CreateTrustedBundle(elasticKeyPair, kibanaKeyPair)
 	}
 
 	elasticsearch, err := r.getElasticsearch(ctx)
@@ -130,9 +152,9 @@ func (r *ReconcileLogStorage) createLogStorage(
 		Elasticsearch:               elasticsearch,
 		Kibana:                      kibana,
 		ClusterConfig:               clusterConfig,
-		ElasticsearchSecrets:        []*corev1.Secret{esCertSecret, esAdminUserSecret},
-		KibanaCertSecret:            kbCertSecret,
-		KibanaInternalCertSecret:    kbInternalCertSecret,
+		ElasticsearchUserSecret:     esAdminUserSecret,
+		ElasticsearchKeyPair:        elasticKeyPair,
+		KibanaKeyPair:               kibanaKeyPair,
 		PullSecrets:                 pullSecrets,
 		Provider:                    r.provider,
 		CuratorSecrets:              curatorSecrets,
@@ -141,6 +163,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 		ClusterDomain:               r.clusterDomain,
 		BaseURL:                     baseURL,
 		ElasticLicenseType:          esLicenseType,
+		TrustedBundle:               trustedBundle,
 	}
 
 	component := render.LogStorage(logStorageCfg)
@@ -151,19 +174,24 @@ func (r *ReconcileLogStorage) createLogStorage(
 		return reconcile.Result{}, false, finalizerCleanup, err
 	}
 
-	components = append(components, component)
-
-	var passThroughSecrets []client.Object
-	if kbCertSecret != nil && kbOperatorManagedCertSecret {
-		passThroughSecrets = append(passThroughSecrets, kbCertSecret)
-	}
-	if esInternalCertSecret != nil {
-		passThroughSecrets = append(passThroughSecrets, esInternalCertSecret)
-	}
-
-	if len(passThroughSecrets) > 0 {
-		components = append(components, render.NewPassthrough(passThroughSecrets...))
-	}
+	components = append(components, component,
+		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+			Namespace:       render.ElasticsearchNamespace,
+			ServiceAccounts: []string{render.ElasticsearchName},
+			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+				rcertificatemanagement.NewKeyPairOption(elasticKeyPair, true, true),
+			},
+			TrustedBundle: trustedBundle,
+		}),
+		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+			Namespace:       render.KibanaNamespace,
+			ServiceAccounts: []string{render.KibanaName},
+			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+				rcertificatemanagement.NewKeyPairOption(kibanaKeyPair, true, true),
+			},
+			TrustedBundle: trustedBundle,
+		}),
+	)
 
 	for _, component := range components {
 		if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {

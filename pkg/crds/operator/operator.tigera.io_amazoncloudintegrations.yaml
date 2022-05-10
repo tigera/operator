@@ -76,6 +76,8 @@ spec:
                 items:
                   type: string
                 type: array
+            required:
+            - trustEnforcedSecurityGroupID
             type: object
           status:
             description: AmazonCloudIntegrationStatus defines the observed state of

@@ -54,7 +54,7 @@ type AmazonCloudIntegrationSpec struct {
 	EnforcedSecurityGroupID string `json:"enforcedSecurityGroupID,omitempty"`
 	// TrustEnforcedSecurityGroupID is the ID of the Security Group which will be applied
 	// to all ENIs in the VPC.
-	TrustEnforcedSecurityGroupID string `json:"trustEnforcedSecurityGroupID,omitempty"`
+	TrustEnforcedSecurityGroupID string `json:"trustEnforcedSecurityGroupID"`
 }
 
 // AmazonCloudIntegrationStatus defines the observed state of AmazonCloudIntegration

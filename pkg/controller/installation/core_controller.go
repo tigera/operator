@@ -1815,7 +1815,7 @@ func (r *ReconcileInstallation) updateInstallationStatus(instance *operator.Inst
 
 		ctype := string(condition.Type)
 		if condition.Type == operator.ComponentAvailable {
-			ctype = "Ready"
+			ctype = string(operator.ConditionTypeReady)
 		}
 		status := metav1.ConditionUnknown
 		if condition.Status == operator.ConditionTrue {
@@ -1827,6 +1827,7 @@ func (r *ReconcileInstallation) updateInstallationStatus(instance *operator.Inst
 			Type:               ctype,
 			Status:             status,
 			LastTransitionTime: condition.LastTransitionTime,
+			ObservedGeneration: instance.GetGeneration(),
 		}
 
 		if len(condition.Reason) > 0 {
@@ -1837,14 +1838,18 @@ func (r *ReconcileInstallation) updateInstallationStatus(instance *operator.Inst
 		}
 
 		for i, c := range instance.Status.Conditions {
-			if condition.Type == operator.ComponentAvailable && c.Type == "Ready" ||
-				condition.Type == operator.ComponentDegraded && c.Type == "Degraded" ||
-				condition.Type == operator.ComponentProgressing && c.Type == "Progressing" {
+			if condition.Type == operator.ComponentAvailable && c.Type == string(operator.ConditionTypeReady) ||
+				condition.Type == operator.ComponentDegraded && c.Type == string(operator.ConditionTypeDegarded) ||
+				condition.Type == operator.ComponentProgressing && c.Type == string(operator.ConditionTypeProgressing) {
+				if !reflect.DeepEqual(c.Status, condition.Status) {
+					ic.LastTransitionTime = metav1.NewTime(time.Now())
+				}
 				instance.Status.Conditions[i] = ic
 				found = true
 			}
 		}
 		if !found {
+			ic.LastTransitionTime = metav1.NewTime(time.Now())
 			instance.Status.Conditions = append(instance.Status.Conditions, ic)
 		}
 	}

@@ -1397,7 +1397,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			cancel()
 		})
 
-		It("check for create new installation condition with multiple items - Ready condition true", func() {
+		It("should reconcile with creating new installation status conditions", func() {
 			ts := &operator.TigeraStatus{
 				ObjectMeta: metav1.ObjectMeta{Name: "calico"},
 				Spec:       operator.TigeraStatusSpec{},
@@ -1446,7 +1446,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(string(cr.Status.Conditions[2].Status)).To(Equal(string(operator.ConditionFalse)))
 		})
 
-		It("check for conditions with one item", func() {
+		It("should reconcile with creating new installation status condition with one item", func() {
 
 			ts := &operator.TigeraStatus{
 				ObjectMeta: metav1.ObjectMeta{Name: "calico"},
@@ -1479,7 +1479,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(cr.Status.Conditions[0].Reason).To(Equal("AllObjectsAvailable"))
 			Expect(cr.Status.Conditions[0].Message).To(Equal("All Objects are available"))
 		})
-		It("check for Empty tigera status condition", func() {
+		It("should reconcile with Empty tigera status condition", func() {
 
 			ts := &operator.TigeraStatus{
 				ObjectMeta: metav1.ObjectMeta{Name: "calico"},
@@ -1498,7 +1498,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(cr.Status.Conditions).To(HaveLen(0))
 		})
-		It("check with All conditions true", func() {
+		It("should reconcile with creating new installation status with multiple conditions as true", func() {
 
 			ts := &operator.TigeraStatus{
 				ObjectMeta: metav1.ObjectMeta{Name: "calico"},
@@ -1557,7 +1557,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(cr.Status.Conditions[0].ObservedGeneration).To(Equal(int64(2)))
 		})
 
-		It("check for has Existing conditions toggle Available to true & others to false", func() {
+		It("should reconcile with Existing conditions and toggle Available to true & others to false", func() {
 
 			ts := &operator.TigeraStatus{
 				ObjectMeta: metav1.ObjectMeta{Name: "calico"},

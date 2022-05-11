@@ -606,7 +606,7 @@ type InstallationStatus struct {
 	Computed *InstallationSpec `json:"computed,omitempty"`
 
 	// Conditions represents the latest observed set of conditions for this component. A component may be one or more of
-	// Available, Progressing, or Degraded.
+	// Available, Progressing, Degraded or other customer types
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 

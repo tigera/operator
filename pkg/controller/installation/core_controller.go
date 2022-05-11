@@ -765,7 +765,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 		r.updateInstallationStatus(instance, ts.Status.Conditions)
 		if err := r.client.Status().Update(ctx, instance); err != nil {
-			log.WithValues("reason", err).Info("Failed to create Installation status for setting degraded condition")
+			log.WithValues("reason", err).Info("Failed to create Installation status conditions.")
 			return reconcile.Result{}, err
 		}
 		return reconcile.Result{}, nil

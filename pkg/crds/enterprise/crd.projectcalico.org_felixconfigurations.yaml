@@ -98,6 +98,11 @@ spec:
                 description: 'BPFEnabled, if enabled Felix will use the BPF dataplane.
                   [Default: false]'
                 type: boolean
+              bpfEnforceRPF:
+                description: 'BPFEnforceRPF enforce strict RPF on all interfaces with
+                  BPF programs regardless of what is the per-interfaces or global
+                  setting. Possible values are Disabled or Strict. [Default: Strict]'
+                type: string
               bpfExtToServiceConnmark:
                 description: 'BPFExtToServiceConnmark in BPF mode, control a 32bit
                   mark that is set on connections from an external client to a local
@@ -251,9 +256,14 @@ spec:
                   routes, by default this will be RTPROT_BOOT when left blank.
                 type: integer
               deviceRouteSourceAddress:
-                description: This is the source address to use on programmed device
-                  routes. By default the source address is left blank, leaving the
-                  kernel to choose the source address used.
+                description: This is the IPv4 source address to use on programmed
+                  device routes. By default the source address is left blank, leaving
+                  the kernel to choose the source address used.
+                type: string
+              deviceRouteSourceAddressIPv6:
+                description: This is the IPv6 source address to use on programmed
+                  device routes. By default the source address is left blank, leaving
+                  the kernel to choose the source address used.
                 type: string
               disableConntrackInvalidCheck:
                 type: boolean
@@ -1125,8 +1135,12 @@ spec:
                   this based on the existing IP pools. [Default: nil (unset)]'
                 type: boolean
               vxlanMTU:
-                description: 'VXLANMTU is the MTU to set on the tunnel device. See
-                  Configuring MTU [Default: 1440]'
+                description: 'VXLANMTU is the MTU to set on the IPv4 VXLAN tunnel
+                  device. See Configuring MTU [Default: 1410]'
+                type: integer
+              vxlanMTUV6:
+                description: 'VXLANMTUV6 is the MTU to set on the IPv6 VXLAN tunnel
+                  device. See Configuring MTU [Default: 1390]'
                 type: integer
               vxlanPort:
                 type: integer
@@ -1190,6 +1204,12 @@ spec:
                 description: 'WireguardRoutingRulePriority controls the priority value
                   to use for the Wireguard routing rule. [Default: 99]'
                 type: integer
+              workloadSourceSpoofing:
+                description: WorkloadSourceSpoofing controls whether pods can use
+                  the allowedSourcePrefixes annotation to send traffic with a source
+                  IP address that is not theirs. This is disabled by default. When
+                  set to "Any", pods can request any prefix.
+                type: string
               xdpEnabled:
                 description: 'XDPEnabled enables XDP acceleration for suitable untracked
                   incoming deny rules. [Default: true]'

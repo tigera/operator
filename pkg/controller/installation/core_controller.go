@@ -1860,7 +1860,7 @@ func (r *ReconcileInstallation) updateInstallationStatus(instance *operator.Inst
 
 		for i, c := range instance.Status.Conditions {
 			if condition.Type == operator.ComponentAvailable && c.Type == string(operator.ConditionTypeReady) ||
-				condition.Type == operator.ComponentDegraded && c.Type == string(operator.ConditionTypeDegarded) ||
+				condition.Type == operator.ComponentDegraded && c.Type == string(operator.ConditionTypeDegraded) ||
 				condition.Type == operator.ComponentProgressing && c.Type == string(operator.ConditionTypeProgressing) {
 				if !reflect.DeepEqual(c.Status, condition.Status) {
 					ic.LastTransitionTime = metav1.NewTime(time.Now())

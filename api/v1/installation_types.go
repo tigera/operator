@@ -672,6 +672,6 @@ type ConditionType string
 
 const (
 	ConditionTypeReady       ConditionType = "Ready"
-	ConditionTypeDegarded    ConditionType = "Degraded"
+	ConditionTypeDegraded    ConditionType = "Degraded"
 	ConditionTypeProgressing ConditionType = "Progressing"
 )

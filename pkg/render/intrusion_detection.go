@@ -1514,7 +1514,7 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 								Value: c.cfg.ADAPIServerCertSecret.VolumeMountCertificateFilePath(),
 							},
 							{
-								Name:      "MODEL_STRAGE_API_TOKEN",
+								Name:      "MODEL_STORAGE_API_TOKEN",
 								ValueFrom: secret.GetEnvVarSource(adDetectorServiceAccountName, "token", false),
 							},
 							{

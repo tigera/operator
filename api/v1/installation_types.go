@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -604,6 +604,10 @@ type InstallationStatus struct {
 	// Computed is the final installation including overlaid resources.
 	// +optional
 	Computed *InstallationSpec `json:"computed,omitempty"`
+
+	// Conditions represents the latest observed set of conditions for this component. A component may be one or more of
+	// Available, Progressing, Degraded or other customer types
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -660,3 +664,14 @@ type CertificateManagement struct {
 	// +optional
 	SignatureAlgorithm string `json:"signatureAlgorithm,omitempty"`
 }
+
+// ConditionTypes describes the Installation CR's status condition type .
+//
+// One of: Ready, Degraded, Progressing
+type ConditionType string
+
+const (
+	ConditionTypeReady       ConditionType = "Ready"
+	ConditionTypeDegraded    ConditionType = "Degraded"
+	ConditionTypeProgressing ConditionType = "Progressing"
+)

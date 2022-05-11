@@ -490,7 +490,7 @@ func (m *statusManager) syncState() {
 		}
 
 		// Check if any pods within the daemonset are failing.
-		if f, err := m.podsFailing(ds.Spec.Selector, ds.Namespace); err != nil {
+		if f, err := m.podsFailing(ds.Spec.Selector, ds.Namespace); err == nil {
 			if f != "" {
 				failing = append(failing, f)
 			}
@@ -516,7 +516,7 @@ func (m *statusManager) syncState() {
 		}
 
 		// Check if any pods within the deployment are failing.
-		if f, err := m.podsFailing(dep.Spec.Selector, dep.Namespace); err != nil {
+		if f, err := m.podsFailing(dep.Spec.Selector, dep.Namespace); err == nil {
 			if f != "" {
 				failing = append(failing, f)
 			}
@@ -540,7 +540,7 @@ func (m *statusManager) syncState() {
 		}
 
 		// Check if any pods within the deployment are failing.
-		if f, err := m.podsFailing(ss.Spec.Selector, ss.Namespace); err != nil {
+		if f, err := m.podsFailing(ss.Spec.Selector, ss.Namespace); err == nil {
 			if f != "" {
 				failing = append(failing, f)
 			}

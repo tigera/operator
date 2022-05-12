@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -685,6 +685,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 
 	if c.bpfDataplaneEnabled() {
 		initContainers = append(initContainers, c.bpffsInitContainer())
+		initContainers = append(initContainers, c.cgroupv2InitContainer())
 	}
 
 	if c.runAsNonPrivileged() {
@@ -823,6 +824,8 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 			corev1.Volume{Name: "sys-fs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
 			// Volume for the bpffs itself, used by the main node container.
 			corev1.Volume{Name: "bpffs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
+			// Volume used by mount-cgroupv2 init container to access root cgroup name space of node.
+			corev1.Volume{Name: "proc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc"}}},
 		)
 	}
 
@@ -975,6 +978,27 @@ func (c *nodeComponent) bpffsInitContainer() corev1.Container {
 			Privileged: ptr.BoolToPtr(true),
 		},
 		Command: []string{CalicoNodeObjectName, "-init"},
+	}
+}
+
+// cgroupv2InitContainer creates an init container that enters the cgroup and mount namespace of the process
+// with PID 1 running on a host to allow felix running in calico-node access the root of cgroup namespace.
+// This is needed by felix to attach CTLB programs and implement k8s services correctly.
+func (c *nodeComponent) cgroupv2InitContainer() corev1.Container {
+	cgroupv2VolumeMounts := []corev1.VolumeMount{
+		{MountPath: "/node-proc", Name: "proc"},
+	}
+
+	return corev1.Container{
+		Name:         "mount-cgroupv2",
+		Image:        c.nodeImage,
+		VolumeMounts: cgroupv2VolumeMounts,
+		SecurityContext: &corev1.SecurityContext{
+			Privileged: ptr.BoolToPtr(true),
+		},
+		Command: []string{"nsenter",
+			"--cgroup=/node-proc/1/ns/cgroup", "--mount=/node-proc/1/ns/mnt",
+			"mount", "-t", "cgroup2", "none", "/run/calico/cgroup"},
 	}
 }
 

@@ -1261,12 +1261,6 @@ func (c *intrusionDetectionComponent) adAPIService() *corev1.Service {
 func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 	adAPIStorageVolumePath := "/storage"
 	adAPIStorageVolumeName := "volume-storage"
-	envVars := []corev1.EnvVar{
-		{Name: "LOG_LEVEL", Value: "info"},
-		{Name: "STORAGE_PATH", Value: adAPIStorageVolumePath},
-		{Name: "TLS_KEY", Value: c.cfg.ADAPIServerCertSecret.VolumeMountKeyFilePath()},
-		{Name: "TLS_CERT", Value: c.cfg.ADAPIServerCertSecret.VolumeMountCertificateFilePath()},
-	}
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -1313,7 +1307,12 @@ func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 						{
 							Name:  ADAPIObjectName,
 							Image: c.adAPIImage,
-							Env:   envVars,
+							Env: []corev1.EnvVar{
+								{Name: "LOG_LEVEL", Value: "info"},
+								{Name: "STORAGE_PATH", Value: adAPIStorageVolumePath},
+								{Name: "TLS_KEY", Value: c.cfg.ADAPIServerCertSecret.VolumeMountKeyFilePath()},
+								{Name: "TLS_CERT", Value: c.cfg.ADAPIServerCertSecret.VolumeMountCertificateFilePath()},
+							},
 							LivenessProbe: &corev1.Probe{
 								Handler: corev1.Handler{
 									HTTPGet: &corev1.HTTPGetAction{

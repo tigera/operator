@@ -435,7 +435,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 			Namespace:       render.IntrusionDetectionNamespace,
 			ServiceAccounts: []string{render.IntrusionDetectionName},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-				rcertificatemanagement.NewKeyPairOption(intrusionDetectionCfg.ADAPIServerCertSecret, false, true),
+				rcertificatemanagement.NewKeyPairOption(intrusionDetectionCfg.ADAPIServerCertSecret, true, true),
 			},
 			TrustedBundle: trustedBundle,
 		}),

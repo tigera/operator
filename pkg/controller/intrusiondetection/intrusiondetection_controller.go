@@ -433,7 +433,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		dpiComponent,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       render.IntrusionDetectionNamespace,
-			ServiceAccounts: []string{render.IntrusionDetectionName},
+			ServiceAccounts: []string{render.IntrusionDetectionName, render.ADAPIObjectName},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(intrusionDetectionCfg.ADAPIServerCertSecret, true, true),
 			},

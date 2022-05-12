@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -404,7 +404,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(calicoNodeImage))
 
 		// Validate correct number of init containers.
-		Expect(len(ds.Spec.Template.Spec.InitContainers)).To(Equal(3))
+		Expect(len(ds.Spec.Template.Spec.InitContainers)).To(Equal(4))
 
 		// CNI container uses image override.
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoCNI.Image, components.ComponentCalicoCNI.Version)))
@@ -416,6 +416,12 @@ var _ = Describe("Node rendering tests", func() {
 		mountBpffs := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "mount-bpffs")
 		Expect(mountBpffs.Image).To(Equal(calicoNodeImage))
 		Expect(mountBpffs.Command).To(Equal([]string{"calico-node", "-init"}))
+
+		// Verify the mount-cgroupv2 image and command.
+		mountCgroupv2 := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "mount-cgroupv2")
+		Expect(mountCgroupv2.Image).To(Equal(calicoNodeImage))
+		Expect(mountCgroupv2.Command).To(Equal([]string{"nsenter", "--cgroup=/node-proc/1/ns/cgroup",
+			"--mount=/node-proc/1/ns/mnt", "mount", "-t", "cgroup2", "none", "/run/calico/cgroup"}))
 
 		// Verify env
 		expectedNodeEnv := []corev1.EnvVar{
@@ -489,6 +495,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
 			{Name: "sys-fs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
 			{Name: "bpffs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
+			{Name: "proc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc"}}},
 			{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 			{
 				Name: certificatemanagement.TrustedCertConfigMapName,

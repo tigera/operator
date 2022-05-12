@@ -1,3 +1,17 @@
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package certificatemanagement
 
 import (
@@ -83,10 +97,16 @@ func (k *KeyPair) VolumeMountKeyFilePath() string {
 	return fmt.Sprintf("/%s/%s", k.GetName(), corev1.TLSPrivateKeyKey)
 }
 
-func (k *KeyPair) VolumeMount() corev1.VolumeMount {
+func (k *KeyPair) VolumeMount(osType rmeta.OSType) corev1.VolumeMount {
+	var mountPath string
+	if osType == rmeta.OSTypeWindows {
+		mountPath = fmt.Sprintf("c:/%s", k.GetName())
+	} else {
+		mountPath = fmt.Sprintf("/%s", k.GetName())
+	}
 	return corev1.VolumeMount{
 		Name:      k.GetName(),
-		MountPath: fmt.Sprintf("/%s", k.GetName()),
+		MountPath: mountPath,
 		ReadOnly:  true,
 	}
 }

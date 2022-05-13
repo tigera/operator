@@ -706,7 +706,6 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 
 	if c.bpfDataplaneEnabled() {
 		initContainers = append(initContainers, c.bpffsInitContainer())
-		initContainers = append(initContainers, c.cgroupv2InitContainer())
 	}
 
 	if c.runAsNonPrivileged() {
@@ -1011,6 +1010,10 @@ func (c *nodeComponent) bpffsInitContainer() corev1.Container {
 			// so that it outlives the init container.
 			MountPropagation: &bidirectional,
 		},
+		{
+			MountPath: "/node-proc",
+			Name:      "proc",
+		},
 	}
 
 	return corev1.Container{
@@ -1021,27 +1024,6 @@ func (c *nodeComponent) bpffsInitContainer() corev1.Container {
 			Privileged: ptr.BoolToPtr(true),
 		},
 		Command: []string{"calico-node", "-init"},
-	}
-}
-
-// cgroupv2InitContainer creates an init container that enters the cgroup and mount namespace of the process
-// with PID 1 running on a host to allow felix running in calico-node access the root of cgroup namespace.
-// This is needed by felix to attach CTLB programs and implement k8s services correctly.
-func (c *nodeComponent) cgroupv2InitContainer() corev1.Container {
-	cgroupv2VolumeMounts := []corev1.VolumeMount{
-		{MountPath: "/node-proc", Name: "proc"},
-	}
-
-	return corev1.Container{
-		Name:         "mount-cgroupv2",
-		Image:        c.nodeImage,
-		VolumeMounts: cgroupv2VolumeMounts,
-		SecurityContext: &corev1.SecurityContext{
-			Privileged: ptr.BoolToPtr(true),
-		},
-		Command: []string{"nsenter",
-			"--cgroup=/node-proc/1/ns/cgroup", "--mount=/node-proc/1/ns/mnt",
-			"mount", "-t", "cgroup2", "none", "/run/calico/cgroup"},
 	}
 }
 

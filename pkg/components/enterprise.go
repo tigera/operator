@@ -152,7 +152,7 @@ var (
 
 	ComponentPacketCapture = component{
 		Version: "master",
-		Image:   "tigera/packetcapture-api",
+		Image:   "tigera/packetcapture",
 	}
 
 	ComponentL7Collector = component{

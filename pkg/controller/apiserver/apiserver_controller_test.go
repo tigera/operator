@@ -200,7 +200,7 @@ var _ = Describe("apiserver controller tests", func() {
 						{Image: "tigera/cnx-apiserver", Digest: "sha256:apiserverhash"},
 						{Image: "tigera/cnx-queryserver", Digest: "sha256:queryserverhash"},
 						{Image: "tigera/key-cert-provisioner", Digest: "sha256:calicocsrinithash"},
-						{Image: "tigera/packetcapture-api", Digest: "sha256:packetcapturehash"},
+						{Image: "tigera/packetcapture", Digest: "sha256:packetcapturehash"},
 					},
 				},
 			})).ToNot(HaveOccurred())

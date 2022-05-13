@@ -175,7 +175,7 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index .Components "packetcapture-api" }}
+{{ with index .Components "packetcapture" }}
 	ComponentPacketCapture = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",

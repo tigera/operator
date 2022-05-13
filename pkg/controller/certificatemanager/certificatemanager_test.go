@@ -294,7 +294,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			Expect(volume.VolumeSource.Secret.SecretName).To(Equal(appSecretName))
 
 			By("verifying the volume mount is correct")
-			mount := keyPair.VolumeMount()
+			mount := keyPair.VolumeMount(rmeta.OSTypeLinux)
 			Expect(mount.MountPath).To(Equal("/" + appSecretName))
 			Expect(mount.Name).To(Equal(appSecretName))
 
@@ -321,7 +321,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			Expect(volume.VolumeSource.EmptyDir).NotTo(BeNil())
 
 			By("verifying the volume mount is correct")
-			mount := keyPair.VolumeMount()
+			mount := keyPair.VolumeMount(rmeta.OSTypeLinux)
 			Expect(mount.MountPath).To(Equal("/" + appSecretName))
 			Expect(mount.Name).To(Equal(appSecretName))
 
@@ -361,7 +361,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			Expect(volume.VolumeSource.Secret.SecretName).To(Equal(appSecretName))
 
 			By("verifying the volume mount is correct")
-			mount := keyPair.VolumeMount()
+			mount := keyPair.VolumeMount(rmeta.OSTypeLinux)
 			Expect(mount.MountPath).To(Equal("/" + appSecretName))
 			Expect(mount.Name).To(Equal(appSecretName))
 
@@ -409,7 +409,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			Expect(volume.VolumeSource.Secret.SecretName).To(Equal(appSecretName))
 
 			By("verifying the volume mount is correct")
-			mount := keyPair.VolumeMount()
+			mount := keyPair.VolumeMount(rmeta.OSTypeLinux)
 			Expect(mount.MountPath).To(Equal("/" + appSecretName))
 			Expect(mount.Name).To(Equal(appSecretName))
 
@@ -466,7 +466,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 					},
 				},
 			}))
-			Expect(trustedBundle.VolumeMount()).To(Equal(corev1.VolumeMount{
+			Expect(trustedBundle.VolumeMount(rmeta.OSTypeLinux)).To(Equal(corev1.VolumeMount{
 				Name:      certificatemanagement.TrustedCertConfigMapName,
 				MountPath: certificatemanagement.TrustedCertVolumeMountPath,
 				ReadOnly:  true,

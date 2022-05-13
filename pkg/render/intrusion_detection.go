@@ -1328,8 +1328,8 @@ func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 							},
 							Command: []string{"/anomaly-detection-api"},
 							VolumeMounts: []corev1.VolumeMount{
-								c.cfg.TrustedCertBundle.VolumeMount(),
-								c.cfg.ADAPIServerCertSecret.VolumeMount(),
+								c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType()),
+								c.cfg.ADAPIServerCertSecret.VolumeMount(c.SupportedOSType()),
 								{
 									MountPath: adAPIStorageVolumePath,
 									Name:      adAPIStorageVolumeName,
@@ -1522,7 +1522,7 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 								MountPath: "/certs/es-ca.pem",
 								SubPath:   "es-ca.pem",
 							},
-							c.cfg.ADAPIServerCertSecret.VolumeMount(),
+							c.cfg.ADAPIServerCertSecret.VolumeMount(c.SupportedOSType()),
 						},
 					},
 				},

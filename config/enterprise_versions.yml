@@ -91,8 +91,8 @@ components:
   elasticsearch-metrics:
     image: tigera/elasticsearch-metrics
     version: master
-  packetcapture-api:
-    image: tigera/packetcapture-api
+  packetcapture:
+    image: tigera/packetcapture
     version: master
   # coreos-prometheus holds the version of prometheus built for tigera/prometheus,
   # which prometheus operator uses to validate.

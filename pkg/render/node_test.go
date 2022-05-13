@@ -404,7 +404,7 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(calicoNodeImage))
 
 		// Validate correct number of init containers.
-		Expect(len(ds.Spec.Template.Spec.InitContainers)).To(Equal(4))
+		Expect(len(ds.Spec.Template.Spec.InitContainers)).To(Equal(3))
 
 		// CNI container uses image override.
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoCNI.Image, components.ComponentCalicoCNI.Version)))
@@ -416,12 +416,6 @@ var _ = Describe("Node rendering tests", func() {
 		mountBpffs := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "mount-bpffs")
 		Expect(mountBpffs.Image).To(Equal(calicoNodeImage))
 		Expect(mountBpffs.Command).To(Equal([]string{"calico-node", "-init"}))
-
-		// Verify the mount-cgroupv2 image and command.
-		mountCgroupv2 := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "mount-cgroupv2")
-		Expect(mountCgroupv2.Image).To(Equal(calicoNodeImage))
-		Expect(mountCgroupv2.Command).To(Equal([]string{"nsenter", "--cgroup=/node-proc/1/ns/cgroup",
-			"--mount=/node-proc/1/ns/mnt", "mount", "-t", "cgroup2", "none", "/run/calico/cgroup"}))
 
 		// Verify env
 		expectedNodeEnv := []corev1.EnvVar{

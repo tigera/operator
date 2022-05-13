@@ -705,7 +705,7 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(cli.Delete(ctx, kbSecret)).NotTo(HaveOccurred())
 
 					By("creating new ES and KB secrets with an old invalid DNS name")
-					kbSecret, err = secret.CreateTLSSecret(nil,
+					_, err = secret.CreateTLSSecret(nil,
 						render.TigeraKibanaCertSecret, common.OperatorNamespace(), "tls.key", "tls.crt",
 						rmeta.DefaultCertificateDuration, nil, "tigera-secure-kb-http.tigera-elasticsearch.svc",
 					)
@@ -1515,7 +1515,7 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 	Expect(err).NotTo(HaveOccurred())
 	esPublic, err := certificateManager.GetOrCreateKeyPair(cli, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{render.TigeraElasticsearchInternalCertSecret})
 	Expect(err).NotTo(HaveOccurred())
-	cli.Create(context.Background(), esPublic.Secret(common.OperatorNamespace()))
+	Expect(cli.Create(context.Background(), esPublic.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 	var replicas int32 = 2
 	cfg := &render.ElasticsearchConfiguration{
@@ -1568,14 +1568,6 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 		}),
 	).ShouldNot(HaveOccurred())
 	Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: esMetricsUsrSecretObjMeta})).ShouldNot(HaveOccurred())
-}
-
-func toSecrets(objs []client.Object) []*corev1.Secret {
-	var secrets []*corev1.Secret
-	for _, o := range objs {
-		secrets = append(secrets, o.(*corev1.Secret))
-	}
-	return secrets
 }
 
 func createPubSecret(name string, ns string, bytes []byte, certName string) client.Object {

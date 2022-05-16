@@ -168,7 +168,7 @@ func (m *statusManager) updateStatus() {
 		}
 
 		if m.IsProgressing() {
-			m.setProgressing(operator.ResourceNotReady, m.progressingMessage())
+			m.setProgressing(string(operator.ResourceNotReady), m.progressingMessage())
 		} else {
 			m.clearProgressing()
 		}
@@ -184,7 +184,7 @@ func (m *statusManager) updateStatus() {
 		// If we've been given an explicit degraded reason then it should be reported even if readyToMonitor is false,
 		// as this degraded reason may be the reason why we're not ready to monitor.
 		if m.isExplicitlyDegraded() {
-			m.setDegraded(operator.PodFailure, fmt.Sprintf("%s - %s", m.degradedReason(), m.degradedMessage()))
+			m.setDegraded(string(operator.PodFailure), fmt.Sprintf("%s - %s", m.degradedReason(), m.degradedMessage()))
 		} else {
 			m.clearDegraded()
 		}

@@ -769,7 +769,7 @@ func (m *statusManager) clearDegraded() {
 	defer m.lock.Unlock()
 
 	conditions := []operator.TigeraStatusCondition{
-		{Type: operator.ComponentDegraded, Status: operator.ConditionFalse, Reason: string(operator.NotApplicable), Message: "Not Available"},
+		{Type: operator.ComponentDegraded, Status: operator.ConditionFalse, Reason: string(operator.NotAvailable), Message: "Not Available"},
 	}
 	m.set(true, conditions...)
 }
@@ -789,7 +789,7 @@ func (m *statusManager) clearAvailable() {
 	defer m.lock.Unlock()
 
 	conditions := []operator.TigeraStatusCondition{
-		{Type: operator.ComponentAvailable, Status: operator.ConditionFalse, Reason: "NotAvailable", Message: "Not Available"},
+		{Type: operator.ComponentAvailable, Status: operator.ConditionFalse, Reason: string(operator.NotAvailable), Message: "Not Available"},
 	}
 	m.set(true, conditions...)
 }

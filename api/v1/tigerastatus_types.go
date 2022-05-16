@@ -1,5 +1,5 @@
 /*
-
+Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -103,6 +103,27 @@ type TigeraStatusList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []TigeraStatus `json:"items"`
 }
+
+// TigeraStatusReason represents the reason for a particular condition. A reason may be one of the below.
+type TigeraStatusReason string
+
+const (
+	AllObjectsAvailable       TigeraStatusReason = "AllObjectsAvailable"
+	ResourceNotReady          TigeraStatusReason = "ResourceNotReady"
+	PodFailure                TigeraStatusReason = "PodFailure"
+	CertificateError          TigeraStatusReason = "CertificateError"
+	InvalidConfigurationError TigeraStatusReason = "InvalidConfigurationError"
+	ResourceCreateError       TigeraStatusReason = "ResourceCreateError"
+	ResourceMigrationError    TigeraStatusReason = "ResourceMigrationError"
+	ResourceNotFound          TigeraStatusReason = "ResourceNotFound"
+	ResourcePatchError        TigeraStatusReason = "ResourcePatchError"
+	ResourceReadError         TigeraStatusReason = "ResourceReadError"
+	ResourceScalingError      TigeraStatusReason = "ResourceScalingError"
+	ResourceUpdateError       TigeraStatusReason = "ResourceUpdateError"
+	ResourceValidationError   TigeraStatusReason = "ResourceValidationError"
+	NotApplicable             TigeraStatusReason = "NotApplicable"
+	NotAvailable              TigeraStatusReason = "NotAvailable"
+)
 
 func init() {
 	SchemeBuilder.Register(&TigeraStatus{}, &TigeraStatusList{})

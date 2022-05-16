@@ -666,9 +666,8 @@ type CertificateManagement struct {
 	SignatureAlgorithm string `json:"signatureAlgorithm,omitempty"`
 }
 
-// ConditionTypes describes the Installation CR's status condition type .
-//
-// One of: Ready, Degraded, Progressing
+// ConditionTypes describes Installation CR's status condition type.
+// One of: Ready, Degraded, Progressing.
 type ConditionType string
 
 const (

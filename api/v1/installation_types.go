@@ -605,7 +605,7 @@ type InstallationStatus struct {
 	// +optional
 	Computed *InstallationSpec `json:"computed,omitempty"`
 
-	// Conditions represents the latest observed set of conditions for this component. A component may be one or more of
+	// Conditions represents the latest observed set of conditions for the component. A component may be one or more of
 	// Ready, Progressing, Degraded or other customer types
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
@@ -665,9 +665,8 @@ type CertificateManagement struct {
 	SignatureAlgorithm string `json:"signatureAlgorithm,omitempty"`
 }
 
-// ConditionTypes describes the Installation CR's status condition type .
-//
-// One of: Ready, Degraded, Progressing
+// ConditionTypes describes Installation CR's status condition type.
+// One of: Ready, Degraded, Progressing.
 type ConditionType string
 
 const (

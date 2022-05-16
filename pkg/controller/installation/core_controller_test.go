@@ -1404,16 +1404,20 @@ var _ = Describe("Testing core-controller installation", func() {
 						{
 							Type:    operator.ComponentAvailable,
 							Status:  operator.ConditionTrue,
-							Reason:  "AllObjectsAvailable",
+							Reason:  string(operator.AllObjectsAvailable),
 							Message: "All Objects are available",
 						},
 						{
-							Type:   operator.ComponentProgressing,
-							Status: operator.ConditionFalse,
+							Type:    operator.ComponentProgressing,
+							Status:  operator.ConditionFalse,
+							Reason:  string(operator.NotApplicable),
+							Message: "Not Applicable",
 						},
 						{
-							Type:   operator.ComponentDegraded,
-							Status: operator.ConditionFalse,
+							Type:    operator.ComponentDegraded,
+							Status:  operator.ConditionFalse,
+							Reason:  string(operator.NotApplicable),
+							Message: "Not Applicable",
 						},
 					},
 				},
@@ -1433,15 +1437,19 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			Expect(cr.Status.Conditions[0].Type).To(Equal("Ready"))
 			Expect(string(cr.Status.Conditions[0].Status)).To(Equal(string(operator.ConditionTrue)))
-			Expect(cr.Status.Conditions[0].Reason).To(Equal("AllObjectsAvailable"))
+			Expect(cr.Status.Conditions[0].Reason).To(Equal(string(operator.AllObjectsAvailable)))
 			Expect(cr.Status.Conditions[0].Message).To(Equal("All Objects are available"))
 			Expect(cr.Status.Conditions[0].ObservedGeneration).To(Equal(int64(2)))
 
 			Expect(cr.Status.Conditions[1].Type).To(Equal("Progressing"))
 			Expect(string(cr.Status.Conditions[1].Status)).To(Equal(string(operator.ConditionFalse)))
+			Expect(cr.Status.Conditions[1].Reason).To(Equal(string(operator.NotApplicable)))
+			Expect(cr.Status.Conditions[1].Message).To(Equal("Not Applicable"))
 
 			Expect(cr.Status.Conditions[2].Type).To(Equal("Degraded"))
 			Expect(string(cr.Status.Conditions[2].Status)).To(Equal(string(operator.ConditionFalse)))
+			Expect(cr.Status.Conditions[2].Reason).To(Equal(string(operator.NotApplicable)))
+			Expect(cr.Status.Conditions[2].Message).To(Equal("Not Applicable"))
 		})
 
 		It("should reconcile with creating new installation status condition with one item", func() {
@@ -1454,7 +1462,7 @@ var _ = Describe("Testing core-controller installation", func() {
 						{
 							Type:    operator.ComponentAvailable,
 							Status:  operator.ConditionTrue,
-							Reason:  "AllObjectsAvailable",
+							Reason:  string(operator.AllObjectsAvailable),
 							Message: "All Objects are available",
 						},
 					},
@@ -1474,7 +1482,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			Expect(cr.Status.Conditions[0].Type).To(Equal("Ready"))
 			Expect(string(cr.Status.Conditions[0].Status)).To(Equal(string(operator.ConditionTrue)))
-			Expect(cr.Status.Conditions[0].Reason).To(Equal("AllObjectsAvailable"))
+			Expect(cr.Status.Conditions[0].Reason).To(Equal(string(operator.AllObjectsAvailable)))
 			Expect(cr.Status.Conditions[0].Message).To(Equal("All Objects are available"))
 		})
 		It("should reconcile with Empty tigera status condition", func() {
@@ -1506,19 +1514,19 @@ var _ = Describe("Testing core-controller installation", func() {
 						{
 							Type:    operator.ComponentAvailable,
 							Status:  operator.ConditionTrue,
-							Reason:  "AllObjectsAvailable",
+							Reason:  string(operator.AllObjectsAvailable),
 							Message: "All Objects are available",
 						},
 						{
 							Type:    operator.ComponentProgressing,
 							Status:  operator.ConditionTrue,
-							Reason:  "ProgressingOperatorTigera",
+							Reason:  string(operator.ResourceNotReady),
 							Message: "Progressing Installation.operator.tigera.io",
 						},
 						{
 							Type:    operator.ComponentDegraded,
 							Status:  operator.ConditionTrue,
-							Reason:  "ImageSetError",
+							Reason:  string(operator.ResourceUpdateError),
 							Message: "Error resolving ImageSet for components",
 						},
 					},
@@ -1538,21 +1546,21 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			Expect(cr.Status.Conditions[0].Type).To(Equal("Ready"))
 			Expect(string(cr.Status.Conditions[0].Status)).To(Equal(string(operator.ConditionTrue)))
-			Expect(cr.Status.Conditions[0].Reason).To(Equal("AllObjectsAvailable"))
+			Expect(cr.Status.Conditions[0].Reason).To(Equal(string(operator.AllObjectsAvailable)))
 			Expect(cr.Status.Conditions[0].Message).To(Equal("All Objects are available"))
 			Expect(cr.Status.Conditions[0].ObservedGeneration).To(Equal(int64(2)))
 
 			Expect(cr.Status.Conditions[1].Type).To(Equal("Progressing"))
 			Expect(string(cr.Status.Conditions[1].Status)).To(Equal(string(operator.ConditionTrue)))
-			Expect(cr.Status.Conditions[1].Reason).To(Equal("ProgressingOperatorTigera"))
+			Expect(cr.Status.Conditions[1].Reason).To(Equal(string(operator.ResourceNotReady)))
 			Expect(cr.Status.Conditions[1].Message).To(Equal("Progressing Installation.operator.tigera.io"))
-			Expect(cr.Status.Conditions[0].ObservedGeneration).To(Equal(int64(2)))
+			Expect(cr.Status.Conditions[1].ObservedGeneration).To(Equal(int64(2)))
 
 			Expect(cr.Status.Conditions[2].Type).To(Equal("Degraded"))
 			Expect(string(cr.Status.Conditions[2].Status)).To(Equal(string(operator.ConditionTrue)))
-			Expect(cr.Status.Conditions[2].Reason).To(Equal("ImageSetError"))
+			Expect(cr.Status.Conditions[2].Reason).To(Equal(string(operator.ResourceUpdateError)))
 			Expect(cr.Status.Conditions[2].Message).To(Equal("Error resolving ImageSet for components"))
-			Expect(cr.Status.Conditions[0].ObservedGeneration).To(Equal(int64(2)))
+			Expect(cr.Status.Conditions[2].ObservedGeneration).To(Equal(int64(2)))
 		})
 
 		It("should reconcile with Existing conditions and toggle Available to true & others to false", func() {
@@ -1565,16 +1573,20 @@ var _ = Describe("Testing core-controller installation", func() {
 						{
 							Type:    operator.ComponentAvailable,
 							Status:  operator.ConditionTrue,
-							Reason:  "AllObjectsAvailable",
+							Reason:  string(operator.AllObjectsAvailable),
 							Message: "All Objects are available",
 						},
 						{
-							Type:   operator.ComponentProgressing,
-							Status: operator.ConditionFalse,
+							Type:    operator.ComponentProgressing,
+							Status:  operator.ConditionFalse,
+							Reason:  string(operator.NotApplicable),
+							Message: "Not Applicable",
 						},
 						{
-							Type:   operator.ComponentDegraded,
-							Status: operator.ConditionFalse,
+							Type:    operator.ComponentDegraded,
+							Status:  operator.ConditionFalse,
+							Reason:  string(operator.NotApplicable),
+							Message: "Not Applicable",
 						},
 					},
 				},
@@ -1584,18 +1596,22 @@ var _ = Describe("Testing core-controller installation", func() {
 				{
 					Type:               "Ready",
 					Status:             metav1.ConditionStatus(operator.ConditionFalse),
+					Reason:             string(operator.NotApplicable),
+					Message:            "Not Applicable",
 					LastTransitionTime: metav1.NewTime(time.Now()),
 				},
 				{
 					Type:               "Progressing",
 					Status:             metav1.ConditionStatus(operator.ConditionTrue),
 					LastTransitionTime: metav1.NewTime(time.Now()),
-					Reason:             "ProgressingOperatorTigera",
-					Message:            "All Objects are available",
+					Reason:             string(operator.ResourceNotReady),
+					Message:            "All resources are not available",
 				},
 				{
 					Type:               "Degraded",
 					Status:             metav1.ConditionStatus(operator.ConditionFalse),
+					Reason:             string(operator.NotApplicable),
+					Message:            "Not Applicable",
 					LastTransitionTime: metav1.NewTime(time.Now()),
 				},
 			}
@@ -1612,19 +1628,21 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			Expect(cr.Status.Conditions[0].Type).To(Equal("Ready"))
 			Expect(string(cr.Status.Conditions[0].Status)).To(Equal(string(operator.ConditionTrue)))
-			Expect(cr.Status.Conditions[0].Reason).To(Equal("AllObjectsAvailable"))
+			Expect(cr.Status.Conditions[0].Reason).To(Equal(string(operator.AllObjectsAvailable)))
 			Expect(cr.Status.Conditions[0].Message).To(Equal("All Objects are available"))
 			Expect(cr.Status.Conditions[0].ObservedGeneration).To(Equal(int64(2)))
 
 			Expect(cr.Status.Conditions[1].Type).To(Equal("Progressing"))
 			Expect(string(cr.Status.Conditions[1].Status)).To(Equal(string(operator.ConditionFalse)))
-			Expect(cr.Status.Conditions[1].Reason).To(Equal(""))
-			Expect(cr.Status.Conditions[1].Message).To(Equal(""))
-			Expect(cr.Status.Conditions[0].ObservedGeneration).To(Equal(int64(2)))
+			Expect(cr.Status.Conditions[1].Reason).To(Equal(string(operator.NotApplicable)))
+			Expect(cr.Status.Conditions[1].Message).To(Equal("Not Applicable"))
+			Expect(cr.Status.Conditions[1].ObservedGeneration).To(Equal(int64(2)))
 
 			Expect(cr.Status.Conditions[2].Type).To(Equal("Degraded"))
 			Expect(string(cr.Status.Conditions[2].Status)).To(Equal(string(operator.ConditionFalse)))
-			Expect(cr.Status.Conditions[0].ObservedGeneration).To(Equal(int64(2)))
+			Expect(cr.Status.Conditions[2].Reason).To(Equal(string(operator.NotApplicable)))
+			Expect(cr.Status.Conditions[2].Message).To(Equal("Not Applicable"))
+			Expect(cr.Status.Conditions[2].ObservedGeneration).To(Equal(int64(2)))
 		})
 	})
 })

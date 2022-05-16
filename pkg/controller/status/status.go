@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -162,13 +162,13 @@ func (m *statusManager) updateStatus() {
 		// We've collected knowledge about the current state of the objects we're monitoring.
 		// Now, use that to update the TigeraStatus object for this manager.
 		if m.IsAvailable() {
-			m.setAvailable("All objects available", "")
+			m.setAvailable(string(operator.AllObjectsAvailable), "All objects available")
 		} else {
 			m.clearAvailable()
 		}
 
 		if m.IsProgressing() {
-			m.setProgressing("Not all resources are ready", m.progressingMessage())
+			m.setProgressing(string(operator.ResourceNotReady), m.progressingMessage())
 		} else {
 			m.clearProgressing()
 		}
@@ -184,7 +184,7 @@ func (m *statusManager) updateStatus() {
 		// If we've been given an explicit degraded reason then it should be reported even if readyToMonitor is false,
 		// as this degraded reason may be the reason why we're not ready to monitor.
 		if m.isExplicitlyDegraded() {
-			m.setDegraded(m.degradedReason(), m.degradedMessage())
+			m.setDegraded(string(operator.PodFailure), m.degradedReason()+m.degradedMessage())
 		} else {
 			m.clearDegraded()
 		}
@@ -402,8 +402,8 @@ func (m *statusManager) ClearDegraded() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.degraded = false
-	m.explicitDegradedReason = ""
-	m.explicitDegradedMsg = ""
+	m.explicitDegradedReason = string(operator.NotApplicable)
+	m.explicitDegradedMsg = "Not Applicable"
 	m.windowsUpgradeDegradedMsg = ""
 }
 
@@ -751,7 +751,7 @@ func (m *statusManager) clearDegraded() {
 	defer m.lock.Unlock()
 
 	conditions := []operator.TigeraStatusCondition{
-		{Type: operator.ComponentDegraded, Status: operator.ConditionFalse},
+		{Type: operator.ComponentDegraded, Status: operator.ConditionFalse, Reason: string(operator.NotApplicable), Message: "Not Available"},
 	}
 	m.set(true, conditions...)
 }
@@ -761,7 +761,7 @@ func (m *statusManager) clearProgressing() {
 	defer m.lock.Unlock()
 
 	conditions := []operator.TigeraStatusCondition{
-		{Type: operator.ComponentProgressing, Status: operator.ConditionFalse},
+		{Type: operator.ComponentProgressing, Status: operator.ConditionFalse, Reason: string(operator.NotAvailable), Message: "Not Available"},
 	}
 	m.set(true, conditions...)
 }
@@ -771,7 +771,7 @@ func (m *statusManager) clearAvailable() {
 	defer m.lock.Unlock()
 
 	conditions := []operator.TigeraStatusCondition{
-		{Type: operator.ComponentAvailable, Status: operator.ConditionFalse},
+		{Type: operator.ComponentAvailable, Status: operator.ConditionFalse, Reason: "NotAvailable", Message: "Not Available"},
 	}
 	m.set(true, conditions...)
 }

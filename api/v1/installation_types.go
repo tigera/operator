@@ -671,7 +671,12 @@ type CertificateManagement struct {
 type ConditionType string
 
 const (
-	ConditionTypeReady       ConditionType = "Ready"
-	ConditionTypeDegraded    ConditionType = "Degraded"
+	// ConditionTypeReady indicates that the component is healthy.
+	ConditionTypeReady ConditionType = "Ready"
+
+	// ConditionTypeDegraded indicated that the component is not operating as desired and user action is required..
+	ConditionTypeDegraded ConditionType = "Degraded"
+
+	// ConditionTypeProgressing indicates that the component is in the process of being installed or upgraded
 	ConditionTypeProgressing ConditionType = "Progressing"
 )

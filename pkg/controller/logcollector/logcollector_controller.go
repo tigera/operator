@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,6 +19,10 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -59,10 +63,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 
-	var licenseAPIReady = &utils.ReadyFlag{}
+	licenseAPIReady := &utils.ReadyFlag{}
+	policyWatchesReady := &utils.ReadyFlag{}
 
 	// create the reconciler
-	reconciler := newReconciler(mgr, opts, licenseAPIReady)
+	reconciler := newReconciler(mgr, opts, licenseAPIReady, policyWatchesReady)
 
 	// Create a new controller
 	controller, err := controller.New("logcollector-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
@@ -78,18 +83,23 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
 
+	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, policyWatchesReady, []types.NamespacedName{
+		{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace},
+	})
+
 	return add(mgr, controller)
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag, policyWatchesReady *utils.ReadyFlag) reconcile.Reconciler {
 	c := &ReconcileLogCollector{
-		client:          mgr.GetClient(),
-		scheme:          mgr.GetScheme(),
-		provider:        opts.DetectedProvider,
-		status:          status.New(mgr.GetClient(), "log-collector", opts.KubernetesVersion),
-		clusterDomain:   opts.ClusterDomain,
-		licenseAPIReady: licenseAPIReady,
+		client:             mgr.GetClient(),
+		scheme:             mgr.GetScheme(),
+		provider:           opts.DetectedProvider,
+		status:             status.New(mgr.GetClient(), "log-collector", opts.KubernetesVersion),
+		clusterDomain:      opts.ClusterDomain,
+		licenseAPIReady:    licenseAPIReady,
+		policyWatchesReady: policyWatchesReady,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
@@ -150,12 +160,13 @@ var _ reconcile.Reconciler = &ReconcileLogCollector{}
 type ReconcileLogCollector struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client          client.Client
-	scheme          *runtime.Scheme
-	provider        operatorv1.Provider
-	status          status.StatusManager
-	clusterDomain   string
-	licenseAPIReady *utils.ReadyFlag
+	client             client.Client
+	scheme             *runtime.Scheme
+	provider           operatorv1.Provider
+	status             status.StatusManager
+	clusterDomain      string
+	licenseAPIReady    *utils.ReadyFlag
+	policyWatchesReady *utils.ReadyFlag
 }
 
 // GetLogCollector returns the default LogCollector instance with defaults populated.
@@ -242,6 +253,24 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	if !utils.IsAPIServerReady(r.client, reqLogger) {
 		r.status.SetDegraded("Waiting for Tigera API server to be ready", "")
 		return reconcile.Result{}, nil
+	}
+
+	if !r.policyWatchesReady.IsReady() {
+		r.status.SetDegraded("Waiting for NetworkPolicy watches to be established", "")
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
+	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+		if errors.IsNotFound(err) {
+			log.Error(err, "Waiting for Tigera component policy tier to be created")
+			r.status.SetDegraded("Waiting for Tigera component policy tier to be created", err.Error())
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		} else {
+			log.Error(err, "Error querying Tigera component policy tier")
+			r.status.SetDegraded("Error querying Tigera component policy tier", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	if !r.licenseAPIReady.IsReady() {
@@ -381,31 +410,32 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	// Try to grab the ManagementClusterConnection CR because we need it for network policy rendering,
+	// as well as validation with respect to Syslog.logTypes.
+	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
+	if err != nil {
+		// Not finding a ManagementClusterConnection CR is not an error, as only a managed cluster will
+		// have this CR available, but we should communicate any other kind of error that we encounter.
+		if !errors.IsNotFound(err) {
+			r.status.SetDegraded(
+				"An error occurred while looking for a ManagementClusterConnection",
+				err.Error(),
+			)
+			return reconcile.Result{}, err
+		}
+	}
+	managedCluster := managementClusterConnection != nil
+
 	if instance.Spec.AdditionalStores != nil {
 		if instance.Spec.AdditionalStores.Syslog != nil {
 			syslog := instance.Spec.AdditionalStores.Syslog
-
-			// Try to grab the ManagementClusterConnection CR because we need it for some
-			// validation with respect to Syslog.logTypes.
-			managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
-			if err != nil {
-				// Not finding a ManagementClusterConnection CR is not an error, as only a managed cluster will
-				// have this CR available, but we should communicate any other kind of error that we encounter.
-				if !errors.IsNotFound(err) {
-					r.status.SetDegraded(
-						"An error occurred while looking for a ManagementClusterConnection",
-						err.Error(),
-					)
-					return reconcile.Result{}, err
-				}
-			}
 
 			// If the user set Syslog.logTypes, we need to ensure that they did not include
 			// the v1.SyslogLogIDSEvents option if this is a managed cluster (i.e.
 			// ManagementClusterConnection CR is present). This is because IDS events
 			// are only forwarded within a non-managed cluster (where LogStorage is present).
 			if syslog.LogTypes != nil {
-				if err == nil && managementClusterConnection != nil {
+				if err == nil && managedCluster {
 					for _, l := range syslog.LogTypes {
 						// Set status to degraded to warn user and let them fix the issue themselves.
 						if l == v1.SyslogLogIDSEvents {
@@ -464,6 +494,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		OSType:           rmeta.OSTypeLinux,
 		MetricsServerTLS: fluentdPrometheusTLS,
 		TrustedBundle:    trustedBundle,
+		ManagedCluster:   managedCluster,
 	}
 	// Render the fluentd component for Linux
 	comp := render.Fluentd(fluentdCfg)

@@ -17,6 +17,10 @@
 package render
 
 import (
+	"net"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/api/pkg/lib/numorstring"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -40,6 +44,7 @@ const (
 	GuardianClusterRoleName        = GuardianName
 	GuardianClusterRoleBindingName = GuardianName
 	GuardianDeploymentName         = GuardianName
+	GuardianEgressPolicyName       = networkpolicy.TigeraComponentPolicyPrefix + "guardian-egress"
 	GuardianServiceName            = "tigera-guardian"
 	GuardianVolumeName             = "tigera-guardian-certs"
 	GuardianSecretName             = "tigera-managed-cluster-connection"
@@ -48,6 +53,7 @@ const (
 
 var GuardianEntityRule = networkpolicy.CreateEntityRule(GuardianNamespace, GuardianDeploymentName, GuardianTargetPort)
 var GuardianSourceEntityRule = networkpolicy.CreateSourceEntityRule(GuardianNamespace, GuardianDeploymentName)
+var GuardianServiceSelectorEntityRule = networkpolicy.CreateServiceSelectorEntityRule(GuardianNamespace, GuardianName)
 
 func Guardian(cfg *GuardianConfiguration) Component {
 	return &GuardianComponent{
@@ -87,6 +93,13 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
 		CreateNamespace(GuardianNamespace, c.cfg.Installation.KubernetesProvider),
 	}
+
+	egressPolicy, err := c.guardianEgressAllowTigeraPolicy()
+	if err == nil {
+		objs = append(objs, egressPolicy)
+	}
+	objs = append(objs, guardianDefaultDenyAllowTigeraPolicy())
+
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(GuardianNamespace, c.cfg.PullSecrets...)...)...)
 	objs = append(objs,
 		c.serviceAccount(),
@@ -305,4 +318,65 @@ func (c *GuardianComponent) annotations() map[string]string {
 	annotations := c.cfg.TrustedCertBundle.HashAnnotations()
 	annotations["hash.operator.tigera.io/tigera-managed-cluster-connection"] = rmeta.AnnotationHash(c.cfg.TunnelSecret.Data)
 	return annotations
+}
+
+func (c *GuardianComponent) guardianEgressAllowTigeraPolicy() (*v3.NetworkPolicy, error) {
+	// Assumes address has the form "host:port", required by net.Dial for TCP.
+	host, port, err := net.SplitHostPort(c.cfg.URL)
+	if err != nil {
+		return nil, err
+	}
+	parsedPort, err := numorstring.PortFromString(port)
+	if err != nil {
+		return nil, err
+	}
+	parsedIp := net.ParseIP(host)
+
+	policy := &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GuardianEgressPolicyName,
+			Namespace: GuardianNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(GuardianName),
+			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
+		},
+	}
+
+	if parsedIp == nil {
+		// Assume host is a valid hostname.
+		policy.Spec.Egress = []v3.Rule{{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Domains: []string{host},
+				Ports:   []numorstring.Port{parsedPort},
+			},
+		}}
+	} else {
+		var netSuffix string
+		if parsedIp.To4() != nil {
+			netSuffix = "/32"
+		} else {
+			netSuffix = "/128"
+		}
+
+		policy.Spec.Egress = []v3.Rule{{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Nets:  []string{parsedIp.String() + netSuffix},
+				Ports: []numorstring.Port{parsedPort},
+			},
+		}}
+	}
+
+	return policy, nil
+}
+
+func guardianDefaultDenyAllowTigeraPolicy() *v3.NetworkPolicy {
+	return networkpolicy.AllowTigeraDefaultDeny(GuardianNamespace)
 }

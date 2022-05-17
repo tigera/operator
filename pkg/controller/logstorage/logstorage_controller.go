@@ -17,6 +17,13 @@ package logstorage
 import (
 	"context"
 	"fmt"
+	"time"
+
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
+	"k8s.io/client-go/kubernetes"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
@@ -68,23 +75,49 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 
-	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage", opts.KubernetesVersion), opts, utils.NewElasticClient)
+	// Create the reconciler
+	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage", opts.KubernetesVersion), opts, utils.NewElasticClient, &utils.ReadyFlag{})
 	if err != nil {
 		return err
 	}
 
-	return add(mgr, r)
+	// Create the controller
+	c, err := controller.New("log-storage-controller", mgr, controller.Options{Reconciler: r})
+	if err != nil {
+		return err
+	}
+
+	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		return fmt.Errorf("log-storage-controller failed to establish a connection to k8s: %w", err)
+	}
+
+	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, r.policyWatchesReady, []types.NamespacedName{
+		{Name: render.ElasticsearchPolicyName, Namespace: render.ElasticsearchNamespace},
+		{Name: render.EsCuratorPolicyName, Namespace: render.ElasticsearchNamespace},
+		{Name: render.KibanaPolicyName, Namespace: render.KibanaNamespace},
+		{Name: render.ECKOperatorPolicyName, Namespace: render.ECKOperatorNamespace},
+		{Name: render.ElasticsearchInternalPolicyName, Namespace: render.ElasticsearchNamespace},
+		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.ElasticsearchNamespace},
+		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.KibanaNamespace},
+		{Name: esgateway.PolicyName, Namespace: render.ElasticsearchNamespace},
+		{Name: esmetrics.ElasticsearchMetricsPolicyName, Namespace: render.ElasticsearchNamespace},
+		{Name: kubecontrollers.EsKubeControllerPolicyName, Namespace: common.CalicoNamespace},
+	})
+
+	return add(mgr, c)
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, opts options.AddOptions, esCliCreator utils.ElasticsearchClientCreator) (*ReconcileLogStorage, error) {
+func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, opts options.AddOptions, esCliCreator utils.ElasticsearchClientCreator, policyWatchesReady *utils.ReadyFlag) (*ReconcileLogStorage, error) {
 	c := &ReconcileLogStorage{
-		client:        cli,
-		scheme:        schema,
-		status:        statusMgr,
-		provider:      opts.DetectedProvider,
-		esCliCreator:  esCliCreator,
-		clusterDomain: opts.ClusterDomain,
+		client:             cli,
+		scheme:             schema,
+		status:             statusMgr,
+		provider:           opts.DetectedProvider,
+		esCliCreator:       esCliCreator,
+		clusterDomain:      opts.ClusterDomain,
+		policyWatchesReady: policyWatchesReady,
 	}
 
 	c.status.Run(opts.ShutdownContext)
@@ -92,14 +125,9 @@ func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.S
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
-	c, err := controller.New("log-storage-controller", mgr, controller.Options{Reconciler: r})
-	if err != nil {
-		return err
-	}
-
+func add(mgr manager.Manager, c controller.Controller) error {
 	// Watch for changes to primary resource LogStorage
-	err = c.Watch(&source.Kind{Type: &operatorv1.LogStorage{}}, &handler.EnqueueRequestForObject{})
+	err := c.Watch(&source.Kind{Type: &operatorv1.LogStorage{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
@@ -196,12 +224,13 @@ var _ reconcile.Reconciler = &ReconcileLogStorage{}
 type ReconcileLogStorage struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client        client.Client
-	scheme        *runtime.Scheme
-	status        status.StatusManager
-	provider      operatorv1.Provider
-	esCliCreator  utils.ElasticsearchClientCreator
-	clusterDomain string
+	client             client.Client
+	scheme             *runtime.Scheme
+	status             status.StatusManager
+	provider           operatorv1.Provider
+	esCliCreator       utils.ElasticsearchClientCreator
+	clusterDomain      string
+	policyWatchesReady *utils.ReadyFlag
 }
 
 // fillDefaults populates the default values onto an LogStorage object.
@@ -338,6 +367,30 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		}
 		r.status.SetDegraded("An error occurred while querying Installation", err.Error())
 		return reconcile.Result{}, err
+	}
+
+	// Ensure the API Server is ready, before rendering any objects that utilize the V3 API.
+	if !utils.IsAPIServerReady(r.client, reqLogger) {
+		r.status.SetDegraded("Waiting for Tigera API server to be ready", "")
+		return reconcile.Result{}, nil
+	}
+
+	if !r.policyWatchesReady.IsReady() {
+		r.status.SetDegraded("Waiting for NetworkPolicy watches to be established", "")
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
+	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+		if errors.IsNotFound(err) {
+			log.Error(err, "Waiting for Tigera component policy tier to be created")
+			r.status.SetDegraded("Waiting for Tigera component policy tier to be created", err.Error())
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		} else {
+			log.Error(err, "Error querying Tigera component policy tier")
+			r.status.SetDegraded("Error querying Tigera component policy tier", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	managementCluster, err := utils.GetManagementCluster(ctx, r.client)

@@ -17,7 +17,12 @@ package kubecontrollers_test
 import (
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/types"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -88,6 +93,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		{Name: "ES_CURATOR_BACKEND_CERT", Value: "/etc/ssl/elastic/ca.pem"},
 	}
 	var internalManagerTLSSecret certificatemanagement.KeyPairInterface
+	var expectedESPolicy = testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/es-kubecontrollers.json")
+	var expectedESPolicyForOpenshift = testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/es-kubecontrollers_ocp.json")
 
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
@@ -234,6 +241,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			version string
 			kind    string
 		}{
+			{name: kubecontrollers.EsKubeControllerPolicyName, ns: common.CalicoNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: kubecontrollers.EsKubeControllerServiceAccount, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: kubecontrollers.EsKubeControllerRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: kubecontrollers.EsKubeControllerRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -353,6 +361,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			version string
 			kind    string
 		}{
+			{name: kubecontrollers.EsKubeControllerPolicyName, ns: common.CalicoNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: kubecontrollers.EsKubeControllerServiceAccount, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: kubecontrollers.EsKubeControllerRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: kubecontrollers.EsKubeControllerRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -600,5 +609,48 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(depResource).ToNot(BeNil())
 		deployment := depResource.(*appsv1.Deployment)
 		rtest.ExpectNoK8sServiceEpEnvVars(deployment.Spec.Template.Spec)
+	})
+
+	Context("es-kube-controllers allow-tigera rendering", func() {
+		policyName := types.NamespacedName{Name: "allow-tigera.es-kube-controller-access", Namespace: "calico-system"}
+
+		getExpectedPolicy := func(scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
+			if scenario.ManagedCluster {
+				return nil
+			}
+
+			return testutils.SelectPolicyByProvider(scenario, expectedESPolicy, expectedESPolicyForOpenshift)
+		}
+
+		DescribeTable("should render allow-tigera policy",
+			func(scenario testutils.AllowTigeraScenario) {
+				if scenario.Openshift {
+					cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
+				} else {
+					cfg.Installation.KubernetesProvider = operatorv1.ProviderNone
+				}
+				if scenario.ManagedCluster {
+					cfg.ManagementClusterConnection = &operatorv1.ManagementClusterConnection{}
+				} else {
+					cfg.ManagementClusterConnection = nil
+				}
+				instance.Variant = operatorv1.TigeraSecureEnterprise
+				cfg.LogStorageExists = true
+				cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
+				cfg.ElasticsearchSecret = &testutils.ElasticsearchSecret
+				cfg.ManagerInternalSecret = internalManagerTLSSecret
+				cfg.EnabledESOIDCWorkaround = true
+				component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
+				resources, _ := component.Objects()
+
+				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+				expectedPolicy := getExpectedPolicy(scenario)
+				Expect(policy).To(Equal(expectedPolicy))
+			},
+			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
+			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
+			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
+		)
 	})
 })

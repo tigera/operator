@@ -83,7 +83,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
 
 	go utils.WaitToAddResourceWatch(controller, k8sClient, log, dpiAPIReady,
-		&v3.DeepPacketInspection{TypeMeta: metav1.TypeMeta{Kind: v3.KindDeepPacketInspection}})
+		[]client.Object{&v3.DeepPacketInspection{TypeMeta: metav1.TypeMeta{Kind: v3.KindDeepPacketInspection}}})
 
 	return add(mgr, controller)
 }

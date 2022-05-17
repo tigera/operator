@@ -19,6 +19,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+
 	ocsv1 "github.com/openshift/api/security/v1"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -49,6 +51,7 @@ const (
 	managerPort                  = 9443
 	managerTargetPort            = 9443
 	ManagerServiceName           = "tigera-manager"
+	ManagerDeploymentName        = "tigera-manager"
 	ManagerNamespace             = "tigera-manager"
 	ManagerServiceIP             = "localhost"
 	ManagerServiceAccount        = "tigera-manager"
@@ -77,6 +80,9 @@ const (
 	defaultVoltronPort       = "9443"
 	defaultTunnelVoltronPort = "9449"
 )
+
+var ManagerEntityRule = networkpolicy.CreateEntityRule(ManagerNamespace, ManagerDeploymentName, managerPort)
+var ManagerSourceEntityRule = networkpolicy.CreateSourceEntityRule(ManagerNamespace, ManagerDeploymentName)
 
 func Manager(cfg *ManagerConfiguration) (Component, error) {
 	var tlsSecrets []*corev1.Secret
@@ -212,10 +218,10 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-manager",
+			Name:      ManagerDeploymentName,
 			Namespace: ManagerNamespace,
 			Labels: map[string]string{
-				"k8s-app": "tigera-manager",
+				"k8s-app": ManagerDeploymentName,
 			},
 			Annotations: c.tlsAnnotations,
 		},
@@ -241,16 +247,16 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-manager",
+			Name:      ManagerDeploymentName,
 			Namespace: ManagerNamespace,
 			Labels: map[string]string{
-				"k8s-app": "tigera-manager",
+				"k8s-app": ManagerDeploymentName,
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"k8s-app": "tigera-manager",
+					"k8s-app": ManagerDeploymentName,
 				},
 			},
 			Replicas: c.cfg.Replicas,
@@ -500,7 +506,7 @@ func (c *managerComponent) managerService() *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-manager",
+			Name:      ManagerServiceName,
 			Namespace: ManagerNamespace,
 		},
 		Spec: corev1.ServiceSpec{
@@ -512,7 +518,7 @@ func (c *managerComponent) managerService() *corev1.Service {
 				},
 			},
 			Selector: map[string]string{
-				"k8s-app": "tigera-manager",
+				"k8s-app": ManagerDeploymentName,
 			},
 		},
 	}

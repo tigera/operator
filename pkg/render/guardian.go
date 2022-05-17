@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,19 +17,19 @@
 package render
 
 import (
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
+	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/components"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
-	"github.com/tigera/operator/pkg/render/common/secret"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 // The names of the components related to the Guardian related rendered objects.
@@ -43,7 +43,11 @@ const (
 	GuardianServiceName            = "tigera-guardian"
 	GuardianVolumeName             = "tigera-guardian-certs"
 	GuardianSecretName             = "tigera-managed-cluster-connection"
+	GuardianTargetPort             = 8080
 )
+
+var GuardianEntityRule = networkpolicy.CreateEntityRule(GuardianNamespace, GuardianDeploymentName, GuardianTargetPort)
+var GuardianSourceEntityRule = networkpolicy.CreateSourceEntityRule(GuardianNamespace, GuardianDeploymentName)
 
 func Guardian(cfg *GuardianConfiguration) Component {
 	return &GuardianComponent{

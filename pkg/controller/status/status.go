@@ -39,6 +39,14 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+const (
+	NotAvailable        string = "NotAvailable"
+	AllObjectsAvailable string = "AllObjectsAvailable"
+	ResourceNotReady    string = "ResourceNotReady"
+	PodFailure          string = "PodFailure"
+	NotApplicable       string = "NotApplicable"
+)
+
 var log = logf.Log.WithName("status_manager")
 
 // StatusManager manages the status for a single controller and component, and reports the status via
@@ -162,13 +170,13 @@ func (m *statusManager) updateStatus() {
 		// We've collected knowledge about the current state of the objects we're monitoring.
 		// Now, use that to update the TigeraStatus object for this manager.
 		if m.IsAvailable() {
-			m.setAvailable(string(operator.AllObjectsAvailable), "All objects available")
+			m.setAvailable(AllObjectsAvailable, "All objects available")
 		} else {
 			m.clearAvailable()
 		}
 
 		if m.IsProgressing() {
-			m.setProgressing(string(operator.ResourceNotReady), m.progressingMessage())
+			m.setProgressing(ResourceNotReady, m.progressingMessage())
 		} else {
 			m.clearProgressing()
 		}
@@ -184,7 +192,7 @@ func (m *statusManager) updateStatus() {
 		// If we've been given an explicit degraded reason then it should be reported even if readyToMonitor is false,
 		// as this degraded reason may be the reason why we're not ready to monitor.
 		if m.isExplicitlyDegraded() {
-			m.setDegraded(string(operator.PodFailure), m.degradedReason()+m.degradedMessage())
+			m.setDegraded(PodFailure, m.degradedReason()+m.degradedMessage())
 		} else {
 			m.clearDegraded()
 		}
@@ -402,7 +410,7 @@ func (m *statusManager) ClearDegraded() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.degraded = false
-	m.explicitDegradedReason = string(operator.NotApplicable)
+	m.explicitDegradedReason = NotApplicable
 	m.explicitDegradedMsg = "Not Applicable"
 	m.windowsUpgradeDegradedMsg = ""
 }
@@ -751,7 +759,7 @@ func (m *statusManager) clearDegraded() {
 	defer m.lock.Unlock()
 
 	conditions := []operator.TigeraStatusCondition{
-		{Type: operator.ComponentDegraded, Status: operator.ConditionFalse, Reason: string(operator.NotAvailable), Message: "Not Available"},
+		{Type: operator.ComponentDegraded, Status: operator.ConditionFalse, Reason: NotAvailable, Message: "Not Available"},
 	}
 	m.set(true, conditions...)
 }
@@ -761,7 +769,7 @@ func (m *statusManager) clearProgressing() {
 	defer m.lock.Unlock()
 
 	conditions := []operator.TigeraStatusCondition{
-		{Type: operator.ComponentProgressing, Status: operator.ConditionFalse, Reason: string(operator.NotAvailable), Message: "Not Available"},
+		{Type: operator.ComponentProgressing, Status: operator.ConditionFalse, Reason: NotAvailable, Message: "Not Available"},
 	}
 	m.set(true, conditions...)
 }
@@ -771,7 +779,7 @@ func (m *statusManager) clearAvailable() {
 	defer m.lock.Unlock()
 
 	conditions := []operator.TigeraStatusCondition{
-		{Type: operator.ComponentAvailable, Status: operator.ConditionFalse, Reason: string(operator.NotAvailable), Message: "Not Available"},
+		{Type: operator.ComponentAvailable, Status: operator.ConditionFalse, Reason: NotAvailable, Message: "Not Available"},
 	}
 	m.set(true, conditions...)
 }

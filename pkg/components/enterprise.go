@@ -23,27 +23,27 @@ var (
 	}
 
 	ComponentComplianceBenchmarker = component{
-		Version: "v3.12.2",
+		Version: "v3.12.3-1",
 		Image:   "tigera/compliance-benchmarker",
 	}
 
 	ComponentComplianceController = component{
-		Version: "v3.12.2",
+		Version: "v3.12.3-1",
 		Image:   "tigera/compliance-controller",
 	}
 
 	ComponentComplianceReporter = component{
-		Version: "v3.12.2",
+		Version: "v3.12.3-1",
 		Image:   "tigera/compliance-reporter",
 	}
 
 	ComponentComplianceServer = component{
-		Version: "v3.12.2",
+		Version: "v3.12.3-1",
 		Image:   "tigera/compliance-server",
 	}
 
 	ComponentComplianceSnapshotter = component{
-		Version: "v3.12.2",
+		Version: "v3.12.3-1",
 		Image:   "tigera/compliance-snapshotter",
 	}
 

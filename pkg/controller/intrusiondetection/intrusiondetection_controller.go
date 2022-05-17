@@ -19,6 +19,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"k8s.io/apimachinery/pkg/types"
+
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -62,11 +65,12 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 
-	var licenseAPIReady = &utils.ReadyFlag{}
-	var dpiAPIReady = &utils.ReadyFlag{}
+	licenseAPIReady := &utils.ReadyFlag{}
+	dpiAPIReady := &utils.ReadyFlag{}
+	policyWatchesReady := &utils.ReadyFlag{}
 
 	// create the reconciler
-	reconciler := newReconciler(mgr, opts, licenseAPIReady, dpiAPIReady)
+	reconciler := newReconciler(mgr, opts, licenseAPIReady, dpiAPIReady, policyWatchesReady)
 
 	// Create a new controller
 	controller, err := controller.New("intrusiondetection-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
@@ -85,19 +89,27 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	go utils.WaitToAddResourceWatch(controller, k8sClient, log, dpiAPIReady,
 		[]client.Object{&v3.DeepPacketInspection{TypeMeta: metav1.TypeMeta{Kind: v3.KindDeepPacketInspection}}})
 
+	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, policyWatchesReady, []types.NamespacedName{
+		{Name: render.IntrusionDetectionControllerPolicyName, Namespace: render.IntrusionDetectionNamespace},
+		{Name: render.IntrusionDetectionInstallerPolicyName, Namespace: render.IntrusionDetectionNamespace},
+		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.IntrusionDetectionNamespace},
+		{Name: dpi.DeepPacketInspectionPolicyName, Namespace: dpi.DeepPacketInspectionNamespace},
+	})
+
 	return add(mgr, controller)
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag, dpiAPIReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag, dpiAPIReady *utils.ReadyFlag, policyWatchesReady *utils.ReadyFlag) reconcile.Reconciler {
 	r := &ReconcileIntrusionDetection{
-		client:          mgr.GetClient(),
-		scheme:          mgr.GetScheme(),
-		provider:        opts.DetectedProvider,
-		status:          status.New(mgr.GetClient(), "intrusion-detection", opts.KubernetesVersion),
-		clusterDomain:   opts.ClusterDomain,
-		licenseAPIReady: licenseAPIReady,
-		dpiAPIReady:     dpiAPIReady,
+		client:             mgr.GetClient(),
+		scheme:             mgr.GetScheme(),
+		provider:           opts.DetectedProvider,
+		status:             status.New(mgr.GetClient(), "intrusion-detection", opts.KubernetesVersion),
+		clusterDomain:      opts.ClusterDomain,
+		licenseAPIReady:    licenseAPIReady,
+		dpiAPIReady:        dpiAPIReady,
+		policyWatchesReady: policyWatchesReady,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -191,13 +203,14 @@ var _ reconcile.Reconciler = &ReconcileIntrusionDetection{}
 type ReconcileIntrusionDetection struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client          client.Client
-	scheme          *runtime.Scheme
-	provider        operatorv1.Provider
-	status          status.StatusManager
-	clusterDomain   string
-	licenseAPIReady *utils.ReadyFlag
-	dpiAPIReady     *utils.ReadyFlag
+	client             client.Client
+	scheme             *runtime.Scheme
+	provider           operatorv1.Provider
+	status             status.StatusManager
+	clusterDomain      string
+	licenseAPIReady    *utils.ReadyFlag
+	dpiAPIReady        *utils.ReadyFlag
+	policyWatchesReady *utils.ReadyFlag
 }
 
 // Reconcile reads that state of the cluster for a IntrusionDetection object and makes changes based on the state read
@@ -238,6 +251,24 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	if !utils.IsAPIServerReady(r.client, reqLogger) {
 		r.status.SetDegraded("Waiting for Tigera API server to be ready", "")
 		return reconcile.Result{}, err
+	}
+
+	if !r.policyWatchesReady.IsReady() {
+		r.status.SetDegraded("Waiting for NetworkPolicy watches to be established", "")
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
+	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+		if errors.IsNotFound(err) {
+			log.Error(err, "Waiting for Tigera component policy tier to be created")
+			r.status.SetDegraded("Waiting for Tigera component policy tier to be created", err.Error())
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		} else {
+			log.Error(err, "Error querying Tigera component policy tier")
+			r.status.SetDegraded("Error querying Tigera component policy tier", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	if !r.licenseAPIReady.IsReady() {
@@ -421,6 +452,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		TyphaNodeTLS:       typhaNodeTLS,
 		PullSecrets:        pullSecrets,
 		Openshift:          r.provider == operatorv1.ProviderOpenShift,
+		ManagedCluster:     managementClusterConnection != nil,
 		HasNoLicense:       hasNoLicense,
 		HasNoDPIResource:   hasNoDPIResource,
 		ESClusterConfig:    esClusterConfig,

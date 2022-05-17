@@ -21,6 +21,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	"github.com/stretchr/testify/mock"
 
@@ -50,6 +51,7 @@ var _ = Describe("authentication controller tests", func() {
 		scheme     *runtime.Scheme
 		ctx        context.Context
 		mockStatus *status.MockStatus
+		readyFlag  *utils.ReadyFlag
 		idpSecret  *corev1.Secret
 		auth       *operatorv1.Authentication
 		replicas   int32
@@ -77,6 +79,33 @@ var _ = Describe("authentication controller tests", func() {
 		mockStatus.On("SetDegraded", mock.Anything, mock.Anything).Return()
 		mockStatus.On("ReadyToMonitor")
 
+		// Apply prerequisites for the basic reconcile to succeed.
+		Expect(cli.Create(ctx, &operatorv1.Installation{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "default",
+			},
+			Status: operatorv1.InstallationStatus{
+				Variant:  operatorv1.TigeraSecureEnterprise,
+				Computed: &operatorv1.InstallationSpec{},
+			},
+			Spec: operatorv1.InstallationSpec{
+				ControlPlaneReplicas: &replicas,
+				Variant:              operatorv1.TigeraSecureEnterprise,
+				Registry:             "some.registry.org/",
+			},
+		})).To(BeNil())
+		Expect(cli.Create(ctx, &operatorv1.APIServer{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+			Status:     operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady},
+		})).NotTo(HaveOccurred())
+		Expect(cli.Create(ctx, &v3.Tier{
+			ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
+		})).NotTo(HaveOccurred())
+		Expect(cli.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-dex"}})).ToNot(HaveOccurred())
+		readyFlag = &utils.ReadyFlag{}
+		readyFlag.MarkAsReady()
+
+		// Establish base specifications for context-sensitive resources to create.
 		idpSecret = &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      render.OIDCSecretName,
@@ -99,23 +128,7 @@ var _ = Describe("authentication controller tests", func() {
 
 	Context("OIDC connector config options", func() {
 		It("should set oidc defaults ", func() {
-			// Apply prerequisites for the basic reconcile to succeed.
-			Expect(cli.Create(ctx, &operatorv1.Installation{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "default",
-				},
-				Status: operatorv1.InstallationStatus{
-					Variant:  operatorv1.TigeraSecureEnterprise,
-					Computed: &operatorv1.InstallationSpec{},
-				},
-				Spec: operatorv1.InstallationSpec{
-					ControlPlaneReplicas: &replicas,
-					Variant:              operatorv1.TigeraSecureEnterprise,
-				},
-			})).ToNot(HaveOccurred())
-
 			Expect(cli.Create(ctx, idpSecret)).ToNot(HaveOccurred())
-			Expect(cli.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-dex"}})).ToNot(HaveOccurred())
 			auth.Spec.OIDC = &operatorv1.AuthenticationOIDC{
 				IssuerURL:      "https://example.com",
 				UsernameClaim:  "email",
@@ -127,7 +140,7 @@ var _ = Describe("authentication controller tests", func() {
 			Expect(cli.Create(ctx, auth)).ToNot(HaveOccurred())
 
 			// Reconcile
-			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, ""}
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 			authentication, err := utils.GetAuthentication(ctx, cli)
@@ -142,20 +155,7 @@ var _ = Describe("authentication controller tests", func() {
 
 	Context("image reconciliation", func() {
 		BeforeEach(func() {
-			Expect(cli.Create(ctx, &operatorv1.Installation{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "default",
-				},
-				Status: operatorv1.InstallationStatus{
-					Variant:  operatorv1.TigeraSecureEnterprise,
-					Computed: &operatorv1.InstallationSpec{},
-				},
-				Spec: operatorv1.InstallationSpec{
-					ControlPlaneReplicas: &replicas,
-					Variant:              operatorv1.TigeraSecureEnterprise,
-					Registry:             "some.registry.org/",
-				},
-			})).To(BeNil())
+			Expect(cli.Create(ctx, idpSecret)).ToNot(HaveOccurred())
 			Expect(cli.Create(ctx, &operatorv1.Authentication{
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Spec: operatorv1.AuthenticationSpec{
@@ -169,17 +169,16 @@ var _ = Describe("authentication controller tests", func() {
 					},
 				},
 			})).ToNot(HaveOccurred())
-			Expect(cli.Create(ctx, idpSecret)).ToNot(HaveOccurred())
-			Expect(cli.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-dex"}})).ToNot(HaveOccurred())
 		})
 
 		It("should use builtin images", func() {
 
 			r := ReconcileAuthentication{
-				client:   cli,
-				scheme:   scheme,
-				provider: operatorv1.ProviderNone,
-				status:   mockStatus,
+				client:             cli,
+				scheme:             scheme,
+				provider:           operatorv1.ProviderNone,
+				status:             mockStatus,
+				policyWatchesReady: readyFlag,
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -211,10 +210,11 @@ var _ = Describe("authentication controller tests", func() {
 			})).ToNot(HaveOccurred())
 
 			r := ReconcileAuthentication{
-				client:   cli,
-				scheme:   scheme,
-				provider: operatorv1.ProviderNone,
-				status:   mockStatus,
+				client:             cli,
+				scheme:             scheme,
+				provider:           operatorv1.ProviderNone,
+				status:             mockStatus,
+				policyWatchesReady: readyFlag,
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -237,6 +237,55 @@ var _ = Describe("authentication controller tests", func() {
 		})
 	})
 
+	Context("allow-tigera reconciliation", func() {
+		var r reconcile.Reconciler
+		BeforeEach(func() {
+			Expect(cli.Create(ctx, idpSecret)).ToNot(HaveOccurred())
+			Expect(cli.Create(ctx, &operatorv1.Authentication{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.AuthenticationSpec{
+					ManagerDomain: "https://example.com",
+					OIDC: &operatorv1.AuthenticationOIDC{
+						IssuerURL:      "https://example.com",
+						UsernameClaim:  "email",
+						GroupsClaim:    "group",
+						GroupsPrefix:   "g",
+						UsernamePrefix: "u",
+					},
+				},
+			})).ToNot(HaveOccurred())
+
+			mockStatus = &status.MockStatus{}
+			mockStatus.On("OnCRFound").Return()
+			r = &ReconcileAuthentication{
+				client:             cli,
+				scheme:             scheme,
+				provider:           operatorv1.ProviderNone,
+				status:             mockStatus,
+				policyWatchesReady: readyFlag,
+			}
+		})
+
+		It("should wait if API server is unavailable", func() {
+			utils.DeleteAPIServerAndExpectWait(ctx, cli, r, mockStatus)
+		})
+
+		It("should wait if allow-tigera tier is unavailable", func() {
+			utils.DeleteAllowTigeraTierAndExpectWait(ctx, cli, r, mockStatus)
+		})
+
+		It("should wait if policy watches are not ready", func() {
+			r = &ReconcileAuthentication{
+				client:             cli,
+				scheme:             scheme,
+				provider:           operatorv1.ProviderNone,
+				status:             mockStatus,
+				policyWatchesReady: &utils.ReadyFlag{},
+			}
+			utils.ExpectWaitForPolicyWatches(ctx, r, mockStatus)
+		})
+	})
+
 	const (
 		validCA       = "-----BEGIN CERTIFICATE-----\n-----END CERTIFICATE-----"
 		validPW       = "dc=example,dc=com"
@@ -247,21 +296,6 @@ var _ = Describe("authentication controller tests", func() {
 		attribute     = "uid"
 	)
 	DescribeTable("LDAP connector config options should be validated", func(ldap *operatorv1.AuthenticationLDAP, secretDN, secretPW, secretCA []byte, expectReconcilePass bool) {
-		// Apply prerequisites for the basic reconcile to succeed.
-		Expect(cli.Create(ctx, &operatorv1.Installation{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "default",
-			},
-			Status: operatorv1.InstallationStatus{
-				Variant:  operatorv1.TigeraSecureEnterprise,
-				Computed: &operatorv1.InstallationSpec{},
-			},
-			Spec: operatorv1.InstallationSpec{
-				ControlPlaneReplicas: &replicas,
-				Variant:              operatorv1.TigeraSecureEnterprise,
-			},
-		})).ToNot(HaveOccurred())
-
 		nameAttrEmpty := ldap.UserSearch.NameAttribute == ""
 		auth.Spec.LDAP = ldap
 		idpSecret.Name = render.LDAPSecretName
@@ -271,9 +305,8 @@ var _ = Describe("authentication controller tests", func() {
 			render.RootCASecretField: secretCA,
 		}
 		Expect(cli.Create(ctx, idpSecret)).ToNot(HaveOccurred())
-		Expect(cli.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-dex"}})).ToNot(HaveOccurred())
 		Expect(cli.Create(ctx, auth)).ToNot(HaveOccurred())
-		r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, ""}
+		r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag}
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		if expectReconcilePass {
 			Expect(err).ToNot(HaveOccurred())

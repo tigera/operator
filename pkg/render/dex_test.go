@@ -1,7 +1,28 @@
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package render_test
 
 import (
 	"fmt"
+
+	"k8s.io/apimachinery/pkg/types"
+
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/operator/pkg/render/testutils"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -26,6 +47,10 @@ import (
 
 var _ = Describe("dex rendering tests", func() {
 	const clusterName = "svc.cluster.local"
+
+	expectedDexPolicy := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/dex.json")
+	expectedDexOpenshiftPolicy := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/dex_ocp.json")
+
 	Context("dex is configured for oidc", func() {
 
 		const (
@@ -115,6 +140,8 @@ var _ = Describe("dex rendering tests", func() {
 				version string
 				kind    string
 			}{
+				{render.DexPolicyName, render.DexNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
+				{networkpolicy.TigeraComponentDefaultDenyPolicyName, render.DexNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
 				{render.DexObjectName, render.DexNamespace, "", "v1", "ServiceAccount"},
 				{render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment"},
 				{render.DexObjectName, render.DexNamespace, "", "v1", "Service"},
@@ -175,6 +202,8 @@ var _ = Describe("dex rendering tests", func() {
 				version string
 				kind    string
 			}{
+				{render.DexPolicyName, render.DexNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
+				{networkpolicy.TigeraComponentDefaultDenyPolicyName, render.DexNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
 				{render.DexObjectName, render.DexNamespace, "", "v1", "ServiceAccount"},
 				{render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment"},
 				{render.DexObjectName, render.DexNamespace, "", "v1", "Service"},
@@ -217,5 +246,33 @@ var _ = Describe("dex rendering tests", func() {
 			Expect(deploy.Spec.Template.Spec.Affinity).NotTo(BeNil())
 			Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("tigera-dex", "tigera-dex")))
 		})
+
+		Context("allow-tigera rendering", func() {
+			policyName := types.NamespacedName{Name: "allow-tigera.allow-tigera-dex", Namespace: "tigera-dex"}
+
+			getExpectedPolicy := func(scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
+				if scenario.ManagedCluster {
+					return nil
+				}
+
+				return testutils.SelectPolicyByProvider(scenario, expectedDexPolicy, expectedDexOpenshiftPolicy)
+			}
+
+			DescribeTable("should render allow-tigera policy",
+				func(scenario testutils.AllowTigeraScenario) {
+					cfg.Openshift = scenario.Openshift
+					component := render.Dex(cfg)
+					resources, _ := component.Objects()
+
+					policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+					expectedPolicy := getExpectedPolicy(scenario)
+					Expect(policy).To(Equal(expectedPolicy))
+				},
+				// Dex only renders in the presence of an Authentication CR, therefore does not have a config option for managed clusters.
+				Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
+				Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
+			)
+		})
+
 	})
 })

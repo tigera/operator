@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +16,9 @@ package esmetrics
 
 import (
 	"fmt"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -37,7 +40,11 @@ const (
 	ElasticsearchMetricsSecret          = "tigera-ee-elasticsearch-metrics-elasticsearch-access"
 	ElasticsearchMetricsServerTLSSecret = "tigera-ee-elasticsearch-metrics-tls"
 	ElasticsearchMetricsName            = "tigera-elasticsearch-metrics"
+	ElasticsearchMetricsPolicyName      = networkpolicy.TigeraComponentPolicyPrefix + "elasticsearch-metrics"
+	ElasticsearchMetricsPort            = 9081
 )
+
+var ESMetricsSourceEntityRule = networkpolicy.CreateSourceEntityRule(render.ElasticsearchNamespace, ElasticsearchMetricsName)
 
 func ElasticsearchMetrics(cfg *Config) render.Component {
 	return &elasticsearchMetrics{
@@ -77,9 +84,10 @@ func (e *elasticsearchMetrics) ResolveImages(is *operatorv1.ImageSet) error {
 }
 
 func (e *elasticsearchMetrics) Objects() (objsToCreate, objsToDelete []client.Object) {
-	toCreate := secret.ToRuntimeObjects(
-		secret.CopyToNamespace(render.ElasticsearchNamespace, e.cfg.ESMetricsCredsSecret)...,
-	)
+	toCreate := []client.Object{
+		e.allowTigeraPolicy(),
+	}
+	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(render.ElasticsearchNamespace, e.cfg.ESMetricsCredsSecret)...)...)
 	toCreate = append(toCreate, e.metricsService(), e.metricsDeployment(), e.serviceAccount())
 
 	return toCreate, objsToDelete
@@ -120,9 +128,9 @@ func (e *elasticsearchMetrics) metricsService() *corev1.Service {
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "metrics-port",
-					Port:       9081,
+					Port:       ElasticsearchMetricsPort,
 					Protocol:   corev1.ProtocolTCP,
-					TargetPort: intstr.FromInt(9081),
+					TargetPort: intstr.FromInt(ElasticsearchMetricsPort),
 				},
 			},
 		},
@@ -188,6 +196,44 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 					},
 				}),
 			}, e.cfg.ESConfig, []*corev1.Secret{e.cfg.ESMetricsCredsSecret, e.cfg.ESCertSecret}).(*corev1.PodTemplateSpec),
+		},
+	}
+}
+
+func (e *elasticsearchMetrics) allowTigeraPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      v3.EntityRule{},
+			Destination: networkpolicy.EsGatewayEntityRule,
+		},
+	}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, e.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift)
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ElasticsearchMetricsPolicyName,
+			Namespace: render.ElasticsearchNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:                  &networkpolicy.HighPrecedenceOrder,
+			Tier:                   networkpolicy.TigeraComponentTierName,
+			Selector:               networkpolicy.KubernetesAppSelector(ElasticsearchMetricsName),
+			ServiceAccountSelector: "",
+			Types:                  []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Ingress: []v3.Rule{
+				{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Source:   networkpolicy.PrometheusSourceEntityRule,
+					Destination: v3.EntityRule{
+						Ports: networkpolicy.Ports(ElasticsearchMetricsPort),
+					},
+				},
+			},
+			Egress: egressRules,
 		},
 	}
 }

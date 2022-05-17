@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@ package monitor
 
 import (
 	"context"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -74,11 +76,12 @@ var _ = Describe("Monitor controller tests", func() {
 
 		// Create an object we can use throughout the test to do the monitor reconcile loops.
 		r = ReconcileMonitor{
-			client:          cli,
-			scheme:          scheme,
-			provider:        operatorv1.ProviderNone,
-			status:          mockStatus,
-			prometheusReady: &utils.ReadyFlag{},
+			client:             cli,
+			scheme:             scheme,
+			provider:           operatorv1.ProviderNone,
+			status:             mockStatus,
+			prometheusReady:    &utils.ReadyFlag{},
+			policyWatchesReady: &utils.ReadyFlag{},
 		}
 
 		// We start off with a 'standard' installation, with nothing special
@@ -96,6 +99,15 @@ var _ = Describe("Monitor controller tests", func() {
 			},
 		})).To(BeNil())
 
+		// Create resources MonitorController depends on
+		Expect(cli.Create(ctx, &operatorv1.APIServer{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+			Status:     operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady},
+		})).To(BeNil())
+		Expect(cli.Create(ctx, &v3.Tier{
+			ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
+		})).To(BeNil())
+
 		// Apply the Monitor CR to the fake cluster.
 		Expect(cli.Create(ctx, &operatorv1.Monitor{
 			TypeMeta:   metav1.TypeMeta{Kind: "Monitor", APIVersion: "operator.tigera.io/v1"},
@@ -103,8 +115,9 @@ var _ = Describe("Monitor controller tests", func() {
 		})).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, render.CreateCertificateConfigMap("test", render.TyphaCAConfigMapName, common.OperatorNamespace()))).NotTo(HaveOccurred())
 
-		// Mark that the watch for prometheus resources was successful
+		// Mark that the watches were successful
 		r.prometheusReady.MarkAsReady()
+		r.policyWatchesReady.MarkAsReady()
 	})
 
 	Context("controller reconciliation", func() {
@@ -136,6 +149,47 @@ var _ = Describe("Monitor controller tests", func() {
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
+		})
+	})
+
+	Context("allow-tigera reconciliation", func() {
+		var readyFlag *utils.ReadyFlag
+		BeforeEach(func() {
+			mockStatus = &status.MockStatus{}
+			mockStatus.On("OnCRFound").Return()
+
+			readyFlag = &utils.ReadyFlag{}
+			readyFlag.MarkAsReady()
+
+			// Create an object we can use throughout the test to do the monitor reconcile loops.
+			r = ReconcileMonitor{
+				client:             cli,
+				scheme:             scheme,
+				provider:           operatorv1.ProviderNone,
+				status:             mockStatus,
+				prometheusReady:    readyFlag,
+				policyWatchesReady: readyFlag,
+			}
+		})
+
+		It("should wait if API server is unavailable", func() {
+			utils.DeleteAPIServerAndExpectWait(ctx, cli, &r, mockStatus)
+		})
+
+		It("should wait if allow-tigera tier is unavailable", func() {
+			utils.DeleteAllowTigeraTierAndExpectWait(ctx, cli, &r, mockStatus)
+		})
+
+		It("should wait if policy watches are not ready", func() {
+			r = ReconcileMonitor{
+				client:             cli,
+				scheme:             scheme,
+				provider:           operatorv1.ProviderNone,
+				status:             mockStatus,
+				prometheusReady:    readyFlag,
+				policyWatchesReady: &utils.ReadyFlag{},
+			}
+			utils.ExpectWaitForPolicyWatches(ctx, &r, mockStatus)
 		})
 	})
 

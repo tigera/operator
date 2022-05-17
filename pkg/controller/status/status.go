@@ -39,6 +39,14 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+const (
+	NotAvailable        string = "NotAvailable"
+	AllObjectsAvailable string = "AllObjectsAvailable"
+	ResourceNotReady    string = "ResourceNotReady"
+	PodFailure          string = "PodFailure"
+	NotApplicable       string = "NotApplicable"
+)
+
 var log = logf.Log.WithName("status_manager")
 
 // StatusManager manages the status for a single controller and component, and reports the status via
@@ -162,13 +170,13 @@ func (m *statusManager) updateStatus() {
 		// We've collected knowledge about the current state of the objects we're monitoring.
 		// Now, use that to update the TigeraStatus object for this manager.
 		if m.IsAvailable() {
-			m.setAvailable(string(operator.AllObjectsAvailable), "All objects available")
+			m.setAvailable(AllObjectsAvailable, "All objects available")
 		} else {
 			m.clearAvailable()
 		}
 
 		if m.IsProgressing() {
-			m.setProgressing(string(operator.ResourceNotReady), m.progressingMessage())
+			m.setProgressing(ResourceNotReady, m.progressingMessage())
 		} else {
 			m.clearProgressing()
 		}

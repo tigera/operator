@@ -758,8 +758,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Changes for updating installation status conditions
 	if request.Name == "calico" && request.Namespace == "" {
-		ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: "calico"}}
-		err := r.client.Get(context.TODO(), types.NamespacedName{Name: "calico"}, ts)
+		ts := &operator.TigeraStatus{}
+		err := r.client.Get(ctx, types.NamespacedName{Name: "calico"}, ts)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
@@ -1853,9 +1853,13 @@ func (r *ReconcileInstallation) updateInstallationStatus(instance *operator.Inst
 
 		if len(condition.Reason) > 0 {
 			ic.Reason = condition.Reason
+		} else {
+			ic.Reason = string(operator.NotAvailable)
 		}
 		if len(condition.Message) > 0 {
 			ic.Message = condition.Message
+		} else {
+			ic.Message = "Not Available"
 		}
 
 		for i, c := range instance.Status.Conditions {

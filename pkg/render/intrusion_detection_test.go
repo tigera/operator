@@ -19,7 +19,6 @@ import (
 	. "github.com/onsi/gomega"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
@@ -51,8 +50,8 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
-		adAPIKeyPair, err = certificatemanagement.NewKeyPair(rtest.CreateCertSecret(render.ADAPITLSSecretName, common.OperatorNamespace(), render.ADAPITLSSecretName), []string{""}, "")
-		Expect(err).NotTo(HaveOccurred())
+		secret, err := certificatemanagement.CreateSelfSignedSecret("", "", "", nil)
+		adAPIKeyPair = certificatemanagement.NewKeyPair(secret, []string{""}, "")
 		bundle = certificateManager.CreateTrustedBundle()
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.

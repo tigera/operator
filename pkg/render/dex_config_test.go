@@ -160,10 +160,6 @@ var _ = Describe("dex config tests", func() {
 						LocalObjectReference: corev1.LocalObjectReference{Name: render.DexObjectName}, Items: []corev1.KeyToPath{{Key: "config.yaml", Path: "config.yaml"}}}},
 				},
 				{
-					Name:         "tls",
-					VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{DefaultMode: &defaultMode, SecretName: render.DexTLSSecretName}},
-				},
-				{
 					Name:         "secrets",
 					VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{DefaultMode: &defaultMode, SecretName: idpSecret.Name, Items: []corev1.KeyToPath{{Key: "serviceAccountSecret", Path: "google-groups.json"}}}},
 				},
@@ -211,10 +207,6 @@ var _ = Describe("dex config tests", func() {
 						LocalObjectReference: corev1.LocalObjectReference{Name: render.DexObjectName}, Items: []corev1.KeyToPath{{Key: "config.yaml", Path: "config.yaml"}}}},
 				},
 				{
-					Name:         "tls",
-					VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{DefaultMode: &defaultMode, SecretName: render.DexTLSSecretName}},
-				},
-				{
 					Name:         "secrets",
 					VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{DefaultMode: &defaultMode, SecretName: ldapSecret.Name, Items: []corev1.KeyToPath{{Key: render.RootCASecretField, Path: "idp.pem"}}}},
 				},
@@ -242,10 +234,6 @@ var _ = Describe("dex config tests", func() {
 					Name: "config",
 					VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{Name: render.DexObjectName}, Items: []corev1.KeyToPath{{Key: "config.yaml", Path: "config.yaml"}}}},
-				},
-				{
-					Name:         "tls",
-					VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{DefaultMode: &defaultMode, SecretName: render.DexTLSSecretName}},
 				},
 				{
 					Name:         "secrets",

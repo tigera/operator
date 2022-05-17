@@ -410,7 +410,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 	BeforeEach(func() {
 		var err error
-		kp, err = certificatemanagement.NewKeyPair(rtest.CreateCertSecret(render.ManagerTLSSecretName, common.OperatorNamespace(), render.ManagerTLSSecretName), []string{""}, "")
+		secret, err := certificatemanagement.CreateSelfSignedSecret(render.ManagerTLSSecretName, common.OperatorNamespace(), render.ManagerTLSSecretName, nil)
+		Expect(err).NotTo(HaveOccurred())
+		kp = certificatemanagement.NewKeyPair(secret, []string{""}, "")
 		Expect(err).NotTo(HaveOccurred())
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())

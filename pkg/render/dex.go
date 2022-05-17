@@ -298,8 +298,8 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 		},
 		"web": map[string]interface{}{
 			"https":                   "0.0.0.0:5556",
-			"tlsCert":                 "/etc/dex/tls/tls.crt",
-			"tlsKey":                  "/etc/dex/tls/tls.key",
+			"tlsCert":                 c.cfg.TLSKeyPair.VolumeMountCertificateFilePath(),
+			"tlsKey":                  c.cfg.TLSKeyPair.VolumeMountKeyFilePath(),
 			"allowedOrigins":          []string{"*"},
 			"discoveryAllowedOrigins": []string{"*"},
 		},

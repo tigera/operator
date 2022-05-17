@@ -105,8 +105,12 @@ func (e *esGateway) Objects() (toCreate, toDelete []client.Object) {
 	toCreate = append(toCreate, e.esGatewayRoleBinding())
 	toCreate = append(toCreate, e.esGatewayServiceAccount())
 	toCreate = append(toCreate, e.esGatewayDeployment())
-	// This secret is used by the kube controllers and sent to managed clusters. It is also used by manifests in our docs.
-	toCreate = append(toCreate, render.CreateCertificateSecret(e.cfg.ESGatewayKeyPair.GetCertificatePEM(), elasticsearch.PublicCertSecret, common.OperatorNamespace()))
+	// The following secret is used by the kube controllers and sent to managed clusters. It is also used by manifests in our docs.
+	if e.cfg.ESGatewayKeyPair.UseCertificateManagement() {
+		toCreate = append(toCreate, render.CreateCertificateSecret(e.cfg.Installation.CertificateManagement.CACert, elasticsearch.PublicCertSecret, common.OperatorNamespace()))
+	} else {
+		toCreate = append(toCreate, render.CreateCertificateSecret(e.cfg.ESGatewayKeyPair.GetCertificatePEM(), elasticsearch.PublicCertSecret, common.OperatorNamespace()))
+	}
 	return toCreate, toDelete
 }
 

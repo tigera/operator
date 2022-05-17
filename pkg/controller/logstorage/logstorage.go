@@ -142,6 +142,23 @@ func (r *ReconcileLogStorage) createLogStorage(
 		}
 	}
 
+	var unusedTLSSecret *corev1.Secret
+	if install.CertificateManagement != nil {
+		// Eck requires us to provide a TLS secret for Kibana and Elasticsearch. It will also inspect that it has a
+		// certificate and private key. However, when certificate management is enabled, we do not want to use a
+		// private key stored in a secret. For this reason, we mount a dummy that the actual Elasticsearch and Kibana
+		// pods are never using.
+		unusedTLSSecret, err = utils.GetSecret(ctx, r.client, relasticsearch.UnusedCertSecret, common.OperatorNamespace())
+		if unusedTLSSecret == nil {
+			unusedTLSSecret, err = certificatemanagement.CreateSelfSignedSecret(relasticsearch.UnusedCertSecret, common.OperatorNamespace(), relasticsearch.UnusedCertSecret, []string{})
+			unusedTLSSecret.Data[corev1.TLSCertKey] = install.CertificateManagement.CACert
+		}
+		if err != nil {
+			r.status.SetDegraded(fmt.Sprintf("Failed to retrieve secret %s/%s", common.OperatorNamespace(), relasticsearch.UnusedCertSecret), err.Error())
+			return reconcile.Result{}, false, finalizerCleanup, nil
+		}
+	}
+
 	var components []render.Component
 
 	logStorageCfg := &render.ElasticsearchConfiguration{
@@ -164,6 +181,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 		BaseURL:                     baseURL,
 		ElasticLicenseType:          esLicenseType,
 		TrustedBundle:               trustedBundle,
+		UnusedTLSSecret:             unusedTLSSecret,
 	}
 
 	component := render.LogStorage(logStorageCfg)
@@ -179,7 +197,10 @@ func (r *ReconcileLogStorage) createLogStorage(
 			Namespace:       render.ElasticsearchNamespace,
 			ServiceAccounts: []string{render.ElasticsearchName},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-				rcertificatemanagement.NewKeyPairOption(elasticKeyPair, true, true),
+				// We do not want to delete the secret from the tigera-elasticsearch namespace when CertificateManagement is
+				// enabled. Instead, it will be replaced with a TLS secret that serves merely to pass ECK's validation
+				// checks.
+				rcertificatemanagement.NewKeyPairOption(elasticKeyPair, true, elasticKeyPair != nil && !elasticKeyPair.UseCertificateManagement()),
 			},
 			TrustedBundle: trustedBundle,
 		}),
@@ -187,7 +208,10 @@ func (r *ReconcileLogStorage) createLogStorage(
 			Namespace:       render.KibanaNamespace,
 			ServiceAccounts: []string{render.KibanaName},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-				rcertificatemanagement.NewKeyPairOption(kibanaKeyPair, true, true),
+				// We do not want to delete the secret from the tigera-elasticsearch when CertificateManagement is
+				// enabled. Instead, it will be replaced with a TLS secret that serves merely to pass ECK's validation
+				// checks.
+				rcertificatemanagement.NewKeyPairOption(kibanaKeyPair, true, kibanaKeyPair != nil && !kibanaKeyPair.UseCertificateManagement()),
 			},
 			TrustedBundle: trustedBundle,
 		}),

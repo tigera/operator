@@ -296,8 +296,12 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{render.EsManagerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
 					{render.EsManagerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
 					// Certificate management comes with two additional cluster role bindings:
-					{"tigera-elasticsearch:csr-creator", "", &rbacv1.ClusterRoleBinding{}, nil},
-					{"tigera-kibana:csr-creator", "", &rbacv1.ClusterRoleBinding{}, nil},
+					{relasticsearch.UnusedCertSecret, common.OperatorNamespace(), &corev1.Secret{}, nil},
+					{render.TigeraElasticsearchInternalCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+					{render.TigeraKibanaCertSecret, render.KibanaNamespace, &corev1.Secret{}, nil},
+				}
+				cfg.UnusedTLSSecret = &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.UnusedCertSecret, Namespace: common.OperatorNamespace()},
 				}
 				component := render.LogStorage(cfg)
 
@@ -324,7 +328,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{Name: "elastic-internal-transport-certificates", MountPath: "/csr"},
 				})
 				compareInitContainer(initContainers[2], "key-cert-elastic", []corev1.VolumeMount{
-					{Name: render.TigeraElasticsearchInternalCertSecret, MountPath: certificatemanagement.CSRCMountPath},
+					{Name: "elastic-internal-http-certificates", MountPath: certificatemanagement.CSRCMountPath},
 				})
 				compareInitContainer(initContainers[3], "key-cert-elastic-transport", []corev1.VolumeMount{
 					{Name: "elastic-internal-transport-certificates", MountPath: certificatemanagement.CSRCMountPath},

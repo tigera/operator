@@ -15,89 +15,11 @@
 package render
 
 import (
-	"bytes"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
-	"math/big"
-	"time"
-
+	"github.com/tigera/operator/pkg/common"
 	calicrypto "github.com/tigera/operator/pkg/crypto"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/openshift/library-go/pkg/crypto"
-	"github.com/tigera/operator/pkg/common"
 )
-
-// Voltron related constants.
-const (
-	VoltronDnsName      = "voltron"
-	VoltronKeySizeBits  = 2048
-	blockTypePrivateKey = "RSA PRIVATE KEY"
-	blockTypeCert       = "CERTIFICATE"
-)
-
-// VoltronTunnelSecret Creates a secret that will store the CA needed to generated certificates
-// for managed cluster registration
-func VoltronTunnelSecret() *corev1.Secret {
-	key, cert := createSelfSignedSecret("tigera-voltron", []string{VoltronDnsName})
-	return &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      VoltronTunnelSecretName,
-			Namespace: common.OperatorNamespace(),
-		},
-		Data: map[string][]byte{
-			corev1.TLSCertKey:       []byte(cert),
-			corev1.TLSPrivateKeyKey: []byte(key),
-		},
-	}
-}
-
-// Secrets to establish a tunnel between Voltron and Guardian
-// Differs from other secrets in the way that it needs a DNS name and KeyUsage.
-func createSelfSignedSecret(cn string, altNames []string) (string, string) {
-	template := template(cn, altNames)
-	privateKey, err := rsa.GenerateKey(rand.Reader, VoltronKeySizeBits)
-	if err != nil {
-		panic(err)
-	}
-	// Passing in template as parent, creates a self-signed cert.
-	cert, err := x509.CreateCertificate(rand.Reader, template, template, &privateKey.PublicKey, privateKey)
-	if err != nil {
-		panic(err)
-	}
-	// This will create a pem string for the privateKey and the cert
-	var keyPem bytes.Buffer
-	err = pem.Encode(&keyPem, &pem.Block{
-		Type:  blockTypePrivateKey,
-		Bytes: x509.MarshalPKCS1PrivateKey(privateKey)})
-	if err != nil {
-		panic(err)
-	}
-	var certPem bytes.Buffer
-	if err := pem.Encode(&certPem, &pem.Block{Type: blockTypeCert, Bytes: cert}); err != nil {
-		panic(err)
-	}
-	return keyPem.String(), certPem.String()
-}
-
-func template(cn string, altNames []string) *x509.Certificate {
-	return &x509.Certificate{
-		IsCA:                  true,
-		BasicConstraintsValid: true,
-		SerialNumber:          big.NewInt(1),
-		DNSNames:              altNames,
-		Subject:               pkix.Name{CommonName: cn},
-		NotBefore:             time.Now(),
-		// For now use the same lifetime as the other certs we generate. This will change when we implement rotation.
-		NotAfter: time.Now().AddDate(0, 0, crypto.DefaultCACertificateLifetimeInDays),
-		KeyUsage: x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign | x509.KeyUsageKeyEncipherment,
-	}
-}
 
 func CreateDexClientSecret() *corev1.Secret {
 	return &corev1.Secret{

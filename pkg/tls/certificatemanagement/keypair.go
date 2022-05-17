@@ -144,12 +144,12 @@ func (k *KeyPair) GetIssuer() CertificateInterface {
 
 // NewKeyPair returns a KeyPair, which wraps a Secret object that contains a private key and a certificate. Whether certificate
 // management is configured or not, KeyPair returns the right InitContainer, Volumemount or Volume (when applicable).
-func NewKeyPair(secret *corev1.Secret, dnsNames []string, clusterDomain string) (KeyPairInterface, error) {
+func NewKeyPair(secret *corev1.Secret, dnsNames []string, clusterDomain string) KeyPairInterface {
 	return &KeyPair{
 		Name:           secret.Name,
 		PrivateKeyPEM:  secret.Data[corev1.TLSPrivateKeyKey],
 		CertificatePEM: secret.Data[corev1.TLSCertKey],
 		DNSNames:       dnsNames,
 		ClusterDomain:  clusterDomain,
-	}, nil
+	}
 }

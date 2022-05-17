@@ -751,9 +751,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
 
 	// Changes for updating installation status conditions
-	if request.Name == "calico" && request.Namespace == "" {
+	if request.Name == InstallationName && request.Namespace == "" {
 		ts := &operator.TigeraStatus{}
-		err := r.client.Get(ctx, types.NamespacedName{Name: "calico"}, ts)
+		err := r.client.Get(ctx, types.NamespacedName{Name: InstallationName}, ts)
 		if err != nil {
 			return reconcile.Result{}, err
 		}

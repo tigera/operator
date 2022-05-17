@@ -11,8 +11,8 @@ if [[ ! "${tag}" =~ ^cloud-v[0-9]+\.[0-9]+\.[0-9]+-[0-9]+$ ]]; then
 	exit 1
 fi
 
-if [[ ! "$(git rev-parse --abbrev-ref HEAD)" =~ (release-v*.*|master|cloud-dev|cloud-v*.*) ]]; then
-	echo "not on 'master', 'cloud-dev', 'cloud-v*.*', or 'release-vX.Y'"
+if [[ ! "$(git rev-parse --abbrev-ref HEAD)" =~ (release-v*.*|master|cloud-dev|cloud-v*.*|staging) ]]; then
+	echo "not on 'master', 'cloud-dev', 'cloud-v*.*', 'staging', or 'release-vX.Y'"
 	exit 0
 fi
 
@@ -30,11 +30,6 @@ make release VERSION=${tag} BUILD_IMAGE=tigera-tesla/operator-cloud
 echo "Publish release ${tag}"
 make release-publish-images VERSION=${tag}
 make release-publish-images VERSION=${tag} BUILD_IMAGE=tigera-tesla/operator-cloud
-
-if [[ "$(git rev-parse --abbrev-ref HEAD)" =~ (cloud-*) ]]; then
-	echo "on 'cloud-dev' branch, do not push to RedHat for certification"
-	exit 0
-fi
 
 # skipping the remaining code because the operator-cloud won't be submitted to RedHat
 exit 0

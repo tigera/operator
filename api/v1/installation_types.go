@@ -607,6 +607,7 @@ type InstallationStatus struct {
 
 	// Conditions represents the latest observed set of conditions for the component. A component may be one or more of
 	// Ready, Progressing, Degraded or other customer types
+	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
@@ -670,7 +671,12 @@ type CertificateManagement struct {
 type ConditionType string
 
 const (
-	ConditionTypeReady       ConditionType = "Ready"
-	ConditionTypeDegraded    ConditionType = "Degraded"
+	// ConditionTypeReady indicates that the component is healthy.
+	ConditionTypeReady ConditionType = "Ready"
+
+	// ConditionTypeDegraded indicated that the component is not operating as desired and user action is required..
+	ConditionTypeDegraded ConditionType = "Degraded"
+
+	// ConditionTypeProgressing indicates that the component is in the process of being installed or upgraded
 	ConditionTypeProgressing ConditionType = "Progressing"
 )

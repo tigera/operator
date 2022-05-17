@@ -88,6 +88,8 @@ const (
 	CalicoFinalizer         = "tigera.io/operator-cleanup"
 )
 
+const InstallationName string = "calico"
+
 //// Node and Installation finalizer
 // There is a problem with tearing down the calico resources where removing the calico-node ClusterRoleBinding
 // will block the kube-controller pod from teminating because the CNI plugin no longer has permissions.
@@ -195,7 +197,7 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 	}
 
 	// Watch for changes to TigeraStatus.
-	err = c.Watch(&source.Kind{Type: &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: "calico"}}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: InstallationName}}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch calico Tigerastatus: %w", err)
 	}
@@ -756,8 +758,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Changes for updating installation status conditions
 	if request.Name == "calico" && request.Namespace == "" {
-		ts := &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: "calico"}}
-		err := r.client.Get(context.TODO(), types.NamespacedName{Name: "calico"}, ts)
+		ts := &operator.TigeraStatus{}
+		err := r.client.Get(ctx, types.NamespacedName{Name: "calico"}, ts)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
@@ -776,7 +778,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		// update Installation resource with existing install if it exists.
 		nc, err := convert.NeedsConversion(ctx, r.client)
 		if err != nil {
-			r.SetDegraded(operator.ResourceUpdateError, "Error checking for existing installation", err, reqLogger)
+			r.SetDegraded(operator.ResourceValidationError, "Error checking for existing installation", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 		if nc {
@@ -788,7 +790,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 					// to make sure we never back off retrying.
 					return reconcile.Result{RequeueAfter: 15 * time.Second}, nil
 				}
-				r.SetDegraded(operator.ResourceUpdateError, "Error converting existing installation", err, reqLogger)
+				r.SetDegraded(operator.ResourceValidationError, "Error converting existing installation", err, reqLogger)
 				return reconcile.Result{}, err
 			}
 			instance.Spec = utils.OverrideInstallationSpec(install.Spec, instance.Spec)
@@ -904,9 +906,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			log.Info("Rebooting to enable TigeraSecure controllers")
 			os.Exit(0)
 		} else if err != nil {
-			r.SetDegraded(operator.ResourceNotFound, "Error discovering Tigera Secure availability", err, reqLogger)
+			r.SetDegraded(operator.InternalServerError, "Error discovering Tigera Secure availability", err, reqLogger)
 		} else {
-			r.SetDegraded(operator.ResourceNotFound, "Cannot deploy Tigera Secure", fmt.Errorf("Missing Tigera Secure custom resource definitions"), reqLogger)
+			r.SetDegraded(operator.InternalServerError, "Cannot deploy Tigera Secure", fmt.Errorf("Missing Tigera Secure custom resource definitions"), reqLogger)
 		}
 
 		// Queue a retry. We don't want to watch the APIServer API since it might not exist and would cause
@@ -972,7 +974,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	certificateManager, err := certificatemanager.Create(r.client, &instance.Spec, r.clusterDomain)
 	if err != nil {
-		r.SetDegraded(operator.CertificateError, "Unable to create the Tigera CA", err, reqLogger)
+		r.SetDegraded(operator.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	var managerInternalTLSSecret certificatemanagement.KeyPairInterface
@@ -1274,7 +1276,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	if err = imageset.ResolveImages(imageSet, components...); err != nil {
-		r.SetDegraded(operator.ResourceUpdateError, "Error resolving ImageSet for components", err, reqLogger)
+		r.SetDegraded(operator.ResourceValidationError, "Error resolving ImageSet for components", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -1342,7 +1344,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		openshiftConfig := &configv1.Network{}
 		err = r.client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, openshiftConfig)
 		if err != nil {
-			r.SetDegraded(operator.ResourceUpdateError, "Unable to update OpenShift Network config: failed to read OpenShift network configuration", err, reqLogger)
+			r.SetDegraded(operator.ResourceReadError, "Unable to update OpenShift Network config: failed to read OpenShift network configuration", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
@@ -1416,14 +1418,9 @@ func calicoDirectoryExists() bool {
 	return err == nil
 }
 
-//func (r *ReconcileInstallation) SetDegraded(reason string, err error, log logr.Logger) {
-//	log.Error(err, reason)
-//	r.status.SetDegraded(reason, err.Error())
-//}
-
 func (r *ReconcileInstallation) SetDegraded(reason operator.TigeraStatusReason, message string, err error, log logr.Logger) {
-	log.Error(err, string(reason)+message)
-	r.status.SetDegraded(string(reason), message+err.Error())
+	log.WithValues(string(reason), message).Error(err, string(reason))
+	r.status.SetDegraded(string(reason), fmt.Sprintf("%s - Error: %s", message, err))
 }
 
 // GetOrCreateTyphaNodeTLSConfig reads and validates the CA ConfigMap and Secrets for
@@ -1840,9 +1837,13 @@ func (r *ReconcileInstallation) updateInstallationStatus(instance *operator.Inst
 
 		if len(condition.Reason) > 0 {
 			ic.Reason = condition.Reason
+		} else {
+			ic.Reason = string(operator.NotAvailable)
 		}
 		if len(condition.Message) > 0 {
 			ic.Message = condition.Message
+		} else {
+			ic.Message = "Not Available"
 		}
 
 		for i, c := range instance.Status.Conditions {

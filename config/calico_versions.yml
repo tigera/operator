@@ -1,18 +1,18 @@
-title: v3.21.4
+title: v3.21.5
 components:
   libcalico-go:
-    version: v3.21.4
+    version: v3.21.5
   typha:
-    version: v3.21.4
+    version: v3.21.5
   calico/node:
-    version: v3.21.4
+    version: v3.21.5
   calico/cni:
     version: v3.21.4
   calico/kube-controllers:
-    version: v3.21.4
+    version: v3.21.5
   flexvol:
-    version: v3.21.4
+    version: v3.21.5
   calico/apiserver:
-    version: v3.21.4
+    version: v3.21.5
   calico/windows-upgrade:
-    version: v3.21.4
+    version: v3.21.5

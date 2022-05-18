@@ -61,6 +61,9 @@ components:
   anomaly_detection_jobs:
     image: tigera/anomaly_detection_jobs
     version: master
+  anomaly-detection-api:
+    image: tigera/anomaly-detection-api
+    version: master
   compliance-controller:
     image: tigera/compliance-controller
     version: master
@@ -88,8 +91,8 @@ components:
   elasticsearch-metrics:
     image: tigera/elasticsearch-metrics
     version: master
-  packetcapture-api:
-    image: tigera/packetcapture-api
+  packetcapture:
+    image: tigera/packetcapture
     version: master
   # coreos-prometheus holds the version of prometheus built for tigera/prometheus,
   # which prometheus operator uses to validate.

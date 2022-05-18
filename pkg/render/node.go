@@ -1181,6 +1181,7 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
 		{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 		{Name: "FELIX_HEALTHENABLED", Value: "true"},
+		{Name: "FELIX_HEALTHPORT", Value: fmt.Sprintf("%d", c.cfg.FelixHealthPort)},
 		{
 			Name: "NODENAME",
 			ValueFrom: &corev1.EnvVarSource{

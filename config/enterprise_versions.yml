@@ -4,7 +4,7 @@ components:
     version: v3.12.2
   cnx-manager:
     image: tigera/cnx-manager
-    version: v3.12.2
+    version: v3.12.3-1
   voltron:
     image: tigera/voltron
     version: v3.12.2

@@ -824,7 +824,7 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 			// Volume for the bpffs itself, used by the main node container.
 			corev1.Volume{Name: "bpffs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
 			// Volume used by mount-cgroupv2 init container to access root cgroup name space of node.
-			corev1.Volume{Name: "proc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc"}}},
+			corev1.Volume{Name: "init-proc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc/1"}}},
 		)
 	}
 
@@ -968,8 +968,9 @@ func (c *nodeComponent) bpffsInitContainer() corev1.Container {
 			MountPropagation: &bidirectional,
 		},
 		{
-			MountPath: "/node-proc",
-			Name:      "proc",
+			MountPath: "/initproc",
+			Name:      "init-proc",
+			ReadOnly:  true,
 		},
 	}
 

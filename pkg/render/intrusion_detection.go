@@ -1261,7 +1261,10 @@ func (c *intrusionDetectionComponent) adAPIService() *corev1.Service {
 func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 	adAPIStorageVolumePath := "/storage"
 	adAPIStorageVolumeName := "volume-storage"
-
+	var initContainers []corev1.Container
+	if c.cfg.ADAPIServerCertSecret.UseCertificateManagement() {
+		initContainers = append(initContainers, c.cfg.ADAPIServerCertSecret.InitContainer(IntrusionDetectionNamespace))
+	}
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1303,6 +1306,7 @@ func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 							},
 						},
 					},
+					InitContainers: initContainers,
 					Containers: []corev1.Container{
 						{
 							Name:  ADAPIObjectName,

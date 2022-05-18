@@ -78,11 +78,11 @@ def print_issues_to_file(f, issues):
     f.write(u"\n")
 
 def calico_version():
-    v = yaml.load(file('config/calico_versions.yml', 'r'))
+    v = yaml.safe_load(open('config/calico_versions.yml', 'r'))
     return v['title']
 
 def enterprise_version():
-    v = yaml.load(file('config/enterprise_versions.yml', 'r'))
+    v = yaml.safe_load(open('config/enterprise_versions.yml', 'r'))
     return v['title']
 
 if __name__ == "__main__":

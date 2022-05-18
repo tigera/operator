@@ -59,19 +59,19 @@ components:
     version: v3.12.3-1
   compliance-controller:
     image: tigera/compliance-controller
-    version: v3.12.2
+    version: v3.12.3-1
   compliance-reporter:
     image: tigera/compliance-reporter
-    version: v3.12.2
+    version: v3.12.3-1
   compliance-snapshotter:
     image: tigera/compliance-snapshotter
-    version: v3.12.2
+    version: v3.12.3-1
   compliance-server:
     image: tigera/compliance-server
-    version: v3.12.2
+    version: v3.12.3-1
   compliance-benchmarker:
     image: tigera/compliance-benchmarker
-    version: v3.12.2
+    version: v3.12.3-1
   guardian:
     image: tigera/guardian
     version: v3.12.2

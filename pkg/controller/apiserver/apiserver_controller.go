@@ -19,6 +19,9 @@ import (
 	"fmt"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -42,6 +45,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
+
+const APIServerName string = "apiserver"
 
 var log = logf.Log.WithName("controller_apiserver")
 
@@ -135,6 +140,12 @@ func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 		return fmt.Errorf("apiserver-controller failed to watch ImageSet: %w", err)
 	}
 
+	// Watch for changes to TigeraStatus.
+	err = c.Watch(&source.Kind{Type: &operatorv1.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: APIServerName}}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("apiserver-controller failed to watch apiserver Tigerastatus: %w", err)
+	}
+
 	log.V(5).Info("Controller created and Watches setup")
 	return nil
 }
@@ -177,6 +188,21 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
+
+	// Changes for updating apiserver status conditions
+	if request.Name == APIServerName && request.Namespace == "" {
+		ts := &operatorv1.TigeraStatus{}
+		err := r.client.Get(ctx, types.NamespacedName{Name: APIServerName}, ts)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+		r.status.UpdateStatusCondition(instance.Status.Conditions, ts.Status.Conditions, instance.GetGeneration())
+		if err := r.client.Status().Update(ctx, instance); err != nil {
+			log.WithValues("reason", err).Info("Failed to create apiserver status conditions.")
+			return reconcile.Result{}, err
+		}
+		return reconcile.Result{}, nil
+	}
 
 	// Query for the installation object.
 	variant, network, err := utils.GetInstallation(context.Background(), r.client)

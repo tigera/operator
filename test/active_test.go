@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -72,7 +72,8 @@ var _ = Describe("pkg/active with apiserver", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "calico-system"},
 			Spec:       corev1.NamespaceSpec{},
 		}
-		c.Delete(context.Background(), ns)
+		err := c.Delete(context.Background(), ns)
+		Expect(err).NotTo(HaveOccurred())
 		// Validate the calico-system namespace is deleted using an unstructured type.
 		// This hits the API server directly instead of using the client cache.
 		// This should help with flaky tests.

@@ -83,7 +83,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 		Expect(batchv1beta.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
-		cli = fake.NewFakeClientWithScheme(scheme)
+		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
 
 		installation = &operatorv1.InstallationSpec{}
 		certificateManager, err = certificatemanager.Create(cli, installation, clusterDomain)
@@ -105,6 +105,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		legacyCryptoCA, err := tls.MakeCA(rmeta.TigeraOperatorCAIssuerPrefix + "@some-hash")
+		Expect(err).NotTo(HaveOccurred())
 		expiredLegacySecret, err = secret.CreateTLSSecret(legacyCryptoCA, appSecretName, appNs, "key", "cert", -time.Hour, nil, appSecretName)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -247,6 +248,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 				Expect(cli.Create(ctx, secret)).NotTo(HaveOccurred())
 				installation.CertificateManagement = cm
 				certificateManagerCM, err := certificatemanager.Create(cli, installation, clusterDomain)
+				Expect(err).NotTo(HaveOccurred())
 				_, err = certificateManagerCM.GetOrCreateKeyPair(cli, secret.Name, secret.Namespace, []string{appSecretName})
 				Expect(err).NotTo(HaveOccurred())
 			})
@@ -256,6 +258,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 				Expect(cli.Create(ctx, secret)).NotTo(HaveOccurred())
 				installation.CertificateManagement = cm
 				certificateManagerCM, err := certificatemanager.Create(cli, installation, clusterDomain)
+				Expect(err).NotTo(HaveOccurred())
 				_, err = certificateManagerCM.GetOrCreateKeyPair(cli, secret.Name, secret.Namespace, []string{appSecretName})
 				Expect(err).To(HaveOccurred())
 			})

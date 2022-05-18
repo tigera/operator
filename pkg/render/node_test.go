@@ -211,6 +211,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
+			{Name: "FELIX_HEALTHPORT", Value: "9099"},
 			{
 				Name: "NODENAME",
 				ValueFrom: &corev1.EnvVarSource{
@@ -434,6 +435,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
+			{Name: "FELIX_HEALTHPORT", Value: "9099"},
 			{
 				Name: "NODENAME",
 				ValueFrom: &corev1.EnvVarSource{
@@ -655,6 +657,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
+			{Name: "FELIX_HEALTHPORT", Value: "9099"},
 			{
 				Name: "NODENAME",
 				ValueFrom: &corev1.EnvVarSource{
@@ -934,6 +937,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
+			{Name: "FELIX_HEALTHPORT", Value: "9099"},
 			{
 				Name: "NODENAME",
 				ValueFrom: &corev1.EnvVarSource{
@@ -1091,6 +1095,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
+			{Name: "FELIX_HEALTHPORT", Value: "9099"},
 			{
 				Name: "NODENAME",
 				ValueFrom: &corev1.EnvVarSource{
@@ -1338,6 +1343,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
+			{Name: "FELIX_HEALTHPORT", Value: "9099"},
 			{
 				Name: "NODENAME",
 				ValueFrom: &corev1.EnvVarSource{
@@ -1492,6 +1498,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
+			{Name: "FELIX_HEALTHPORT", Value: "9099"},
 			{
 				Name: "NODENAME",
 				ValueFrom: &corev1.EnvVarSource{
@@ -1660,6 +1667,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
+			{Name: "FELIX_HEALTHPORT", Value: "9199"},
 			{
 				Name: "NODENAME",
 				ValueFrom: &corev1.EnvVarSource{
@@ -1741,6 +1749,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
+			{Name: "FELIX_HEALTHPORT", Value: "9199"},
 			{
 				Name: "NODENAME",
 				ValueFrom: &corev1.EnvVarSource{
@@ -2050,6 +2059,24 @@ var _ = Describe("Node rendering tests", func() {
 				"CALICO_IPV4POOL_IPIP": "Always",
 				// Enabled is the default so we don't set
 				// NAT_OUTGOING if it is enabled.
+			}),
+		Entry("Pool with VXLAN enabled (IPv6)",
+			operatorv1.IPPool{
+				CIDR:          "fc00::/48",
+				Encapsulation: operatorv1.EncapsulationVXLAN,
+			},
+			map[string]string{
+				"CALICO_IPV6POOL_CIDR":  "fc00::/48",
+				"CALICO_IPV6POOL_VXLAN": "Always",
+			}),
+		Entry("Pool with VXLAN cross subnet enabled (IPv6)",
+			operatorv1.IPPool{
+				CIDR:          "fc00::/48",
+				Encapsulation: operatorv1.EncapsulationVXLANCrossSubnet,
+			},
+			map[string]string{
+				"CALICO_IPV6POOL_CIDR":  "fc00::/48",
+				"CALICO_IPV6POOL_VXLAN": "CrossSubnet",
 			}),
 		Entry("Pool with nat outgoing disabled (IPv6)",
 			operatorv1.IPPool{
@@ -2737,6 +2764,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
+			{Name: "FELIX_HEALTHPORT", Value: "9099"},
 			{
 				Name: "NODENAME",
 				ValueFrom: &corev1.EnvVarSource{

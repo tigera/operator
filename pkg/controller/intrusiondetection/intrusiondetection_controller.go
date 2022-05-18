@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -174,6 +175,10 @@ func add(mgr manager.Manager, c controller.Controller) error {
 
 	if err = utils.AddConfigMapWatch(c, render.TyphaCAConfigMapName, common.OperatorNamespace()); err != nil {
 		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
+	}
+
+	if err = utils.AddSecretsWatch(c, render.ADAPITLSSecretName, render.IntrusionDetectionNamespace); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch the Secret resource: %v", err)
 	}
 
 	return nil
@@ -336,6 +341,14 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
+	adAPIServerTLSSecret, err := certificateManager.GetOrCreateKeyPair(r.client, render.ADAPITLSSecretName, common.OperatorNamespace(),
+		dns.GetServiceDNSNames(render.ADAPIObjectName, render.IntrusionDetectionNamespace, r.clusterDomain))
+	if err != nil {
+		log.Error(err, "Error creating Anomaly Detection API TLS certificate")
+		r.status.SetDegraded("Error creating TLS certificate", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	if !r.dpiAPIReady.IsReady() {
 		log.Info("Waiting for DeepPacketInspection API to be ready")
 		r.status.SetDegraded("Waiting for DeepPacketInspection API to be ready", "")
@@ -368,17 +381,18 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	// Render the desired objects from the CRD and create or update them.
 	var hasNoLicense = !utils.IsFeatureActive(license, common.ThreatDefenseFeature)
 	intrusionDetectionCfg := &render.IntrusionDetectionConfiguration{
-		LogCollector:      lc,
-		ESSecrets:         esSecrets,
-		Installation:      network,
-		ESClusterConfig:   esClusterConfig,
-		PullSecrets:       pullSecrets,
-		Openshift:         r.provider == operatorv1.ProviderOpenShift,
-		ClusterDomain:     r.clusterDomain,
-		ESLicenseType:     esLicenseType,
-		ManagedCluster:    managementClusterConnection != nil,
-		HasNoLicense:      hasNoLicense,
-		TrustedCertBundle: trustedBundle,
+		LogCollector:          lc,
+		ESSecrets:             esSecrets,
+		Installation:          network,
+		ESClusterConfig:       esClusterConfig,
+		PullSecrets:           pullSecrets,
+		Openshift:             r.provider == operatorv1.ProviderOpenShift,
+		ClusterDomain:         r.clusterDomain,
+		ESLicenseType:         esLicenseType,
+		ManagedCluster:        managementClusterConnection != nil,
+		HasNoLicense:          hasNoLicense,
+		TrustedCertBundle:     trustedBundle,
+		ADAPIServerCertSecret: adAPIServerTLSSecret,
 	}
 	comp := render.IntrusionDetection(intrusionDetectionCfg)
 
@@ -419,8 +433,11 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		dpiComponent,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       render.IntrusionDetectionNamespace,
-			ServiceAccounts: []string{render.IntrusionDetectionName},
-			TrustedBundle:   trustedBundle,
+			ServiceAccounts: []string{render.IntrusionDetectionName, render.ADAPIObjectName},
+			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+				rcertificatemanagement.NewKeyPairOption(intrusionDetectionCfg.ADAPIServerCertSecret, true, true),
+			},
+			TrustedBundle: trustedBundle,
 		}),
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       dpi.DeepPacketInspectionNamespace,

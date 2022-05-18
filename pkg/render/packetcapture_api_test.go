@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -345,6 +345,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 		installation := operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{CACert: cert}}
 		certificateManager, err := certificatemanager.Create(cli, &installation, clusterDomain)
+		Expect(err).NotTo(HaveOccurred())
 		secret, err = certificateManager.GetOrCreateKeyPair(cli, render.PacketCaptureCertSecret, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
 
@@ -353,8 +354,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 	})
 
 	It("should render all resources for an installation with oidc configured", func() {
-		var authentication *operatorv1.Authentication
-		authentication = &operatorv1.Authentication{
+		authentication := &operatorv1.Authentication{
 			Spec: operatorv1.AuthenticationSpec{
 				ManagerDomain: "https://127.0.0.1",
 				OIDC:          &operatorv1.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"}}}

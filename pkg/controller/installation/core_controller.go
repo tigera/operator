@@ -281,6 +281,12 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 		return fmt.Errorf("tigera-installation-controller failed to watch FelixConfiguration resource: %w", err)
 	}
 
+	// Watch for changes to BGPConfiguration.
+	err = c.Watch(&source.Kind{Type: &crdv1.BGPConfiguration{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("tigera-installation-controller failed to watch BGPConfiguration resource: %w", err)
+	}
+
 	if r.enterpriseCRDsExist {
 		// Watch for changes to primary resource ManagementCluster
 		err = c.Watch(&source.Kind{Type: &operator.ManagementCluster{}}, &handler.EnqueueRequestForObject{})
@@ -1196,6 +1202,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	// Fetch any existing default BGPConfiguration object.
+	bgpConfiguration := &crdv1.BGPConfiguration{}
+	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, bgpConfiguration)
+	if err != nil && !apierrors.IsNotFound(err) {
+		r.SetDegraded("Unable to read BGPConfiguration", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// Build a configuration for rendering calico/node.
 	nodeCfg := render.NodeConfiguration{
 		K8sServiceEp:            k8sapi.Endpoint,
@@ -1212,6 +1226,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		Terminating:             nodeTerminating,
 		PrometheusServerTLS:     nodePrometheusTLS,
 		FelixHealthPort:         *felixConfiguration.Spec.HealthPort,
+		BindMode:                bgpConfiguration.Spec.BindMode,
 	}
 	components = append(components, render.Node(&nodeCfg))
 
@@ -1400,10 +1415,7 @@ func readMTUFile() (int, error) {
 
 func calicoDirectoryExists() bool {
 	_, err := os.Stat("/var/lib/calico")
-	if err != nil {
-		return false
-	}
-	return true
+	return err == nil
 }
 
 func (r *ReconcileInstallation) SetDegraded(reason operator.TigeraStatusReason, message string, err error, log logr.Logger) {
@@ -1439,7 +1451,7 @@ func GetOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 				}
 			}
 			if cn == "" && uriSAN == "" {
-				errMsgs = append(errMsgs, fmt.Sprintf("CertPair for Felix does not contain common-name or uri-san"))
+				errMsgs = append(errMsgs, "CertPair for Felix does not contain common-name or uri-san")
 			}
 		}
 		return
@@ -1628,7 +1640,7 @@ func isOpenshiftOnAws(install *operator.Installation, ctx context.Context, clien
 	if err := client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, &infra); err != nil {
 		return false, fmt.Errorf("Unable to read OpenShift infrastructure configuration: %s", err.Error())
 	}
-	return (infra.Status.Platform == "AWS"), nil
+	return (infra.Status.PlatformStatus.Type == "AWS"), nil
 }
 
 func updateInstallationForOpenshiftNetwork(i *operator.Installation, o *configv1.Network) error {

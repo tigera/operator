@@ -1,3 +1,17 @@
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package convert
 
 import (
@@ -35,29 +49,29 @@ var _ = Describe("Parser", func() {
 	})
 
 	It("should not detect an installation if none exists", func() {
-		c := fake.NewFakeClientWithScheme(scheme)
+		c := fake.NewClientBuilder().WithScheme(scheme).Build()
 		Expect(NeedsConversion(ctx, c)).To(BeFalse())
 	})
 
 	It("should detect an installation if one exists", func() {
-		c := fake.NewFakeClientWithScheme(scheme, emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig())
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig()).Build()
 		_, err := Convert(ctx, c)
 		Expect(err).ToNot(HaveOccurred())
 	})
 
 	It("should detect a valid installation", func() {
-		c := fake.NewFakeClientWithScheme(scheme, emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig())
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig()).Build()
 		_, err := Convert(ctx, c)
 		Expect(err).ToNot(HaveOccurred())
 	})
 
 	It("should error if it detects a canal installation", func() {
-		c := fake.NewFakeClientWithScheme(scheme, &appsv1.DaemonSet{
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(&appsv1.DaemonSet{
 			ObjectMeta: v1.ObjectMeta{
 				Name:      "canal-node",
 				Namespace: "kube-system",
 			},
-		}, pool, emptyFelixConfig())
+		}, pool, emptyFelixConfig()).Build()
 		_, err := Convert(ctx, c)
 		Expect(err).To(HaveOccurred())
 	})
@@ -68,7 +82,7 @@ var _ = Describe("Parser", func() {
 			Name:  "FOO",
 			Value: "bar",
 		}}
-		c := fake.NewFakeClientWithScheme(scheme, node, emptyKubeControllerSpec(), pool, emptyFelixConfig())
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(node, emptyKubeControllerSpec(), pool, emptyFelixConfig()).Build()
 		_, err := Convert(ctx, c)
 		Expect(err).To(HaveOccurred())
 	})
@@ -86,7 +100,7 @@ var _ = Describe("Parser", func() {
 			},
 		}
 
-		c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyKubeControllerSpec(), pool, emptyFelixConfig()).Build()
 		cfg, err := Convert(ctx, c)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(cfg).ToNot(BeNil())
@@ -101,7 +115,7 @@ var _ = Describe("Parser", func() {
 			Value: "{",
 		}}
 
-		c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), pool, emptyFelixConfig())
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyKubeControllerSpec(), pool, emptyFelixConfig()).Build()
 		_, err := Convert(ctx, c)
 		Expect(err).To(HaveOccurred())
 	})
@@ -136,7 +150,7 @@ var _ = Describe("Parser", func() {
 					},
 				}
 
-				cli := fake.NewFakeClient(ds, emptyKubeControllerSpec())
+				cli := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyKubeControllerSpec()).Build()
 				c := components{
 					node: CheckedDaemonSet{
 						DaemonSet:   *ds,

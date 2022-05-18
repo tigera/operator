@@ -498,8 +498,13 @@ func (m *statusManager) syncState() {
 		}
 
 		// Check if any pods within the daemonset are failing.
-		if f := m.podsFailing(ds.Spec.Selector, ds.Namespace); f != "" {
-			failing = append(failing, f)
+		if f, err := m.podsFailing(ds.Spec.Selector, ds.Namespace); err == nil {
+			if f != "" {
+				failing = append(failing, f)
+			}
+		} else {
+			log.WithValues("reason", err, "daemonset", dsnn).Info("Failed to check for failing pods")
+			continue
 		}
 	}
 
@@ -519,8 +524,13 @@ func (m *statusManager) syncState() {
 		}
 
 		// Check if any pods within the deployment are failing.
-		if f := m.podsFailing(dep.Spec.Selector, dep.Namespace); f != "" {
-			failing = append(failing, f)
+		if f, err := m.podsFailing(dep.Spec.Selector, dep.Namespace); err == nil {
+			if f != "" {
+				failing = append(failing, f)
+			}
+		} else {
+			log.WithValues("reason", err, "deployment", depnn).Info("Failed to check for failing pods")
+			continue
 		}
 	}
 
@@ -538,8 +548,13 @@ func (m *statusManager) syncState() {
 		}
 
 		// Check if any pods within the deployment are failing.
-		if f := m.podsFailing(ss.Spec.Selector, ss.Namespace); f != "" {
-			failing = append(failing, f)
+		if f, err := m.podsFailing(ss.Spec.Selector, ss.Namespace); err == nil {
+			if f != "" {
+				failing = append(failing, f)
+			}
+		} else {
+			log.WithValues("reason", err, "statefuleset", depnn).Info("Failed to check for failing pods")
+			continue
 		}
 	}
 
@@ -615,29 +630,32 @@ func (m *statusManager) removeTigeraStatus() {
 
 // podsFailing takes a selector and returns if any of the pods that match it are failing. Failing pods are defined
 // to be in CrashLoopBackOff state.
-func (m *statusManager) podsFailing(selector *metav1.LabelSelector, namespace string) string {
+func (m *statusManager) podsFailing(selector *metav1.LabelSelector, namespace string) (string, error) {
 	l := corev1.PodList{}
 	s, err := metav1.LabelSelectorAsMap(selector)
 	if err != nil {
 		panic(err)
 	}
-	m.client.List(context.TODO(), &l, client.MatchingLabels(s), client.InNamespace(namespace))
+	err = m.client.List(context.TODO(), &l, client.MatchingLabels(s), client.InNamespace(namespace))
+	if err != nil {
+		return "", err
+	}
 	for _, p := range l.Items {
 		if p.Status.Phase == corev1.PodFailed {
-			return fmt.Sprintf("Pod %s/%s has failed", p.Namespace, p.Name)
+			return fmt.Sprintf("Pod %s/%s has failed", p.Namespace, p.Name), nil
 		}
 		for _, c := range p.Status.InitContainerStatuses {
 			if msg := m.containerErrorMessage(p, c); msg != "" {
-				return msg
+				return msg, nil
 			}
 		}
 		for _, c := range p.Status.ContainerStatuses {
 			if msg := m.containerErrorMessage(p, c); msg != "" {
-				return msg
+				return msg, nil
 			}
 		}
 	}
-	return ""
+	return "", nil
 }
 
 func (m *statusManager) containerErrorMessage(p corev1.Pod, c corev1.ContainerStatus) string {

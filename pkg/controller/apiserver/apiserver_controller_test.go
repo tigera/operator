@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -68,7 +68,7 @@ var _ = Describe("apiserver controller tests", func() {
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
 		ctx = context.Background()
-		cli = fake.NewFakeClientWithScheme(scheme)
+		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
 
 		ca, err := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 		Expect(err).NotTo(HaveOccurred())
@@ -200,7 +200,7 @@ var _ = Describe("apiserver controller tests", func() {
 						{Image: "tigera/cnx-apiserver", Digest: "sha256:apiserverhash"},
 						{Image: "tigera/cnx-queryserver", Digest: "sha256:queryserverhash"},
 						{Image: "tigera/key-cert-provisioner", Digest: "sha256:calicocsrinithash"},
-						{Image: "tigera/packetcapture-api", Digest: "sha256:packetcapturehash"},
+						{Image: "tigera/packetcapture", Digest: "sha256:packetcapturehash"},
 					},
 				},
 			})).ToNot(HaveOccurred())

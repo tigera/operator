@@ -45,6 +45,7 @@ const (
 	birdTemplateHashAnnotation        = "hash.operator.tigera.io/bird-templates"
 	nodeCniConfigAnnotation           = "hash.operator.tigera.io/cni-config"
 	bgpLayoutHashAnnotation           = "hash.operator.tigera.io/bgp-layout"
+	bgpBindModeHashAnnotation         = "hash.operator.tigera.io/bgp-bind-mode"
 	CSRLabelCalicoSystem              = "calico-system"
 	BGPLayoutConfigMapName            = "bgp-layout"
 	BGPLayoutConfigMapKey             = "earlyNetworkConfiguration"
@@ -108,6 +109,10 @@ type NodeConfiguration struct {
 	// The health port that Felix should bind to. The controller reads FelixConfiguration
 	// and sets this.
 	FelixHealthPort int
+
+	// The bindMode read from the default BGPConfiguration. Used to trigger rolling updates
+	// should this value change.
+	BindMode string
 }
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
@@ -725,6 +730,11 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 		}
 	}
 
+	// Include the annotation of BindMode
+	if c.cfg.BindMode != "" {
+		annotations[bgpBindModeHashAnnotation] = rmeta.AnnotationHash(c.cfg.BindMode)
+	}
+
 	// Determine the name to use for the calico/node daemonset. For mixed-mode, we run the enterprise DaemonSet
 	// with its own name so as to not conflict.
 	ds := appsv1.DaemonSet{
@@ -1164,6 +1174,7 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
 		{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 		{Name: "FELIX_HEALTHENABLED", Value: "true"},
+		{Name: "FELIX_HEALTHPORT", Value: fmt.Sprintf("%d", c.cfg.FelixHealthPort)},
 		{
 			Name: "NODENAME",
 			ValueFrom: &corev1.EnvVarSource{
@@ -1241,6 +1252,15 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		// Configure IPv6 pool.
 		if v6pool := GetIPv6Pool(c.cfg.Installation.CalicoNetwork.IPPools); v6pool != nil {
 			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_CIDR", Value: v6pool.CIDR})
+
+			switch v6pool.Encapsulation {
+			case operatorv1.EncapsulationVXLAN:
+				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_VXLAN", Value: "Always"})
+			case operatorv1.EncapsulationVXLANCrossSubnet:
+				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_VXLAN", Value: "CrossSubnet"})
+			case operatorv1.EncapsulationNone:
+				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_VXLAN", Value: "Never"})
+			}
 
 			if v6pool.BlockSize != nil {
 				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_BLOCK_SIZE", Value: fmt.Sprintf("%d", *v6pool.BlockSize)})
@@ -1357,8 +1377,8 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "IP6_AUTODETECTION_METHOD", Value: v6Method})
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_IPV6SUPPORT", Value: "true"})
 
-		// Set CALICO_ROUTER_ID to "hash" if IPv6 only.
-		if v4Method == "" {
+		// Set CALICO_ROUTER_ID to "hash" for IPv6-only with BGP enabled.
+		if v4Method == "" && bgpEnabled(c.cfg.Installation) {
 			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_ROUTER_ID", Value: "hash"})
 		}
 	} else {

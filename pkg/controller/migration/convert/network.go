@@ -1,3 +1,17 @@
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package convert
 
 import (
@@ -109,7 +123,7 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 		return ErrIncompatibleCluster{
 			err:       fmt.Sprintf("IP=%s is not supported", *ip),
 			component: ComponentCalicoNode,
-			fix:       fmt.Sprintf("remove the IP env var or set it to 'none' or 'autodetect', depending on your cluster configuration"),
+			fix:       "remove the IP env var or set it to 'none' or 'autodetect', depending on your cluster configuration",
 		}
 	}
 
@@ -136,7 +150,7 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 			return ErrIncompatibleCluster{
 				err:       fmt.Sprintf("IP6=%s is not supported", *ip),
 				component: ComponentCalicoNode,
-				fix:       fmt.Sprintf("remove the IP6 env var or set it to 'none' or 'autodetect', depending on your cluster configuration"),
+				fix:       "remove the IP6 env var or set it to 'none' or 'autodetect', depending on your cluster configuration",
 			}
 		}
 	} else {
@@ -145,13 +159,28 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 		}
 	}
 
-	// If IPv6 only, check that CALICO_ROUTER_ID, if defined, is set to `hash`.
+	// If IPv6 only and bird backend is used, check that CALICO_ROUTER_ID, if defined, is set to `hash`.
 	// Custom router ID values are only used for manual calico-node deployments and not
 	// applicable to calico-node running as a daemonset.
 	// In IPv6-only mode, calico-node will be rendered with CALICO_ROUTER_ID="hash".
 	if ip6 != nil && *ip6 == "autodetect" && ip != nil && *ip == "none" {
-		if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "CALICO_ROUTER_ID", "hash"); err != nil {
-			return err
+		if install.Spec.CalicoNetwork.BGP != nil && *install.Spec.CalicoNetwork.BGP == operatorv1.BGPEnabled {
+			if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "CALICO_ROUTER_ID", "hash"); err != nil {
+				return err
+			}
+		} else {
+			// IPv6-only clusters with BGP disabled should not have CALICO_ROUTER_ID set.
+			routerID, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "CALICO_ROUTER_ID")
+			if err != nil {
+				return err
+			}
+			if routerID != nil {
+				return ErrIncompatibleCluster{
+					err:       "CNI config indicates an IPv6-only VXLAN cluster but CALICO_ROUTER_ID is only used for BGP-enabled clusters",
+					component: ComponentCNIConfig,
+					fix:       "remove the CALICO_ROUTER_ID env var",
+				}
+			}
 		}
 	}
 

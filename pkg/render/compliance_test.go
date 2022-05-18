@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -412,6 +412,7 @@ var _ = Describe("compliance rendering tests", func() {
 			cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 			cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: cert}
 			certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain)
+			Expect(err).NotTo(HaveOccurred())
 			complianceTLS, err := certificateManager.GetOrCreateKeyPair(cli, render.ComplianceServerCertSecret, common.OperatorNamespace(), []string{""})
 			Expect(err).NotTo(HaveOccurred())
 			cfg.ComplianceServerCertSecret = complianceTLS

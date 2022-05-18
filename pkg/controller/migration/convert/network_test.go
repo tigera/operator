@@ -1,3 +1,17 @@
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package convert
 
 import (
@@ -21,13 +35,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
-
-func ConfigList(x string) string {
-	return fmt.Sprintf(`{
-	"name": "k8s-pod-network",
-	"cniVersion": "0.3.1",
-	"plugins": [ ` + x + `] }`)
-}
 
 func int32Ptr(x int32) *int32 {
 	return &x
@@ -55,7 +62,6 @@ var _ = Describe("Convert network tests", func() {
 		v6pool.Name = "test-ipv6-pool"
 		v6pool.Spec = crdv1.IPPoolSpec{
 			CIDR:        "2001:db8::1/120",
-			IPIPMode:    crdv1.IPIPModeAlways,
 			NATOutgoing: true,
 		}
 	})
@@ -69,7 +75,7 @@ var _ = Describe("Convert network tests", func() {
 				Value: "none",
 			})
 
-			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
@@ -87,7 +93,7 @@ var _ = Describe("Convert network tests", func() {
 			}, operatorv1.PluginGKE),
 		)
 		It("should convert AWS CNI install", func() {
-			c := fake.NewFakeClientWithScheme(scheme, append([]runtime.Object{v4pool, emptyFelixConfig(), getK8sNodes(6)}, awsCNIPolicyOnlyConfig()...)...)
+			c := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(append([]runtime.Object{v4pool, emptyFelixConfig(), getK8sNodes(6)}, awsCNIPolicyOnlyConfig()...)...).Build()
 			_, err := Convert(ctx, c)
 			Expect(err).NotTo(HaveOccurred())
 		})
@@ -95,7 +101,7 @@ var _ = Describe("Convert network tests", func() {
 
 	Describe("handle Calico CNI migration", func() {
 		It("migrate default", func() {
-			c := fake.NewFakeClientWithScheme(scheme, emptyNodeSpec(), emptyKubeControllerSpec(), v4pool, emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), v4pool, emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
@@ -104,7 +110,7 @@ var _ = Describe("Convert network tests", func() {
 			Expect(*cfg.Spec.CalicoNetwork.BGP).To(Equal(operatorv1.BGPEnabled))
 		})
 		It("should convert Calico v3.15 manifest", func() {
-			c := fake.NewFakeClientWithScheme(scheme, append([]runtime.Object{v4pool, emptyFelixConfig()}, calicoDefaultConfig()...)...)
+			c := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(append([]runtime.Object{v4pool, emptyFelixConfig()}, calicoDefaultConfig()...)...).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).NotTo(HaveOccurred())
 			var _1440 int32 = 1440
@@ -151,7 +157,7 @@ var _ = Describe("Convert network tests", func() {
 				Name:  "CALICO_NETWORKING_BACKEND",
 				Value: "none",
 			}}
-			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
@@ -169,7 +175,7 @@ var _ = Describe("Convert network tests", func() {
 				Name:  "CALICO_NETWORKING_BACKEND",
 				Value: "vxlan",
 			}}
-			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
@@ -189,7 +195,7 @@ var _ = Describe("Convert network tests", func() {
 					Value: "false",
 				},
 			)
-			c := fake.NewFakeClientWithScheme(scheme, emptyNodeSpec(), emptyKubeControllerSpec(), v4pool, emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), v4pool, emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
@@ -221,7 +227,7 @@ var _ = Describe("Convert network tests", func() {
 				},
 			)
 
-			c := fake.NewFakeClientWithScheme(scheme, v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
@@ -254,13 +260,13 @@ var _ = Describe("Convert network tests", func() {
 				},
 			)
 
-			c := fake.NewFakeClientWithScheme(scheme, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(Equal("CNI config indicates assign_ipv4=true but there were no valid IPv4 pools found. To fix it, create an IPv4 pool or set assign_ipv4=false on cni-config"))
 			Expect(cfg).To(BeNil())
 
-			c = fake.NewFakeClientWithScheme(scheme, v4pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			c = fake.NewClientBuilder().WithScheme(scheme).WithObjects(v4pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
 			cfg, err = Convert(ctx, c)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(Equal("CNI config indicates assign_ipv6=true but there were no valid IPv6 pools found. To fix it, create an IPv6 pool or set assign_ipv6=false on cni-config"))
@@ -299,11 +305,11 @@ var _ = Describe("Convert network tests", func() {
 
 			// Run test with both pools. calico-node will create a v4 pool by default.
 			// But the operator migration will remove the v4 pool from the installation cr.
-			bothPools := fake.NewFakeClientWithScheme(scheme, v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			bothPools := fake.NewClientBuilder().WithScheme(scheme).WithObjects(v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
 			runTest(bothPools)
 
 			// Run test but with only v6 pool
-			ipv6Only := fake.NewFakeClientWithScheme(scheme, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			ipv6Only := fake.NewClientBuilder().WithScheme(scheme).WithObjects(v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
 			runTest(ipv6Only)
 		})
 		It("fails migrating default IPv6 only config if missing pool", func() {
@@ -325,14 +331,14 @@ var _ = Describe("Convert network tests", func() {
 			)
 
 			// no pools at all
-			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(Equal("CNI config indicates assign_ipv6=true but there were no valid IPv6 pools found. To fix it, create an IPv6 pool or set assign_ipv6=false on cni-config"))
 			Expect(cfg).To(BeNil())
 
 			// IPv4 pool only
-			c = fake.NewFakeClientWithScheme(scheme, ds, v4pool, emptyKubeControllerSpec(), emptyFelixConfig())
+			c = fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, v4pool, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
 			cfg, err = Convert(ctx, c)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(Equal("CNI config indicates assign_ipv6=true but there were no valid IPv6 pools found. To fix it, create an IPv6 pool or set assign_ipv6=false on cni-config"))
@@ -379,12 +385,90 @@ var _ = Describe("Convert network tests", func() {
 
 			// Run test with both pools. calico-node will create a v4 pool by default.
 			// But the operator migration will remove the v4 pool from the installation cr.
-			bothPools := fake.NewFakeClientWithScheme(scheme, v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			bothPools := fake.NewClientBuilder().WithScheme(scheme).WithObjects(v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
 			runTest(bothPools)
 
 			// Run test but with only v6 pool
-			ipv6Only := fake.NewFakeClientWithScheme(scheme, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			ipv6Only := fake.NewClientBuilder().WithScheme(scheme).WithObjects(v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
 			runTest(ipv6Only)
+		})
+		It("migrate IPv6-only config with VXLAN", func() {
+			// This is the minimal dual stack config as outlined in our docs.
+			ds := emptyNodeSpec()
+			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
+				Name:  "CNI_NETWORK_CONFIG",
+				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam", "assign_ipv4":"false", "assign_ipv6":"true"}}`,
+			}}
+			ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
+				Name:  "CALICO_NETWORKING_BACKEND",
+				Value: "vxlan",
+			}}
+
+			ds.Spec.Template.Spec.Containers[0].Env = append(ds.Spec.Template.Spec.Containers[0].Env,
+				corev1.EnvVar{
+					Name:  "IP6",
+					Value: "autodetect",
+				},
+				corev1.EnvVar{
+					Name:  "FELIX_IPV6SUPPORT",
+					Value: "true",
+				},
+			)
+
+			v6pool.Spec.IPIPMode = crdv1.IPIPModeNever
+			v6pool.Spec.VXLANMode = crdv1.VXLANModeAlways
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
+			cfg, err := Convert(ctx, c)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cfg).ToNot(BeNil())
+			Expect(cfg.Spec.CNI.Type).To(Equal(operatorv1.PluginCalico))
+			Expect(cfg.Spec.CNI.IPAM.Type).To(Equal(operatorv1.IPAMPluginCalico))
+			Expect(*cfg.Spec.CalicoNetwork.BGP).To(Equal(operatorv1.BGPDisabled))
+
+			expectedV6pool, err := convertPool(*v6pool)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cfg.Spec.CalicoNetwork.IPPools).To(ContainElements(expectedV6pool))
+		})
+		It("migrate dual stack config with VXLAN", func() {
+			// This is the minimal dual stack config as outlined in our docs.
+			ds := emptyNodeSpec()
+			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
+				Name:  "CNI_NETWORK_CONFIG",
+				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam", "assign_ipv4":"true", "assign_ipv6":"true"}}`,
+			}}
+			ds.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
+				Name:  "CALICO_NETWORKING_BACKEND",
+				Value: "vxlan",
+			}}
+
+			ds.Spec.Template.Spec.Containers[0].Env = append(ds.Spec.Template.Spec.Containers[0].Env,
+				corev1.EnvVar{
+					Name:  "IP6",
+					Value: "autodetect",
+				},
+				corev1.EnvVar{
+					Name:  "FELIX_IPV6SUPPORT",
+					Value: "true",
+				},
+			)
+
+			v4pool.Spec.IPIPMode = crdv1.IPIPModeNever
+			v4pool.Spec.VXLANMode = crdv1.VXLANModeAlways
+			v6pool.Spec.IPIPMode = crdv1.IPIPModeNever
+			v6pool.Spec.VXLANMode = crdv1.VXLANModeAlways
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
+			cfg, err := Convert(ctx, c)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cfg).ToNot(BeNil())
+			Expect(cfg.Spec.CNI.Type).To(Equal(operatorv1.PluginCalico))
+			Expect(cfg.Spec.CNI.IPAM.Type).To(Equal(operatorv1.IPAMPluginCalico))
+			Expect(*cfg.Spec.CalicoNetwork.BGP).To(Equal(operatorv1.BGPDisabled))
+
+			expectedV4pool, err := convertPool(*v4pool)
+			Expect(err).ToNot(HaveOccurred())
+			expectedV6pool, err := convertPool(*v6pool)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cfg.Spec.CalicoNetwork.IPPools).To(ContainElements(expectedV4pool, expectedV6pool))
 		})
 
 		DescribeTable("test invalid ipam and backend",
@@ -398,7 +482,7 @@ var _ = Describe("Convert network tests", func() {
 					Name:  "CALICO_NETWORKING_BACKEND",
 					Value: backend,
 				}}
-				c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig())
+				c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig()).Build()
 				_, err := Convert(ctx, c)
 				Expect(err).To(HaveOccurred())
 			},
@@ -415,7 +499,7 @@ var _ = Describe("Convert network tests", func() {
 				Name:  "CALICO_NETWORKING_BACKEND",
 				Value: "none",
 			}}
-			c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig()).Build()
 			_, err := Convert(ctx, c)
 			Expect(err).To(HaveOccurred())
 		})
@@ -431,7 +515,7 @@ var _ = Describe("Convert network tests", func() {
 						Name:  "CALICO_NETWORKING_BACKEND",
 						Value: backend,
 					}}
-					c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig())
+					c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig()).Build()
 					cfg, err := Convert(ctx, c)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(cfg).ToNot(BeNil())
@@ -453,7 +537,7 @@ var _ = Describe("Convert network tests", func() {
 						Name:  "CALICO_NETWORKING_BACKEND",
 						Value: "bird",
 					}}
-					c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig())
+					c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig()).Build()
 					_, err := Convert(ctx, c)
 					Expect(err).NotTo(HaveOccurred())
 				},
@@ -487,7 +571,7 @@ var _ = Describe("Convert network tests", func() {
 						Name:  "CALICO_NETWORKING_BACKEND",
 						Value: "bird",
 					}}
-					c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig())
+					c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig()).Build()
 					_, err := Convert(ctx, c)
 					Expect(err).To(HaveOccurred())
 				},
@@ -561,7 +645,7 @@ var _ = Describe("Convert network tests", func() {
 						Name:  "CALICO_NETWORKING_BACKEND",
 						Value: "bird",
 					}}
-					c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig())
+					c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig()).Build()
 					_, err := Convert(ctx, c)
 					Expect(err).To(HaveOccurred())
 				},
@@ -603,7 +687,7 @@ var _ = Describe("Convert network tests", func() {
 						Name:  "CALICO_NETWORKING_BACKEND",
 						Value: "bird",
 					}}
-					c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig())
+					c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig()).Build()
 					_, err := Convert(ctx, c)
 					Expect(err).NotTo(HaveOccurred())
 				},
@@ -646,7 +730,7 @@ var _ = Describe("Convert network tests", func() {
 						Name:  "CALICO_NETWORKING_BACKEND",
 						Value: "bird",
 					}}
-					c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig())
+					c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig()).Build()
 					cfg, err := Convert(ctx, c)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(cfg).ToNot(BeNil())
@@ -691,7 +775,7 @@ var _ = Describe("Convert network tests", func() {
 						Name:  "CALICO_NETWORKING_BACKEND",
 						Value: "bird",
 					}}
-					c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig())
+					c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig()).Build()
 					cfg, err := Convert(ctx, c)
 					Expect(err).ToNot(HaveOccurred())
 					Expect(cfg).ToNot(BeNil())
@@ -730,7 +814,7 @@ var _ = Describe("Convert network tests", func() {
 					Name:  "CALICO_NETWORKING_BACKEND",
 					Value: "bird",
 				}}
-				c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig())
+				c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig()).Build()
 				_, err := Convert(ctx, c)
 				Expect(err).To(HaveOccurred())
 			},
@@ -748,7 +832,7 @@ var _ = Describe("Convert network tests", func() {
 		// The calico-node ds has a v4 pool to satisfy the migration controller.
 		// The tests here are only testing the IPv6-related env var migration
 		// validation so the defined pools don't matter.
-		c := fake.NewFakeClientWithScheme(scheme, ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig())
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig()).Build()
 		cfg, err := Convert(ctx, c)
 		if errorExpected {
 			Expect(err).To(HaveOccurred())
@@ -767,12 +851,20 @@ var _ = Describe("Convert network tests", func() {
 			{Name: "FELIX_IPV6SUPPORT", Value: "true"}}, true),
 		Entry("should not error if IP6=none and FELIX_IPV6SUPPORT is undefined", []corev1.EnvVar{{Name: "IP6", Value: "none"}}, false),
 		Entry("should error if IPv4 only and FELIX_IPV6SUPPORT=true", []corev1.EnvVar{{Name: "FELIX_IPV6SUPPORT", Value: "true"}}, true),
-		Entry("should error if IPv6 only and CALICO_ROUTER_ID != `hash`",
+		Entry("should error if IPv6 only with bird and CALICO_ROUTER_ID != `hash`",
 			[]corev1.EnvVar{
 				{Name: "IP", Value: "none"},
 				{Name: "IP6", Value: "autodetect"},
 				{Name: "FELIX_IPV6SUPPORT", Value: "true"},
+				{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
 				{Name: "CALICO_ROUTER_ID", Value: "not hash"}}, true),
+		Entry("should error if IPv6 only with vxlan and CALICO_ROUTER_ID == `hash`",
+			[]corev1.EnvVar{
+				{Name: "IP", Value: "none"},
+				{Name: "IP6", Value: "autodetect"},
+				{Name: "FELIX_IPV6SUPPORT", Value: "true"},
+				{Name: "CALICO_NETWORKING_BACKEND", Value: "vxlan"},
+				{Name: "CALICO_ROUTER_ID", Value: "hash"}}, true),
 	)
 
 	It("handle both IP_AUTODETECTION_METHOD and IP6_AUTODETECTION_METHOD", func() {
@@ -807,7 +899,7 @@ var _ = Describe("Convert network tests", func() {
 			Value: "interface=ens*",
 		})
 
-		c := fake.NewFakeClientWithScheme(scheme, v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
 		cfg, err := Convert(ctx, c)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(cfg).ToNot(BeNil())
@@ -834,12 +926,12 @@ var _ = Describe("Convert network tests", func() {
 				Value: "cidr=10.0.0.0/24,10.0.1.0/24",
 			})
 
-			c := fake.NewFakeClientWithScheme(scheme, v4pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(v4pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
 			Expect(cfg.Spec.CalicoNetwork.NodeAddressAutodetectionV4).NotTo(BeNil())
-			Expect(*&cfg.Spec.CalicoNetwork.NodeAddressAutodetectionV4.CIDRS).To(Equal([]string{"10.0.0.0/24", "10.0.1.0/24"}))
+			Expect(cfg.Spec.CalicoNetwork.NodeAddressAutodetectionV4.CIDRS).To(Equal([]string{"10.0.0.0/24", "10.0.1.0/24"}))
 		})
 		It("migrate first-found", func() {
 			ds.Spec.Template.Spec.Containers[0].Env = append(ds.Spec.Template.Spec.Containers[0].Env, corev1.EnvVar{
@@ -847,7 +939,7 @@ var _ = Describe("Convert network tests", func() {
 				Value: "first-found",
 			})
 
-			c := fake.NewFakeClientWithScheme(scheme, v4pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(v4pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
@@ -861,7 +953,7 @@ var _ = Describe("Convert network tests", func() {
 				Value: "can-reach=8.8.8.8",
 			})
 
-			c := fake.NewFakeClientWithScheme(scheme, v4pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(v4pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
@@ -874,7 +966,7 @@ var _ = Describe("Convert network tests", func() {
 				Value: "interface=ens*",
 			})
 
-			c := fake.NewFakeClientWithScheme(scheme, v4pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(v4pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
@@ -887,7 +979,7 @@ var _ = Describe("Convert network tests", func() {
 				Value: "skip-interface=eth1",
 			})
 
-			c := fake.NewFakeClientWithScheme(scheme, v4pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(v4pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
@@ -900,7 +992,7 @@ var _ = Describe("Convert network tests", func() {
 				Value: "kubernetes-internal-ip",
 			})
 
-			c := fake.NewFakeClientWithScheme(scheme, v4pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(v4pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
@@ -913,7 +1005,7 @@ var _ = Describe("Convert network tests", func() {
 				Value: "invalid",
 			})
 
-			c := fake.NewFakeClientWithScheme(scheme, v4pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(v4pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).To(HaveOccurred())
 			Expect(cfg).To(BeNil())
@@ -953,12 +1045,12 @@ var _ = Describe("Convert network tests", func() {
 					Value: "cidr=2001:20::8/64",
 				},
 			)
-			c := fake.NewFakeClientWithScheme(scheme, v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
 			Expect(cfg.Spec.CalicoNetwork.NodeAddressAutodetectionV6).NotTo(BeNil())
-			Expect(*&cfg.Spec.CalicoNetwork.NodeAddressAutodetectionV6.CIDRS).To(Equal([]string{"2001:20::8/64"}))
+			Expect(cfg.Spec.CalicoNetwork.NodeAddressAutodetectionV6.CIDRS).To(Equal([]string{"2001:20::8/64"}))
 		})
 		It("migrate first-found", func() {
 			ds.Spec.Template.Spec.Containers[0].Env = append(ds.Spec.Template.Spec.Containers[0].Env,
@@ -967,7 +1059,7 @@ var _ = Describe("Convert network tests", func() {
 					Value: "first-found",
 				})
 
-			c := fake.NewFakeClientWithScheme(scheme, v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
@@ -983,7 +1075,7 @@ var _ = Describe("Convert network tests", func() {
 				},
 			)
 
-			c := fake.NewFakeClientWithScheme(scheme, v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
@@ -998,7 +1090,7 @@ var _ = Describe("Convert network tests", func() {
 				},
 			)
 
-			c := fake.NewFakeClientWithScheme(scheme, v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
@@ -1013,7 +1105,7 @@ var _ = Describe("Convert network tests", func() {
 				},
 			)
 
-			c := fake.NewFakeClientWithScheme(scheme, v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
@@ -1028,7 +1120,7 @@ var _ = Describe("Convert network tests", func() {
 				},
 			)
 
-			c := fake.NewFakeClientWithScheme(scheme, v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())
@@ -1043,7 +1135,7 @@ var _ = Describe("Convert network tests", func() {
 				},
 			)
 
-			c := fake.NewFakeClientWithScheme(scheme, v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).To(HaveOccurred())
 			Expect(cfg).To(BeNil())

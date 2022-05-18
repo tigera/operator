@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -328,7 +328,8 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 	}
 	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
 		// Allow access to the pod security policy in case this is enforced on the cluster
-		role.Rules = append(role.Rules, rbacv1.PolicyRule{APIGroups: []string{"policy"},
+		role.Rules = append(role.Rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
 			Resources:     []string{"podsecuritypolicies"},
 			Verbs:         []string{"use"},
 			ResourceNames: []string{common.TyphaDeploymentName},
@@ -468,6 +469,7 @@ func (c *typhaComponent) typhaEnvVars() []corev1.EnvVar {
 		{Name: "TYPHA_CONNECTIONREBALANCINGMODE", Value: "kubernetes"},
 		{Name: "TYPHA_DATASTORETYPE", Value: "kubernetes"},
 		{Name: "TYPHA_HEALTHENABLED", Value: "true"},
+		{Name: "TYPHA_HEALTHPORT", Value: fmt.Sprintf("%d", c.healthPort())},
 		{Name: "TYPHA_K8SNAMESPACE", Value: common.CalicoNamespace},
 		{Name: "TYPHA_CAFILE", Value: c.cfg.TLS.TrustedBundle.MountPath()},
 		{Name: "TYPHA_SERVERCERTFILE", Value: c.cfg.TLS.TyphaSecret.VolumeMountCertificateFilePath()},
@@ -495,7 +497,8 @@ func (c *typhaComponent) typhaEnvVars() []corev1.EnvVar {
 		if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
 			typhaEnv = append(typhaEnv, corev1.EnvVar{
 				Name:  "MULTI_INTERFACE_MODE",
-				Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
+				Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value(),
+			})
 		}
 	}
 
@@ -522,12 +525,16 @@ func (c *typhaComponent) typhaEnvVars() []corev1.EnvVar {
 	return typhaEnv
 }
 
-// livenessReadinessProbes creates the typha's liveness and readiness probes.
-func (c *typhaComponent) livenessReadinessProbes() (*corev1.Probe, *corev1.Probe) {
-	// Determine liveness and readiness configuration for typha.
+// healthPort returns the liveness and readiness port to use for typha.
+func (c *typhaComponent) healthPort() int {
 	// We use the felix health port, minus one, to determine the port to use for Typha.
 	// This isn't ideal, but allows for some control of the typha port.
-	port := intstr.FromInt(c.cfg.FelixHealthPort - 1)
+	return c.cfg.FelixHealthPort - 1
+}
+
+// livenessReadinessProbes creates the typha's liveness and readiness probes.
+func (c *typhaComponent) livenessReadinessProbes() (*corev1.Probe, *corev1.Probe) {
+	port := intstr.FromInt(c.healthPort())
 	lp := &corev1.Probe{
 		Handler: corev1.Handler{
 			HTTPGet: &corev1.HTTPGetAction{
@@ -591,12 +598,35 @@ func (c *typhaComponent) affinity() (aff *corev1.Affinity) {
 		if c.cfg.Installation.TyphaAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil && len(c.cfg.Installation.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution) == 0 {
 			return nil
 		}
-		aff = &corev1.Affinity{NodeAffinity: &corev1.NodeAffinity{
-			RequiredDuringSchedulingIgnoredDuringExecution:  c.cfg.Installation.TyphaAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution,
-			PreferredDuringSchedulingIgnoredDuringExecution: c.cfg.Installation.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
-		},
+		aff = &corev1.Affinity{
+			NodeAffinity: &corev1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution:  c.cfg.Installation.TyphaAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution,
+				PreferredDuringSchedulingIgnoredDuringExecution: c.cfg.Installation.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
+			},
 		}
 
+	}
+	if aff == nil {
+		aff = &corev1.Affinity{}
+	}
+	aff.PodAntiAffinity = &corev1.PodAntiAffinity{
+		PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
+			{
+				Weight: 1,
+				PodAffinityTerm: corev1.PodAffinityTerm{
+					LabelSelector: &metav1.LabelSelector{
+						MatchExpressions: []metav1.LabelSelectorRequirement{
+							{
+								Key:      AppLabelName,
+								Operator: metav1.LabelSelectorOpIn,
+								Values:   []string{TyphaK8sAppName},
+							},
+						},
+					},
+					TopologyKey: "topology.kubernetes.io/zone",
+				},
+			},
+		},
 	}
 	return aff
 }

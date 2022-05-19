@@ -124,6 +124,7 @@ const (
 	InternalServerError                          = "InternalServerError"
 	NotApplicable                                = "NotApplicable"
 	NotAvailable                                 = "NotAvailable"
+	Unknown                                      = "Unknown"
 )
 
 func init() {

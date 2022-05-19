@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -484,5 +484,59 @@ var _ = Describe("Status reporting tests", func() {
 				Expect(sm.windowsNodeUpgrades.progressingReason()).To(Equal(""))
 			})
 		})
+		//Context("Update condition status ", func() {
+		//	BeforeEach(func() {
+		//		sm.ReadyToMonitor()
+		//	})
+		//	It("should reconcile with creating new installation status conditions", func() {
+		//		ts := &operator.TigeraStatus{
+		//			ObjectMeta: metav1.ObjectMeta{Name: "calico"},
+		//			Spec:       operator.TigeraStatusSpec{},
+		//			Status: operator.TigeraStatusStatus{
+		//				Conditions: []operator.TigeraStatusCondition{
+		//					{
+		//						Type:    operator.ComponentAvailable,
+		//						Status:  operator.ConditionTrue,
+		//						Reason:  string(operator.AllObjectsAvailable),
+		//						Message: "All Objects are available",
+		//					},
+		//					{
+		//						Type:    operator.ComponentProgressing,
+		//						Status:  operator.ConditionFalse,
+		//						Reason:  operator.NotApplicable,
+		//						Message: "Not Applicable",
+		//					},
+		//					{
+		//						Type:    operator.ComponentDegraded,
+		//						Status:  operator.ConditionFalse,
+		//						Reason:  operator.NotApplicable,
+		//						Message: "Not Applicable",
+		//					},
+		//				},
+		//			},
+		//		}
+		//		cr := []metav1.Condition{}
+		//
+		//		sm.UpdateStatusCondition(cr, ts.Status.Conditions, 2)
+		//
+		//		Expect(len(cr)).To(HaveLen(3))
+		//
+		//		Expect(cr[0].Type).To(Equal("Ready"))
+		//		Expect(string(cr[0].Status)).To(Equal(string(operator.ConditionTrue)))
+		//		Expect(cr[0].Reason).To(Equal(string(operator.AllObjectsAvailable)))
+		//		Expect(cr[0].Message).To(Equal("All Objects are available"))
+		//		Expect(cr[0].ObservedGeneration).To(Equal(int64(2)))
+		//
+		//		Expect(cr[1].Type).To(Equal("Progressing"))
+		//		Expect(string(cr[1].Status)).To(Equal(string(operator.ConditionFalse)))
+		//		Expect(cr[1].Reason).To(Equal(string(operator.NotApplicable)))
+		//		Expect(cr[1].Message).To(Equal("Not Applicable"))
+		//
+		//		Expect(cr[2].Type).To(Equal("Degraded"))
+		//		Expect(string(cr[2].Status)).To(Equal(string(operator.ConditionFalse)))
+		//		Expect(cr[2].Reason).To(Equal(string(operator.NotApplicable)))
+		//		Expect(cr[2].Message).To(Equal("Not Applicable"))
+		//	})
+		//})
 	})
 })

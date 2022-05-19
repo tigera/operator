@@ -757,7 +757,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if err != nil {
 			return reconcile.Result{}, err
 		}
-		r.updateInstallationStatus(instance, ts.Status.Conditions)
+		r.status.UpdateStatusCondition(instance.Status.Conditions, ts.Status.Conditions, instance.GetGeneration())
 		if err := r.client.Status().Update(ctx, instance); err != nil {
 			log.WithValues("reason", err).Info("Failed to create Installation status conditions.")
 			return reconcile.Result{}, err
@@ -1795,59 +1795,5 @@ func setInstallationFinalizer(i *operator.Installation) {
 func removeInstallationFinalizer(i *operator.Installation) {
 	if stringsutil.StringInSlice(CalicoFinalizer, i.GetFinalizers()) {
 		i.SetFinalizers(stringsutil.RemoveStringInSlice(CalicoFinalizer, i.GetFinalizers()))
-	}
-}
-
-func (r *ReconcileInstallation) updateInstallationStatus(instance *operator.Installation, conditions []operator.TigeraStatusCondition) {
-	if instance.Status.Conditions == nil {
-		instance.Status.Conditions = []metav1.Condition{}
-	}
-
-	for _, condition := range conditions {
-		found := false
-
-		ctype := string(condition.Type)
-		if condition.Type == operator.ComponentAvailable {
-			ctype = string(operator.ConditionTypeReady)
-		}
-		status := metav1.ConditionUnknown
-		if condition.Status == operator.ConditionTrue {
-			status = metav1.ConditionTrue
-		} else if condition.Status == operator.ConditionFalse {
-			status = metav1.ConditionFalse
-		}
-		ic := metav1.Condition{
-			Type:               ctype,
-			Status:             status,
-			LastTransitionTime: condition.LastTransitionTime,
-			ObservedGeneration: instance.GetGeneration(),
-		}
-
-		if len(condition.Reason) > 0 {
-			ic.Reason = condition.Reason
-		} else {
-			ic.Reason = string(operator.NotAvailable)
-		}
-		if len(condition.Message) > 0 {
-			ic.Message = condition.Message
-		} else {
-			ic.Message = "Not Available"
-		}
-
-		for i, c := range instance.Status.Conditions {
-			if condition.Type == operator.ComponentAvailable && c.Type == string(operator.ConditionTypeReady) ||
-				condition.Type == operator.ComponentDegraded && c.Type == string(operator.ConditionTypeDegraded) ||
-				condition.Type == operator.ComponentProgressing && c.Type == string(operator.ConditionTypeProgressing) {
-				if !reflect.DeepEqual(c.Status, condition.Status) {
-					ic.LastTransitionTime = metav1.NewTime(time.Now())
-				}
-				instance.Status.Conditions[i] = ic
-				found = true
-			}
-		}
-		if !found {
-			ic.LastTransitionTime = metav1.NewTime(time.Now())
-			instance.Status.Conditions = append(instance.Status.Conditions, ic)
-		}
 	}
 }

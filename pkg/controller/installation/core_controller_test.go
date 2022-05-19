@@ -1552,7 +1552,6 @@ var _ = Describe("Testing core-controller installation", func() {
 			}
 
 			syncPeriodOption := windows.CalicoWindowsUpgraderSyncPeriod(2 * time.Second)
-
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
 				config:                nil, // there is no fake for config
@@ -1842,5 +1841,4 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(cr.Status.Conditions[2].ObservedGeneration).To(Equal(int64(2)))
 		})
 	})
->>>>>>> FIxing Installation status condition
 })

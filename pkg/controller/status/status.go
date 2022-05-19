@@ -39,14 +39,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-const (
-	NotAvailable        string = "NotAvailable"
-	AllObjectsAvailable string = "AllObjectsAvailable"
-	ResourceNotReady    string = "ResourceNotReady"
-	PodFailure          string = "PodFailure"
-	NotApplicable       string = "NotApplicable"
-)
-
 var log = logf.Log.WithName("status_manager")
 
 // StatusManager manages the status for a single controller and component, and reports the status via
@@ -84,6 +76,7 @@ type StatusManager interface {
 	IsProgressing() bool
 	IsDegraded() bool
 	ReadyToMonitor()
+	UpdateStatusCondition(statuscondition []metav1.Condition, conditions []operator.TigeraStatusCondition, generation int64)
 }
 
 type statusManager struct {
@@ -170,13 +163,13 @@ func (m *statusManager) updateStatus() {
 		// We've collected knowledge about the current state of the objects we're monitoring.
 		// Now, use that to update the TigeraStatus object for this manager.
 		if m.IsAvailable() {
-			m.setAvailable(AllObjectsAvailable, "All objects available")
+			m.setAvailable(string(operator.AllObjectsAvailable), "All objects available")
 		} else {
 			m.clearAvailable()
 		}
 
 		if m.IsProgressing() {
-			m.setProgressing(ResourceNotReady, m.progressingMessage())
+			m.setProgressing(operator.ResourceNotReady, m.progressingMessage())
 		} else {
 			m.clearProgressing()
 		}
@@ -837,6 +830,60 @@ func (m *statusManager) degradedReason() string {
 		reasons = append(reasons, "Some pods are failing")
 	}
 	return strings.Join(reasons, "; ")
+}
+
+func (m *statusManager) UpdateStatusCondition(statuscondition []metav1.Condition, conditions []operator.TigeraStatusCondition, generation int64) {
+	if statuscondition == nil {
+		statuscondition = []metav1.Condition{}
+	}
+
+	for _, condition := range conditions {
+		found := false
+
+		ctype := string(condition.Type)
+		if condition.Type == operator.ComponentAvailable {
+			ctype = string(operator.ConditionTypeReady)
+		}
+		status := metav1.ConditionUnknown
+		if condition.Status == operator.ConditionTrue {
+			status = metav1.ConditionTrue
+		} else if condition.Status == operator.ConditionFalse {
+			status = metav1.ConditionFalse
+		}
+		ic := metav1.Condition{
+			Type:               ctype,
+			Status:             status,
+			LastTransitionTime: condition.LastTransitionTime,
+			ObservedGeneration: generation,
+		}
+
+		if len(condition.Reason) > 0 {
+			ic.Reason = condition.Reason
+		} else {
+			ic.Reason = operator.Unknown
+		}
+		if len(condition.Message) > 0 {
+			ic.Message = condition.Message
+		} else {
+			ic.Message = "Unknown"
+		}
+
+		for i, c := range statuscondition {
+			if condition.Type == operator.ComponentAvailable && c.Type == string(operator.ConditionTypeReady) ||
+				condition.Type == operator.ComponentDegraded && c.Type == string(operator.ConditionTypeDegraded) ||
+				condition.Type == operator.ComponentProgressing && c.Type == string(operator.ConditionTypeProgressing) {
+				if !reflect.DeepEqual(c.Status, condition.Status) {
+					ic.LastTransitionTime = metav1.NewTime(time.Now())
+				}
+				statuscondition[i] = ic
+				found = true
+			}
+		}
+		if !found {
+			ic.LastTransitionTime = metav1.NewTime(time.Now())
+			statuscondition = append(statuscondition, ic)
+		}
+	}
 }
 
 func hasPendingCSR(ctx context.Context, m *statusManager, labelMap map[string]string) (bool, error) {

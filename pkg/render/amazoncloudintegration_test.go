@@ -118,18 +118,12 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 		d := resource.(*appsv1.Deployment)
 
 		Expect(d.Name).To(Equal(AwsCIName))
-		Expect(len(d.Labels)).To(Equal(1))
-		Expect(d.Labels).To(HaveKeyWithValue("k8s-app", AwsCIName))
 
 		Expect(*d.Spec.Replicas).To(BeEquivalentTo(1))
 		Expect(d.Spec.Strategy.Type).To(Equal(appsv1.RecreateDeploymentStrategyType))
-		Expect(len(d.Spec.Selector.MatchLabels)).To(Equal(1))
-		Expect(d.Spec.Selector.MatchLabels).To(HaveKeyWithValue("k8s-app", AwsCIName))
 
 		Expect(d.Spec.Template.Name).To(Equal(AwsCIName))
 		Expect(d.Spec.Template.Namespace).To(Equal(AwsCINs))
-		Expect(len(d.Spec.Template.Labels)).To(Equal(1))
-		Expect(d.Spec.Template.Labels).To(HaveKeyWithValue("k8s-app", AwsCIName))
 
 		Expect(len(d.Spec.Template.Spec.NodeSelector)).To(Equal(0))
 

@@ -517,7 +517,7 @@ var _ = Describe("Status reporting tests", func() {
 		//		}
 		//		cr := []metav1.Condition{}
 		//
-		//		sm.UpdateStatusCondition(cr, ts.Status.Conditions, 2)
+		//		UpdateStatusCondition(cr, ts.Status.Conditions, 2)
 		//
 		//		Expect(len(cr)).To(HaveLen(3))
 		//

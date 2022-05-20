@@ -76,7 +76,6 @@ type StatusManager interface {
 	IsProgressing() bool
 	IsDegraded() bool
 	ReadyToMonitor()
-	UpdateStatusCondition(statuscondition []metav1.Condition, conditions []operator.TigeraStatusCondition, generation int64)
 }
 
 type statusManager struct {
@@ -832,60 +831,6 @@ func (m *statusManager) degradedReason() string {
 	return strings.Join(reasons, "; ")
 }
 
-func (m *statusManager) UpdateStatusCondition(statuscondition []metav1.Condition, conditions []operator.TigeraStatusCondition, generation int64) {
-	if statuscondition == nil {
-		statuscondition = []metav1.Condition{}
-	}
-
-	for _, condition := range conditions {
-		found := false
-
-		ctype := string(condition.Type)
-		if condition.Type == operator.ComponentAvailable {
-			ctype = string(operator.ConditionTypeReady)
-		}
-		status := metav1.ConditionUnknown
-		if condition.Status == operator.ConditionTrue {
-			status = metav1.ConditionTrue
-		} else if condition.Status == operator.ConditionFalse {
-			status = metav1.ConditionFalse
-		}
-		ic := metav1.Condition{
-			Type:               ctype,
-			Status:             status,
-			LastTransitionTime: condition.LastTransitionTime,
-			ObservedGeneration: generation,
-		}
-
-		if len(condition.Reason) > 0 {
-			ic.Reason = condition.Reason
-		} else {
-			ic.Reason = operator.Unknown
-		}
-		if len(condition.Message) > 0 {
-			ic.Message = condition.Message
-		} else {
-			ic.Message = "Unknown"
-		}
-
-		for i, c := range statuscondition {
-			if condition.Type == operator.ComponentAvailable && c.Type == string(operator.ConditionTypeReady) ||
-				condition.Type == operator.ComponentDegraded && c.Type == string(operator.ConditionTypeDegraded) ||
-				condition.Type == operator.ComponentProgressing && c.Type == string(operator.ConditionTypeProgressing) {
-				if !reflect.DeepEqual(c.Status, condition.Status) {
-					ic.LastTransitionTime = metav1.NewTime(time.Now())
-				}
-				statuscondition[i] = ic
-				found = true
-			}
-		}
-		if !found {
-			ic.LastTransitionTime = metav1.NewTime(time.Now())
-			statuscondition = append(statuscondition, ic)
-		}
-	}
-}
-
 func hasPendingCSR(ctx context.Context, m *statusManager, labelMap map[string]string) (bool, error) {
 	if m.kubernetesVersion.ProvidesCertV1API() {
 		return hasPendingCSRUsingCertV1(ctx, m.client, labelMap)
@@ -953,8 +898,9 @@ func hasPendingCSRUsingCertV1beta1(ctx context.Context, cli client.Client, label
 	return false, nil
 }
 
-//UpdateStatusCondition updates CR's status conditions from tigerastatus conditions
+//UpdateStatusCondition updates CR's status conditions from tigerastatus conditions.
 func UpdateStatusCondition(statuscondition []metav1.Condition, conditions []operator.TigeraStatusCondition, generation int64) []metav1.Condition {
+
 	if statuscondition == nil {
 		statuscondition = []metav1.Condition{}
 	}
@@ -990,6 +936,7 @@ func UpdateStatusCondition(statuscondition []metav1.Condition, conditions []oper
 			if condition.Type == operator.ComponentAvailable && c.Type == string(operator.ComponentReady) ||
 				condition.Type == operator.ComponentDegraded && c.Type == string(operator.ComponentDegraded) ||
 				condition.Type == operator.ComponentProgressing && c.Type == string(operator.ComponentProgressing) {
+
 				if !reflect.DeepEqual(c.Status, condition.Status) {
 					ic.LastTransitionTime = metav1.NewTime(time.Now())
 				}
@@ -1002,5 +949,6 @@ func UpdateStatusCondition(statuscondition []metav1.Condition, conditions []oper
 			statuscondition = append(statuscondition, ic)
 		}
 	}
+
 	return statuscondition
 }

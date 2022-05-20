@@ -746,7 +746,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		reqLogger.Error(err, "An error occurred when querying the Installation resource")
 		return reconcile.Result{}, err
 	}
-	status := instance.Status
+
 	terminating := (instance.DeletionTimestamp != nil)
 	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
 
@@ -757,7 +757,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if err != nil {
 			return reconcile.Result{}, err
 		}
-		r.status.UpdateStatusCondition(instance.Status.Conditions, ts.Status.Conditions, instance.GetGeneration())
+
+		status.UpdateStatusCondition(instance.Status.Conditions, ts.Status.Conditions, instance.GetGeneration())
 		if err := r.client.Status().Update(ctx, instance); err != nil {
 			log.WithValues("reason", err).Info("Failed to create Installation status conditions.")
 			return reconcile.Result{}, err
@@ -765,6 +766,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
+	status := instance.Status
 	// Mark CR found so we can report converter problems via tigerastatus
 	r.status.OnCRFound()
 

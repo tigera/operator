@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,9 @@ package render
 import (
 	"fmt"
 	"strings"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -43,7 +46,10 @@ const (
 	DexPort          = 5556
 	DexTLSSecretName = "tigera-dex-tls"
 	DexClientId      = "tigera-manager"
+	DexPolicyName    = networkpolicy.TigeraComponentPolicyPrefix + "allow-tigera-dex"
 )
+
+var DexEntityRule = networkpolicy.CreateEntityRule(DexNamespace, DexObjectName, DexPort)
 
 func Dex(cfg *DexComponentConfiguration) Component {
 
@@ -102,6 +108,8 @@ func (*dexComponent) SupportedOSType() rmeta.OSType {
 
 func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
+		c.allowTigeraNetworkPolicy(),
+		allowTigeraDefaultDeny(),
 		c.serviceAccount(),
 		c.deployment(),
 		c.service(),
@@ -342,4 +350,88 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 			"config.yaml": string(bytes),
 		},
 	}
+}
+
+func (c *dexComponent) allowTigeraNetworkPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.Openshift)
+	egressRules = append(egressRules, []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
+		},
+
+		// These rules allow egress between dex and identity providers.
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Nets:  []string{"0.0.0.0/0"},
+				Ports: networkpolicy.Ports(443, 6443, 389, 636),
+			},
+		},
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Nets:  []string{"::/0"},
+				Ports: networkpolicy.Ports(443, 6443, 389, 636),
+			},
+		},
+	}...)
+
+	dexIngressPortDestination := v3.EntityRule{
+		Ports: networkpolicy.Ports(DexPort),
+	}
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      DexPolicyName,
+			Namespace: DexNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(DexObjectName),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Ingress: []v3.Rule{
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      ManagerSourceEntityRule,
+					Destination: dexIngressPortDestination,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      networkpolicy.EsGatewaySourceEntityRule,
+					Destination: dexIngressPortDestination,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      ComplianceServerSourceEntityRule,
+					Destination: dexIngressPortDestination,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      PacketCaptureSourceEntityRule,
+					Destination: dexIngressPortDestination,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      networkpolicy.PrometheusSourceEntityRule,
+					Destination: dexIngressPortDestination,
+				},
+			},
+			Egress: egressRules,
+		},
+	}
+}
+
+func allowTigeraDefaultDeny() *v3.NetworkPolicy {
+	return networkpolicy.AllowTigeraDefaultDeny(DexNamespace)
 }

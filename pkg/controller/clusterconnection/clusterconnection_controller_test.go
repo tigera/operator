@@ -18,18 +18,21 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/stretchr/testify/mock"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/test"
+	"k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/tigera/operator/pkg/controller/clusterconnection"
 	"github.com/tigera/operator/pkg/render"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/stretchr/testify/mock"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -51,6 +54,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 	var scheme *runtime.Scheme
 	var dpl *appsv1.Deployment
 	var mockStatus *status.MockStatus
+	var readyFlag *utils.ReadyFlag
 
 	BeforeSuite(func() {
 		// Create a Kubernetes client.
@@ -74,7 +78,9 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ReadyToMonitor")
 
-		r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone)
+		readyFlag = &utils.ReadyFlag{}
+		readyFlag.MarkAsReady()
+		r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, readyFlag, operatorv1.ProviderNone)
 		dpl = &appsv1.Deployment{
 			TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 			ObjectMeta: metav1.ObjectMeta{
@@ -127,6 +133,16 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				},
 			})
 		Expect(err).NotTo(HaveOccurred())
+		err = c.Create(ctx, &operatorv1.APIServer{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+			Status:     operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady},
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		err = c.Create(ctx, &v3.Tier{
+			ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
+		})
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	Context("default config", func() {
@@ -146,7 +162,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 
 	Context("image reconciliation", func() {
 		It("should use builtin images", func() {
-			r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone)
+			r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, readyFlag, operatorv1.ProviderNone)
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -176,7 +192,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				},
 			})).ToNot(HaveOccurred())
 
-			r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone)
+			r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, readyFlag, operatorv1.ProviderNone)
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -195,6 +211,46 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentGuardian.Image,
 					"sha256:guardianhash")))
+		})
+	})
+
+	Context("allow-tigera reconciliation", func() {
+		BeforeEach(func() {
+			mockStatus = &status.MockStatus{}
+			mockStatus.On("Run").Return()
+			r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, readyFlag, operatorv1.ProviderNone)
+		})
+
+		AfterEach(func() {
+			err := c.Get(ctx, client.ObjectKey{Name: "tigera-secure"}, &operatorv1.APIServer{})
+			if errors.IsNotFound(err) {
+				err = c.Create(ctx, &operatorv1.APIServer{
+					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+					Status:     operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady},
+				})
+				Expect(err).NotTo(HaveOccurred())
+			}
+
+			err = c.Get(ctx, client.ObjectKey{Name: "allow-tigera"}, &v3.Tier{})
+			if errors.IsNotFound(err) {
+				err = c.Create(ctx, &v3.Tier{
+					ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
+				})
+				Expect(err).NotTo(HaveOccurred())
+			}
+		})
+
+		It("should wait if API server is unavailable", func() {
+			utils.DeleteAPIServerAndExpectWait(ctx, c, r, mockStatus)
+		})
+
+		It("should wait if allow-tigera tier is unavailable", func() {
+			utils.DeleteAllowTigeraTierAndExpectWait(ctx, c, r, mockStatus)
+		})
+
+		It("should wait if policy watches are not ready", func() {
+			r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, &utils.ReadyFlag{}, operatorv1.ProviderNone)
+			utils.ExpectWaitForPolicyWatches(ctx, r, mockStatus)
 		})
 	})
 })

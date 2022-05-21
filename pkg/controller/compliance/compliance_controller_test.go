@@ -88,12 +88,13 @@ var _ = Describe("Compliance controller tests", func() {
 		// Create an object we can use throughout the test to do the compliance reconcile loops.
 		// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 		r = ReconcileCompliance{
-			client:          c,
-			scheme:          scheme,
-			provider:        operatorv1.ProviderNone,
-			status:          mockStatus,
-			clusterDomain:   dns.DefaultClusterDomain,
-			licenseAPIReady: &utils.ReadyFlag{},
+			client:             c,
+			scheme:             scheme,
+			provider:           operatorv1.ProviderNone,
+			status:             mockStatus,
+			clusterDomain:      dns.DefaultClusterDomain,
+			licenseAPIReady:    &utils.ReadyFlag{},
+			policyWatchesReady: &utils.ReadyFlag{},
 		}
 
 		// We start off with a 'standard' installation, with nothing special
@@ -118,6 +119,7 @@ var _ = Describe("Compliance controller tests", func() {
 		// The compliance reconcile loop depends on a ton of objects that should be available in your client as
 		// prerequisites. Without them, compliance will not even start creating objects. Let's create them now.
 		Expect(c.Create(ctx, &operatorv1.APIServer{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}, Status: operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady}})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}, Status: v3.LicenseKeyStatus{Features: []string{common.ComplianceFeature}}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.ClusterConfigConfigMapName, Namespace: common.OperatorNamespace()},
 			Data: map[string]string{
@@ -139,8 +141,9 @@ var _ = Describe("Compliance controller tests", func() {
 		cr = &operatorv1.Compliance{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}}
 		Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 
-		// mark that the watch for license key was successful
+		// mark that the watches were successful
 		r.licenseAPIReady.MarkAsReady()
+		r.policyWatchesReady.MarkAsReady()
 	})
 
 	It("should create resources for standalone clusters", func() {
@@ -508,6 +511,48 @@ var _ = Describe("Compliance controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentComplianceServer.Image,
 					"sha256:serverhash")))
+		})
+	})
+
+	Context("allow-tigera reconciliation", func() {
+		var readyFlag *utils.ReadyFlag
+
+		BeforeEach(func() {
+			mockStatus = &status.MockStatus{}
+			mockStatus.On("OnCRFound").Return()
+
+			readyFlag = &utils.ReadyFlag{}
+			readyFlag.MarkAsReady()
+			r = ReconcileCompliance{
+				client:             c,
+				scheme:             scheme,
+				provider:           operatorv1.ProviderNone,
+				status:             mockStatus,
+				clusterDomain:      dns.DefaultClusterDomain,
+				licenseAPIReady:    readyFlag,
+				policyWatchesReady: readyFlag,
+			}
+		})
+
+		It("should wait if API server is unavailable", func() {
+			utils.DeleteAPIServerAndExpectWait(ctx, c, &r, mockStatus)
+		})
+
+		It("should wait if allow-tigera tier is unavailable", func() {
+			utils.DeleteAllowTigeraTierAndExpectWait(ctx, c, &r, mockStatus)
+		})
+
+		It("should wait if policy watches are not ready", func() {
+			r = ReconcileCompliance{
+				client:             c,
+				scheme:             scheme,
+				provider:           operatorv1.ProviderNone,
+				status:             mockStatus,
+				clusterDomain:      dns.DefaultClusterDomain,
+				licenseAPIReady:    readyFlag,
+				policyWatchesReady: &utils.ReadyFlag{},
+			}
+			utils.ExpectWaitForPolicyWatches(ctx, &r, mockStatus)
 		})
 	})
 

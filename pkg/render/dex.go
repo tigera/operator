@@ -196,27 +196,16 @@ func (c *dexComponent) deployment() client.Object {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      DexObjectName,
 			Namespace: DexNamespace,
-			Labels: map[string]string{
-				"k8s-app": DexObjectName,
-			},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"k8s-app": DexObjectName,
-				},
-			},
 			Replicas: c.cfg.Installation.ControlPlaneReplicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      DexObjectName,
-					Namespace: DexNamespace,
-					Labels: map[string]string{
-						"k8s-app": DexObjectName,
-					},
+					Name:        DexObjectName,
+					Namespace:   DexNamespace,
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{

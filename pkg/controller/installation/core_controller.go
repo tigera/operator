@@ -756,23 +756,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	terminating := (instance.DeletionTimestamp != nil)
 	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
 
-	// Changes for updating installation status conditions
-	if request.Name == InstallationName && request.Namespace == "" {
-		ts := &operator.TigeraStatus{}
-		err := r.client.Get(ctx, types.NamespacedName{Name: InstallationName}, ts)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-
-		status.UpdateStatusCondition(instance.Status.Conditions, ts.Status.Conditions, instance.GetGeneration())
-		if err := r.client.Status().Update(ctx, instance); err != nil {
-			log.WithValues("reason", err).Info("Failed to create Installation status conditions.")
-			return reconcile.Result{}, err
-		}
-		return reconcile.Result{}, nil
-	}
-
-	status := instance.Status
 	// Mark CR found so we can report converter problems via tigerastatus
 	r.status.OnCRFound()
 

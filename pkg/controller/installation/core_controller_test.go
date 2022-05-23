@@ -1324,7 +1324,6 @@ var _ = Describe("Testing core-controller installation", func() {
 					},
 				},
 			}
-
 			conditions := []metav1.Condition{
 				{
 					Type:               "Ready",

@@ -243,6 +243,7 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 }
 
 // mergeState returns the object to pass to Update given the current and desired object states.
+// Returns nil if no update should be applied.
 func mergeState(desired client.Object, current runtime.Object) client.Object {
 	currentMeta := current.(metav1.ObjectMetaAccessor).GetObjectMeta()
 	desiredMeta := desired.(metav1.ObjectMetaAccessor).GetObjectMeta()
@@ -345,17 +346,9 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 		dsa.Status = csa.Status
 		return dsa
 	case *v3.UISettings:
-		// Only update if the spec has changed
-		cui := current.(*v3.UISettings)
-		dui := desired.(*v3.UISettings)
-		if reflect.DeepEqual(cui.Spec, dui.Spec) {
-			return cui
-		}
-
-		// UISettings are always owned by the group, so never modify the OwnerReferences that are returned by the
-		// APIServer.
-		dui.SetOwnerReferences(cui.GetOwnerReferences())
-		return dui
+		// The operator only creates shared UISettings (cluster-wide). Although the UI prevents deletion of these
+		// resources, it does allow the user to modify them. Therefore, we do not want to reapply these resources.
+		return nil
 	default:
 		// Default to just using the desired state, with an updated RV.
 		return desired

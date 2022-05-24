@@ -122,6 +122,37 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Volumes[3].Secret.SecretName).To(Equal(relasticsearch.PublicCertSecret))
 	})
 
+	It("should render all resources for a openshift", func() {
+		resources := renderObjects(renderConfig{oidc: false, managementCluster: nil, installation: installation, complianceFeatureActive: true, openshift: true})
+
+		// Should render the correct resources.
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: render.ManagerNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.ManagerServiceAccount, ns: render.ManagerNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: render.ManagerClusterRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: render.ManagerClusterRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: render.ManagerClusterSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
+			{name: render.ManagerUserSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
+			{name: render.ManagerClusterSettingsLayerTigera, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
+			{name: render.ManagerClusterSettingsLayerOpenshift, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
+			{name: render.ManagerClusterSettingsViewDefault, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
+			{name: "tigera-manager", ns: render.ManagerNamespace, group: "", version: "v1", kind: "Service"},
+			{name: "tigera-manager", ns: "", group: "security.openshift.io", version: "v1", kind: "SecurityContextConstraints"},
+			{name: "tigera-manager", ns: render.ManagerNamespace, group: "apps", version: "v1", kind: "Deployment"},
+		}
+
+		for i, expectedRes := range expectedResources {
+			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+		}
+		Expect(resources).To(HaveLen(len(expectedResources)))
+	})
+
 	It("should not proxy compliance if the feature is not active", func() {
 		resources := renderObjects(renderConfig{oidc: false, managementCluster: nil, installation: installation, complianceFeatureActive: false})
 		voltron := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment).Spec.Template.Spec.Containers[2]
@@ -556,6 +587,7 @@ type renderConfig struct {
 	managementCluster       *operatorv1.ManagementCluster
 	installation            *operatorv1.InstallationSpec
 	complianceFeatureActive bool
+	openshift               bool
 }
 
 func renderObjects(roc renderConfig) []client.Object {
@@ -601,6 +633,7 @@ func renderObjects(roc renderConfig) []client.Object {
 		ESLicenseType:           render.ElasticsearchLicenseTypeEnterpriseTrial,
 		Replicas:                roc.installation.ControlPlaneReplicas,
 		ComplianceFeatureActive: roc.complianceFeatureActive,
+		Openshift:               roc.openshift,
 	}
 	component, err := render.Manager(cfg)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)

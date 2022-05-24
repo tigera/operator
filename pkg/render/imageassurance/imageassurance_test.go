@@ -5,22 +5,27 @@ package imageassurance_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcimageassurance "github.com/tigera/operator/pkg/render/common/imageassurance"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/imageassurance"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 var _ = Describe("Image Assurance Render", func() {
@@ -30,10 +35,10 @@ var _ = Describe("Image Assurance Render", func() {
 		pgUserSecret              corev1.Secret
 		pgServerCertSecret        corev1.Secret
 		tlsSecrets                corev1.Secret
-		mgrSecrets                corev1.Secret
 		pgConfig                  corev1.ConfigMap
 		config                    corev1.ConfigMap
 		tenantEncryptionKeySecret corev1.Secret
+		bundle                    certificatemanagement.TrustedBundle
 	)
 
 	BeforeEach(func() {
@@ -117,14 +122,12 @@ var _ = Describe("Image Assurance Render", func() {
 			Data: map[string][]byte{"tls.key": []byte("tlskey"), "tls.cert": []byte("tlscert")},
 		}
 
-		mgrSecrets = corev1.Secret{
-			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      imageassurance.ManagerCertSecretName,
-				Namespace: common.OperatorNamespace(),
-			},
-			Data: map[string][]byte{"tls.key": []byte("mgrkey"), "tls.cert": []byte("mgrcert")},
-		}
+		scheme := runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
+		certificateManager, err := certificatemanager.Create(cli, nil, dns.DefaultClusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+		bundle = certificateManager.CreateTrustedBundle()
 
 		tenantEncryptionKeySecret = corev1.Secret{
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
@@ -341,7 +344,7 @@ var _ = Describe("Image Assurance Render", func() {
 			PGConfig:                  &pgConfig,
 			ConfigurationConfigMap:    &config,
 			TLSSecret:                 &tlsSecrets,
-			InternalMgrSecret:         &mgrSecrets,
+			TrustedCertBundle:         bundle,
 			NeedsMigrating:            false,
 			ComponentsUp:              false,
 			TenantEncryptionKeySecret: &tenantEncryptionKeySecret,
@@ -633,7 +636,7 @@ var _ = Describe("Image Assurance Render", func() {
 			PGConfig:                  &pgConfig,
 			ConfigurationConfigMap:    &config,
 			TLSSecret:                 &tlsSecrets,
-			InternalMgrSecret:         &mgrSecrets,
+			TrustedCertBundle:         bundle,
 			NeedsMigrating:            true,
 			ComponentsUp:              false,
 			TenantEncryptionKeySecret: &tenantEncryptionKeySecret,
@@ -675,7 +678,7 @@ var _ = Describe("Image Assurance Render", func() {
 			PGConfig:                  &pgConfig,
 			ConfigurationConfigMap:    &config,
 			TLSSecret:                 &tlsSecrets,
-			InternalMgrSecret:         &mgrSecrets,
+			TrustedCertBundle:         bundle,
 			NeedsMigrating:            true,
 			ComponentsUp:              true,
 			TenantEncryptionKeySecret: &tenantEncryptionKeySecret,
@@ -700,7 +703,7 @@ var _ = Describe("Image Assurance Render", func() {
 				ManagerDomain: "https://127.0.0.1",
 				OIDC:          &operatorv1.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"}}}
 
-		var dexCfg = render.NewDexKeyValidatorConfig(authentication, nil, render.CreateDexTLSSecret("cn"), dns.DefaultClusterDomain)
+		var dexCfg = render.NewDexKeyValidatorConfig(authentication, nil, dns.DefaultClusterDomain)
 
 		component := imageassurance.ImageAssurance(&imageassurance.Config{
 			PullSecrets:               nil,
@@ -712,7 +715,7 @@ var _ = Describe("Image Assurance Render", func() {
 			PGConfig:                  &pgConfig,
 			ConfigurationConfigMap:    &config,
 			TLSSecret:                 &tlsSecrets,
-			InternalMgrSecret:         &mgrSecrets,
+			TrustedCertBundle:         bundle,
 			KeyValidatorConfig:        dexCfg,
 			NeedsMigrating:            false,
 			ComponentsUp:              false,

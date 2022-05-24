@@ -1,5 +1,3 @@
-
----
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
@@ -54,9 +52,15 @@ spec:
                 type: integer
               awsSecondaryIPSupport:
                 description: 'AWSSecondaryIPSupport controls whether Felix will try
-                  to provision AWS secondary ENIs and secondary IPs for workloads
-                  that have IPs from IP pools that are configured with an AWS subnet
-                  ID. [Default: Disabled]'
+                  to provision AWS secondary ENIs for workloads that have IPs from
+                  IP pools that are configured with an AWS subnet ID.  If the field
+                  is set to "EnabledENIPerWorkload" then each workload with an AWS-backed
+                  IP will be assigned its own secondary ENI. If set to "Enabled" then
+                  each workload with an AWS-backed IP pool will be allocated a secondary
+                  IP address on a secondary ENI; this mode requires additional IP
+                  pools to be provisioned for the host to claim IPs for the primary
+                  IP of the secondary ENIs. Accepted value must be one of "Enabled",
+                  "EnabledENIPerWorkload" or "Disabled". [Default: Disabled]'
                 type: string
               awsSrcDstCheck:
                 description: 'Set source-destination-check on AWS EC2 instances. Accepted
@@ -133,6 +137,37 @@ spec:
                   logs are emitted to the BPF trace pipe, accessible with the command
                   `tc exec bpf debug`. [Default: Off].'
                 type: string
+              bpfMapSizeConntrack:
+                description: 'BPFMapSizeConntrack sets the size for the conntrack
+                  map.  This map must be large enough to hold an entry for each active
+                  connection.  Warning: changing the size of the conntrack map can
+                  cause disruption.'
+                type: integer
+              bpfMapSizeIPSets:
+                description: BPFMapSizeIPSets sets the size for ipsets map.  The IP
+                  sets map must be large enough to hold an entry for each endpoint
+                  matched by every selector in the source/destination matches in network
+                  policy.  Selectors such as "all()" can result in large numbers of
+                  entries (one entry per endpoint in that case).
+                type: integer
+              bpfMapSizeNATAffinity:
+                type: integer
+              bpfMapSizeNATBackend:
+                description: BPFMapSizeNATBackend sets the size for nat back end map.
+                  This is the total number of endpoints. This is mostly more than
+                  the size of the number of services.
+                type: integer
+              bpfMapSizeNATFrontend:
+                description: BPFMapSizeNATFrontend sets the size for nat front end
+                  map. FrontendMap should be large enough to hold an entry for each
+                  nodeport, external IP and each port in each service.
+                type: integer
+              bpfMapSizeRoute:
+                description: BPFMapSizeRoute sets the size for the routes map.  The
+                  routes map should be large enough to hold one entry per workload
+                  and a handful of entries per host (enough to cover its own IPs and
+                  tunnel IPs).
+                type: integer
               bpfPSNATPorts:
                 anyOf:
                 - type: integer
@@ -234,8 +269,8 @@ spec:
               dnsLogsFileAggregationKind:
                 description: 'DNSLogsFileAggregationKind is used to choose the type
                   of aggregation for DNS log entries. [Default: 1 - client name prefix
-                  aggregation]. Accepted values are 0 and 1. 0 - No aggregation 1
-                  - Aggregate over clients with the same name prefix'
+                  aggregation]. Accepted values are 0 and 1. 0 - No aggregation. 1
+                  - Aggregate over clients with the same name prefix.'
                 type: integer
               dnsLogsFileDirectory:
                 description: 'DNSLogsFileDirectory sets the directory where DNS log
@@ -273,10 +308,58 @@ spec:
                 description: 'DNSLogsLatency indicates to include measurements of
                   DNS request/response latency in each DNS log. [Default: true]'
                 type: boolean
+              dnsPacketsNfqueueID:
+                description: 'DNSPacketsNfqueueID is the NFQUEUE ID to use for capturing
+                  DNS packets to ensure programming IPSets occurs before the response
+                  is released. Used when DNSPolicyMode is DelayDNSResponse. [Default:
+                  101]'
+                type: integer
+              dnsPacketsNfqueueMaxHoldDuration:
+                description: 'DNSPacketsNfqueueMaxHoldDuration is the max length of
+                  time to hold on to a DNS response while waiting for the the dataplane
+                  to be programmed. Used when DNSPolicyMode is DelayDNSResponse. [Default:
+                  3s]'
+                type: string
+              dnsPacketsNfqueueSize:
+                description: 'DNSPacketsNfqueueSize is the size of the NFQUEUE for
+                  captured DNS packets. This is the maximum number of DNS packets
+                  that may be queued awaiting programming in the dataplane. Used when
+                  DNSPolicyMode is DelayDNSResponse. [Default: 100]'
+                type: integer
+              dnsPolicyMode:
+                description: "DNSPolicyMode specifies how DNS policy programming will
+                  be handled. DelayDeniedPacket - Felix delays any denied packet that
+                  traversed a policy that included egress domain matches, but did
+                  not match. The packet is released after a fixed time, or after the
+                  destination IP address was programmed. DelayDNSResponse - Felix
+                  delays any DNS response until related IPSets are programmed. This
+                  introduces some latency to all DNS packets (even when no IPSet programming
+                  is required), but it ensures policy hit statistics are accurate.
+                  This is the recommended setting when you are making use of staged
+                  policies or policy rule hit statistics. NoDelay - Felix does not
+                  introduce any delay to the packets. DNS rules may not have been
+                  programmed by the time the first packet traverses the policy rules.
+                  Client applications need to handle reconnection attempts if initial
+                  connection attempts fail. This may be problematic for some applications
+                  or for very low DNS TTLs. \n On Windows, or when using the eBPF
+                  dataplane, this setting is ignored and \"NoDelay\" is always used.
+                  \n [Default: DelayDeniedPacket]"
+                enum:
+                - NoDelay
+                - DelayDeniedPacket
+                - DelayDNSResponse
+                type: string
               dnsPolicyNfqueueID:
                 description: 'DNSPolicyNfqueueID is the NFQUEUE ID to use for DNS
                   Policy re-evaluation when the domains IP hasn''t been programmed
-                  to ipsets yet. [Default: 100]'
+                  to ipsets yet. Used when DNSPolicyMode is DelayDeniedPacket. [Default:
+                  100]'
+                type: integer
+              dnsPolicyNfqueueSize:
+                description: 'DNSPolicyNfqueueID is the size of the NFQUEUE for DNS
+                  policy re-evaluation. This is the maximum number of denied packets
+                  that may be queued up pending re-evaluation. Used when DNSPolicyMode
+                  is DelayDeniedPacket. [Default: 100]'
                 type: integer
               dnsTrustedServers:
                 description: 'The DNS servers that Felix should trust. Each entry
@@ -439,16 +522,16 @@ spec:
                 description: 'FlowLogsFileAggregationKindForAllowed is used to choose
                   the type of aggregation for flow log entries created for allowed
                   connections. [Default: 2 - pod prefix name based aggregation]. Accepted
-                  values are 0, 1 and 2. 0 - No aggregation 1 - Source port based
-                  aggregation 2 - Pod prefix name based aggreagation.'
+                  values are 0, 1 and 2. 0 - No aggregation. 1 - Source port based
+                  aggregation. 2 - Pod prefix name based aggreagation.'
                 type: integer
               flowLogsFileAggregationKindForDenied:
                 description: 'FlowLogsFileAggregationKindForDenied is used to choose
                   the type of aggregation for flow log entries created for denied
                   connections. [Default: 1 - source port based aggregation]. Accepted
-                  values are 0, 1 and 2. 0 - No aggregation 1 - Source port based
-                  aggregation 2 - Pod prefix name based aggregation. 3 - No destination
-                  ports based aggregation'
+                  values are 0, 1 and 2. 0 - No aggregation. 1 - Source port based
+                  aggregation. 2 - Pod prefix name based aggregation. 3 - No destination
+                  ports based aggregation.'
                 type: integer
               flowLogsFileDirectory:
                 description: FlowLogsFileDirectory sets the directory where flow logs
@@ -938,9 +1021,9 @@ spec:
                   routes. - CalicoIPAM: the default - use IPAM data to construct routes.'
                 type: string
               routeTableRange:
-                description: Calico programs additional Linux route tables for various
-                  purposes.  RouteTableRange specifies the indices of the route tables
-                  that Calico should use.
+                description: Deprecated in favor of RouteTableRanges. Calico programs
+                  additional Linux route tables for various purposes. RouteTableRange
+                  specifies the indices of the route tables that Calico should use.
                 properties:
                   max:
                     type: integer
@@ -950,6 +1033,21 @@ spec:
                 - max
                 - min
                 type: object
+              routeTableRanges:
+                description: Calico programs additional Linux route tables for various
+                  purposes. RouteTableRanges specifies a set of table index ranges
+                  that Calico should use. Deprecates`RouteTableRange`, overrides `RouteTableRange`.
+                items:
+                  properties:
+                    max:
+                      type: integer
+                    min:
+                      type: integer
+                  required:
+                  - max
+                  - min
+                  type: object
+                type: array
               serviceLoopPrevention:
                 description: 'When service IP advertisement is enabled, prevent routing
                   loops to service IPs that are not in use, by dropping or rejecting
@@ -1050,6 +1148,10 @@ spec:
               wireguardInterfaceName:
                 description: 'WireguardInterfaceName specifies the name to use for
                   the Wireguard interface. [Default: wg.calico]'
+                type: string
+              wireguardKeepAlive:
+                description: 'WireguardKeepAlive controls Wireguard PersistentKeepalive
+                  option. Set 0 to disable. [Default: 0]'
                 type: string
               wireguardListeningPort:
                 description: 'WireguardListeningPort controls the listening port used

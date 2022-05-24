@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -59,6 +59,7 @@ var _ = Describe("Mainline component function tests", func() {
 	var mgr manager.Manager
 	var shutdownContext context.Context
 	var cancel context.CancelFunc
+	var operatorDone chan struct{}
 	BeforeEach(func() {
 		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable)
 		verifyCRDsExist(c)
@@ -92,6 +93,21 @@ var _ = Describe("Mainline component function tests", func() {
 	})
 
 	AfterEach(func() {
+		defer func() {
+			cancel()
+			Eventually(func() error {
+				select {
+				case <-operatorDone:
+					return nil
+				default:
+					return fmt.Errorf("operator did not shutdown")
+				}
+			}, 60*time.Second).Should(BeNil())
+		}()
+		removeInstallResourceCR(c, "default", context.Background())
+
+		waitForProductTeardown(c)
+
 		// Clean up Calico data that might be left behind.
 		Eventually(func() error {
 			cs := kubernetes.NewForConfigOrDie(mgr.GetConfig())
@@ -103,7 +119,7 @@ var _ = Describe("Mainline component function tests", func() {
 				return fmt.Errorf("No nodes found")
 			}
 			for _, n := range nodes.Items {
-				for k, _ := range n.ObjectMeta.Annotations {
+				for k := range n.ObjectMeta.Annotations {
 					if strings.Contains(k, "projectcalico") {
 						delete(n.ObjectMeta.Annotations, k)
 					}
@@ -116,49 +132,12 @@ var _ = Describe("Mainline component function tests", func() {
 			return nil
 		}, 30*time.Second).Should(BeNil())
 
-		// Validate the calico-system namespace is deleted using an unstructured type. This hits the API server
-		// directly instead of using the client cache. This should help with flaky tests.
-		Eventually(func() error {
-			u := &unstructured.Unstructured{}
-			u.SetGroupVersionKind(schema.GroupVersionKind{
-				Group:   "",
-				Version: "v1",
-				Kind:    "Namespace",
-			})
-
-			k := client.ObjectKey{Name: "calico-system"}
-			err := c.Get(context.Background(), k, u)
-			return err
-		}, 240*time.Second).ShouldNot(BeNil())
 		mgr = nil
 	})
 
 	Describe("Installing CRD", func() {
-		AfterEach(func() {
-			// Delete any CRD that might have been created by the test.
-			instance := &operator.Installation{
-				TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
-				ObjectMeta: metav1.ObjectMeta{Name: "default"},
-			}
-			err := c.Get(context.Background(), client.ObjectKey{Name: "default"}, instance)
-			Expect(err).NotTo(HaveOccurred())
-			err = c.Delete(context.Background(), instance)
-			Expect(err).NotTo(HaveOccurred())
-		})
-
 		It("Should install resources for a CRD", func() {
-			done := installResourceCRD(c, mgr, shutdownContext, nil)
-			defer func() {
-				cancel()
-				Eventually(func() error {
-					select {
-					case <-done:
-						return nil
-					default:
-						return fmt.Errorf("operator did not shutdown")
-					}
-				}, 60*time.Second).Should(BeNil())
-			}()
+			operatorDone = installResourceCRD(c, mgr, shutdownContext, nil)
 			verifyCalicoHasDeployed(c)
 
 			instance := &operator.Installation{
@@ -202,18 +181,7 @@ var _ = Describe("Mainline component function tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 			}
 
-			done := installResourceCRD(c, mgr, shutdownContext, nil)
-			defer func() {
-				cancel()
-				Eventually(func() error {
-					select {
-					case <-done:
-						return nil
-					default:
-						return fmt.Errorf("operator did not shutdown")
-					}
-				}, 60*time.Second).Should(BeNil())
-			}()
+			operatorDone = installResourceCRD(c, mgr, shutdownContext, nil)
 			verifyCalicoHasDeployed(c)
 
 			By("Deleting CR after its tigera status becomes available")
@@ -239,13 +207,7 @@ var _ = Describe("Mainline component function tests with ignored resource", func
 		verifyCRDsExist(c)
 	})
 	AfterEach(func() {
-		instance := &operator.Installation{
-			TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: "not-default"},
-			Spec:       operator.InstallationSpec{},
-		}
-		err := c.Delete(context.Background(), instance)
-		Expect(err).NotTo(HaveOccurred())
+		removeInstallResourceCR(c, "not-default", context.Background())
 	})
 
 	It("Should ignore a CRD resource not named 'default'", func() {
@@ -314,7 +276,8 @@ func setupManager(manageCRDs bool) (client.Client, context.Context, context.Canc
 	Expect(err).NotTo(HaveOccurred())
 	// Create a manager to use in the tests.
 	mgr, err := manager.New(cfg, manager.Options{
-		Namespace: "",
+		Namespace:          "",
+		MetricsBindAddress: "0",
 		// Upgrade notes fro v0.14.0 (https://sdk.operatorframework.io/docs/upgrading-sdk-version/version-upgrade-guide/#v014x)
 		// say to replace restmapper but the NewDynamicRestMapper did not satisfy the
 		// MapperProvider interface
@@ -354,6 +317,21 @@ func installResourceCRD(c client.Client, mgr manager.Manager, ctx context.Contex
 
 	By("Running the operator")
 	return RunOperator(mgr, ctx)
+}
+
+func removeInstallResourceCR(c client.Client, name string, ctx context.Context) {
+	// Delete any CRD that might have been created by the test.
+	instance := &operator.Installation{
+		TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+	}
+	err := c.Get(ctx, client.ObjectKey{Name: name}, instance)
+	if err != nil && kerror.IsNotFound(err) {
+		return
+	}
+	Expect(err).NotTo(HaveOccurred())
+	err = c.Delete(ctx, instance)
+	Expect(err).NotTo(HaveOccurred())
 }
 
 func verifyCalicoHasDeployed(c client.Client) {
@@ -424,4 +402,55 @@ func verifyCRDsExist(c client.Client) {
 		}
 		return nil
 	}, 10*time.Second).Should(BeNil())
+}
+
+func waitForProductTeardown(c client.Client) {
+	// Validate the calico-system namespace is deleted using an unstructured type. This hits the API server
+	// directly instead of using the client cache. This should help with flaky tests.
+	Eventually(func() error {
+		u := &unstructured.Unstructured{}
+		u.SetGroupVersionKind(schema.GroupVersionKind{
+			Group:   "",
+			Version: "v1",
+			Kind:    "Namespace",
+		})
+
+		k := client.ObjectKey{Name: "calico-system"}
+		err := c.Get(context.Background(), k, u)
+		if err == nil {
+			return fmt.Errorf("Calico namespace still exists")
+		}
+		if !kerror.IsNotFound(err) {
+			return err
+		}
+		u = &unstructured.Unstructured{}
+		u.SetGroupVersionKind(schema.GroupVersionKind{
+			Group:   "rbac.authorization.k8s.io",
+			Version: "v1",
+			Kind:    "ClusterRoleBinding",
+		})
+		k = client.ObjectKey{Name: "calico-node"}
+		err = c.Get(context.Background(), k, u)
+		if err == nil {
+			return fmt.Errorf("Node CRB still exists")
+		}
+		if !kerror.IsNotFound(err) {
+			return err
+		}
+		u = &unstructured.Unstructured{}
+		u.SetGroupVersionKind(schema.GroupVersionKind{
+			Group:   "operator.tigera.io",
+			Version: "v1",
+			Kind:    "Installation",
+		})
+		k = client.ObjectKey{Name: "default"}
+		err = c.Get(context.Background(), k, u)
+		if err == nil {
+			return fmt.Errorf("default Installation still exists")
+		}
+		if !kerror.IsNotFound(err) {
+			return err
+		}
+		return nil
+	}, 240*time.Second).Should(BeNil())
 }

@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Components defined here are required to be kept in sync with
+// config/enterprise_versions.yml
+
 package components
 
 var (
@@ -136,6 +139,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "anomaly_detection_jobs" }}
+	ComponentAnomalyDetectionJobs = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with .Components.kibana }}
 	ComponentKibana = component{
 		Version: "tesla-{{ .Version }}",
@@ -174,6 +183,12 @@ var (
 {{- end }}
 {{ with index .Components "envoy" }}
 	ComponentEnvoyProxy = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
+{{ with index .Components "dikastes" }}
+	ComponentDikastes = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
@@ -250,6 +265,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "windows" }}
+	ComponentTigeraWindows = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "image-assurance-api" }}
 	ComponentImageAssuranceApi = component{
 		Version: "{{ .Version }}",
@@ -280,12 +301,6 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index .Components "windows" }}
-	ComponentTigeraWindows = component{
-		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
-	}
-{{- end }}
 	EnterpriseComponents = []component{
 		ComponentAPIServer,
 		ComponentComplianceBenchmarker,
@@ -306,6 +321,7 @@ var (
 		ComponentFluentdWindows,
 		ComponentGuardian,
 		ComponentIntrusionDetectionController,
+		ComponentAnomalyDetectionJobs,
 		ComponentKibana,
 		ComponentManager,
 		ComponentDex,
@@ -326,11 +342,12 @@ var (
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
+		ComponentTigeraWindows,
 		ComponentImageAssuranceApi,
 		ComponentImageAssuranceScanner,
 		ComponentImageAssuranceDBMigrator,
 		ComponentImageAssuranceCAW,
-		ComponentTigeraWindows,
+		ComponentDikastes,
 		ComponentSasha,
 	}
 )

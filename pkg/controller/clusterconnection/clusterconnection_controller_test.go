@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,7 +20,9 @@ import (
 
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/test"
 
 	"github.com/tigera/operator/pkg/controller/clusterconnection"
@@ -36,7 +38,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -59,7 +60,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		err := operatorv1.SchemeBuilder.AddToScheme(scheme)
 		Expect(err).NotTo(HaveOccurred())
-		c = fake.NewFakeClientWithScheme(scheme)
+		c = fake.NewClientBuilder().WithScheme(scheme).Build()
 		ctx = context.Background()
 		mockStatus = &status.MockStatus{}
 		mockStatus.On("Run").Return()
@@ -81,38 +82,23 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				Namespace: render.GuardianNamespace,
 			},
 		}
-		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.GuardianSecretName,
-				Namespace: common.OperatorNamespace(),
-			},
-			Data: map[string][]byte{
-				"cert": []byte("foo"),
-				"key":  []byte("bar"),
-			},
-		}
-		c.Create(ctx, secret)
-		pcSecret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.PacketCaptureCertSecret,
-				Namespace: common.OperatorNamespace(),
-			},
-			Data: map[string][]byte{
-				"tls.crt": []byte("foo"),
-				"tls.key": []byte("bar"),
-			},
-		}
-		c.Create(ctx, pcSecret)
-		c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.PrometheusTLSSecretName,
-				Namespace: common.OperatorNamespace(),
-			},
-			Data: map[string][]byte{
-				"tls.crt": []byte("foo"),
-				"tls.key": []byte("bar"),
-			},
-		})
+		certificateManager, err := certificatemanager.Create(c, nil, dns.DefaultClusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
+		secret, err := certificateManager.GetOrCreateKeyPair(c, render.GuardianSecretName, common.OperatorNamespace(), []string{"a"})
+		Expect(err).NotTo(HaveOccurred())
+
+		pcSecret, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureCertSecret, common.OperatorNamespace(), []string{"a"})
+		Expect(err).NotTo(HaveOccurred())
+
+		promSecret, err := certificateManager.GetOrCreateKeyPair(c, render.PrometheusTLSSecretName, common.OperatorNamespace(), []string{"a"})
+		Expect(err).NotTo(HaveOccurred())
+		err = c.Create(ctx, secret.Secret(common.OperatorNamespace()))
+		Expect(err).NotTo(HaveOccurred())
+		err = c.Create(ctx, pcSecret.Secret(common.OperatorNamespace()))
+		Expect(err).NotTo(HaveOccurred())
+		err = c.Create(ctx, promSecret.Secret(common.OperatorNamespace()))
+		Expect(err).NotTo(HaveOccurred())
 
 		By("applying the required prerequisites")
 		// Create a ManagementClusterConnection in the k8s client.

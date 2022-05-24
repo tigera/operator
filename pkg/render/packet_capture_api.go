@@ -15,9 +15,6 @@
 package render
 
 import (
-	"fmt"
-	"strings"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -27,13 +24,13 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 // The names of the components related to the PacketCapture APIs related rendered objects.
@@ -47,8 +44,7 @@ const (
 	PacketCaptureDeploymentName         = PacketCaptureName
 	PacketCaptureServiceName            = PacketCaptureName
 
-	PacketCaptureCertSecret        = "tigera-packetcapture-server-tls"
-	PacketCaptureTLSHashAnnotation = "hash.operator.tigera.io/packetcapture-certificate"
+	PacketCaptureCertSecret = "tigera-packetcapture-server-tls"
 )
 
 // PacketCaptureApiConfiguration contains all the config information needed to render the component.
@@ -57,14 +53,14 @@ type PacketCaptureApiConfiguration struct {
 	Openshift          bool
 	Installation       *operatorv1.InstallationSpec
 	KeyValidatorConfig authentication.KeyValidatorConfig
-	ServerCertSecret   *corev1.Secret
+	ServerCertSecret   certificatemanagement.KeyPairInterface
+	TrustedBundle      certificatemanagement.TrustedBundle
 	ClusterDomain      string
 }
 
 type packetCaptureApiComponent struct {
-	cfg          *PacketCaptureApiConfiguration
-	image        string
-	csrInitImage string
+	cfg   *PacketCaptureApiConfiguration
+	image string
 }
 
 func PacketCaptureAPI(cfg *PacketCaptureApiConfiguration) Component {
@@ -80,23 +76,10 @@ func (pc *packetCaptureApiComponent) ResolveImages(is *operatorv1.ImageSet) erro
 	prefix := pc.cfg.Installation.ImagePrefix
 
 	var err error
-	var errMsg []string
 	pc.image, err = components.GetReference(components.ComponentPacketCapture, reg, path, prefix, is)
 	if err != nil {
-		errMsg = append(errMsg, err.Error())
+		return err
 	}
-
-	if pc.cfg.Installation.CertificateManagement != nil {
-		pc.csrInitImage, err = ResolveCSRInitImage(pc.cfg.Installation, is)
-		if err != nil {
-			errMsg = append(errMsg, err.Error())
-		}
-	}
-
-	if len(errMsg) != 0 {
-		return fmt.Errorf(strings.Join(errMsg, ","))
-	}
-
 	return nil
 }
 
@@ -109,7 +92,6 @@ func (pc *packetCaptureApiComponent) Objects() ([]client.Object, []client.Object
 		CreateNamespace(PacketCaptureNamespace, pc.cfg.Installation.KubernetesProvider),
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PacketCaptureNamespace, pc.cfg.PullSecrets...)...)...)
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PacketCaptureNamespace, pc.cfg.ServerCertSecret)...)...)
 
 	objs = append(objs,
 		pc.serviceAccount(),
@@ -124,10 +106,9 @@ func (pc *packetCaptureApiComponent) Objects() ([]client.Object, []client.Object
 		objs = append(objs, configmap.ToRuntimeObjects(pc.cfg.KeyValidatorConfig.RequiredConfigMaps(PacketCaptureNamespace)...)...)
 	}
 
-	if pc.cfg.Installation.CertificateManagement != nil {
-		objs = append(objs, CSRClusterRoleBinding(PacketCaptureServiceName, PacketCaptureNamespace))
+	if pc.cfg.TrustedBundle != nil {
+		objs = append(objs, pc.cfg.TrustedBundle.ConfigMap(PacketCaptureNamespace))
 	}
-
 	return objs, nil
 }
 
@@ -265,33 +246,27 @@ func (pc *packetCaptureApiComponent) deployment() client.Object {
 
 func (pc *packetCaptureApiComponent) initContainers() []corev1.Container {
 	var initContainers []corev1.Container
-	if pc.cfg.Installation.CertificateManagement != nil {
-		initContainers = append(initContainers, CreateCSRInitContainer(
-			pc.cfg.Installation.CertificateManagement,
-			pc.csrInitImage,
-			PacketCaptureCertSecret,
-			PacketCaptureServiceName,
-			corev1.TLSPrivateKeyKey,
-			corev1.TLSCertKey,
-			dns.GetServiceDNSNames(PacketCaptureServiceName, PacketCaptureNamespace, pc.cfg.ClusterDomain),
-			PacketCaptureNamespace))
+	if pc.cfg.ServerCertSecret.UseCertificateManagement() {
+		initContainers = append(initContainers, pc.cfg.ServerCertSecret.InitContainer(PacketCaptureNamespace))
 	}
 	return initContainers
 }
 
 func (pc *packetCaptureApiComponent) container() corev1.Container {
-	var volumeMounts = []corev1.VolumeMount{{
-		Name:      PacketCaptureCertSecret,
-		MountPath: "/certs/https",
-		ReadOnly:  true,
-	}}
+	var volumeMounts = []corev1.VolumeMount{
+		pc.cfg.ServerCertSecret.VolumeMount(),
+	}
 	env := []corev1.EnvVar{
 		{Name: "PACKETCAPTURE_API_LOG_LEVEL", Value: "Info"},
+		{Name: "PACKETCAPTURE_API_HTTPS_KEY", Value: pc.cfg.ServerCertSecret.VolumeMountKeyFilePath()},
+		{Name: "PACKETCAPTURE_API_HTTPS_CERT", Value: pc.cfg.ServerCertSecret.VolumeMountCertificateFilePath()},
 	}
 
 	if pc.cfg.KeyValidatorConfig != nil {
 		env = append(env, pc.cfg.KeyValidatorConfig.RequiredEnv("PACKETCAPTURE_API_")...)
-		volumeMounts = append(volumeMounts, pc.cfg.KeyValidatorConfig.RequiredVolumeMounts()...)
+	}
+	if pc.cfg.TrustedBundle != nil {
+		volumeMounts = append(volumeMounts, pc.cfg.TrustedBundle.VolumeMount())
 	}
 
 	return corev1.Container{
@@ -320,13 +295,12 @@ func (pc *packetCaptureApiComponent) healthProbe() *corev1.Probe {
 }
 
 func (pc *packetCaptureApiComponent) volumes() []corev1.Volume {
-	var volumes = []corev1.Volume{{
-		Name:         PacketCaptureCertSecret,
-		VolumeSource: CertificateVolumeSource(pc.cfg.Installation.CertificateManagement, PacketCaptureCertSecret),
-	}}
+	var volumes = []corev1.Volume{
+		pc.cfg.ServerCertSecret.Volume(),
+	}
 
-	if pc.cfg.KeyValidatorConfig != nil {
-		volumes = append(volumes, pc.cfg.KeyValidatorConfig.RequiredVolumes()...)
+	if pc.cfg.TrustedBundle != nil {
+		volumes = append(volumes, pc.cfg.TrustedBundle.Volume())
 	}
 
 	return volumes
@@ -334,7 +308,7 @@ func (pc *packetCaptureApiComponent) volumes() []corev1.Volume {
 
 func (pc *packetCaptureApiComponent) annotations() map[string]string {
 	var annotations = map[string]string{
-		PacketCaptureTLSHashAnnotation: rmeta.AnnotationHash(pc.cfg.ServerCertSecret.Data),
+		pc.cfg.ServerCertSecret.HashAnnotationKey(): pc.cfg.ServerCertSecret.HashAnnotationValue(),
 	}
 
 	return annotations

@@ -34,7 +34,7 @@ This graph shows the dependencies between controllers. Optional dependencies are
 
 When developing in the operator, there are a few design principles to be aware of.
 
-- API changes should be rare occurences, and the API should contain as little as possible. Use auto-detection
+- API changes should be rare occurrences, and the API should contain as little as possible. Use auto-detection
   or automation wherever possible to reduce the API surface.
 - Each "component" should receive its own CRD, namespace, controller, and status manager. e.g., compliance, networking, apiserver.
 - Controllers interact with each other through the Kubernetes API. For example, by updating status on relevant objects.
@@ -79,6 +79,53 @@ To launch Calico, install the default custom resource:
 To tear down the cluster:
 
 	make cluster-destroy
+	
+#### Running a custom image in your existing Calico (Enterprise) cluster
+
+These steps assume that you already have installed the operator in a Calico (Enterprise) cluster after following either 
+docs.projectcalico.org or docs.tigera.io. To verify, run `kubectl get deployment -n tigera-operator tigera-operator`. 
+You should see an existing deployment. 
+The steps also assume that you have setup your docker such that you can push to a registry.
+
+These are the steps:
+1. Make your own code changes to this repository.
+2. Create the binaries and a docker image.
+   ```bash
+   make image
+   ```
+   The output will show you the docker tag that was just created. (For example: `Successfully tagged tigera/operator:latest-amd64`.)
+3. Re-tag the image and push it to a registry of your choice.
+   ```
+   export IMAGE=myregistry.com/user/tigera/operator:my-tag
+   docker tag tigera/operator:latest $IMAGE
+   docker push $IMAGE
+   ```
+4. Change your deployment to use the image.
+   ```
+   kubectl set image deploy  -n tigera-operator tigera-operator  tigera-operator=$IMAGE
+   ```
+   _If your image is in a private registry, you also need to add [imagePullSecrets](https://kubernetes.io/docs/concepts/containers/images/) to the deployment._
+
+#### Set breakpoints in Goland IDE and run the code against your existing Calico (Enterprise) cluster
+
+These steps assume that you already have installed the operator in a Calico (Enterprise) cluster after following either 
+https://docs.projectcalico.org or https://docs.tigera.io. To verify, run `kubectl get deployment -n tigera-operator tigera-operator`. 
+You should see an existing deployment. Install [kubefwd](kubefwd.com).
+
+1. Scale down the operator, so it does not interfere with your own:
+```bash
+kubectl scale deploy -n tigera-operator tigera-operator --replicas=0
+```
+2. Run kubefwd in a separate terminal, so pods and service names are accessible from your local computer.
+```bash
+kubefwd svc -n calico-system -n tigera-compliance -n tigera-kibana -n tigera-manager -n tigera-dex -n tigera-elasticsearch -n tigera-prometheus -c $KUBECONFIG
+```
+3. Open a code file in your editor and set a breakpoint.
+4. Create a debug configuration by right-clicking main.go and select `modify run configuration`. 
+   1. Under Run kind, select `Package`
+   2. Under Environment, add `KUBECONFIG=/path/to/config`
+   3. In Program arguments, add `--enable-leader-election=false`
+5. Save the configuration. You can now run it in debug mode.
 
 ### Using Calico Enterprise
 

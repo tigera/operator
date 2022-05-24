@@ -208,8 +208,8 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 				return fmt.Errorf("ipPool.CIDR(%s) is invalid: %s", v6pool.CIDR, err)
 			}
 
-			if v6pool.Encapsulation != operatorv1.EncapsulationNone {
-				return fmt.Errorf("Encapsulation is not supported by IPv6 pools, but it is set for %s", v6pool.CIDR)
+			if v6pool.Encapsulation == operatorv1.EncapsulationIPIP || v6pool.Encapsulation == operatorv1.EncapsulationIPIPCrossSubnet {
+				return fmt.Errorf("IPIP encapsulation is not supported by IPv6 pools, but it is set for %s", v6pool.CIDR)
 			}
 
 			if bpfDataplane {

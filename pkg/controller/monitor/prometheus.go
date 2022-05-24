@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -43,13 +43,6 @@ func addPrometheusWatch(c controller.Controller) error {
 	return utils.AddNamespacedWatch(c, &monitoringv1.Prometheus{
 		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.PrometheusesKind, APIVersion: monitor.MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{Name: monitor.CalicoNodePrometheus, Namespace: common.TigeraPrometheusNamespace},
-	})
-}
-
-func addPodMonitorWatch(c controller.Controller) error {
-	return utils.AddNamespacedWatch(c, &monitoringv1.PodMonitor{
-		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.PodMonitorsKind, APIVersion: monitor.MonitoringAPIVersion},
-		ObjectMeta: metav1.ObjectMeta{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace},
 	})
 }
 
@@ -150,7 +143,7 @@ func requiresPrometheusResources(client kubernetes.Interface) error {
 	return nil
 }
 
-func waitToAddPrometheusWatch(c controller.Controller, client kubernetes.Interface, log logr.Logger, readyFlag *utils.ReadyFlag) error {
+func waitToAddPrometheusWatch(c controller.Controller, client kubernetes.Interface, log logr.Logger, readyFlag *utils.ReadyFlag) {
 	const (
 		initBackoff   = 30 * time.Second
 		maxBackoff    = 8 * time.Minute
@@ -172,7 +165,7 @@ func waitToAddPrometheusWatch(c controller.Controller, client kubernetes.Interfa
 				log.Info(fmt.Sprintf("%v. monitor-controller will retry.", err))
 			} else {
 				readyFlag.MarkAsReady()
-				return nil
+				return
 			}
 		}
 

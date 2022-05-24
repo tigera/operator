@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -46,8 +46,8 @@ var log = logf.Log.WithName("status_manager")
 // component's current status:
 //
 // - Available: The component is successfully running. All pods launched by the component are healthy.
-//              An upgrade may or may not be occuring.
-// - Progressing: A state change is occuring. It may be that the component is being installed for the
+//              An upgrade may or may not be occurring.
+// - Progressing: A state change is occurring. It may be that the component is being installed for the
 //                first time, or being upgraded to a new configuration or version.
 // - Degraded: The component is not running the desired state and is not progressing towards it. Either the
 //             component has not been installed, has been updated with invalid configuration, or has crashed.
@@ -223,7 +223,7 @@ func (m *statusManager) Run(ctx context.Context) {
 //
 // If there are no resources to monitor, then by default this component is available (all 0 resources for this component
 // are healthy). One caveat to the default when there are no resources to monitor is if the component has a degraded
-// status explicitely set.
+// status explicitly set.
 func (m *statusManager) ReadyToMonitor() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
@@ -490,8 +490,13 @@ func (m *statusManager) syncState() {
 		}
 
 		// Check if any pods within the daemonset are failing.
-		if f := m.podsFailing(ds.Spec.Selector, ds.Namespace); f != "" {
-			failing = append(failing, f)
+		if f, err := m.podsFailing(ds.Spec.Selector, ds.Namespace); err == nil {
+			if f != "" {
+				failing = append(failing, f)
+			}
+		} else {
+			log.WithValues("reason", err, "daemonset", dsnn).Info("Failed to check for failing pods")
+			continue
 		}
 	}
 
@@ -511,8 +516,13 @@ func (m *statusManager) syncState() {
 		}
 
 		// Check if any pods within the deployment are failing.
-		if f := m.podsFailing(dep.Spec.Selector, dep.Namespace); f != "" {
-			failing = append(failing, f)
+		if f, err := m.podsFailing(dep.Spec.Selector, dep.Namespace); err == nil {
+			if f != "" {
+				failing = append(failing, f)
+			}
+		} else {
+			log.WithValues("reason", err, "deployment", depnn).Info("Failed to check for failing pods")
+			continue
 		}
 	}
 
@@ -530,8 +540,13 @@ func (m *statusManager) syncState() {
 		}
 
 		// Check if any pods within the deployment are failing.
-		if f := m.podsFailing(ss.Spec.Selector, ss.Namespace); f != "" {
-			failing = append(failing, f)
+		if f, err := m.podsFailing(ss.Spec.Selector, ss.Namespace); err == nil {
+			if f != "" {
+				failing = append(failing, f)
+			}
+		} else {
+			log.WithValues("reason", err, "statefuleset", depnn).Info("Failed to check for failing pods")
+			continue
 		}
 	}
 
@@ -607,29 +622,32 @@ func (m *statusManager) removeTigeraStatus() {
 
 // podsFailing takes a selector and returns if any of the pods that match it are failing. Failing pods are defined
 // to be in CrashLoopBackOff state.
-func (m *statusManager) podsFailing(selector *metav1.LabelSelector, namespace string) string {
+func (m *statusManager) podsFailing(selector *metav1.LabelSelector, namespace string) (string, error) {
 	l := corev1.PodList{}
 	s, err := metav1.LabelSelectorAsMap(selector)
 	if err != nil {
 		panic(err)
 	}
-	m.client.List(context.TODO(), &l, client.MatchingLabels(s), client.InNamespace(namespace))
+	err = m.client.List(context.TODO(), &l, client.MatchingLabels(s), client.InNamespace(namespace))
+	if err != nil {
+		return "", err
+	}
 	for _, p := range l.Items {
 		if p.Status.Phase == corev1.PodFailed {
-			return fmt.Sprintf("Pod %s/%s has failed", p.Namespace, p.Name)
+			return fmt.Sprintf("Pod %s/%s has failed", p.Namespace, p.Name), nil
 		}
 		for _, c := range p.Status.InitContainerStatuses {
 			if msg := m.containerErrorMessage(p, c); msg != "" {
-				return msg
+				return msg, nil
 			}
 		}
 		for _, c := range p.Status.ContainerStatuses {
 			if msg := m.containerErrorMessage(p, c); msg != "" {
-				return msg
+				return msg, nil
 			}
 		}
 	}
-	return ""
+	return "", nil
 }
 
 func (m *statusManager) containerErrorMessage(p corev1.Pod, c corev1.ContainerStatus) string {

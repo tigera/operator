@@ -40,9 +40,9 @@ const (
 	blockTypeCert       = "CERTIFICATE"
 )
 
-// Creates a secret that will store the CA needed to generated certificates
+// VoltronTunnelSecret Creates a secret that will store the CA needed to generated certificates
 // for managed cluster registration
-func voltronTunnelSecret() *corev1.Secret {
+func VoltronTunnelSecret() *corev1.Secret {
 	key, cert := createSelfSignedSecret("tigera-voltron", []string{VoltronDnsName})
 	return &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
@@ -50,22 +50,6 @@ func voltronTunnelSecret() *corev1.Secret {
 			Name:      VoltronTunnelSecretName,
 			Namespace: common.OperatorNamespace(),
 		},
-		Data: map[string][]byte{
-			VoltronTunnelSecretCertName: []byte(cert),
-			VoltronTunnelSecretKeyName:  []byte(key),
-		},
-	}
-}
-
-func CreateDexTLSSecret(dexCommonName string) *corev1.Secret {
-	key, cert := createSelfSignedSecret(dexCommonName, []string{dexCommonName})
-	return &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      DexTLSSecretName,
-			Namespace: common.OperatorNamespace(),
-		},
-		Type: corev1.SecretTypeTLS,
 		Data: map[string][]byte{
 			corev1.TLSCertKey:       []byte(cert),
 			corev1.TLSPrivateKeyKey: []byte(key),

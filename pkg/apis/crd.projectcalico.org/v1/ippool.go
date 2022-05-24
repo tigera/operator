@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -65,16 +65,16 @@ type VXLANMode string
 
 const (
 	VXLANModeNever       VXLANMode = "Never"
-	VXLANModeAlways                = "Always"
-	VXLANModeCrossSubnet           = "CrossSubnet"
+	VXLANModeAlways      VXLANMode = "Always"
+	VXLANModeCrossSubnet VXLANMode = "CrossSubnet"
 )
 
 type IPIPMode string
 
 const (
 	IPIPModeNever       IPIPMode = "Never"
-	IPIPModeAlways               = "Always"
-	IPIPModeCrossSubnet          = "CrossSubnet"
+	IPIPModeAlways      IPIPMode = "Always"
+	IPIPModeCrossSubnet IPIPMode = "CrossSubnet"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

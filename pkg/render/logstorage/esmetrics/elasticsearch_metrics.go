@@ -16,9 +16,6 @@ package esmetrics
 
 import (
 	"fmt"
-	"strings"
-
-	"github.com/tigera/operator/pkg/dns"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -33,6 +30,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
@@ -54,8 +52,8 @@ type Config struct {
 	ESMetricsCredsSecret *corev1.Secret
 	ESCertSecret         *corev1.Secret
 	ClusterDomain        string
-	ServerTLS            *corev1.Secret
-	TrustedBundle        *corev1.ConfigMap
+	ServerTLS            certificatemanagement.KeyPairInterface
+	TrustedBundle        certificatemanagement.TrustedBundle
 }
 
 type elasticsearchMetrics struct {
@@ -71,22 +69,9 @@ func (e *elasticsearchMetrics) ResolveImages(is *operatorv1.ImageSet) error {
 	path := e.cfg.Installation.ImagePath
 	prefix := e.cfg.Installation.ImagePrefix
 
-	var errMsgs []string
-
 	e.esMetricsImage, err = components.GetReference(components.ComponentElasticsearchMetrics, reg, path, prefix, is)
 	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
-	}
-
-	if e.cfg.Installation.CertificateManagement != nil {
-		e.csrImage, err = render.ResolveCSRInitImage(e.cfg.Installation, is)
-		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
-		}
-	}
-
-	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+		return err
 	}
 
 	return err
@@ -96,15 +81,7 @@ func (e *elasticsearchMetrics) Objects() (objsToCreate, objsToDelete []client.Ob
 	toCreate := secret.ToRuntimeObjects(
 		secret.CopyToNamespace(render.ElasticsearchNamespace, e.cfg.ESMetricsCredsSecret)...,
 	)
-	toCreate = append(toCreate, e.metricsService(), e.metricsDeployment(), e.cfg.TrustedBundle, e.serviceAccount())
-
-	if e.cfg.Installation.CertificateManagement == nil {
-		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(render.ElasticsearchNamespace, e.cfg.ServerTLS)...)...)
-		objsToDelete = append(objsToDelete, render.CSRClusterRoleBinding(ElasticsearchMetricsName, render.ElasticsearchNamespace))
-	} else {
-		objsToDelete = append(objsToDelete, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: ElasticsearchMetricsServerTLSSecret, Namespace: render.ElasticsearchNamespace}})
-		toCreate = append(toCreate, render.CSRClusterRoleBinding(ElasticsearchMetricsName, render.ElasticsearchNamespace))
-	}
+	toCreate = append(toCreate, e.metricsService(), e.metricsDeployment(), e.serviceAccount())
 
 	return toCreate, objsToDelete
 }
@@ -155,27 +132,11 @@ func (e *elasticsearchMetrics) metricsService() *corev1.Service {
 
 func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 	var initContainers []corev1.Container
-
-	annotations := map[string]string{
-		"k8s-app":                           ElasticsearchMetricsName,
-		render.PrometheusCABundleAnnotation: rmeta.AnnotationHash(e.cfg.TrustedBundle.Data),
-	}
-	if e.cfg.Installation.CertificateManagement != nil {
-		initContainers = append(initContainers,
-			render.CreateCSRInitContainer(
-				e.cfg.Installation.CertificateManagement,
-				e.csrImage,
-				ElasticsearchMetricsServerTLSSecret,
-				ElasticsearchMetricsServerTLSSecret,
-				corev1.TLSPrivateKeyKey,
-				corev1.TLSCertKey,
-				dns.GetServiceDNSNames(ElasticsearchMetricsName, render.ElasticsearchNamespace, e.cfg.ClusterDomain),
-				render.ElasticsearchNamespace),
-		)
-	}
-
-	if e.cfg.ServerTLS != nil {
-		annotations[fmt.Sprintf("hash.operator.tigera.io/%s", e.cfg.ServerTLS.Name)] = rmeta.AnnotationHash(e.cfg.ServerTLS.Data)
+	annotations := e.cfg.TrustedBundle.HashAnnotations()
+	if e.cfg.ServerTLS.UseCertificateManagement() {
+		initContainers = append(initContainers, e.cfg.ServerTLS.InitContainer(render.ElasticsearchNamespace))
+	} else {
+		annotations[e.cfg.ServerTLS.HashAnnotationKey()] = e.cfg.ServerTLS.HashAnnotationValue()
 	}
 
 	return &appsv1.Deployment{
@@ -193,7 +154,10 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 			},
 			Template: *relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: annotations,
+					Labels: map[string]string{
+						"k8s-app": ElasticsearchMetricsName,
+					},
+					Annotations: annotations,
 				},
 				Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
 					Tolerations:        e.cfg.Installation.ControlPlaneTolerations,
@@ -210,36 +174,18 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 								Args: []string{"--es.uri=https://$(ELASTIC_USERNAME):$(ELASTIC_PASSWORD)@$(ELASTIC_HOST):$(ELASTIC_PORT)",
 									"--es.all", "--es.indices", "--es.indices_settings", "--es.shards", "--es.cluster_settings",
 									"--es.timeout=30s", "--es.ca=$(ELASTIC_CA)", "--web.listen-address=:9081",
-									"--web.telemetry-path=/metrics", "--tls.key=/tls/tls.key", "--tls.crt=/tls/tls.crt", "--ca.crt=/ca/tls.crt"},
+									"--web.telemetry-path=/metrics", "--tls.key=/tigera-ee-elasticsearch-metrics-tls/tls.key", "--tls.crt=/tigera-ee-elasticsearch-metrics-tls/tls.crt", fmt.Sprintf("--ca.crt=%s", certificatemanagement.TrustedCertBundleMountPath)},
 								VolumeMounts: []corev1.VolumeMount{
-									{
-										Name:      ElasticsearchMetricsServerTLSSecret,
-										MountPath: "/tls",
-										ReadOnly:  true,
-									},
-									{
-										Name:      render.PrometheusCABundle,
-										MountPath: "/ca",
-										ReadOnly:  true,
-									},
+									e.cfg.ServerTLS.VolumeMount(),
+									e.cfg.TrustedBundle.VolumeMount(),
 								},
 							}, render.DefaultElasticsearchClusterName, ElasticsearchMetricsSecret,
 							e.cfg.ClusterDomain, e.SupportedOSType(),
 						),
 					},
 					Volumes: []corev1.Volume{
-						{
-							Name:         ElasticsearchMetricsServerTLSSecret,
-							VolumeSource: render.CertificateVolumeSource(e.cfg.Installation.CertificateManagement, ElasticsearchMetricsServerTLSSecret),
-						},
-						{
-							Name: render.PrometheusCABundle,
-							VolumeSource: corev1.VolumeSource{
-								ConfigMap: &corev1.ConfigMapVolumeSource{
-									LocalObjectReference: corev1.LocalObjectReference{Name: render.PrometheusCABundle},
-								},
-							},
-						},
+						e.cfg.ServerTLS.Volume(),
+						e.cfg.TrustedBundle.Volume(),
 					},
 				}),
 			}, e.cfg.ESConfig, []*corev1.Secret{e.cfg.ESMetricsCredsSecret, e.cfg.ESCertSecret}).(*corev1.PodTemplateSpec),

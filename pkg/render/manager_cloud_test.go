@@ -21,8 +21,11 @@ var _ = Describe("Tigera Secure Cloud Manager rendering tests", func() {
 	installation := &operatorv1.InstallationSpec{}
 
 	It("should render all resources for a Image Assurance configuration", func() {
-		resources := renderObjects(renderConfig{oidc: false, managementCluster: nil,
-			installation: installation, includeManagerTLSSecret: true, imageAssuranceEnabled: true})
+		resources := renderObjects(renderConfig{
+			oidc:                  false,
+			managementCluster:     nil,
+			installation:          installation,
+			imageAssuranceEnabled: true})
 
 		// Should render the correct resources.
 		expectedResources := []struct {

@@ -1,3 +1,17 @@
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package convert
 
 import (
@@ -90,7 +104,7 @@ var _ = Describe("Convert network tests", func() {
 				Name:  "CNI_NETWORK_CONFIG",
 				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam"}}`,
 			}}
-			c := fake.NewFakeClientWithScheme(scheme, ds, v4pool1, emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, v4pool1, emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfg.Spec.CalicoNetwork.IPPools).To(Equal([]operatorv1.IPPool{{
@@ -108,7 +122,7 @@ var _ = Describe("Convert network tests", func() {
 				{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"},
 			}
 
-			c := fake.NewFakeClientWithScheme(scheme, ds, emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyFelixConfig()).Build()
 			_, err := Convert(ctx, c)
 			Expect(err).NotTo(HaveOccurred())
 		})
@@ -122,7 +136,7 @@ var _ = Describe("Convert network tests", func() {
 				Name:  "CALICO_IPV4POOL_CIDR",
 				Value: envcidr,
 			}}
-			c := fake.NewFakeClientWithScheme(scheme, ds, v4pool1, v4pool2, v4pooldefault, emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, v4pool1, v4pool2, v4pooldefault, emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfg.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
@@ -144,7 +158,7 @@ var _ = Describe("Convert network tests", func() {
 				Name:  "CALICO_IPV6POOL_CIDR",
 				Value: envcidr,
 			}}
-			c := fake.NewFakeClientWithScheme(scheme, ds, v6pool1, v6pool2, v6pooldefault, emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, v6pool1, v6pool2, v6pooldefault, emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfg.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
@@ -162,7 +176,7 @@ var _ = Describe("Convert network tests", func() {
 				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam"}}`,
 			}}
 			v4pool1.Spec.CIDR = "1.168.0/24"
-			c := fake.NewFakeClientWithScheme(scheme, ds, v4pool1)
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, v4pool1).Build()
 			_, err := Convert(ctx, c)
 			Expect(err).To(HaveOccurred())
 		})
@@ -178,7 +192,7 @@ var _ = Describe("Convert network tests", func() {
 				Value: "3.168.4.0/24",
 			}}
 			v4pooldefault.Spec.Disabled = true
-			c := fake.NewFakeClientWithScheme(scheme, ds, v4pooldefault, v4pool2, emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, v4pooldefault, v4pool2, emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfg.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
@@ -190,7 +204,7 @@ var _ = Describe("Convert network tests", func() {
 				Name:  "CNI_NETWORK_CONFIG",
 				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "calico-ipam", "assign_ipv6":"true"}}`,
 			}}
-			c := fake.NewFakeClientWithScheme(scheme, ds, v4pool1, v6pool1, emptyFelixConfig())
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, v4pool1, v6pool1, emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(cfg.Spec.CalicoNetwork.IPPools).To(ConsistOf([]operatorv1.IPPool{{
@@ -220,7 +234,7 @@ var _ = Describe("Convert network tests", func() {
 				}
 				pools = append(pools, p)
 			}
-			c := fake.NewFakeClientWithScheme(scheme, append([]runtime.Object{ds}, pools...)...)
+			c := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(append([]runtime.Object{ds}, pools...)...).Build()
 			_, err := Convert(ctx, c)
 			Expect(err).To(HaveOccurred())
 		},
@@ -346,7 +360,7 @@ var _ = Describe("Convert network tests", func() {
 				BlockSize:     int32Ptr(24),
 				NodeSelector:  "nodeselectorstring",
 			}),
-			Entry("ipv4, no encap, nat, block 27, differnt nodeselector", true, crdv1.IPPool{Spec: crdv1.IPPoolSpec{
+			Entry("ipv4, no encap, nat, block 27, different nodeselector", true, crdv1.IPPool{Spec: crdv1.IPPoolSpec{
 				CIDR:         "1.168.4.0/24",
 				VXLANMode:    crdv1.VXLANModeNever,
 				IPIPMode:     crdv1.IPIPModeNever,

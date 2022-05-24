@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,20 +15,23 @@
 package test
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	. "github.com/onsi/gomega"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-
-	. "github.com/onsi/gomega"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/tls"
 
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/sets"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func ExpectK8sServiceEpEnvVars(podSpec corev1.PodSpec, host, port string) {
@@ -138,7 +141,10 @@ func ExpectGlobalAlertTemplateToBePopulated(resource runtime.Object) {
 	Expect(ok).To(BeTrue(), fmt.Sprintf("resource (%v) should convert to GlobalAlertTemplate", resource))
 	Expect(v.Spec.Description).ToNot(BeEmpty(), fmt.Sprintf("Description should not be empty for resource (%v)", resource))
 	Expect(v.Spec.Severity).ToNot(BeNumerically("==", 0), fmt.Sprintf("Severity should not be empty for resource (%v)", resource))
-	Expect(v.Spec.DataSet).ToNot(BeEmpty(), fmt.Sprintf("DataSet should not be empty for resource (%v)", resource))
+
+	if v.Spec.Type != v3.GlobalAlertTypeAnomalyDetection { // ignored for  AnomalyDetection Typed
+		Expect(v.Spec.DataSet).ToNot(BeEmpty(), fmt.Sprintf("DataSet should not be empty for resource (%v)", resource))
+	}
 }
 
 func ExpectEnv(env []v1.EnvVar, key, value string) {
@@ -161,7 +167,14 @@ func ExpectVolumeMount(vms []v1.VolumeMount, name, path string) {
 	Expect(false).To(BeTrue(), fmt.Sprintf("Missing expected volume mount %s", name))
 }
 
-func CreateCertSecret(name, namespace string) *corev1.Secret {
+// CreateCertSecret creates a secret that is not signed by the certificate manager, making it useful for testing legacy
+// operator secrets or secrets that are brought to the cluster by the customer.
+func CreateCertSecret(name, namespace string, dnsNames ...string) *corev1.Secret {
+	cryptoCA, _ := tls.MakeCA(rmeta.TigeraOperatorCAIssuerPrefix + "@some-hash")
+	cfg, _ := cryptoCA.MakeServerCertForDuration(sets.NewString(dnsNames...), rmeta.DefaultCertificateDuration, tls.SetServerAuth, tls.SetClientAuth)
+	keyContent, crtContent := &bytes.Buffer{}, &bytes.Buffer{}
+	_ = cfg.WriteCertConfig(crtContent, keyContent)
+
 	return &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -169,8 +182,8 @@ func CreateCertSecret(name, namespace string) *corev1.Secret {
 			Namespace: namespace,
 		},
 		Data: map[string][]byte{
-			"tls.crt": []byte("crt"),
-			"tls.key": []byte("crt"),
+			corev1.TLSPrivateKeyKey: keyContent.Bytes(),
+			corev1.TLSCertKey:       crtContent.Bytes(),
 		},
 	}
 }

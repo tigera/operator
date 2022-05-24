@@ -16,9 +16,6 @@ package status
 import (
 	"context"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"github.com/stretchr/testify/mock"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -26,10 +23,6 @@ import (
 // TODO use mockery to generate mock
 type MockStatus struct {
 	mock.Mock
-}
-
-func (m *MockStatus) UpdateStatusCondition(statuscondition []metav1.Condition, conditions []operatorv1.TigeraStatusCondition, generation int64) {
-	m.Called(statuscondition, conditions, generation)
 }
 
 func (m *MockStatus) Run(context.Context) {

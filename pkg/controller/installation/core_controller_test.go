@@ -1309,52 +1309,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(cr.Status.Conditions[0].Reason).To(Equal(string(operator.AllObjectsAvailable)))
 			Expect(cr.Status.Conditions[0].Message).To(Equal("All Objects are available"))
 		})
-		It("should reconcile with creating new installation status conditions", func() {
-			ts := &operator.TigeraStatus{
-				ObjectMeta: metav1.ObjectMeta{Name: "calico"},
-				Spec:       operator.TigeraStatusSpec{},
-				Status: operator.TigeraStatusStatus{
-					Conditions: []operator.TigeraStatusCondition{
-						{
-							Type:    operator.ComponentAvailable,
-							Status:  operator.ConditionTrue,
-							Reason:  string(operator.AllObjectsAvailable),
-							Message: "All Objects are available",
-						},
-					},
-				},
-			}
-			conditions := []metav1.Condition{
-				{
-					Type:               "Ready",
-					Status:             metav1.ConditionStatus(operator.ConditionFalse),
-					Reason:             operator.NotApplicable,
-					Message:            "Not Applicable",
-					LastTransitionTime: metav1.NewTime(time.Now()),
-				},
-			}
 
-			Expect(c.Create(ctx, ts)).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
-
-			mockStatus.On("UpdateStatusCondition", conditions, ts.Status.Conditions, int64(2)).Return()
-
-			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
-				Name:      "calico",
-				Namespace: "",
-			}})
-			Expect(err).ShouldNot(HaveOccurred())
-
-			err = c.Get(ctx, types.NamespacedName{Name: "default"}, cr)
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(cr.Status.Conditions).To(HaveLen(1))
-
-			Expect(cr.Status.Conditions[0].Type).To(Equal("Ready"))
-			Expect(string(cr.Status.Conditions[0].Status)).To(Equal(string(operator.ConditionTrue)))
-			Expect(cr.Status.Conditions[0].Reason).To(Equal(string(operator.AllObjectsAvailable)))
-			Expect(cr.Status.Conditions[0].Message).To(Equal("All Objects are available"))
-			Expect(cr.Status.Conditions[0].ObservedGeneration).To(Equal(int64(2)))
-		})
 		It("should reconcile with Empty tigera status condition", func() {
 
 			ts := &operator.TigeraStatus{

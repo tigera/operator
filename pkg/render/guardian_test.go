@@ -39,7 +39,7 @@ var _ = Describe("Rendering tests", func() {
 	var g render.Component
 	var resources []client.Object
 
-	var renderGuardian = func(i operatorv1.InstallationSpec) {
+	var renderGuardian = func(i operatorv1.InstallationSpec, cfg render.GuardianConfiguration) {
 		addr := "127.0.0.1:1234"
 		secret := &corev1.Secret{
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
@@ -59,36 +59,78 @@ var _ = Describe("Rendering tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		bundle := certificateManager.CreateTrustedBundle()
 
-		cfg := &render.GuardianConfiguration{
-			URL: addr,
-			PullSecrets: []*corev1.Secret{{
-				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "pull-secret",
-					Namespace: common.OperatorNamespace(),
-				},
-			}},
-			Installation:      &i,
-			TunnelSecret:      secret,
-			TrustedCertBundle: bundle,
-		}
-		g = render.Guardian(cfg)
+		cfg.URL = addr
+		cfg.PullSecrets = []*corev1.Secret{{
+			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "pull-secret",
+				Namespace: common.OperatorNamespace(),
+			},
+		}}
+		cfg.Installation = &i
+		cfg.TunnelSecret = secret
+		cfg.TrustedCertBundle = bundle
+
+		g = render.Guardian(&cfg)
 		Expect(g.ResolveImages(nil)).To(BeNil())
 		resources, _ = g.Objects()
 	}
 
-	BeforeEach(func() {
-		renderGuardian(operatorv1.InstallationSpec{Registry: "my-reg/"})
-	})
+	It("should render all resources for a managed cluster on OpenShift", func() {
+		renderGuardian(operatorv1.InstallationSpec{Registry: "my-reg/"}, render.GuardianConfiguration{
+			Openshift: true,
+		})
 
-	It("should render all resources for a managed cluster", func() {
-		expectedResources := []struct {
+		type expectedResource struct {
 			name    string
 			ns      string
 			group   string
 			version string
 			kind    string
-		}{
+		}
+
+		expectedResources := []expectedResource{
+			{name: render.GuardianNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: "pull-secret", ns: render.GuardianNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: render.GuardianServiceAccountName, ns: render.GuardianNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: render.GuardianClusterRoleName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: render.GuardianClusterRoleBindingName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: render.GuardianDeploymentName, ns: render.GuardianNamespace, group: "apps", version: "v1", kind: "Deployment"},
+			{name: render.GuardianServiceName, ns: render.GuardianNamespace, group: "", version: "", kind: ""},
+			{name: render.GuardianSecretName, ns: render.GuardianNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: certificatemanagement.TrustedCertConfigMapName, ns: render.GuardianNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: render.ManagerNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.ManagerServiceAccount, ns: render.ManagerNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: render.ManagerClusterRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: render.ManagerClusterRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: render.ManagerClusterSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
+			{name: render.ManagerUserSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
+			{name: render.ManagerClusterSettingsLayerTigera, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
+			{name: render.ManagerClusterSettingsLayerOpenshift, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
+			{name: render.ManagerClusterSettingsViewDefault, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
+		}
+
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+		for i, expectedRes := range expectedResources {
+			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+		}
+
+		deployment := rtest.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(deployment.Spec.Template.Spec.Containers[0].Image).Should(Equal("my-reg/tigera/guardian:" + components.ComponentGuardian.Version))
+	})
+
+	It("should render all resources for a managed cluster", func() {
+		renderGuardian(operatorv1.InstallationSpec{Registry: "my-reg/"}, render.GuardianConfiguration{})
+
+		type expectedResource struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}
+
+		expectedResources := []expectedResource{
 			{name: render.GuardianNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: "pull-secret", ns: render.GuardianNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: render.GuardianServiceAccountName, ns: render.GuardianNamespace, group: "", version: "v1", kind: "ServiceAccount"},
@@ -107,6 +149,7 @@ var _ = Describe("Rendering tests", func() {
 			{name: render.ManagerClusterSettingsLayerTigera, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
 			{name: render.ManagerClusterSettingsViewDefault, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
 		}
+
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 		for i, expectedRes := range expectedResources {
 			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
@@ -124,7 +167,7 @@ var _ = Describe("Rendering tests", func() {
 		}
 		renderGuardian(operatorv1.InstallationSpec{
 			ControlPlaneTolerations: []corev1.Toleration{t},
-		})
+		}, render.GuardianConfiguration{})
 		deployment := rtest.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(deployment.Spec.Template.Spec.Tolerations).Should(ContainElements(t, rmeta.TolerateCriticalAddonsOnly, rmeta.TolerateMaster))
 	})

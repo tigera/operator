@@ -57,10 +57,11 @@ const (
 	ManagerTLSSecretName         = "manager-tls"
 	ManagerInternalTLSSecretName = "internal-manager-tls"
 
-	ManagerClusterSettings            = "cluster-settings"
-	ManagerUserSettings               = "user-settings"
-	ManagerClusterSettingsLayerTigera = "cluster-settings.layer.tigera-infrastructure"
-	ManagerClusterSettingsViewDefault = "cluster-settings.view.default"
+	ManagerClusterSettings               = "cluster-settings"
+	ManagerUserSettings                  = "user-settings"
+	ManagerClusterSettingsLayerTigera    = "cluster-settings.layer.tigera-infrastructure"
+	ManagerClusterSettingsLayerOpenshift = "cluster-settings.layer.openshift-infrastructure"
+	ManagerClusterSettingsViewDefault    = "cluster-settings.view.default"
 
 	ElasticsearchManagerUserSecret  = "tigera-ee-manager-elasticsearch-access"
 	TlsSecretHashAnnotation         = "hash.operator.tigera.io/tls-secret"
@@ -174,9 +175,8 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 		managerClusterRoleBinding(),
 		managerClusterWideSettingsGroup(),
 		managerUserSpecificSettingsGroup(),
-		managerClusterWideTigeraLayer(),
-		managerClusterWideDefaultView(),
 	)
+	objs = append(objs, managerClusterWideLayersAndViews(c.cfg.Openshift)...)
 	objs = append(objs, c.getTLSObjects()...)
 	objs = append(objs,
 		c.managerService(),
@@ -734,6 +734,18 @@ func managerUserSpecificSettingsGroup() *v3.UISettingsGroup {
 	}
 }
 
+// managerClusterWideLayersAndViews returns a consistent set of layers and views depending on the cluster type.
+//
+// Calico Enterprise only
+func managerClusterWideLayersAndViews(openshift bool) (obj []client.Object) {
+	obj = append(obj, managerClusterWideTigeraLayer())
+	if openshift {
+		obj = append(obj, managerClusterWideOpenshiftLayer())
+	}
+	obj = append(obj, managerClusterWideDefaultView(openshift))
+	return obj
+}
+
 // managerClusterWideTigeraLayer returns a UISettings layer belonging to the cluster-wide settings group that contains
 // all of the tigera namespaces.
 //
@@ -751,6 +763,7 @@ func managerClusterWideTigeraLayer() *v3.UISettings {
 		"tigera-kibana",
 		"tigera-manager",
 		"tigera-operator",
+		"tigera-operator-enterprise",
 		"tigera-packetcapture",
 		"tigera-prometheus",
 		"tigera-system",
@@ -773,7 +786,99 @@ func managerClusterWideTigeraLayer() *v3.UISettings {
 		},
 		Spec: v3.UISettingsSpec{
 			Group:       "cluster-settings",
-			Description: "Tigera Infrastructure",
+			Description: "Tigera",
+			Layer: &v3.UIGraphLayer{
+				Nodes: nodes,
+			},
+		},
+	}
+}
+
+// managerClusterWideOpenshiftLayer returns a UISettings layer belonging to the cluster-wide settings group that contains
+// all of the openshift namespaces.
+//
+// Calico Enterprise only
+func managerClusterWideOpenshiftLayer() *v3.UISettings {
+	namespaces := []string{
+		"openshift",
+		"openshift-apiserver",
+		"openshift-apiserver-operator",
+		"openshift-authentication",
+		"openshift-authentication-operator",
+		"openshift-cloud-controller-manager",
+		"openshift-cloud-controller-manager-operator",
+		"openshift-cloud-credential-operator",
+		"openshift-cluster-csi-drivers",
+		"openshift-cluster-machine-approver",
+		"openshift-cluster-node-tuning-operator",
+		"openshift-cluster-samples-operator",
+		"openshift-cluster-storage-operator",
+		"openshift-cluster-version",
+		"openshift-config",
+		"openshift-config-managed",
+		"openshift-config-operator",
+		"openshift-console",
+		"openshift-console-operator",
+		"openshift-console-user-settings",
+		"openshift-controller-manager",
+		"openshift-controller-manager-operator",
+		"openshift-dns",
+		"openshift-dns-operator",
+		"openshift-etcd",
+		"openshift-etcd-operator",
+		"openshift-image-registry",
+		"openshift-infra",
+		"openshift-ingress",
+		"openshift-ingress-canary",
+		"openshift-ingress-operator",
+		"openshift-insights",
+		"openshift-kni-infra",
+		"openshift-kube-apiserver",
+		"openshift-kube-apiserver-operator",
+		"openshift-kube-controller-manager",
+		"openshift-kube-controller-manager-operator",
+		"openshift-kube-proxy",
+		"openshift-kube-scheduler",
+		"openshift-kube-scheduler-operator",
+		"openshift-kube-storage-version-migrator",
+		"openshift-kube-storage-version-migrator-operator",
+		"openshift-kubevirt-infra",
+		"openshift-machine-api",
+		"openshift-machine-config-operator",
+		"openshift-marketplace",
+		"openshift-monitoring",
+		"openshift-multus",
+		"openshift-network-diagnostics",
+		"openshift-network-operator",
+		"openshift-node",
+		"openshift-oauth-apiserver",
+		"openshift-openstack-infra",
+		"openshift-operator-lifecycle-manager",
+		"openshift-operators",
+		"openshift-ovirt-infra",
+		"openshift-service-ca",
+		"openshift-service-ca-operator",
+		"openshift-user-workload-monitoring",
+		"openshift-vsphere-infra",
+	}
+	nodes := make([]v3.UIGraphNode, len(namespaces))
+	for i := range namespaces {
+		ns := namespaces[i]
+		nodes[i] = v3.UIGraphNode{
+			ID:   "namespace/" + ns,
+			Type: "namespace",
+			Name: ns,
+		}
+	}
+
+	return &v3.UISettings{
+		TypeMeta: metav1.TypeMeta{Kind: "UISettings", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: ManagerClusterSettingsLayerOpenshift,
+		},
+		Spec: v3.UISettingsSpec{
+			Group:       "cluster-settings",
+			Description: "OpenShift",
 			Layer: &v3.UIGraphLayer{
 				Nodes: nodes,
 			},
@@ -785,7 +890,24 @@ func managerClusterWideTigeraLayer() *v3.UISettings {
 // everything and uses the tigera-infrastructure layer.
 //
 // Calico Enterprise only
-func managerClusterWideDefaultView() *v3.UISettings {
+func managerClusterWideDefaultView(openshift bool) *v3.UISettings {
+	nodes := []v3.UIGraphNodeView{{
+		UIGraphNode: v3.UIGraphNode{
+			ID:   "layer/cluster-settings.layer.tigera-infrastructure",
+			Type: "layer",
+			Name: "cluster-settings.layer.tigera-infrastructure",
+		},
+	}}
+	if openshift {
+		nodes = append(nodes, v3.UIGraphNodeView{
+			UIGraphNode: v3.UIGraphNode{
+				ID:   "layer/cluster-settings.layer.openshift-infrastructure",
+				Type: "layer",
+				Name: "cluster-settings.layer.openshift-infrastructure",
+			},
+		})
+	}
+
 	return &v3.UISettings{
 		TypeMeta: metav1.TypeMeta{Kind: "UISettings", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -795,13 +917,7 @@ func managerClusterWideDefaultView() *v3.UISettings {
 			Group:       "cluster-settings",
 			Description: "Default",
 			View: &v3.UIGraphView{
-				Nodes: []v3.UIGraphNodeView{{
-					UIGraphNode: v3.UIGraphNode{
-						ID:   "layer/cluster-settings.layer.tigera-infrastructure",
-						Type: "layer",
-						Name: "cluster-settings.layer.tigera-infrastructure",
-					},
-				}},
+				Nodes: nodes,
 			},
 		},
 	}

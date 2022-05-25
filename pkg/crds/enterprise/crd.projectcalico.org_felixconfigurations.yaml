@@ -98,6 +98,11 @@ spec:
                 description: 'BPFEnabled, if enabled Felix will use the BPF dataplane.
                   [Default: false]'
                 type: boolean
+              bpfEnforceRPF:
+                description: 'BPFEnforceRPF enforce strict RPF on all interfaces with
+                  BPF programs regardless of what is the per-interfaces or global
+                  setting. Possible values are Disabled or Strict. [Default: Strict]'
+                type: string
               bpfExtToServiceConnmark:
                 description: 'BPFExtToServiceConnmark in BPF mode, control a 32bit
                   mark that is set on connections from an external client to a local
@@ -212,6 +217,15 @@ spec:
                   Calico policy will be bypassed. [Default: insert]'
                 type: string
               dataplaneDriver:
+                description: DataplaneDriver filename of the external dataplane driver
+                  to use.  Only used if UseInternalDataplaneDriver is set to false.
+                type: string
+              dataplaneWatchdogTimeout:
+                description: 'DataplaneWatchdogTimeout is the readiness/liveness timeout
+                  used for Felix''s (internal) dataplane driver. Increase this value
+                  if you experience spurious non-ready or non-live events when Felix
+                  is under heavy load. Decrease the value to get felix to report non-live
+                  or non-ready more quickly. [Default: 90s]'
                 type: string
               debugDisableLogDropping:
                 type: boolean
@@ -242,9 +256,14 @@ spec:
                   routes, by default this will be RTPROT_BOOT when left blank.
                 type: integer
               deviceRouteSourceAddress:
-                description: This is the source address to use on programmed device
-                  routes. By default the source address is left blank, leaving the
-                  kernel to choose the source address used.
+                description: This is the IPv4 source address to use on programmed
+                  device routes. By default the source address is left blank, leaving
+                  the kernel to choose the source address used.
+                type: string
+              deviceRouteSourceAddressIPv6:
+                description: This is the IPv6 source address to use on programmed
+                  device routes. By default the source address is left blank, leaving
+                  the kernel to choose the source address used.
                 type: string
               disableConntrackInvalidCheck:
                 type: boolean
@@ -537,6 +556,11 @@ spec:
                 description: FlowLogsFileDirectory sets the directory where flow logs
                   files are stored.
                 type: string
+              flowLogsFileDomainsLimit:
+                description: 'FlowLogsFileDomainsLimit is used to configure the number
+                  of (destination) domains to include in the flow log. These are not
+                  included for workload or host endpoint destinations. [Default: 5]'
+                type: integer
               flowLogsFileEnabled:
                 description: FlowLogsFileEnabled when set to true, enables logging
                   flow logs to a file. If false no flow logging to file will occur.
@@ -643,6 +667,9 @@ spec:
                   disabled by setting the interval to 0.
                 type: string
               ipipEnabled:
+                description: 'IPIPEnabled overrides whether Felix should configure
+                  an IPIP interface on the host. Optional as Felix determines this
+                  based on the existing IP pools. [Default: nil (unset)]'
                 type: boolean
               ipipMTU:
                 description: 'IPIPMTU is the MTU to set on the tunnel device. See
@@ -737,6 +764,8 @@ spec:
                   usage. [Default: 10s]'
                 type: string
               ipv6Support:
+                description: IPv6Support controls whether Felix enables support for
+                  IPv6 (if supported by the in-use dataplane).
                 type: boolean
               kubeMasqueradeBit:
                 description: 'KubeMasqueradeBit should be set to the same value as
@@ -1096,12 +1125,22 @@ spec:
                   Felix makes reports. [Default: 86400s]'
                 type: string
               useInternalDataplaneDriver:
+                description: UseInternalDataplaneDriver, if true, Felix will use its
+                  internal dataplane programming logic.  If false, it will launch
+                  an external dataplane driver and communicate with it over protobuf.
                 type: boolean
               vxlanEnabled:
+                description: 'VXLANEnabled overrides whether Felix should create the
+                  VXLAN tunnel device for VXLAN networking. Optional as Felix determines
+                  this based on the existing IP pools. [Default: nil (unset)]'
                 type: boolean
               vxlanMTU:
-                description: 'VXLANMTU is the MTU to set on the tunnel device. See
-                  Configuring MTU [Default: 1440]'
+                description: 'VXLANMTU is the MTU to set on the IPv4 VXLAN tunnel
+                  device. See Configuring MTU [Default: 1410]'
+                type: integer
+              vxlanMTUV6:
+                description: 'VXLANMTUV6 is the MTU to set on the IPv6 VXLAN tunnel
+                  device. See Configuring MTU [Default: 1390]'
                 type: integer
               vxlanPort:
                 type: integer
@@ -1165,6 +1204,12 @@ spec:
                 description: 'WireguardRoutingRulePriority controls the priority value
                   to use for the Wireguard routing rule. [Default: 99]'
                 type: integer
+              workloadSourceSpoofing:
+                description: WorkloadSourceSpoofing controls whether pods can use
+                  the allowedSourcePrefixes annotation to send traffic with a source
+                  IP address that is not theirs. This is disabled by default. When
+                  set to "Any", pods can request any prefix.
+                type: string
               xdpEnabled:
                 description: 'XDPEnabled enables XDP acceleration for suitable untracked
                   incoming deny rules. [Default: true]'

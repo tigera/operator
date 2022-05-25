@@ -37,25 +37,30 @@ spec:
               description:
                 description: The description is displayed by the UI.
                 type: string
-              period:
-                description: Period controls how long an alert exception will be active.
-                  It is optional and omitting Period will make the alert exception
-                  active forever.
+              endTime:
+                description: EndTime defines the end time at which this alert exception
+                  will expire. If omitted the alert exception filtering will continue
+                  indefinitely.
+                format: date-time
                 type: string
               selector:
                 description: Selector defines a query string for alert events to be
                   excluded from UI search results.
                 type: string
+              startTime:
+                description: StartTime defines the start time from which this alert
+                  exception will take effect. If the value is in the past, matched
+                  alerts will be filtered immediately. If the value is changed to
+                  a future time, alert exceptions will restart at that time.
+                format: date-time
+                type: string
             required:
             - description
             - selector
+            - startTime
             type: object
           status:
             description: AlertExceptionStatus contains the status of an alert exception.
-            properties:
-              lastExecuted:
-                format: date-time
-                type: string
             type: object
         type: object
     served: true

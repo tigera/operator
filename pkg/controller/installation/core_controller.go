@@ -750,6 +750,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	terminating := (instance.DeletionTimestamp != nil)
 	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
 
+	// Mark CR found so we can report converter problems via tigerastatus
+	r.status.OnCRFound()
+
 	// Changes for updating installation status conditions
 	if request.Name == InstallationName && request.Namespace == "" {
 		ts := &operator.TigeraStatus{}
@@ -766,9 +769,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	status := instance.Status
-	// Mark CR found so we can report converter problems via tigerastatus
-	r.status.OnCRFound()
-
 	if !r.migrationChecked {
 		// update Installation resource with existing install if it exists.
 		nc, err := convert.NeedsConversion(ctx, r.client)

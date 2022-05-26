@@ -403,7 +403,7 @@ func (m *statusManager) ClearDegraded() {
 	defer m.lock.Unlock()
 	m.degraded = false
 	m.explicitDegradedReason = operator.Unknown
-	m.explicitDegradedMsg = "Unknown"
+	m.explicitDegradedMsg = ""
 	m.windowsUpgradeDegradedMsg = ""
 }
 
@@ -751,7 +751,7 @@ func (m *statusManager) clearDegraded() {
 	defer m.lock.Unlock()
 
 	conditions := []operator.TigeraStatusCondition{
-		{Type: operator.ComponentDegraded, Status: operator.ConditionFalse, Reason: operator.Unknown, Message: "Unknown"},
+		{Type: operator.ComponentDegraded, Status: operator.ConditionFalse, Reason: operator.Unknown, Message: ""},
 	}
 	m.set(true, conditions...)
 }
@@ -761,7 +761,7 @@ func (m *statusManager) clearProgressing() {
 	defer m.lock.Unlock()
 
 	conditions := []operator.TigeraStatusCondition{
-		{Type: operator.ComponentProgressing, Status: operator.ConditionFalse, Reason: operator.Unknown, Message: "Unknown"},
+		{Type: operator.ComponentProgressing, Status: operator.ConditionFalse, Reason: operator.Unknown, Message: ""},
 	}
 	m.set(true, conditions...)
 }
@@ -771,7 +771,7 @@ func (m *statusManager) clearAvailable() {
 	defer m.lock.Unlock()
 
 	conditions := []operator.TigeraStatusCondition{
-		{Type: operator.ComponentAvailable, Status: operator.ConditionFalse, Reason: operator.Unknown, Message: "Unknown"},
+		{Type: operator.ComponentAvailable, Status: operator.ConditionFalse, Reason: operator.Unknown, Message: ""},
 	}
 	m.set(true, conditions...)
 }
@@ -880,6 +880,7 @@ func hasPendingCSRUsingCertV1beta1(ctx context.Context, cli client.Client, label
 	return false, nil
 }
 
+//UpdateStatusCondition updates CR's status conditions from tigerastatus conditions
 func UpdateStatusCondition(statuscondition []metav1.Condition, conditions []operator.TigeraStatusCondition, generation int64) []metav1.Condition {
 	if statuscondition == nil {
 		statuscondition = []metav1.Condition{}
@@ -903,17 +904,13 @@ func UpdateStatusCondition(statuscondition []metav1.Condition, conditions []oper
 			Status:             status,
 			LastTransitionTime: condition.LastTransitionTime,
 			ObservedGeneration: generation,
+			Message:            condition.Message,
 		}
 
 		if len(condition.Reason) > 0 {
 			ic.Reason = condition.Reason
 		} else {
 			ic.Reason = operator.Unknown
-		}
-		if len(condition.Message) > 0 {
-			ic.Message = condition.Message
-		} else {
-			ic.Message = "Unknown"
 		}
 
 		for i, c := range statuscondition {

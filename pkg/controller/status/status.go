@@ -162,13 +162,13 @@ func (m *statusManager) updateStatus() {
 		// We've collected knowledge about the current state of the objects we're monitoring.
 		// Now, use that to update the TigeraStatus object for this manager.
 		if m.IsAvailable() {
-			m.setAvailable("All objects available", "")
+			m.setAvailable(string(operator.AllObjectsAvailable), "All objects available")
 		} else {
 			m.clearAvailable()
 		}
 
 		if m.IsProgressing() {
-			m.setProgressing("Not all resources are ready", m.progressingMessage())
+			m.setProgressing(operator.ResourceNotReady, m.progressingMessage())
 		} else {
 			m.clearProgressing()
 		}
@@ -184,7 +184,7 @@ func (m *statusManager) updateStatus() {
 		// If we've been given an explicit degraded reason then it should be reported even if readyToMonitor is false,
 		// as this degraded reason may be the reason why we're not ready to monitor.
 		if m.isExplicitlyDegraded() {
-			m.setDegraded(m.degradedReason(), m.degradedMessage())
+			m.setDegraded(operator.PodFailure, fmt.Sprintf("%s - %s", m.degradedReason(), m.degradedMessage()))
 		} else {
 			m.clearDegraded()
 		}
@@ -402,7 +402,7 @@ func (m *statusManager) ClearDegraded() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.degraded = false
-	m.explicitDegradedReason = ""
+	m.explicitDegradedReason = operator.Unknown
 	m.explicitDegradedMsg = ""
 	m.windowsUpgradeDegradedMsg = ""
 }
@@ -769,7 +769,7 @@ func (m *statusManager) clearDegraded() {
 	defer m.lock.Unlock()
 
 	conditions := []operator.TigeraStatusCondition{
-		{Type: operator.ComponentDegraded, Status: operator.ConditionFalse},
+		{Type: operator.ComponentDegraded, Status: operator.ConditionFalse, Reason: operator.Unknown, Message: ""},
 	}
 	m.set(true, conditions...)
 }
@@ -779,7 +779,7 @@ func (m *statusManager) clearProgressing() {
 	defer m.lock.Unlock()
 
 	conditions := []operator.TigeraStatusCondition{
-		{Type: operator.ComponentProgressing, Status: operator.ConditionFalse},
+		{Type: operator.ComponentProgressing, Status: operator.ConditionFalse, Reason: operator.Unknown, Message: ""},
 	}
 	m.set(true, conditions...)
 }
@@ -789,7 +789,7 @@ func (m *statusManager) clearAvailable() {
 	defer m.lock.Unlock()
 
 	conditions := []operator.TigeraStatusCondition{
-		{Type: operator.ComponentAvailable, Status: operator.ConditionFalse},
+		{Type: operator.ComponentAvailable, Status: operator.ConditionFalse, Reason: operator.Unknown, Message: ""},
 	}
 	m.set(true, conditions...)
 }
@@ -896,4 +896,56 @@ func hasPendingCSRUsingCertV1beta1(ctx context.Context, cli client.Client, label
 		}
 	}
 	return false, nil
+}
+
+//UpdateStatusCondition updates CR's status conditions from tigerastatus conditions
+func UpdateStatusCondition(statuscondition []metav1.Condition, conditions []operator.TigeraStatusCondition, generation int64) []metav1.Condition {
+	if statuscondition == nil {
+		statuscondition = []metav1.Condition{}
+	}
+
+	for _, condition := range conditions {
+		found := false
+
+		ctype := string(condition.Type)
+		if condition.Type == operator.ComponentAvailable {
+			ctype = string(operator.ConditionTypeReady)
+		}
+		status := metav1.ConditionUnknown
+		if condition.Status == operator.ConditionTrue {
+			status = metav1.ConditionTrue
+		} else if condition.Status == operator.ConditionFalse {
+			status = metav1.ConditionFalse
+		}
+		ic := metav1.Condition{
+			Type:               ctype,
+			Status:             status,
+			LastTransitionTime: condition.LastTransitionTime,
+			ObservedGeneration: generation,
+			Message:            condition.Message,
+		}
+
+		if len(condition.Reason) > 0 {
+			ic.Reason = condition.Reason
+		} else {
+			ic.Reason = operator.Unknown
+		}
+
+		for i, c := range statuscondition {
+			if condition.Type == operator.ComponentAvailable && c.Type == string(operator.ConditionTypeReady) ||
+				condition.Type == operator.ComponentDegraded && c.Type == string(operator.ConditionTypeDegraded) ||
+				condition.Type == operator.ComponentProgressing && c.Type == string(operator.ConditionTypeProgressing) {
+				if !reflect.DeepEqual(c.Status, condition.Status) {
+					ic.LastTransitionTime = metav1.NewTime(time.Now())
+				}
+				statuscondition[i] = ic
+				found = true
+			}
+		}
+		if !found {
+			ic.LastTransitionTime = metav1.NewTime(time.Now())
+			statuscondition = append(statuscondition, ic)
+		}
+	}
+	return statuscondition
 }

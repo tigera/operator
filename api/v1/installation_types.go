@@ -666,7 +666,7 @@ type CertificateManagement struct {
 	SignatureAlgorithm string `json:"signatureAlgorithm,omitempty"`
 }
 
-// ConditionTypes describes Installation CR's status condition type.
+// ConditionType describes Installation CR's status condition type.
 // One of: Ready, Degraded, Progressing.
 type ConditionType string
 
@@ -674,9 +674,9 @@ const (
 	// ConditionTypeReady indicates that the component is healthy.
 	ConditionTypeReady ConditionType = "Ready"
 
-	// ConditionTypeDegraded indicated that the component is not operating as desired and user action is required..
+	// ConditionTypeDegraded indicated that the component is not operating as desired and user action is required.
 	ConditionTypeDegraded ConditionType = "Degraded"
 
-	// ConditionTypeProgressing indicates that the component is in the process of being installed or upgraded
+	// ConditionTypeProgressing indicates that the component is in the process of being installed or upgraded.
 	ConditionTypeProgressing ConditionType = "Progressing"
 )

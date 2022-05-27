@@ -336,6 +336,13 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"patch"},
 			},
 			{
+				// Used for creating service account tokens to be used by the CNI plugin.
+				APIGroups:     []string{""},
+				Resources:     []string{"serviceaccounts/token"},
+				ResourceNames: []string{"calico-node"},
+				Verbs:         []string{"create"},
+			},
+			{
 				// Calico needs to query configmaps for pool auto-detection on kubeadm.
 				APIGroups: []string{""},
 				Resources: []string{"configmaps"},

@@ -20,6 +20,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -52,8 +54,10 @@ const (
 	ElasticsearchADJobUserSecret                 = "tigera-ee-ad-job-elasticsearch-access"
 	ElasticsearchPerformanceHotspotsUserSecret   = "tigera-ee-performance-hotspots-elasticsearch-access"
 
-	IntrusionDetectionInstallerJobName = "intrusion-detection-es-job-installer"
-	IntrusionDetectionControllerName   = "intrusion-detection-controller"
+	IntrusionDetectionInstallerJobName     = "intrusion-detection-es-job-installer"
+	IntrusionDetectionControllerName       = "intrusion-detection-controller"
+	IntrusionDetectionControllerPolicyName = networkpolicy.TigeraComponentPolicyPrefix + IntrusionDetectionControllerName
+	IntrusionDetectionInstallerPolicyName  = networkpolicy.TigeraComponentPolicyPrefix + "intrusion-detection-elastic"
 
 	ADJobPodTemplateBaseName     = "tigera.io.detectors"
 	adDetectorPrefixName         = "tigera.io.detector."
@@ -69,6 +73,12 @@ const (
 )
 
 var adAPIReplicas int32 = 1
+
+var IntrusionDetectionSourceEntityRule = networkpolicy.CreateSourceEntityRule(IntrusionDetectionNamespace, IntrusionDetectionControllerName)
+var IntrusionDetectionInstallerSourceEntityRule = v3.EntityRule{
+	NamespaceSelector: fmt.Sprintf("name == '%s'", IntrusionDetectionNamespace),
+	Selector:          fmt.Sprintf("job-name == '%s'", IntrusionDetectionInstallerJobName),
+}
 
 func IntrusionDetection(cfg *IntrusionDetectionConfiguration) Component {
 	return &intrusionDetectionComponent{
@@ -141,6 +151,8 @@ func (c *intrusionDetectionComponent) SupportedOSType() rmeta.OSType {
 func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
 		CreateNamespace(IntrusionDetectionNamespace, c.cfg.Installation.KubernetesProvider),
+		c.intrusionDetectionControllerAllowTigeraPolicy(),
+		intrusionDetectionDefaultDenyAllowTigeraPolicy(),
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(IntrusionDetectionNamespace, c.cfg.PullSecrets...)...)...)
 
@@ -181,6 +193,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 	}
 
 	if !c.cfg.ManagedCluster {
+		objs = append(objs, c.intrusionDetectionElasticsearchAllowTigeraPolicy())
 		objs = append(objs, c.intrusionDetectionElasticsearchJob())
 	}
 
@@ -1534,4 +1547,99 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 			},
 		},
 	}
+}
+
+func (c *intrusionDetectionComponent) intrusionDetectionControllerAllowTigeraPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{
+		// Block any link local IPs, e.g. cloud metadata, which are often targets of server-side request forgery (SSRF) attacks
+		{
+			Action:   v3.Deny,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Nets: []string{"169.254.0.0/16"},
+			},
+		},
+		{
+			Action:   v3.Deny,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Nets: []string{"fe80::/10"},
+			},
+		},
+	}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.Openshift)
+	if c.cfg.ManagedCluster {
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: GuardianEntityRule,
+		})
+	} else {
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.EsGatewayEntityRule,
+		})
+	}
+	egressRules = append(egressRules, []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
+		},
+		{
+			// Pass to subsequent tiers for further enforcement
+			Action: v3.Pass,
+		},
+	}...)
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      IntrusionDetectionControllerPolicyName,
+			Namespace: IntrusionDetectionNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(IntrusionDetectionControllerName),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Ingress: []v3.Rule{
+				{
+					// Intrusion detection controller doesn't listen on any external ports
+					Action: v3.Deny,
+				},
+			},
+			Egress: egressRules,
+		},
+	}
+}
+
+func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchAllowTigeraPolicy() client.Object {
+	egressRules := []v3.Rule{}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.Openshift)
+	egressRules = append(egressRules, v3.Rule{
+		Action:      v3.Allow,
+		Protocol:    &networkpolicy.TCPProtocol,
+		Destination: networkpolicy.EsGatewayEntityRule,
+	})
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      IntrusionDetectionInstallerPolicyName,
+			Namespace: IntrusionDetectionNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: fmt.Sprintf("job-name == '%s'", IntrusionDetectionInstallerJobName),
+			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
+			Egress:   egressRules,
+		},
+	}
+}
+
+func intrusionDetectionDefaultDenyAllowTigeraPolicy() *v3.NetworkPolicy {
+	return networkpolicy.AllowTigeraDefaultDeny(IntrusionDetectionNamespace)
 }

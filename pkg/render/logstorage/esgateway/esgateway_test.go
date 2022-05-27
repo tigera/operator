@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,13 @@ package esgateway
 import (
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/types"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/operator/pkg/render/testutils"
+
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -47,7 +53,10 @@ var _ = Describe("ES Gateway rendering tests", func() {
 	Context("ES Gateway deployment", func() {
 		var installation *operatorv1.InstallationSpec
 		var replicas int32
+		var cfg *Config
 		clusterDomain := "cluster.local"
+		expectedPolicy := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/es-gateway.json")
+		expectedPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/es-gateway_ocp.json")
 
 		BeforeEach(func() {
 			installation = &operatorv1.InstallationSpec{
@@ -56,25 +65,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				Registry:             "testregistry.com/",
 			}
 			replicas = 2
-		})
-
-		It("should render an ES Gateway deployment and all supporting resources", func() {
-			expectedResources := []resourceTestObj{
-				{relasticsearch.PublicCertSecret, common.OperatorNamespace(), &corev1.Secret{}, nil},
-				{render.TigeraElasticsearchCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
-				{relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
-				{render.KibanaInternalCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
-				{kubecontrollers.ElasticsearchKubeControllersUserSecret, common.OperatorNamespace(), &corev1.Secret{}, nil},
-				{kubecontrollers.ElasticsearchKubeControllersVerificationUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
-				{kubecontrollers.ElasticsearchKubeControllersSecureUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
-				{ServiceName, render.ElasticsearchNamespace, &corev1.Service{}, nil},
-				{RoleName, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
-				{RoleName, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
-				{ServiceAccountName, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
-				{DeploymentName, render.ElasticsearchNamespace, &appsv1.Deployment{}, nil},
-			}
-
-			component := EsGateway(&Config{
+			cfg = &Config{
 				installation,
 				[]*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
@@ -91,7 +82,27 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: common.OperatorNamespace()}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.InternalCertSecret, Namespace: render.ElasticsearchNamespace}},
 				clusterDomain, "elastic",
-			})
+			}
+		})
+
+		It("should render an ES Gateway deployment and all supporting resources", func() {
+			expectedResources := []resourceTestObj{
+				{PolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+				{relasticsearch.PublicCertSecret, common.OperatorNamespace(), &corev1.Secret{}, nil},
+				{render.TigeraElasticsearchCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+				{relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+				{render.KibanaInternalCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+				{kubecontrollers.ElasticsearchKubeControllersUserSecret, common.OperatorNamespace(), &corev1.Secret{}, nil},
+				{kubecontrollers.ElasticsearchKubeControllersVerificationUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+				{kubecontrollers.ElasticsearchKubeControllersSecureUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+				{ServiceName, render.ElasticsearchNamespace, &corev1.Service{}, nil},
+				{RoleName, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
+				{RoleName, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
+				{ServiceAccountName, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
+				{DeploymentName, render.ElasticsearchNamespace, &appsv1.Deployment{}, nil},
+			}
+
+			component := EsGateway(cfg)
 
 			createResources, _ := component.Objects()
 			compareResources(createResources, expectedResources)
@@ -100,6 +111,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 		It("should render an ES Gateway deployment and all supporting resources when CertificateManagement is enabled", func() {
 			installation.CertificateManagement = &operatorv1.CertificateManagement{}
 			expectedResources := []resourceTestObj{
+				{PolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 				{relasticsearch.PublicCertSecret, common.OperatorNamespace(), &corev1.Secret{}, nil},
 				{render.TigeraElasticsearchCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 				{relasticsearch.PublicCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
@@ -115,24 +127,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				{RoleName + ":csr-creator", "", &rbacv1.ClusterRoleBinding{}, nil},
 			}
 
-			component := EsGateway(&Config{
-				installation,
-				[]*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-				},
-				[]*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
-					{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: common.OperatorNamespace()}},
-				},
-				[]*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersUserSecret, Namespace: common.OperatorNamespace()}},
-					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersVerificationUserSecret, Namespace: render.ElasticsearchNamespace}},
-					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersSecureUserSecret, Namespace: render.ElasticsearchNamespace}},
-				},
-				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: common.OperatorNamespace()}},
-				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.InternalCertSecret, Namespace: render.ElasticsearchNamespace}},
-				clusterDomain, "elastic",
-			})
+			component := EsGateway(cfg)
 
 			createResources, _ := component.Objects()
 			compareResources(createResources, expectedResources)
@@ -142,24 +137,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 			var replicas int32 = 1
 			installation.ControlPlaneReplicas = &replicas
 
-			component := EsGateway(&Config{
-				installation,
-				[]*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-				},
-				[]*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
-					{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: common.OperatorNamespace()}},
-				},
-				[]*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersUserSecret, Namespace: common.OperatorNamespace()}},
-					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersVerificationUserSecret, Namespace: render.ElasticsearchNamespace}},
-					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersSecureUserSecret, Namespace: render.ElasticsearchNamespace}},
-				},
-				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: common.OperatorNamespace()}},
-				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.InternalCertSecret, Namespace: render.ElasticsearchNamespace}},
-				clusterDomain, "elastic",
-			})
+			component := EsGateway(cfg)
 
 			resources, _ := component.Objects()
 			deploy, ok := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -171,24 +149,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 			var replicas int32 = 2
 			installation.ControlPlaneReplicas = &replicas
 
-			component := EsGateway(&Config{
-				installation,
-				[]*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-				},
-				[]*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
-					{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: common.OperatorNamespace()}},
-				},
-				[]*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersUserSecret, Namespace: common.OperatorNamespace()}},
-					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersVerificationUserSecret, Namespace: render.ElasticsearchNamespace}},
-					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersSecureUserSecret, Namespace: render.ElasticsearchNamespace}},
-				},
-				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: common.OperatorNamespace()}},
-				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.InternalCertSecret, Namespace: render.ElasticsearchNamespace}},
-				clusterDomain, "elastic",
-			})
+			component := EsGateway(cfg)
 
 			resources, _ := component.Objects()
 			deploy, ok := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -200,24 +161,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 		It("should apply controlPlaneNodeSelector correctly", func() {
 			installation.ControlPlaneNodeSelector = map[string]string{"foo": "bar"}
 
-			component := EsGateway(&Config{
-				installation,
-				[]*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-				},
-				[]*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
-					{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: common.OperatorNamespace()}},
-				},
-				[]*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersUserSecret, Namespace: common.OperatorNamespace()}},
-					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersVerificationUserSecret, Namespace: render.ElasticsearchNamespace}},
-					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersSecureUserSecret, Namespace: render.ElasticsearchNamespace}},
-				},
-				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: common.OperatorNamespace()}},
-				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.InternalCertSecret, Namespace: render.ElasticsearchNamespace}},
-				clusterDomain, "elastic",
-			})
+			component := EsGateway(cfg)
 
 			resources, _ := component.Objects()
 			d, ok := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -233,29 +177,44 @@ var _ = Describe("ES Gateway rendering tests", func() {
 			}
 
 			installation.ControlPlaneTolerations = []corev1.Toleration{t}
-			component := EsGateway(&Config{
-				installation,
-				[]*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-				},
-				[]*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
-					{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: common.OperatorNamespace()}},
-				},
-				[]*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersUserSecret, Namespace: common.OperatorNamespace()}},
-					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersVerificationUserSecret, Namespace: render.ElasticsearchNamespace}},
-					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersSecureUserSecret, Namespace: render.ElasticsearchNamespace}},
-				},
-				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaInternalCertSecret, Namespace: common.OperatorNamespace()}},
-				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.InternalCertSecret, Namespace: render.ElasticsearchNamespace}},
-				clusterDomain, "elastic",
-			})
+			component := EsGateway(cfg)
 
 			resources, _ := component.Objects()
 			d, ok := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(ok).To(BeTrue())
 			Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(t))
+		})
+
+		Context("allow-tigera rendering", func() {
+			policyName := types.NamespacedName{Name: "allow-tigera.es-gateway-access", Namespace: "tigera-elasticsearch"}
+
+			getExpectedPolicy := func(scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
+				if scenario.ManagedCluster {
+					return nil
+				}
+
+				return testutils.SelectPolicyByProvider(scenario, expectedPolicy, expectedPolicyForOpenshift)
+			}
+
+			DescribeTable("should render allow-tigera policy",
+				func(scenario testutils.AllowTigeraScenario) {
+					if scenario.Openshift {
+						cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
+					} else {
+						cfg.Installation.KubernetesProvider = operatorv1.ProviderNone
+					}
+					component := EsGateway(cfg)
+					resources, _ := component.Objects()
+
+					policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+					expectedPolicy := getExpectedPolicy(scenario)
+					Expect(policy).To(Equal(expectedPolicy))
+				},
+				// ES Gateway only renders in the presence of an LogStorage CR and absence of a ManagementClusterConnection CR, therefore
+				// does not have a config option for managed clusters.
+				Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
+				Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
+			)
 		})
 	})
 })

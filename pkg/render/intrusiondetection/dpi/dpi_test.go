@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,7 +16,9 @@ package dpi_test
 
 import (
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
@@ -26,6 +28,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
+	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -33,6 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -162,11 +166,18 @@ type resourceTestObj struct {
 }
 
 var _ = Describe("DPI rendering tests", func() {
-
 	var (
 		clusterDomain = "cluster.local"
+		installation  *operatorv1.InstallationSpec
 		typhaNodeTLS  *render.TyphaNodeTLS
+		cfg           *dpi.DPIConfig
 	)
+
+	// Fetch expectations from utilities that require Ginkgo context.
+	expectedUnmanagedPolicy := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/dpi_unmanaged.json")
+	expectedUnmanagedPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/dpi_unmanaged_ocp.json")
+	expectedManagedPolicy := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/dpi_managed.json")
+	expectedManagedPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/dpi_managed_ocp.json")
 
 	BeforeEach(func() {
 		scheme := runtime.NewScheme()
@@ -184,12 +195,10 @@ var _ = Describe("DPI rendering tests", func() {
 			NodeSecret:    nodeKeyPair,
 			TrustedBundle: trustedBundle,
 		}
-	})
-
-	It("should render all resources for deep packet inspection with default resource requirements", func() {
-		component := dpi.DPI(&dpi.DPIConfig{
+		installation = &operatorv1.InstallationSpec{Registry: "testregistry.com/"}
+		cfg = &dpi.DPIConfig{
 			IntrusionDetection: ids,
-			Installation:       &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
+			Installation:       installation,
 			TyphaNodeTLS:       typhaNodeTLS,
 			PullSecrets:        pullSecrets,
 			Openshift:          false,
@@ -198,12 +207,17 @@ var _ = Describe("DPI rendering tests", func() {
 			ESClusterConfig:    esConfigMap,
 			ESSecrets:          nil,
 			ClusterDomain:      dns.DefaultClusterDomain,
-		})
+		}
+	})
+
+	It("should render all resources for deep packet inspection with default resource requirements", func() {
+		component := dpi.DPI(cfg)
 
 		resources, _ := component.Objects()
 
 		expectedResources := []resourceTestObj{
 			{name: dpi.DeepPacketInspectionNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: dpi.DeepPacketInspectionPolicyName, ns: dpi.DeepPacketInspectionNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: "pull-secret", ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
@@ -245,23 +259,15 @@ var _ = Describe("DPI rendering tests", func() {
 			}},
 		}
 
-		component := dpi.DPI(&dpi.DPIConfig{
-			IntrusionDetection: ids2,
-			Installation:       &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
-			TyphaNodeTLS:       typhaNodeTLS,
-			PullSecrets:        pullSecrets,
-			Openshift:          true,
-			HasNoLicense:       false,
-			HasNoDPIResource:   false,
-			ESClusterConfig:    esConfigMap,
-			ESSecrets:          nil,
-			ClusterDomain:      dns.DefaultClusterDomain,
-		})
+		cfg.IntrusionDetection = ids2
+		cfg.Openshift = true
+		component := dpi.DPI(cfg)
 
 		resources, _ := component.Objects()
 
 		expectedResources := []resourceTestObj{
 			{name: dpi.DeepPacketInspectionNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: dpi.DeepPacketInspectionPolicyName, ns: dpi.DeepPacketInspectionNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: "pull-secret", ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
@@ -286,22 +292,13 @@ var _ = Describe("DPI rendering tests", func() {
 	})
 
 	It("should delete resources for deep packet inspection if there is no valid product license", func() {
-		component := dpi.DPI(&dpi.DPIConfig{
-			IntrusionDetection: ids,
-			Installation:       &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
-			TyphaNodeTLS:       typhaNodeTLS,
-			PullSecrets:        pullSecrets,
-			Openshift:          false,
-			HasNoLicense:       true,
-			HasNoDPIResource:   false,
-			ESClusterConfig:    esConfigMap,
-			ESSecrets:          nil,
-			ClusterDomain:      dns.DefaultClusterDomain,
-		})
+		cfg.HasNoLicense = true
+		component := dpi.DPI(cfg)
 
 		createResources, deleteResource := component.Objects()
 		expectedResources := []resourceTestObj{
 			{name: dpi.DeepPacketInspectionNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: dpi.DeepPacketInspectionPolicyName, ns: dpi.DeepPacketInspectionNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: relasticsearch.PublicCertSecret, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: "pull-secret", ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ServiceAccount"},
@@ -319,20 +316,11 @@ var _ = Describe("DPI rendering tests", func() {
 	})
 
 	It("should delete resources for deep packet inspection if there is no DPI resource", func() {
-		component := dpi.DPI(&dpi.DPIConfig{
-			IntrusionDetection: ids,
-			Installation:       &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
-			TyphaNodeTLS:       typhaNodeTLS,
-			PullSecrets:        pullSecrets,
-			Openshift:          false,
-			HasNoLicense:       false,
-			HasNoDPIResource:   true,
-			ESClusterConfig:    esConfigMap,
-			ESSecrets:          nil,
-			ClusterDomain:      dns.DefaultClusterDomain,
-		})
+		cfg.HasNoDPIResource = true
+		component := dpi.DPI(cfg)
 		createResources, deleteResource := component.Objects()
 		expectedResources := []resourceTestObj{
+			{name: dpi.DeepPacketInspectionPolicyName, ns: dpi.DeepPacketInspectionNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: relasticsearch.PublicCertSecret, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: "pull-secret", ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ServiceAccount"},
@@ -353,6 +341,37 @@ var _ = Describe("DPI rendering tests", func() {
 		for i, expectedRes := range expectedCreateResources {
 			rtest.ExpectResource(createResources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
+	})
+
+	Context("allow-tigera rendering", func() {
+		policyName := types.NamespacedName{Name: "allow-tigera.tigera-dpi", Namespace: "tigera-dpi"}
+
+		getExpectedPolicy := func(scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
+			return testutils.SelectPolicyByClusterTypeAndProvider(
+				scenario,
+				expectedUnmanagedPolicy,
+				expectedUnmanagedPolicyForOpenshift,
+				expectedManagedPolicy,
+				expectedManagedPolicyForOpenshift,
+			)
+		}
+
+		DescribeTable("should render allow-tigera policy",
+			func(scenario testutils.AllowTigeraScenario) {
+				cfg.ManagedCluster = scenario.ManagedCluster
+				cfg.Openshift = scenario.Openshift
+				component := dpi.DPI(cfg)
+				resources, _ := component.Objects()
+
+				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+				expectedPolicy := getExpectedPolicy(scenario)
+				Expect(policy).To(Equal(expectedPolicy))
+			},
+			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
+			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
+			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
+		)
 	})
 })
 

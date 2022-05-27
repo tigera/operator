@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 package render
 
 import (
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -43,9 +44,13 @@ const (
 	PacketCaptureClusterRoleBindingName = PacketCaptureName
 	PacketCaptureDeploymentName         = PacketCaptureName
 	PacketCaptureServiceName            = PacketCaptureName
+	PacketCapturePort                   = 8444
 
 	PacketCaptureCertSecret = "tigera-packetcapture-server-tls"
 )
+
+var PacketCaptureEntityRule = networkpolicy.CreateEntityRule(PacketCaptureNamespace, PacketCaptureDeploymentName, PacketCapturePort)
+var PacketCaptureSourceEntityRule = networkpolicy.CreateSourceEntityRule(PacketCaptureNamespace, PacketCaptureDeploymentName)
 
 // PacketCaptureApiConfiguration contains all the config information needed to render the component.
 type PacketCaptureApiConfiguration struct {
@@ -132,7 +137,7 @@ func (pc *packetCaptureApiComponent) service() *corev1.Service {
 					Name:       PacketCaptureName,
 					Port:       443,
 					Protocol:   corev1.ProtocolTCP,
-					TargetPort: intstr.FromInt(8444),
+					TargetPort: intstr.FromInt(PacketCapturePort),
 				},
 			},
 		},
@@ -285,7 +290,7 @@ func (pc *packetCaptureApiComponent) healthProbe() *corev1.Probe {
 		Handler: corev1.Handler{
 			HTTPGet: &corev1.HTTPGetAction{
 				Path:   "/health",
-				Port:   intstr.FromInt(8444),
+				Port:   intstr.FromInt(PacketCapturePort),
 				Scheme: corev1.URISchemeHTTPS,
 			},
 		},

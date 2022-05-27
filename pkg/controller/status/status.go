@@ -909,7 +909,7 @@ func UpdateStatusCondition(statuscondition []metav1.Condition, conditions []oper
 
 		ctype := string(condition.Type)
 		if condition.Type == operator.ComponentAvailable {
-			ctype = string(operator.ConditionTypeReady)
+			ctype = string(operator.ComponentReady)
 		}
 		status := metav1.ConditionUnknown
 		if condition.Status == operator.ConditionTrue {
@@ -932,9 +932,9 @@ func UpdateStatusCondition(statuscondition []metav1.Condition, conditions []oper
 		}
 
 		for i, c := range statuscondition {
-			if condition.Type == operator.ComponentAvailable && c.Type == string(operator.ConditionTypeReady) ||
-				condition.Type == operator.ComponentDegraded && c.Type == string(operator.ConditionTypeDegraded) ||
-				condition.Type == operator.ComponentProgressing && c.Type == string(operator.ConditionTypeProgressing) {
+			if condition.Type == operator.ComponentAvailable && c.Type == string(operator.ComponentReady) ||
+				condition.Type == operator.ComponentDegraded && c.Type == string(operator.ComponentDegraded) ||
+				condition.Type == operator.ComponentProgressing && c.Type == string(operator.ComponentProgressing) {
 				if !reflect.DeepEqual(c.Status, condition.Status) {
 					ic.LastTransitionTime = metav1.NewTime(time.Now())
 				}

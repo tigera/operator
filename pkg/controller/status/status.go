@@ -168,7 +168,7 @@ func (m *statusManager) updateStatus() {
 		}
 
 		if m.IsProgressing() {
-			m.setProgressing(operator.ResourceNotReady, m.progressingMessage())
+			m.setProgressing(string(operator.ResourceNotReady), m.progressingMessage())
 		} else {
 			m.clearProgressing()
 		}
@@ -402,7 +402,7 @@ func (m *statusManager) ClearDegraded() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.degraded = false
-	m.explicitDegradedReason = operator.Unknown
+	m.explicitDegradedReason = string(operator.Unknown)
 	m.explicitDegradedMsg = ""
 	m.windowsUpgradeDegradedMsg = ""
 }
@@ -769,7 +769,7 @@ func (m *statusManager) clearDegraded() {
 	defer m.lock.Unlock()
 
 	conditions := []operator.TigeraStatusCondition{
-		{Type: operator.ComponentDegraded, Status: operator.ConditionFalse, Reason: operator.Unknown, Message: ""},
+		{Type: operator.ComponentDegraded, Status: operator.ConditionFalse, Reason: string(operator.Unknown), Message: ""},
 	}
 	m.set(true, conditions...)
 }
@@ -779,7 +779,7 @@ func (m *statusManager) clearProgressing() {
 	defer m.lock.Unlock()
 
 	conditions := []operator.TigeraStatusCondition{
-		{Type: operator.ComponentProgressing, Status: operator.ConditionFalse, Reason: operator.Unknown, Message: ""},
+		{Type: operator.ComponentProgressing, Status: operator.ConditionFalse, Reason: string(operator.Unknown), Message: ""},
 	}
 	m.set(true, conditions...)
 }
@@ -789,7 +789,7 @@ func (m *statusManager) clearAvailable() {
 	defer m.lock.Unlock()
 
 	conditions := []operator.TigeraStatusCondition{
-		{Type: operator.ComponentAvailable, Status: operator.ConditionFalse, Reason: operator.Unknown, Message: ""},
+		{Type: operator.ComponentAvailable, Status: operator.ConditionFalse, Reason: string(operator.Unknown), Message: ""},
 	}
 	m.set(true, conditions...)
 }
@@ -928,7 +928,7 @@ func UpdateStatusCondition(statuscondition []metav1.Condition, conditions []oper
 		if len(condition.Reason) > 0 {
 			ic.Reason = condition.Reason
 		} else {
-			ic.Reason = operator.Unknown
+			ic.Reason = string(operator.Unknown)
 		}
 
 		for i, c := range statuscondition {

@@ -74,6 +74,9 @@ const (
 
 	// Degraded means the component is not operating as desired and user action is required.
 	ComponentDegraded StatusConditionType = "Degraded"
+
+	// Ready indicated the component is healthy and ready.it is identical to Available and used in Status conditions for CRs.
+	ComponentReady StatusConditionType = "Ready"
 )
 
 // TigeraStatusCondition represents a condition attached to a particular component.

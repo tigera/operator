@@ -161,6 +161,7 @@ func (m *statusManager) updateStatus() {
 
 		// We've collected knowledge about the current state of the objects we're monitoring.
 		// Now, use that to update the TigeraStatus object for this manager.
+		available := m.IsAvailable()
 		if m.IsAvailable() {
 			m.setAvailable(string(operator.AllObjectsAvailable), "All objects available")
 		} else {
@@ -170,13 +171,21 @@ func (m *statusManager) updateStatus() {
 		if m.IsProgressing() {
 			m.setProgressing(string(operator.ResourceNotReady), m.progressingMessage())
 		} else {
-			m.clearProgressing()
+			if available {
+				m.clearProgressingWithReason(operator.AllObjectsAvailable, "All Objects Available")
+			} else {
+				m.clearProgressing()
+			}
 		}
 
 		if m.IsDegraded() {
 			m.setDegraded(m.degradedReason(), m.degradedMessage())
 		} else {
-			m.clearDegraded()
+			if available {
+				m.clearDegradedWithReason(operator.AllObjectsAvailable, "All Objects Available")
+			} else {
+				m.clearDegraded()
+			}
 		}
 	} else {
 		log.V(2).WithName(m.component).Info("Status manager is not ready to report component statuses.")
@@ -829,6 +838,26 @@ func (m *statusManager) degradedReason() string {
 		reasons = append(reasons, "Some pods are failing")
 	}
 	return strings.Join(reasons, "; ")
+}
+
+func (m *statusManager) clearDegradedWithReason(reason operator.TigeraStatusReason, msg string) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	conditions := []operator.TigeraStatusCondition{
+		{Type: operator.ComponentDegraded, Status: operator.ConditionFalse, Reason: string(reason), Message: msg},
+	}
+	m.set(true, conditions...)
+}
+
+func (m *statusManager) clearProgressingWithReason(reason operator.TigeraStatusReason, msg string) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	conditions := []operator.TigeraStatusCondition{
+		{Type: operator.ComponentProgressing, Status: operator.ConditionFalse, Reason: string(reason), Message: msg},
+	}
+	m.set(true, conditions...)
 }
 
 func hasPendingCSR(ctx context.Context, m *statusManager, labelMap map[string]string) (bool, error) {

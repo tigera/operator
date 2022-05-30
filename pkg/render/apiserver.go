@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/ptr"
@@ -894,7 +895,9 @@ func (c *apiServerComponent) startUpArgs() []string {
 		args = append(args,
 			"--enable-managed-clusters-create-api=true",
 			fmt.Sprintf("--set-managed-clusters-ca-cert=%s", c.cfg.TunnelCASecret.VolumeMountCertificateFilePath()),
-			fmt.Sprintf("--set-managed-clusters-ca-key=%s", c.cfg.TunnelCASecret.VolumeMountKeyFilePath()))
+			fmt.Sprintf("--set-managed-clusters-ca-key=%s", c.cfg.TunnelCASecret.VolumeMountKeyFilePath()),
+			fmt.Sprintf("--operatorNamespace=%s", common.OperatorNamespace()),
+		)
 		if c.cfg.ManagementCluster.Spec.Address != "" {
 			args = append(args, fmt.Sprintf("--managementClusterAddr=%s", c.cfg.ManagementCluster.Spec.Address))
 		}

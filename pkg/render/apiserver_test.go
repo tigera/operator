@@ -683,6 +683,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			"--set-managed-clusters-ca-cert=/tigera-management-cluster-connection/tls.crt",
 			"--set-managed-clusters-ca-key=/tigera-management-cluster-connection/tls.key",
 			"--managementClusterAddr=example.com:1234",
+			fmt.Sprintf("--operatorNamespace=%s", common.OperatorNamespace()),
 		}
 		Expect((dep.(*appsv1.Deployment)).Spec.Template.Spec.Containers[0].Args).To(ConsistOf(expectedArgs))
 	})
@@ -751,6 +752,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			"--set-managed-clusters-ca-cert=/tigera-management-cluster-connection/tls.crt",
 			"--set-managed-clusters-ca-key=/tigera-management-cluster-connection/tls.key",
 			"--managementClusterAddr=example.com:1234",
+			fmt.Sprintf("--operatorNamespace=%s", common.OperatorNamespace()),
 		}
 		Expect((dep.(*appsv1.Deployment)).Spec.Template.Spec.Containers[0].Args).To(ConsistOf(expectedArgs))
 	})

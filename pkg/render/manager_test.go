@@ -52,7 +52,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	}
 	var replicas int32 = 2
 	installation := &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas}
-	const expectedResourcesNumber = 12
+	const expectedResourcesNumber = 11
 
 	It("should render all resources for a default configuration", func() {
 		resources := renderObjects(renderConfig{oidc: false, managementCluster: nil, installation: installation, complianceFeatureActive: true})
@@ -591,7 +591,7 @@ func renderObjects(roc renderConfig) []client.Object {
 
 	var cloudResources render.ManagerCloudResources
 	if roc.imageAssuranceEnabled {
-		voltronTls := rtest.CreateCertSecret(rcimageassurance.ImageAssuranceSecretName, common.OperatorNamespace())
+		voltronTls := rtest.CreateCertSecret(rcimageassurance.ImageAssuranceSecretName, common.OperatorNamespace(), dns.DefaultClusterDomain)
 		cloudResources.ImageAssuranceResources = &rcimageassurance.Resources{TLSSecret: voltronTls}
 	}
 

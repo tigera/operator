@@ -430,16 +430,6 @@ var _ = Describe("monitor rendering tests", func() {
 				ValueFrom: nil,
 			},
 			{
-				Name:      "TLS_CLIENT_SECRET_HASH_ANNOTATION",
-				Value:     "0e6ae3fec848d64b4647532abed2256acca56b85",
-				ValueFrom: nil,
-			},
-			{
-				Name:      "TLS_CA_BUNDLE_HASH_ANNOTATION",
-				Value:     "0e6ae3fec848d64b4647532abed2256acca56b85",
-				ValueFrom: nil,
-			},
-			{
 				Name:      "DEX_ENABLED",
 				Value:     "true",
 				ValueFrom: nil,

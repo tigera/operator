@@ -52,7 +52,7 @@ var _ = FDescribe("LogStorage controller", func() {
 		ctx                context.Context
 		certificateManager certificatemanager.CertificateManager
 
-		mockServer = &httptest.Server{}
+		mockServer *httptest.Server
 	)
 
 	BeforeEach(func() {
@@ -73,6 +73,18 @@ var _ = FDescribe("LogStorage controller", func() {
 		prometheusTLS, err := certificateManager.GetOrCreateKeyPair(cli, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{render.PrometheusTLSSecretName})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+		kibanaTLS, err := certificateManager.GetOrCreateKeyPair(cli, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cli.Create(ctx, kibanaTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+
+		mockServer = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte{})
+		}))
+		mockServer.Config.TLSConfig = &tls.Config{InsecureSkipVerify: true}
+		mockServer.Start()
+	})
+	AfterEach(func() {
+		mockServer.Close()
 	})
 	Context("Reconcile", func() {
 		Context("Management cluster with image assurance installed", func() {
@@ -118,6 +130,13 @@ var _ = FDescribe("LogStorage controller", func() {
 				mockStatus.On("AddCronJobs", mock.Anything)
 				mockStatus.On("OnCRFound").Return()
 				mockStatus.On("ReadyToMonitor")
+
+				Expect(cli.Create(ctx, &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      render.ElasticsearchOperatorUserSecret,
+						Namespace: common.OperatorNamespace(),
+					},
+				})).ShouldNot(HaveOccurred())
 			})
 			It("sets cloud enabled controllers and env variables on kube controllers", func() {
 				mockElasticsearchServer := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -126,13 +145,6 @@ var _ = FDescribe("LogStorage controller", func() {
 				mockElasticsearchServer.Config.TLSConfig = &tls.Config{InsecureSkipVerify: true}
 				mockElasticsearchServer.Start()
 				defer mockElasticsearchServer.Close()
-
-				Expect(cli.Create(ctx, &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      render.ElasticsearchOperatorUserSecret,
-						Namespace: common.OperatorNamespace(),
-					},
-				})).ShouldNot(HaveOccurred())
 
 				Expect(cli.Create(ctx, &storagev1.StorageClass{
 					ObjectMeta: metav1.ObjectMeta{
@@ -272,6 +284,13 @@ var _ = FDescribe("LogStorage controller", func() {
 				mockStatus.On("AddCronJobs", mock.Anything)
 				mockStatus.On("OnCRFound").Return()
 				mockStatus.On("ReadyToMonitor")
+
+				Expect(cli.Create(ctx, &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      render.ElasticsearchOperatorUserSecret,
+						Namespace: common.OperatorNamespace(),
+					},
+				})).ShouldNot(HaveOccurred())
 			})
 			It("test LogStorage reconciles successfully", func() {
 				Expect(cli.Create(ctx, &operatorv1.LogStorage{
@@ -363,7 +382,15 @@ var _ = FDescribe("LogStorage controller", func() {
 					},
 				})).ShouldNot(HaveOccurred())
 
-				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, true, mockServer)
+				ms := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.WriteHeader(424)
+					w.Write([]byte{})
+				}))
+				ms.Config.TLSConfig = &tls.Config{InsecureSkipVerify: true}
+				ms.Start()
+				defer ms.Close()
+
+				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, true, ms)
 				Expect(err).ShouldNot(HaveOccurred())
 
 				esAdminUserSecret := &corev1.Secret{

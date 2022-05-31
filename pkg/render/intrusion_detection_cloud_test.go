@@ -21,6 +21,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rcimageassurance "github.com/tigera/operator/pkg/render/common/imageassurance"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 var _ = Describe("Tigera Secure Cloud Intrusion Detection Controller rendering tests", func() {
@@ -53,7 +54,7 @@ var _ = Describe("Tigera Secure Cloud Intrusion Detection Controller rendering t
 							rcimageassurance.ConfigurationConfigMapOrgIDKey: "test-org-id",
 						},
 					},
-					TLSSecret: rtest.CreateCertSecret(rcimageassurance.ImageAssuranceSecretName, common.OperatorNamespace()),
+					TLSSecret: rtest.CreateCertSecret(rcimageassurance.ImageAssuranceSecretName, common.OperatorNamespace(), dns.DefaultClusterDomain),
 				},
 			},
 		}
@@ -85,12 +86,26 @@ var _ = Describe("Tigera Secure Cloud Intrusion Detection Controller rendering t
 
 		Expect(idc.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(3))
-		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("internal-manager-tls"))
-		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/manager-tls"))
-		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal("tigera-image-assurance-api-cert"))
-		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal("/certs/bast"))
-		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[2].Name).To(Equal("elastic-ca-cert-volume"))
-		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[2].MountPath).To(Equal("/etc/ssl/elastic/"))
+		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElement(
+			corev1.VolumeMount{
+				Name:      certificatemanagement.TrustedCertConfigMapName,
+				MountPath: certificatemanagement.TrustedCertVolumeMountPath,
+				ReadOnly:  true,
+			},
+		))
+		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElement(
+			corev1.VolumeMount{
+				Name:      "tigera-image-assurance-api-cert",
+				MountPath: "/certs/bast",
+				ReadOnly:  true,
+			},
+		))
+		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElement(
+			corev1.VolumeMount{
+				Name:      "elastic-ca-cert-volume",
+				MountPath: "/etc/ssl/elastic/",
+			},
+		))
 
 		Expect(idc.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
 			corev1.EnvVar{Name: "IMAGE_ASSURANCE_CA_BUNDLE_PATH", Value: "/certs/bast/tls.crt"},
@@ -106,12 +121,33 @@ var _ = Describe("Tigera Secure Cloud Intrusion Detection Controller rendering t
 			},
 		))
 
-		Expect(idc.Spec.Template.Spec.Volumes).To(HaveLen(3))
-		Expect(idc.Spec.Template.Spec.Volumes[0].Name).To(Equal("internal-manager-tls"))
-		Expect(idc.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal("internal-manager-tls"))
-		Expect(idc.Spec.Template.Spec.Volumes[1].Name).To(Equal("elastic-ca-cert-volume"))
-		Expect(idc.Spec.Template.Spec.Volumes[1].Secret.SecretName).To(Equal("tigera-secure-es-gateway-http-certs-public"))
-		Expect(idc.Spec.Template.Spec.Volumes[2].Name).To(Equal("tigera-image-assurance-api-cert"))
-		Expect(idc.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal("tigera-image-assurance-api-cert"))
+		Expect(idc.Spec.Template.Spec.Volumes).To(ContainElement(
+			corev1.Volume{
+				Name: "elastic-ca-cert-volume",
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: "tigera-secure-es-gateway-http-certs-public",
+						Items: []corev1.KeyToPath{{
+							Key:  "tls.crt",
+							Path: "ca.pem",
+						}},
+					},
+				},
+			},
+		))
+		Expect(idc.Spec.Template.Spec.Volumes).To(ContainElement(
+			corev1.Volume{
+				Name: "tigera-image-assurance-api-cert",
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: "tigera-image-assurance-api-cert",
+						Items: []corev1.KeyToPath{{
+							Key:  "tls.crt",
+							Path: "tls.crt",
+						}},
+					},
+				},
+			},
+		))
 	})
 })

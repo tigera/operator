@@ -287,7 +287,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(dp.Spec.Template.Spec.Volumes[1].Secret.SecretName).To(Equal(relasticsearch.PublicCertSecret))
 
 		clusterRole := rtest.GetResource(resources, kubecontrollers.EsKubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(len(clusterRole.Rules)).To(Equal(20))
+		Expect(clusterRole.Rules).To(HaveLen(22))
 	})
 
 	It("should render all calico-kube-controllers resources for a default configuration using TigeraSecureEnterprise and ClusterType is Management", func() {
@@ -409,7 +409,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:tesla-" + components.ComponentTigeraKubeControllers.Version))
 
 		clusterRole := rtest.GetResource(resources, kubecontrollers.EsKubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(len(clusterRole.Rules)).To(Equal(20))
+		Expect(clusterRole.Rules).To(HaveLen(22))
 	})
 
 	It("should include a ControlPlaneNodeSelector when specified", func() {

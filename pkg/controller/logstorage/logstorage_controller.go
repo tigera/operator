@@ -531,6 +531,11 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			if err != nil || !proceed {
 				return result, err
 			}
+
+			result, proceed, err = r.performHealthChecks(reqLogger, ctx)
+			if err != nil || !proceed {
+				return result, err
+			}
 		}
 
 		result, proceed, err := r.createEsKubeControllers(
@@ -555,11 +560,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			reqLogger,
 			ctx,
 		)
-		if err != nil || !proceed {
-			return result, err
-		}
-
-		result, proceed, err = r.performHealthChecks(reqLogger, ctx)
 		if err != nil || !proceed {
 			return result, err
 		}

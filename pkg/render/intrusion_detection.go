@@ -533,7 +533,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 		}
 	}
 
-	return corev1.Container{
+	return c.decorateIntrusionDetectionCloudContainer(corev1.Container{
 		Name:  "controller",
 		Image: c.controllerImage,
 		Env:   envs,
@@ -553,7 +553,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 			Privileged: &privileged,
 		},
 		VolumeMounts: volumeMounts,
-	}
+	})
 }
 
 // Determine whether this component's configuration has syslog forwarding enabled or not.

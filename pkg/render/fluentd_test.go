@@ -97,7 +97,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		envs := ds.Spec.Template.Spec.Containers[0].Env
 
 		Expect(envs).Should(ContainElements(
-			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
+			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "tenant_id.clusterTestName"},
 			corev1.EnvVar{Name: "FLUENT_UID", Value: "0"},
 			corev1.EnvVar{Name: "FLOW_LOG_FILE", Value: "/var/log/calico/flowlogs/flows.log"},
 			corev1.EnvVar{Name: "DNS_LOG_FILE", Value: "/var/log/calico/dnslogs/dns.log"},

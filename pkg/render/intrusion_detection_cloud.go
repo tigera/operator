@@ -23,7 +23,7 @@ type IntrusionDetectionCloudResources struct {
 	ImageAssuranceResources *rcimageassurance.Resources
 }
 
-func (c *intrusionDetectionComponent) decorateIntrusionDetectionContainer(container corev1.Container) corev1.Container {
+func (c *intrusionDetectionComponent) decorateIntrusionDetectionCloudContainer(container corev1.Container) corev1.Container {
 	// if image assurance is enabled add env needed for it.
 	if c.cfg.CloudResources.ImageAssuranceResources != nil {
 		container.Env = append(container.Env,

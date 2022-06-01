@@ -37,8 +37,7 @@ const (
 	PGUserSecretName = "tigera-image-assurance-postgres-user"
 
 	// tls certificates for tigera-manager and image assurance api
-	APICertSecretName     = "tigera-image-assurance-api-cert-pair"
-	ManagerCertSecretName = "internal-manager-tls"
+	APICertSecretName = "tigera-image-assurance-api-cert-pair"
 
 	MountPathPostgresCerts = "/certs/db/"
 	mountPathAPITLSCerts   = "/certs/https/"

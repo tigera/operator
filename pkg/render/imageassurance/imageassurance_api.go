@@ -273,21 +273,6 @@ func (c *component) apiVolumes() []corev1.Volume {
 			},
 		},
 		{
-			Name: ManagerCertSecretName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					DefaultMode: &defaultMode,
-					Items: []corev1.KeyToPath{
-						{
-							Key:  "cert",
-							Path: "cert",
-						},
-					},
-					SecretName: ManagerCertSecretName,
-				},
-			},
-		},
-		{
 			Name: TenantEncryptionKeySecretName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{

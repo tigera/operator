@@ -108,10 +108,10 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	// Watch secrets created for postgres in operator namespace.
 	for _, s := range []string{
 		imageassurance.PGCertSecretName,
-		imageassurance.ManagerCertSecretName,
 		imageassurance.APICertSecretName,
 		imageassurance.PGAdminUserSecretName,
 		imageassurance.TenantEncryptionKeySecretName,
+		render.ManagerInternalTLSSecretName,
 		certificatemanagement.CASecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, s, common.OperatorNamespace()); err != nil {

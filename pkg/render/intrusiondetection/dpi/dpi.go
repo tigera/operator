@@ -125,9 +125,6 @@ func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Labels: map[string]string{
-				"k8s-app": DeepPacketInspectionName,
-			},
 			Annotations: d.dpiAnnotations(),
 		},
 		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
@@ -150,7 +147,6 @@ func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 			Namespace: DeepPacketInspectionNamespace,
 		},
 		Spec: appsv1.DaemonSetSpec{
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": DeepPacketInspectionName}},
 			Template: *podTemplate,
 		},
 	}

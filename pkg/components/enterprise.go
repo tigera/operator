@@ -126,7 +126,7 @@ var (
 	}
 
 	ComponentAnomalyDetectionAPI = component{
-		Version: "master",
+		Version: "v3.14.0-3",
 		Image:   "tigera/anomaly-detection-api",
 	}
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -160,7 +160,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		r.status.SetDegraded("Error querying for Application Layer", err.Error())
 		return reconcile.Result{}, err
 	}
-
+	r.status.OnCRFound()
 	preDefaultPatchFrom := client.MergeFrom(applicationLayer.DeepCopy())
 
 	updateApplicationLayerWithDefaults(applicationLayer)

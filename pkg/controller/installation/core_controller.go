@@ -1421,7 +1421,11 @@ func calicoDirectoryExists() bool {
 
 func (r *ReconcileInstallation) SetDegraded(reason operator.TigeraStatusReason, message string, err error, log logr.Logger) {
 	log.WithValues(string(reason), message).Error(err, string(reason))
-	r.status.SetDegraded(string(reason), fmt.Sprintf("%s - Error: %s", message, err))
+	errormsg := ""
+	if err != nil {
+		errormsg = err.Error()
+	}
+	r.status.SetDegraded(string(reason), fmt.Sprintf("%s - Error: %s", message, errormsg))
 }
 
 // GetOrCreateTyphaNodeTLSConfig reads and validates the CA ConfigMap and Secrets for

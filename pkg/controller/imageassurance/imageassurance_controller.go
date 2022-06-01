@@ -176,7 +176,7 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		r.status.SetDegraded("Error querying for ImageAssurance", err.Error())
 		return reconcile.Result{}, err
 	}
-
+	r.status.OnCRFound()
 	variant, installation, err := utils.GetInstallation(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {

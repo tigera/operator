@@ -80,7 +80,7 @@ type InstallationSpec struct {
 	// If the specified value is not empty, the Operator will still attempt auto-detection, but
 	// will additionally compare the auto-detected value to the specified value to confirm they match.
 	// +optional
-	// +kubebuilder:validation:Enum="";EKS;GKE;AKS;OpenShift;DockerEnterprise;
+	// +kubebuilder:validation:Enum="";EKS;GKE;AKS;OpenShift;DockerEnterprise;RKE2
 	KubernetesProvider Provider `json:"kubernetesProvider,omitempty"`
 
 	// CNI specifies the CNI that will be used by this installation.
@@ -207,6 +207,7 @@ var (
 	ProviderEKS       Provider = "EKS"
 	ProviderGKE       Provider = "GKE"
 	ProviderAKS       Provider = "AKS"
+	ProviderRKE2      Provider = "RKE2"
 	ProviderOpenShift Provider = "OpenShift"
 	ProviderDockerEE  Provider = "DockerEnterprise"
 )

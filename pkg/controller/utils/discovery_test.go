@@ -84,4 +84,16 @@ var _ = Describe("provider discovery", func() {
 		Expect(e).To(BeNil())
 		Expect(p).To(Equal(operatorv1.ProviderEKS))
 	})
+
+	It("should detect EKS based on presence of kube-system/rke2 ConfigMap", func() {
+		c := fake.NewSimpleClientset(&corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "rke2",
+				Namespace: "kube-system",
+			},
+		})
+		p, e := AutoDiscoverProvider(context.Background(), c)
+		Expect(e).To(BeNil())
+		Expect(p).To(Equal(operatorv1.ProviderRKE2))
+	})
 })

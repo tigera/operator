@@ -97,10 +97,7 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		managerServiceAccount(),
 		managerClusterRole(false, true, c.cfg.Openshift),
 		managerClusterRoleBinding(),
-		managerClusterWideSettingsGroup(),
 		managerUserSpecificSettingsGroup(),
-		managerClusterWideTigeraLayer(),
-		managerClusterWideDefaultView(),
 	)
 
 	return objs, nil

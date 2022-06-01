@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,39 +19,43 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
-
+	"github.com/tigera/operator/pkg/tls"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
 var _ = Describe("Rendering tests for PacketCapture API component", func() {
 
-	// Certificate secret
-	var secret = &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      render.PacketCaptureCertSecret,
-			Namespace: common.OperatorNamespace(),
-		},
-		Data: map[string][]byte{
-			"tls.crt": []byte("foo"),
-			"tls.key": []byte("bar"),
-		},
-	}
+	var secret certificatemanagement.KeyPairInterface
+	var cli client.Client
+	BeforeEach(func() {
+		scheme := runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
+		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+		secret, err = certificateManager.GetOrCreateKeyPair(cli, render.PacketCaptureCertSecret, common.OperatorNamespace(), []string{""})
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 	// Pull secret
 	var pullSecrets = []*corev1.Secret{{
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
@@ -89,23 +93,11 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		var resources = []expectedResource{
 			{name: render.PacketCaptureNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: "pull-secret", ns: render.PacketCaptureNamespace, group: "", version: "v1", kind: "Secret"},
-			{name: render.PacketCaptureCertSecret, ns: render.PacketCaptureNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: render.PacketCaptureServiceAccountName, ns: render.PacketCaptureNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: render.PacketCaptureClusterRoleName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: render.PacketCaptureClusterRoleBindingName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: render.PacketCaptureDeploymentName, ns: render.PacketCaptureNamespace, group: "apps", version: "v1", kind: "Deployment"},
 			{name: render.PacketCaptureServiceName, ns: render.PacketCaptureNamespace, group: "", version: "v1", kind: "Service"},
-		}
-
-		if enableOIDC {
-			var oidc = []expectedResource{
-				{name: "tigera-dex-tls", ns: render.PacketCaptureNamespace, group: "", version: "v1", kind: "Secret"},
-			}
-			resources = append(resources, oidc...)
-		}
-
-		if useCSR {
-			resources = append(resources, expectedResource{"tigera-packetcapture:csr-creator", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"})
 		}
 
 		return resources
@@ -116,6 +108,14 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 	var expectedEnvVars = func(enableOIDC bool) []corev1.EnvVar {
 		var envVars = []corev1.EnvVar{
 			{Name: "PACKETCAPTURE_API_LOG_LEVEL", Value: "Info"},
+			{
+				Name:  "PACKETCAPTURE_API_HTTPS_KEY",
+				Value: "/tigera-packetcapture-server-tls/tls.key",
+			},
+			{
+				Name:  "PACKETCAPTURE_API_HTTPS_CERT",
+				Value: "/tigera-packetcapture-server-tls/tls.crt",
+			},
 		}
 
 		if enableOIDC {
@@ -167,26 +167,19 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 	}
 
 	// Generate expected volume mounts
-	var expectedVolumeMounts = func(enableOIDC bool) []corev1.VolumeMount {
+	var expectedVolumeMounts = func() []corev1.VolumeMount {
 		var volumeMounts = []corev1.VolumeMount{
 			{
 				Name:      render.PacketCaptureCertSecret,
-				MountPath: "/certs/https",
+				MountPath: "/tigera-packetcapture-server-tls",
 				ReadOnly:  true,
 			},
-		}
-		if enableOIDC {
-			volumeMounts = append(volumeMounts, corev1.VolumeMount{
-				Name:      "tigera-dex-tls-crt",
-				ReadOnly:  false,
-				MountPath: "/etc/ssl/certs",
-			})
 		}
 		return volumeMounts
 	}
 	// Generate expected containers
 	var expectedContainers = func(enableOIDC bool) []corev1.Container {
-		var volumeMounts = expectedVolumeMounts(enableOIDC)
+		var volumeMounts = expectedVolumeMounts()
 		var envVars = expectedEnvVars(enableOIDC)
 
 		return []corev1.Container{
@@ -226,7 +219,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 	}
 
 	// Generate expected volumes
-	var expectedVolumes = func(useCSR, enableOIDC bool) []corev1.Volume {
+	var expectedVolumes = func(useCSR bool) []corev1.Volume {
 		var volumes []corev1.Volume
 		if useCSR {
 			volumes = append(volumes, corev1.Volume{
@@ -248,19 +241,6 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 			})
 
 		}
-		if enableOIDC {
-			volumes = append(volumes, corev1.Volume{
-				Name: render.DexCertSecretName,
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						SecretName: render.DexCertSecretName,
-						Items: []corev1.KeyToPath{
-							{Key: corev1.TLSCertKey, Path: "tls-dex.crt"},
-						},
-					},
-				},
-			})
-		}
 
 		return volumes
 	}
@@ -281,14 +261,16 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		// Check init containers
 		if useCSR {
 			Expect(len(deployment.Spec.Template.Spec.InitContainers)).To(Equal(1))
-			Expect(deployment.Spec.Template.Spec.InitContainers[0].Name).To(Equal(render.CSRInitContainerName))
+			Expect(deployment.Spec.Template.Spec.InitContainers[0].Name).To(Equal(fmt.Sprintf("%s-key-cert-provisioner", render.PacketCaptureCertSecret)))
 		}
 
 		// Check volumes
-		Expect(deployment.Spec.Template.Spec.Volumes).To(ConsistOf(expectedVolumes(useCSR, enableOIDC)))
+		Expect(deployment.Spec.Template.Spec.Volumes).To(ConsistOf(expectedVolumes(useCSR)))
 
 		// Check annotations
-		Expect(deployment.Spec.Template.Annotations).To(HaveKeyWithValue(render.PacketCaptureTLSHashAnnotation, Not(BeEmpty())))
+		if !useCSR {
+			Expect(deployment.Spec.Template.Annotations).To(HaveKeyWithValue("hash.operator.tigera.io/tigera-packetcapture-server-tls", Not(BeEmpty())))
+		}
 
 		// Check permissions
 		clusterRole := rtest.GetResource(resources, render.PacketCaptureClusterRoleName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
@@ -359,19 +341,25 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 	})
 
 	It("should render all resources for an installation with certificate management", func() {
-		var resources = renderPacketCapture(operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{}}, nil)
+		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
+		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
+		installation := operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{CACert: cert}}
+		certificateManager, err := certificatemanager.Create(cli, &installation, clusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+		secret, err = certificateManager.GetOrCreateKeyPair(cli, render.PacketCaptureCertSecret, common.OperatorNamespace(), []string{""})
+		Expect(err).NotTo(HaveOccurred())
 
+		var resources = renderPacketCapture(installation, nil)
 		checkPacketCaptureResources(resources, true, false)
 	})
 
 	It("should render all resources for an installation with oidc configured", func() {
-		var authentication *operatorv1.Authentication
-		authentication = &operatorv1.Authentication{
+		authentication := &operatorv1.Authentication{
 			Spec: operatorv1.AuthenticationSpec{
 				ManagerDomain: "https://127.0.0.1",
 				OIDC:          &operatorv1.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"}}}
 
-		var dexCfg = render.NewDexKeyValidatorConfig(authentication, nil, render.CreateDexTLSSecret("cn"), dns.DefaultClusterDomain)
+		var dexCfg = render.NewDexKeyValidatorConfig(authentication, nil, dns.DefaultClusterDomain)
 		var resources = renderPacketCapture(defaultInstallation, dexCfg)
 
 		checkPacketCaptureResources(resources, false, true)

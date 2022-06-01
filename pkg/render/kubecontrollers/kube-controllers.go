@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019,2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,9 +17,6 @@ package kubecontrollers
 import (
 	"strings"
 
-	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -32,9 +29,12 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/render"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
@@ -72,10 +72,13 @@ type KubeControllersConfiguration struct {
 	ClusterDomain           string
 	MetricsPort             int
 
+	// For details on why this is needed see 'Node and Installation finalizer' in the core_controller.
+	Terminating bool
+
 	// Secrets - provided by the caller. Used to generate secrets in the destination
 	// namespace to be returned by the rendered. Expected that the calling code
 	// take care to pass the same secret on each reconcile where possible.
-	ManagerInternalSecret        *corev1.Secret
+	ManagerInternalSecret        certificatemanagement.KeyPairInterface
 	ElasticsearchSecret          *corev1.Secret
 	KubeControllersGatewaySecret *corev1.Secret
 	KibanaSecret                 *corev1.Secret
@@ -236,8 +239,7 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 	}
 	objectsToDelete := []client.Object{}
 	if c.renderManagerInternalSecret {
-		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
-			secret.CopyToNamespace(common.CalicoNamespace, c.cfg.ManagerInternalSecret)...)...)
+		objectsToCreate = append(objectsToCreate, c.cfg.ManagerInternalSecret.Secret(common.CalicoNamespace))
 	}
 
 	if c.renderElasticsearchSecret {
@@ -258,6 +260,11 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 		objectsToCreate = append(objectsToCreate, c.prometheusService())
 	} else {
 		objectsToDelete = append(objectsToDelete, c.prometheusService())
+	}
+
+	if c.cfg.Terminating {
+		objectsToDelete = append(objectsToDelete, objectsToCreate...)
+		objectsToCreate = nil
 	}
 
 	return objectsToCreate, objectsToDelete
@@ -282,9 +289,9 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration, kubeContr
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
-			// IPAM resources are manipulated when nodes are deleted.
+			// IPAM resources are manipulated in response to node and block updates, as well as periodic triggers.
 			APIGroups: []string{"crd.projectcalico.org"},
-			Resources: []string{"ippools", "ipreservations"},
+			Resources: []string{"ipreservations"},
 			Verbs:     []string{"list"},
 		},
 		{
@@ -293,10 +300,16 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration, kubeContr
 			Verbs:     []string{"get", "list", "create", "update", "delete", "watch"},
 		},
 		{
+			// Pools are watched to maintain a mapping of blocks to IP pools.
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{"ippools"},
+			Verbs:     []string{"list", "watch"},
+		},
+		{
 			// Needs access to update clusterinformations.
 			APIGroups: []string{"crd.projectcalico.org"},
 			Resources: []string{"clusterinformations"},
-			Verbs:     []string{"get", "create", "update"},
+			Verbs:     []string{"get", "create", "update", "list", "watch"},
 		},
 		{
 			// Needs to manage hostendpoints.
@@ -353,19 +366,19 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 			Verbs:     []string{"get", "watch"},
 		},
 		{
-			APIGroups: []string{"projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"deeppacketinspections"},
 			Verbs:     []string{"get", "watch", "list"},
 		},
 		{
 			APIGroups: []string{"crd.projectcalico.org"},
-			Resources: []string{"deeppacketinspections"},
-			Verbs:     []string{"get"},
+			Resources: []string{"deeppacketinspections/status"},
+			Verbs:     []string{"update"},
 		},
 		{
 			APIGroups: []string{"crd.projectcalico.org"},
-			Resources: []string{"deeppacketinspections/status"},
-			Verbs:     []string{"update"},
+			Resources: []string{"packetcaptures"},
+			Verbs:     []string{"get", "list", "update"},
 		},
 	}
 
@@ -441,13 +454,14 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 				)
 			}
 		}
+		if c.cfg.ManagerInternalSecret != nil {
+			env = append(env, corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: c.cfg.ManagerInternalSecret.VolumeMountCertificateFilePath()})
+		}
 
 		if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
 			env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
 		}
 	}
-
-	defaultMode := int32(420)
 
 	container := c.cloudDecorateContainer(corev1.Container{
 		Name:      c.kubeControllerName,
@@ -480,7 +494,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 			},
 			TimeoutSeconds: 10,
 		},
-		VolumeMounts: kubeControllersVolumeMounts(c.cfg.ManagerInternalSecret),
+		VolumeMounts: c.kubeControllersVolumeMounts(),
 	})
 
 	if c.kubeControllerName == EsKubeController {
@@ -494,7 +508,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		ImagePullSecrets:   c.cfg.Installation.ImagePullSecrets,
 		ServiceAccountName: c.kubeControllerServiceAccountName,
 		Containers:         []corev1.Container{container},
-		Volumes:            kubeControllersVolumes(defaultMode, c.cfg.ManagerInternalSecret),
+		Volumes:            c.kubeControllersVolumes(),
 	}
 
 	if c.kubeControllerName == EsKubeController {
@@ -595,7 +609,7 @@ func (c *kubeControllersComponent) kubeControllersResources() corev1.ResourceReq
 func (c *kubeControllersComponent) annotations() map[string]string {
 	am := map[string]string{}
 	if c.cfg.ManagerInternalSecret != nil {
-		am[render.ManagerInternalTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.ManagerInternalSecret.Data)
+		am[c.cfg.ManagerInternalSecret.HashAnnotationKey()] = c.cfg.ManagerInternalSecret.HashAnnotationValue()
 	}
 	if c.cfg.ElasticsearchSecret != nil {
 		am[render.TlsSecretHashAnnotation] = rmeta.AnnotationHash(c.cfg.ElasticsearchSecret.Data)
@@ -615,39 +629,20 @@ func (c *kubeControllersComponent) controllersPodSecurityPolicy() *policyv1beta1
 	return psp
 }
 
-func kubeControllersVolumeMounts(managerSecret *corev1.Secret) []corev1.VolumeMount {
-	if managerSecret != nil {
-		return []corev1.VolumeMount{{
-			Name:      render.ManagerInternalTLSSecretName,
-			MountPath: "/manager-tls",
-			ReadOnly:  true,
-		}}
+func (c *kubeControllersComponent) kubeControllersVolumeMounts() []corev1.VolumeMount {
+	if c.cfg.ManagerInternalSecret != nil {
+		return []corev1.VolumeMount{
+			c.cfg.ManagerInternalSecret.VolumeMount(),
+		}
 	}
-
 	return []corev1.VolumeMount{}
 }
 
-func kubeControllersVolumes(defaultMode int32, managerSecret *corev1.Secret) []corev1.Volume {
-	if managerSecret != nil {
-
+func (c *kubeControllersComponent) kubeControllersVolumes() []corev1.Volume {
+	if c.cfg.ManagerInternalSecret != nil {
 		return []corev1.Volume{
-			{
-				Name: render.ManagerInternalTLSSecretName,
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						DefaultMode: &defaultMode,
-						SecretName:  render.ManagerInternalTLSSecretName,
-						Items: []corev1.KeyToPath{
-							{
-								Key:  "cert",
-								Path: "cert",
-							},
-						},
-					},
-				},
-			},
+			c.cfg.ManagerInternalSecret.Volume(),
 		}
 	}
-
 	return []corev1.Volume{}
 }

@@ -24,12 +24,14 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/cloudconfig"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rcimageassurance "github.com/tigera/operator/pkg/render/common/imageassurance"
+	rtest "github.com/tigera/operator/pkg/render/common/test"
 	iarender "github.com/tigera/operator/pkg/render/imageassurance"
 	"github.com/tigera/operator/test"
 )
@@ -53,7 +55,7 @@ var _ = Describe("Cloud Intrusion Detection Controller tests", func() {
 		Expect(operatorv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 		// Create a client that will have a crud interface of k8s objects.
-		c = fake.NewFakeClientWithScheme(scheme)
+		c = fake.NewClientBuilder().WithScheme(scheme).Build()
 		ctx = context.Background()
 
 		// Create an object we can use throughout the test to do the compliance reconcile loops.
@@ -121,23 +123,18 @@ var _ = Describe("Cloud Intrusion Detection Controller tests", func() {
 		Expect(c.Create(ctx, &operatorv1.LogCollector{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
 
+		certificateManager, err := certificatemanager.Create(c, nil, "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
+		kiibanaTLS, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, kiibanaTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+
 		Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      relasticsearch.PublicCertSecret,
-				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.ElasticsearchIntrusionDetectionUserSecret,
-				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.ElasticsearchADJobUserSecret,
-				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.ElasticsearchPerformanceHotspotsUserSecret,
-				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, rtest.CreateCertSecret(render.ElasticsearchIntrusionDetectionUserSecret, common.OperatorNamespace(), render.GuardianSecretName)))
+		Expect(c.Create(ctx, rtest.CreateCertSecret(render.ElasticsearchADJobUserSecret, common.OperatorNamespace(), render.GuardianSecretName)))
+		Expect(c.Create(ctx, rtest.CreateCertSecret(render.ElasticsearchPerformanceHotspotsUserSecret, common.OperatorNamespace(), render.GuardianSecretName)))
+
 		Expect(c.Create(ctx, &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      render.ECKLicenseConfigMapName,
@@ -147,21 +144,6 @@ var _ = Describe("Cloud Intrusion Detection Controller tests", func() {
 		})).NotTo(HaveOccurred())
 
 		Expect(c.Create(ctx, &v3.DeepPacketInspection{ObjectMeta: metav1.ObjectMeta{Name: "test-dpi", Namespace: "test-dpi-ns"}})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.NodeTLSSecretName,
-				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.TyphaTLSSecretName,
-				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.TyphaCAConfigMapName,
-				Namespace: "tigera-operator",
-			},
-			Data: map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterpriseTrial)},
-		})).NotTo(HaveOccurred())
 
 		// Apply the intrusiondetection CR to the fake cluster.
 		Expect(c.Create(ctx, &operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
@@ -211,7 +193,7 @@ var _ = Describe("Cloud Intrusion Detection Controller tests", func() {
 		})
 
 		AfterEach(func() {
-			c.Delete(ctx, &corev1.ConfigMap{
+			_ = c.Delete(ctx, &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      rcimageassurance.ConfigurationConfigMapName,
 					Namespace: "tigera-operator",
@@ -243,11 +225,20 @@ var _ = Describe("Cloud Intrusion Detection Controller tests", func() {
 			Expect(test.GetResource(c, &d)).NotTo(HaveOccurred())
 
 			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
-			Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(2))
-			Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("tigera-image-assurance-api-cert"))
-			Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/certs/bast"))
-			Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal("elastic-ca-cert-volume"))
-			Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal("/etc/ssl/elastic/"))
+			Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElement(
+				corev1.VolumeMount{
+					Name:      "tigera-image-assurance-api-cert",
+					MountPath: "/certs/bast",
+					ReadOnly:  true,
+				},
+			))
+
+			Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElement(
+				corev1.VolumeMount{
+					Name:      "elastic-ca-cert-volume",
+					MountPath: "/etc/ssl/elastic/",
+				},
+			))
 
 			Expect(d.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
 				corev1.EnvVar{Name: "IMAGE_ASSURANCE_CA_BUNDLE_PATH", Value: "/certs/bast/tls.crt"},
@@ -263,11 +254,32 @@ var _ = Describe("Cloud Intrusion Detection Controller tests", func() {
 				},
 			))
 
-			Expect(d.Spec.Template.Spec.Volumes).To(HaveLen(2))
-			Expect(d.Spec.Template.Spec.Volumes[0].Name).To(Equal("elastic-ca-cert-volume"))
-			Expect(d.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal("tigera-secure-es-gateway-http-certs-public"))
-			Expect(d.Spec.Template.Spec.Volumes[1].Name).To(Equal("tigera-image-assurance-api-cert"))
-			Expect(d.Spec.Template.Spec.Volumes[1].Secret.SecretName).To(Equal("tigera-image-assurance-api-cert"))
+			Expect(d.Spec.Template.Spec.Volumes).To(ContainElement(
+				corev1.Volume{
+					Name: "elastic-ca-cert-volume",
+					VolumeSource: corev1.VolumeSource{
+						Secret: &corev1.SecretVolumeSource{
+							SecretName: "tigera-secure-es-gateway-http-certs-public",
+							Items: []corev1.KeyToPath{
+								{Key: "tls.crt", Path: "ca.pem"},
+							},
+						},
+					},
+				},
+			))
+			Expect(d.Spec.Template.Spec.Volumes).To(ContainElement(
+				corev1.Volume{
+					Name: "tigera-image-assurance-api-cert",
+					VolumeSource: corev1.VolumeSource{
+						Secret: &corev1.SecretVolumeSource{
+							SecretName: "tigera-image-assurance-api-cert",
+							Items: []corev1.KeyToPath{
+								{Key: "tls.crt", Path: "tls.crt"},
+							},
+						},
+					},
+				},
+			))
 		})
 
 		It("should return error when Image Assurance ConfigMap doesn't exist", func() {

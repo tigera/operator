@@ -20,8 +20,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/openshift/library-go/pkg/crypto"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -38,16 +36,16 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	v1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/render"
+	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	rsecret "github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/monitor"
-	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/url"
 )
 
@@ -316,60 +314,32 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	var fluentdPrometheusTLS *corev1.Secret
-	trustedBundle, err := utils.GetPrometheusCertificateBundle(ctx, r.client, render.LogCollectorNamespace, installation.CertificateManagement)
-	if trustedBundle == nil {
-		r.status.SetDegraded("Waiting for the prometheus client secret to become available", "")
-		err = fmt.Errorf("waiting for the prometheus client secret to become available")
-		return reconcile.Result{}, nil
-	} else if err != nil {
-		log.Error(err, "Unable to create a metrics certificate bundle")
-		r.status.SetDegraded("Unable to create a metrics certificate bundle", err.Error())
+	certificateManager, err := certificatemanager.Create(r.client, installation, r.clusterDomain)
+	if err != nil {
+		log.Error(err, "unable to create the Tigera CA")
+		r.status.SetDegraded("Unable to create the Tigera CA", err.Error())
 		return reconcile.Result{}, err
 	}
-	if installation.CertificateManagement == nil {
-		fluentdPrometheusTLS, err = utils.ValidateCertPair(r.client,
-			common.OperatorNamespace(),
-			render.FluentdPrometheusTLSSecretName,
-			corev1.TLSPrivateKeyKey,
-			corev1.TLSCertKey,
-		)
-		if err != nil {
-			log.Error(err, "Invalid TLS Cert")
-			r.status.SetDegraded("Error validating TLS certificate", err.Error())
-			return reconcile.Result{}, err
-		}
-
-		if fluentdPrometheusTLS == nil {
-			fluentdPrometheusTLS, err = rsecret.CreateTLSSecret(nil,
-				render.FluentdPrometheusTLSSecretName,
-				common.OperatorNamespace(),
-				corev1.TLSPrivateKeyKey,
-				corev1.TLSCertKey,
-				rmeta.DefaultCertificateDuration,
-				[]crypto.CertificateExtensionFunc{tls.SetServerAuth},
-				render.FluentdPrometheusTLSSecretName,
-			)
-			if err != nil {
-				log.Error(err, "Error creating TLS certificate")
-				r.status.SetDegraded("Error creating TLS certificate", err.Error())
-				return reconcile.Result{}, err
-			}
-		}
-		prometheusTLS, err := utils.GetSecret(ctx, r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
-		if prometheusTLS == nil {
-			log.Info("Prometheus secrets are not available yet, waiting until they become available")
-			r.status.SetDegraded("Prometheus secrets are not available yet, waiting until they become available", "")
-			return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
-		} else if err != nil {
-			r.status.SetDegraded("Failed to get Prometheus credentials", err.Error())
-			return reconcile.Result{}, err
-		}
-		r.status.RemoveCertificateSigningRequests(common.TigeraPrometheusNamespace)
-	} else {
-		// Monitor pending CSRs for the TigeraStatus
-		r.status.AddCertificateSigningRequests(render.LogCollectorNamespace, map[string]string{"k8s-app": render.LogCollectorNamespace})
+	fluentdPrometheusTLS, err := certificateManager.GetOrCreateKeyPair(r.client, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), []string{render.FluentdPrometheusTLSSecretName})
+	if err != nil {
+		log.Error(err, "Error creating TLS certificate")
+		r.status.SetDegraded("Error creating TLS certificate", err.Error())
+		return reconcile.Result{}, err
 	}
+
+	certificate, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
+	if err != nil {
+		log.Error(err, "Failed to get certificate")
+		r.status.SetDegraded("Failed to get certificate", err.Error())
+		return reconcile.Result{}, err
+	} else if certificate == nil {
+		log.Info("Prometheus secrets are not available yet, waiting until they become available")
+		r.status.SetDegraded("Prometheus secrets are not available yet, waiting until they become available", "")
+		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+	trustedBundle := certificateManager.CreateTrustedBundle(certificate)
+
+	certificateManager.AddToStatusManager(r.status, render.LogCollectorNamespace)
 
 	var exportLogs = utils.IsFeatureActive(license, common.ExportLogsFeature)
 	if !exportLogs && instance.Spec.AdditionalStores != nil {
@@ -481,35 +451,35 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	fluentdCfg := &render.FluentdConfiguration{
-		LogCollector:    instance,
-		ESSecrets:       esSecrets,
-		ESClusterConfig: esClusterConfig,
-		S3Credential:    s3Credential,
-		SplkCredential:  splunkCredential,
-		Filters:         filters,
-		EKSConfig:       eksConfig,
-		PullSecrets:     pullSecrets,
-		Installation:    installation,
-		ClusterDomain:   r.clusterDomain,
-		OSType:          rmeta.OSTypeLinux,
-		TLS:             fluentdPrometheusTLS,
-		TrustedBundle:   trustedBundle,
+		LogCollector:     instance,
+		ESSecrets:        esSecrets,
+		ESClusterConfig:  esClusterConfig,
+		S3Credential:     s3Credential,
+		SplkCredential:   splunkCredential,
+		Filters:          filters,
+		EKSConfig:        eksConfig,
+		PullSecrets:      pullSecrets,
+		Installation:     installation,
+		ClusterDomain:    r.clusterDomain,
+		OSType:           rmeta.OSTypeLinux,
+		MetricsServerTLS: fluentdPrometheusTLS,
+		TrustedBundle:    trustedBundle,
 	}
 	// Render the fluentd component for Linux
-	component := render.Fluentd(fluentdCfg)
-	components := []render.Component{component}
-	if fluentdPrometheusTLS != nil {
-		oprIssued, err := utils.IsCertOperatorIssued(fluentdPrometheusTLS.Data[corev1.TLSCertKey])
-		if err != nil {
-			reqLogger.Error(err, "failed checking certificate issuer")
-			r.status.SetDegraded("failed checking certificate issuer", err.Error())
-		}
-		if oprIssued {
-			components = append(components, render.NewPassthrough(fluentdPrometheusTLS))
-		}
+	comp := render.Fluentd(fluentdCfg)
+	components := []render.Component{
+		comp,
+		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+			Namespace:       render.LogCollectorNamespace,
+			ServiceAccounts: []string{render.FluentdNodeName},
+			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+				rcertificatemanagement.NewKeyPairOption(fluentdPrometheusTLS, true, true),
+			},
+			TrustedBundle: trustedBundle,
+		}),
 	}
 
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, comp); err != nil {
 		reqLogger.Error(err, "Error with images from ImageSet")
 		r.status.SetDegraded("Error with images from ImageSet", err.Error())
 		return reconcile.Result{}, err
@@ -542,9 +512,9 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			ClusterDomain:   r.clusterDomain,
 			OSType:          rmeta.OSTypeWindows,
 		}
-		component = render.Fluentd(fluentdCfg)
+		comp = render.Fluentd(fluentdCfg)
 
-		if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+		if err = imageset.ApplyImageSet(ctx, r.client, variant, comp); err != nil {
 			reqLogger.Error(err, "Error with images from ImageSet")
 			r.status.SetDegraded("Error with images from ImageSet", err.Error())
 			return reconcile.Result{}, err
@@ -553,7 +523,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		// Create a component handler to manage the rendered component.
 		handler = utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
-		if err := handler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+		if err := handler.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
 			r.status.SetDegraded("Error creating / updating resource", err.Error())
 			return reconcile.Result{}, err
 		}

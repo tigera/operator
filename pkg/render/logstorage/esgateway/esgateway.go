@@ -35,6 +35,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
@@ -49,11 +50,12 @@ const (
 
 	ElasticsearchHTTPSEndpoint = "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
 	ElasticsearchPort          = 9200
-	KibanaHTTPSEndpoint        = "https://tigera-secure-kb-http.tigera-kibana.svc:5601"
-	KibanaPort                 = 5601
 
 	ExternalCertsSecret     = "tigera-secure-external-es-certs"
 	ExternalCertsVolumeName = "tigera-secure-external-es-certs"
+
+	KibanaHTTPSEndpoint = "https://tigera-secure-kb-http.tigera-kibana.svc:5601"
+	KibanaPort          = 5601
 )
 
 func EsGateway(c *Config) render.Component {
@@ -150,7 +152,7 @@ func (e *esGateway) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 	if e.installation.CertificateManagement != nil {
-		e.csrImage, err = render.ResolveCSRInitImage(e.installation, is)
+		e.csrImage, err = certificatemanagement.ResolveCSRInitImage(e.installation, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
@@ -169,7 +171,7 @@ func (e *esGateway) Objects() (toCreate, toDelete []client.Object) {
 	toCreate = append(toCreate, e.esGatewayServiceAccount())
 	toCreate = append(toCreate, e.esGatewayDeployment())
 	if e.installation.CertificateManagement != nil {
-		toCreate = append(toCreate, render.CSRClusterRoleBinding(RoleName, render.ElasticsearchNamespace))
+		toCreate = append(toCreate, certificatemanagement.CSRClusterRoleBinding(RoleName, render.ElasticsearchNamespace))
 	}
 	return toCreate, toDelete
 }
@@ -264,7 +266,7 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 		svcDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, e.clusterDomain)
 		svcDNSNames = append(svcDNSNames, dns.GetServiceDNSNames(ServiceName, render.ElasticsearchNamespace, e.clusterDomain)...)
 
-		initContainers = append(initContainers, render.CreateCSRInitContainer(
+		initContainers = append(initContainers, certificatemanagement.CreateCSRInitContainer(
 			e.installation.CertificateManagement,
 			e.csrImage,
 			VolumeName,

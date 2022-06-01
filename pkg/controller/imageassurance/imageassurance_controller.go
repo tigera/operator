@@ -10,15 +10,18 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	rcimageassurance "github.com/tigera/operator/pkg/render/common/imageassurance"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/imageassurance"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -103,8 +106,14 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	// Watch secrets created for postgres in operator namespace.
-	for _, s := range []string{imageassurance.PGCertSecretName, imageassurance.ManagerCertSecretName,
-		imageassurance.APICertSecretName, imageassurance.PGAdminUserSecretName, imageassurance.TenantEncryptionKeySecretName} {
+	for _, s := range []string{
+		imageassurance.PGCertSecretName,
+		imageassurance.APICertSecretName,
+		imageassurance.PGAdminUserSecretName,
+		imageassurance.TenantEncryptionKeySecretName,
+		render.ManagerInternalTLSSecretName,
+		certificatemanagement.CASecretName,
+	} {
 		if err = utils.AddSecretsWatch(c, s, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("ImageAssurance-controller failed to watch Secret %s: %v", s, err)
 		}
@@ -228,14 +237,21 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
-	internalMgrSecret, err := utils.ValidateCertPair(r.client, common.OperatorNamespace(), render.ManagerInternalTLSSecretName,
-		render.ManagerInternalSecretKeyName, render.ManagerInternalSecretCertName)
+	certificateManager, err := certificatemanager.Create(r.client, installation, r.clusterDomain)
+	if err != nil {
+		log.Error(err, "unable to create the Tigera CA")
+		r.status.SetDegraded("Unable to create the Tigera CA", err.Error())
+		return reconcile.Result{}, err
+	}
+	internalMgrSecret, err := certificateManager.GetCertificate(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
 
 	if err != nil {
 		reqLogger.Error(err, err.Error())
 		r.status.SetDegraded("Error retrieving internal manager tls secret", err.Error())
 		return reconcile.Result{}, err
 	}
+
+	trustedBundle := certificateManager.CreateTrustedBundle(internalMgrSecret)
 
 	if internalMgrSecret == nil {
 		reqLogger.Info("Waiting for internal manager tls certificate to be available")
@@ -322,15 +338,22 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		PGCertSecret:              pgCertSecret,
 		PGUserSecret:              pgUserSecret,
 		TLSSecret:                 tlsSecret,
-		InternalMgrSecret:         internalMgrSecret,
 		NeedsMigrating:            needsMigrating,
 		ComponentsUp:              componentsUp,
 		KeyValidatorConfig:        kvc,
 		TenantEncryptionKeySecret: tenantEncryptionKeySecret,
+		TrustedCertBundle:         trustedBundle,
 	}
 
-	components := []render.Component{render.NewPassthrough([]client.Object{tlsSecret}...)}
-	components = append(components, imageassurance.ImageAssurance(config))
+	components := []render.Component{
+		render.NewPassthrough([]client.Object{tlsSecret}...),
+		imageassurance.ImageAssurance(config),
+		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+			Namespace:       imageassurance.NameSpaceImageAssurance,
+			ServiceAccounts: []string{imageassurance.ResourceNameImageAssuranceAPI},
+			TrustedBundle:   trustedBundle,
+		}),
+	}
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, components...); err != nil {
 		reqLogger.Error(err, "Error with images from ImageSet")

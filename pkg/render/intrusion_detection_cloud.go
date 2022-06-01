@@ -14,12 +14,16 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
+const (
+	IntrusionDetectionControllerImageAssuranceAPIClusterRoleName = "intrusion-detection-controller-image-assurance-api"
+)
+
 // IntrusionDetectionCloudResources contains all the resource needed for cloud intrusion detection controller.
 type IntrusionDetectionCloudResources struct {
 	ImageAssuranceResources *rcimageassurance.Resources
 }
 
-func (c *intrusionDetectionComponent) decorateIntrusionDetectionContainer(container corev1.Container) corev1.Container {
+func (c *intrusionDetectionComponent) decorateIntrusionDetectionCloudContainer(container corev1.Container) corev1.Container {
 	// if image assurance is enabled add env needed for it.
 	if c.cfg.CloudResources.ImageAssuranceResources != nil {
 		container.Env = append(container.Env,

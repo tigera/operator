@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -54,7 +54,7 @@ type AmazonCloudIntegrationSpec struct {
 	EnforcedSecurityGroupID string `json:"enforcedSecurityGroupID,omitempty"`
 	// TrustEnforcedSecurityGroupID is the ID of the Security Group which will be applied
 	// to all ENIs in the VPC.
-	TrustEnforcedSecurityGroupID string `json:"trustEnforcedSecurityGroupID,omitemtpy"`
+	TrustEnforcedSecurityGroupID string `json:"trustEnforcedSecurityGroupID,omitempty"`
 }
 
 // AmazonCloudIntegrationStatus defines the observed state of AmazonCloudIntegration

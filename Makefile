@@ -98,7 +98,7 @@ endif
 
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=v0.65.1
+GO_BUILD_VER?=v0.65.2
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(ARCH)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./api -name '*.go')
@@ -377,7 +377,7 @@ foss-checks:
 ###############################################################################
 .PHONY: ci
 ## Run what CI runs
-ci: clean format-check validate-gen-versions image-all test dirty-check test-crds
+ci: clean format-check validate-gen-versions static-checks image-all test dirty-check test-crds
 
 validate-gen-versions:
 	make gen-versions
@@ -725,7 +725,7 @@ bundle-crd-options:
 
 .PHONY: bundle-crd-clean
 bundle-crd-clean:
-	git checkout -- config/crd/bases/
+	git checkout -- config/crd/bases
 
 .PHONY: bundle-validate
 bundle-validate:
@@ -782,3 +782,14 @@ test-calico-crds: $(BINDIR)/operator-$(ARCH)
 # fields won't necessarily be in the same order or indentation.
 test-enterprise-crds: $(BINDIR)/operator-$(ARCH)
 	$(BINDIR)/operator-$(ARCH) --print-enterprise-crds all >/dev/null 2>&1
+
+# Always install the git hooks to prevent potentially problematic commits.
+hooks_installed:=$(shell ./install-git-hooks)
+
+.PHONY: install-git-hooks
+install-git-hooks:
+	./install-git-hooks
+
+.PHONY: pre-commit
+pre-commit:
+	$(CONTAINERIZED) $(CALICO_BUILD) git-hooks/pre-commit-in-container

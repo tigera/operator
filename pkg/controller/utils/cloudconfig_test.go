@@ -41,7 +41,7 @@ var _ = Describe("CloudConfig utils tests", func() {
 			Expect(admissionv1beta1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
 			ctx = context.Background()
-			cli = fake.NewFakeClientWithScheme(scheme)
+			cli = fake.NewClientBuilder().WithScheme(scheme).Build()
 		})
 
 		It("should return an error after failing to find the ConfigMap", func() {

@@ -39,7 +39,7 @@ mv bundle/{metadata,manifests} bundle/${VERSION}
 #
 # Update the CSV. Set the operator image container image and creation timestamp annotations.
 #
-yq write -i ${CSV} metadata.annotations.containerImage ${OPERATOR_IMAGE}
+yq write -i ${CSV} metadata.annotations.containerImage ${OPERATOR_IMAGE_DIGEST}
 TIMESTAMP=$(echo ${OPERATOR_IMAGE_INSPECT} | jq -r .[0].Created)
 yq write -i ${CSV} metadata.annotations.createdAt ${TIMESTAMP}
 
@@ -58,14 +58,26 @@ fi
 # dot in the key "olm.skipRange".
 yq write -i ${CSV} --style double 'metadata.annotations[olm.skipRange]' \<${VERSION}
 
+# Add required 'relatedImages' to CSV
+# E.g.
+#
+#   relatedImages:
+#     - name: tigera-operator
+#       image: quay.io/tigera/operator@sha256:b4e3eeccfd3d5a931c07f31c244b272e058ccabd2d8155ccc3ff52ed78855e69
+yq write -i ${CSV} spec.relatedImages[0].name tigera-operator
+yq write -i ${CSV} spec.relatedImages[0].image ${OPERATOR_IMAGE_DIGEST}
+
 #
 # Now start updates to the bundle dockerfile. First update the package name.
 #
 sed -i 's/\(operators\.operatorframework\.\io\.bundle\.package\.v1\)=operator/\1=tigera-operator/' bundle.Dockerfile
 
+# Supported OpenShift versions. Specify min version.
+openshiftVersions=v4.6
+
 # Add in required labels
 cat <<EOF >> bundle.Dockerfile
-LABEL com.redhat.openshift.versions="v4.5"
+LABEL com.redhat.openshift.versions="${openshiftVersions}"
 LABEL com.redhat.delivery.backport=true
 LABEL com.redhat.delivery.operator.bundle=true
 EOF
@@ -87,6 +99,9 @@ EOF
 # validation fails
 yq delete -i ${CSV} spec.install.spec.permissions
 
+# Rename CSV to "tigera-operator".
+mv bundle/${VERSION}/manifests/operator.clusterserviceversion.yaml bundle/${VERSION}/manifests/tigera-operator.clusterserviceversion.yaml
+
 # Remove unneeded empty lines
 sed -i '/^$/d' bundle.Dockerfile
 
@@ -104,3 +119,8 @@ sed -i 's/.*operators\.operatorframework\.io\.test.*//' bundle/${VERSION}/metada
 
 # Remove unneeded empty lines
 sed -i '/^$/d' bundle/${VERSION}/metadata/annotations.yaml
+
+# Add required com.redhat.openshift.versions
+cat <<EOF >> bundle/${VERSION}/metadata/annotations.yaml
+  com.redhat.openshift.versions: ${openshiftVersions}
+EOF

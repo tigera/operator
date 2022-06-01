@@ -14,8 +14,11 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/render"
 	rcimageassurance "github.com/tigera/operator/pkg/render/common/imageassurance"
 	"github.com/tigera/operator/pkg/render/imageassurance"
 	"github.com/tigera/operator/test"
@@ -66,6 +69,11 @@ var _ = Describe("Image Assurance Controller", func() {
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("RemoveDeployments", mock.Anything).Return()
 
+		certificateManager, err := certificatemanager.Create(c, nil, dns.DefaultClusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+		internalManagerTLS, err := certificateManager.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
+		Expect(err).NotTo(HaveOccurred())
+
 		r = ReconcileImageAssurance{
 			client:          c,
 			scheme:          scheme,
@@ -104,13 +112,7 @@ var _ = Describe("Image Assurance Controller", func() {
 				"password": []byte("my-secret-pass"),
 			},
 		})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.ManagerCertSecretName, Namespace: common.OperatorNamespace()},
-			Data: map[string][]byte{
-				"cert": []byte("cert"),
-				"key":  []byte("private-key"),
-			},
-		})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, internalManagerTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.PGCertSecretName, Namespace: common.OperatorNamespace()},
 			Data: map[string][]byte{

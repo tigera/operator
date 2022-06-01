@@ -1,3 +1,17 @@
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package convert
 
 import (
@@ -53,7 +67,7 @@ var _ = Describe("Convert typha check tests", func() {
 			td := emptyTyphaDeployment()
 			td.Spec.Replicas = int32Ptr(1)
 
-			c := fake.NewFakeClientWithScheme(scheme, emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td, getK8sNodes(2))
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td).WithLists(getK8sNodes(2)).Build()
 			_, err := Convert(ctx, c)
 			Expect(err).NotTo(HaveOccurred())
 		})
@@ -61,7 +75,7 @@ var _ = Describe("Convert typha check tests", func() {
 			td := emptyTyphaDeployment()
 			td.Spec.Replicas = int32Ptr(1)
 
-			c := fake.NewFakeClientWithScheme(scheme, emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td, getK8sNodes(3))
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td).WithLists(getK8sNodes(3)).Build()
 			_, err := Convert(ctx, c)
 			Expect(err).NotTo(HaveOccurred())
 		})
@@ -71,7 +85,7 @@ var _ = Describe("Convert typha check tests", func() {
 			td := emptyTyphaDeployment()
 			td.Spec.Replicas = int32Ptr(1)
 
-			c := fake.NewFakeClientWithScheme(scheme, emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td, getK8sNodes(5))
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td).WithLists(getK8sNodes(5)).Build()
 			_, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 		})
@@ -79,7 +93,7 @@ var _ = Describe("Convert typha check tests", func() {
 			td := emptyTyphaDeployment()
 			td.Spec.Replicas = int32Ptr(4)
 
-			c := fake.NewFakeClientWithScheme(scheme, emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td, getK8sNodes(8))
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td).WithLists(getK8sNodes(8)).Build()
 			_, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 		})
@@ -89,19 +103,19 @@ var _ = Describe("Convert typha check tests", func() {
 			td := emptyTyphaDeployment()
 			td.Spec.Replicas = int32Ptr(0)
 
-			c := fake.NewFakeClientWithScheme(scheme, emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td, getK8sNodes(2))
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td).WithLists(getK8sNodes(2)).Build()
 			_, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 		})
 		It("should not error with no replicas", func() {
 			td := emptyTyphaDeployment()
 
-			c := fake.NewFakeClientWithScheme(scheme, emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td, getK8sNodes(2))
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td).WithLists(getK8sNodes(2)).Build()
 			_, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 		})
 		It("should not error with no typha deployment", func() {
-			c := fake.NewFakeClientWithScheme(scheme, emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), getK8sNodes(2))
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig()).WithLists(getK8sNodes(2)).Build()
 			_, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 		})

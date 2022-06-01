@@ -12,45 +12,48 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Components defined here are required to be kept in sync with
+// config/calico_versions.yml
+
 package components
 
 import "github.com/tigera/operator/version"
 
 var (
-	CalicoRelease string = "v3.22.2"
+	CalicoRelease string = "v3.23.1"
 
 	ComponentCalicoCNI = component{
-		Version: "v3.22.2",
+		Version: "v3.23.1",
 		Image:   "calico/cni",
 	}
 
 	ComponentCalicoKubeControllers = component{
-		Version: "v3.22.2",
+		Version: "v3.23.1",
 		Image:   "calico/kube-controllers",
 	}
 
 	ComponentCalicoNode = component{
-		Version: "v3.22.2",
+		Version: "v3.23.1",
 		Image:   "calico/node",
 	}
 
 	ComponentCalicoTypha = component{
-		Version: "v3.22.2",
+		Version: "v3.23.1",
 		Image:   "calico/typha",
 	}
 
 	ComponentFlexVolume = component{
-		Version: "v3.22.2",
+		Version: "v3.23.1",
 		Image:   "calico/pod2daemon-flexvol",
 	}
 
 	ComponentCalicoAPIServer = component{
-		Version: "v3.22.2",
+		Version: "v3.23.1",
 		Image:   "calico/apiserver",
 	}
 
 	ComponentWindows = component{
-		Version: "v3.22.2",
+		Version: "v3.23.1",
 		Image:   "calico/windows-upgrade",
 	}
 	ComponentOperatorInit = component{

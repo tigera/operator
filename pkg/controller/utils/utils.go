@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -483,22 +483,19 @@ func WaitToAddResourceWatch(controller controller.Controller, client kubernetes.
 	duration := 1 * time.Second
 	ticker := time.NewTicker(duration)
 	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			duration = duration * 2
-			if duration >= maxDuration {
-				duration = maxDuration
-			}
-			ticker.Reset(duration)
-			if isResourceReady(client, obj.GetObjectKind().GroupVersionKind().Kind) {
-				err := controller.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{})
-				if err != nil {
-					log.Info("failed to watch %s resource: %v. Will retry to add watch", obj.GetObjectKind().GroupVersionKind().Kind, err)
-				} else {
-					flag.MarkAsReady()
-					return
-				}
+	for range ticker.C {
+		duration = duration * 2
+		if duration >= maxDuration {
+			duration = maxDuration
+		}
+		ticker.Reset(duration)
+		if isResourceReady(client, obj.GetObjectKind().GroupVersionKind().Kind) {
+			err := controller.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{})
+			if err != nil {
+				log.Info("failed to watch %s resource: %v. Will retry to add watch", obj.GetObjectKind().GroupVersionKind().Kind, err)
+			} else {
+				flag.MarkAsReady()
+				return
 			}
 		}
 	}

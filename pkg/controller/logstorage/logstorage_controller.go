@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -502,7 +502,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			ctx,
 		)
 
-		if ls != nil && ls.DeletionTimestamp != nil && finalizerCleanup == true {
+		if ls != nil && ls.DeletionTimestamp != nil && finalizerCleanup {
 			ls.SetFinalizers(stringsutil.RemoveStringInSlice(LogStorageFinalizer, ls.GetFinalizers()))
 
 			// Write the logstorage back to the datastore
@@ -531,6 +531,11 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			if err != nil || !proceed {
 				return result, err
 			}
+
+			result, proceed, err = r.performHealthChecks(reqLogger, ctx)
+			if err != nil || !proceed {
+				return result, err
+			}
 		}
 
 		result, proceed, err := r.createEsKubeControllers(
@@ -555,11 +560,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			reqLogger,
 			ctx,
 		)
-		if err != nil || !proceed {
-			return result, err
-		}
-
-		result, proceed, err = r.performHealthChecks(reqLogger, ctx)
 		if err != nil || !proceed {
 			return result, err
 		}

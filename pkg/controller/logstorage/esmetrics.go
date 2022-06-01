@@ -1,26 +1,39 @@
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package logstorage
 
 import (
 	"context"
-	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
+
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/openshift/library-go/pkg/crypto"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	rsecret "github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
-	"github.com/tigera/operator/pkg/tls"
+	"github.com/tigera/operator/pkg/render/monitor"
 )
 
 func (r *ReconcileLogStorage) createEsMetrics(
@@ -35,65 +48,53 @@ func (r *ReconcileLogStorage) createEsMetrics(
 ) (reconcile.Result, bool, error) {
 	esMetricsSecret, err := utils.GetSecret(context.Background(), r.client, esmetrics.ElasticsearchMetricsSecret, common.OperatorNamespace())
 	if err != nil {
+		reqLogger.Error(err, "Failed to retrieve Elasticsearch metrics user secret.")
 		r.status.SetDegraded("Failed to retrieve Elasticsearch metrics user secret.", err.Error())
 		return reconcile.Result{}, false, err
 	} else if esMetricsSecret == nil {
+		reqLogger.Info("Waiting for elasticsearch metrics secrets to become available")
 		r.status.SetDegraded("Waiting for elasticsearch metrics secrets to become available", "")
-		err = fmt.Errorf("waiting for elasticsearch metrics secrets to become available")
 		return reconcile.Result{}, false, nil
 	}
 
 	publicCertSecretESCopy, err := utils.GetSecret(context.Background(), r.client, relasticsearch.PublicCertSecret, render.ElasticsearchNamespace)
 	if err != nil {
+		reqLogger.Error(err, "Failed to retrieve Elasticsearch public cert secret.")
 		r.status.SetDegraded("Failed to retrieve Elasticsearch public cert secret.", err.Error())
 		return reconcile.Result{}, false, err
 	} else if publicCertSecretESCopy == nil {
+		reqLogger.Info("Waiting for elasticsearch public cert secret to become available")
 		r.status.SetDegraded("Waiting for elasticsearch public cert secret to become available", "")
-		err = fmt.Errorf("waiting for elasticsearch public cert secret to become available")
 		return reconcile.Result{}, false, nil
 	}
 
-	trustedBundle, err := utils.GetPrometheusCertificateBundle(ctx, r.client, render.ElasticsearchNamespace, install.CertificateManagement)
-	if trustedBundle == nil {
-		r.status.SetDegraded("Waiting for the prometheus client secret to become available", "")
-		err = fmt.Errorf("waiting for the prometheus client secret to become available")
-		return reconcile.Result{}, false, nil
-	} else if err != nil {
-		log.Error(err, "Unable to create a metrics certificate bundle")
-		r.status.SetDegraded("Unable to create a metrics certificate bundle", err.Error())
+	certificateManager, err := certificatemanager.Create(r.client, install, r.clusterDomain)
+	if err != nil {
+		reqLogger.Error(err, "unable to create the Tigera CA")
+		r.status.SetDegraded("Unable to create the Tigera CA", err.Error())
 		return reconcile.Result{}, false, err
 	}
-	var serverTLS *corev1.Secret
-	if install.CertificateManagement == nil {
-		serverTLS, err = utils.ValidateCertPair(r.client,
-			common.OperatorNamespace(),
-			esmetrics.ElasticsearchMetricsServerTLSSecret,
-			corev1.TLSPrivateKeyKey,
-			corev1.TLSCertKey,
-		)
-		if err != nil {
-			log.Error(err, "Invalid TLS Cert")
-			r.status.SetDegraded("Error validating TLS certificate", err.Error())
-			return reconcile.Result{}, false, err
-		}
+	prometheusCertificate, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
+	if err != nil {
+		reqLogger.Error(err, "Failed to get certificate")
+		r.status.SetDegraded("Failed to get certificate", err.Error())
+		return reconcile.Result{}, false, err
+	} else if prometheusCertificate == nil {
+		reqLogger.Info("Prometheus secrets are not available yet, waiting until they become available")
+		r.status.SetDegraded("Prometheus secrets are not available yet, waiting until they become available", "")
+		return reconcile.Result{RequeueAfter: 5 * time.Second}, false, nil
+	}
+	trustedBundle := certificateManager.CreateTrustedBundle(prometheusCertificate)
 
-		if serverTLS == nil {
-			dnsNames := dns.GetServiceDNSNames(esmetrics.ElasticsearchMetricsName, render.ElasticsearchNamespace, clusterDomain)
-			serverTLS, err = rsecret.CreateTLSSecret(nil,
-				esmetrics.ElasticsearchMetricsServerTLSSecret,
-				common.OperatorNamespace(),
-				corev1.TLSPrivateKeyKey,
-				corev1.TLSCertKey,
-				rmeta.DefaultCertificateDuration,
-				[]crypto.CertificateExtensionFunc{tls.SetServerAuth},
-				dnsNames...,
-			)
-			if err != nil {
-				log.Error(err, "Error creating TLS certificate")
-				r.status.SetDegraded("Error creating TLS certificate", err.Error())
-				return reconcile.Result{}, false, err
-			}
-		}
+	serverTLS, err := certificateManager.GetOrCreateKeyPair(
+		r.client,
+		esmetrics.ElasticsearchMetricsServerTLSSecret,
+		common.OperatorNamespace(),
+		dns.GetServiceDNSNames(esmetrics.ElasticsearchMetricsName, render.ElasticsearchNamespace, clusterDomain))
+	if err != nil {
+		reqLogger.Error(err, "Error finding or creating TLS certificate")
+		r.status.SetDegraded("Error finding or creating TLS certificate", err.Error())
+		return reconcile.Result{}, false, err
 	}
 
 	esMetricsCfg := &esmetrics.Config{
@@ -107,16 +108,15 @@ func (r *ReconcileLogStorage) createEsMetrics(
 		TrustedBundle:        trustedBundle,
 	}
 	esMetricsComponent := esmetrics.ElasticsearchMetrics(esMetricsCfg)
-	components := []render.Component{esMetricsComponent}
-	if serverTLS != nil {
-		oprIssued, err := utils.IsCertOperatorIssued(serverTLS.Data[corev1.TLSCertKey])
-		if err != nil {
-			reqLogger.Error(err, "Error checking certificate issuer")
-			r.status.SetDegraded("Error checking certificate issuer", err.Error())
-		}
-		if oprIssued {
-			components = append(components, render.NewPassthrough(serverTLS))
-		}
+	components := []render.Component{esMetricsComponent,
+		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+			Namespace:       render.ElasticsearchNamespace,
+			ServiceAccounts: []string{esmetrics.ElasticsearchMetricsName},
+			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+				rcertificatemanagement.NewKeyPairOption(serverTLS, true, true),
+			},
+			TrustedBundle: trustedBundle,
+		}),
 	}
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, esMetricsComponent); err != nil {

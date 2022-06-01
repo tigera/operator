@@ -1,17 +1,16 @@
-/*
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package main
 
@@ -262,19 +261,19 @@ func main() {
 
 	kubernetesVersion, err := common.GetKubernetesVersion(clientset)
 	if err != nil {
-		log.Error(err, fmt.Sprintf("Unable to resolve Kubernetes version, defaulting to v1.18"))
+		log.Error(err, "Unable to resolve Kubernetes version, defaulting to v1.18")
 		kubernetesVersion = &common.VersionInfo{Major: 1, Minor: 18}
 	}
 
 	elasticExternalEnv := os.Getenv("ELASTIC_EXTERNAL")
 	if elasticExternalEnv == "" {
-		log.Error(err, fmt.Sprintf("Unable to resolve ELASTIC_EXTERNAL, defaulting to false"))
+		log.Error(err, "Unable to resolve ELASTIC_EXTERNAL, defaulting to false")
 		elasticExternalEnv = "false"
 	}
 
 	elasticExternal, err := strconv.ParseBool(elasticExternalEnv)
 	if err != nil {
-		log.Error(err, fmt.Sprintf("Unable to resolve ELASTIC_EXTERNAL, defaulting to false"))
+		log.Error(err, "Unable to resolve ELASTIC_EXTERNAL, defaulting to false")
 		elasticExternal = false
 	}
 
@@ -368,7 +367,7 @@ func showCRDs(variant operatorv1.ProductVariant, outputType string) error {
 		}
 		first = false
 
-		fmt.Println(fmt.Sprintf("# %s", v.Name))
+		fmt.Printf("# %s\n", v.Name)
 		fmt.Println(string(b))
 	}
 	// Indicates nothing was printed so we couldn't find the requested outputType

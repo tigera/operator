@@ -44,7 +44,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-var _ = FDescribe("LogStorage controller", func() {
+var _ = Describe("LogStorage controller", func() {
 	var (
 		cli                client.Client
 		mockStatus         *status.MockStatus
@@ -65,7 +65,7 @@ var _ = FDescribe("LogStorage controller", func() {
 		Expect(admissionv1beta1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
 		ctx = context.Background()
-		cli = fake.NewFakeClientWithScheme(scheme)
+		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
 		var err error
 		certificateManager, err = certificatemanager.Create(cli, nil, "")
 		Expect(err).NotTo(HaveOccurred())
@@ -78,7 +78,8 @@ var _ = FDescribe("LogStorage controller", func() {
 		Expect(cli.Create(ctx, kibanaTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 		mockServer = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte{})
+			_, err := w.Write([]byte{})
+			Expect(err).NotTo(HaveOccurred())
 		}))
 		mockServer.Config.TLSConfig = &tls.Config{InsecureSkipVerify: true}
 		mockServer.Start()
@@ -140,7 +141,8 @@ var _ = FDescribe("LogStorage controller", func() {
 			})
 			It("sets cloud enabled controllers and env variables on kube controllers", func() {
 				mockElasticsearchServer := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					w.Write([]byte{})
+					_, err := w.Write([]byte{})
+					Expect(err).NotTo(HaveOccurred())
 				}))
 				mockElasticsearchServer.Config.TLSConfig = &tls.Config{InsecureSkipVerify: true}
 				mockElasticsearchServer.Start()
@@ -384,7 +386,8 @@ var _ = FDescribe("LogStorage controller", func() {
 
 				ms := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					w.WriteHeader(424)
-					w.Write([]byte{})
+					_, err := w.Write([]byte{})
+					Expect(err).NotTo(HaveOccurred())
 				}))
 				ms.Config.TLSConfig = &tls.Config{InsecureSkipVerify: true}
 				ms.Start()

@@ -40,9 +40,8 @@ const (
 	APICertSecretName     = "tigera-image-assurance-api-cert-pair"
 	ManagerCertSecretName = "internal-manager-tls"
 
-	MountPathPostgresCerts   = "/certs/db/"
-	mountPathAPITLSCerts     = "/certs/https/"
-	mountPathManagerTLSCerts = "/manager-tls/"
+	MountPathPostgresCerts = "/certs/db/"
+	mountPathAPITLSCerts   = "/certs/https/"
 
 	TenantEncryptionKeySecretName  = "tigera-secure-bast-tenant-key"
 	EncryptionKey                  = "encryption_key"
@@ -53,7 +52,6 @@ const (
 	pgCertsHashAnnotation         = "hash.operator.tigera.io/pgcerts"
 	pgAdminUserHashAnnotation     = "hash.operator.tigera.io/pgadminuser"
 	apiCertHashAnnotation         = "hash.operator.tigera.io/apicerts"
-	managerCertHashAnnotation     = "hash.operator.tigera.io/managercerts"
 	tenantKeySecretHashAnnotation = "hash.operator.tigera.io/tenantkeysecret"
 )
 

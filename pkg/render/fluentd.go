@@ -146,7 +146,6 @@ type FluentdConfiguration struct {
 type fluentdComponent struct {
 	cfg          *FluentdConfiguration
 	image        string
-	csrImage     string
 	probeTimeout int32
 	probePeriod  int32
 }

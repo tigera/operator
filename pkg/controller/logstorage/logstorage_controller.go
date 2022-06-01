@@ -502,7 +502,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			ctx,
 		)
 
-		if ls != nil && ls.DeletionTimestamp != nil && finalizerCleanup == true {
+		if ls != nil && ls.DeletionTimestamp != nil && finalizerCleanup {
 			ls.SetFinalizers(stringsutil.RemoveStringInSlice(LogStorageFinalizer, ls.GetFinalizers()))
 
 			// Write the logstorage back to the datastore

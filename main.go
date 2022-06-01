@@ -267,13 +267,13 @@ func main() {
 
 	elasticExternalEnv := os.Getenv("ELASTIC_EXTERNAL")
 	if elasticExternalEnv == "" {
-		log.Error(err, fmt.Sprintf("Unable to resolve ELASTIC_EXTERNAL, defaulting to false"))
+		log.Error(err, "Unable to resolve ELASTIC_EXTERNAL, defaulting to false")
 		elasticExternalEnv = "false"
 	}
 
 	elasticExternal, err := strconv.ParseBool(elasticExternalEnv)
 	if err != nil {
-		log.Error(err, fmt.Sprintf("Unable to resolve ELASTIC_EXTERNAL, defaulting to false"))
+		log.Error(err, "Unable to resolve ELASTIC_EXTERNAL, defaulting to false")
 		elasticExternal = false
 	}
 

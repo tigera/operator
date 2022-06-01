@@ -193,7 +193,7 @@ var _ = Describe("Cloud Intrusion Detection Controller tests", func() {
 		})
 
 		AfterEach(func() {
-			c.Delete(ctx, &corev1.ConfigMap{
+			_ = c.Delete(ctx, &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      rcimageassurance.ConfigurationConfigMapName,
 					Namespace: "tigera-operator",

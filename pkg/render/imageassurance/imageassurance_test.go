@@ -688,8 +688,7 @@ var _ = Describe("Image Assurance Render", func() {
 
 	It("should API resource correctly with Authentication Enabled", func() {
 		// Should render the correct resources.
-		var authentication *operatorv1.Authentication
-		authentication = &operatorv1.Authentication{
+		authentication := &operatorv1.Authentication{
 			Spec: operatorv1.AuthenticationSpec{
 				ManagerDomain: "https://127.0.0.1",
 				OIDC:          &operatorv1.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"}}}

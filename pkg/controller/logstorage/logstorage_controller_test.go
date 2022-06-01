@@ -849,7 +849,8 @@ var _ = Describe("LogStorage controller", func() {
 
 				It("test that ES gateway TLS cert secret is created if not provided and has an OwnerReference on it", func() {
 					mockServer = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-						w.Write([]byte{})
+						_, err := w.Write([]byte{})
+						Expect(err).ShouldNot(HaveOccurred())
 					}))
 					mockServer.Config.TLSConfig = &tls.Config{InsecureSkipVerify: true}
 					mockServer.Start()
@@ -932,7 +933,8 @@ var _ = Describe("LogStorage controller", func() {
 
 				It("should not add OwnerReference to user supplied ES gateway TLS cert", func() {
 					mockServer = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-						w.Write([]byte{})
+						_, err := w.Write([]byte{})
+						Expect(err).ShouldNot(HaveOccurred())
 					}))
 					mockServer.Config.TLSConfig = &tls.Config{InsecureSkipVerify: true}
 					mockServer.Start()

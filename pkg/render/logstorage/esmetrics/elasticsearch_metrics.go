@@ -59,7 +59,6 @@ type Config struct {
 type elasticsearchMetrics struct {
 	cfg            *Config
 	esMetricsImage string
-	csrImage       string
 }
 
 func (e *elasticsearchMetrics) ResolveImages(is *operatorv1.ImageSet) error {

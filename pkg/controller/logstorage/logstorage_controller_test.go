@@ -16,9 +16,7 @@ package logstorage
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
-	"net/http"
 	"net/http/httptest"
 	"reflect"
 
@@ -123,6 +121,11 @@ var _ = Describe("LogStorage controller", func() {
 		prometheusTLS, err := certificateManager.GetOrCreateKeyPair(cli, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{render.PrometheusTLSSecretName})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+		cloudCreateESAccessSecret(cli, ctx)
+		mockServer = cloudMockEsServer()
+	})
+	AfterEach(func() {
+		mockServer.Close()
 	})
 	Context("Reconcile", func() {
 		Context("Check default logstorage settings", func() {
@@ -848,14 +851,6 @@ var _ = Describe("LogStorage controller", func() {
 				})
 
 				It("test that ES gateway TLS cert secret is created if not provided and has an OwnerReference on it", func() {
-					mockServer = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-						_, err := w.Write([]byte{})
-						Expect(err).ShouldNot(HaveOccurred())
-					}))
-					mockServer.Config.TLSConfig = &tls.Config{InsecureSkipVerify: true}
-					mockServer.Start()
-					defer mockServer.Close()
-
 					resources := []client.Object{
 						&storagev1.StorageClass{
 							ObjectMeta: metav1.ObjectMeta{
@@ -932,14 +927,6 @@ var _ = Describe("LogStorage controller", func() {
 				})
 
 				It("should not add OwnerReference to user supplied ES gateway TLS cert", func() {
-					mockServer = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-						_, err := w.Write([]byte{})
-						Expect(err).ShouldNot(HaveOccurred())
-					}))
-					mockServer.Config.TLSConfig = &tls.Config{InsecureSkipVerify: true}
-					mockServer.Start()
-					defer mockServer.Close()
-
 					resources := []client.Object{
 						&storagev1.StorageClass{
 							ObjectMeta: metav1.ObjectMeta{

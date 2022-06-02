@@ -1,3 +1,5 @@
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+
 package logstorage
 
 import (
@@ -44,6 +46,25 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+func cloudMockEsServer() *httptest.Server {
+	m := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, err := w.Write([]byte{})
+		Expect(err).NotTo(HaveOccurred())
+	}))
+	m.Config.TLSConfig = &tls.Config{InsecureSkipVerify: true}
+	m.Start()
+	return m
+}
+
+func cloudCreateESAccessSecret(cli client.Client, ctx context.Context) {
+	Expect(cli.Create(ctx, &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      render.ElasticsearchOperatorUserSecret,
+			Namespace: common.OperatorNamespace(),
+		},
+	})).ShouldNot(HaveOccurred())
+}
+
 var _ = Describe("LogStorage controller", func() {
 	var (
 		cli                client.Client
@@ -77,12 +98,7 @@ var _ = Describe("LogStorage controller", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, kibanaTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
-		mockServer = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			_, err := w.Write([]byte{})
-			Expect(err).NotTo(HaveOccurred())
-		}))
-		mockServer.Config.TLSConfig = &tls.Config{InsecureSkipVerify: true}
-		mockServer.Start()
+		mockServer = cloudMockEsServer()
 	})
 	AfterEach(func() {
 		mockServer.Close()
@@ -132,12 +148,7 @@ var _ = Describe("LogStorage controller", func() {
 				mockStatus.On("OnCRFound").Return()
 				mockStatus.On("ReadyToMonitor")
 
-				Expect(cli.Create(ctx, &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      render.ElasticsearchOperatorUserSecret,
-						Namespace: common.OperatorNamespace(),
-					},
-				})).ShouldNot(HaveOccurred())
+				cloudCreateESAccessSecret(cli, ctx)
 			})
 			It("sets cloud enabled controllers and env variables on kube controllers", func() {
 				mockElasticsearchServer := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -287,12 +298,7 @@ var _ = Describe("LogStorage controller", func() {
 				mockStatus.On("OnCRFound").Return()
 				mockStatus.On("ReadyToMonitor")
 
-				Expect(cli.Create(ctx, &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      render.ElasticsearchOperatorUserSecret,
-						Namespace: common.OperatorNamespace(),
-					},
-				})).ShouldNot(HaveOccurred())
+				cloudCreateESAccessSecret(cli, ctx)
 			})
 			It("test LogStorage reconciles successfully", func() {
 				Expect(cli.Create(ctx, &operatorv1.LogStorage{

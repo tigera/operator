@@ -6,3 +6,5 @@ pkg/controller/intrusiondetection/intrusiondetection_controller_cloud_test.go
 pkg/controller/imageassurance/imageassurance_controller.go
 pkg/render/imageassurance/imageassurance.go
 pkg/render/imageassurance/imageassurance_api.go
+pkg/controller/logstorage/logstorage_controller_cloud_test.go
+pkg/controller/logstorage/cloudmodifications.go

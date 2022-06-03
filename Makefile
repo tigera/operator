@@ -526,9 +526,7 @@ define fetch_crds
     $(eval branch := $(2))
     $(eval dir := $(3))
 	@echo "Fetching $(dir) CRDs from $(project) branch $(branch)"
-	git -C .crds/$(dir) clone git@github.com:$(project).git ./
-	git -C .crds/$(dir) fetch --all origin 2>&1 | grep -v -e "new branch" -e "new tag"
-	git -C .crds/$(dir) checkout -q $(branch)
+	git -C .crds/$(dir) clone --depth 1 --branch $(branch) --single-branch git@github.com:$(project).git ./
 endef
 define copy_crds
     $(eval dir := $(1))
@@ -714,7 +712,7 @@ bundle: bundle-generate bundle-crd-clean update-bundle bundle-validate bundle-im
 
 .PHONY: bundle-crd-clean
 bundle-crd-clean:
-	git checkout -- config/crd/bases/
+	git checkout -- config/crd/bases
 
 .PHONY: bundle-validate
 bundle-validate:

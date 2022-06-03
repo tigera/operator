@@ -20,7 +20,7 @@ var (
 	CalicoRelease string = "v3.21.5"
 
 	ComponentCalicoCNI = component{
-		Version: "v3.21.4",
+		Version: "v3.21.5",
 		Image:   "calico/cni",
 	}
 

@@ -645,6 +645,8 @@ func fillDefaults(instance *operator.Installation) error {
 			instance.Spec.FlexVolumePath = "/home/kubernetes/flexvolume/"
 		} else if instance.Spec.KubernetesProvider == operator.ProviderAKS {
 			instance.Spec.FlexVolumePath = "/etc/kubernetes/volumeplugins/"
+		} else if instance.Spec.KubernetesProvider == operator.ProviderRKE2 {
+			instance.Spec.FlexVolumePath = "/var/lib/kubelet/volumeplugins/"
 		} else {
 			instance.Spec.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
 		}

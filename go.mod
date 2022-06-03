@@ -3,8 +3,8 @@ module github.com/tigera/operator
 go 1.16
 
 require (
-	github.com/aws/aws-sdk-go v1.25.37
-	github.com/cloudflare/cfssl v1.4.1
+	github.com/aws/aws-sdk-go v1.27.0
+	github.com/cloudflare/cfssl v1.6.1
 	github.com/containernetworking/cni v1.0.1
 	github.com/elastic/cloud-on-k8s v0.0.0-20210914143041-4f367c381636
 	github.com/ghodss/yaml v1.0.0
@@ -23,7 +23,7 @@ require (
 	github.com/stretchr/testify v1.7.0
 	github.com/tigera/api v0.0.0-20220325204048-b3e0b35ba256
 	go.uber.org/zap v1.19.0
-	golang.org/x/crypto v0.0.0-20210220033148-5ea612d1eb83
+	golang.org/x/crypto v0.0.0-20210506145944-38f3c27a63bf
 	gopkg.in/inf.v0 v0.9.1
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.22.3

@@ -672,6 +672,8 @@ github.com/tigera/api v0.0.0-20211206200601-c5525835af81 h1:CVRKbodVmbftEr2dIs6C
 github.com/tigera/api v0.0.0-20211206200601-c5525835af81/go.mod h1:FFE+MQo0Up7GGg3RagKRAwgdH7UqlXBFm+47BwmQLVQ=
 github.com/tigera/api v0.0.0-20220601203636-47cc2dc3dac2 h1:OiDnhs/EB/eCQ8FB9p9GmQft9fDBxSvyPEDFqhdUNbw=
 github.com/tigera/api v0.0.0-20220601203636-47cc2dc3dac2/go.mod h1:6qWfgULooruKiC8eoGgyRjOh0K+h/q8bc7AvdUysAUo=
+github.com/tigera/api v0.0.0-20220603200035-ade1f26fbf2d h1:WhQc55n4d14QLTMFjVM1nzJkKFhVU0E5xucGOuosYv0=
+github.com/tigera/api v0.0.0-20220603200035-ade1f26fbf2d/go.mod h1:6qWfgULooruKiC8eoGgyRjOh0K+h/q8bc7AvdUysAUo=
 github.com/tmc/grpc-websocket-proxy v0.0.0-20170815181823-89b8d40f7ca8/go.mod h1:ncp9v5uamzpCO7NfCPTXjqaC+bZgJeR0sMTm6dMHP7U=
 github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5/go.mod h1:ncp9v5uamzpCO7NfCPTXjqaC+bZgJeR0sMTm6dMHP7U=
 github.com/tsenart/vegeta v12.7.0+incompatible/go.mod h1:Smz/ZWfhKRcyDDChZkG3CyTHdj87lHzio/HOCkbndXM=

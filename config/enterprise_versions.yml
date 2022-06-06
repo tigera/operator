@@ -114,7 +114,7 @@ components:
   deep-packet-inspection:
     image: tigera/deep-packet-inspection
     version: master
-  windows:
+  windows-upgrade:
     image: tigera/calico-windows-upgrade
     version: master
   # The components below are third-party images that have been retagged under

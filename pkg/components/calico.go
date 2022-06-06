@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -52,7 +52,7 @@ var (
 		Image:   "calico/apiserver",
 	}
 
-	ComponentWindows = component{
+	ComponentWindowsUpgrade = component{
 		Version: "master",
 		Image:   "calico/windows-upgrade",
 	}
@@ -69,6 +69,6 @@ var (
 		ComponentFlexVolume,
 		ComponentOperatorInit,
 		ComponentCalicoAPIServer,
-		ComponentWindows,
+		ComponentWindowsUpgrade,
 	}
 )

@@ -58,7 +58,7 @@ var (
 	}
 {{- end }}
 {{ with index .Components "calico/windows-upgrade"}}
-	ComponentWindows = component{
+	ComponentWindowsUpgrade = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
@@ -76,6 +76,6 @@ var (
 		ComponentFlexVolume,
 		ComponentOperatorInit,
 		ComponentCalicoAPIServer,
-		ComponentWindows,
+		ComponentWindowsUpgrade,
 	}
 )

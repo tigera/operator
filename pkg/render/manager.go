@@ -212,11 +212,8 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-manager",
-			Namespace: ManagerNamespace,
-			Labels: map[string]string{
-				"k8s-app": "tigera-manager",
-			},
+			Name:        "tigera-manager",
+			Namespace:   ManagerNamespace,
 			Annotations: c.tlsAnnotations,
 		},
 		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
@@ -243,16 +240,8 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tigera-manager",
 			Namespace: ManagerNamespace,
-			Labels: map[string]string{
-				"k8s-app": "tigera-manager",
-			},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"k8s-app": "tigera-manager",
-				},
-			},
 			Replicas: c.cfg.Replicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,

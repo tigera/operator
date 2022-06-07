@@ -751,12 +751,8 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 			Namespace: common.CalicoNamespace,
 		},
 		Spec: appsv1.DaemonSetSpec{
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": CalicoNodeObjectName}},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"k8s-app": CalicoNodeObjectName,
-					},
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
@@ -843,6 +839,8 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 			corev1.Volume{Name: "sys-fs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
 			// Volume for the bpffs itself, used by the main node container.
 			corev1.Volume{Name: "bpffs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
+			// Volume used by mount-cgroupv2 init container to access root cgroup name space of node.
+			corev1.Volume{Name: "init-proc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc/1"}}},
 		)
 	}
 
@@ -984,6 +982,11 @@ func (c *nodeComponent) bpffsInitContainer() corev1.Container {
 			// Bidirectional is required to ensure that the new mount we make at /sys/fs/bpf propagates to the host
 			// so that it outlives the init container.
 			MountPropagation: &bidirectional,
+		},
+		{
+			MountPath: "/initproc",
+			Name:      "init-proc",
+			ReadOnly:  true,
 		},
 	}
 

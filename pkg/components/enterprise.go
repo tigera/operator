@@ -225,7 +225,7 @@ var (
 		Image:   "tigera/elasticsearch-metrics",
 	}
 
-	ComponentTigeraWindows = component{
+	ComponentTigeraWindowsUpgrade = component{
 		Version: "v3.14.0-1",
 		Image:   "tigera/calico-windows-upgrade",
 	}
@@ -270,7 +270,7 @@ var (
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
-		ComponentTigeraWindows,
+		ComponentTigeraWindowsUpgrade,
 		ComponentDikastes,
 	}
 )

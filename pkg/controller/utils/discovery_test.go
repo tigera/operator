@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -83,5 +83,17 @@ var _ = Describe("provider discovery", func() {
 		p, e := AutoDiscoverProvider(context.Background(), c)
 		Expect(e).To(BeNil())
 		Expect(p).To(Equal(operatorv1.ProviderEKS))
+	})
+
+	It("should detect RKE2 based on presence of kube-system/rke2 ConfigMap", func() {
+		c := fake.NewSimpleClientset(&corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "rke2",
+				Namespace: "kube-system",
+			},
+		})
+		p, e := AutoDiscoverProvider(context.Background(), c)
+		Expect(e).To(BeNil())
+		Expect(p).To(Equal(operatorv1.ProviderRKE2))
 	})
 })

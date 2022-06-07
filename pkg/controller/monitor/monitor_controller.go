@@ -21,10 +21,6 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -64,11 +60,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 
-	prometheusReady := &utils.ReadyFlag{}
-	policyWatchesReady := &utils.ReadyFlag{}
+	var prometheusReady = &utils.ReadyFlag{}
 
 	// Create the reconciler
-	reconciler := newReconciler(mgr, opts, prometheusReady, policyWatchesReady)
+	reconciler := newReconciler(mgr, opts, prometheusReady)
 
 	// Create a new controller
 	controller, err := controller.New("monitor-controller", mgr, controller.Options{Reconciler: reconciler})
@@ -81,29 +76,20 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		log.Error(err, "Failed to establish a connection to k8s")
 		return err
 	}
-	go waitToAddPrometheusWatch(controller, k8sClient, log, prometheusReady)
 
-	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, policyWatchesReady, []types.NamespacedName{
-		{Name: monitor.PrometheusPolicyName, Namespace: common.TigeraPrometheusNamespace},
-		{Name: monitor.PrometheusAPIPolicyName, Namespace: common.TigeraPrometheusNamespace},
-		{Name: monitor.PrometheusOperatorPolicyName, Namespace: common.TigeraPrometheusNamespace},
-		{Name: monitor.AlertManagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
-		{Name: monitor.MeshAlertManagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
-		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: common.TigeraPrometheusNamespace},
-	})
+	go waitToAddPrometheusWatch(controller, k8sClient, log, prometheusReady)
 
 	return add(mgr, controller)
 }
 
-func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady *utils.ReadyFlag, policyWatchesReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady *utils.ReadyFlag) reconcile.Reconciler {
 	r := &ReconcileMonitor{
-		client:             mgr.GetClient(),
-		scheme:             mgr.GetScheme(),
-		provider:           opts.DetectedProvider,
-		status:             status.New(mgr.GetClient(), "monitor", opts.KubernetesVersion),
-		prometheusReady:    prometheusReady,
-		clusterDomain:      opts.ClusterDomain,
-		policyWatchesReady: policyWatchesReady,
+		client:          mgr.GetClient(),
+		scheme:          mgr.GetScheme(),
+		provider:        opts.DetectedProvider,
+		status:          status.New(mgr.GetClient(), "monitor", opts.KubernetesVersion),
+		prometheusReady: prometheusReady,
+		clusterDomain:   opts.ClusterDomain,
 	}
 
 	r.status.AddStatefulSets([]types.NamespacedName{
@@ -155,13 +141,12 @@ func add(mgr manager.Manager, c controller.Controller) error {
 var _ reconcile.Reconciler = &ReconcileMonitor{}
 
 type ReconcileMonitor struct {
-	client             client.Client
-	scheme             *runtime.Scheme
-	provider           operatorv1.Provider
-	status             status.StatusManager
-	prometheusReady    *utils.ReadyFlag
-	clusterDomain      string
-	policyWatchesReady *utils.ReadyFlag
+	client          client.Client
+	scheme          *runtime.Scheme
+	provider        operatorv1.Provider
+	status          status.StatusManager
+	prometheusReady *utils.ReadyFlag
+	clusterDomain   string
 }
 
 func (r *ReconcileMonitor) getMonitor(ctx context.Context) (*operatorv1.Monitor, error) {
@@ -203,30 +188,6 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 		r.setDegraded(reqLogger, err, "Failed to query Installation")
 		return reconcile.Result{}, err
-	}
-
-	// Ensure the API Server is ready, before rendering any objects that utilize the V3 API.
-	if !utils.IsAPIServerReady(r.client, reqLogger) {
-		r.status.SetDegraded("Waiting for Tigera API server to be ready", "")
-		return reconcile.Result{}, nil
-	}
-
-	if !r.policyWatchesReady.IsReady() {
-		r.status.SetDegraded("Waiting for NetworkPolicy watches to be established", "")
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-	}
-
-	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
-	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
-		if errors.IsNotFound(err) {
-			log.Error(err, "Waiting for Tigera component policy tier to be created")
-			r.status.SetDegraded("Waiting for Tigera component policy tier to be created", err.Error())
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-		} else {
-			log.Error(err, "Error querying Tigera component policy tier")
-			r.status.SetDegraded("Error querying Tigera component policy tier", err.Error())
-			return reconcile.Result{}, err
-		}
 	}
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(install, r.client)

@@ -263,7 +263,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
 	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 		if errors.IsNotFound(err) {
-			log.Error(err, "Waiting for Tigera component policy tier to be created")
 			r.status.SetDegraded("Waiting for Tigera component policy tier to be created", err.Error())
 			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 		} else {

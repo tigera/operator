@@ -209,7 +209,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	// Ensure the API Server is ready, before rendering any objects that utilize the V3 API.
 	if !utils.IsAPIServerReady(r.client, reqLogger) {
 		r.status.SetDegraded("Waiting for Tigera API server to be ready", "")
-		return reconcile.Result{}, nil
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	if !r.policyWatchesReady.IsReady() {
@@ -233,7 +233,6 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
 	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 		if errors.IsNotFound(err) {
-			log.Error(err, "Waiting for Tigera component policy tier to be created")
 			r.status.SetDegraded("Waiting for Tigera component policy tier to be created", err.Error())
 			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 		} else {

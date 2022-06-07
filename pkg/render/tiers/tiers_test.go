@@ -19,9 +19,12 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/render/tiers"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -40,12 +43,24 @@ var _ = Describe("Tiers rendering tests", func() {
 	pcPolicyForUnmanagedOCP := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/packetcapture_ocp.json")
 	pcPolicyForManaged := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/packetcapture_managed.json")
 	pcPolicyForManagedOCP := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/packetcapture_managed_ocp.json")
+	guardianPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/guardian.json")
+	guardianPolicyForOCP := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/guardian_ocp.json")
+	expectedAlertmanagerPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/alertmanager.json")
+	expectedAlertmanagerMeshPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/alertmanager-mesh.json")
+	expectedPrometheusPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/prometheus.json")
+	expectedPrometheusApiPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/prometheus-api.json")
+	expectedPrometheusOperatorPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/prometheus-operator.json")
+	expectedAlertmanagerPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/alertmanager_ocp.json")
+	expectedAlertmanagerMeshPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/alertmanager-mesh_ocp.json")
+	expectedPrometheusPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/prometheus_ocp.json")
+	expectedPrometheusApiPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/prometheus-api_ocp.json")
+	expectedPrometheusOperatorPolicyOpenshift := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/prometheus-operator_ocp.json")
 
 	BeforeEach(func() {
 		// Establish default config for test cases to override.
 		cfg = &tiers.Config{
-			Openshift:      false,
-			ManagedCluster: false,
+			Openshift:                   false,
+			ManagementClusterConnection: nil,
 		}
 	})
 
@@ -56,11 +71,24 @@ var _ = Describe("Tiers rendering tests", func() {
 			{Name: "allow-tigera.cluster-dns", Namespace: "openshift-dns"},
 			{Name: "allow-tigera.kube-controller-access", Namespace: "calico-system"},
 			{Name: "allow-tigera.tigera-packetcapture", Namespace: "tigera-packetcapture"},
+			{Name: "allow-tigera.guardian-access", Namespace: "tigera-guardian"},
 		}
 
 		getExpectedPolicy := func(name types.NamespacedName, scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
 			if name.Name == "allow-tigera.cnx-apiserver-access" {
 				return testutils.SelectPolicyByProvider(scenario, apiServerPolicy, apiServerPolicyForOCP)
+			} else if name.Name == "allow-tigera.calico-node-alertmanager" {
+				return testutils.SelectPolicyByProvider(scenario, expectedAlertmanagerPolicy, expectedAlertmanagerPolicyForOpenshift)
+			} else if name.Name == "allow-tigera.calico-node-alertmanager-mesh" {
+				return testutils.SelectPolicyByProvider(scenario, expectedAlertmanagerMeshPolicy, expectedAlertmanagerMeshPolicyForOpenshift)
+			} else if name.Name == "allow-tigera.prometheus" {
+				return testutils.SelectPolicyByProvider(scenario, expectedPrometheusPolicy, expectedPrometheusPolicyForOpenshift)
+			} else if name.Name == "allow-tigera.tigera-prometheus-api" {
+				return testutils.SelectPolicyByProvider(scenario, expectedPrometheusApiPolicy, expectedPrometheusApiPolicyForOpenshift)
+			} else if name.Name == "allow-tigera.prometheus-operator" {
+				return testutils.SelectPolicyByProvider(scenario, expectedPrometheusOperatorPolicy, expectedPrometheusOperatorPolicyOpenshift)
+			} else if name.Name == "allow-tigera.guardian-access" && scenario.ManagedCluster {
+				return testutils.SelectPolicyByProvider(scenario, guardianPolicy, guardianPolicyForOCP)
 			} else if name.Name == "allow-tigera.kube-controller-access" {
 				return testutils.SelectPolicyByClusterTypeAndProvider(
 					scenario,
@@ -88,7 +116,12 @@ var _ = Describe("Tiers rendering tests", func() {
 		DescribeTable("should render allow-tigera policy",
 			func(scenario testutils.AllowTigeraScenario) {
 				cfg.Openshift = scenario.Openshift
-				cfg.ManagedCluster = scenario.ManagedCluster
+				if scenario.ManagedCluster {
+					cfg.ManagementClusterConnection = &operatorv1.ManagementClusterConnection{
+						ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+						Spec:       operatorv1.ManagementClusterConnectionSpec{ManagementClusterAddr: "127.0.0.1:1234"},
+					}
+				}
 				component := tiers.Tiers(cfg)
 				resourcesToCreate, resourcesToDelete := component.Objects()
 
@@ -119,5 +152,24 @@ var _ = Describe("Tiers rendering tests", func() {
 			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
 			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
 		)
+
+		// The test matrix above validates against an IP-based management cluster address.
+		// Validate policy adaptation for domain-based management cluster address here.
+		It("should adapt Guardian policy if ManagementClusterAddr is domain-based", func() {
+			component := tiers.Tiers(&tiers.Config{
+				Openshift: false,
+				ManagementClusterConnection: &operatorv1.ManagementClusterConnection{
+					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+					Spec:       operatorv1.ManagementClusterConnectionSpec{ManagementClusterAddr: "mydomain.io:8080"},
+				},
+			})
+			resourcesToCreate, _ := component.Objects()
+			policyName := types.NamespacedName{Name: "allow-tigera.guardian-access", Namespace: "tigera-guardian"}
+			policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resourcesToCreate)
+			managementClusterEgressRule := policy.Spec.Egress[4]
+			Expect(managementClusterEgressRule.Destination.Domains).To(Equal([]string{"mydomain.io"}))
+			Expect(managementClusterEgressRule.Destination.Ports).To(Equal(networkpolicy.Ports(8080)))
+		})
+
 	})
 })

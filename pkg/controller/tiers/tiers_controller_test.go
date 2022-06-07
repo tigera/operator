@@ -17,6 +17,8 @@ package tiers
 import (
 	"context"
 
+	"github.com/tigera/operator/pkg/common"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -85,6 +87,19 @@ var _ = Describe("tier controller tests", func() {
 				},
 			})).NotTo(HaveOccurred())
 
+		Expect(c.Create(
+			ctx,
+			&v3.LicenseKey{
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+				Status: v3.LicenseKeyStatus{
+					Features: []string{
+						common.TiersFeature,
+						common.EgressAccessControlFeature,
+					},
+				},
+			},
+		)).NotTo(HaveOccurred())
+
 		Expect(c.Create(ctx, &operatorv1.APIServer{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 			Status:     operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady},
@@ -137,6 +152,80 @@ var _ = Describe("tier controller tests", func() {
 			policyWatchesReady: readyFlag,
 		}
 		mockStatus.On("SetDegraded", "Waiting for Tier watch to be established", "").Return()
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).ShouldNot(HaveOccurred())
+		mockStatus.AssertExpectations(GinkgoT())
+	})
+
+	It("should require license", func() {
+		Expect(c.Delete(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}})).ToNot(HaveOccurred())
+		mockStatus = &status.MockStatus{}
+		r = ReconcileTiers{
+			Client:             c,
+			scheme:             scheme,
+			provider:           operatorv1.ProviderNone,
+			status:             mockStatus,
+			tierWatchReady:     readyFlag,
+			policyWatchesReady: readyFlag,
+		}
+		mockStatus.On("SetDegraded", "License not found", "licensekeies.projectcalico.org \"default\" not found").Return()
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).ShouldNot(HaveOccurred())
+		mockStatus.AssertExpectations(GinkgoT())
+	})
+
+	It("should require license with tiers feature", func() {
+		license := &v3.LicenseKey{
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			Status: v3.LicenseKeyStatus{
+				Features: []string{
+					common.EgressAccessControlFeature,
+				},
+			},
+		}
+		Expect(c.Delete(ctx, &v3.LicenseKey{ObjectMeta: license.ObjectMeta}))
+		Expect(c.Create(ctx, license)).ToNot(HaveOccurred())
+		mockStatus = &status.MockStatus{}
+		r = ReconcileTiers{
+			Client:             c,
+			scheme:             scheme,
+			provider:           operatorv1.ProviderNone,
+			status:             mockStatus,
+			tierWatchReady:     readyFlag,
+			policyWatchesReady: readyFlag,
+		}
+		mockStatus.On("SetDegraded", "Feature is not active", "License does not support feature: tiers").Return()
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).ShouldNot(HaveOccurred())
+		mockStatus.AssertExpectations(GinkgoT())
+	})
+
+	It("should require license with egress access control feature for domain-based management cluster addresses", func() {
+		license := &v3.LicenseKey{
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			Status: v3.LicenseKeyStatus{
+				Features: []string{
+					common.TiersFeature,
+				},
+			},
+		}
+		managementClusterConnection := &operatorv1.ManagementClusterConnection{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+			Spec:       operatorv1.ManagementClusterConnectionSpec{ManagementClusterAddr: "mydomain.io:443"},
+		}
+		Expect(c.Delete(ctx, &v3.LicenseKey{ObjectMeta: license.ObjectMeta}))
+		Expect(c.Create(ctx, license)).ToNot(HaveOccurred())
+		Expect(c.Create(ctx, managementClusterConnection)).NotTo(HaveOccurred())
+		mockStatus = &status.MockStatus{}
+		r = ReconcileTiers{
+			Client:             c,
+			scheme:             scheme,
+			provider:           operatorv1.ProviderNone,
+			status:             mockStatus,
+			tierWatchReady:     readyFlag,
+			policyWatchesReady: readyFlag,
+		}
+		mockStatus.On("SetDegraded", "Feature is not active", "License does not support feature: egress-access-control").Return()
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).ShouldNot(HaveOccurred())
 		mockStatus.AssertExpectations(GinkgoT())

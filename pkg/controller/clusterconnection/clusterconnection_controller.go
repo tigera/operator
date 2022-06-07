@@ -19,12 +19,6 @@ import (
 	"fmt"
 	"time"
 
-	"k8s.io/client-go/kubernetes"
-
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -59,12 +53,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-
 	statusManager := status.New(mgr.GetClient(), "management-cluster-connection", opts.KubernetesVersion)
-	policyWatchesReady := &utils.ReadyFlag{}
 
 	// Create the reconciler
-	reconciler := newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, policyWatchesReady, opts.DetectedProvider, opts)
+	reconciler := newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider, opts)
 
 	// Create a new controller
 	controller, err := controller.New(controllerName, mgr, controller.Options{Reconciler: reconciler})
@@ -72,27 +64,17 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("failed to create %s: %w", controllerName, err)
 	}
 
-	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
-	if err != nil {
-		return fmt.Errorf("%s failed to establish a connection to k8s: %w", controllerName, err)
-	}
-	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, policyWatchesReady, []types.NamespacedName{
-		{Name: render.GuardianEgressPolicyName, Namespace: render.GuardianNamespace},
-		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.GuardianNamespace},
-	})
-
 	return add(mgr, controller)
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, policyWatchesReady *utils.ReadyFlag, p operatorv1.Provider, opts options.AddOptions) *ReconcileConnection {
+func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, p operatorv1.Provider, opts options.AddOptions) *ReconcileConnection {
 	c := &ReconcileConnection{
-		Client:             cli,
-		Scheme:             schema,
-		Provider:           p,
-		status:             statusMgr,
-		clusterDomain:      opts.ClusterDomain,
-		policyWatchesReady: policyWatchesReady,
+		Client:        cli,
+		Scheme:        schema,
+		Provider:      p,
+		status:        statusMgr,
+		clusterDomain: opts.ClusterDomain,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
@@ -146,12 +128,11 @@ var _ reconcile.Reconciler = &ReconcileConnection{}
 
 // ReconcileConnection reconciles a ManagementClusterConnection object
 type ReconcileConnection struct {
-	Client             client.Client
-	Scheme             *runtime.Scheme
-	Provider           operatorv1.Provider
-	status             status.StatusManager
-	clusterDomain      string
-	policyWatchesReady *utils.ReadyFlag
+	Client        client.Client
+	Scheme        *runtime.Scheme
+	Provider      operatorv1.Provider
+	status        status.StatusManager
+	clusterDomain string
 }
 
 // Reconcile reads that state of the cluster for a ManagementClusterConnection object and makes changes based on the
@@ -166,30 +147,6 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	variant, instl, err := utils.GetInstallation(ctx, r.Client)
 	if err != nil {
 		return result, err
-	}
-
-	// Ensure the API Server is ready, before rendering any objects that utilize the V3 API.
-	if !utils.IsAPIServerReady(r.Client, reqLogger) {
-		r.status.SetDegraded("Waiting for Tigera API server to be ready", "")
-		return reconcile.Result{}, nil
-	}
-
-	if !r.policyWatchesReady.IsReady() {
-		r.status.SetDegraded("Waiting for NetworkPolicy watches to be established", "")
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-	}
-
-	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
-	if err := r.Client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
-		if k8serrors.IsNotFound(err) {
-			log.Error(err, "Waiting for Tigera component policy tier to be created")
-			r.status.SetDegraded("Waiting for Tigera component policy tier to be created", err.Error())
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-		} else {
-			log.Error(err, "Error querying Tigera component policy tier")
-			r.status.SetDegraded("Error querying Tigera component policy tier", err.Error())
-			return reconcile.Result{}, err
-		}
 	}
 
 	managementCluster, err := utils.GetManagementCluster(ctx, r.Client)

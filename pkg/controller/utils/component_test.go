@@ -264,13 +264,13 @@ var _ = Describe("Component handler tests", func() {
 		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
 		Expect(err).To(BeNil())
 
-		By("checking that the uisettings is updated with description, but ownerref is not modified")
+		By("checking that the uisettings is not updated")
 		ui = &v3.UISettings{}
 		err = c.Get(ctx, uiKey, ui)
 		Expect(err).To(BeNil())
 		Expect(ui.OwnerReferences).To(HaveLen(1))
 		Expect(ui.OwnerReferences[0].Name).To(Equal("owner"))
-		Expect(ui.Spec.Description).To(Equal("another test"))
+		Expect(ui.Spec.Description).To(Equal("just a test"))
 	})
 
 	It("merges labels and reconciles only operator added labels", func() {

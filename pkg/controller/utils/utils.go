@@ -429,6 +429,7 @@ func WaitToAddResourceWatch(controller controller.Controller, client kubernetes.
 	maxDuration := 30 * time.Second
 	duration := 1 * time.Second
 	ticker := time.NewTicker(duration)
+	log = ContextLoggerForResource(log, obj)
 	defer ticker.Stop()
 	for range ticker.C {
 		duration = duration * 2
@@ -436,31 +437,33 @@ func WaitToAddResourceWatch(controller controller.Controller, client kubernetes.
 			duration = maxDuration
 		}
 		ticker.Reset(duration)
-		if isResourceReady(client, obj.GetObjectKind().GroupVersionKind().Kind) {
-			err := controller.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{})
-			if err != nil {
-				log.Info("failed to watch %s resource: %v. Will retry to add watch", obj.GetObjectKind().GroupVersionKind().Kind, err)
-			} else {
-				flag.MarkAsReady()
-				return
-			}
+		if ok, err := isResourceReady(client, obj.GetObjectKind().GroupVersionKind().Kind); err != nil {
+			log.WithValues("Error", err).Info("Failed to check if resource is ready - will retry")
+		} else if !ok {
+			log.Info("Waiting for resource to be ready - will retry")
+		} else if err := controller.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{}); err != nil {
+			log.WithValues("Error", err).Info("Failed to watch resource - will retry")
+		} else {
+			log.Info("Successfully watching resource")
+			flag.MarkAsReady()
+			return
 		}
 	}
 }
 
-func isResourceReady(client kubernetes.Interface, resourceKind string) bool {
+func isResourceReady(client kubernetes.Interface, resourceKind string) (bool, error) {
 	_, res, err := client.Discovery().ServerGroupsAndResources()
 	if err != nil {
-		return false
+		return false, err
 	}
 	for _, group := range res {
 		if group.GroupVersion == v3.GroupVersionCurrent {
 			for _, r := range group.APIResources {
 				if r.Kind == resourceKind {
-					return true
+					return true, nil
 				}
 			}
 		}
 	}
-	return false
+	return false, nil
 }

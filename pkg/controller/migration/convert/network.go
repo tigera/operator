@@ -138,6 +138,11 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 			if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "FELIX_IPV6SUPPORT", "false"); err != nil {
 				return err
 			}
+			// If IP6=none then if IP6_AUTODETECTION_METHOD is set it must be none. This is not a valid value
+			// for the env var but Kops sets it.
+			if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "IP6_AUTODETECTION_METHOD ", "none"); err != nil {
+				return err
+			}
 		} else if *ip6 == "autodetect" {
 			if err := handleIPv6AutoDetectionMethod(c, install); err != nil {
 				return err

@@ -1366,8 +1366,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Write updated status.
-	if statusMTU > math.MaxInt32 || statusMTU < math.MinInt32 {
-		return reconcile.Result{}, errors.New("The MTU size should be between Max int32 (2147483647) and Min int32 (-2147483648)")
+	if statusMTU > math.MaxInt32 || statusMTU < 0 {
+		return reconcile.Result{}, errors.New("The MTU size should be between Max int32 (2147483647) and 0")
 	}
 	instance.Status.MTU = int32(statusMTU)
 	instance.Status.Variant = instance.Spec.Variant

@@ -301,6 +301,36 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 		if dd.Spec.Replicas == nil {
 			dd.Spec.Replicas = cd.Spec.Replicas
 		}
+
+		// Merge the template's labels.
+		currentLabels := mapExistsOrInitialize(cd.Spec.Template.GetObjectMeta().GetLabels())
+		desiredLabels := mapExistsOrInitialize(dd.Spec.Template.GetObjectMeta().GetLabels())
+		mergedLabels := mergeMaps(currentLabels, desiredLabels)
+		dd.Spec.Template.SetLabels(mergedLabels)
+
+		// Merge the template's annotations.
+		currentAnnotations := mapExistsOrInitialize(cd.Spec.Template.GetObjectMeta().GetAnnotations())
+		desiredAnnotations := mapExistsOrInitialize(dd.Spec.Template.GetObjectMeta().GetAnnotations())
+		mergedAnnotations := mergeMaps(currentAnnotations, desiredAnnotations)
+		dd.Spec.Template.SetAnnotations(mergedAnnotations)
+
+		return dd
+	case *apps.DaemonSet:
+		cd := current.(*apps.DaemonSet)
+		dd := desired.(*apps.DaemonSet)
+
+		// Merge the template's labels.
+		currentLabels := mapExistsOrInitialize(cd.Spec.Template.GetObjectMeta().GetLabels())
+		desiredLabels := mapExistsOrInitialize(dd.Spec.Template.GetObjectMeta().GetLabels())
+		mergedLabels := mergeMaps(currentLabels, desiredLabels)
+		dd.Spec.Template.SetLabels(mergedLabels)
+
+		// Merge the template's annotations.
+		currentAnnotations := mapExistsOrInitialize(cd.Spec.Template.GetObjectMeta().GetAnnotations())
+		desiredAnnotations := mapExistsOrInitialize(dd.Spec.Template.GetObjectMeta().GetAnnotations())
+		mergedAnnotations := mergeMaps(currentAnnotations, desiredAnnotations)
+		dd.Spec.Template.SetAnnotations(mergedAnnotations)
+
 		return dd
 	case *v1.ServiceAccount:
 		// ServiceAccounts generate a new token if we don't include the existing one.

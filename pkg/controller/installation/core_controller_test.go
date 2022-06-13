@@ -362,6 +362,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("AddCertificateSigningRequests", mock.Anything)
 			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
+			mockStatus.On("SetMetaData", mock.Anything).Return()
 
 			// Create the indexer and informer shared by the typhaAutoscaler and
 			// calicoWindowsUpgrader.
@@ -728,6 +729,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
 			mockStatus.On("SetWindowsUpgradeStatus", mock.Anything, mock.Anything, mock.Anything, nil)
+			mockStatus.On("SetMetaData", mock.Anything).Return()
 
 			// Create the indexer and informer shared by the typhaAutoscaler and
 			// calicoWindowsUpgrader.
@@ -963,6 +965,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("ClearDegraded")
 			mockStatus.On("AddCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
+			mockStatus.On("SetMetaData", mock.Anything).Return()
 
 			// Create the indexer and informer shared by the typhaAutoscaler and
 			// calicoWindowsUpgrader.
@@ -999,7 +1002,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 			// We start off with a 'standard' installation, with nothing special
 			cr = &operator.Installation{
-				ObjectMeta: metav1.ObjectMeta{Name: "default", Generation: 2},
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 				Spec: operator.InstallationSpec{
 					Variant:               operator.TigeraSecureEnterprise,
 					Registry:              "some.registry.org/",
@@ -1276,17 +1279,18 @@ var _ = Describe("Testing core-controller installation", func() {
 			})
 		})
 		It("should reconcile with creating new installation status condition with one item", func() {
-
+			generation := int64(2)
 			ts := &operator.TigeraStatus{
 				ObjectMeta: metav1.ObjectMeta{Name: "calico"},
 				Spec:       operator.TigeraStatusSpec{},
 				Status: operator.TigeraStatusStatus{
 					Conditions: []operator.TigeraStatusCondition{
 						{
-							Type:    operator.ComponentAvailable,
-							Status:  operator.ConditionTrue,
-							Reason:  string(operator.AllObjectsAvailable),
-							Message: "All Objects are available",
+							Type:               operator.ComponentAvailable,
+							Status:             operator.ConditionTrue,
+							Reason:             string(operator.AllObjectsAvailable),
+							Message:            "All Objects are available",
+							ObservedGeneration: generation,
 						},
 					},
 				},
@@ -1310,7 +1314,6 @@ var _ = Describe("Testing core-controller installation", func() {
 		})
 
 		It("should reconcile with Empty tigera status condition", func() {
-
 			ts := &operator.TigeraStatus{
 				ObjectMeta: metav1.ObjectMeta{Name: "calico"},
 				Spec:       operator.TigeraStatusSpec{},
@@ -1329,29 +1332,32 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(cr.Status.Conditions).To(HaveLen(0))
 		})
 		It("should reconcile with creating new installation status with multiple conditions as true", func() {
-
+			generation := int64(2)
 			ts := &operator.TigeraStatus{
 				ObjectMeta: metav1.ObjectMeta{Name: "calico"},
 				Spec:       operator.TigeraStatusSpec{},
 				Status: operator.TigeraStatusStatus{
 					Conditions: []operator.TigeraStatusCondition{
 						{
-							Type:    operator.ComponentAvailable,
-							Status:  operator.ConditionTrue,
-							Reason:  string(operator.AllObjectsAvailable),
-							Message: "All Objects are available",
+							Type:               operator.ComponentAvailable,
+							Status:             operator.ConditionTrue,
+							Reason:             string(operator.AllObjectsAvailable),
+							Message:            "All Objects are available",
+							ObservedGeneration: generation,
 						},
 						{
-							Type:    operator.ComponentProgressing,
-							Status:  operator.ConditionTrue,
-							Reason:  string(operator.ResourceNotReady),
-							Message: "Progressing Installation.operator.tigera.io",
+							Type:               operator.ComponentProgressing,
+							Status:             operator.ConditionTrue,
+							Reason:             string(operator.ResourceNotReady),
+							Message:            "Progressing Installation.operator.tigera.io",
+							ObservedGeneration: generation,
 						},
 						{
-							Type:    operator.ComponentDegraded,
-							Status:  operator.ConditionTrue,
-							Reason:  string(operator.ResourceUpdateError),
-							Message: "Error resolving ImageSet for components",
+							Type:               operator.ComponentDegraded,
+							Status:             operator.ConditionTrue,
+							Reason:             string(operator.ResourceUpdateError),
+							Message:            "Error resolving ImageSet for components",
+							ObservedGeneration: generation,
 						},
 					},
 				},
@@ -1388,29 +1394,32 @@ var _ = Describe("Testing core-controller installation", func() {
 		})
 
 		It("should reconcile with Existing conditions and toggle Available to true & others to false", func() {
-
+			generation := int64(2)
 			ts := &operator.TigeraStatus{
 				ObjectMeta: metav1.ObjectMeta{Name: "calico"},
 				Spec:       operator.TigeraStatusSpec{},
 				Status: operator.TigeraStatusStatus{
 					Conditions: []operator.TigeraStatusCondition{
 						{
-							Type:    operator.ComponentAvailable,
-							Status:  operator.ConditionTrue,
-							Reason:  string(operator.AllObjectsAvailable),
-							Message: "All Objects are available",
+							Type:               operator.ComponentAvailable,
+							Status:             operator.ConditionTrue,
+							Reason:             string(operator.AllObjectsAvailable),
+							Message:            "All Objects are available",
+							ObservedGeneration: generation,
 						},
 						{
-							Type:    operator.ComponentProgressing,
-							Status:  operator.ConditionFalse,
-							Reason:  string(operator.NotApplicable),
-							Message: "Not Applicable",
+							Type:               operator.ComponentProgressing,
+							Status:             operator.ConditionFalse,
+							Reason:             string(operator.NotApplicable),
+							Message:            "Not Applicable",
+							ObservedGeneration: generation,
 						},
 						{
-							Type:    operator.ComponentDegraded,
-							Status:  operator.ConditionFalse,
-							Reason:  string(operator.NotApplicable),
-							Message: "Not Applicable",
+							Type:               operator.ComponentDegraded,
+							Status:             operator.ConditionFalse,
+							Reason:             string(operator.NotApplicable),
+							Message:            "Not Applicable",
+							ObservedGeneration: generation,
 						},
 					},
 				},

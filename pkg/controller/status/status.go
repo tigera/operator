@@ -76,6 +76,7 @@ type StatusManager interface {
 	IsProgressing() bool
 	IsDegraded() bool
 	ReadyToMonitor()
+	SetMetaData(meta *metav1.ObjectMeta)
 }
 
 type statusManager struct {
@@ -111,6 +112,8 @@ type statusManager struct {
 	// to determine whether we need to call Delete() on the object, without sending unnecessary
 	// get/delete calls to the API server.
 	crExists bool
+
+	observedGeneration int64
 }
 
 func New(client client.Client, component string, kubernetesVersion *common.VersionInfo) StatusManager {
@@ -702,6 +705,11 @@ func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondi
 	// update it. Otherwise add a new one.
 	for _, condition := range conditions {
 		found := false
+
+		//set the CR's observedGeneration for tigerastatus condition
+		if m.observedGeneration != 0 {
+			condition.ObservedGeneration = m.observedGeneration
+		}
 		for i, c := range ts.Status.Conditions {
 			if c.Type == condition.Type {
 				// If the status has changed, update the transition time.
@@ -860,6 +868,12 @@ func (m *statusManager) clearProgressingWithReason(reason operator.TigeraStatusR
 	m.set(true, conditions...)
 }
 
+func (m *statusManager) SetMetaData(meta *metav1.ObjectMeta) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	m.observedGeneration = meta.Generation
+}
+
 func hasPendingCSR(ctx context.Context, m *statusManager, labelMap map[string]string) (bool, error) {
 	if m.kubernetesVersion.ProvidesCertV1API() {
 		return hasPendingCSRUsingCertV1(ctx, m.client, labelMap)
@@ -928,7 +942,7 @@ func hasPendingCSRUsingCertV1beta1(ctx context.Context, cli client.Client, label
 }
 
 //UpdateStatusCondition updates CR's status conditions from tigerastatus conditions.
-func UpdateStatusCondition(statuscondition []metav1.Condition, conditions []operator.TigeraStatusCondition, generation int64) []metav1.Condition {
+func UpdateStatusCondition(statuscondition []metav1.Condition, conditions []operator.TigeraStatusCondition) []metav1.Condition {
 	if statuscondition == nil {
 		statuscondition = []metav1.Condition{}
 	}
@@ -940,6 +954,7 @@ func UpdateStatusCondition(statuscondition []metav1.Condition, conditions []oper
 		if condition.Type == operator.ComponentAvailable {
 			ctype = string(operator.ComponentReady)
 		}
+
 		status := metav1.ConditionUnknown
 		if condition.Status == operator.ConditionTrue {
 			status = metav1.ConditionTrue
@@ -950,7 +965,7 @@ func UpdateStatusCondition(statuscondition []metav1.Condition, conditions []oper
 			Type:               ctype,
 			Status:             status,
 			LastTransitionTime: condition.LastTransitionTime,
-			ObservedGeneration: generation,
+			ObservedGeneration: condition.ObservedGeneration,
 			Message:            condition.Message,
 		}
 

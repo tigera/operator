@@ -96,6 +96,12 @@ type TigeraStatusCondition struct {
 
 	// Optionally, a detailed message providing additional context.
 	Message string `json:"message,omitempty"`
+
+	// observedGeneration represents the generation that the condition was set based upon.
+	// For instance, if generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+	// with respect to the current state of the instance.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -124,6 +130,7 @@ const (
 	ResourceScalingError      TigeraStatusReason = "ResourceScalingError"
 	ResourceUpdateError       TigeraStatusReason = "ResourceUpdateError"
 	ResourceValidationError   TigeraStatusReason = "ResourceValidationError"
+	MigrationError            TigeraStatusReason = "MigrationError"
 	InternalServerError       TigeraStatusReason = "InternalServerError"
 	NotApplicable             TigeraStatusReason = "NotApplicable"
 	Unknown                   TigeraStatusReason = "Unknown"

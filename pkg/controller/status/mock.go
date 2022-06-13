@@ -16,6 +16,8 @@ package status
 import (
 	"context"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/stretchr/testify/mock"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -115,4 +117,8 @@ func (m *MockStatus) WasCalled(method string, arguments ...interface{}) bool {
 		}
 	}
 	return false
+}
+
+func (m *MockStatus) SetMetaData(meta *metav1.ObjectMeta) {
+	m.Called(meta)
 }

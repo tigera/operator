@@ -760,6 +760,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Mark CR found so we can report converter problems via tigerastatus
 	r.status.OnCRFound()
+	//Set the meta info in the tigerastatus like observedGenerations
+	r.status.SetMetaData(&instance.ObjectMeta)
 
 	// Changes for updating installation status conditions
 	if request.Name == InstallationName && request.Namespace == "" {
@@ -768,7 +770,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if err != nil {
 			return reconcile.Result{}, err
 		}
-		instance.Status.Conditions = status.UpdateStatusCondition(instance.Status.Conditions, ts.Status.Conditions, instance.GetGeneration())
+		instance.Status.Conditions = status.UpdateStatusCondition(instance.Status.Conditions, ts.Status.Conditions)
 		if err := r.client.Status().Update(ctx, instance); err != nil {
 			log.WithValues("reason", err).Info("Failed to create Installation status conditions.")
 			return reconcile.Result{}, err
@@ -788,12 +790,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			install, err := convert.Convert(ctx, r.client)
 			if err != nil {
 				if errors.As(err, &convert.ErrIncompatibleCluster{}) {
-					r.SetDegraded(operator.ResourceValidationError, "Existing Calico installation can not be managed by Tigera Operator as it is configured in a way that Operator does not currently support. Please update your existing Calico install config", err, reqLogger)
+					r.SetDegraded(operator.MigrationError, "Existing Calico installation can not be managed by Tigera Operator as it is configured in a way that Operator does not currently support. Please update your existing Calico install config", err, reqLogger)
 					// We should always requeue a convert problem. Don't return error
 					// to make sure we never back off retrying.
 					return reconcile.Result{RequeueAfter: 15 * time.Second}, nil
 				}
-				r.SetDegraded(operator.ResourceValidationError, "Error converting existing installation", err, reqLogger)
+				r.SetDegraded(operator.MigrationError, "Error converting existing installation", err, reqLogger)
 				return reconcile.Result{}, err
 			}
 			instance.Spec = utils.OverrideInstallationSpec(install.Spec, instance.Spec)
@@ -999,14 +1001,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	birdTemplates, err := getBirdTemplates(r.client)
 	if err != nil {
-		log.Error(err, "Error retrieving confd templates")
 		r.SetDegraded(operator.ResourceReadError, "Error retrieving confd templates", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	bgpLayout, err := getConfigMap(r.client, render.BGPLayoutConfigMapName)
 	if err != nil {
-		log.Error(err, "Error retrieving BGP layout ConfigMap")
 		r.SetDegraded(operator.ResourceReadError, "Error retrieving BGP layout ConfigMap", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -1022,7 +1022,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	err = utils.GetK8sServiceEndPoint(r.client)
 	if err != nil {
-		log.Error(err, "Error reading services endpoint configmap")
 		r.SetDegraded(operator.ResourceReadError, "Error reading services endpoint configmap", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -1031,8 +1030,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if instance.Spec.KubernetesProvider == operator.ProviderOpenShift {
 		openShiftOnAws, err = isOpenshiftOnAws(instance, ctx, r.client)
 		if err != nil {
-			log.Error(err, "Error checking if OpenShift is on AWS")
-			r.SetDegraded(operator.ResourceValidationError, "Error checking if OpenShift is on AWS", err, reqLogger)
+			r.SetDegraded(operator.ResourceReadError, "Error checking if OpenShift is on AWS", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
@@ -1043,7 +1041,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// to mimic a 'normal' rolling update.
 	needNsMigration, err := r.namespaceMigration.NeedsCoreNamespaceMigration(ctx)
 	if err != nil {
-		r.SetDegraded(operator.ResourceValidationError, "Error checking if namespace migration is needed", err, reqLogger)
+		r.SetDegraded(operator.ResourceReadError, "Error checking if namespace migration is needed", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -1053,7 +1051,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if apierrors.IsNotFound(err) {
 			aci = nil
 		} else if err != nil {
-			r.SetDegraded(operator.ResourceValidationError, "Error reading AmazonCloudIntegration", err, reqLogger)
+			r.SetDegraded(operator.ResourceReadError, "Error reading AmazonCloudIntegration", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
@@ -1062,7 +1060,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	felixConfiguration := &crdv1.FelixConfiguration{}
 	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, felixConfiguration)
 	if err != nil && !apierrors.IsNotFound(err) {
-		r.SetDegraded(operator.ResourceNotFound, "Unable to read FelixConfiguration", err, reqLogger)
+		r.SetDegraded(operator.ResourceReadError, "Unable to read FelixConfiguration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -1091,7 +1089,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 		nodePrometheusTLS, err = certificateManager.GetOrCreateKeyPair(r.client, render.NodePrometheusTLSServerSecret, common.OperatorNamespace(), dns.GetServiceDNSNames(render.CalicoNodeMetricsService, common.CalicoNamespace, r.clusterDomain))
 		if err != nil {
-			r.SetDegraded(operator.CertificateError, "Error creating TLS certificate", err, reqLogger)
+			r.SetDegraded(operator.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 		if nodePrometheusTLS != nil {
@@ -1099,7 +1097,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 		prometheusClientCert, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
 		if err != nil {
-			r.SetDegraded(operator.CertificateError, "Error creating TLS certificate", err, reqLogger)
+			r.SetDegraded(operator.CertificateError, "Unable to fetch prometheus certificate", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 		if prometheusClientCert != nil {
@@ -1111,7 +1109,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	kubeControllersConfig := &crdv1.KubeControllersConfiguration{}
 	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, kubeControllersConfig)
 	if err != nil && !apierrors.IsNotFound(err) {
-		r.SetDegraded(operator.ResourceNotFound, "Unable to read KubeControllersConfiguration", err, reqLogger)
+		r.SetDegraded(operator.ResourceReadError, "Unable to read KubeControllersConfiguration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -1209,7 +1207,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	bgpConfiguration := &crdv1.BGPConfiguration{}
 	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, bgpConfiguration)
 	if err != nil && !apierrors.IsNotFound(err) {
-		r.SetDegraded(operator.ResourceNotFound, "Unable to read BGPConfiguration", err, reqLogger)
+		r.SetDegraded(operator.ResourceReadError, "Unable to read BGPConfiguration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

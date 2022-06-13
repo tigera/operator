@@ -130,7 +130,7 @@ func (t *typhaAutoscaler) start() {
 		stopCh := make(chan struct{})
 		go t.nodeInformer.Run(stopCh)
 		go t.typhaInformer.Run(stopCh)
-		for !t.nodeInformer.HasSynced() && !t.typhaInformer.HasSynced() {
+		for !t.nodeInformer.HasSynced() || !t.typhaInformer.HasSynced() {
 			time.Sleep(100 * time.Millisecond)
 		}
 

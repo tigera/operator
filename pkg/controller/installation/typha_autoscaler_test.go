@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -247,7 +247,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		_, err := c.AppsV1().Deployments("calico-system").Create(ctx, typha, metav1.CreateOptions{})
 		Expect(err).To(BeNil())
 
-		statusManager.On("SetDegraded", "Failed to autoscale typha", "not enough linux nodes to schedule typha pods on, require 3 and have 2")
+		statusManager.On("SetDegraded", "ResourceScalingError", "Failed to autoscale typha - not enough linux nodes to schedule typha pods on, require 3 and have 2")
 
 		// Create a few nodes
 		_ = CreateNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)

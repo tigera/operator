@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -275,7 +275,7 @@ func (c *GuardianComponent) container() []corev1.Container {
 
 func (c *GuardianComponent) volumeMounts() []corev1.VolumeMount {
 	mounts := []corev1.VolumeMount{
-		c.cfg.TrustedCertBundle.VolumeMount(),
+		c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType()),
 		{
 			Name:      GuardianVolumeName,
 			MountPath: "/certs/",

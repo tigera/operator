@@ -81,8 +81,9 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(err).NotTo(HaveOccurred())
 		kp, err := certificateManager.GetOrCreateKeyPair(cli, render.ProjectCalicoApiServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
 		Expect(err).NotTo(HaveOccurred())
-		tunnelKeyPair, err = certificatemanagement.NewKeyPair(render.VoltronTunnelSecret(), []string{""}, "")
+		tunnelSecret, err := certificatemanagement.CreateSelfSignedSecret(render.VoltronTunnelSecretName, common.OperatorNamespace(), "tigera-voltron", []string{"voltron"})
 		Expect(err).NotTo(HaveOccurred())
+		tunnelKeyPair = certificatemanagement.NewKeyPair(tunnelSecret, []string{""}, "")
 		replicas = 2
 		cfg = &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sapi.ServiceEndpoint{},
@@ -661,11 +662,12 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		By("Validating the newly created tunnel secret")
-		tunnelCASecret, err := certificatemanagement.NewKeyPair(render.VoltronTunnelSecret(), nil, "")
+		tunnelSecret, err := certificatemanagement.CreateSelfSignedSecret(render.VoltronTunnelSecretName, common.OperatorNamespace(), "tigera-voltron", []string{"voltron"})
 		Expect(err).ToNot(HaveOccurred())
+		tunnelKeyPair = certificatemanagement.NewKeyPair(tunnelSecret, []string{""}, "")
 
 		// Use the x509 package to validate that the cert was signed with the privatekey
-		validateTunnelSecret(tunnelCASecret.Secret(""))
+		validateTunnelSecret(tunnelSecret)
 
 		dep := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment")
 		Expect(dep).ToNot(BeNil())
@@ -887,7 +889,7 @@ func validateTunnelSecret(voltronSecret *corev1.Secret) {
 	Expect(err).ShouldNot(HaveOccurred())
 
 	opts := x509.VerifyOptions{
-		DNSName: render.VoltronDnsName,
+		DNSName: "voltron",
 		Roots:   roots,
 	}
 
@@ -895,7 +897,7 @@ func validateTunnelSecret(voltronSecret *corev1.Secret) {
 	Expect(err).ShouldNot(HaveOccurred())
 
 	opts = x509.VerifyOptions{
-		DNSName:     render.VoltronDnsName,
+		DNSName:     "voltron",
 		Roots:       x509.NewCertPool(),
 		CurrentTime: time.Now().AddDate(0, 0, crypto.DefaultCACertificateLifetimeInDays+1),
 	}

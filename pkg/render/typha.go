@@ -415,8 +415,8 @@ func (c *typhaComponent) volumes() []corev1.Volume {
 // typhaVolumeMounts creates the typha's volume mounts.
 func (c *typhaComponent) typhaVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
-		c.cfg.TLS.TrustedBundle.VolumeMount(),
-		c.cfg.TLS.TyphaSecret.VolumeMount(),
+		c.cfg.TLS.TrustedBundle.VolumeMount(c.SupportedOSType()),
+		c.cfg.TLS.TyphaSecret.VolumeMount(c.SupportedOSType()),
 	}
 }
 

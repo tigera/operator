@@ -180,7 +180,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		cfg.OSType = rmeta.OSTypeWindows
-		cfg.TrustedBundle = nil
 		cfg.MetricsServerTLS = nil
 		// Should render the correct resources.
 		component := render.Fluentd(cfg)
@@ -376,7 +375,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(4))
+		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(3))
 		envs := ds.Spec.Template.Spec.Containers[0].Env
 
 		expectedEnvs := []struct {
@@ -461,7 +460,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(5))
+		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(4))
 
 		var volnames []string
 		for _, vol := range ds.Spec.Template.Spec.Volumes {

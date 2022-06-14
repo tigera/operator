@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -114,17 +114,6 @@ var (
 				}},
 		},
 		{
-			Name: "elastic-ca-cert-volume",
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: relasticsearch.PublicCertSecret,
-					Items: []corev1.KeyToPath{
-						{Key: "tls.crt", Path: "ca.pem"},
-					},
-				},
-			},
-		},
-		{
 			Name: "log-snort-alters",
 			VolumeSource: corev1.VolumeSource{
 				HostPath: &corev1.HostPathVolumeSource{
@@ -138,9 +127,6 @@ var (
 	expectedVolumeMounts = []corev1.VolumeMount{
 		{MountPath: certificatemanagement.TrustedCertVolumeMountPath, Name: certificatemanagement.TrustedCertConfigMapName, ReadOnly: true},
 		{MountPath: "/node-certs", Name: "node-certs", ReadOnly: true},
-		{
-			MountPath: "/etc/ssl/elastic/", Name: "elastic-ca-cert-volume",
-		},
 		{
 			MountPath: "/var/log/calico/snort-alerts", Name: "log-snort-alters",
 		},

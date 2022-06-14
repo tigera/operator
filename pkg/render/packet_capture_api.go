@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -243,7 +243,7 @@ func (pc *packetCaptureApiComponent) initContainers() []corev1.Container {
 
 func (pc *packetCaptureApiComponent) container() corev1.Container {
 	var volumeMounts = []corev1.VolumeMount{
-		pc.cfg.ServerCertSecret.VolumeMount(),
+		pc.cfg.ServerCertSecret.VolumeMount(pc.SupportedOSType()),
 	}
 	env := []corev1.EnvVar{
 		{Name: "PACKETCAPTURE_API_LOG_LEVEL", Value: "Info"},
@@ -255,7 +255,7 @@ func (pc *packetCaptureApiComponent) container() corev1.Container {
 		env = append(env, pc.cfg.KeyValidatorConfig.RequiredEnv("PACKETCAPTURE_API_")...)
 	}
 	if pc.cfg.TrustedBundle != nil {
-		volumeMounts = append(volumeMounts, pc.cfg.TrustedBundle.VolumeMount())
+		volumeMounts = append(volumeMounts, pc.cfg.TrustedBundle.VolumeMount(pc.SupportedOSType()))
 	}
 
 	return corev1.Container{

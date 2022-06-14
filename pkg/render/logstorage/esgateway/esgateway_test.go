@@ -100,7 +100,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 
 		It("should render an ES Gateway deployment and all supporting resources when CertificateManagement is enabled", func() {
 			secret, err := certificatemanagement.CreateSelfSignedSecret("", "", "", nil)
-			Expect(err).NotTo(BeNil())
+			Expect(err).NotTo(HaveOccurred())
 			installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: secret.Data[corev1.TLSCertKey]}
 			expectedResources := []resourceTestObj{
 				{kubecontrollers.ElasticsearchKubeControllersUserSecret, common.OperatorNamespace(), &corev1.Secret{}, nil},

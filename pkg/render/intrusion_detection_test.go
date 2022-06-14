@@ -51,6 +51,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		secret, err := certificatemanagement.CreateSelfSignedSecret("", "", "", nil)
+		Expect(err).NotTo(HaveOccurred())
 		adAPIKeyPair = certificatemanagement.NewKeyPair(secret, []string{""}, "")
 		bundle = certificateManager.CreateTrustedBundle()
 		// Initialize a default instance to use. Each test can override this to its

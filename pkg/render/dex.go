@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -230,7 +230,7 @@ func (c *dexComponent) deployment() client.Object {
 									ContainerPort: DexPort,
 								},
 							},
-							VolumeMounts: append(c.cfg.DexConfig.RequiredVolumeMounts(), c.cfg.TLSKeyPair.VolumeMount()),
+							VolumeMounts: append(c.cfg.DexConfig.RequiredVolumeMounts(), c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType())),
 						},
 					},
 					Volumes: append(c.cfg.DexConfig.RequiredVolumes(), c.cfg.TLSKeyPair.Volume()),
@@ -298,8 +298,8 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 		},
 		"web": map[string]interface{}{
 			"https":                   "0.0.0.0:5556",
-			"tlsCert":                 "/etc/dex/tls/tls.crt",
-			"tlsKey":                  "/etc/dex/tls/tls.key",
+			"tlsCert":                 c.cfg.TLSKeyPair.VolumeMountCertificateFilePath(),
+			"tlsKey":                  c.cfg.TLSKeyPair.VolumeMountKeyFilePath(),
 			"allowedOrigins":          []string{"*"},
 			"discoveryAllowedOrigins": []string{"*"},
 		},

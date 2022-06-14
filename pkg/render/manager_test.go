@@ -98,28 +98,22 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
 		))
 		Expect(len(esProxy.VolumeMounts)).To(Equal(1))
-		Expect(esProxy.VolumeMounts[0].Name).To(Equal("elastic-ca-cert-volume"))
-		Expect(esProxy.VolumeMounts[0].MountPath).To(Equal("/etc/ssl/elastic/"))
+		Expect(esProxy.VolumeMounts[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+		Expect(esProxy.VolumeMounts[0].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
 
-		Expect(len(voltron.VolumeMounts)).To(Equal(3))
+		Expect(len(voltron.VolumeMounts)).To(Equal(2))
 		Expect(voltron.VolumeMounts[0].Name).To(Equal(render.ManagerTLSSecretName))
 		Expect(voltron.VolumeMounts[0].MountPath).To(Equal("/manager-tls"))
-		Expect(voltron.VolumeMounts[1].Name).To(Equal(render.KibanaPublicCertSecret))
-		Expect(voltron.VolumeMounts[1].MountPath).To(Equal("/certs/kibana"))
-		Expect(voltron.VolumeMounts[2].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
-		Expect(voltron.VolumeMounts[2].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
+		Expect(voltron.VolumeMounts[1].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+		Expect(voltron.VolumeMounts[1].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
 
 		Expect(voltron.Env).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: "true"}))
 
-		Expect(len(deployment.Spec.Template.Spec.Volumes)).To(Equal(4))
+		Expect(len(deployment.Spec.Template.Spec.Volumes)).To(Equal(2))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ManagerTLSSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ManagerTLSSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[1].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 		Expect(deployment.Spec.Template.Spec.Volumes[1].VolumeSource.ConfigMap.Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
-		Expect(deployment.Spec.Template.Spec.Volumes[2].Name).To(Equal(relasticsearch.PublicCertSecret))
-		Expect(deployment.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal(relasticsearch.PublicCertSecret))
-		Expect(deployment.Spec.Template.Spec.Volumes[3].Name).To(Equal("elastic-ca-cert-volume"))
-		Expect(deployment.Spec.Template.Spec.Volumes[3].Secret.SecretName).To(Equal(relasticsearch.PublicCertSecret))
 	})
 
 	It("should not proxy compliance if the feature is not active", func() {
@@ -245,9 +239,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 		d := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		// tigera-manager volumes/volumeMounts checks.
-		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(4))
+		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(2))
 		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(oidcEnvVar))
-		Expect(len(d.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(2))
+		Expect(len(d.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(1))
 	})
 
 	It("should render multicluster settings properly", func() {
@@ -293,37 +287,29 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(voltron.Name).To(Equal("tigera-voltron"))
 		rtest.ExpectEnv(voltron.Env, "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", "true")
 
-		Expect(len(esProxy.VolumeMounts)).To(Equal(2))
+		Expect(len(esProxy.VolumeMounts)).To(Equal(1))
 		Expect(esProxy.VolumeMounts[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 		Expect(esProxy.VolumeMounts[0].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
-		Expect(esProxy.VolumeMounts[1].Name).To(Equal("elastic-ca-cert-volume"))
-		Expect(esProxy.VolumeMounts[1].MountPath).To(Equal("/etc/ssl/elastic/"))
 
-		Expect(len(voltron.VolumeMounts)).To(Equal(5))
+		Expect(len(voltron.VolumeMounts)).To(Equal(4))
 		Expect(voltron.VolumeMounts[0].Name).To(Equal(render.ManagerTLSSecretName))
 		Expect(voltron.VolumeMounts[0].MountPath).To(Equal("/manager-tls"))
-		Expect(voltron.VolumeMounts[1].Name).To(Equal(render.KibanaPublicCertSecret))
-		Expect(voltron.VolumeMounts[1].MountPath).To(Equal("/certs/kibana"))
-		Expect(voltron.VolumeMounts[2].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
-		Expect(voltron.VolumeMounts[2].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
-		Expect(voltron.VolumeMounts[3].Name).To(Equal(render.ManagerInternalTLSSecretName))
-		Expect(voltron.VolumeMounts[3].MountPath).To(Equal("/internal-manager-tls"))
-		Expect(voltron.VolumeMounts[4].Name).To(Equal(render.VoltronTunnelSecretName))
-		Expect(voltron.VolumeMounts[4].MountPath).To(Equal("/tigera-management-cluster-connection"))
+		Expect(voltron.VolumeMounts[1].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+		Expect(voltron.VolumeMounts[1].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
+		Expect(voltron.VolumeMounts[2].Name).To(Equal(render.ManagerInternalTLSSecretName))
+		Expect(voltron.VolumeMounts[2].MountPath).To(Equal("/internal-manager-tls"))
+		Expect(voltron.VolumeMounts[3].Name).To(Equal(render.VoltronTunnelSecretName))
+		Expect(voltron.VolumeMounts[3].MountPath).To(Equal("/tigera-management-cluster-connection"))
 
-		Expect(len(deployment.Spec.Template.Spec.Volumes)).To(Equal(6))
+		Expect(len(deployment.Spec.Template.Spec.Volumes)).To(Equal(4))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ManagerTLSSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ManagerTLSSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[1].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 		Expect(deployment.Spec.Template.Spec.Volumes[1].VolumeSource.ConfigMap.Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
-		Expect(deployment.Spec.Template.Spec.Volumes[2].Name).To(Equal(render.KibanaPublicCertSecret))
-		Expect(deployment.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal(render.KibanaPublicCertSecret))
-		Expect(deployment.Spec.Template.Spec.Volumes[3].Name).To(Equal(render.ManagerInternalTLSSecretName))
-		Expect(deployment.Spec.Template.Spec.Volumes[3].Secret.SecretName).To(Equal(render.ManagerInternalTLSSecretName))
-		Expect(deployment.Spec.Template.Spec.Volumes[4].Name).To(Equal(render.VoltronTunnelSecretName))
-		Expect(deployment.Spec.Template.Spec.Volumes[4].Secret.SecretName).To(Equal(render.VoltronTunnelSecretName))
-		Expect(deployment.Spec.Template.Spec.Volumes[5].Name).To(Equal("elastic-ca-cert-volume"))
-		Expect(deployment.Spec.Template.Spec.Volumes[5].Secret.SecretName).To(Equal(relasticsearch.PublicCertSecret))
+		Expect(deployment.Spec.Template.Spec.Volumes[2].Name).To(Equal(render.ManagerInternalTLSSecretName))
+		Expect(deployment.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal(render.ManagerInternalTLSSecretName))
+		Expect(deployment.Spec.Template.Spec.Volumes[3].Name).To(Equal(render.VoltronTunnelSecretName))
+		Expect(deployment.Spec.Template.Spec.Volumes[3].Secret.SecretName).To(Equal(render.VoltronTunnelSecretName))
 
 		clusterRole := rtest.GetResource(resources, render.ManagerClusterRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
@@ -424,7 +410,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 	BeforeEach(func() {
 		var err error
-		kp, err = certificatemanagement.NewKeyPair(rtest.CreateCertSecret(render.ManagerTLSSecretName, common.OperatorNamespace(), render.ManagerTLSSecretName), []string{""}, "")
+		secret, err := certificatemanagement.CreateSelfSignedSecret(render.ManagerTLSSecretName, common.OperatorNamespace(), render.ManagerTLSSecretName, nil)
+		Expect(err).NotTo(HaveOccurred())
+		kp = certificatemanagement.NewKeyPair(secret, []string{""}, "")
 		Expect(err).NotTo(HaveOccurred())
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
@@ -516,7 +504,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		csrInitContainer := deployment.Spec.Template.Spec.InitContainers[0]
 		Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", render.ManagerTLSSecretName)))
 
-		Expect(len(deployment.Spec.Template.Spec.Volumes)).To(Equal(4))
+		Expect(len(deployment.Spec.Template.Spec.Volumes)).To(Equal(2))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ManagerTLSSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Secret).To(BeNil())
 	})

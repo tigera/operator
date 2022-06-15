@@ -199,6 +199,13 @@ spec:
                       x days, use a retention period of x+1. Default: 91'
                     format: int32
                     type: integer
+                  dnsLogs:
+                    description: 'DNSLogs configures the retention period for DNS
+                      logs, in days.  Logs written on a day that started at least
+                      this long ago are removed.  To keep logs for at least x days,
+                      use a retention period of x+1. Default: 8'
+                    format: int32
+                    type: integer
                   flows:
                     description: 'Flows configures the retention period for flow logs,
                       in days.  Logs written on a day that started at least this long

@@ -141,14 +141,11 @@ type Retention struct {
 	// +optional
 	ComplianceReports *int32 `json:"complianceReports"`
 
-	// DNSReports configures the retention period for DNS reports, in days. Reports are output
-	// from the analysis of the system state and audit events for compliance reporting.
-	// Consult the DNS Reporting documentation for more details on reports.
-	// Logs written on a day that started at least this long ago are
-	// removed.  To keep logs for at least x days, use a retention period of x+1.
+	// DNSLogs configures the retention period for DNS logs, in days.  Logs written on a day that started at least this long ago
+	// are removed.  To keep logs for at least x days, use a retention period of x+1.
 	// Default: 8
 	// +optional
-	DNSReports *int32 `json:"dnsReports"`
+	DNSLogs *int32 `json:"dnsLogs"`
 }
 
 // LogStorageComponentName CRD enum

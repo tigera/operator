@@ -104,7 +104,7 @@ var _ = Describe("Calico windows upgrader", func() {
 
 		n1 := test.CreateNode(cs, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
 		n2 := test.CreateWindowsNode(cs, "node2", operator.Calico, "v3.21.999")
-		n3 := test.CreateWindowsNode(cs, "node3", operator.Calico, components.ComponentWindowsUpgrade.Version)
+		n3 := test.CreateWindowsNode(cs, "node3", operator.Calico, components.ComponentWindows.Version)
 
 		cr.KubernetesProvider = operator.ProviderEKS
 		cr.Variant = operator.TigeraSecureEnterprise
@@ -166,7 +166,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		// - n3 is a Windows node running Enterprise using latest version so it is up-to-date.
 		n1 := test.CreateNode(cs, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
 		n2 := test.CreateWindowsNode(cs, "node2", operator.Calico, "v3.21.999")
-		n3 := test.CreateWindowsNode(cs, "node3", operator.TigeraSecureEnterprise, components.ComponentTigeraWindowsUpgrade.Version)
+		n3 := test.CreateWindowsNode(cs, "node3", operator.TigeraSecureEnterprise, components.ComponentTigeraWindows.Version)
 		mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{"node2"}, []string{"node3"}, nil)
 
 		c.Start(ctx)
@@ -195,7 +195,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{}, mock.Anything, nil)
 
 		// Set the latest Calico Windows variant and version like the node service would.
-		setNodeVariantAndVersion(cs, nodeIndexInformer, n2, operator.TigeraSecureEnterprise, components.ComponentTigeraWindowsUpgrade.Version)
+		setNodeVariantAndVersion(cs, nodeIndexInformer, n2, operator.TigeraSecureEnterprise, components.ComponentTigeraWindows.Version)
 
 		// Ensure that when calicoWindowsUpgrader runs again, the node taint and
 		// label are removed.
@@ -211,7 +211,7 @@ var _ = Describe("Calico windows upgrader", func() {
 	It("should upgrade outdated nodes if the installation variant differs", func() {
 		// Create a Windows node running Calico with a version that is the same
 		// as the latest Enteprise version.
-		n1 := test.CreateWindowsNode(cs, "node1", operator.Calico, components.ComponentTigeraWindowsUpgrade.Version)
+		n1 := test.CreateWindowsNode(cs, "node1", operator.Calico, components.ComponentTigeraWindows.Version)
 		mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{"node1"}, []string{}, nil)
 
 		c.Start(ctx)
@@ -232,7 +232,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		// label are removed.
 		mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{}, []string{"node1"}, nil)
 
-		setNodeVariantAndVersion(cs, nodeIndexInformer, n1, operator.TigeraSecureEnterprise, components.ComponentTigeraWindowsUpgrade.Version)
+		setNodeVariantAndVersion(cs, nodeIndexInformer, n1, operator.TigeraSecureEnterprise, components.ComponentTigeraWindows.Version)
 
 		Eventually(func() error {
 			return assertNodesFinishedUpgrade(cs, n1)
@@ -284,7 +284,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		// Ensure that when calicoWindowsUpgrader runs again, the node taint and
 		// label are removed.
 		mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{}, []string{"node1"}, nil)
-		setNodeVariantAndVersion(cs, nodeIndexInformer, n1, operator.TigeraSecureEnterprise, components.ComponentTigeraWindowsUpgrade.Version)
+		setNodeVariantAndVersion(cs, nodeIndexInformer, n1, operator.TigeraSecureEnterprise, components.ComponentTigeraWindows.Version)
 
 		Eventually(func() error {
 			return assertNodesFinishedUpgrade(cs, n1)
@@ -321,7 +321,7 @@ var _ = Describe("Calico windows upgrader", func() {
 		Expect(err).To(BeNil())
 
 		// Set the latest Calico Windows variant and version like the node service would.
-		setNodeVariantAndVersion(cs, nodeIndexInformer, n1, operator.TigeraSecureEnterprise, components.ComponentTigeraWindowsUpgrade.Version)
+		setNodeVariantAndVersion(cs, nodeIndexInformer, n1, operator.TigeraSecureEnterprise, components.ComponentTigeraWindows.Version)
 
 		// Ensure that when calicoWindowsUpgrader runs again, the node taint and
 		// label are removed.

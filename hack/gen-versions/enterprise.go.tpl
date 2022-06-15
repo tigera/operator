@@ -265,8 +265,8 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index .Components "windows-upgrade" }}
-	ComponentTigeraWindowsUpgrade = component{
+{{ with index .Components "windows" }}
+	ComponentTigeraWindows = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
@@ -342,12 +342,12 @@ var (
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
-		ComponentTigeraWindowsUpgrade,
-		ComponentDikastes,
+		ComponentTigeraWindows,
 		ComponentImageAssuranceApi,
 		ComponentImageAssuranceScanner,
 		ComponentImageAssuranceDBMigrator,
 		ComponentImageAssuranceCAW,
+		ComponentDikastes,
 		ComponentSasha,
 	}
 )

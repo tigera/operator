@@ -1228,7 +1228,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 
 				// Create node with current Enterprise version.
-				n1 := test.CreateWindowsNode(cs, "windows1", cr.Spec.Variant, components.ComponentTigeraWindowsUpgrade.Version)
+				n1 := test.CreateWindowsNode(cs, "windows1", cr.Spec.Variant, components.ComponentTigeraWindows.Version)
 
 				mockStatus.On("SetWindowsUpgradeStatus", []string{}, []string{}, []string{"windows1"}, nil)
 

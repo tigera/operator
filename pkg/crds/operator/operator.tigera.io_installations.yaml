@@ -459,7 +459,6 @@ spec:
                 - AKS
                 - OpenShift
                 - DockerEnterprise
-                - RKE2
                 type: string
               nodeMetricsPort:
                 description: NodeMetricsPort specifies which port calico/node serves
@@ -1210,7 +1209,6 @@ spec:
                     - AKS
                     - OpenShift
                     - DockerEnterprise
-                    - RKE2
                     type: string
                   nodeMetricsPort:
                     description: NodeMetricsPort specifies which port calico/node

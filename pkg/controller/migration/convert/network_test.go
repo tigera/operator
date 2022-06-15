@@ -195,35 +195,7 @@ var _ = Describe("Convert network tests", func() {
 					Value: "false",
 				},
 			)
-			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig()).Build()
-			cfg, err := Convert(ctx, c)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(cfg).ToNot(BeNil())
-			Expect(cfg.Spec.CNI.Type).To(Equal(operatorv1.PluginCalico))
-			Expect(cfg.Spec.CNI.IPAM.Type).To(Equal(operatorv1.IPAMPluginCalico))
-			Expect(*cfg.Spec.CalicoNetwork.BGP).To(Equal(operatorv1.BGPEnabled))
-
-			expectedV4pool, err := convertPool(*v4pool)
-			Expect(err).ToNot(HaveOccurred())
-			Expect(cfg.Spec.CalicoNetwork.IPPools).To(ContainElements(expectedV4pool))
-		})
-		It("migrate default with IPv6 and Autodetection method explicitly disabled", func() {
-			ds := emptyNodeSpec()
-			ds.Spec.Template.Spec.Containers[0].Env = append(ds.Spec.Template.Spec.Containers[0].Env,
-				corev1.EnvVar{
-					Name:  "IP6",
-					Value: "none",
-				},
-				corev1.EnvVar{
-					Name:  "IP6_AUTODETECTION_METHOD",
-					Value: "none",
-				},
-				corev1.EnvVar{
-					Name:  "FELIX_IPV6SUPPORT",
-					Value: "false",
-				},
-			)
-			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig()).Build()
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), v4pool, emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg).ToNot(BeNil())

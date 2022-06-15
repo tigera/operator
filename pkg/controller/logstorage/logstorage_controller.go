@@ -225,6 +225,10 @@ func fillDefaults(opr *operatorv1.LogStorage) {
 		var crr int32 = 91
 		opr.Spec.Retention.ComplianceReports = &crr
 	}
+	if opr.Spec.Retention.DNSLogs == nil {
+		var dlr int32 = 8
+		opr.Spec.Retention.DNSLogs = &dlr
+	}
 
 	if opr.Spec.Indices == nil {
 		opr.Spec.Indices = &operatorv1.Indices{}

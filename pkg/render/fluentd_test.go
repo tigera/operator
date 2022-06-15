@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -239,17 +239,17 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 		container := ds.Spec.Template.Spec.Containers[0]
 
-		Expect(container.ReadinessProbe.Exec.Command).To(ConsistOf([]string{`c:\ruby26\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/readiness.sh`}))
+		Expect(container.ReadinessProbe.Exec.Command).To(ConsistOf([]string{`c:\ruby\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/readiness.sh`}))
 		Expect(container.ReadinessProbe.TimeoutSeconds).To(BeEquivalentTo(10))
 		Expect(container.ReadinessProbe.PeriodSeconds).To(BeEquivalentTo(10))
 		Expect(container.ReadinessProbe.FailureThreshold).To(BeEquivalentTo(3))
 
-		Expect(container.LivenessProbe.Exec.Command).To(ConsistOf([]string{`c:\ruby26\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/liveness.sh`}))
+		Expect(container.LivenessProbe.Exec.Command).To(ConsistOf([]string{`c:\ruby\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/liveness.sh`}))
 		Expect(container.LivenessProbe.TimeoutSeconds).To(BeEquivalentTo(10))
 		Expect(container.LivenessProbe.PeriodSeconds).To(BeEquivalentTo(10))
 		Expect(container.LivenessProbe.FailureThreshold).To(BeEquivalentTo(3))
 
-		Expect(container.StartupProbe.Exec.Command).To(ConsistOf([]string{`c:\ruby26\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/liveness.sh`}))
+		Expect(container.StartupProbe.Exec.Command).To(ConsistOf([]string{`c:\ruby\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/liveness.sh`}))
 		Expect(container.StartupProbe.TimeoutSeconds).To(BeEquivalentTo(20))
 		Expect(container.StartupProbe.PeriodSeconds).To(BeEquivalentTo(20))
 		Expect(container.StartupProbe.FailureThreshold).To(BeEquivalentTo(10))

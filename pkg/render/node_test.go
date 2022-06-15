@@ -22,6 +22,7 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gstruct"
+	"github.com/tigera/operator/pkg/ptr"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -2614,6 +2615,28 @@ var _ = Describe("Node rendering tests", func() {
 		for _, v := range expectedEnvVars {
 			Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ContainElement(v))
 		}
+	})
+
+	It("should render controlPlaneTolerations", func() {
+		sampleUserToleration := corev1.Toleration{
+			Key:               "test",
+			Operator:          corev1.TolerationOpExists,
+			Value:             "value",
+			Effect:            corev1.TaintEffectNoExecute,
+			TolerationSeconds: ptr.Int64ToPtr(1200),
+		}
+
+		defaultInstance.ControlPlaneTolerations = []corev1.Toleration{
+			sampleUserToleration,
+		}
+		nodeComponent := render.Node(&cfg)
+		resources, _ := nodeComponent.Objects()
+
+		dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+		Expect(dsResource).ToNot(BeNil())
+		ds := dsResource.(*appsv1.DaemonSet)
+
+		Expect(ds.Spec.Template.Spec.Tolerations).To(ContainElement(sampleUserToleration))
 	})
 
 	It("should render resourcerequirements", func() {

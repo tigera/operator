@@ -742,6 +742,11 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 		annotations[bgpBindModeHashAnnotation] = rmeta.AnnotationHash(c.cfg.BindMode)
 	}
 
+	tolerations := rmeta.TolerateAll
+	if len(c.cfg.Installation.ControlPlaneTolerations) != 0 {
+		tolerations = c.cfg.Installation.ControlPlaneTolerations
+	}
+
 	// Determine the name to use for the calico/node daemonset. For mixed-mode, we run the enterprise DaemonSet
 	// with its own name so as to not conflict.
 	ds := appsv1.DaemonSet{
@@ -756,7 +761,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
-					Tolerations:                   rmeta.TolerateAll,
+					Tolerations:                   tolerations,
 					Affinity:                      affinity,
 					ImagePullSecrets:              c.cfg.Installation.ImagePullSecrets,
 					ServiceAccountName:            CalicoNodeObjectName,

@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/tigera/operator/pkg/ptr"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -316,33 +318,30 @@ var _ = Describe("LogStorage controller", func() {
 						mockStatus.AssertExpectations(GinkgoT())
 					})
 
-					//It("should update the default settings for DNS logs", func() {
-					//	retain10 := int32(10)
-					//	retain1 := int32(1)
-					//	mockStatus.On("AddDaemonsets", mock.Anything).Return()
-					//	mockStatus.On("AddDeployments", mock.Anything).Return()
-					//	mockStatus.On("AddStatefulSets", mock.Anything).Return()
-					//	mockStatus.On("AddCronJobs", mock.Anything)
-					//	mockStatus.On("ClearDegraded", mock.Anything).Return()
-					//	mockStatus.On("ReadyToMonitor")
-					//
-					//	r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain)
-					//	Expect(err).ShouldNot(HaveOccurred())
-					//
-					//	ls := &operatorv1.LogStorage{}
-					//	Expect(cli.Get(ctx, utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
-					//	Expect(ls.Spec.Retention.DNSLogs).To(Equal(&retain1))
-					//
-					//	var preDefaultPatchFrom client.Patch
-					//	//create predefaultpatch
-					//	ls1 := &operatorv1.LogStorage{}
-					//	ls1.Spec.Retention.DNSLogs = &retain10
-					//	preDefaultPatchFrom = client.MergeFrom(ls1.DeepCopy())
-					//	err = r.client.Patch(ctx, ls, preDefaultPatchFrom)
-					//	Expect(err).ShouldNot(HaveOccurred())
-					//	Expect(cli.Get(ctx, utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
-					//	Expect(ls.Spec.Retention.DNSLogs).To(Equal(&retain10))
-					//})
+					It("should update the default settings for DNS logs", func() {
+						retain1 := int32(1)
+						mockStatus.On("AddDaemonsets", mock.Anything).Return()
+						mockStatus.On("AddDeployments", mock.Anything).Return()
+						mockStatus.On("AddStatefulSets", mock.Anything).Return()
+						mockStatus.On("AddCronJobs", mock.Anything)
+						mockStatus.On("ClearDegraded", mock.Anything).Return()
+						mockStatus.On("ReadyToMonitor")
+
+						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain)
+						Expect(err).ShouldNot(HaveOccurred())
+
+						ls := &operatorv1.LogStorage{}
+						Expect(cli.Get(ctx, utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
+						Expect(ls.Spec.Retention.DNSLogs).To(Equal(&retain1))
+
+						ls.Spec.Retention = &operatorv1.Retention{
+							DNSLogs: ptr.Int32ToPtr(10),
+						}
+						err = r.client.Update(ctx, ls)
+						Expect(err).ShouldNot(HaveOccurred())
+						Expect(cli.Get(ctx, utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
+						Expect(ls.Spec.Retention.DNSLogs).To(Equal(ptr.Int32ToPtr(10)))
+					})
 				})
 			})
 		})

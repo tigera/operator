@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ var (
 	FelixCommonName          = "typha-client"
 	NodePriorityClassName    = "system-node-critical"
 	ClusterPriorityClassName = "system-cluster-critical"
+	K8sAppLabelName          = "k8s-app"
 )
 
 // A Renderer is capable of generating components to be installed on the cluster.

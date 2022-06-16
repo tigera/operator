@@ -40,7 +40,6 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/test"
@@ -839,17 +838,47 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(deploy.Spec.Template.Spec.Affinity).To(BeNil())
 	})
 
-	It("should render PodAffinity when ControlPlaneReplicas is greater than 1", func() {
+	It("should render zone/host PodAffinity when ControlPlaneReplicas is greater than 1", func() {
 		var replicas int32 = 2
 		cfg.Installation.ControlPlaneReplicas = &replicas
+
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
+		apiserverSelector := &metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"k8s-app": "tigera-apiserver",
+			},
+		}
+
+		// expected zone pod anti-affinity term
+		expectedZonePAA := corev1.WeightedPodAffinityTerm{
+			Weight: 100,
+			PodAffinityTerm: corev1.PodAffinityTerm{
+				LabelSelector: apiserverSelector,
+				TopologyKey:   "topology.kubernetes.io/zone",
+			},
+		}
+
+		expectedHostPAA := corev1.WeightedPodAffinityTerm{
+			Weight: 100,
+			PodAffinityTerm: corev1.PodAffinityTerm{
+				LabelSelector: apiserverSelector,
+				Namespaces:    []string{"tigera-system"},
+				TopologyKey:   "kubernetes.io/hostname",
+			},
+		}
+
 		deploy, ok := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
 		Expect(deploy.Spec.Template.Spec.Affinity).NotTo(BeNil())
-		Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("tigera-apiserver", "tigera-system")))
+		paa := deploy.Spec.Template.Spec.Affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution
+
+		// deployment should have both zone/host anti-affinity
+		Expect(paa).To(HaveLen(2))
+		Expect(paa[0]).To(Equal(expectedZonePAA))
+		Expect(paa[1]).To(Equal(expectedHostPAA))
 	})
 })
 
@@ -1419,7 +1448,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(deploy.Spec.Template.Spec.Affinity).To(BeNil())
 	})
 
-	It("should render PodAffinity when ControlPlaneReplicas is greater than 1", func() {
+	It("should render zone/host PodAffinity when ControlPlaneReplicas is greater than 1", func() {
 		var replicas int32 = 2
 		cfg.Installation.ControlPlaneReplicas = &replicas
 
@@ -1427,9 +1456,38 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
+		apiserverSelector := &metav1.LabelSelector{
+			MatchLabels: map[string]string{
+				"k8s-app": "calico-apiserver",
+			},
+		}
+
+		// expected zone pod anti-affinity term
+		expectedZonePAA := corev1.WeightedPodAffinityTerm{
+			Weight: 100,
+			PodAffinityTerm: corev1.PodAffinityTerm{
+				LabelSelector: apiserverSelector,
+				TopologyKey:   "topology.kubernetes.io/zone",
+			},
+		}
+
+		expectedHostPAA := corev1.WeightedPodAffinityTerm{
+			Weight: 100,
+			PodAffinityTerm: corev1.PodAffinityTerm{
+				LabelSelector: apiserverSelector,
+				Namespaces:    []string{"calico-apiserver"},
+				TopologyKey:   "kubernetes.io/hostname",
+			},
+		}
+
 		deploy, ok := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
 		Expect(deploy.Spec.Template.Spec.Affinity).NotTo(BeNil())
-		Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("calico-apiserver", "calico-apiserver")))
+		paa := deploy.Spec.Template.Spec.Affinity.PodAntiAffinity.PreferredDuringSchedulingIgnoredDuringExecution
+
+		// deployment should have both zone/host anti-affinity
+		Expect(paa).To(HaveLen(2))
+		Expect(paa[0]).To(Equal(expectedZonePAA))
+		Expect(paa[1]).To(Equal(expectedHostPAA))
 	})
 })

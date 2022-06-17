@@ -1314,6 +1314,10 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
 	const schedule = "@hourly"
 
 	return &batchv1beta.CronJob{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "CronJob",
+			APIVersion: "batch/v1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      EsCuratorName,
 			Namespace: ElasticsearchNamespace,

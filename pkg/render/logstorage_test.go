@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -74,6 +74,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						AuditReports:      &retention,
 						Snapshots:         &retention,
 						ComplianceReports: &retention,
+						DNSLogs:           &retention,
 					},
 				},
 				Status: operatorv1.LogStorageStatus{
@@ -392,9 +393,22 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: common.OperatorNamespace()}},
 				}
 				cfg.ClusterDomain = dns.DefaultClusterDomain
-				component := render.LogStorage(cfg)
 
+				component := render.LogStorage(cfg)
 				createResources, deleteResources := component.Objects()
+
+				cronjob, ok := rtest.GetResource(createResources, "elastic-curator", "tigera-elasticsearch", "batch", "v1", "CronJob").(*batchv1beta.CronJob)
+				Expect(ok).To(BeTrue())
+
+				Expect(cronjob.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Env).To(ContainElements([]corev1.EnvVar{
+					{Name: "EE_FLOWS_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(1)},
+					{Name: "EE_AUDIT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(1)},
+					{Name: "EE_SNAPSHOT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(1)},
+					{Name: "EE_COMPLIANCE_REPORT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(1)},
+					{Name: "EE_DNS_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(1)},
+					{Name: "EE_MAX_TOTAL_STORAGE_PCT", Value: fmt.Sprint(80)},
+					{Name: "EE_MAX_LOGS_STORAGE_PCT", Value: fmt.Sprint(70)},
+				}))
 
 				compareResources(createResources, expectedCreateResources)
 				compareResources(deleteResources, []resourceTestObj{})
@@ -593,6 +607,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						AuditReports:      &retention,
 						Snapshots:         &retention,
 						ComplianceReports: &retention,
+						DNSLogs:           &retention,
 					},
 				},
 				Status: operatorv1.LogStorageStatus{
@@ -1080,6 +1095,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						AuditReports:      &retention,
 						Snapshots:         &retention,
 						ComplianceReports: &retention,
+						DNSLogs:           &retention,
 					},
 				},
 				Status: operatorv1.LogStorageStatus{
@@ -1178,6 +1194,7 @@ var deleteLogStorageTests = func(managementCluster *operatorv1.ManagementCluster
 						AuditReports:      &retention,
 						Snapshots:         &retention,
 						ComplianceReports: &retention,
+						DNSLogs:           &retention,
 					},
 				},
 				Status: operatorv1.LogStorageStatus{

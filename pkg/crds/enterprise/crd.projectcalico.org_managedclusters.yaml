@@ -39,6 +39,10 @@ spec:
                   component into the actual application cluster corresponding to this
                   Managed Cluster
                 type: string
+              operatorNamespace:
+                description: The namespace of the managed cluster's operator. This
+                  value is used in the generation of the InstallationManifest.
+                type: string
             type: object
           status:
             properties:

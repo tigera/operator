@@ -605,6 +605,11 @@ type InstallationStatus struct {
 	// Computed is the final installation including overlaid resources.
 	// +optional
 	Computed *InstallationSpec `json:"computed,omitempty"`
+
+	// Conditions represents the latest observed set of conditions for the component. A component may be one or more of
+	// Ready, Progressing, Degraded or other customer types.
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true

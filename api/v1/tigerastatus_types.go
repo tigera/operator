@@ -1,5 +1,5 @@
 /*
-
+Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -74,6 +74,9 @@ const (
 
 	// Degraded means the component is not operating as desired and user action is required.
 	ComponentDegraded StatusConditionType = "Degraded"
+
+	// Ready indicates that the component is healthy and ready.it is identical to Available and used in Status conditions for CRs.
+	ComponentReady StatusConditionType = "Ready"
 )
 
 // TigeraStatusCondition represents a condition attached to a particular component.
@@ -93,6 +96,12 @@ type TigeraStatusCondition struct {
 
 	// Optionally, a detailed message providing additional context.
 	Message string `json:"message,omitempty"`
+
+	// observedGeneration represents the generation that the condition was set based upon.
+	// For instance, if generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+	// with respect to the current state of the instance.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -103,6 +112,29 @@ type TigeraStatusList struct {
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []TigeraStatus `json:"items"`
 }
+
+// TigeraStatusReason represents the reason for a particular condition. A reason may be one of the below.
+type TigeraStatusReason string
+
+const (
+	AllObjectsAvailable       TigeraStatusReason = "AllObjectsAvailable"
+	ResourceNotReady          TigeraStatusReason = "ResourceNotReady"
+	PodFailure                TigeraStatusReason = "PodFailure"
+	CertificateError          TigeraStatusReason = "CertificateError"
+	InvalidConfigurationError TigeraStatusReason = "InvalidConfigurationError"
+	ResourceCreateError       TigeraStatusReason = "ResourceCreateError"
+	ResourceMigrationError    TigeraStatusReason = "ResourceMigrationError"
+	ResourceNotFound          TigeraStatusReason = "ResourceNotFound"
+	ResourcePatchError        TigeraStatusReason = "ResourcePatchError"
+	ResourceReadError         TigeraStatusReason = "ResourceReadError"
+	ResourceScalingError      TigeraStatusReason = "ResourceScalingError"
+	ResourceUpdateError       TigeraStatusReason = "ResourceUpdateError"
+	ResourceValidationError   TigeraStatusReason = "ResourceValidationError"
+	MigrationError            TigeraStatusReason = "MigrationError"
+	InternalServerError       TigeraStatusReason = "InternalServerError"
+	NotApplicable             TigeraStatusReason = "NotApplicable"
+	Unknown                   TigeraStatusReason = "Unknown"
+)
 
 func init() {
 	SchemeBuilder.Register(&TigeraStatus{}, &TigeraStatusList{})

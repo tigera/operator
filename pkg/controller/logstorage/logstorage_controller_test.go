@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/tigera/operator/pkg/ptr"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -146,6 +148,7 @@ var _ = Describe("LogStorage controller", func() {
 				Expect(ls.Spec.Retention.AuditReports).To(Equal(&retain91))
 				Expect(ls.Spec.Retention.ComplianceReports).To(Equal(&retain91))
 				Expect(ls.Spec.Retention.Snapshots).To(Equal(&retain91))
+				Expect(ls.Spec.Retention.DNSLogs).To(Equal(&retain8))
 			})
 
 			It("should set the retention values to the default settings", func() {
@@ -316,6 +319,31 @@ var _ = Describe("LogStorage controller", func() {
 						Expect(cli.Get(ctx, utils.DefaultTSEEInstanceKey, ls)).Should(HaveOccurred())
 
 						mockStatus.AssertExpectations(GinkgoT())
+					})
+
+					It("should update the default settings for DNS logs", func() {
+						retain1 := int32(1)
+						mockStatus.On("AddDaemonsets", mock.Anything).Return()
+						mockStatus.On("AddDeployments", mock.Anything).Return()
+						mockStatus.On("AddStatefulSets", mock.Anything).Return()
+						mockStatus.On("AddCronJobs", mock.Anything)
+						mockStatus.On("ClearDegraded", mock.Anything).Return()
+						mockStatus.On("ReadyToMonitor")
+
+						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain)
+						Expect(err).ShouldNot(HaveOccurred())
+
+						ls := &operatorv1.LogStorage{}
+						Expect(cli.Get(ctx, utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
+						Expect(ls.Spec.Retention.DNSLogs).To(Equal(&retain1))
+
+						ls.Spec.Retention = &operatorv1.Retention{
+							DNSLogs: ptr.Int32ToPtr(10),
+						}
+						err = r.client.Update(ctx, ls)
+						Expect(err).ShouldNot(HaveOccurred())
+						Expect(cli.Get(ctx, utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
+						Expect(ls.Spec.Retention.DNSLogs).To(Equal(ptr.Int32ToPtr(10)))
 					})
 				})
 			})
@@ -1439,6 +1467,7 @@ var _ = Describe("LogStorage controller", func() {
 		var arr int32 = 91
 		var sr int32 = 91
 		var crr int32 = 91
+		var dlr int32 = 8
 		var replicas int32 = render.DefaultElasticsearchReplicas
 		limits := corev1.ResourceList{}
 		requests := corev1.ResourceList{}
@@ -1452,6 +1481,7 @@ var _ = Describe("LogStorage controller", func() {
 				AuditReports:      &arr,
 				Snapshots:         &sr,
 				ComplianceReports: &crr,
+				DNSLogs:           &dlr,
 			},
 			Indices: &operatorv1.Indices{
 				Replicas: &replicas,
@@ -1502,6 +1532,7 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 				AuditReports:      &retention,
 				Snapshots:         &retention,
 				ComplianceReports: &retention,
+				DNSLogs:           &retention,
 			},
 			StorageClassName: storageClass,
 		},

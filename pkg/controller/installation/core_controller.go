@@ -197,7 +197,9 @@ func add(mgr manager.Manager, r *ReconcileInstallation) error {
 	}
 
 	// Watch for changes to TigeraStatus.
-	err = c.Watch(&source.Kind{Type: &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: InstallationName}}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &operator.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: "calico"}}}, &handler.EnqueueRequestForObject{}, predicate.NewPredicateFuncs(func(object client.Object) bool {
+		return object.GetName() == InstallationName
+	}))
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch calico Tigerastatus: %w", err)
 	}

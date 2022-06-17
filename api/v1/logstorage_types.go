@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -140,6 +140,12 @@ type Retention struct {
 	// Default: 91
 	// +optional
 	ComplianceReports *int32 `json:"complianceReports"`
+
+	// DNSLogs configures the retention period for DNS logs, in days.  Logs written on a day that started at least this long ago
+	// are removed.  To keep logs for at least x days, use a retention period of x+1.
+	// Default: 8
+	// +optional
+	DNSLogs *int32 `json:"dnsLogs"`
 }
 
 // LogStorageComponentName CRD enum

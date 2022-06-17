@@ -146,6 +146,7 @@ var _ = Describe("LogStorage controller", func() {
 				Expect(ls.Spec.Retention.AuditReports).To(Equal(&retain91))
 				Expect(ls.Spec.Retention.ComplianceReports).To(Equal(&retain91))
 				Expect(ls.Spec.Retention.Snapshots).To(Equal(&retain91))
+				Expect(ls.Spec.Retention.DNSLogs).To(Equal(&retain8))
 			})
 
 			It("should set the retention values to the default settings", func() {
@@ -1439,6 +1440,7 @@ var _ = Describe("LogStorage controller", func() {
 		var arr int32 = 91
 		var sr int32 = 91
 		var crr int32 = 91
+		var dlr int32 = 8
 		var replicas int32 = render.DefaultElasticsearchReplicas
 		limits := corev1.ResourceList{}
 		requests := corev1.ResourceList{}
@@ -1452,6 +1454,7 @@ var _ = Describe("LogStorage controller", func() {
 				AuditReports:      &arr,
 				Snapshots:         &sr,
 				ComplianceReports: &crr,
+				DNSLogs:           &dlr,
 			},
 			Indices: &operatorv1.Indices{
 				Replicas: &replicas,
@@ -1502,6 +1505,7 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 				AuditReports:      &retention,
 				Snapshots:         &retention,
 				ComplianceReports: &retention,
+				DNSLogs:           &retention,
 			},
 			StorageClassName: storageClass,
 		},

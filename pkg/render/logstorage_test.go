@@ -78,6 +78,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						Snapshots:         &retention,
 						ComplianceReports: &retention,
 						DNSLogs:           &retention,
+						BGPLogs:           &retention,
 					},
 				},
 				Status: operatorv1.LogStorageStatus{
@@ -392,6 +393,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{Name: "EE_SNAPSHOT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(1)},
 					{Name: "EE_COMPLIANCE_REPORT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(1)},
 					{Name: "EE_DNS_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(1)},
+					{Name: "EE_BGP_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(1)},
 					{Name: "EE_MAX_TOTAL_STORAGE_PCT", Value: fmt.Sprint(80)},
 					{Name: "EE_MAX_LOGS_STORAGE_PCT", Value: fmt.Sprint(70)},
 				}))
@@ -594,6 +596,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						Snapshots:         &retention,
 						ComplianceReports: &retention,
 						DNSLogs:           &retention,
+						BGPLogs:           &retention,
 					},
 				},
 				Status: operatorv1.LogStorageStatus{
@@ -1080,6 +1083,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						Snapshots:         &retention,
 						ComplianceReports: &retention,
 						DNSLogs:           &retention,
+						BGPLogs:           &retention,
 					},
 				},
 				Status: operatorv1.LogStorageStatus{

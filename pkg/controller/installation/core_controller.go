@@ -89,7 +89,7 @@ const (
 	CalicoFinalizer         = "tigera.io/operator-cleanup"
 )
 
-//// Node and Installation finalizer
+// // Node and Installation finalizer
 // There is a problem with tearing down the calico resources where removing the calico-node ClusterRoleBinding
 // will block the kube-controller pod from teminating because the CNI plugin no longer has permissions.
 // To ensure this problem does not happen we add a finalizer to the Installation resource and to the
@@ -118,6 +118,12 @@ const (
 var (
 	log                    = logf.Log.WithName("controller_installation")
 	openshiftNetworkConfig = "cluster"
+)
+
+var (
+	typhaNN           = types.NamespacedName{Name: "calico-kube-controllers", Namespace: "calico-system"}
+	nodeNN            = types.NamespacedName{Name: "calico-node", Namespace: "calico-system"}
+	kubeControllersNN = types.NamespacedName{Name: "calico-kube-controllers", Namespace: "calico-system"}
 )
 
 // Add creates a new Installation Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -1113,7 +1119,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		nodeAppArmorProfile = val
 	}
 
-	components := []render.Component{}
+	var components []render.Component
 
 	namespaceCfg := &render.NamespaceConfiguration{
 		Installation: &instance.Spec,
@@ -1154,7 +1160,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			common.CalicoNamespace, criticalPriorityClasses)
 		resourceQuotaComponent := render.NewPassthrough(resourceQuotaObj)
 		components = append(components, resourceQuotaComponent)
-
 	}
 
 	// Build a configuration for rendering calico/typha.
@@ -1167,7 +1172,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		ClusterDomain:          r.clusterDomain,
 		FelixHealthPort:        *felixConfiguration.Spec.HealthPort,
 	}
-	components = append(components, render.Typha(&typhaCfg))
+	typhaComponent := render.Typha(&typhaCfg)
 
 	// See the section 'Node and Installation finalizer' at the top of this file for terminating details.
 	nodeTerminating := false
@@ -1217,7 +1222,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		FelixHealthPort:         *felixConfiguration.Spec.HealthPort,
 		BindMode:                bgpConfiguration.Spec.BindMode,
 	}
-	components = append(components, render.Node(&nodeCfg))
+	nodeComponent := render.Node(&nodeCfg)
 
 	components = append(components,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
@@ -1270,18 +1275,31 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Create a component handler to create or update the rendered components.
-	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+	compHandler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+
+	// Most of the components need only the standard processing.
 	for _, component := range components {
-		if err := handler.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
+		if err := compHandler.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
 			r.SetDegraded("Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
 
+	// Special handling for Typha and Node to deal with dependencies...
+	if err := compHandler.CreateOrUpdateOrDelete(ctx, typhaComponent, nil, utils.WithPreUpdateGate(r.shouldSkipTyphaUpdate)); err != nil {
+		r.SetDegraded("Error creating / updating resource", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if err := compHandler.CreateOrUpdateOrDelete(ctx, nodeComponent, nil, utils.WithPreUpdateGate(r.shouldSkipNodeUpdate)); err != nil {
+		r.SetDegraded("Error creating / updating resource", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// TODO: We handle too many components in this controller at the moment. Once we are done consolidating,
 	// we can have the CreateOrUpdate logic handle this for us.
-	r.status.AddDaemonsets([]types.NamespacedName{{Name: "calico-node", Namespace: "calico-system"}})
-	r.status.AddDeployments([]types.NamespacedName{{Name: "calico-kube-controllers", Namespace: "calico-system"}})
+	r.status.AddDaemonsets([]types.NamespacedName{nodeNN})
+	r.status.AddDeployments([]types.NamespacedName{typhaNN})
+	r.status.AddDeployments([]types.NamespacedName{kubeControllersNN})
 	certificateManager.AddToStatusManager(r.status, render.CSRLabelCalicoSystem)
 
 	// Run this after we have rendered our components so the new (operator created)
@@ -1541,6 +1559,98 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 		}
 	}
 	return nil
+}
+
+// shouldSkipTyphaUpdate is a pre-update gate for use with the ComponentHandler.  It checks if it is safe to update
+// Typha and returns a reason if not.  Otherwise, returns "".
+func (r *ReconcileInstallation) shouldSkipTyphaUpdate(oldObj, newObj client.Object) (skipReason string, err error) {
+	progressReason, failureReason, err := r.status.DaemonSetStatus(nodeNN)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			// calico-node doesn't exist, so nothing stops us updating Typha.
+			err = nil
+		}
+		return
+	}
+	if progressReason != "" || failureReason != "" {
+		skipReason = "Waiting to update Typha until calico-node is ready."
+	}
+	return
+}
+
+// shouldSkipNodeUpdate is a pre-update gate for use with the ComponentHandler.  It checks if it is safe to update
+// node and returns a reason if not.  Otherwise, returns "".
+func (r *ReconcileInstallation) shouldSkipNodeUpdate(oldObj, newObj client.Object) (skipReason string, err error) {
+	oldDS := oldObj.(*appsv1.DaemonSet)
+	newDS := newObj.(*appsv1.DaemonSet)
+
+	// We allow the update strategy to be overridden in the installation resource.  If the user has set it to
+	// OnDelete then they're in control and we don't need to skip anything.
+	if newDS.Spec.UpdateStrategy.Type == appsv1.OnDeleteDaemonSetStrategyType {
+		return
+	}
+
+	// Check if an update is already in progress.  If so, there's nothing to be gained by skipping _this_ update.
+	// We could make things worse if there was something wrong with the old update and this update is intended to
+	// correct it.
+	if oldDS.Status.UpdatedNumberScheduled < oldDS.Status.DesiredNumberScheduled {
+		return
+	}
+
+	// Check if Typha is up and healthy.  If Typha is being restarted then it's not safe to
+	// upgrade node because node can go non-ready while disconnected from typha.  If it goes non-ready
+	// while there's a pending update then Kubernetes will skip doing a rolling update and immediately
+	// kill the non-ready pods.
+	progressReason, failureReason, err := r.status.DeploymentStatus(typhaNN)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			// Typha doesn't exist, so nothing stops us updating Node.
+			err = nil
+		}
+		return
+	}
+	if progressReason != "" || failureReason != "" {
+		skipReason = fmt.Sprintf("Waiting to update %q DaemonSet until %q is ready.", nodeNN, typhaNN)
+		return
+	}
+
+	// If we get here, we're configured for rolling update and typha is happy.  Check if the node DaemonSet itself
+	// is healthy enough to start a rolling update.
+	if newDS.Spec.UpdateStrategy.Type == appsv1.RollingUpdateDaemonSetStrategyType {
+		maxUnavIS := newDS.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable
+		maxUnav := safeCalculateMaxUnavailable(maxUnavIS, oldDS.Status.DesiredNumberScheduled)
+		if int(oldDS.Status.NumberUnavailable) > maxUnav {
+			skipReason = fmt.Sprintf("Waiting to update %q DaemonSet until <%d of its pods are unavailable.", nodeNN, maxUnav)
+		}
+	} else {
+		log.Info("Unknown update strategy type; unable to calculate safety of updating DaemonSet.",
+			"strategy", newDS.Spec.UpdateStrategy.Type)
+	}
+
+	return
+}
+
+func safeCalculateMaxUnavailable(maxUnavPtr *intstr.IntOrString, numNodes int32) int {
+	if maxUnavPtr == nil {
+		return 1
+	}
+	var v int
+	if maxUnavPtr.Type == intstr.String && strings.Contains(maxUnavPtr.StrVal, "%") {
+		// Calculate percentage.
+		p, err := strconv.ParseFloat(strings.Trim(maxUnavPtr.StrVal, "%"), 64)
+		if err != nil {
+			log.Error(err, "Failed to parse maxUnavailable percentage.", "value", maxUnavPtr.StrVal)
+			return 1
+		}
+		v = int(math.Ceil(p * float64(numNodes) / 100.0))
+	} else {
+		v = maxUnavPtr.IntValue()
+	}
+	if v < 1 {
+		// Not valid.  It should either be a positive int or the percentage should get rounded up.
+		v = 1
+	}
+	return v
 }
 
 var osExitOverride = os.Exit

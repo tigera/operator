@@ -61,6 +61,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileAPISe
 		enterpriseCRDsExist: opts.EnterpriseCRDExists,
 		status:              status.New(mgr.GetClient(), "apiserver", opts.KubernetesVersion),
 		clusterDomain:       opts.ClusterDomain,
+		usePSP:              opts.UsePSP,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -124,8 +125,10 @@ func add(mgr manager.Manager, r *ReconcileAPIServer) error {
 		}
 	}
 
-	for _, secretName := range []string{"calico-apiserver-certs", "tigera-apiserver-certs", render.PacketCaptureCertSecret,
-		certificatemanagement.CASecretName, render.DexTLSSecretName} {
+	for _, secretName := range []string{
+		"calico-apiserver-certs", "tigera-apiserver-certs", render.PacketCaptureCertSecret,
+		certificatemanagement.CASecretName, render.DexTLSSecretName,
+	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 		}
@@ -153,6 +156,7 @@ type ReconcileAPIServer struct {
 	enterpriseCRDsExist bool
 	status              status.StatusManager
 	clusterDomain       string
+	usePSP              bool
 }
 
 // Reconcile reads that state of the cluster for a APIServer object and makes changes based on the state read
@@ -299,6 +303,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		PullSecrets:                 pullSecrets,
 		Openshift:                   r.provider == operatorv1.ProviderOpenShift,
 		TunnelCASecret:              tunnelCASecret,
+		UsePSP:                      r.usePSP,
 	}
 
 	component, err := render.APIServer(&apiServerCfg)
@@ -355,7 +360,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			ServerCertSecret:   packetCaptureCertSecret,
 			ClusterDomain:      r.clusterDomain,
 		}
-		var pc = render.PacketCaptureAPI(packetCaptureApiCfg)
+		pc := render.PacketCaptureAPI(packetCaptureApiCfg)
 		components = append(components, pc,
 			rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 				Namespace:       render.PacketCaptureNamespace,

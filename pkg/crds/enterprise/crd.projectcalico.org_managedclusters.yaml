@@ -12,6 +12,7 @@ spec:
     listKind: ManagedClusterList
     plural: managedclusters
     singular: managedcluster
+  preserveUnknownFields: false
   scope: Cluster
   versions:
   - name: v1

@@ -12,6 +12,7 @@ spec:
     listKind: PacketCaptureList
     plural: packetcaptures
     singular: packetcapture
+  preserveUnknownFields: false
   scope: Namespaced
   versions:
   - name: v1

@@ -113,6 +113,9 @@ type NodeConfiguration struct {
 	// The bindMode read from the default BGPConfiguration. Used to trigger rolling updates
 	// should this value change.
 	BindMode string
+
+	// Whether or not the cluster supports pod security policies.
+	UsePSP bool
 }
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
@@ -208,7 +211,7 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, c.clusterAdminClusterRoleBinding())
 	}
 
-	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
+	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift && c.cfg.UsePSP {
 		objs = append(objs, c.nodePodSecurityPolicy())
 	}
 

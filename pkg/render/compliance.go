@@ -80,6 +80,9 @@ type ComplianceConfiguration struct {
 	KeyValidatorConfig          authentication.KeyValidatorConfig
 	ClusterDomain               string
 	HasNoLicense                bool
+
+	// Whether or not the cluster supports pod security policies.
+	UsePSP bool
 }
 
 type complianceComponent struct {
@@ -135,7 +138,7 @@ func (c *complianceComponent) SupportedOSType() rmeta.OSType {
 
 func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 	complianceObjs := append(
-		[]client.Object{CreateNamespace(ComplianceNamespace, c.cfg.Installation.KubernetesProvider)},
+		[]client.Object{CreateNamespace(ComplianceNamespace, c.cfg.Installation.KubernetesProvider, PSSPrivileged)},
 		secret.ToRuntimeObjects(secret.CopyToNamespace(ComplianceNamespace, c.cfg.PullSecrets...)...)...,
 	)
 	complianceObjs = append(complianceObjs,
@@ -196,7 +199,7 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 
 	if c.cfg.Openshift {
 		complianceObjs = append(complianceObjs, c.complianceBenchmarkerSecurityContextConstraints())
-	} else {
+	} else if c.cfg.UsePSP {
 		complianceObjs = append(complianceObjs,
 			c.complianceBenchmarkerPodSecurityPolicy(),
 			c.complianceControllerPodSecurityPolicy(),
@@ -224,8 +227,10 @@ func (c *complianceComponent) Ready() bool {
 	return true
 }
 
-var complianceBoolTrue = true
-var complianceReplicas int32 = 1
+var (
+	complianceBoolTrue       = true
+	complianceReplicas int32 = 1
+)
 
 const complianceServerPort = 5443
 
@@ -770,26 +775,31 @@ func (c *complianceComponent) complianceSnapshotterClusterRole() *rbacv1.Cluster
 	rules := []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{"networking.k8s.io", "authentication.k8s.io", ""},
-			Resources: []string{"networkpolicies", "nodes", "namespaces", "pods", "serviceaccounts",
-				"endpoints", "services"},
+			Resources: []string{
+				"networkpolicies", "nodes", "namespaces", "pods", "serviceaccounts",
+				"endpoints", "services",
+			},
 			Verbs: []string{"get", "list"},
 		},
 		{
 			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"globalnetworkpolicies", "tier.globalnetworkpolicies",
+			Resources: []string{
+				"globalnetworkpolicies", "tier.globalnetworkpolicies",
 				"stagedglobalnetworkpolicies", "tier.stagedglobalnetworkpolicies",
 				"networkpolicies", "tier.networkpolicies",
 				"stagednetworkpolicies", "tier.stagednetworkpolicies",
 				"stagedkubernetesnetworkpolicies",
 				"tiers", "hostendpoints",
-				"globalnetworksets", "networksets"},
+				"globalnetworksets", "networksets",
+			},
 			Verbs: []string{"get", "list"},
 		},
 	}
 
 	if !c.cfg.Openshift {
 		// Allow access to the pod security policy in case this is enforced on the cluster
-		rules = append(rules, rbacv1.PolicyRule{APIGroups: []string{"policy"},
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
 			Resources:     []string{"podsecuritypolicies"},
 			Verbs:         []string{"use"},
 			ResourceNames: []string{ComplianceSnapshotterName},
@@ -903,7 +913,8 @@ func (c *complianceComponent) complianceBenchmarkerClusterRole() *rbacv1.Cluster
 
 	if !c.cfg.Openshift {
 		// Allow access to the pod security policy in case this is enforced on the cluster
-		rules = append(rules, rbacv1.PolicyRule{APIGroups: []string{"policy"},
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
 			Resources:     []string{"podsecuritypolicies"},
 			Verbs:         []string{"use"},
 			ResourceNames: []string{"compliance-benchmarker"},

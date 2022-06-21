@@ -73,7 +73,7 @@ func printVersion() {
 	log.Info(fmt.Sprintf("Go Version: %s", goruntime.Version()))
 	log.Info(fmt.Sprintf("Go OS/Arch: %s/%s", goruntime.GOOS, goruntime.GOARCH))
 	// TODO: Add this back if we can
-	//log.Info(fmt.Sprintf("Version of operator-sdk: %v", sdkVersion.Version))
+	// log.Info(fmt.Sprintf("Version of operator-sdk: %v", sdkVersion.Version))
 }
 
 func main() {
@@ -231,6 +231,16 @@ func main() {
 	}
 	setupLog.WithValues("provider", provider).Info("Checking type of cluster")
 
+	// Determine if PodSecurityPolicies are supported. PSPs were removed in
+	// Kubernetes v1.25. We can remove this check once the operator not longer
+	// supports Kubernetes < v1.25.0.
+	usePSP, err := utils.SupportsPodSecurityPolicies(ctx, clientset)
+	if err != nil {
+		setupLog.Error(err, "Failed to discover PodSecurityPolicy availability")
+		os.Exit(1)
+	}
+	setupLog.WithValues("supported", usePSP).Info("Checking if PodSecurityPolicies are supported by the cluster")
+
 	// Determine if we need to start the TSEE specific controllers.
 	enterpriseCRDExists, err := utils.RequiresTigeraSecure(mgr.GetConfig())
 	if err != nil {
@@ -260,6 +270,7 @@ func main() {
 	options := options.AddOptions{
 		DetectedProvider:    provider,
 		EnterpriseCRDExists: enterpriseCRDExists,
+		UsePSP:              usePSP,
 		AmazonCRDExists:     amazonCRDExists,
 		ClusterDomain:       clusterDomain,
 		KubernetesVersion:   kubernetesVersion,
@@ -278,7 +289,6 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
-
 }
 
 // setKubernetesServiceEnv configured the environment with the location of the Kubernetes API

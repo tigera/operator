@@ -191,3 +191,19 @@ func isRKE2(ctx context.Context, c kubernetes.Interface) (bool, error) {
 
 	return (cm != nil), nil
 }
+
+func SupportsPodSecurityPolicies(ctx context.Context, c kubernetes.Interface) (bool, error) {
+	resources, err := c.Discovery().ServerResourcesForGroupVersion("policy/v1beta1")
+	if err != nil {
+		if kerrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	for _, r := range resources.APIResources {
+		if r.Kind == "PodSecurityPolicy" {
+			return true, nil
+		}
+	}
+	return false, nil
+}

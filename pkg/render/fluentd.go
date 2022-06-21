@@ -141,6 +141,9 @@ type FluentdConfiguration struct {
 	OSType           rmeta.OSType
 	MetricsServerTLS certificatemanagement.KeyPairInterface
 	TrustedBundle    certificatemanagement.TrustedBundle
+
+	// Whether or not the cluster supports pod security policies.
+	UsePSP bool
 }
 
 type fluentdComponent struct {
@@ -248,8 +251,10 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 		if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
 			objs = append(objs,
 				c.eksLogForwarderClusterRole(),
-				c.eksLogForwarderClusterRoleBinding(),
-				c.eksLogForwarderPodSecurityPolicy())
+				c.eksLogForwarderClusterRoleBinding())
+			if c.cfg.UsePSP {
+				objs = append(objs, c.eksLogForwarderPodSecurityPolicy())
+			}
 		}
 		objs = append(objs, c.eksLogForwarderServiceAccount(),
 			c.eksLogForwarderSecret(),
@@ -261,8 +266,10 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift && c.cfg.OSType == rmeta.OSTypeLinux {
 		objs = append(objs,
 			c.fluentdClusterRole(),
-			c.fluentdClusterRoleBinding(),
-			c.fluentdPodSecurityPolicy())
+			c.fluentdClusterRoleBinding())
+		if c.cfg.UsePSP {
+			objs = append(objs, c.fluentdPodSecurityPolicy())
+		}
 	}
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.cfg.ESSecrets...)...)...)
@@ -520,7 +527,7 @@ func (c *fluentdComponent) container() corev1.Container {
 	}
 
 	isPrivileged := false
-	//On OpenShift Fluentd needs privileged access to access logs on host path volume
+	// On OpenShift Fluentd needs privileged access to access logs on host path volume
 	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
 		isPrivileged = true
 	}
@@ -577,7 +584,8 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		s3 := c.cfg.LogCollector.Spec.AdditionalStores.S3
 		if s3 != nil {
 			envs = append(envs,
-				corev1.EnvVar{Name: "AWS_KEY_ID",
+				corev1.EnvVar{
+					Name: "AWS_KEY_ID",
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{
@@ -585,8 +593,10 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 							},
 							Key: S3KeyIdName,
 						},
-					}},
-				corev1.EnvVar{Name: "AWS_SECRET_KEY",
+					},
+				},
+				corev1.EnvVar{
+					Name: "AWS_SECRET_KEY",
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{
@@ -594,7 +604,8 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 							},
 							Key: S3KeySecretName,
 						},
-					}},
+					},
+				},
 				corev1.EnvVar{Name: "S3_STORAGE", Value: "true"},
 				corev1.EnvVar{Name: "S3_BUCKET_NAME", Value: s3.BucketName},
 				corev1.EnvVar{Name: "AWS_REGION", Value: s3.Region},
@@ -610,7 +621,8 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 				corev1.EnvVar{Name: "SYSLOG_PORT", Value: port},
 				corev1.EnvVar{Name: "SYSLOG_PROTOCOL", Value: proto},
 				corev1.EnvVar{Name: "SYSLOG_FLUSH_INTERVAL", Value: fluentdDefaultFlush},
-				corev1.EnvVar{Name: "SYSLOG_HOSTNAME",
+				corev1.EnvVar{
+					Name: "SYSLOG_HOSTNAME",
 					ValueFrom: &corev1.EnvVarSource{
 						FieldRef: &corev1.ObjectFieldSelector{
 							FieldPath: "spec.nodeName",
@@ -657,7 +669,8 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		if splunk != nil {
 			proto, host, port, _ := url.ParseEndpoint(splunk.Endpoint)
 			envs = append(envs,
-				corev1.EnvVar{Name: "SPLUNK_HEC_TOKEN",
+				corev1.EnvVar{
+					Name: "SPLUNK_HEC_TOKEN",
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{
@@ -665,7 +678,8 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 							},
 							Key: SplunkFluentdSecretTokenKey,
 						},
-					}},
+					},
+				},
 				corev1.EnvVar{Name: "SPLUNK_FLOW_LOG", Value: "true"},
 				corev1.EnvVar{Name: "SPLUNK_AUDIT_LOG", Value: "true"},
 				corev1.EnvVar{Name: "SPLUNK_DNS_LOG", Value: "true"},

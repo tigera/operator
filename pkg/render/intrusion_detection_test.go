@@ -417,6 +417,18 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		}))
 	})
 
+	It("should render properly when PSP is not supported by the cluster", func() {
+		cfg.UsePSP = false
+		component := render.IntrusionDetection(cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		// Should not contain any PodSecurityPolicies
+		for _, r := range resources {
+			Expect(r.GetObjectKind()).NotTo(Equal("PodSecurityPolicy"))
+		}
+	})
+
 	It("should apply controlPlaneNodeSelector correctly", func() {
 		cfg.Installation = &operatorv1.InstallationSpec{
 			ControlPlaneNodeSelector: map[string]string{"foo": "bar"},
@@ -429,6 +441,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(idc.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{"foo": "bar"}))
 		Expect(job.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{"foo": "bar"}))
 	})
+
 	It("should apply controlPlaneTolerations correctly", func() {
 		t := corev1.Toleration{
 			Key:      "foo",

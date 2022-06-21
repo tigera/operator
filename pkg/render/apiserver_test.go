@@ -272,11 +272,22 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		clusterRoleBinding := rtest.GetResource(resources, "tigera-extension-apiserver-auth-access", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 		Expect(clusterRoleBinding.RoleRef.Name).To(Equal("tigera-extension-apiserver-auth-access"))
-
 	},
 		Entry("default cluster domain", dns.DefaultClusterDomain),
 		Entry("custom cluster domain", "custom-domain.internal"),
 	)
+
+	It("should render properly when PSP is not supported by the cluster", func() {
+		cfg.UsePSP = false
+		component := render.APIServer(cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		// Should not contain any PodSecurityPolicies
+		for _, r := range resources {
+			Expect(r.GetObjectKind()).NotTo(Equal("PodSecurityPolicy"))
+		}
+	})
 
 	It("should render an API server with custom configuration", func() {
 		expectedResources := []struct {
@@ -903,7 +914,6 @@ func validateTunnelSecret(voltronSecret *corev1.Secret) {
 	}
 	_, err = newCert.Verify(opts)
 	Expect(err).Should(HaveOccurred())
-
 }
 
 var (

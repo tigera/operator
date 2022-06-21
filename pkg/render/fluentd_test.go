@@ -63,6 +63,18 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 	})
 
+	It("should render properly when PSP is not supported by the cluster", func() {
+		cfg.UsePSP = false
+		component := render.Fluentd(cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		// Should not contain any PodSecurityPolicies
+		for _, r := range resources {
+			Expect(r.GetObjectKind()).NotTo(Equal("PodSecurityPolicy"))
+		}
+	})
+
 	It("should render with a default configuration", func() {
 		expectedResources := []struct {
 			name    string

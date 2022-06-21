@@ -74,6 +74,7 @@ func (c *namespaceComponent) Ready() bool {
 	return true
 }
 
+// TODO: Add in Pod Security Admission labels.
 func CreateNamespace(name string, provider operatorv1.Provider) *corev1.Namespace {
 	ns := &corev1.Namespace{
 		TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},

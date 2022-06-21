@@ -172,6 +172,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		enterpriseCRDsExist:   opts.EnterpriseCRDExists,
 		clusterDomain:         opts.ClusterDomain,
 		manageCRDs:            opts.ManageCRDs,
+		usePSP:                opts.UsePSP,
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
@@ -360,6 +361,7 @@ type ReconcileInstallation struct {
 	migrationChecked      bool
 	clusterDomain         string
 	manageCRDs            bool
+	usePSP                bool
 }
 
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
@@ -1166,6 +1168,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		MigrateNamespaces:      needNsMigration,
 		ClusterDomain:          r.clusterDomain,
 		FelixHealthPort:        *felixConfiguration.Spec.HealthPort,
+		UsePSP:                 r.usePSP,
 	}
 	components = append(components, render.Typha(&typhaCfg))
 
@@ -1216,6 +1219,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		PrometheusServerTLS:     nodePrometheusTLS,
 		FelixHealthPort:         *felixConfiguration.Spec.HealthPort,
 		BindMode:                bgpConfiguration.Spec.BindMode,
+		UsePSP:                  r.usePSP,
 	}
 	components = append(components, render.Node(&nodeCfg))
 
@@ -1244,6 +1248,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		MetricsPort:                 kubeControllersMetricsPort,
 		ManagerInternalSecret:       managerInternalTLSSecret,
 		Terminating:                 terminating,
+		UsePSP:                      r.usePSP,
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 

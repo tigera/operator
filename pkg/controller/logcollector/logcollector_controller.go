@@ -59,7 +59,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 
-	var licenseAPIReady = &utils.ReadyFlag{}
+	licenseAPIReady := &utils.ReadyFlag{}
 
 	// create the reconciler
 	reconciler := newReconciler(mgr, opts, licenseAPIReady)
@@ -90,6 +90,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		status:          status.New(mgr.GetClient(), "log-collector", opts.KubernetesVersion),
 		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
+		usePSP:          opts.UsePSP,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
@@ -123,7 +124,8 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret,
 		relasticsearch.PublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret,
 		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName, monitor.PrometheusTLSSecretName,
-		render.FluentdPrometheusTLSSecretName} {
+		render.FluentdPrometheusTLSSecretName,
+	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-collector-controller failed to watch the Secret resource(%s): %v", secretName, err)
 		}
@@ -156,6 +158,7 @@ type ReconcileLogCollector struct {
 	status          status.StatusManager
 	clusterDomain   string
 	licenseAPIReady *utils.ReadyFlag
+	usePSP          bool
 }
 
 // GetLogCollector returns the default LogCollector instance with defaults populated.
@@ -353,7 +356,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 
 	certificateManager.AddToStatusManager(r.status, render.LogCollectorNamespace)
 
-	var exportLogs = utils.IsFeatureActive(license, common.ExportLogsFeature)
+	exportLogs := utils.IsFeatureActive(license, common.ExportLogsFeature)
 	if !exportLogs && instance.Spec.AdditionalStores != nil {
 		r.status.SetDegraded("Feature is not active", "License does not support feature: export-logs")
 		return reconcile.Result{}, err
@@ -476,6 +479,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		OSType:           rmeta.OSTypeLinux,
 		MetricsServerTLS: fluentdPrometheusTLS,
 		TrustedBundle:    trustedBundle,
+		UsePSP:           r.usePSP,
 	}
 	// Render the fluentd component for Linux
 	comp := render.Fluentd(fluentdCfg)
@@ -524,6 +528,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			ClusterDomain:   r.clusterDomain,
 			OSType:          rmeta.OSTypeWindows,
 			TrustedBundle:   trustedBundle,
+			UsePSP:          r.usePSP,
 		}
 		comp = render.Fluentd(fluentdCfg)
 

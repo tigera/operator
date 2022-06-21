@@ -128,6 +128,18 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 		})
 
 		Context("Initial creation", func() {
+			It("should render properly when PSP is not supported by the cluster", func() {
+				cfg.UsePSP = false
+				component := render.LogStorage(cfg)
+				Expect(component.ResolveImages(nil)).To(BeNil())
+				resources, _ := component.Objects()
+
+				// Should not contain any PodSecurityPolicies
+				for _, r := range resources {
+					Expect(r.GetObjectKind()).NotTo(Equal("PodSecurityPolicy"))
+				}
+			})
+
 			It("should render an elasticsearchComponent", func() {
 				expectedCreateResources := []resourceTestObj{
 					{render.ECKOperatorNamespace, "", &corev1.Namespace{}, nil},
@@ -211,6 +223,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					"--manage-webhook-certs=false",
 				}))
 			})
+
 			It("should render an elasticsearchComponent and delete the Elasticsearch and Kibana ExternalService", func() {
 				expectedCreateResources := []resourceTestObj{
 					{render.ECKOperatorNamespace, "", &corev1.Namespace{}, nil},

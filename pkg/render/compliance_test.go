@@ -69,6 +69,19 @@ var _ = Describe("compliance rendering tests", func() {
 		}
 	})
 
+	It("should render properly when PSP is not supported by the cluster", func() {
+		cfg.UsePSP = false
+		component, err := render.Compliance(cfg)
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		// Should not contain any PodSecurityPolicies
+		for _, r := range resources {
+			Expect(r.GetObjectKind()).NotTo(Equal("PodSecurityPolicy"))
+		}
+	})
+
 	Context("Standalone cluster", func() {
 		It("should render all resources for a default configuration", func() {
 			component, err := render.Compliance(cfg)

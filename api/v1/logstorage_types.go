@@ -146,6 +146,12 @@ type Retention struct {
 	// Default: 8
 	// +optional
 	DNSLogs *int32 `json:"dnsLogs"`
+
+	// BGPLogs configures the retention period for BGP logs, in days.  Logs written on a day that started at least this long ago
+	// are removed.  To keep logs for at least x days, use a retention period of x+1.
+	// Default: 8
+	// +optional
+	BGPLogs *int32 `json:"bgpLogs"`
 }
 
 // LogStorageComponentName CRD enum

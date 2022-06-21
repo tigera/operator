@@ -229,6 +229,10 @@ func fillDefaults(opr *operatorv1.LogStorage) {
 		var dlr int32 = 8
 		opr.Spec.Retention.DNSLogs = &dlr
 	}
+	if opr.Spec.Retention.BGPLogs == nil {
+		var bgp int32 = 8
+		opr.Spec.Retention.BGPLogs = &bgp
+	}
 
 	if opr.Spec.Indices == nil {
 		opr.Spec.Indices = &operatorv1.Indices{}

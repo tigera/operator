@@ -12,6 +12,7 @@ spec:
     listKind: AlertExceptionList
     plural: alertexceptions
     singular: alertexception
+  preserveUnknownFields: false
   scope: Cluster
   versions:
   - name: v1

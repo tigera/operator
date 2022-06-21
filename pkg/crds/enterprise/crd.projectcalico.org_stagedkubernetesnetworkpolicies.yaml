@@ -12,6 +12,7 @@ spec:
     listKind: StagedKubernetesNetworkPolicyList
     plural: stagedkubernetesnetworkpolicies
     singular: stagedkubernetesnetworkpolicy
+  preserveUnknownFields: false
   scope: Namespaced
   versions:
   - name: v1

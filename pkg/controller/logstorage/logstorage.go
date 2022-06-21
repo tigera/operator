@@ -182,6 +182,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 		ElasticLicenseType:          esLicenseType,
 		TrustedBundle:               trustedBundle,
 		UnusedTLSSecret:             unusedTLSSecret,
+		UsePSP:                      r.usePSP,
 	}
 
 	component := render.LogStorage(logStorageCfg)
@@ -285,7 +286,8 @@ func (r *ReconcileLogStorage) applyILMPolicies(ls *operatorv1.LogStorage, reqLog
 func addLogStorageWatches(c controller.Controller) error {
 	// Watch for changes in storage classes, as new storage classes may be made available for LogStorage.
 	err := c.Watch(&source.Kind{
-		Type: &storagev1.StorageClass{}}, &handler.EnqueueRequestForObject{})
+		Type: &storagev1.StorageClass{},
+	}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("log-storage-controller failed to watch StorageClass resource: %w", err)
 	}
@@ -327,8 +329,10 @@ func addLogStorageWatches(c controller.Controller) error {
 		return fmt.Errorf("log-storage-controller failed to watch primary resource: %w", err)
 	}
 
-	for _, name := range []string{render.OIDCUsersConfigMapName, render.OIDCUsersEsSecreteName,
-		render.ElasticsearchAdminUserSecret} {
+	for _, name := range []string{
+		render.OIDCUsersConfigMapName, render.OIDCUsersEsSecreteName,
+		render.ElasticsearchAdminUserSecret,
+	} {
 		if err = utils.AddConfigMapWatch(c, name, render.ElasticsearchNamespace); err != nil {
 			return fmt.Errorf("log-storage-controller failed to watch the ConfigMap resource: %w", err)
 		}

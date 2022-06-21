@@ -104,6 +104,7 @@ var _ = Describe("Node rendering tests", func() {
 			TLS:             typhaNodeTLS,
 			ClusterDomain:   defaultClusterDomain,
 			FelixHealthPort: 9099,
+			UsePSP:          true,
 		}
 	})
 

@@ -12,6 +12,7 @@ spec:
     listKind: GlobalThreatFeedList
     plural: globalthreatfeeds
     singular: globalthreatfeed
+  preserveUnknownFields: false
   scope: Cluster
   versions:
   - name: v1

@@ -45,14 +45,15 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	var instance *operatorv1.InstallationSpec
 	var k8sServiceEp k8sapi.ServiceEndpoint
 	var cfg kubecontrollers.KubeControllersConfiguration
-	var esEnvs = []corev1.EnvVar{
+	esEnvs := []corev1.EnvVar{
 		{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
 		{Name: "ELASTIC_SCHEME", Value: "https"},
 		{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
 		{Name: "ELASTIC_PORT", Value: "9200", ValueFrom: nil},
 		{Name: "ELASTIC_ACCESS_MODE", Value: "serviceuser"},
 		{Name: "ELASTIC_SSL_VERIFY", Value: "true"},
-		{Name: "ELASTIC_USER", Value: "",
+		{
+			Name: "ELASTIC_USER", Value: "",
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -62,7 +63,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				},
 			},
 		},
-		{Name: "ELASTIC_USERNAME", Value: "",
+		{
+			Name: "ELASTIC_USERNAME", Value: "",
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -72,7 +74,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				},
 			},
 		},
-		{Name: "ELASTIC_PASSWORD", Value: "",
+		{
+			Name: "ELASTIC_PASSWORD", Value: "",
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -117,6 +120,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			ClusterDomain: dns.DefaultClusterDomain,
 			MetricsPort:   9094,
 			TrustedBundle: certificateManager.CreateTrustedBundle(),
+			UsePSP:        true,
 		}
 	})
 
@@ -139,6 +143,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			K8sServiceEp:  k8sServiceEp,
 			Installation:  instance,
 			ClusterDomain: dns.DefaultClusterDomain,
+			UsePSP:        true,
 		}
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())

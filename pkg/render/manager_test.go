@@ -86,9 +86,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		deployment := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(len(deployment.Spec.Template.Spec.Containers)).Should(Equal(3))
-		var manager = deployment.Spec.Template.Spec.Containers[0]
-		var esProxy = deployment.Spec.Template.Spec.Containers[1]
-		var voltron = deployment.Spec.Template.Spec.Containers[2]
+		manager := deployment.Spec.Template.Spec.Containers[0]
+		esProxy := deployment.Spec.Template.Spec.Containers[1]
+		voltron := deployment.Spec.Template.Spec.Containers[2]
 
 		Expect(manager.Image).Should(Equal(components.TigeraRegistry + "tigera/cnx-manager:" + components.ComponentManager.Version))
 		Expect(esProxy.Image).Should(Equal(components.TigeraRegistry + "tigera/es-proxy:" + components.ComponentEsProxy.Version))
@@ -432,6 +432,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Installation:      i,
 			ESLicenseType:     render.ElasticsearchLicenseTypeUnknown,
 			Replicas:          &replicas,
+			UsePSP:            true,
 		}
 		component, err := render.Manager(cfg)
 		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
@@ -552,7 +553,9 @@ func renderObjects(roc renderConfig) []client.Object {
 		authentication := &operatorv1.Authentication{
 			Spec: operatorv1.AuthenticationSpec{
 				ManagerDomain: "https://127.0.0.1",
-				OIDC:          &operatorv1.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"}}}
+				OIDC:          &operatorv1.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"},
+			},
+		}
 
 		dexCfg = render.NewDexKeyValidatorConfig(authentication, nil, dns.DefaultClusterDomain)
 	}
@@ -589,6 +592,7 @@ func renderObjects(roc renderConfig) []client.Object {
 		ESLicenseType:           render.ElasticsearchLicenseTypeEnterpriseTrial,
 		Replicas:                roc.installation.ControlPlaneReplicas,
 		ComplianceFeatureActive: roc.complianceFeatureActive,
+		UsePSP:                  true,
 	}
 	component, err := render.Manager(cfg)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)

@@ -279,7 +279,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 	It("should render properly when PSP is not supported by the cluster", func() {
 		cfg.UsePSP = false
-		component := render.APIServer(cfg)
+		component, err := render.APIServer(cfg)
+		Expect(err).NotTo(HaveOccurred())
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 

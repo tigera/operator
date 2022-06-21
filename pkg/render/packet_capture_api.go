@@ -64,7 +64,6 @@ type packetCaptureApiComponent struct {
 }
 
 func PacketCaptureAPI(cfg *PacketCaptureApiConfiguration) Component {
-
 	return &packetCaptureApiComponent{
 		cfg: cfg,
 	}
@@ -89,7 +88,7 @@ func (pc *packetCaptureApiComponent) SupportedOSType() rmeta.OSType {
 
 func (pc *packetCaptureApiComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
-		CreateNamespace(PacketCaptureNamespace, pc.cfg.Installation.KubernetesProvider),
+		CreateNamespace(PacketCaptureNamespace, pc.cfg.Installation.KubernetesProvider, PSSRestricted),
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PacketCaptureNamespace, pc.cfg.PullSecrets...)...)...)
 
@@ -147,7 +146,6 @@ func (pc *packetCaptureApiComponent) serviceAccount() client.Object {
 }
 
 func (pc *packetCaptureApiComponent) clusterRole() client.Object {
-
 	rules := []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{"authorization.k8s.io"},
@@ -242,7 +240,7 @@ func (pc *packetCaptureApiComponent) initContainers() []corev1.Container {
 }
 
 func (pc *packetCaptureApiComponent) container() corev1.Container {
-	var volumeMounts = []corev1.VolumeMount{
+	volumeMounts := []corev1.VolumeMount{
 		pc.cfg.ServerCertSecret.VolumeMount(pc.SupportedOSType()),
 	}
 	env := []corev1.EnvVar{
@@ -284,7 +282,7 @@ func (pc *packetCaptureApiComponent) healthProbe() *corev1.Probe {
 }
 
 func (pc *packetCaptureApiComponent) volumes() []corev1.Volume {
-	var volumes = []corev1.Volume{
+	volumes := []corev1.Volume{
 		pc.cfg.ServerCertSecret.Volume(),
 	}
 
@@ -296,7 +294,7 @@ func (pc *packetCaptureApiComponent) volumes() []corev1.Volume {
 }
 
 func (pc *packetCaptureApiComponent) annotations() map[string]string {
-	var annotations = map[string]string{
+	annotations := map[string]string{
 		pc.cfg.ServerCertSecret.HashAnnotationKey(): pc.cfg.ServerCertSecret.HashAnnotationValue(),
 	}
 

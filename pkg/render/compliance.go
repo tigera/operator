@@ -138,7 +138,7 @@ func (c *complianceComponent) SupportedOSType() rmeta.OSType {
 
 func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 	complianceObjs := append(
-		[]client.Object{CreateNamespace(ComplianceNamespace, c.cfg.Installation.KubernetesProvider)},
+		[]client.Object{CreateNamespace(ComplianceNamespace, c.cfg.Installation.KubernetesProvider, PSSPrivileged)},
 		secret.ToRuntimeObjects(secret.CopyToNamespace(ComplianceNamespace, c.cfg.PullSecrets...)...)...,
 	)
 	complianceObjs = append(complianceObjs,

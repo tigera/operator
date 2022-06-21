@@ -142,8 +142,14 @@ func (c *intrusionDetectionComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Object) {
+	// Configure pod security standard. If syslog forwarding is enabled, we
+	// need hostpath volumes which require a privileged PSS.
+	pss := PSSRestricted
+	if c.syslogForwardingIsEnabled() {
+		pss = PSSPrivileged
+	}
 	objs := []client.Object{
-		CreateNamespace(IntrusionDetectionNamespace, c.cfg.Installation.KubernetesProvider),
+		CreateNamespace(IntrusionDetectionNamespace, c.cfg.Installation.KubernetesProvider, PodSecurityStandard(pss)),
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(IntrusionDetectionNamespace, c.cfg.PullSecrets...)...)...)
 

@@ -253,7 +253,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 		// ECK CRs
 		toCreate = append(toCreate,
-			CreateNamespace(ECKOperatorNamespace, es.cfg.Installation.KubernetesProvider),
+			CreateNamespace(ECKOperatorNamespace, es.cfg.Installation.KubernetesProvider, PSSRestricted),
 		)
 
 		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ECKOperatorNamespace, es.cfg.PullSecrets...)...)...)
@@ -288,7 +288,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate, es.eckOperatorStatefulSet())
 
 		// Elasticsearch CRs
-		toCreate = append(toCreate, CreateNamespace(ElasticsearchNamespace, es.cfg.Installation.KubernetesProvider))
+		toCreate = append(toCreate, CreateNamespace(ElasticsearchNamespace, es.cfg.Installation.KubernetesProvider, PSSPrivileged))
 
 		if len(es.cfg.PullSecrets) > 0 {
 			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.cfg.PullSecrets...)...)...)
@@ -304,7 +304,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate, es.elasticsearchCluster())
 
 		// Kibana CRs
-		toCreate = append(toCreate, CreateNamespace(KibanaNamespace, es.cfg.Installation.KubernetesProvider))
+		toCreate = append(toCreate, CreateNamespace(KibanaNamespace, es.cfg.Installation.KubernetesProvider, PSSRestricted))
 		toCreate = append(toCreate, es.kibanaServiceAccount())
 
 		if len(es.cfg.PullSecrets) > 0 {
@@ -350,7 +350,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		}
 	} else {
 		toCreate = append(toCreate,
-			CreateNamespace(ElasticsearchNamespace, es.cfg.Installation.KubernetesProvider),
+			CreateNamespace(ElasticsearchNamespace, es.cfg.Installation.KubernetesProvider, PSSPrivileged),
 			es.elasticsearchExternalService(),
 		)
 	}

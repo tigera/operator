@@ -12,6 +12,7 @@ spec:
     listKind: LicenseKeyList
     plural: licensekeys
     singular: licensekey
+  preserveUnknownFields: false
   scope: Cluster
   versions:
   - name: v1

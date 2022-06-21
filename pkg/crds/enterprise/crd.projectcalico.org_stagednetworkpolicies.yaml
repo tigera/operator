@@ -12,6 +12,7 @@ spec:
     listKind: StagedNetworkPolicyList
     plural: stagednetworkpolicies
     singular: stagednetworkpolicy
+  preserveUnknownFields: false
   scope: Namespaced
   versions:
   - name: v1

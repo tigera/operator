@@ -69,6 +69,7 @@ var _ = Describe("Typha rendering tests", func() {
 			Installation:    installation,
 			ClusterDomain:   defaultClusterDomain,
 			FelixHealthPort: 9099,
+			UsePSP:          true,
 		}
 	})
 

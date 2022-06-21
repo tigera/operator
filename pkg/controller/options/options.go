@@ -19,4 +19,7 @@ type AddOptions struct {
 	KubernetesVersion   *common.VersionInfo
 	ManageCRDs          bool
 	ShutdownContext     context.Context
+
+	// Whether or not the cluster supports PodSecurityPolicies.
+	UsePSP bool
 }

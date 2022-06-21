@@ -63,6 +63,9 @@ type TyphaConfiguration struct {
 	// The health port that Felix is bound to. We configure Typha to bind to the port
 	// that is one less.
 	FelixHealthPort int
+
+	// Whether or not the cluster supports pod security policies.
+	UsePSP bool
 }
 
 // Typha creates the typha daemonset and other resources for the daemonset to operate normally.
@@ -107,7 +110,7 @@ func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
 		c.typhaPodDisruptionBudget(),
 	}
 
-	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
+	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift && c.cfg.UsePSP {
 		objs = append(objs, c.typhaPodSecurityPolicy())
 	}
 

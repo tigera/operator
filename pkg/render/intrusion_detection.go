@@ -90,6 +90,9 @@ type IntrusionDetectionConfiguration struct {
 	HasNoLicense          bool
 	TrustedCertBundle     certificatemanagement.TrustedBundle
 	ADAPIServerCertSecret certificatemanagement.KeyPairInterface
+
+	// Whether or not the cluster supports pod security policies.
+	UsePSP bool
 }
 
 type intrusionDetectionComponent struct {
@@ -186,9 +189,11 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 
 	if !c.cfg.Openshift {
 		objs = append(objs,
-			c.intrusionDetectionPodSecurityPolicy(),
 			c.intrusionDetectionPSPClusterRole(),
 			c.intrusionDetectionPSPClusterRoleBinding())
+		if c.cfg.UsePSP {
+			objs = append(objs, c.intrusionDetectionPodSecurityPolicy())
+		}
 	}
 
 	if c.cfg.HasNoLicense {

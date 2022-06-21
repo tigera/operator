@@ -239,6 +239,7 @@ func main() {
 		setupLog.Error(err, "Failed to discover PodSecurityPolicy availability")
 		os.Exit(1)
 	}
+	setupLog.WithValues("supported", usePSP).Info("Checking if PodSecurityPolicies are supported by the cluster")
 
 	// Determine if we need to start the TSEE specific controllers.
 	enterpriseCRDExists, err := utils.RequiresTigeraSecure(mgr.GetConfig())

@@ -46,7 +46,7 @@ import (
 )
 
 type ComponentHandler interface {
-	CreateOrUpdateOrDelete(context.Context, render.Component, status.StatusManager) error
+	CreateOrUpdateOrDelete(context.Context, render.Component, status.StatusManager, ...CRUDOption) error
 }
 
 // cr is allowed to be nil in the case we don't want to put ownership on a resource,
@@ -67,7 +67,28 @@ type componentHandler struct {
 	log    logr.Logger
 }
 
-func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component render.Component, status status.StatusManager) error {
+type crudOpts struct {
+	preUpdateGate func(oldObj, newObj client.Object) (skipReason string, err error)
+}
+
+type CRUDOption func(opts *crudOpts)
+
+func WithPreUpdateGate(f func(oldObj, newObj client.Object) (skipReason string, err error)) CRUDOption {
+	return func(opts *crudOpts) {
+		opts.preUpdateGate = f
+	}
+}
+
+var _ = WithPreUpdateGate
+
+func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component render.Component, status status.StatusManager, opts ...CRUDOption) error {
+	options := crudOpts{
+		preUpdateGate: func(oldObj, newObj client.Object) (skipReason string, err error) { return },
+	}
+	for _, opt := range opts {
+		opt(&options)
+	}
+
 	// Before creating the component, make sure that it is ready. This provides a hook to do
 	// dependency checking for the component.
 	cmpLog := c.log.WithValues("component", reflect.TypeOf(component))
@@ -195,6 +216,18 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 					}
 				}
 			default:
+				// Some components (such as node and typha) have extra sequencing requirements that we can only check
+				// _here_ once we know that we really need to update that component.
+				skipReason, err := options.preUpdateGate(cur, mobj)
+				if err != nil {
+					logCtx.WithValues("key", key).Error(err, "Failed to check if object should be skipped.")
+					return err
+				}
+				if skipReason != "" {
+					logCtx.WithValues("key", key, "reason", skipReason).Info("Skipping update of object.")
+					continue
+				}
+
 				if err := c.client.Update(ctx, mobj); err != nil {
 					logCtx.WithValues("key", key).Info("Failed to update object.")
 					return err

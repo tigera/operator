@@ -76,6 +76,8 @@ type StatusManager interface {
 	IsProgressing() bool
 	IsDegraded() bool
 	ReadyToMonitor()
+	DaemonSetStatus(dsnn types.NamespacedName) (progressing, failing string, err error)
+	DeploymentStatus(depnn types.NamespacedName) (progressing, failing string, err error)
 }
 
 type statusManager struct {
@@ -468,86 +470,43 @@ func (m *statusManager) IsDegraded() bool {
 func (m *statusManager) syncState() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	progressing := []string{}
-	failing := []string{}
+	var progressing, failing []string
+
+	appendStatus := func(progReason, failReason string) {
+		if progReason != "" {
+			progressing = append(progressing, progReason)
+		}
+		if failReason != "" {
+			failing = append(failing, failReason)
+		}
+	}
 
 	// For each daemonset, check its rollout status.
-	for _, dsnn := range m.daemonsets {
-		ds := &appsv1.DaemonSet{}
-		err := m.client.Get(context.TODO(), dsnn, ds)
+	for _, nn := range m.daemonsets {
+		progReason, failReason, err := m.DaemonSetStatus(nn)
 		if err != nil {
-			log.WithValues("reason", err).Info("Failed to query daemonset")
+			log.WithValues("error", err, "name", nn).Info("Error getting status of DaemonSet")
 			continue
 		}
-		if ds.Status.UpdatedNumberScheduled < ds.Status.DesiredNumberScheduled {
-			progressing = append(progressing, fmt.Sprintf("DaemonSet %q update is rolling out (%d out of %d updated)", dsnn.String(), ds.Status.UpdatedNumberScheduled, ds.Status.DesiredNumberScheduled))
-		} else if ds.Status.NumberUnavailable > 0 {
-			progressing = append(progressing, fmt.Sprintf("DaemonSet %q is not available (awaiting %d nodes)", dsnn.String(), ds.Status.NumberUnavailable))
-		} else if ds.Status.NumberAvailable == 0 && ds.Status.DesiredNumberScheduled != 0 {
-			progressing = append(progressing, fmt.Sprintf("DaemonSet %q is not yet scheduled on any nodes", dsnn.String()))
-		} else if ds.Generation > ds.Status.ObservedGeneration {
-			progressing = append(progressing, fmt.Sprintf("DaemonSet %q update is being processed (generation %d, observed generation %d)", dsnn.String(), ds.Generation, ds.Status.ObservedGeneration))
-		}
-
-		// Check if any pods within the daemonset are failing.
-		if f, err := m.podsFailing(ds.Spec.Selector, ds.Namespace); err == nil {
-			if f != "" {
-				failing = append(failing, f)
-			}
-		} else {
-			log.WithValues("reason", err, "daemonset", dsnn).Info("Failed to check for failing pods")
-			continue
-		}
+		appendStatus(progReason, failReason)
 	}
 
-	for _, depnn := range m.deployments {
-		dep := &appsv1.Deployment{}
-		err := m.client.Get(context.TODO(), depnn, dep)
+	for _, nn := range m.deployments {
+		progReason, failReason, err := m.DeploymentStatus(nn)
 		if err != nil {
-			log.WithValues("reason", err).Info("Failed to query deployment")
+			log.WithValues("error", err, "name", nn).Info("Error getting status of Deployment")
 			continue
 		}
-		if dep.Status.UnavailableReplicas > 0 {
-			progressing = append(progressing, fmt.Sprintf("Deployment %q is not available (awaiting %d replicas)", depnn.String(), dep.Status.UnavailableReplicas))
-		} else if dep.Status.AvailableReplicas == 0 {
-			progressing = append(progressing, fmt.Sprintf("Deployment %q is not yet scheduled on any nodes", depnn.String()))
-		} else if dep.Status.ObservedGeneration < dep.Generation {
-			progressing = append(progressing, fmt.Sprintf("Deployment %q update is being processed (generation %d, observed generation %d)", depnn.String(), dep.Generation, dep.Status.ObservedGeneration))
-		}
-
-		// Check if any pods within the deployment are failing.
-		if f, err := m.podsFailing(dep.Spec.Selector, dep.Namespace); err == nil {
-			if f != "" {
-				failing = append(failing, f)
-			}
-		} else {
-			log.WithValues("reason", err, "deployment", depnn).Info("Failed to check for failing pods")
-			continue
-		}
+		appendStatus(progReason, failReason)
 	}
 
-	for _, depnn := range m.statefulsets {
-		ss := &appsv1.StatefulSet{}
-		err := m.client.Get(context.TODO(), depnn, ss)
+	for _, nn := range m.statefulsets {
+		progReason, failReason, err := m.StatefulSetStatus(nn)
 		if err != nil {
-			log.WithValues("reason", err).Info("Failed to query statefulset")
+			log.WithValues("error", err, "name", nn).Info("Error getting status of StatefulSet")
 			continue
 		}
-		if *ss.Spec.Replicas != ss.Status.CurrentReplicas {
-			progressing = append(progressing, fmt.Sprintf("Statefulset %q is not available (awaiting %d replicas)", depnn.String(), ss.Status.CurrentReplicas-*ss.Spec.Replicas))
-		} else if ss.Status.ObservedGeneration < ss.Generation {
-			progressing = append(progressing, fmt.Sprintf("Statefulset %q update is being processed (generation %d, observed generation %d)", ss.String(), ss.Generation, ss.Status.ObservedGeneration))
-		}
-
-		// Check if any pods within the deployment are failing.
-		if f, err := m.podsFailing(ss.Spec.Selector, ss.Namespace); err == nil {
-			if f != "" {
-				failing = append(failing, f)
-			}
-		} else {
-			log.WithValues("reason", err, "statefuleset", depnn).Info("Failed to check for failing pods")
-			continue
-		}
+		appendStatus(progReason, failReason)
 	}
 
 	for _, depnn := range m.cronjobs {
@@ -591,6 +550,82 @@ func (m *statusManager) syncState() {
 	m.progressing = progressing
 	m.failing = failing
 	m.hasSynced = true
+}
+
+// DaemonSetStatus gets the named DaemonSet and calculates/returns its status.  The progressing/failing return
+// values contain a non-empty description if the DaemonSet is progressing/failing.  A non-nil err indicates
+// a failure to determine the status (for example an API server connectivity error or NotFound).
+func (m *statusManager) DaemonSetStatus(dsnn types.NamespacedName) (progressing, failing string, err error) {
+	ds := &appsv1.DaemonSet{}
+	err = m.client.Get(context.TODO(), dsnn, ds)
+	if err != nil {
+		return
+	}
+	if ds.Status.UpdatedNumberScheduled < ds.Status.DesiredNumberScheduled {
+		progressing = fmt.Sprintf("DaemonSet %q update is rolling out (%d out of %d updated)", dsnn.String(), ds.Status.UpdatedNumberScheduled, ds.Status.DesiredNumberScheduled)
+	} else if ds.Status.NumberUnavailable > 0 {
+		progressing = fmt.Sprintf("DaemonSet %q is not available (awaiting %d nodes)", dsnn.String(), ds.Status.NumberUnavailable)
+	} else if ds.Status.NumberAvailable == 0 && ds.Status.DesiredNumberScheduled != 0 {
+		progressing = fmt.Sprintf("DaemonSet %q is not yet scheduled on any nodes", dsnn.String())
+	} else if ds.Generation > ds.Status.ObservedGeneration {
+		progressing = fmt.Sprintf("DaemonSet %q update is being processed (generation %d, observed generation %d)", dsnn.String(), ds.Generation, ds.Status.ObservedGeneration)
+	}
+
+	// Check if any pods within the daemonset are failing.
+	failing, err2 := m.podsFailing(ds.Spec.Selector, ds.Namespace)
+	if err2 != nil {
+		log.WithValues("reason", err, "daemonset", dsnn).Info("Failed to check for failing pods")
+	}
+	return
+}
+
+// DeploymentStatus gets the named Deployment and calculates/returns its status.  The progressing/failing return
+// values contain a non-empty description if the Deployment is progressing/failing.  A non-nil err indicates
+// a failure to determine the status (for example an API server connectivity error or NotFound).
+func (m *statusManager) DeploymentStatus(depnn types.NamespacedName) (progressing, failing string, err error) {
+	dep := &appsv1.Deployment{}
+	err = m.client.Get(context.TODO(), depnn, dep)
+	if err != nil {
+		return
+	}
+	if dep.Status.UnavailableReplicas > 0 {
+		progressing = fmt.Sprintf("Deployment %q is not available (awaiting %d replicas)", depnn.String(), dep.Status.UnavailableReplicas)
+	} else if dep.Status.AvailableReplicas == 0 {
+		progressing = fmt.Sprintf("Deployment %q is not yet scheduled on any nodes", depnn.String())
+	} else if dep.Status.ObservedGeneration < dep.Generation {
+		progressing = fmt.Sprintf("Deployment %q update is being processed (generation %d, observed generation %d)", depnn.String(), dep.Generation, dep.Status.ObservedGeneration)
+	}
+
+	// Check if any pods within the Deployment are failing.
+	failing, err2 := m.podsFailing(dep.Spec.Selector, dep.Namespace)
+	if err2 != nil {
+		log.WithValues("reason", err2, "deployment", depnn).Info("Failed to check for failing pods")
+	}
+	return
+}
+
+// StatefulSetStatus gets the named StatefulSet and calculates/returns its status.  The progressing/failing return
+// values contain a non-empty description if the StatefulSet is progressing/failing.  A non-nil err indicates
+// a failure to determine the status (for example an API server connectivity error or NotFound).
+func (m *statusManager) StatefulSetStatus(depnn types.NamespacedName) (progressing, failing string, err error) {
+	ss := &appsv1.StatefulSet{}
+	err = m.client.Get(context.TODO(), depnn, ss)
+	if err != nil {
+		return
+	}
+
+	if *ss.Spec.Replicas != ss.Status.CurrentReplicas {
+		progressing = fmt.Sprintf("Statefulset %q is not available (awaiting %d replicas)", depnn.String(), ss.Status.CurrentReplicas-*ss.Spec.Replicas)
+	} else if ss.Status.ObservedGeneration < ss.Generation {
+		progressing = fmt.Sprintf("Statefulset %q update is being processed (generation %d, observed generation %d)", ss.String(), ss.Generation, ss.Status.ObservedGeneration)
+	}
+
+	// Check if any pods within the StatefulSet are failing.
+	failing, err2 := m.podsFailing(ss.Spec.Selector, ss.Namespace)
+	if err2 != nil {
+		log.WithValues("reason", err2, "statefulset", depnn).Info("Failed to check for failing pods")
+	}
+	return
 }
 
 // isInitialized returns true if corresponding CR has been queried

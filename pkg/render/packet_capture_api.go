@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,8 +28,8 @@ import (
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -274,7 +274,7 @@ func (pc *packetCaptureApiComponent) container() corev1.Container {
 		Image:           pc.image,
 		LivenessProbe:   pc.healthProbe(),
 		ReadinessProbe:  pc.healthProbe(),
-		SecurityContext: podsecuritycontext.NewBaseContext(),
+		SecurityContext: securitycontext.NewBaseContext(),
 		Env:             env,
 		VolumeMounts:    volumeMounts,
 	}

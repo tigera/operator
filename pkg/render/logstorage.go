@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -50,6 +50,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -1279,7 +1280,8 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 								},
 							},
 						},
-						VolumeMounts: volumeMounts,
+						SecurityContext: securitycontext.NewNonPrivilegedUserContext(),
+						VolumeMounts:    volumeMounts,
 					}},
 					Volumes: volumes,
 				},

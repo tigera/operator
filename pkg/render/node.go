@@ -1177,6 +1177,10 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		clusterType = clusterType + ",bgp"
 	}
 
+	if c.vppDataplaneEnabled() {
+		clusterType = clusterType + ",vpp"
+	}
+
 	nodeEnv := []corev1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "WAIT_FOR_DATASTORE", Value: "true"},

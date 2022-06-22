@@ -32,9 +32,9 @@ import (
 	rkibana "github.com/tigera/operator/pkg/render/common/kibana"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
-	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -349,7 +349,7 @@ func (c *managerComponent) managerContainer() corev1.Container {
 		Image:           c.managerImage,
 		Env:             c.managerEnvVars(),
 		LivenessProbe:   c.managerProbe(),
-		SecurityContext: podsecuritycontext.NewBaseContext(),
+		SecurityContext: securitycontext.NewBaseContext(),
 		VolumeMounts:    c.managerVolumeMounts(),
 	}
 
@@ -422,7 +422,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		Env:             env,
 		VolumeMounts:    c.volumeMountsForProxyManager(),
 		LivenessProbe:   c.managerProxyProbe(),
-		SecurityContext: podsecuritycontext.NewBaseContext(),
+		SecurityContext: securitycontext.NewBaseContext(),
 	}
 }
 
@@ -460,7 +460,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		Name:            "tigera-es-proxy",
 		Image:           c.esProxyImage,
 		LivenessProbe:   c.managerEsProxyProbe(),
-		SecurityContext: podsecuritycontext.NewBaseContext(),
+		SecurityContext: securitycontext.NewBaseContext(),
 		Env:             env,
 		VolumeMounts:    volumeMounts,
 	}

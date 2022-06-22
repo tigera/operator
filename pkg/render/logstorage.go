@@ -49,6 +49,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -1270,7 +1271,8 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 								},
 							},
 						},
-						VolumeMounts: volumeMounts,
+						SecurityContext: securitycontext.NewNonPrivilegedUserContext(),
+						VolumeMounts:    volumeMounts,
 					}},
 					Volumes: volumes,
 				},

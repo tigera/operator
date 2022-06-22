@@ -763,7 +763,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Mark CR found so we can report converter problems via tigerastatus
 	r.status.OnCRFound()
 	//Set the meta info in the tigerastatus like observedGenerations
-	r.status.SetMetaData(&instance.ObjectMeta)
+	defer r.status.SetMetaData(&instance.ObjectMeta)
 
 	// Changes for updating installation status conditions
 	if request.Name == InstallationName && request.Namespace == "" {
@@ -777,7 +777,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			log.WithValues("reason", err).Info("Failed to create Installation status conditions.")
 			return reconcile.Result{}, err
 		}
-		return reconcile.Result{}, nil
 	}
 
 	status := instance.Status

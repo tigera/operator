@@ -28,8 +28,8 @@ import (
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -263,7 +263,7 @@ func (pc *packetCaptureApiComponent) container() corev1.Container {
 		Image:           pc.image,
 		LivenessProbe:   pc.healthProbe(),
 		ReadinessProbe:  pc.healthProbe(),
-		SecurityContext: podsecuritycontext.NewBaseContext(),
+		SecurityContext: securitycontext.NewBaseContext(),
 		Env:             env,
 		VolumeMounts:    volumeMounts,
 	}

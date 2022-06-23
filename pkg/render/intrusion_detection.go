@@ -90,6 +90,9 @@ type IntrusionDetectionConfiguration struct {
 	HasNoLicense          bool
 	TrustedCertBundle     certificatemanagement.TrustedBundle
 	ADAPIServerCertSecret certificatemanagement.KeyPairInterface
+
+	// Whether or not the cluster supports pod security policies.
+	UsePSP bool
 }
 
 type intrusionDetectionComponent struct {
@@ -139,8 +142,14 @@ func (c *intrusionDetectionComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Object) {
+	// Configure pod security standard. If syslog forwarding is enabled, we
+	// need hostpath volumes which require a privileged PSS.
+	pss := PSSRestricted
+	if c.syslogForwardingIsEnabled() {
+		pss = PSSPrivileged
+	}
 	objs := []client.Object{
-		CreateNamespace(IntrusionDetectionNamespace, c.cfg.Installation.KubernetesProvider),
+		CreateNamespace(IntrusionDetectionNamespace, c.cfg.Installation.KubernetesProvider, PodSecurityStandard(pss)),
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(IntrusionDetectionNamespace, c.cfg.PullSecrets...)...)...)
 
@@ -186,9 +195,11 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 
 	if !c.cfg.Openshift {
 		objs = append(objs,
-			c.intrusionDetectionPodSecurityPolicy(),
 			c.intrusionDetectionPSPClusterRole(),
 			c.intrusionDetectionPSPClusterRoleBinding())
+		if c.cfg.UsePSP {
+			objs = append(objs, c.intrusionDetectionPodSecurityPolicy())
+		}
 	}
 
 	if c.cfg.HasNoLicense {

@@ -59,6 +59,19 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			},
 			MetricsServerTLS: metricsSecret,
 			TrustedBundle:    certificateManager.CreateTrustedBundle(),
+			UsePSP:           true,
+		}
+	})
+
+	It("should render properly when PSP is not supported by the cluster", func() {
+		cfg.UsePSP = false
+		component := render.Fluentd(cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		// Should not contain any PodSecurityPolicies
+		for _, r := range resources {
+			Expect(r.GetObjectKind()).NotTo(Equal("PodSecurityPolicy"))
 		}
 	})
 
@@ -104,7 +117,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			corev1.EnvVar{Name: "FLUENTD_ES_SECURE", Value: "true"},
 			corev1.EnvVar{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
 			corev1.EnvVar{Name: "ELASTIC_PORT", Value: "9200"},
-			corev1.EnvVar{Name: "NODENAME",
+			corev1.EnvVar{
+				Name: "NODENAME",
 				ValueFrom: &corev1.EnvVarSource{
 					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
 				},
@@ -326,7 +340,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{Name: expected.secretName},
 							Key:                  expected.secretKey,
-						}},
+						},
+					},
 				}))
 			}
 		}
@@ -403,7 +418,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{Name: expected.secretName},
 							Key:                  expected.secretKey,
-						}},
+						},
+					},
 				}))
 			}
 		}
@@ -412,7 +428,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			ValueFrom: &corev1.EnvVarSource{
 				FieldRef: &corev1.ObjectFieldSelector{
 					FieldPath: "spec.nodeName",
-				}},
+				},
+			},
 		}))
 	})
 
@@ -496,7 +513,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{Name: expected.secretName},
 							Key:                  expected.secretKey,
-						}},
+						},
+					},
 				}))
 			}
 		}
@@ -573,7 +591,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 						SecretKeyRef: &corev1.SecretKeySelector{
 							LocalObjectReference: corev1.LocalObjectReference{Name: expected.secretName},
 							Key:                  expected.secretKey,
-						}},
+						},
+					},
 				}))
 			}
 		}

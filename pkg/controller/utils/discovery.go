@@ -191,3 +191,22 @@ func isRKE2(ctx context.Context, c kubernetes.Interface) (bool, error) {
 
 	return (cm != nil), nil
 }
+
+// SupportsPodSecurityPolicies returns true if the cluster contains the policy/v1beta1 PodSecurityPolicy API,
+// and false otherwise. This API is scheuled to be removed in Kubernetes v1.25, but should still be used
+// in earlier Kubernetes versions.
+func SupportsPodSecurityPolicies(c kubernetes.Interface) (bool, error) {
+	resources, err := c.Discovery().ServerResourcesForGroupVersion("policy/v1beta1")
+	if err != nil {
+		if kerrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	for _, r := range resources.APIResources {
+		if r.Kind == "PodSecurityPolicy" {
+			return true, nil
+		}
+	}
+	return false, nil
+}

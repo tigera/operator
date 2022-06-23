@@ -918,6 +918,15 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
 	}
 
+	volumeMounts := []corev1.VolumeMount{
+		c.cfg.TLSKeyPair.VolumeMount(),
+	}
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		if c.cfg.ManagementCluster != nil {
+			volumeMounts = append(volumeMounts, c.cfg.TunnelCASecret.VolumeMount())
+		}
+	}
+
 	container := corev1.Container{
 		Name:  "tigera-queryserver",
 		Image: c.queryServerImage,
@@ -934,6 +943,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 			PeriodSeconds:       10,
 		},
 		SecurityContext: podsecuritycontext.NewBaseContext(),
+		VolumeMounts:    volumeMounts,
 	}
 	return container
 }

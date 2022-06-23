@@ -234,7 +234,7 @@ func main() {
 	// Determine if PodSecurityPolicies are supported. PSPs were removed in
 	// Kubernetes v1.25. We can remove this check once the operator not longer
 	// supports Kubernetes < v1.25.0.
-	usePSP, err := utils.SupportsPodSecurityPolicies(ctx, clientset)
+	usePSP, err := utils.SupportsPodSecurityPolicies(clientset)
 	if err != nil {
 		setupLog.Error(err, "Failed to discover PodSecurityPolicy availability")
 		os.Exit(1)

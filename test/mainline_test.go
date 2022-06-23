@@ -285,7 +285,7 @@ func setupManager(manageCRDs bool) (client.Client, context.Context, context.Canc
 	// Auto-detect whether the cluster supports PSP. Since we use a kind cluster
 	// from before v1.25, we expect this to be true. Once we update our kind
 	// version >= v1.25, we should instead expect this to return "false".
-	usePSP, err := utils.SupportsPodSecurityPolicies(context.TODO(), cs)
+	usePSP, err := utils.SupportsPodSecurityPolicies(cs)
 	Expect(err).NotTo(HaveOccurred())
 	Expect(usePSP).To(BeTrue())
 

@@ -921,11 +921,6 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 	volumeMounts := []corev1.VolumeMount{
 		c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()),
 	}
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		if c.cfg.ManagementCluster != nil {
-			volumeMounts = append(volumeMounts, c.cfg.TunnelCASecret.VolumeMount(c.SupportedOSType()))
-		}
-	}
 
 	container := corev1.Container{
 		Name:  "tigera-queryserver",

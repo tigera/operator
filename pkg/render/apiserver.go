@@ -943,7 +943,8 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 			InitialDelaySeconds: 90,
 			PeriodSeconds:       10,
 		},
-		SecurityContext: securitycontext.NewBaseContext(),
+		// UID 1001 is used in the queryserver Dockerfile.
+		SecurityContext: securitycontext.NewBaseContext(1001, 0),
 		VolumeMounts:    volumeMounts,
 	}
 	return container

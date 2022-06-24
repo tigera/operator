@@ -545,7 +545,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 		},
 	}
 
-	sc := securitycontext.NewNonPrivilegedUserContext()
+	sc := securitycontext.NewBaseContext(securitycontext.RunAsUserID, securitycontext.RunAsGroupID)
 
 	// If syslog forwarding is enabled then set the necessary ENV var and volume mount to
 	// write logs for Fluentd.

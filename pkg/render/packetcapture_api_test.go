@@ -187,8 +187,11 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 				Name:  render.PacketCaptureContainerName,
 				Image: fmt.Sprintf("%s%s:%s", components.TigeraRegistry, components.ComponentPacketCapture.Image, components.ComponentPacketCapture.Version),
 				SecurityContext: &corev1.SecurityContext{
-					RunAsNonRoot:             ptr.BoolToPtr(true),
 					AllowPrivilegeEscalation: ptr.BoolToPtr(false),
+					Privileged:               ptr.BoolToPtr(false),
+					RunAsGroup:               ptr.Int64ToPtr(0),
+					RunAsNonRoot:             ptr.BoolToPtr(true),
+					RunAsUser:                ptr.Int64ToPtr(10001),
 				},
 				ReadinessProbe: &corev1.Probe{
 					Handler: corev1.Handler{

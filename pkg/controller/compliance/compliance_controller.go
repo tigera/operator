@@ -52,7 +52,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	var licenseAPIReady = &utils.ReadyFlag{}
+	licenseAPIReady := &utils.ReadyFlag{}
 	// create the reconciler
 	reconciler := newReconciler(mgr, opts, licenseAPIReady)
 
@@ -82,6 +82,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		status:          status.New(mgr.GetClient(), "compliance", opts.KubernetesVersion),
 		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
+		usePSP:          opts.UsePSP,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -115,7 +116,8 @@ func add(mgr manager.Manager, c controller.Controller) error {
 			render.TigeraElasticsearchGatewaySecret, render.ElasticsearchComplianceBenchmarkerUserSecret,
 			render.ElasticsearchComplianceControllerUserSecret, render.ElasticsearchComplianceReporterUserSecret,
 			render.ElasticsearchComplianceSnapshotterUserSecret, render.ElasticsearchComplianceServerUserSecret,
-			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, certificatemanagement.CASecretName} {
+			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, certificatemanagement.CASecretName,
+		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("compliance-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
 			}
@@ -159,6 +161,7 @@ type ReconcileCompliance struct {
 	status          status.StatusManager
 	clusterDomain   string
 	licenseAPIReady *utils.ReadyFlag
+	usePSP          bool
 }
 
 func GetCompliance(ctx context.Context, cli client.Client) (*operatorv1.Compliance, error) {
@@ -352,7 +355,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	reqLogger.V(3).Info("rendering components")
-	var hasNoLicense = !utils.IsFeatureActive(license, common.ComplianceFeature)
+	hasNoLicense := !utils.IsFeatureActive(license, common.ComplianceFeature)
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	complianceCfg := &render.ComplianceConfiguration{
 		ESSecrets:                   esSecrets,
@@ -367,6 +370,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		KeyValidatorConfig:          keyValidatorConfig,
 		ClusterDomain:               r.clusterDomain,
 		HasNoLicense:                hasNoLicense,
+		UsePSP:                      r.usePSP,
 	}
 	// Render the desired objects from the CRD and create or update them.
 	comp, err := render.Compliance(complianceCfg)

@@ -57,7 +57,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 
-	var licenseAPIReady = &utils.ReadyFlag{}
+	licenseAPIReady := &utils.ReadyFlag{}
 
 	// create the reconciler
 	reconciler := newReconciler(mgr, opts, licenseAPIReady)
@@ -88,10 +88,10 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		status:          status.New(mgr.GetClient(), "manager", opts.KubernetesVersion),
 		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
+		usePSP:          opts.UsePSP,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
-
 }
 
 // add adds watches for resources that are available at startup
@@ -184,6 +184,7 @@ type ReconcileManager struct {
 	status          status.StatusManager
 	clusterDomain   string
 	licenseAPIReady *utils.ReadyFlag
+	usePSP          bool
 }
 
 // GetManager returns the default manager instance with defaults populated.
@@ -275,7 +276,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	trustedSecretNames := []string{render.PacketCaptureCertSecret, render.PrometheusTLSSecretName, relasticsearch.PublicCertSecret}
-	var installCompliance = utils.IsFeatureActive(license, common.ComplianceFeature)
+	installCompliance := utils.IsFeatureActive(license, common.ComplianceFeature)
 	if installCompliance {
 		// Check that compliance is running.
 		compliance, err := compliance.GetCompliance(ctx, r.client)
@@ -454,6 +455,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		ESLicenseType:           elasticLicenseType,
 		Replicas:                replicas,
 		ComplianceFeatureActive: installCompliance,
+		UsePSP:                  r.usePSP,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

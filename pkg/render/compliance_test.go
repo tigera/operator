@@ -65,12 +65,25 @@ var _ = Describe("compliance rendering tests", func() {
 			Openshift:                  notOpenshift,
 			ClusterDomain:              clusterDomain,
 			TrustedBundle:              bundle,
+			UsePSP:                     true,
+		}
+	})
+
+	It("should render properly when PSP is not supported by the cluster", func() {
+		cfg.UsePSP = false
+		component, err := render.Compliance(cfg)
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		// Should not contain any PodSecurityPolicies
+		for _, r := range resources {
+			Expect(r.GetObjectKind()).NotTo(Equal("PodSecurityPolicy"))
 		}
 	})
 
 	Context("Standalone cluster", func() {
 		It("should render all resources for a default configuration", func() {
-
 			component, err := render.Compliance(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
@@ -363,7 +376,7 @@ var _ = Describe("compliance rendering tests", func() {
 	})
 
 	Describe("node selection & affinity", func() {
-		var renderCompliance = func(i *operatorv1.InstallationSpec) (server, controller, snapshotter *appsv1.Deployment, reporter *corev1.PodTemplate, benchmarker *appsv1.DaemonSet) {
+		renderCompliance := func(i *operatorv1.InstallationSpec) (server, controller, snapshotter *appsv1.Deployment, reporter *corev1.PodTemplate, benchmarker *appsv1.DaemonSet) {
 			cfg.Installation = i
 			component, err := render.Compliance(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -471,14 +484,13 @@ var _ = Describe("compliance rendering tests", func() {
 	})
 
 	Context("Render Benchmarker", func() {
-
 		It("should render benchmarker properly for non GKE environments", func() {
 			cfg.Installation.KubernetesProvider = operatorv1.ProviderNone
 			component, err := render.Compliance(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 
-			var dsBenchMarker = rtest.GetResource(resources, "compliance-benchmarker", ns, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+			dsBenchMarker := rtest.GetResource(resources, "compliance-benchmarker", ns, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 			volumeMounts := dsBenchMarker.Spec.Template.Spec.Containers[0].VolumeMounts
 
 			Expect(len(volumeMounts)).To(Equal(6))
@@ -503,7 +515,7 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 			resources, _ := component.Objects()
 
-			var dsBenchMarker = rtest.GetResource(resources, "compliance-benchmarker", ns, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+			dsBenchMarker := rtest.GetResource(resources, "compliance-benchmarker", ns, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 			volumeMounts := dsBenchMarker.Spec.Template.Spec.Containers[0].VolumeMounts
 
 			Expect(len(volumeMounts)).To(Equal(7))
@@ -524,5 +536,4 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(volumeMounts[6].MountPath).To(Equal("/home/kubernetes"))
 		})
 	})
-
 })

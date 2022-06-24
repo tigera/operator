@@ -11,6 +11,8 @@ import (
 func NewBasePolicy() *policyv1beta1.PodSecurityPolicy {
 	falseBool := false
 	ptrBoolFalse := &falseBool
+	// This PodSecurityPolicy is equivalent to a "restricted" pod security standard,
+	// according to: https://kubernetes.io/docs/reference/access-authn-authz/psp-to-pod-security-standards/
 	return &policyv1beta1.PodSecurityPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -30,13 +32,13 @@ func NewBasePolicy() *policyv1beta1.PodSecurityPolicy {
 				policyv1beta1.DownwardAPI,
 				policyv1beta1.PersistentVolumeClaim,
 			},
-			HostNetwork: false,
 			HostPorts: []policyv1beta1.HostPortRange{{
 				Min: int32(0),
 				Max: int32(65535),
 			}},
-			HostIPC: false,
-			HostPID: false,
+			HostNetwork: false,
+			HostIPC:     false,
+			HostPID:     false,
 			RunAsUser: policyv1beta1.RunAsUserStrategyOptions{
 				Rule: policyv1beta1.RunAsUserStrategyMustRunAsNonRoot,
 			},

@@ -1271,7 +1271,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 								},
 							},
 						},
-						SecurityContext: securitycontext.NewNonPrivilegedUserContext(),
+						SecurityContext: securitycontext.NewBaseContext(securitycontext.RunAsUserID, securitycontext.RunAsGroupID),
 						VolumeMounts:    volumeMounts,
 					}},
 					Volumes: volumes,

@@ -31,19 +31,12 @@ var (
 
 // NewBaseContext returns the non root non privileged security context that most of the containers running should
 // be using.
-func NewBaseContext() *corev1.SecurityContext {
+func NewBaseContext(uid, gid int64) *corev1.SecurityContext {
 	return &corev1.SecurityContext{
 		AllowPrivilegeEscalation: ptr.BoolToPtr(false),
 		Privileged:               ptr.BoolToPtr(false),
+		RunAsGroup:               &gid,
 		RunAsNonRoot:             ptr.BoolToPtr(true),
+		RunAsUser:                &uid,
 	}
-}
-
-// NewNonPrivilegedUserContext returns the base context with a default user and group.
-func NewNonPrivilegedUserContext() *corev1.SecurityContext {
-	sc := NewBaseContext()
-	sc.RunAsUser = &RunAsUserID
-	sc.RunAsGroup = &RunAsGroupID
-
-	return sc
 }

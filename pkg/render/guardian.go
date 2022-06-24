@@ -276,7 +276,8 @@ func (c *GuardianComponent) container() []corev1.Container {
 				InitialDelaySeconds: 10,
 				PeriodSeconds:       5,
 			},
-			SecurityContext: securitycontext.NewBaseContext(),
+			// UID 1001 is used in the guardian Dockerfile.
+			SecurityContext: securitycontext.NewBaseContext(1001, 0),
 		},
 	}
 }

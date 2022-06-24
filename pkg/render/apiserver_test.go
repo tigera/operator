@@ -244,7 +244,14 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(d.Spec.Template.Spec.Containers[1].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_DEFAULT_SECURITY_GROUPS")})))
 		Expect(d.Spec.Template.Spec.Containers[1].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_POD_SECURITY_GROUP")})))
 
-		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts).To(BeEmpty())
+		Expect(len(d.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
+		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("tigera-apiserver-certs"))
+		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal("/var/log/calico/audit"))
+		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].ReadOnly).To(BeFalse())
+		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].SubPath).To(Equal(""))
+		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPropagation).To(BeNil())
+		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].SubPathExpr).To(Equal(""))
+
 		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.HTTPGet.Path).To(Equal("/version"))
 		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.HTTPGet.Port.String()).To(BeEquivalentTo("8080"))
 		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.HTTPGet.Scheme).To(BeEquivalentTo("HTTPS"))

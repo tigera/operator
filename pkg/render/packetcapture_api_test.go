@@ -189,7 +189,9 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 				SecurityContext: &corev1.SecurityContext{
 					AllowPrivilegeEscalation: ptr.BoolToPtr(false),
 					Privileged:               ptr.BoolToPtr(false),
+					RunAsGroup:               ptr.Int64ToPtr(0),
 					RunAsNonRoot:             ptr.BoolToPtr(true),
+					RunAsUser:                ptr.Int64ToPtr(1001),
 				},
 				ReadinessProbe: &corev1.Probe{
 					Handler: corev1.Handler{

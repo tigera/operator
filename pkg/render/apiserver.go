@@ -739,7 +739,6 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 			Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 			Labels: map[string]string{
 				"apiserver": "true",
-				"k8s-app":   name,
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -747,6 +746,8 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
+			// For legacy reasons we use apiserver: true here instead of the k8s-app: name label,
+			// so we need to set it explicitly rather than use the common labeling logic.
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"apiserver": "true"}},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
@@ -754,7 +755,6 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 					Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
 					Labels: map[string]string{
 						"apiserver": "true",
-						"k8s-app":   name,
 					},
 					Annotations: annotations,
 				},
@@ -801,11 +801,11 @@ func (c *apiServerComponent) hostNetwork() bool {
 // apiServerContainer creates the API server container.
 func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	volumeMounts := []corev1.VolumeMount{
-		c.cfg.TLSKeyPair.VolumeMount(),
+		c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()),
 	}
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		if c.cfg.ManagementCluster != nil {
-			volumeMounts = append(volumeMounts, c.cfg.TunnelCASecret.VolumeMount())
+			volumeMounts = append(volumeMounts, c.cfg.TunnelCASecret.VolumeMount(c.SupportedOSType()))
 		}
 		volumeMounts = append(volumeMounts,
 			corev1.VolumeMount{Name: auditLogsVolumeName, MountPath: "/var/log/calico/audit"},

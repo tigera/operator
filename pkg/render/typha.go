@@ -369,14 +369,8 @@ func (c *typhaComponent) typhaDeployment() *appsv1.Deployment {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      common.TyphaDeploymentName,
 			Namespace: common.CalicoNamespace,
-			Labels: map[string]string{
-				AppLabelName: TyphaK8sAppName,
-			},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{AppLabelName: TyphaK8sAppName},
-			},
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RollingUpdateDeploymentStrategyType,
 				RollingUpdate: &appsv1.RollingUpdateDeployment{
@@ -387,9 +381,6 @@ func (c *typhaComponent) typhaDeployment() *appsv1.Deployment {
 			RevisionHistoryLimit: &revisionHistoryLimit,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						AppLabelName: TyphaK8sAppName,
-					},
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
@@ -424,8 +415,8 @@ func (c *typhaComponent) volumes() []corev1.Volume {
 // typhaVolumeMounts creates the typha's volume mounts.
 func (c *typhaComponent) typhaVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
-		c.cfg.TLS.TrustedBundle.VolumeMount(),
-		c.cfg.TLS.TyphaSecret.VolumeMount(),
+		c.cfg.TLS.TrustedBundle.VolumeMount(c.SupportedOSType()),
+		c.cfg.TLS.TyphaSecret.VolumeMount(c.SupportedOSType()),
 	}
 }
 

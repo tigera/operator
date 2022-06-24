@@ -204,27 +204,16 @@ func (c *dexComponent) deployment() client.Object {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      DexObjectName,
 			Namespace: DexNamespace,
-			Labels: map[string]string{
-				"k8s-app": DexObjectName,
-			},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"k8s-app": DexObjectName,
-				},
-			},
 			Replicas: c.cfg.Installation.ControlPlaneReplicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      DexObjectName,
-					Namespace: DexNamespace,
-					Labels: map[string]string{
-						"k8s-app": DexObjectName,
-					},
+					Name:        DexObjectName,
+					Namespace:   DexNamespace,
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
@@ -249,7 +238,7 @@ func (c *dexComponent) deployment() client.Object {
 									ContainerPort: DexPort,
 								},
 							},
-							VolumeMounts: append(c.cfg.DexConfig.RequiredVolumeMounts(), c.cfg.TLSKeyPair.VolumeMount()),
+							VolumeMounts: append(c.cfg.DexConfig.RequiredVolumeMounts(), c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType())),
 						},
 					},
 					Volumes: append(c.cfg.DexConfig.RequiredVolumes(), c.cfg.TLSKeyPair.Volume()),
@@ -317,8 +306,8 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 		},
 		"web": map[string]interface{}{
 			"https":                   "0.0.0.0:5556",
-			"tlsCert":                 "/etc/dex/tls/tls.crt",
-			"tlsKey":                  "/etc/dex/tls/tls.key",
+			"tlsCert":                 c.cfg.TLSKeyPair.VolumeMountCertificateFilePath(),
+			"tlsKey":                  c.cfg.TLSKeyPair.VolumeMountKeyFilePath(),
 			"allowedOrigins":          []string{"*"},
 			"discoveryAllowedOrigins": []string{"*"},
 		},

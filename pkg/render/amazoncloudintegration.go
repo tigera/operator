@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -230,23 +230,16 @@ func (c *amazonCloudIntegrationComponent) deployment() *appsv1.Deployment {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      AmazonCloudIntegrationComponentName,
 			Namespace: AmazonCloudIntegrationNamespace,
-			Labels: map[string]string{
-				"k8s-app": AmazonCloudIntegrationComponentName,
-			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": AmazonCloudIntegrationComponentName}},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      AmazonCloudIntegrationComponentName,
-					Namespace: AmazonCloudIntegrationNamespace,
-					Labels: map[string]string{
-						"k8s-app": AmazonCloudIntegrationComponentName,
-					},
+					Name:        AmazonCloudIntegrationComponentName,
+					Namespace:   AmazonCloudIntegrationNamespace,
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{

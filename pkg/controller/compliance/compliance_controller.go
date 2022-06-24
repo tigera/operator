@@ -127,7 +127,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	// Watch the given secrets in each both the compliance and operator namespaces
 	for _, namespace := range []string{common.OperatorNamespace(), render.ComplianceNamespace} {
 		for _, secretName := range []string{
-			relasticsearch.PublicCertSecret, render.ElasticsearchComplianceBenchmarkerUserSecret,
+			render.TigeraElasticsearchGatewaySecret, render.ElasticsearchComplianceBenchmarkerUserSecret,
 			render.ElasticsearchComplianceControllerUserSecret, render.ElasticsearchComplianceReporterUserSecret,
 			render.ElasticsearchComplianceSnapshotterUserSecret, render.ElasticsearchComplianceServerUserSecret,
 			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, certificatemanagement.CASecretName} {
@@ -336,7 +336,17 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, err
 		}
 	}
-	trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret)
+	esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
+	if err != nil {
+		log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", relasticsearch.PublicCertSecret))
+		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err.Error())
+		return reconcile.Result{}, err
+	} else if esgwCertificate == nil {
+		log.Info("Elasticsearch gateway certificate is not available yet, waiting until they become available")
+		r.status.SetDegraded("Elasticsearch gateway certificate are not available yet, waiting until they become available", "")
+		return reconcile.Result{}, nil
+	}
+	trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, esgwCertificate)
 
 	var complianceServerCertSecret certificatemanagement.KeyPairInterface
 	if managementClusterConnection == nil {

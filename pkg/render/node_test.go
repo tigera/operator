@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -491,6 +491,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
 			{Name: "sys-fs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
 			{Name: "bpffs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
+			{Name: "init-proc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc/1"}}},
 			{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 			{
 				Name: certificatemanagement.TrustedCertConfigMapName,
@@ -2839,6 +2840,25 @@ var _ = Describe("Node rendering tests", func() {
 		Entry("OCP Enterprise no BGP", true, true, operatorv1.BGPDisabled),
 		Entry("OCP Enterprise w/ BGP", true, true, operatorv1.BGPEnabled),
 	)
+
+	Context("With VPP dataplane", func() {
+		It("should set cluster type correctly", func() {
+			vpp := operatorv1.LinuxDataplaneVPP
+			cfg.Installation.CalicoNetwork.LinuxDataplane = &vpp
+			component := render.Node(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+			Expect(len(resources)).To(Equal(defaultNumExpectedResources))
+
+			dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			ds := dsResource.(*appsv1.DaemonSet)
+
+			Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ContainElement(
+				corev1.EnvVar{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp,vpp"},
+			))
+		})
+
+	})
 
 	Context("with k8s overrides set", func() {
 		It("should override k8s endpoints", func() {

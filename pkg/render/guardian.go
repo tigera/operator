@@ -199,19 +199,11 @@ func (c *GuardianComponent) deployment() client.Object {
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GuardianDeploymentName,
-			Namespace: GuardianNamespace,
-			Labels: map[string]string{
-				"k8s-app": GuardianName,
-			},
+			Name:        GuardianDeploymentName,
+			Namespace:   GuardianNamespace,
 			Annotations: c.annotations(),
 		},
 		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"k8s-app": GuardianName,
-				},
-			},
 			Replicas: &replicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
@@ -220,9 +212,6 @@ func (c *GuardianComponent) deployment() client.Object {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      GuardianDeploymentName,
 					Namespace: ManagerNamespace,
-					Labels: map[string]string{
-						"k8s-app": GuardianName,
-					},
 				},
 				Spec: corev1.PodSpec{
 					NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
@@ -291,7 +280,7 @@ func (c *GuardianComponent) container() []corev1.Container {
 
 func (c *GuardianComponent) volumeMounts() []corev1.VolumeMount {
 	mounts := []corev1.VolumeMount{
-		c.cfg.TrustedCertBundle.VolumeMount(),
+		c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType()),
 		{
 			Name:      GuardianVolumeName,
 			MountPath: "/certs/",

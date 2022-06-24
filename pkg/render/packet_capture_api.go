@@ -212,27 +212,16 @@ func (pc *packetCaptureApiComponent) deployment() client.Object {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      PacketCaptureDeploymentName,
 			Namespace: PacketCaptureNamespace,
-			Labels: map[string]string{
-				"k8s-app": PacketCaptureName,
-			},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"k8s-app": PacketCaptureName,
-				},
-			},
 			Replicas: ptr.Int32ToPtr(1),
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      PacketCaptureDeploymentName,
-					Namespace: PacketCaptureNamespace,
-					Labels: map[string]string{
-						"k8s-app": PacketCaptureName,
-					},
+					Name:        PacketCaptureDeploymentName,
+					Namespace:   PacketCaptureNamespace,
 					Annotations: pc.annotations(),
 				},
 				Spec: corev1.PodSpec{
@@ -259,7 +248,7 @@ func (pc *packetCaptureApiComponent) initContainers() []corev1.Container {
 
 func (pc *packetCaptureApiComponent) container() corev1.Container {
 	var volumeMounts = []corev1.VolumeMount{
-		pc.cfg.ServerCertSecret.VolumeMount(),
+		pc.cfg.ServerCertSecret.VolumeMount(pc.SupportedOSType()),
 	}
 	env := []corev1.EnvVar{
 		{Name: "PACKETCAPTURE_API_LOG_LEVEL", Value: "Info"},
@@ -271,7 +260,7 @@ func (pc *packetCaptureApiComponent) container() corev1.Container {
 		env = append(env, pc.cfg.KeyValidatorConfig.RequiredEnv("PACKETCAPTURE_API_")...)
 	}
 	if pc.cfg.TrustedBundle != nil {
-		volumeMounts = append(volumeMounts, pc.cfg.TrustedBundle.VolumeMount())
+		volumeMounts = append(volumeMounts, pc.cfg.TrustedBundle.VolumeMount(pc.SupportedOSType()))
 	}
 
 	return corev1.Container{

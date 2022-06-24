@@ -21,11 +21,11 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -61,8 +61,9 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
-		adAPIKeyPair, err = certificatemanagement.NewKeyPair(rtest.CreateCertSecret(render.ADAPITLSSecretName, common.OperatorNamespace(), render.ADAPITLSSecretName), []string{""}, "")
+		secret, err := certificatemanagement.CreateSelfSignedSecret("", "", "", nil)
 		Expect(err).NotTo(HaveOccurred())
+		adAPIKeyPair = certificatemanagement.NewKeyPair(secret, []string{""}, "")
 		bundle = certificateManager.CreateTrustedBundle()
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
@@ -183,10 +184,10 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 
 		// secrets are mounted
 		adAPIDeployment := rtest.GetResource(resources, render.ADAPIObjectName, render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(bundle.VolumeMount().Name))
-		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal(bundle.VolumeMount().MountPath))
-		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal(adAPIKeyPair.VolumeMount().Name))
-		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal(adAPIKeyPair.VolumeMount().MountPath))
+		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(bundle.VolumeMount(rmeta.OSTypeLinux).Name))
+		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal(bundle.VolumeMount(rmeta.OSTypeLinux).MountPath))
+		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal(adAPIKeyPair.VolumeMount(rmeta.OSTypeLinux).Name))
+		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal(adAPIKeyPair.VolumeMount(rmeta.OSTypeLinux).MountPath))
 
 		// Check all Role for respective AD API SAs
 		detectorsSecret := rtest.GetResource(resources, "anomaly-detectors", render.IntrusionDetectionNamespace, "", "v1", "Secret").(*corev1.Secret)

@@ -220,7 +220,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: map[string]string{"job-name": IntrusionDetectionInstallerJobName},
 		},
-		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
+		Spec: corev1.PodSpec{
 			Tolerations:      c.cfg.Installation.ControlPlaneTolerations,
 			NodeSelector:     c.cfg.Installation.ControlPlaneNodeSelector,
 			RestartPolicy:    corev1.RestartPolicyOnFailure,
@@ -231,7 +231,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchJob() *batc
 			},
 			Volumes:            []corev1.Volume{c.cfg.TrustedCertBundle.Volume()},
 			ServiceAccountName: IntrusionDetectionInstallerJobName,
-		}),
+		},
 	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 
 	return &batchv1.Job{
@@ -293,7 +293,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobContainer() corev1.Co
 				Value: c.cfg.ESClusterConfig.ClusterName(),
 			},
 		},
-		VolumeMounts: []corev1.VolumeMount{c.cfg.TrustedCertBundle.VolumeMount()},
+		VolumeMounts: []corev1.VolumeMount{c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType())},
 	}
 }
 
@@ -467,15 +467,9 @@ func (c *intrusionDetectionComponent) intrusionDetectionDeployment() *appsv1.Dep
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      IntrusionDetectionName,
 			Namespace: IntrusionDetectionNamespace,
-			Labels: map[string]string{
-				"k8s-app": IntrusionDetectionName,
-			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{"k8s-app": IntrusionDetectionName},
-			},
 			Template: *c.deploymentPodTemplate(),
 		},
 	}
@@ -522,14 +516,11 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 
 	return relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      IntrusionDetectionName,
-			Namespace: IntrusionDetectionNamespace,
-			Labels: map[string]string{
-				"k8s-app": IntrusionDetectionName,
-			},
+			Name:        IntrusionDetectionName,
+			Namespace:   IntrusionDetectionNamespace,
 			Annotations: c.intrusionDetectionAnnotations(),
 		},
-		Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
+		Spec: corev1.PodSpec{
 			Tolerations:        c.cfg.Installation.ControlPlaneTolerations,
 			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 			ServiceAccountName: IntrusionDetectionName,
@@ -538,7 +529,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 				container,
 			},
 			Volumes: volumes,
-		}),
+		},
 	}, c.cfg.ESClusterConfig, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
 }
 
@@ -559,7 +550,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 	// If syslog forwarding is enabled then set the necessary ENV var and volume mount to
 	// write logs for Fluentd.
 	volumeMounts := []corev1.VolumeMount{
-		c.cfg.TrustedCertBundle.VolumeMount(),
+		c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType()),
 	}
 	if c.syslogForwardingIsEnabled() {
 		envs = append(envs,
@@ -1274,7 +1265,10 @@ func (c *intrusionDetectionComponent) adAPIService() *corev1.Service {
 func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 	adAPIStorageVolumePath := "/storage"
 	adAPIStorageVolumeName := "volume-storage"
-
+	var initContainers []corev1.Container
+	if c.cfg.ADAPIServerCertSecret.UseCertificateManagement() {
+		initContainers = append(initContainers, c.cfg.ADAPIServerCertSecret.InitContainer(IntrusionDetectionNamespace))
+	}
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1316,6 +1310,7 @@ func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 							},
 						},
 					},
+					InitContainers: initContainers,
 					Containers: []corev1.Container{
 						{
 							Name:  ADAPIObjectName,
@@ -1346,8 +1341,8 @@ func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 							},
 							Command: []string{"/anomaly-detection-api"},
 							VolumeMounts: []corev1.VolumeMount{
-								c.cfg.TrustedCertBundle.VolumeMount(),
-								c.cfg.ADAPIServerCertSecret.VolumeMount(),
+								c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType()),
+								c.cfg.ADAPIServerCertSecret.VolumeMount(c.SupportedOSType()),
 								{
 									MountPath: adAPIStorageVolumePath,
 									Name:      adAPIStorageVolumeName,
@@ -1540,7 +1535,7 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 								MountPath: "/certs/es-ca.pem",
 								SubPath:   "es-ca.pem",
 							},
-							c.cfg.ADAPIServerCertSecret.VolumeMount(),
+							c.cfg.ADAPIServerCertSecret.VolumeMount(c.SupportedOSType()),
 						},
 					},
 				},

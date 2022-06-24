@@ -189,7 +189,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		cfg.OSType = rmeta.OSTypeWindows
-		cfg.TrustedBundle = nil
 		cfg.MetricsServerTLS = nil
 		// Should render the correct resources.
 		component := render.Fluentd(cfg)
@@ -248,17 +247,17 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 		container := ds.Spec.Template.Spec.Containers[0]
 
-		Expect(container.ReadinessProbe.Exec.Command).To(ConsistOf([]string{`c:\ruby26\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/readiness.sh`}))
+		Expect(container.ReadinessProbe.Exec.Command).To(ConsistOf([]string{`c:\ruby\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/readiness.sh`}))
 		Expect(container.ReadinessProbe.TimeoutSeconds).To(BeEquivalentTo(10))
 		Expect(container.ReadinessProbe.PeriodSeconds).To(BeEquivalentTo(10))
 		Expect(container.ReadinessProbe.FailureThreshold).To(BeEquivalentTo(3))
 
-		Expect(container.LivenessProbe.Exec.Command).To(ConsistOf([]string{`c:\ruby26\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/liveness.sh`}))
+		Expect(container.LivenessProbe.Exec.Command).To(ConsistOf([]string{`c:\ruby\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/liveness.sh`}))
 		Expect(container.LivenessProbe.TimeoutSeconds).To(BeEquivalentTo(10))
 		Expect(container.LivenessProbe.PeriodSeconds).To(BeEquivalentTo(10))
 		Expect(container.LivenessProbe.FailureThreshold).To(BeEquivalentTo(3))
 
-		Expect(container.StartupProbe.Exec.Command).To(ConsistOf([]string{`c:\ruby26\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/liveness.sh`}))
+		Expect(container.StartupProbe.Exec.Command).To(ConsistOf([]string{`c:\ruby\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/liveness.sh`}))
 		Expect(container.StartupProbe.TimeoutSeconds).To(BeEquivalentTo(20))
 		Expect(container.StartupProbe.PeriodSeconds).To(BeEquivalentTo(20))
 		Expect(container.StartupProbe.FailureThreshold).To(BeEquivalentTo(10))
@@ -387,7 +386,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(4))
+		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(3))
 		envs := ds.Spec.Template.Spec.Containers[0].Env
 
 		expectedEnvs := []struct {
@@ -473,7 +472,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(5))
+		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(4))
 
 		var volnames []string
 		for _, vol := range ds.Spec.Template.Spec.Volumes {

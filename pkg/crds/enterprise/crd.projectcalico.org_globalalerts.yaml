@@ -12,6 +12,7 @@ spec:
     listKind: GlobalAlertList
     plural: globalalerts
     singular: globalalert
+  preserveUnknownFields: false
   scope: Cluster
   versions:
   - name: v1

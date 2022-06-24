@@ -45,7 +45,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/ptr"
@@ -67,30 +66,30 @@ const (
 
 	ElasticsearchNamespace = "tigera-elasticsearch"
 
-	TigeraElasticsearchCertSecret         = "tigera-secure-elasticsearch-cert"
+	// TigeraElasticsearchGatewaySecret is the TLS key pair that is mounted by Elasticsearch gateway.
+	TigeraElasticsearchGatewaySecret = "tigera-secure-elasticsearch-cert"
+	// TigeraElasticsearchInternalCertSecret is the TLS key pair that is mounted by the Elasticsearch pods.
 	TigeraElasticsearchInternalCertSecret = "tigera-secure-internal-elasticsearch-cert"
+	// TigeraKibanaCertSecret is the TLS key pair that is mounted by the Kibana pods.
+	TigeraKibanaCertSecret = "tigera-secure-kibana-cert"
 
-	ElasticsearchName                     = "tigera-secure"
-	ElasticsearchServiceName              = "tigera-secure-es-http"
-	ESGatewayServiceName                  = "tigera-secure-es-gateway-http"
-	ElasticsearchDefaultPort              = 9200
-	ElasticsearchInternalPort             = 9300
-	ElasticsearchSecureSettingsSecretName = "tigera-elasticsearch-secure-settings"
-	ElasticsearchOperatorUserSecret       = "tigera-ee-operator-elasticsearch-access"
-	ElasticsearchAdminUserSecret          = "tigera-secure-es-elastic-user"
-	ElasticsearchPolicyName               = networkpolicy.TigeraComponentPolicyPrefix + "elasticsearch-access"
-	ElasticsearchInternalPolicyName       = networkpolicy.TigeraComponentPolicyPrefix + "elasticsearch-internal"
+	ElasticsearchName               = "tigera-secure"
+	ElasticsearchServiceName        = "tigera-secure-es-http"
+	ESGatewayServiceName            = "tigera-secure-es-gateway-http"
+	ElasticsearchDefaultPort        = 9200
+	ElasticsearchInternalPort       = 9300
+	ElasticsearchOperatorUserSecret = "tigera-ee-operator-elasticsearch-access"
+	ElasticsearchAdminUserSecret    = "tigera-secure-es-elastic-user"
+	ElasticsearchPolicyName         = networkpolicy.TigeraComponentPolicyPrefix + "elasticsearch-access"
+	ElasticsearchInternalPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "elasticsearch-internal"
 
-	KibanaName               = "tigera-secure"
-	KibanaNamespace          = "tigera-kibana"
-	KibanaPublicCertSecret   = "tigera-secure-es-gateway-http-certs-public"
-	KibanaInternalCertSecret = "tigera-secure-kb-http-certs-public"
-	TigeraKibanaCertSecret   = "tigera-secure-kibana-cert"
-	KibanaBasePath           = "tigera-kibana"
-	KibanaServiceName        = "tigera-secure-kb-http"
-	KibanaDefaultRoute       = "/app/kibana#/dashboards?%s&title=%s"
-	KibanaPolicyName         = networkpolicy.TigeraComponentPolicyPrefix + "kibana-access"
-	KibanaPort               = 5601
+	KibanaName         = "tigera-secure"
+	KibanaNamespace    = "tigera-kibana"
+	KibanaBasePath     = "tigera-kibana"
+	KibanaServiceName  = "tigera-secure-kb-http"
+	KibanaDefaultRoute = "/app/kibana#/dashboards?%s&title=%s"
+	KibanaPolicyName   = networkpolicy.TigeraComponentPolicyPrefix + "kibana-access"
+	KibanaPort         = 5601
 
 	DefaultElasticsearchClusterName = "cluster"
 	DefaultElasticsearchReplicas    = 0
@@ -170,27 +169,8 @@ var log = logf.Log.WithName("render")
 
 // LogStorage renders the components necessary for kibana and elasticsearch
 func LogStorage(cfg *ElasticsearchConfiguration) Component {
-
-	var kibanaSecrets []*corev1.Secret
-
-	if cfg.KibanaCertSecret != nil {
-
-		kibanaSecrets = append(kibanaSecrets, secret.CopyToNamespace(KibanaNamespace, cfg.KibanaCertSecret)...)
-
-		if cfg.Installation.CertificateManagement != nil {
-
-			kibanaSecrets = append(kibanaSecrets,
-				CreateCertificateSecret(cfg.Installation.CertificateManagement.CACert, relasticsearch.InternalCertSecret, KibanaNamespace),
-				CreateCertificateSecret(cfg.Installation.CertificateManagement.CACert, KibanaInternalCertSecret, common.OperatorNamespace()))
-		} else if cfg.KibanaInternalCertSecret != nil {
-			//copy the valid cert to operator namespace.
-			kibanaSecrets = append(kibanaSecrets, secret.CopyToNamespace(common.OperatorNamespace(), cfg.KibanaInternalCertSecret)...)
-		}
-	}
-
 	return &elasticsearchComponent{
-		cfg:           cfg,
-		kibanaSecrets: kibanaSecrets,
+		cfg: cfg,
 	}
 }
 
@@ -203,9 +183,9 @@ type ElasticsearchConfiguration struct {
 	Elasticsearch               *esv1.Elasticsearch
 	Kibana                      *kbv1.Kibana
 	ClusterConfig               *relasticsearch.ClusterConfig
-	ElasticsearchSecrets        []*corev1.Secret
-	KibanaCertSecret            *corev1.Secret
-	KibanaInternalCertSecret    *corev1.Secret
+	ElasticsearchUserSecret     *corev1.Secret
+	ElasticsearchKeyPair        certificatemanagement.KeyPairInterface
+	KibanaKeyPair               certificatemanagement.KeyPairInterface
 	PullSecrets                 []*corev1.Secret
 	Provider                    operatorv1.Provider
 	CuratorSecrets              []*corev1.Secret
@@ -214,6 +194,8 @@ type ElasticsearchConfiguration struct {
 	ClusterDomain               string
 	BaseURL                     string // BaseUrl is where the manager is reachable, for setting Kibana publicBaseUrl
 	ElasticLicenseType          ElasticsearchLicenseType
+	TrustedBundle               certificatemanagement.TrustedBundle
+	UnusedTLSSecret             *corev1.Secret
 }
 
 type elasticsearchComponent struct {
@@ -336,8 +318,8 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.cfg.PullSecrets...)...)...)
 		}
 
-		if len(es.cfg.ElasticsearchSecrets) > 0 {
-			toCreate = append(toCreate, secret.ToRuntimeObjects(es.cfg.ElasticsearchSecrets...)...)
+		if es.cfg.ElasticsearchUserSecret != nil {
+			toCreate = append(toCreate, es.cfg.ElasticsearchUserSecret)
 		}
 
 		toCreate = append(toCreate, es.elasticsearchServiceAccount())
@@ -399,8 +381,23 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	if es.cfg.Installation.CertificateManagement != nil {
-		toCreate = append(toCreate, certificatemanagement.CSRClusterRoleBinding("tigera-elasticsearch", ElasticsearchNamespace))
-		toCreate = append(toCreate, certificatemanagement.CSRClusterRoleBinding("tigera-kibana", KibanaNamespace))
+		toCreate = append(toCreate, es.cfg.UnusedTLSSecret)
+		if es.cfg.ElasticsearchKeyPair.UseCertificateManagement() {
+			// We need to render a secret. It won't ever be used by Elasticsearch for TLS, but is needed to pass ECK's checks.
+			// If the secret changes / gets reconciled, it will not trigger a re-render of Kibana.
+			unusedSecret := es.cfg.ElasticsearchKeyPair.Secret(ElasticsearchNamespace)
+			unusedSecret.Data = es.cfg.UnusedTLSSecret.Data
+			toCreate = append(toCreate, unusedSecret)
+		}
+		if es.cfg.KibanaKeyPair.UseCertificateManagement() {
+			// We need to render a secret. It won't ever be used by Kibana for TLS, but is needed to pass ECK's checks.
+			// If the secret changes / gets reconciled, it will not trigger a re-render of Kibana.
+			unusedSecret := es.cfg.KibanaKeyPair.Secret(KibanaNamespace)
+			unusedSecret.Data = es.cfg.UnusedTLSSecret.Data
+			toCreate = append(toCreate, unusedSecret)
+		}
+	} else if es.cfg.UnusedTLSSecret != nil {
+		toDelete = append(toDelete, es.cfg.UnusedTLSSecret)
 	}
 
 	return toCreate, toDelete
@@ -540,9 +537,9 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 
 	initContainers := []corev1.Container{initOSSettingsContainer}
 
-	annotations := map[string]string{
-		ElasticsearchTLSHashAnnotation: rmeta.SecretsAnnotationHash(es.cfg.ElasticsearchSecrets...),
-	}
+	annotations := es.cfg.TrustedBundle.HashAnnotations()
+	annotations[ElasticsearchTLSHashAnnotation] = rmeta.SecretsAnnotationHash(es.cfg.ElasticsearchUserSecret)
+	annotations[es.cfg.ElasticsearchKeyPair.HashAnnotationKey()] = es.cfg.ElasticsearchKeyPair.HashAnnotationValue()
 
 	var volumes []corev1.Volume
 
@@ -578,17 +575,11 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			},
 		}
 
-		// Add the init container that will issue a CSR for HTTP traffic and mount it in an emptyDir.
-		csrInitContainerHTTP := certificatemanagement.CreateCSRInitContainer(
-			es.cfg.Installation.CertificateManagement,
-			es.csrImage,
-			csrVolumeNameHTTP,
-			ElasticsearchServiceName,
-			corev1.TLSPrivateKeyKey,
-			corev1.TLSCertKey,
-			dns.GetServiceDNSNames(ElasticsearchServiceName, ElasticsearchNamespace, es.cfg.ClusterDomain),
-			ElasticsearchNamespace)
+		csrInitContainerHTTP := es.cfg.ElasticsearchKeyPair.InitContainer(ElasticsearchNamespace)
 		csrInitContainerHTTP.Name = "key-cert-elastic"
+		csrInitContainerHTTP.VolumeMounts[0].Name = csrVolumeNameHTTP
+		httpVolumemount := es.cfg.ElasticsearchKeyPair.VolumeMount(es.SupportedOSType())
+		httpVolumemount.Name = csrVolumeNameHTTP
 
 		// Add the init container that will issue a CSR for transport and mount it in an emptyDir.
 		csrInitContainerTransport := certificatemanagement.CreateCSRInitContainer(
@@ -631,7 +622,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			},
 		})
 		esContainer.VolumeMounts = append(esContainer.VolumeMounts,
-			corev1.VolumeMount{MountPath: certificatemanagement.CSRCMountPath, Name: csrVolumeNameHTTP, ReadOnly: false},
+			httpVolumemount,
 			corev1.VolumeMount{MountPath: "/usr/share/elasticsearch/config/http-certs", Name: csrVolumeNameHTTP, ReadOnly: false},
 			corev1.VolumeMount{MountPath: "/usr/share/elasticsearch/config/transport-certs", Name: csrVolumeNameTransport, ReadOnly: false},
 			corev1.VolumeMount{MountPath: "/usr/share/elasticsearch/config/node-transport-cert", Name: csrVolumeNameTransport, ReadOnly: false},
@@ -1348,6 +1339,10 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
 	const schedule = "@hourly"
 
 	return &batchv1beta.CronJob{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "CronJob",
+			APIVersion: "batch/v1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      EsCuratorName,
 			Namespace: ElasticsearchNamespace,
@@ -1368,7 +1363,7 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
 								"k8s-app": EsCuratorName,
 							},
 						},
-						Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
+						Spec: corev1.PodSpec{
 							NodeSelector: es.cfg.Installation.ControlPlaneNodeSelector,
 							Tolerations:  es.cfg.Installation.ControlPlaneTolerations,
 							Containers: []corev1.Container{
@@ -1381,12 +1376,18 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
 										RunAsNonRoot:             &t,
 										AllowPrivilegeEscalation: &f,
 									},
+									VolumeMounts: []corev1.VolumeMount{
+										es.cfg.TrustedBundle.VolumeMount(es.SupportedOSType()),
+									},
 								}, DefaultElasticsearchClusterName, ElasticsearchCuratorUserSecret, es.cfg.ClusterDomain, es.SupportedOSType()),
 							},
 							ImagePullSecrets:   secret.GetReferenceList(es.cfg.PullSecrets),
 							RestartPolicy:      corev1.RestartPolicyOnFailure,
 							ServiceAccountName: EsCuratorServiceAccount,
-						}),
+							Volumes: []corev1.Volume{
+								es.cfg.TrustedBundle.Volume(),
+							},
+						},
 					},
 				},
 			},
@@ -1400,6 +1401,8 @@ func (es elasticsearchComponent) curatorEnvVars() []corev1.EnvVar {
 		{Name: "EE_AUDIT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(*es.cfg.LogStorage.Spec.Retention.AuditReports)},
 		{Name: "EE_SNAPSHOT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(*es.cfg.LogStorage.Spec.Retention.Snapshots)},
 		{Name: "EE_COMPLIANCE_REPORT_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(*es.cfg.LogStorage.Spec.Retention.ComplianceReports)},
+		{Name: "EE_DNS_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(*es.cfg.LogStorage.Spec.Retention.DNSLogs)},
+		{Name: "EE_BGP_INDEX_RETENTION_PERIOD", Value: fmt.Sprint(*es.cfg.LogStorage.Spec.Retention.BGPLogs)},
 		{Name: "EE_MAX_TOTAL_STORAGE_PCT", Value: fmt.Sprint(maxTotalStoragePercent)},
 		{Name: "EE_MAX_LOGS_STORAGE_PCT", Value: fmt.Sprint(maxLogsStoragePercent)},
 	}

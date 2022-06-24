@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -42,24 +42,10 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 	esLicenseType render.ElasticsearchLicenseType,
 	ctx context.Context,
 ) (reconcile.Result, bool, error) {
-	kubeControllerEsPublicCertSecret, err := utils.GetSecret(ctx, r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
-	if err != nil {
-		log.Error(err, err.Error())
-		r.status.SetDegraded("Failed to get Elasticsearch pub cert secret used by kube controllers", err.Error())
-		return reconcile.Result{}, false, err
-	}
-
 	kubeControllersUserSecret, err := utils.GetSecret(ctx, r.client, kubecontrollers.ElasticsearchKubeControllersUserSecret, common.OperatorNamespace())
 	if err != nil {
 		log.Error(err, err.Error())
 		r.status.SetDegraded("Failed to get kube controllers gateway secret", err.Error())
-		return reconcile.Result{}, false, err
-	}
-
-	kubeControllerKibanaPublicCertSecret, err := utils.GetSecret(ctx, r.client, render.KibanaPublicCertSecret, common.OperatorNamespace())
-	if err != nil {
-		log.Error(err, err.Error())
-		r.status.SetDegraded("Failed to get Kibana pub cert secret used by kube controllers", err.Error())
 		return reconcile.Result{}, false, err
 	}
 
@@ -85,6 +71,14 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 			return reconcile.Result{}, false, err
 		}
 	}
+	esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
+	if err != nil {
+		log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", relasticsearch.PublicCertSecret))
+		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err.Error())
+		return reconcile.Result{}, false, err
+	}
+	trustedBundle := certificateManager.CreateTrustedBundle(esgwCertificate)
+
 	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:                 k8sapi.Endpoint,
 		Installation:                 install,
@@ -93,10 +87,9 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 		ManagerInternalSecret:        managerInternalTLSSecret,
 		EnabledESOIDCWorkaround:      enableESOIDCWorkaround,
 		Authentication:               authentication,
-		ElasticsearchSecret:          kubeControllerEsPublicCertSecret,
 		KubeControllersGatewaySecret: kubeControllersUserSecret,
-		KibanaSecret:                 kubeControllerKibanaPublicCertSecret,
 		LogStorageExists:             true,
+		TrustedBundle:                trustedBundle,
 	}
 	esKubeControllerComponents := kubecontrollers.NewElasticsearchKubeControllers(&kubeControllersCfg)
 

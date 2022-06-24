@@ -21,6 +21,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 
 	"github.com/stretchr/testify/mock"
 
@@ -36,7 +37,6 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
-	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/test"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -159,17 +159,26 @@ var _ = Describe("Manager controller tests", func() {
 			})).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      relasticsearch.PublicCertSecret,
-					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
+
+			certificateManager, err := certificatemanager.Create(c, nil, "")
+			Expect(err).NotTo(HaveOccurred())
+			complianceKp, err := certificateManager.GetOrCreateKeyPair(c, render.ComplianceServerCertSecret, common.OperatorNamespace(), []string{render.ComplianceServerCertSecret})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, complianceKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			pcapKp, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureCertSecret, common.OperatorNamespace(), []string{render.PacketCaptureCertSecret})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, pcapKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			promKp, err := certificateManager.GetOrCreateKeyPair(c, render.PrometheusTLSSecretName, common.OperatorNamespace(), []string{render.PrometheusTLSSecretName})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, promKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			gwKp, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, gwKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ElasticsearchManagerUserSecret,
 					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, rtest.CreateCertSecret(render.ComplianceServerCertSecret, common.OperatorNamespace(), render.PacketCaptureCertSecret)))
-			Expect(c.Create(ctx, rtest.CreateCertSecret(render.PacketCaptureCertSecret, common.OperatorNamespace(), render.PacketCaptureCertSecret)))
-			Expect(c.Create(ctx, rtest.CreateCertSecret(render.PrometheusTLSSecretName, common.OperatorNamespace(), render.PrometheusTLSSecretName)))
 			Expect(c.Create(ctx, &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ECKLicenseConfigMapName,
@@ -352,29 +361,28 @@ var _ = Describe("Manager controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: common.TigeraPrometheusNamespace},
 			})).NotTo(HaveOccurred())
 
+			certificateManager, err := certificatemanager.Create(c, nil, "")
+			Expect(err).NotTo(HaveOccurred())
+			complianceKp, err := certificateManager.GetOrCreateKeyPair(c, render.ComplianceServerCertSecret, common.OperatorNamespace(), []string{render.ComplianceServerCertSecret})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, complianceKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			pcapKp, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureCertSecret, common.OperatorNamespace(), []string{render.PacketCaptureCertSecret})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, pcapKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			promKp, err := certificateManager.GetOrCreateKeyPair(c, render.PrometheusTLSSecretName, common.OperatorNamespace(), []string{render.PrometheusTLSSecretName})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, promKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			gwKp, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, gwKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+
 			Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      relasticsearch.PublicCertSecret,
-					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
+
 			Expect(c.Create(ctx, &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ElasticsearchManagerUserSecret,
 					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
 
-			Expect(c.Create(ctx, &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.ComplianceServerCertSecret,
-					Namespace: common.OperatorNamespace(),
-				},
-				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-				Data: map[string][]byte{
-					"tls.crt": []byte("crt"),
-					"tls.key": []byte("crt"),
-				},
-			})).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, rtest.CreateCertSecret(render.PacketCaptureCertSecret, common.OperatorNamespace(), render.PacketCaptureCertSecret)))
-			Expect(c.Create(ctx, rtest.CreateCertSecret(render.PrometheusTLSSecretName, common.OperatorNamespace(), render.PrometheusTLSSecretName)))
 			Expect(c.Create(ctx, &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ECKLicenseConfigMapName,

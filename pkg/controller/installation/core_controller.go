@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"net"
 	"os"
 	"reflect"
@@ -681,6 +682,8 @@ func fillDefaults(instance *operator.Installation) error {
 			instance.Spec.FlexVolumePath = "/home/kubernetes/flexvolume/"
 		} else if instance.Spec.KubernetesProvider == operator.ProviderAKS {
 			instance.Spec.FlexVolumePath = "/etc/kubernetes/volumeplugins/"
+		} else if instance.Spec.KubernetesProvider == operator.ProviderRKE2 {
+			instance.Spec.FlexVolumePath = "/var/lib/kubelet/volumeplugins/"
 		} else {
 			instance.Spec.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
 		}
@@ -1363,6 +1366,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Write updated status.
+	if statusMTU > math.MaxInt32 || statusMTU < 0 {
+		return reconcile.Result{}, errors.New("The MTU size should be between Max int32 (2147483647) and 0")
+	}
 	instance.Status.MTU = int32(statusMTU)
 	instance.Status.Variant = instance.Spec.Variant
 	if imageSet == nil {

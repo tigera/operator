@@ -93,6 +93,91 @@ var _ = Describe("Component handler tests", func() {
 		handler = NewComponentHandler(log, c, scheme, instance)
 	})
 
+	It("merges daemonset template annotations and reconciles only operator added annotations", func() {
+		fc := &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs: []client.Object{&apps.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-ds",
+					Namespace: "default",
+				},
+				Spec: apps.DaemonSetSpec{
+					Template: v1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Annotations: map[string]string{
+								fakeComponentAnnotationKey: fakeComponentAnnotationValue,
+							},
+						},
+					},
+				},
+			}},
+		}
+
+		err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).To(BeNil())
+
+		By("checking that the daemonset is created and desired annotations are present")
+		expectedAnnotations := map[string]string{
+			fakeComponentAnnotationKey: fakeComponentAnnotationValue,
+		}
+		dsKey := client.ObjectKey{
+			Name:      "test-ds",
+			Namespace: "default",
+		}
+		ds := &apps.DaemonSet{}
+		_ = c.Get(ctx, dsKey, ds)
+		Expect(ds.Spec.Template.GetAnnotations()).To(Equal(expectedAnnotations))
+
+		By("add a new annotation, simulating a rolling restart request")
+		annotations := map[string]string{
+			fakeComponentAnnotationKey:          fakeComponentAnnotationValue,
+			"kubectl.kubernetes.io/restartedAt": "some-time",
+		}
+		ds.Spec.Template.Annotations = annotations
+		Expect(c.Update(ctx, ds)).NotTo(HaveOccurred())
+
+		By("checking that the object is updated with the annotation")
+		ds = &apps.DaemonSet{}
+		err = c.Get(ctx, dsKey, ds)
+		Expect(err).To(BeNil())
+		Expect(ds.Spec.Template.GetAnnotations()).To(Equal(annotations))
+
+		// Re-initialize the fake component. Object metadata gets modified as part of CreateOrUpdate, leading
+		// to resource update conflicts.
+		fc = &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs: []client.Object{&apps.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-ds",
+					Namespace: "default",
+				},
+				Spec: apps.DaemonSetSpec{
+					Template: v1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Annotations: map[string]string{
+								fakeComponentAnnotationKey: fakeComponentAnnotationValue,
+							},
+						},
+					},
+				},
+			}},
+		}
+
+		By("initiating a merge")
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).To(BeNil())
+
+		By("retrieving the daemonset and checking that both current and desired annotations are still present")
+		expectedAnnotations = map[string]string{
+			fakeComponentAnnotationKey:          fakeComponentAnnotationValue,
+			"kubectl.kubernetes.io/restartedAt": "some-time",
+		}
+		ds = &apps.DaemonSet{}
+		err = c.Get(ctx, dsKey, ds)
+		Expect(err).To(BeNil())
+		Expect(ds.Spec.Template.GetAnnotations()).To(Equal(expectedAnnotations))
+	})
+
 	It("merges annotations and reconciles only operator added annotations", func() {
 		fc := &fakeComponent{
 			supportedOSType: rmeta.OSTypeLinux,
@@ -917,6 +1002,154 @@ var _ = Describe("Component handler tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Get(ctx, client.ObjectKey{Name: "my-secret"}, secret)).NotTo(HaveOccurred())
 		Expect(secret.Type).To(Equal(corev1.SecretTypeTLS))
+	})
+
+	Context("common labels and labelselector", func() {
+		It("updates daemonsets", func() {
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{&apps.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-daemonset",
+						Namespace: "test-namespace",
+					},
+					Spec: apps.DaemonSetSpec{
+						Template: corev1.PodTemplateSpec{},
+					},
+				}},
+			}
+
+			err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+			Expect(err).To(BeNil())
+
+			By("checking that the daemonset is created and labels are added")
+			expectedLabels := map[string]string{
+				"k8s-app":                "test-daemonset",
+				"app.kubernetes.io/name": "test-daemonset",
+			}
+			expectedSelector := metav1.LabelSelector{
+				MatchLabels: map[string]string{"k8s-app": "test-daemonset"},
+			}
+			key := client.ObjectKey{
+				Name:      "test-daemonset",
+				Namespace: "test-namespace",
+			}
+			ds := &apps.DaemonSet{}
+			Expect(c.Get(ctx, key, ds)).NotTo(HaveOccurred())
+			Expect(ds.Spec.Template.GetLabels()).To(Equal(expectedLabels))
+			Expect(*ds.Spec.Selector).To(Equal(expectedSelector))
+		})
+		It("does not change LabelSelector on daemonsets", func() {
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{&apps.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-daemonset",
+						Namespace: "test-namespace",
+					},
+					Spec: apps.DaemonSetSpec{
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"preset-key": "preset-value",
+							},
+						},
+						Template: corev1.PodTemplateSpec{},
+					},
+				}},
+			}
+
+			err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+			Expect(err).To(BeNil())
+
+			expectedLabels := map[string]string{
+				"k8s-app":                "test-daemonset",
+				"app.kubernetes.io/name": "test-daemonset",
+			}
+			expectedSelector := metav1.LabelSelector{
+				MatchLabels: map[string]string{"preset-key": "preset-value"},
+			}
+			key := client.ObjectKey{
+				Name:      "test-daemonset",
+				Namespace: "test-namespace",
+			}
+			ds := &apps.DaemonSet{}
+			Expect(c.Get(ctx, key, ds)).NotTo(HaveOccurred())
+			Expect(ds.Spec.Template.GetLabels()).To(Equal(expectedLabels))
+			Expect(*ds.Spec.Selector).To(Equal(expectedSelector))
+		})
+		It("updates deployments", func() {
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{&apps.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-deployment",
+						Namespace: "test-namespace",
+					},
+					Spec: apps.DeploymentSpec{
+						Template: corev1.PodTemplateSpec{},
+					},
+				}},
+			}
+
+			err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+			Expect(err).To(BeNil())
+
+			expectedLabels := map[string]string{
+				"k8s-app":                "test-deployment",
+				"app.kubernetes.io/name": "test-deployment",
+			}
+			expectedSelector := metav1.LabelSelector{
+				MatchLabels: map[string]string{"k8s-app": "test-deployment"},
+			}
+			key := client.ObjectKey{
+				Name:      "test-deployment",
+				Namespace: "test-namespace",
+			}
+			d := &apps.Deployment{}
+			Expect(c.Get(ctx, key, d)).NotTo(HaveOccurred())
+			Expect(d.GetLabels()).To(Equal(expectedLabels))
+			Expect(d.Spec.Template.GetLabels()).To(Equal(expectedLabels))
+			Expect(*d.Spec.Selector).To(Equal(expectedSelector))
+		})
+		It("does not change LabelSelector on deployments", func() {
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{&apps.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-deployment",
+						Namespace: "test-namespace",
+					},
+					Spec: apps.DeploymentSpec{
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"preset-key": "preset-value",
+							},
+						},
+						Template: corev1.PodTemplateSpec{},
+					},
+				}},
+			}
+
+			err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+			Expect(err).To(BeNil())
+
+			expectedLabels := map[string]string{
+				"k8s-app":                "test-deployment",
+				"app.kubernetes.io/name": "test-deployment",
+			}
+			expectedSelector := metav1.LabelSelector{
+				MatchLabels: map[string]string{"preset-key": "preset-value"},
+			}
+			key := client.ObjectKey{
+				Name:      "test-deployment",
+				Namespace: "test-namespace",
+			}
+			d := &apps.Deployment{}
+			Expect(c.Get(ctx, key, d)).To(BeNil())
+			Expect(d.GetLabels()).To(Equal(expectedLabels))
+			Expect(d.Spec.Template.GetLabels()).To(Equal(expectedLabels))
+			Expect(*d.Spec.Selector).To(Equal(expectedSelector))
+		})
 	})
 })
 

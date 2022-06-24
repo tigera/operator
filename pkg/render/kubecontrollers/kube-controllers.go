@@ -84,9 +84,8 @@ type KubeControllersConfiguration struct {
 	// namespace to be returned by the rendered. Expected that the calling code
 	// take care to pass the same secret on each reconcile where possible.
 	ManagerInternalSecret        certificatemanagement.KeyPairInterface
-	ElasticsearchSecret          *corev1.Secret
 	KubeControllersGatewaySecret *corev1.Secret
-	KibanaSecret                 *corev1.Secret
+	TrustedBundle                certificatemanagement.TrustedBundle
 }
 
 func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
@@ -127,7 +126,6 @@ func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeController
 		kubeControllerName:               KubeController,
 		kubeControllerConfigName:         "default",
 		kubeControllerMetricsName:        KubeControllerMetrics,
-		renderManagerInternalSecret:      cfg.ManagerInternalSecret != nil,
 		kubeControllersRules:             kubeControllerRolePolicyRules,
 		kubeControllerAllowTigeraPolicy:  kubeControllerAllowTigeraPolicy,
 		enabledControllers:               enabledControllers,
@@ -171,18 +169,16 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 	}
 
 	return &kubeControllersComponent{
-		cfg:                                cfg,
-		kubeControllerServiceAccountName:   EsKubeControllerServiceAccount,
-		kubeControllerRoleName:             EsKubeControllerRole,
-		kubeControllerRoleBindingName:      EsKubeControllerRoleBinding,
-		kubeControllerName:                 EsKubeController,
-		kubeControllerConfigName:           "elasticsearch",
-		kubeControllerMetricsName:          EsKubeControllerMetrics,
-		renderElasticsearchSecret:          cfg.ElasticsearchSecret != nil,
-		renderKubeControllersGatewaySecret: cfg.KubeControllersGatewaySecret != nil,
-		kubeControllersRules:               kubeControllerRolePolicyRules,
-		kubeControllerAllowTigeraPolicy:    kubeControllerAllowTigeraPolicy,
-		enabledControllers:                 enabledControllers,
+		cfg:                              cfg,
+		kubeControllerServiceAccountName: EsKubeControllerServiceAccount,
+		kubeControllerRoleName:           EsKubeControllerRole,
+		kubeControllerRoleBindingName:    EsKubeControllerRoleBinding,
+		kubeControllerName:               EsKubeController,
+		kubeControllerConfigName:         "elasticsearch",
+		kubeControllerMetricsName:        EsKubeControllerMetrics,
+		kubeControllersRules:             kubeControllerRolePolicyRules,
+		kubeControllerAllowTigeraPolicy:  kubeControllerAllowTigeraPolicy,
+		enabledControllers:               enabledControllers,
 	}
 }
 
@@ -199,10 +195,6 @@ type kubeControllersComponent struct {
 	kubeControllerName               string
 	kubeControllerConfigName         string
 	kubeControllerMetricsName        string
-
-	renderElasticsearchSecret          bool
-	renderManagerInternalSecret        bool
-	renderKubeControllersGatewaySecret bool
 
 	kubeControllersRules            []rbacv1.PolicyRule
 	kubeControllerAllowTigeraPolicy *v3.NetworkPolicy
@@ -242,16 +234,7 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 	)
 
 	objectsToDelete := []client.Object{}
-	if c.renderManagerInternalSecret {
-		objectsToCreate = append(objectsToCreate, c.cfg.ManagerInternalSecret.Secret(common.CalicoNamespace))
-	}
-
-	if c.renderElasticsearchSecret {
-		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
-			secret.CopyToNamespace(common.CalicoNamespace, c.cfg.ElasticsearchSecret)...)...)
-	}
-
-	if c.renderKubeControllersGatewaySecret {
+	if c.cfg.KubeControllersGatewaySecret != nil {
 		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
 			secret.CopyToNamespace(common.CalicoNamespace, c.cfg.KubeControllersGatewaySecret)...)...)
 	}
@@ -511,10 +494,6 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		Volumes:            c.kubeControllersVolumes(),
 	}
 
-	if c.kubeControllerName == EsKubeController {
-		podSpec = relasticsearch.PodSpecDecorate(podSpec)
-	}
-
 	var replicas int32 = 1
 
 	d := appsv1.Deployment{
@@ -522,27 +501,16 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      c.kubeControllerName,
 			Namespace: common.CalicoNamespace,
-			Labels: map[string]string{
-				"k8s-app": c.kubeControllerName,
-			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"k8s-app": c.kubeControllerName,
-				},
-			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      c.kubeControllerName,
-					Namespace: common.CalicoNamespace,
-					Labels: map[string]string{
-						"k8s-app": c.kubeControllerName,
-					},
+					Name:        c.kubeControllerName,
+					Namespace:   common.CalicoNamespace,
 					Annotations: c.annotations(),
 				},
 				Spec: podSpec,
@@ -607,18 +575,17 @@ func (c *kubeControllersComponent) kubeControllersResources() corev1.ResourceReq
 }
 
 func (c *kubeControllersComponent) annotations() map[string]string {
-	am := map[string]string{}
+	var am map[string]string
+	if c.cfg.TrustedBundle != nil {
+		am = c.cfg.TrustedBundle.HashAnnotations()
+	} else {
+		am = make(map[string]string)
+	}
 	if c.cfg.ManagerInternalSecret != nil {
 		am[c.cfg.ManagerInternalSecret.HashAnnotationKey()] = c.cfg.ManagerInternalSecret.HashAnnotationValue()
 	}
-	if c.cfg.ElasticsearchSecret != nil {
-		am[render.TlsSecretHashAnnotation] = rmeta.AnnotationHash(c.cfg.ElasticsearchSecret.Data)
-	}
 	if c.cfg.KubeControllersGatewaySecret != nil {
 		am[render.ElasticsearchUserHashAnnotation] = rmeta.AnnotationHash(c.cfg.KubeControllersGatewaySecret.Data)
-	}
-	if c.cfg.KibanaSecret != nil {
-		am[render.KibanaTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.KibanaSecret.Data)
 	}
 	return am
 }
@@ -630,21 +597,25 @@ func (c *kubeControllersComponent) controllersPodSecurityPolicy() *policyv1beta1
 }
 
 func (c *kubeControllersComponent) kubeControllersVolumeMounts() []corev1.VolumeMount {
+	var mounts []corev1.VolumeMount
 	if c.cfg.ManagerInternalSecret != nil {
-		return []corev1.VolumeMount{
-			c.cfg.ManagerInternalSecret.VolumeMount(),
-		}
+		mounts = append(mounts, c.cfg.ManagerInternalSecret.VolumeMount(c.SupportedOSType()))
 	}
-	return []corev1.VolumeMount{}
+	if c.cfg.TrustedBundle != nil {
+		mounts = append(mounts, c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()))
+	}
+	return mounts
 }
 
 func (c *kubeControllersComponent) kubeControllersVolumes() []corev1.Volume {
+	var volumes []corev1.Volume
 	if c.cfg.ManagerInternalSecret != nil {
-		return []corev1.Volume{
-			c.cfg.ManagerInternalSecret.Volume(),
-		}
+		volumes = append(volumes, c.cfg.ManagerInternalSecret.Volume())
 	}
-	return []corev1.Volume{}
+	if c.cfg.TrustedBundle != nil {
+		volumes = append(volumes, c.cfg.TrustedBundle.Volume())
+	}
+	return volumes
 }
 
 func esKubeControllersAllowTigeraPolicy(cfg *KubeControllersConfiguration) *v3.NetworkPolicy {

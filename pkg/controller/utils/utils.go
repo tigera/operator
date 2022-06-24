@@ -451,14 +451,17 @@ func WaitToAddResourceWatch(controller controller.Controller, c kubernetes.Inter
 		}
 		ticker.Reset(duration)
 		for obj := range resourcesToWatch {
-			if isResourceReady(c, obj.GetObjectKind().GroupVersionKind().Kind) {
-				predicateFns := resourcePredicateFns[obj]
-				err := controller.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{}, predicateFns...)
-				if err != nil {
-					log.Info("failed to watch %s resource: %v. Will retry to add watch", obj.GetObjectKind().GroupVersionKind().Kind, err)
-				} else {
-					delete(resourcesToWatch, obj)
-				}
+			log = ContextLoggerForResource(log, obj)
+			predicateFns := resourcePredicateFns[obj]
+			if ok, err := isResourceReady(c, obj.GetObjectKind().GroupVersionKind().Kind); err != nil {
+				log.WithValues("Error", err).Info("Failed to check if resource is ready - will retry")
+			} else if !ok {
+				log.Info("Waiting for resource to be ready - will retry")
+			} else if err := controller.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{}, predicateFns...); err != nil {
+				log.WithValues("Error", err).Info("Failed to watch resource - will retry")
+			} else {
+				log.Info("Successfully watching resource")
+				delete(resourcesToWatch, obj)
 			}
 		}
 
@@ -469,21 +472,21 @@ func WaitToAddResourceWatch(controller controller.Controller, c kubernetes.Inter
 	}
 }
 
-func isResourceReady(client kubernetes.Interface, resourceKind string) bool {
+func isResourceReady(client kubernetes.Interface, resourceKind string) (bool, error) {
 	_, res, err := client.Discovery().ServerGroupsAndResources()
 	if err != nil {
-		return false
+		return false, err
 	}
 	for _, group := range res {
 		if group.GroupVersion == v3.GroupVersionCurrent {
 			for _, r := range group.APIResources {
 				if r.Kind == resourceKind {
-					return true
+					return true, nil
 				}
 			}
 		}
 	}
-	return false
+	return false, nil
 }
 
 // Creates a predicate for CRUD operations that matches the object's namespace, and name if provided.

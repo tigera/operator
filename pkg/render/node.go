@@ -751,12 +751,8 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 			Namespace: common.CalicoNamespace,
 		},
 		Spec: appsv1.DaemonSetSpec{
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": CalicoNodeObjectName}},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"k8s-app": CalicoNodeObjectName,
-					},
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
@@ -843,6 +839,8 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 			corev1.Volume{Name: "sys-fs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
 			// Volume for the bpffs itself, used by the main node container.
 			corev1.Volume{Name: "bpffs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
+			// Volume used by mount-cgroupv2 init container to access root cgroup name space of node.
+			corev1.Volume{Name: "init-proc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc/1"}}},
 		)
 	}
 
@@ -985,6 +983,11 @@ func (c *nodeComponent) bpffsInitContainer() corev1.Container {
 			// so that it outlives the init container.
 			MountPropagation: &bidirectional,
 		},
+		{
+			MountPath: "/initproc",
+			Name:      "init-proc",
+			ReadOnly:  true,
+		},
 	}
 
 	return corev1.Container{
@@ -1081,8 +1084,8 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 		{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
 		{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
 		{MountPath: "/var/run/nodeagent", Name: "policysync"},
-		c.cfg.TLS.TrustedBundle.VolumeMount(),
-		c.cfg.TLS.NodeSecret.VolumeMount(),
+		c.cfg.TLS.TrustedBundle.VolumeMount(c.SupportedOSType()),
+		c.cfg.TLS.NodeSecret.VolumeMount(c.SupportedOSType()),
 	}
 	if c.runAsNonPrivileged() {
 		nodeVolumeMounts = append(nodeVolumeMounts,
@@ -1147,7 +1150,7 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 			})
 	}
 	if c.cfg.PrometheusServerTLS != nil {
-		nodeVolumeMounts = append(nodeVolumeMounts, c.cfg.PrometheusServerTLS.VolumeMount())
+		nodeVolumeMounts = append(nodeVolumeMounts, c.cfg.PrometheusServerTLS.VolumeMount(c.SupportedOSType()))
 	}
 	return nodeVolumeMounts
 }
@@ -1172,6 +1175,10 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 
 	if bgpEnabled(c.cfg.Installation) {
 		clusterType = clusterType + ",bgp"
+	}
+
+	if c.vppDataplaneEnabled() {
+		clusterType = clusterType + ",vpp"
 	}
 
 	nodeEnv := []corev1.EnvVar{

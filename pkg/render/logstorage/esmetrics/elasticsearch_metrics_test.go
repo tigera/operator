@@ -19,7 +19,9 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/testutils"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -67,10 +69,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 				ESConfig:     esConfig,
 				ESMetricsCredsSecret: &corev1.Secret{
 					TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-					ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
-				ESCertSecret: &corev1.Secret{
-					TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-					ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchCertSecret, Namespace: common.OperatorNamespace()}},
+					ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchGatewaySecret, Namespace: common.OperatorNamespace()}},
 				ClusterDomain: "cluster.local",
 				ServerTLS:     secret,
 				TrustedBundle: bundle,
@@ -98,7 +97,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 				kind    string
 			}{
 				{ElasticsearchMetricsPolicyName, render.ElasticsearchNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
-				{render.TigeraElasticsearchCertSecret, render.ElasticsearchNamespace, "", "v1", "Secret"},
+				{render.TigeraElasticsearchGatewaySecret, render.ElasticsearchNamespace, "", "v1", "Secret"},
 				{ElasticsearchMetricsName, render.ElasticsearchNamespace, "", "v1", "Service"},
 				{ElasticsearchMetricsName, render.ElasticsearchNamespace, "apps", "v1", "Deployment"},
 				{ElasticsearchMetricsName, render.ElasticsearchNamespace, "", "v1", "ServiceAccount"},
@@ -141,7 +140,6 @@ var _ = Describe("Elasticsearch metrics", func() {
 					},
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
-							Labels: map[string]string{"k8s-app": ElasticsearchMetricsName},
 							Annotations: map[string]string{
 								"hash.operator.tigera.io/elasticsearch-configmap": "ae0242f242af19c4916434cb08e8f68f8c15f61d",
 								"hash.operator.tigera.io/elasticsearch-secrets":   "9718549725e37ca6a5f12ba2405392a04d7b5521",
@@ -199,29 +197,19 @@ var _ = Describe("Elasticsearch metrics", func() {
 											},
 										},
 									},
-									{Name: "ELASTIC_CA", Value: "/etc/ssl/elastic/ca.pem"},
-									{Name: "ES_CA_CERT", Value: "/etc/ssl/elastic/ca.pem"},
-									{Name: "ES_CURATOR_BACKEND_CERT", Value: "/etc/ssl/elastic/ca.pem"},
+									{Name: "ELASTIC_CA", Value: certificatemanagement.TrustedCertBundleMountPath},
+									{Name: "ES_CA_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
+									{Name: "ES_CURATOR_BACKEND_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
 								},
 								VolumeMounts: []corev1.VolumeMount{
-									cfg.ServerTLS.VolumeMount(),
-									cfg.TrustedBundle.VolumeMount(),
-									{Name: "elastic-ca-cert-volume", MountPath: "/etc/ssl/elastic/"},
+									cfg.ServerTLS.VolumeMount(meta.OSTypeLinux),
+									cfg.TrustedBundle.VolumeMount(meta.OSTypeLinux),
 								},
 							}},
 							ServiceAccountName: ElasticsearchMetricsName,
 							Volumes: []corev1.Volume{
 								cfg.ServerTLS.Volume(),
 								cfg.TrustedBundle.Volume(),
-								{
-									Name: "elastic-ca-cert-volume",
-									VolumeSource: corev1.VolumeSource{
-										Secret: &corev1.SecretVolumeSource{
-											SecretName: "tigera-secure-es-gateway-http-certs-public",
-											Items:      []corev1.KeyToPath{{Key: "tls.crt", Path: "ca.pem"}},
-										},
-									},
-								},
 							},
 						},
 					},

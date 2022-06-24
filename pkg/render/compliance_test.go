@@ -270,21 +270,17 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
 				corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
 			))
-			Expect(len(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
+			Expect(len(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(2))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal(render.ComplianceServerCertSecret))
 			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal("/tigera-compliance-server-tls"))
-			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[2].Name).To(Equal("elastic-ca-cert-volume"))
-			Expect(dpComplianceServer.Spec.Template.Spec.Containers[0].VolumeMounts[2].MountPath).To(Equal("/etc/ssl/elastic/"))
 
-			Expect(len(dpComplianceServer.Spec.Template.Spec.Volumes)).To(Equal(3))
+			Expect(len(dpComplianceServer.Spec.Template.Spec.Volumes)).To(Equal(2))
 			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ComplianceServerCertSecret))
 			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ComplianceServerCertSecret))
 			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[1].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[1].ConfigMap.Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
-			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[2].Name).To(Equal("elastic-ca-cert-volume"))
-			Expect(dpComplianceServer.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal(relasticsearch.PublicCertSecret))
 
 			clusterRole := rtest.GetResource(resources, "tigera-compliance-server", "", rbac, "v1", "ClusterRole").(*rbacv1.ClusterRole)
 			Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
@@ -526,8 +522,8 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(volumeMounts[3].MountPath).To(Equal("/etc/kubernetes"))
 			Expect(volumeMounts[4].Name).To(Equal("usr-bin"))
 			Expect(volumeMounts[4].MountPath).To(Equal("/usr/local/bin"))
-			Expect(volumeMounts[5].Name).To(Equal("elastic-ca-cert-volume"))
-			Expect(volumeMounts[5].MountPath).To(Equal("/etc/ssl/elastic/"))
+			Expect(volumeMounts[5].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+			Expect(volumeMounts[5].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
 		})
 
 		It("should render benchmarker properly for GKE environments", func() {
@@ -551,10 +547,10 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(volumeMounts[3].MountPath).To(Equal("/etc/kubernetes"))
 			Expect(volumeMounts[4].Name).To(Equal("usr-bin"))
 			Expect(volumeMounts[4].MountPath).To(Equal("/usr/local/bin"))
-			Expect(volumeMounts[5].Name).To(Equal("home-kubernetes"))
-			Expect(volumeMounts[5].MountPath).To(Equal("/home/kubernetes"))
-			Expect(volumeMounts[6].Name).To(Equal("elastic-ca-cert-volume"))
-			Expect(volumeMounts[6].MountPath).To(Equal("/etc/ssl/elastic/"))
+			Expect(volumeMounts[5].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+			Expect(volumeMounts[5].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
+			Expect(volumeMounts[6].Name).To(Equal("home-kubernetes"))
+			Expect(volumeMounts[6].MountPath).To(Equal("/home/kubernetes"))
 		})
 	})
 

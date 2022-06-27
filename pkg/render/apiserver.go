@@ -907,6 +907,9 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		// Set queryserver logging to "info"
 		{Name: "LOGLEVEL", Value: "info"},
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+		{Name: "LISTEN_ADDR", Value: ":8080"},
+		{Name: "TLS_CERT", Value: "/tigera-apiserver-certs/tls.crt"},
+		{Name: "TLS_KEY", Value: "/tigera-apiserver-certs/tls.key"},
 	}
 
 	env = append(env, c.cfg.K8SServiceEndpoint.EnvVars(c.hostNetwork(), c.cfg.Installation.KubernetesProvider)...)
@@ -914,6 +917,10 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 
 	if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
 		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
+	}
+
+	volumeMounts := []corev1.VolumeMount{
+		c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()),
 	}
 
 	container := corev1.Container{
@@ -932,6 +939,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 			PeriodSeconds:       10,
 		},
 		SecurityContext: podsecuritycontext.NewBaseContext(),
+		VolumeMounts:    volumeMounts,
 	}
 	return container
 }

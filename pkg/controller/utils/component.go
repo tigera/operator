@@ -30,7 +30,6 @@ import (
 	batchv1beta "k8s.io/api/batch/v1beta1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -122,7 +121,7 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 		// Check to see if the object exists or not.
 		err := c.client.Get(ctx, key, cur)
 		if err != nil {
-			if !apierrors.IsNotFound(err) {
+			if !errors.IsNotFound(err) {
 				// Anything other than "Not found" we should retry.
 				return err
 			}
@@ -193,12 +192,19 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 			return fmt.Errorf("Object is not ObjectMetaAccessor")
 		}
 
+		key := client.ObjectKeyFromObject(obj)
+
 		err := createOrUpdateObject(obj, om.GetObjectMeta())
-		if err != nil {
+		// If the error is a resource Conflict, try the update again
+		if err != nil && errors.IsConflict(err) {
+			cmpLog.WithValues("key", key, "conflict_message", err).Info("Failed to update object, retrying.")
+			err = createOrUpdateObject(obj, om.GetObjectMeta())
+			if err != nil {
+				return err
+			}
+		} else if err != nil {
 			return err
 		}
-
-		key := client.ObjectKeyFromObject(obj)
 
 		// Keep track of some objects so we can report on their status.
 		switch obj.(type) {

@@ -909,6 +909,9 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		// Set queryserver logging to "info"
 		{Name: "LOGLEVEL", Value: "info"},
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+		{Name: "LISTEN_ADDR", Value: ":8080"},
+		{Name: "TLS_CERT", Value: "/tigera-apiserver-certs/tls.crt"},
+		{Name: "TLS_KEY", Value: "/tigera-apiserver-certs/tls.key"},
 	}
 
 	env = append(env, c.cfg.K8SServiceEndpoint.EnvVars(c.hostNetwork(), c.cfg.Installation.KubernetesProvider)...)

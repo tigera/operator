@@ -30,7 +30,6 @@ import (
 	batchv1beta "k8s.io/api/batch/v1beta1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -88,19 +87,14 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 	objsToCreate, objsToDelete := component.Objects()
 	osType := component.SupportedOSType()
 
-	for _, obj := range objsToCreate {
-		om, ok := obj.(metav1.ObjectMetaAccessor)
-		if !ok {
-			return fmt.Errorf("Object is not ObjectMetaAccessor")
-		}
-
+	createOrUpdateObject := func(obj client.Object, metaObj metav1.Object) error {
 		// Add owner ref for controller owned resources,
 		switch obj.(type) {
 		case *v3.UISettings:
 			// Never add controller ref for UISettings since these are always GCd through the UISettingsGroup.
 		default:
 			if c.cr != nil {
-				if err := controllerutil.SetControllerReference(c.cr, om.GetObjectMeta(), c.scheme); err != nil {
+				if err := controllerutil.SetControllerReference(c.cr, metaObj, c.scheme); err != nil {
 					return err
 				}
 			}
@@ -119,18 +113,6 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 		// Make sure we have our standard selector and pod labels
 		setStandardSelectorAndLabels(obj)
 
-		// Keep track of some objects so we can report on their status.
-		switch obj.(type) {
-		case *apps.Deployment:
-			deployments = append(deployments, key)
-		case *apps.DaemonSet:
-			daemonSets = append(daemonSets, key)
-		case *apps.StatefulSet:
-			statefulsets = append(statefulsets, key)
-		case *batchv1beta.CronJob:
-			cronJobs = append(cronJobs, key)
-		}
-
 		cur, ok := obj.DeepCopyObject().(client.Object)
 		if !ok {
 			logCtx.V(2).Info("Failed converting object", "obj", obj)
@@ -139,7 +121,7 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 		// Check to see if the object exists or not.
 		err := c.client.Get(ctx, key, cur)
 		if err != nil {
-			if !apierrors.IsNotFound(err) {
+			if !errors.IsNotFound(err) {
 				// Anything other than "Not found" we should retry.
 				return err
 			}
@@ -150,13 +132,13 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 			if err != nil {
 				return err
 			}
-			continue
+			return nil
 		}
 
 		// The object exists. Update it, unless the user has marked it as "ignored".
 		if IgnoreObject(cur) {
 			logCtx.Info("Ignoring annotated object")
-			continue
+			return nil
 		}
 		logCtx.V(1).Info("Resource already exists, update it")
 
@@ -164,7 +146,7 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 		if mobj := mergeState(obj, cur); mobj != nil {
 			switch obj.(type) {
 			case *batchv1.Job:
-				// Jobs can't be updated, they can't only be deleted then created
+				// Jobs can't be updated, they can only be deleted then created
 				if err := c.client.Delete(ctx, obj); err != nil {
 					logCtx.WithValues("key", key).Info("Failed to delete job for recreation.")
 					return err
@@ -200,6 +182,40 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 					return err
 				}
 			}
+		}
+		return nil
+	}
+
+	for _, obj := range objsToCreate {
+		om, ok := obj.(metav1.ObjectMetaAccessor)
+		if !ok {
+			return fmt.Errorf("Object is not ObjectMetaAccessor")
+		}
+
+		key := client.ObjectKeyFromObject(obj)
+
+		err := createOrUpdateObject(obj, om.GetObjectMeta())
+		// If the error is a resource Conflict, try the update again
+		if err != nil && errors.IsConflict(err) {
+			cmpLog.WithValues("key", key, "conflict_message", err).Info("Failed to update object, retrying.")
+			err = createOrUpdateObject(obj, om.GetObjectMeta())
+			if err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
+		}
+
+		// Keep track of some objects so we can report on their status.
+		switch obj.(type) {
+		case *apps.Deployment:
+			deployments = append(deployments, key)
+		case *apps.DaemonSet:
+			daemonSets = append(daemonSets, key)
+		case *apps.StatefulSet:
+			statefulsets = append(statefulsets, key)
+		case *batchv1beta.CronJob:
+			cronJobs = append(cronJobs, key)
 		}
 
 		continue

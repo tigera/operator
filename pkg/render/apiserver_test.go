@@ -231,7 +231,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			fmt.Sprintf("testregistry.com/%s:%s", components.ComponentQueryServer.Image, components.ComponentQueryServer.Version),
 		))
 		Expect(d.Spec.Template.Spec.Containers[1].Args).To(BeEmpty())
-		Expect(len(d.Spec.Template.Spec.Containers[1].Env)).To(Equal(2))
+		Expect(len(d.Spec.Template.Spec.Containers[1].Env)).To(Equal(5))
 
 		Expect(d.Spec.Template.Spec.Containers[1].Env[0].Name).To(Equal("LOGLEVEL"))
 		Expect(d.Spec.Template.Spec.Containers[1].Env[0].Value).To(Equal("info"))
@@ -239,18 +239,27 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(d.Spec.Template.Spec.Containers[1].Env[1].Name).To(Equal("DATASTORE_TYPE"))
 		Expect(d.Spec.Template.Spec.Containers[1].Env[1].Value).To(Equal("kubernetes"))
 		Expect(d.Spec.Template.Spec.Containers[1].Env[1].ValueFrom).To(BeNil())
+		Expect(d.Spec.Template.Spec.Containers[1].Env[2].Name).To(Equal("LISTEN_ADDR"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[2].Value).To(Equal(":8080"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[2].ValueFrom).To(BeNil())
+		Expect(d.Spec.Template.Spec.Containers[1].Env[3].Name).To(Equal("TLS_CERT"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[3].Value).To(Equal("/tigera-apiserver-certs/tls.crt"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[3].ValueFrom).To(BeNil())
+		Expect(d.Spec.Template.Spec.Containers[1].Env[4].Name).To(Equal("TLS_KEY"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[4].Value).To(Equal("/tigera-apiserver-certs/tls.key"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[4].ValueFrom).To(BeNil())
 
 		// Expect the SECURITY_GROUP env variables to not be set
 		Expect(d.Spec.Template.Spec.Containers[1].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_DEFAULT_SECURITY_GROUPS")})))
 		Expect(d.Spec.Template.Spec.Containers[1].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_POD_SECURITY_GROUP")})))
 
-		Expect(len(d.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
-		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal("tigera-apiserver-certs"))
-		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal("/var/log/calico/audit"))
-		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].ReadOnly).To(BeFalse())
-		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].SubPath).To(Equal(""))
-		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPropagation).To(BeNil())
-		Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts[1].SubPathExpr).To(Equal(""))
+		Expect(len(d.Spec.Template.Spec.Containers[1].VolumeMounts)).To(Equal(1))
+		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts[0].Name).To(Equal("tigera-apiserver-certs"))
+		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts[0].MountPath).To(Equal("/tigera-apiserver-certs"))
+		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts[0].ReadOnly).To(BeTrue())
+		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts[0].SubPath).To(Equal(""))
+		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts[0].MountPropagation).To(BeNil())
+		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts[0].SubPathExpr).To(Equal(""))
 
 		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.HTTPGet.Path).To(Equal("/version"))
 		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.HTTPGet.Port.String()).To(BeEquivalentTo("8080"))

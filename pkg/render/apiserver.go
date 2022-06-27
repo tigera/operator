@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -909,6 +910,9 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		// Set queryserver logging to "info"
 		{Name: "LOGLEVEL", Value: "info"},
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+		{Name: "LISTEN_ADDR", Value: fmt.Sprintf(":%s", strconv.Itoa(queryServerPort))},
+		{Name: "TLS_CERT", Value: fmt.Sprintf("/%s/tls.crt", ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant))},
+		{Name: "TLS_KEY", Value: fmt.Sprintf("/%s/tls.key", ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant))},
 	}
 
 	env = append(env, c.cfg.K8SServiceEndpoint.EnvVars(c.hostNetwork(), c.cfg.Installation.KubernetesProvider)...)

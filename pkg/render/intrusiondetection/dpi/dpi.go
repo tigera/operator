@@ -15,6 +15,7 @@
 package dpi
 
 import (
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
@@ -22,6 +23,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/meta"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -33,13 +35,16 @@ import (
 )
 
 const (
-	DeepPacketInspectionNamespace = "tigera-dpi"
-	DeepPacketInspectionName      = "tigera-dpi"
-	DefaultMemoryLimit            = "1Gi"
-	DefaultMemoryRequest          = "100Mi"
-	DefaultCPULimit               = "1"
-	DefaultCPURequest             = "100m"
+	DeepPacketInspectionNamespace  = "tigera-dpi"
+	DeepPacketInspectionName       = "tigera-dpi"
+	DeepPacketInspectionPolicyName = networkpolicy.TigeraComponentPolicyPrefix + DeepPacketInspectionName
+	DefaultMemoryLimit             = "1Gi"
+	DefaultMemoryRequest           = "100Mi"
+	DefaultCPULimit                = "1"
+	DefaultCPURequest              = "100m"
 )
+
+var DPISourceEntityRule = networkpolicy.CreateSourceEntityRule(DeepPacketInspectionNamespace, DeepPacketInspectionName)
 
 type DPIConfig struct {
 	IntrusionDetection *operatorv1.IntrusionDetection
@@ -47,6 +52,7 @@ type DPIConfig struct {
 	TyphaNodeTLS       *render.TyphaNodeTLS
 	PullSecrets        []*corev1.Secret
 	Openshift          bool
+	ManagedCluster     bool
 	HasNoLicense       bool
 	HasNoDPIResource   bool
 	ESSecrets          []*corev1.Secret
@@ -85,6 +91,7 @@ func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 		toCreate = append(toCreate, render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider, render.PSSPrivileged))
 	}
 	if d.cfg.HasNoDPIResource || d.cfg.HasNoLicense {
+		toDelete = append(toDelete, d.dpiAllowTigeraPolicy())
 		toDelete = append(toDelete, &corev1.Secret{
 			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: DeepPacketInspectionNamespace},
@@ -97,6 +104,7 @@ func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 			d.dpiDaemonset(),
 		)
 	} else {
+		toCreate = append(toCreate, d.dpiAllowTigeraPolicy())
 		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.ESSecrets...)...)...)
 		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.PullSecrets...)...)...)
 		toCreate = append(toCreate,
@@ -327,4 +335,46 @@ func (d *dpiComponent) dpiAnnotations() map[string]string {
 	annotations := d.cfg.TyphaNodeTLS.TrustedBundle.HashAnnotations()
 	annotations[d.cfg.TyphaNodeTLS.NodeSecret.HashAnnotationKey()] = d.cfg.TyphaNodeTLS.NodeSecret.HashAnnotationValue()
 	return annotations
+}
+
+// This policy uses service selectors.
+func (d *dpiComponent) dpiAllowTigeraPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
+		},
+	}
+	egressRules = networkpolicy.AppendServiceSelectorDNSEgressRules(egressRules, d.cfg.Openshift)
+
+	if d.cfg.ManagedCluster {
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: render.GuardianServiceSelectorEntityRule,
+		})
+	} else {
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.EsGatewayServiceSelectorEntityRule,
+		})
+	}
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      DeepPacketInspectionPolicyName,
+			Namespace: DeepPacketInspectionNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(DeepPacketInspectionName),
+			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
+			Egress:   egressRules,
+		},
+	}
+
 }

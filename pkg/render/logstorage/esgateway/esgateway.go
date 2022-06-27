@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,12 @@ package esgateway
 import (
 	"fmt"
 	"strings"
+
+	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
+	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -41,15 +47,14 @@ const (
 	ServiceAccountName    = "tigera-secure-es-gateway"
 	RoleName              = "tigera-secure-es-gateway"
 	ServiceName           = "tigera-secure-es-gateway-http"
+	PolicyName            = networkpolicy.TigeraComponentPolicyPrefix + "es-gateway-access"
 	ElasticsearchPortName = "es-gateway-elasticsearch-port"
 	KibanaPortName        = "es-gateway-kibana-port"
 	Port                  = 5554
 
 	ElasticsearchHTTPSEndpoint = "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
-	ElasticsearchPort          = 9200
 
 	KibanaHTTPSEndpoint = "https://tigera-secure-kb-http.tigera-kibana.svc:5601"
-	KibanaPort          = 5601
 )
 
 func EsGateway(c *Config) render.Component {
@@ -99,6 +104,7 @@ func (e *esGateway) ResolveImages(is *operatorv1.ImageSet) error {
 }
 
 func (e *esGateway) Objects() (toCreate, toDelete []client.Object) {
+	toCreate = append(toCreate, e.esGatewayAllowTigeraPolicy())
 	toCreate = append(toCreate, secret.ToRuntimeObjects(e.cfg.KubeControllersUserSecrets...)...)
 	toCreate = append(toCreate, e.esGatewayService())
 	toCreate = append(toCreate, e.esGatewayRole())
@@ -281,17 +287,157 @@ func (e esGateway) esGatewayService() *corev1.Service {
 			Ports: []corev1.ServicePort{
 				{
 					Name:       ElasticsearchPortName,
-					Port:       int32(ElasticsearchPort),
+					Port:       int32(render.ElasticsearchDefaultPort),
 					TargetPort: intstr.FromInt(Port),
 					Protocol:   corev1.ProtocolTCP,
 				},
 				{
 					Name:       KibanaPortName,
-					Port:       int32(KibanaPort),
+					Port:       int32(render.KibanaPort),
 					TargetPort: intstr.FromInt(Port),
 					Protocol:   corev1.ProtocolTCP,
 				},
 			},
+		},
+	}
+}
+
+// Allow access to ES Gateway from components that need to talk to Elasticsearch or Kibana.
+func (e *esGateway) esGatewayAllowTigeraPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, e.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift)
+	egressRules = append(egressRules, []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: render.DexEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: render.ElasticsearchEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: render.KibanaEntityRule,
+		},
+	}...)
+
+	esgatewayIngressDestinationEntityRule := v3.EntityRule{
+		Ports: networkpolicy.Ports(Port),
+	}
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      PolicyName,
+			Namespace: render.ElasticsearchNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(DeploymentName),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Ingress: []v3.Rule{
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      render.FluentdSourceEntityRule,
+					Destination: esgatewayIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      render.EKSLogForwarderEntityRule,
+					Destination: esgatewayIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      render.IntrusionDetectionInstallerSourceEntityRule,
+					Destination: esgatewayIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      render.ESCuratorSourceEntityRule,
+					Destination: esgatewayIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      render.ManagerSourceEntityRule,
+					Destination: esgatewayIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      render.ComplianceBenchmarkerSourceEntityRule,
+					Destination: esgatewayIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      render.ComplianceControllerSourceEntityRule,
+					Destination: esgatewayIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      render.ComplianceServerSourceEntityRule,
+					Destination: esgatewayIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      render.ComplianceSnapshotterSourceEntityRule,
+					Destination: esgatewayIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      render.ComplianceReporterSourceEntityRule,
+					Destination: esgatewayIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      render.IntrusionDetectionSourceEntityRule,
+					Destination: esgatewayIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      render.ECKOperatorSourceEntityRule,
+					Destination: esgatewayIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      esmetrics.ESMetricsSourceEntityRule,
+					Destination: esgatewayIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      dpi.DPISourceEntityRule,
+					Destination: esgatewayIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Destination: esgatewayIngressDestinationEntityRule,
+					// The operator needs access to Elasticsearch and Kibana (through ES Gateway), however, since the
+					// operator is on the hostnetwork it's hard to create specific network policies for it.
+					// Allow all sources, as node CIDRs are not known.
+				},
+			},
+			Egress: egressRules,
 		},
 	}
 }

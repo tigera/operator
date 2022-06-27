@@ -16,10 +16,14 @@ package esmetrics
 
 import (
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -40,6 +44,8 @@ var _ = Describe("Elasticsearch metrics", func() {
 	Context("Rendering resources", func() {
 		var esConfig *relasticsearch.ClusterConfig
 		var cfg *Config
+		expectedPolicy := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/es-metrics.json")
+		expectedPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/es-metrics_ocp.json")
 
 		BeforeEach(func() {
 			installation := &operatorv1.InstallationSpec{
@@ -90,6 +96,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 				version string
 				kind    string
 			}{
+				{ElasticsearchMetricsPolicyName, render.ElasticsearchNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
 				{render.TigeraElasticsearchGatewaySecret, render.ElasticsearchNamespace, "", "v1", "Secret"},
 				{ElasticsearchMetricsName, render.ElasticsearchNamespace, "", "v1", "Service"},
 				{ElasticsearchMetricsName, render.ElasticsearchNamespace, "apps", "v1", "Deployment"},
@@ -242,6 +249,38 @@ var _ = Describe("Elasticsearch metrics", func() {
 			d, ok := rtest.GetResource(resources, ElasticsearchMetricsName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(ok).To(BeTrue())
 			Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(t))
+		})
+
+		Context("allow-tigera rendering", func() {
+			policyName := types.NamespacedName{Name: "allow-tigera.elasticsearch-metrics", Namespace: "tigera-elasticsearch"}
+
+			getExpectedPolicy := func(scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
+				if scenario.ManagedCluster {
+					return nil
+				}
+
+				return testutils.SelectPolicyByProvider(scenario, expectedPolicy, expectedPolicyForOpenshift)
+			}
+
+			DescribeTable("should render allow-tigera policy",
+				func(scenario testutils.AllowTigeraScenario) {
+					if scenario.Openshift {
+						cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
+					} else {
+						cfg.Installation.KubernetesProvider = operatorv1.ProviderNone
+					}
+					component := ElasticsearchMetrics(cfg)
+					resources, _ := component.Objects()
+
+					policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+					expectedPolicy := getExpectedPolicy(scenario)
+					Expect(policy).To(Equal(expectedPolicy))
+				},
+				// ES Gateway only renders in the presence of an LogStorage CR and absence of a ManagementClusterConnection CR, therefore
+				// does not have a config option for managed clusters.
+				Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
+				Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
+			)
 		})
 	})
 })

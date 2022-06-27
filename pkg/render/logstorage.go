@@ -22,6 +22,10 @@ import (
 	"net/url"
 	"strings"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/api/pkg/lib/numorstring"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+
 	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
@@ -58,6 +62,7 @@ const (
 	ECKOperatorName         = "elastic-operator"
 	ECKOperatorNamespace    = "tigera-eck-operator"
 	ECKLicenseConfigMapName = "elastic-licensing"
+	ECKOperatorPolicyName   = networkpolicy.TigeraComponentPolicyPrefix + "elastic-operator-access"
 
 	ElasticsearchNamespace = "tigera-elasticsearch"
 
@@ -72,14 +77,19 @@ const (
 	ElasticsearchServiceName        = "tigera-secure-es-http"
 	ESGatewayServiceName            = "tigera-secure-es-gateway-http"
 	ElasticsearchDefaultPort        = 9200
+	ElasticsearchInternalPort       = 9300
 	ElasticsearchOperatorUserSecret = "tigera-ee-operator-elasticsearch-access"
 	ElasticsearchAdminUserSecret    = "tigera-secure-es-elastic-user"
+	ElasticsearchPolicyName         = networkpolicy.TigeraComponentPolicyPrefix + "elasticsearch-access"
+	ElasticsearchInternalPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "elasticsearch-internal"
 
 	KibanaName         = "tigera-secure"
 	KibanaNamespace    = "tigera-kibana"
 	KibanaBasePath     = "tigera-kibana"
 	KibanaServiceName  = "tigera-secure-kb-http"
 	KibanaDefaultRoute = "/app/kibana#/dashboards?%s&title=%s"
+	KibanaPolicyName   = networkpolicy.TigeraComponentPolicyPrefix + "kibana-access"
+	KibanaPort         = 5601
 
 	DefaultElasticsearchClusterName = "cluster"
 	DefaultElasticsearchReplicas    = 0
@@ -87,6 +97,7 @@ const (
 
 	EsCuratorName           = "elastic-curator"
 	EsCuratorServiceAccount = "tigera-elastic-curator"
+	EsCuratorPolicyName     = networkpolicy.TigeraComponentPolicyPrefix + "allow-elastic-curator"
 
 	OIDCUsersConfigMapName = "tigera-known-oidc-users"
 	OIDCUsersEsSecreteName = "tigera-oidc-users-elasticsearch-credentials"
@@ -137,6 +148,22 @@ const (
 	// Volume name that is added by ECK for the purpose of mounting certs.
 	caVolumeName = "elasticsearch-certs"
 )
+
+var ElasticsearchSelector = fmt.Sprintf("elasticsearch.k8s.elastic.co/cluster-name == '%s'", ElasticsearchName)
+var ElasticsearchEntityRule = v3.EntityRule{
+	NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", ElasticsearchNamespace),
+	Selector:          ElasticsearchSelector,
+	Ports:             []numorstring.Port{{MinPort: ElasticsearchDefaultPort, MaxPort: ElasticsearchDefaultPort}},
+}
+var InternalElasticsearchEntityRule = v3.EntityRule{
+	NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", ElasticsearchNamespace),
+	Selector:          ElasticsearchSelector,
+	Ports:             []numorstring.Port{{MinPort: ElasticsearchInternalPort, MaxPort: ElasticsearchInternalPort}},
+}
+var KibanaEntityRule = networkpolicy.CreateEntityRule(KibanaNamespace, KibanaName, KibanaPort)
+var KibanaSourceEntityRule = networkpolicy.CreateSourceEntityRule(KibanaNamespace, KibanaName)
+var ECKOperatorSourceEntityRule = networkpolicy.CreateSourceEntityRule(ECKOperatorNamespace, ECKOperatorName)
+var ESCuratorSourceEntityRule = networkpolicy.CreateSourceEntityRule(ElasticsearchNamespace, EsCuratorName)
 
 var log = logf.Log.WithName("render")
 
@@ -254,6 +281,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		// ECK CRs
 		toCreate = append(toCreate,
 			CreateNamespace(ECKOperatorNamespace, es.cfg.Installation.KubernetesProvider, PSSRestricted),
+			es.eckOperatorAllowTigeraPolicy(),
 		)
 
 		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ECKOperatorNamespace, es.cfg.PullSecrets...)...)...)
@@ -289,6 +317,9 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 		// Elasticsearch CRs
 		toCreate = append(toCreate, CreateNamespace(ElasticsearchNamespace, es.cfg.Installation.KubernetesProvider, PSSPrivileged))
+		toCreate = append(toCreate, es.elasticsearchAllowTigeraPolicy())
+		toCreate = append(toCreate, es.elasticsearchInternalAllowTigeraPolicy())
+		toCreate = append(toCreate, elasticsearchDefaultDenyAllowTigeraPolicy())
 
 		if len(es.cfg.PullSecrets) > 0 {
 			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.cfg.PullSecrets...)...)...)
@@ -305,6 +336,8 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 		// Kibana CRs
 		toCreate = append(toCreate, CreateNamespace(KibanaNamespace, es.cfg.Installation.KubernetesProvider, PSSRestricted))
+		toCreate = append(toCreate, es.kibanaAllowTigeraPolicy())
+		toCreate = append(toCreate, kibanaDefaultDenyAllowTigeraPolicy())
 		toCreate = append(toCreate, es.kibanaServiceAccount())
 
 		if len(es.cfg.PullSecrets) > 0 {
@@ -320,6 +353,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		// Curator CRs
 		// If we have the curator secrets then create curator
 		if len(es.cfg.CuratorSecrets) > 0 {
+			toCreate = append(toCreate, es.esCuratorAllowTigeraPolicy())
 			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.cfg.CuratorSecrets...)...)...)
 			toCreate = append(toCreate, es.esCuratorServiceAccount())
 
@@ -1279,7 +1313,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 								HTTPGet: &corev1.HTTPGetAction{
 									Path: fmt.Sprintf("/%s/login", KibanaBasePath),
 									Port: intstr.IntOrString{
-										IntVal: 5601,
+										IntVal: KibanaPort,
 									},
 									Scheme: corev1.URISchemeHTTPS,
 								},
@@ -1571,6 +1605,251 @@ func (es elasticsearchComponent) oidcUserRoleBinding() client.Object {
 			},
 		},
 	}
+}
+
+// Allow the elastic-operator to communicate with API server, DNS and elastic search.
+func (es *elasticsearchComponent) eckOperatorAllowTigeraPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, es.cfg.Provider == operatorv1.ProviderOpenShift)
+	egressRules = append(egressRules, []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: ElasticsearchEntityRule,
+		},
+	}...)
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ECKOperatorPolicyName,
+			Namespace: ECKOperatorNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(ECKOperatorName),
+			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
+			Egress:   egressRules,
+		},
+	}
+}
+
+// Allow access to Elasticsearch client nodes from Kibana, ECK Operator and ES Gateway.
+func (es *elasticsearchComponent) elasticsearchAllowTigeraPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, es.cfg.Provider == operatorv1.ProviderOpenShift)
+	egressRules = append(egressRules, []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: DexEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.EsGatewayEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
+		},
+	}...)
+
+	elasticSearchIngressDestinationEntityRule := v3.EntityRule{
+		Ports: networkpolicy.Ports(ElasticsearchDefaultPort),
+	}
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ElasticsearchPolicyName,
+			Namespace: ElasticsearchNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: ElasticsearchSelector,
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Ingress: []v3.Rule{
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      KibanaSourceEntityRule,
+					Destination: elasticSearchIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      networkpolicy.EsGatewaySourceEntityRule,
+					Destination: elasticSearchIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      ECKOperatorSourceEntityRule,
+					Destination: elasticSearchIngressDestinationEntityRule,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Destination: elasticSearchIngressDestinationEntityRule,
+					// Allow all sources, as node CIDRs are not known.
+				},
+			},
+			Egress: egressRules,
+		},
+	}
+}
+
+// Allow internal communication within the ElasticSearch cluster
+func (es *elasticsearchComponent) elasticsearchInternalAllowTigeraPolicy() *v3.NetworkPolicy {
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ElasticsearchInternalPolicyName,
+			Namespace: ElasticsearchNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: ElasticsearchSelector,
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Ingress: []v3.Rule{
+				{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Source: v3.EntityRule{
+						Selector: ElasticsearchSelector,
+					},
+					Destination: v3.EntityRule{
+						Ports: networkpolicy.Ports(9300),
+					},
+				},
+			},
+			Egress: []v3.Rule{
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Destination: InternalElasticsearchEntityRule,
+				},
+			},
+		},
+	}
+}
+
+// Allow access to Kibana
+func (es *elasticsearchComponent) kibanaAllowTigeraPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      v3.EntityRule{},
+			Destination: ElasticsearchEntityRule,
+		},
+	}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, es.cfg.Provider == operatorv1.ProviderOpenShift)
+	egressRules = append(egressRules, []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.EsGatewayEntityRule,
+		},
+	}...)
+
+	kibanaPortIngressDestination := v3.EntityRule{
+		Ports: networkpolicy.Ports(KibanaPort),
+	}
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      KibanaPolicyName,
+			Namespace: KibanaNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(KibanaName),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Ingress: []v3.Rule{
+				{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Source: v3.EntityRule{
+						// This policy allows access to Kibana from anywhere.
+						Nets: []string{"0.0.0.0/0"},
+					},
+					Destination: kibanaPortIngressDestination,
+				},
+				{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Source: v3.EntityRule{
+						// This policy allows access to Kibana from anywhere.
+						Nets: []string{"::/0"},
+					},
+					Destination: kibanaPortIngressDestination,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      networkpolicy.EsGatewaySourceEntityRule,
+					Destination: kibanaPortIngressDestination,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      ECKOperatorSourceEntityRule,
+					Destination: kibanaPortIngressDestination,
+				},
+			},
+			Egress: egressRules,
+		},
+	}
+}
+
+func (es *elasticsearchComponent) esCuratorAllowTigeraPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, es.cfg.Provider == operatorv1.ProviderOpenShift)
+	egressRules = append(egressRules, v3.Rule{
+		Action:      v3.Allow,
+		Protocol:    &networkpolicy.TCPProtocol,
+		Source:      v3.EntityRule{},
+		Destination: networkpolicy.EsGatewayEntityRule,
+	})
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      EsCuratorPolicyName,
+			Namespace: ElasticsearchNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(EsCuratorName),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Egress:   egressRules,
+		},
+	}
+}
+
+func elasticsearchDefaultDenyAllowTigeraPolicy() *v3.NetworkPolicy {
+	return networkpolicy.AllowTigeraDefaultDeny(ElasticsearchNamespace)
+}
+
+func kibanaDefaultDenyAllowTigeraPolicy() *v3.NetworkPolicy {
+	return networkpolicy.AllowTigeraDefaultDeny(KibanaNamespace)
 }
 
 // overrideResourceRequirements replaces individual ResourceRequirements field's default value with user's value.

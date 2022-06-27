@@ -119,8 +119,28 @@ func AddServiceWatch(c controller.Controller, name, namespace string) error {
 	})
 }
 
-func WaitToAddLicenseKeyWatch(controller controller.Controller, client kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
-	WaitToAddResourceWatch(controller, client, log, flag, &v3.LicenseKey{TypeMeta: metav1.TypeMeta{Kind: v3.KindLicenseKey}})
+func WaitToAddLicenseKeyWatch(controller controller.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
+	WaitToAddResourceWatch(controller, c, log, flag, []client.Object{&v3.LicenseKey{TypeMeta: metav1.TypeMeta{Kind: v3.KindLicenseKey}}})
+}
+
+func WaitToAddNetworkPolicyWatches(controller controller.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag, policies []types.NamespacedName) {
+	objs := []client.Object{}
+	for _, policy := range policies {
+		objs = append(objs, &v3.NetworkPolicy{
+			TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+			ObjectMeta: metav1.ObjectMeta{Name: policy.Name, Namespace: policy.Namespace},
+		})
+	}
+
+	WaitToAddResourceWatch(controller, c, log, flag, objs, createNamespacePredicate)
+}
+
+func WaitToAddTierWatch(tierName string, controller controller.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
+	obj := &v3.Tier{
+		TypeMeta:   metav1.TypeMeta{Kind: "Tier", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{Name: tierName},
+	}
+	WaitToAddResourceWatch(controller, c, log, flag, []client.Object{obj}, createNamePredicate)
 }
 
 // AddNamespacedWatch creates a watch on the given object. If a name and namespace are provided, then it will
@@ -131,26 +151,7 @@ func AddNamespacedWatch(c controller.Controller, obj client.Object, metaMatches 
 	if objMeta.GetNamespace() == "" {
 		return fmt.Errorf("No namespace provided for namespaced watch")
 	}
-	pred := predicate.Funcs{
-		CreateFunc: func(e event.CreateEvent) bool {
-			if objMeta.GetName() != "" && e.Object.GetName() != objMeta.GetName() {
-				return false
-			}
-			return e.Object.GetNamespace() == objMeta.GetNamespace()
-		},
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			if objMeta.GetName() != "" && e.ObjectNew.GetName() != objMeta.GetName() {
-				return false
-			}
-			return e.ObjectNew.GetNamespace() == objMeta.GetNamespace()
-		},
-		DeleteFunc: func(e event.DeleteEvent) bool {
-			if objMeta.GetName() != "" && e.Object.GetName() != objMeta.GetName() {
-				return false
-			}
-			return e.Object.GetNamespace() == objMeta.GetNamespace()
-		},
-	}
+	pred := createNamespacePredicate(objMeta)
 	return c.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{}, pred)
 }
 
@@ -425,11 +426,23 @@ func StrToElasticLicenseType(license string, logger logr.Logger) render.Elastics
 
 // WaitToAddResourceWatch will check if projectcalico.org APIs are available and if so, it will add a watch for resource
 // The completion of this operation will be signaled on a ready channel
-func WaitToAddResourceWatch(controller controller.Controller, client kubernetes.Interface, log logr.Logger, flag *ReadyFlag, obj client.Object) {
+func WaitToAddResourceWatch(controller controller.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag, objs []client.Object, predFns ...func(meta metav1.Object) predicate.Predicate) {
+	// Track resources left to watch and establish their predicate functions.
+	resourcesToWatch := map[client.Object]bool{}
+	resourcePredicateFns := map[client.Object][]predicate.Predicate{}
+	for _, obj := range objs {
+		resourcesToWatch[obj] = true
+
+		var objPredicateFns []predicate.Predicate
+		for _, predFn := range predFns {
+			objPredicateFns = append(objPredicateFns, predFn(obj))
+		}
+		resourcePredicateFns[obj] = objPredicateFns
+	}
+
 	maxDuration := 30 * time.Second
 	duration := 1 * time.Second
 	ticker := time.NewTicker(duration)
-	log = ContextLoggerForResource(log, obj)
 	defer ticker.Stop()
 	for range ticker.C {
 		duration = duration * 2
@@ -437,14 +450,22 @@ func WaitToAddResourceWatch(controller controller.Controller, client kubernetes.
 			duration = maxDuration
 		}
 		ticker.Reset(duration)
-		if ok, err := isResourceReady(client, obj.GetObjectKind().GroupVersionKind().Kind); err != nil {
-			log.WithValues("Error", err).Info("Failed to check if resource is ready - will retry")
-		} else if !ok {
-			log.Info("Waiting for resource to be ready - will retry")
-		} else if err := controller.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{}); err != nil {
-			log.WithValues("Error", err).Info("Failed to watch resource - will retry")
-		} else {
-			log.Info("Successfully watching resource")
+		for obj := range resourcesToWatch {
+			log = ContextLoggerForResource(log, obj)
+			predicateFns := resourcePredicateFns[obj]
+			if ok, err := isResourceReady(c, obj.GetObjectKind().GroupVersionKind().Kind); err != nil {
+				log.WithValues("Error", err).Info("Failed to check if resource is ready - will retry")
+			} else if !ok {
+				log.Info("Waiting for resource to be ready - will retry")
+			} else if err := controller.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{}, predicateFns...); err != nil {
+				log.WithValues("Error", err).Info("Failed to watch resource - will retry")
+			} else {
+				log.Info("Successfully watching resource")
+				delete(resourcesToWatch, obj)
+			}
+		}
+
+		if len(resourcesToWatch) == 0 {
 			flag.MarkAsReady()
 			return
 		}
@@ -466,4 +487,43 @@ func isResourceReady(client kubernetes.Interface, resourceKind string) (bool, er
 		}
 	}
 	return false, nil
+}
+
+// Creates a predicate for CRUD operations that matches the object's namespace, and name if provided.
+func createNamespacePredicate(objMeta metav1.Object) predicate.Predicate {
+	return predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			if objMeta.GetName() != "" && e.Object.GetName() != objMeta.GetName() {
+				return false
+			}
+			return e.Object.GetNamespace() == objMeta.GetNamespace()
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			if objMeta.GetName() != "" && e.ObjectNew.GetName() != objMeta.GetName() {
+				return false
+			}
+			return e.ObjectNew.GetNamespace() == objMeta.GetNamespace()
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			if objMeta.GetName() != "" && e.Object.GetName() != objMeta.GetName() {
+				return false
+			}
+			return e.Object.GetNamespace() == objMeta.GetNamespace()
+		},
+	}
+}
+
+// Creates a predicate for CRUD operations that matches the object's name.
+func createNamePredicate(objMeta metav1.Object) predicate.Predicate {
+	return predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			return e.Object.GetName() == objMeta.GetName()
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			return e.ObjectNew.GetName() == objMeta.GetName()
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			return e.Object.GetName() == objMeta.GetName()
+		},
+	}
 }

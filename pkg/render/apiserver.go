@@ -41,8 +41,8 @@ import (
 )
 
 const (
-	apiServerPort   = 5443
-	queryServerPort = 8080
+	ApiServerPort   = 5443
+	QueryServerPort = 8080
 
 	auditLogsVolumeName   = "tigera-audit-logs"
 	auditPolicyVolumeName = "tigera-audit-policy"
@@ -678,7 +678,7 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 					Name:       "apiserver",
 					Port:       443,
 					Protocol:   corev1.ProtocolTCP,
-					TargetPort: intstr.FromInt(apiServerPort),
+					TargetPort: intstr.FromInt(ApiServerPort),
 				},
 			},
 			Selector: map[string]string{
@@ -692,9 +692,9 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 		s.Spec.Ports = append(s.Spec.Ports,
 			corev1.ServicePort{
 				Name:       "queryserver",
-				Port:       queryServerPort,
+				Port:       QueryServerPort,
 				Protocol:   corev1.ProtocolTCP,
-				TargetPort: intstr.FromInt(queryServerPort),
+				TargetPort: intstr.FromInt(QueryServerPort),
 			},
 		)
 	}
@@ -850,7 +850,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path:   "/version",
-					Port:   intstr.FromInt(apiServerPort),
+					Port:   intstr.FromInt(ApiServerPort),
 					Scheme: corev1.URISchemeHTTPS,
 				},
 			},
@@ -876,7 +876,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 func (c *apiServerComponent) startUpArgs() []string {
 	args := []string{
-		fmt.Sprintf("--secure-port=%d", apiServerPort),
+		fmt.Sprintf("--secure-port=%d", ApiServerPort),
 		fmt.Sprintf("--tls-private-key-file=%s", c.cfg.TLSKeyPair.VolumeMountKeyFilePath()),
 		fmt.Sprintf("--tls-cert-file=%s", c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()),
 	}
@@ -924,7 +924,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path:   "/version",
-					Port:   intstr.FromInt(queryServerPort),
+					Port:   intstr.FromInt(QueryServerPort),
 					Scheme: corev1.URISchemeHTTPS,
 				},
 			},

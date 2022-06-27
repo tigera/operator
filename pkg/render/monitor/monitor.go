@@ -64,6 +64,7 @@ const (
 	tigeraPrometheusServiceHealthEndpoint = "/health"
 
 	AlertmanagerConfigSecret = "alertmanager-calico-node-alertmanager"
+	AlertmanagerPort         = 9093
 
 	PrometheusServiceAccountName = "prometheus"
 )
@@ -84,6 +85,7 @@ type Config struct {
 	ClientTLSSecret          certificatemanagement.KeyPairInterface
 	ClusterDomain            string
 	TrustedCertBundle        certificatemanagement.TrustedBundle
+	Openshift                bool
 }
 
 type monitorComponent struct {
@@ -251,7 +253,7 @@ func (mc *monitorComponent) alertmanagerService() *corev1.Service {
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "web",
-					Port:       9093,
+					Port:       AlertmanagerPort,
 					Protocol:   corev1.ProtocolTCP,
 					TargetPort: intstr.FromString("web"),
 				},
@@ -604,7 +606,7 @@ func (mc *monitorComponent) serviceMonitorFluentd() *monitoringv1.ServiceMonitor
 				{
 					HonorLabels:   true,
 					Interval:      "5s",
-					Port:          render.FluentdMetricsPort,
+					Port:          render.FluentdMetricsPortName,
 					ScrapeTimeout: "5s",
 					Scheme:        "https",
 					TLSConfig:     mc.tlsConfig(render.FluentdPrometheusTLSSecretName),

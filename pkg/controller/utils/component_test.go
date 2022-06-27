@@ -27,11 +27,14 @@ import (
 	batchv1beta "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	ocsv1 "github.com/openshift/api/security/v1"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	restMeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -1153,6 +1156,123 @@ var _ = Describe("Component handler tests", func() {
 	})
 })
 
+var _ = Describe("Mocked client Component handler tests", func() {
+
+	var (
+		c       client.Client
+		mc      mockClient
+		ctx     context.Context
+		handler ComponentHandler
+	)
+
+	BeforeEach(func() {
+		log := logf.Log.WithName("test_utils_logger")
+
+		mc = mockClient{Info: make([]mockReturn, 0)}
+		c = &mc
+		ctx = context.Background()
+
+		handler = NewComponentHandler(log, c, runtime.NewScheme(), nil)
+	})
+
+	It("if Updating a resource conflicts try the update again", func() {
+		ds := apps.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-ds",
+				Namespace: "default",
+			},
+			Spec: apps.DaemonSetSpec{
+				Template: v1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{
+							fakeComponentAnnotationKey: fakeComponentAnnotationValue,
+						},
+					},
+				},
+			},
+		}
+		fc := &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs:            []client.Object{&ds},
+		}
+
+		mc.Info = append(mc.Info, mockReturn{
+			Method: "Get",
+			Return: nil,
+			Obj:    &ds,
+		})
+		mc.Info = append(mc.Info, mockReturn{
+			Method: "Update",
+			Return: errors.NewConflict(schema.GroupResource{}, "error name", fmt.Errorf("test error message")),
+			Obj:    &ds,
+		})
+		mc.Info = append(mc.Info, mockReturn{
+			Method: "Get",
+			Return: nil,
+			Obj:    &ds,
+		})
+		mc.Info = append(mc.Info, mockReturn{
+			Method: "Update",
+			Return: nil,
+			Obj:    &ds,
+		})
+
+		err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
+		Expect(err).To(BeNil())
+
+		Expect(mc.Index).To(Equal(4))
+
+	})
+
+	It("if Updating a resource conflicts try the update again", func() {
+		ds := apps.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-ds",
+				Namespace: "default",
+			},
+			Spec: apps.DaemonSetSpec{
+				Template: v1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{
+							fakeComponentAnnotationKey: fakeComponentAnnotationValue,
+						},
+					},
+				},
+			},
+		}
+		fc := &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs:            []client.Object{&ds},
+		}
+
+		mc.Info = append(mc.Info, mockReturn{
+			Method: "Get",
+			Return: nil,
+			Obj:    &ds,
+		})
+		mc.Info = append(mc.Info, mockReturn{
+			Method: "Update",
+			Return: errors.NewConflict(schema.GroupResource{}, "error name", fmt.Errorf("test error message")),
+			Obj:    &ds,
+		})
+		mc.Info = append(mc.Info, mockReturn{
+			Method: "Get",
+			Return: nil,
+			Obj:    &ds,
+		})
+		mc.Info = append(mc.Info, mockReturn{
+			Method: "Update",
+			Return: errors.NewConflict(schema.GroupResource{}, "error name", fmt.Errorf("test error message")),
+			Obj:    &ds,
+		})
+
+		err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
+		Expect(err).NotTo(BeNil())
+
+		Expect(mc.Index).To(Equal(4))
+	})
+})
+
 // A fake component that only returns ready and always creates the "test-namespace" Namespace.
 type fakeComponent struct {
 	objs            []client.Object
@@ -1173,4 +1293,92 @@ func (c *fakeComponent) Objects() ([]client.Object, []client.Object) {
 
 func (c *fakeComponent) SupportedOSType() rmeta.OSType {
 	return c.supportedOSType
+}
+
+type mockReturn struct {
+	Method string
+	Return interface{}
+	Obj    client.Object
+}
+
+type mockClient struct {
+	Info  []mockReturn
+	Index int
+}
+
+func (mc *mockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object) error {
+	defer func() { mc.Index++ }()
+	funcName := "Get"
+	if len(mc.Info) <= mc.Index {
+		panic(fmt.Sprintf("mockClient Info doesn't have enough entries for %s %v", funcName, key))
+	}
+	if mc.Info[mc.Index].Method != funcName {
+		panic(fmt.Sprintf("mockClient current (%d) call is for %v, not %s", mc.Index, mc.Info[mc.Index].Method, funcName))
+	}
+	if mc.Info[mc.Index].Return == nil {
+		obj = mc.Info[mc.Index].Obj
+		return nil
+	}
+
+	v, ok := mc.Info[mc.Index].Return.(error)
+	if !ok {
+		panic(fmt.Sprintf("mockClient Info didn't have right type for entry %d for %s %v", mc.Index, funcName, key))
+	}
+
+	return v
+}
+
+func (mc *mockClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
+	panic("List not implemented in mockClient")
+	return nil
+}
+func (mc *mockClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	panic("Create not implemented in mockClient")
+	return nil
+}
+func (mc *mockClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+	panic("Delete not implemented in mockClient")
+	return nil
+}
+func (mc *mockClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	defer func() { mc.Index++ }()
+	funcName := "Update"
+	if len(mc.Info) <= mc.Index {
+		panic(fmt.Sprintf("mockClient Info doesn't have enough entries for %s %v", funcName, client.ObjectKeyFromObject(obj)))
+	}
+	if mc.Info[mc.Index].Method != funcName {
+		panic(fmt.Sprintf("mockClient current (%d) call is for %v, not %s", mc.Index, mc.Info[mc.Index].Method, funcName))
+	}
+	if mc.Info[mc.Index].Return == nil {
+		obj = mc.Info[mc.Index].Obj
+		return nil
+	}
+
+	v, ok := mc.Info[mc.Index].Return.(error)
+	if !ok {
+		panic(fmt.Sprintf("mockClient Info didn't have right type for entry %d for %s %v", mc.Index, funcName, client.ObjectKeyFromObject(obj)))
+	}
+
+	return v
+}
+func (mc *mockClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+	panic("Patch not implemented in mockClient")
+	return nil
+}
+func (mc *mockClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
+	panic("DeleteAll not implemented in mockClient")
+	return nil
+}
+
+func (mc *mockClient) Status() client.StatusWriter {
+	panic("Status not implemented in mockClient")
+	return nil
+}
+func (mc *mockClient) Scheme() *runtime.Scheme {
+	panic("Scheme not implemented in mockClient")
+	return nil
+}
+func (mc *mockClient) RESTMapper() restMeta.RESTMapper {
+	panic("RESTMapper not implemented in mockClient")
+	return nil
 }

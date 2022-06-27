@@ -69,6 +69,19 @@ var _ = Describe("Typha rendering tests", func() {
 			Installation:    installation,
 			ClusterDomain:   defaultClusterDomain,
 			FelixHealthPort: 9099,
+			UsePSP:          true,
+		}
+	})
+
+	It("should render properly when PSP is not supported by the cluster", func() {
+		cfg.UsePSP = false
+		component := render.Typha(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		// Should not contain any PodSecurityPolicies
+		for _, r := range resources {
+			Expect(r.GetObjectKind()).NotTo(Equal("PodSecurityPolicy"))
 		}
 	})
 

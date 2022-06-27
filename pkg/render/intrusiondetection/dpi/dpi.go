@@ -86,15 +86,16 @@ func (d *dpiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 	var toCreate, toDelete []client.Object
 	if d.cfg.HasNoLicense {
-		toDelete = append(toDelete, render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider))
+		toDelete = append(toDelete, render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider, render.PSSPrivileged))
 	} else {
-		toCreate = append(toCreate, render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider))
+		toCreate = append(toCreate, render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider, render.PSSPrivileged))
 	}
 	if d.cfg.HasNoDPIResource || d.cfg.HasNoLicense {
 		toDelete = append(toDelete, d.dpiAllowTigeraPolicy())
 		toDelete = append(toDelete, &corev1.Secret{
 			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: DeepPacketInspectionNamespace}})
+			ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: DeepPacketInspectionNamespace},
+		})
 		toDelete = append(toDelete, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.PullSecrets...)...)...)
 		toDelete = append(toDelete,
 			d.dpiServiceAccount(),

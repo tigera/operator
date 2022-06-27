@@ -110,6 +110,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		licenseAPIReady:    licenseAPIReady,
 		dpiAPIReady:        dpiAPIReady,
 		policyWatchesReady: policyWatchesReady,
+		usePSP:             opts.UsePSP,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -211,6 +212,7 @@ type ReconcileIntrusionDetection struct {
 	licenseAPIReady    *utils.ReadyFlag
 	dpiAPIReady        *utils.ReadyFlag
 	policyWatchesReady *utils.ReadyFlag
+	usePSP             bool
 }
 
 // Reconcile reads that state of the cluster for a IntrusionDetection object and makes changes based on the state read
@@ -414,7 +416,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 
 	reqLogger.V(3).Info("rendering components")
 	// Render the desired objects from the CRD and create or update them.
-	var hasNoLicense = !utils.IsFeatureActive(license, common.ThreatDefenseFeature)
+	hasNoLicense := !utils.IsFeatureActive(license, common.ThreatDefenseFeature)
 	intrusionDetectionCfg := &render.IntrusionDetectionConfiguration{
 		LogCollector:          lc,
 		ESSecrets:             esSecrets,
@@ -428,6 +430,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		HasNoLicense:          hasNoLicense,
 		TrustedCertBundle:     trustedBundle,
 		ADAPIServerCertSecret: adAPIServerTLSSecret,
+		UsePSP:                r.usePSP,
 	}
 	comp := render.IntrusionDetection(intrusionDetectionCfg)
 

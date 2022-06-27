@@ -89,6 +89,9 @@ type APIServerConfiguration struct {
 	PullSecrets                 []*corev1.Secret
 	Openshift                   bool
 	TunnelCASecret              certificatemanagement.KeyPairInterface
+
+	// Whether or not the cluster supports pod security policies.
+	UsePSP bool
 }
 
 type apiServerComponent struct {
@@ -154,7 +157,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.authReaderRoleBinding)
 	globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.webhookReaderClusterRole)
 	globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.webhookReaderClusterRoleBinding)
-	if !c.cfg.Openshift {
+	if !c.cfg.Openshift && c.cfg.UsePSP {
 		globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.apiServerPodSecurityPolicy)
 	}
 
@@ -180,7 +183,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 
 	// Global enterprise-only objects.
 	globalEnterpriseObjects := []client.Object{
-		CreateNamespace(rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise), c.cfg.Installation.KubernetesProvider),
+		CreateNamespace(rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise), c.cfg.Installation.KubernetesProvider, PSSPrivileged),
 		c.tigeraCustomResourcesClusterRole(),
 		c.tigeraCustomResourcesClusterRoleBinding(),
 		c.tierGetterClusterRole(),
@@ -202,7 +205,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 
 	// Global OSS-only objects.
 	globalCalicoObjects := []client.Object{
-		CreateNamespace(rmeta.APIServerNamespace(operatorv1.Calico), c.cfg.Installation.KubernetesProvider),
+		CreateNamespace(rmeta.APIServerNamespace(operatorv1.Calico), c.cfg.Installation.KubernetesProvider, PSSPrivileged),
 	}
 
 	// Compile the final arrays based on the variant.
@@ -301,7 +304,6 @@ func (c *apiServerComponent) delegateAuthClusterRoleBinding() (client.Object, cl
 				Name: nameToDelete,
 			},
 		}
-
 }
 
 // authReaderRoleBinding creates a rolebinding that allows the API server to access the
@@ -347,7 +349,6 @@ func (c *apiServerComponent) authReaderRoleBinding() (client.Object, client.Obje
 				Namespace: "kube-system",
 			},
 		}
-
 }
 
 // apiServerServiceAccount creates the service account used by the API server.
@@ -574,7 +575,6 @@ func (c *apiServerComponent) authClusterRoleBinding() (client.Object, client.Obj
 				Name: nameToDelete,
 			},
 		}
-
 }
 
 // webhookReaderClusterRole returns a ClusterRole to read MutatingWebhookConfigurations and ValidatingWebhookConfigurations and an
@@ -660,7 +660,6 @@ func (c *apiServerComponent) webhookReaderClusterRoleBinding() (client.Object, c
 			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: nameToDelete},
 		}
-
 }
 
 // apiServerService creates a service backed by the API server and - for enterprise - query server.
@@ -698,7 +697,6 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 				TargetPort: intstr.FromInt(QueryServerPort),
 			},
 		)
-
 	}
 	return s
 }

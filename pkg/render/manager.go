@@ -125,6 +125,9 @@ type ManagerConfiguration struct {
 	ESLicenseType           ElasticsearchLicenseType
 	Replicas                *int32
 	ComplianceFeatureActive bool
+
+	// Whether or not the cluster supports pod security policies.
+	UsePSP bool
 }
 
 type managerComponent struct {
@@ -169,7 +172,7 @@ func (c *managerComponent) SupportedOSType() rmeta.OSType {
 
 func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
-		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider),
+		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted),
 		c.managerAllowTigeraNetworkPolicy(),
 		managerAllowTigeraDefaultDeny(),
 	}
@@ -192,7 +195,7 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	// If we're running on openshift, we need to add in an SCC.
 	if c.cfg.Openshift {
 		objs = append(objs, c.securityContextConstraints())
-	} else {
+	} else if c.cfg.UsePSP {
 		// If we're not running openshift, we need to add pod security policies.
 		objs = append(objs, c.managerPodSecurityPolicy())
 	}
@@ -374,7 +377,8 @@ func (c *managerComponent) managerOAuth2EnvVars() []corev1.EnvVar {
 	} else {
 		envs = []corev1.EnvVar{
 			{Name: "CNX_WEB_AUTHENTICATION_TYPE", Value: "OIDC"},
-			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: c.cfg.KeyValidatorConfig.ClientID()}}
+			{Name: "CNX_WEB_OIDC_CLIENT_ID", Value: c.cfg.KeyValidatorConfig.ClientID()},
+		}
 
 		switch c.cfg.KeyValidatorConfig.(type) {
 		case *DexKeyValidatorConfig:
@@ -436,7 +440,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 }
 
 func (c *managerComponent) volumeMountsForProxyManager() []corev1.VolumeMount {
-	var mounts = []corev1.VolumeMount{
+	mounts := []corev1.VolumeMount{
 		{Name: ManagerTLSSecretName, MountPath: "/manager-tls", ReadOnly: true},
 		c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType()),
 	}

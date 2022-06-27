@@ -1,3 +1,17 @@
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package podsecuritypolicy
 
 import (
@@ -11,6 +25,8 @@ import (
 func NewBasePolicy() *policyv1beta1.PodSecurityPolicy {
 	falseBool := false
 	ptrBoolFalse := &falseBool
+	// This PodSecurityPolicy is equivalent to a "restricted" pod security standard,
+	// according to: https://kubernetes.io/docs/reference/access-authn-authz/psp-to-pod-security-standards/
 	return &policyv1beta1.PodSecurityPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -30,13 +46,13 @@ func NewBasePolicy() *policyv1beta1.PodSecurityPolicy {
 				policyv1beta1.DownwardAPI,
 				policyv1beta1.PersistentVolumeClaim,
 			},
-			HostNetwork: false,
 			HostPorts: []policyv1beta1.HostPortRange{{
 				Min: int32(0),
 				Max: int32(65535),
 			}},
-			HostIPC: false,
-			HostPID: false,
+			HostNetwork: false,
+			HostIPC:     false,
+			HostPID:     false,
 			RunAsUser: policyv1beta1.RunAsUserStrategyOptions{
 				Rule: policyv1beta1.RunAsUserStrategyMustRunAsNonRoot,
 			},

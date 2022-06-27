@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -53,11 +53,11 @@ func (c *namespaceComponent) SupportedOSType() rmeta.OSType {
 
 func (c *namespaceComponent) Objects() ([]client.Object, []client.Object) {
 	ns := []client.Object{
-		CreateNamespace(common.CalicoNamespace, c.cfg.Installation.KubernetesProvider),
+		CreateNamespace(common.CalicoNamespace, c.cfg.Installation.KubernetesProvider, PSSPrivileged),
 	}
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		// We need to always have ns tigera-dex even when the Authentication CR is not present, so policies can be added to this namespace.
-		ns = append(ns, CreateNamespace(DexObjectName, c.cfg.Installation.KubernetesProvider))
+		ns = append(ns, CreateNamespace(DexObjectName, c.cfg.Installation.KubernetesProvider, PSSRestricted))
 	}
 	if len(c.cfg.PullSecrets) > 0 {
 		ns = append(ns, secret.ToRuntimeObjects(secret.CopyToNamespace(common.CalicoNamespace, c.cfg.PullSecrets...)...)...)
@@ -74,15 +74,30 @@ func (c *namespaceComponent) Ready() bool {
 	return true
 }
 
-func CreateNamespace(name string, provider operatorv1.Provider) *corev1.Namespace {
+type PodSecurityStandard string
+
+const (
+	PSSPrivileged = "privileged"
+	PSSBaseline   = "baseline"
+	PSSRestricted = "restricted"
+)
+
+func CreateNamespace(name string, provider operatorv1.Provider, pss PodSecurityStandard) *corev1.Namespace {
 	ns := &corev1.Namespace{
 		TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        name,
-			Labels:      map[string]string{"name": name},
+			Name: name,
+			Labels: map[string]string{
+				"name": name,
+			},
 			Annotations: map[string]string{},
 		},
 	}
+
+	// Add in labels for configuring pod security standards.
+	// https://kubernetes.io/docs/concepts/security/pod-security-standards/
+	ns.Labels["pod-security.kubernetes.io/enforce"] = string(pss)
+	ns.Labels["pod-security.kubernetes.io/enforce-version"] = "latest"
 
 	switch provider {
 	case operatorv1.ProviderOpenShift:

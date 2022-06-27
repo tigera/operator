@@ -196,6 +196,9 @@ type ElasticsearchConfiguration struct {
 	ElasticLicenseType          ElasticsearchLicenseType
 	TrustedBundle               certificatemanagement.TrustedBundle
 	UnusedTLSSecret             *corev1.Secret
+
+	// Whether or not the cluster supports pod security policies.
+	UsePSP bool
 }
 
 type elasticsearchComponent struct {
@@ -277,7 +280,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 		// ECK CRs
 		toCreate = append(toCreate,
-			CreateNamespace(ECKOperatorNamespace, es.cfg.Installation.KubernetesProvider),
+			CreateNamespace(ECKOperatorNamespace, es.cfg.Installation.KubernetesProvider, PSSRestricted),
 			es.eckOperatorAllowTigeraPolicy(),
 		)
 
@@ -297,19 +300,23 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		// Apply the pod security policies for all providers except OpenShift
 		if es.cfg.Provider != operatorv1.ProviderOpenShift {
 			toCreate = append(toCreate,
-				es.eckOperatorPodSecurityPolicy(),
 				es.elasticsearchClusterRoleBinding(),
 				es.elasticsearchClusterRole(),
-				es.elasticsearchPodSecurityPolicy(),
 				es.kibanaClusterRoleBinding(),
-				es.kibanaClusterRole(),
-				es.kibanaPodSecurityPolicy())
+				es.kibanaClusterRole())
+
+			if es.cfg.UsePSP {
+				toCreate = append(toCreate,
+					es.eckOperatorPodSecurityPolicy(),
+					es.elasticsearchPodSecurityPolicy(),
+					es.kibanaPodSecurityPolicy())
+			}
 		}
 
 		toCreate = append(toCreate, es.eckOperatorStatefulSet())
 
 		// Elasticsearch CRs
-		toCreate = append(toCreate, CreateNamespace(ElasticsearchNamespace, es.cfg.Installation.KubernetesProvider))
+		toCreate = append(toCreate, CreateNamespace(ElasticsearchNamespace, es.cfg.Installation.KubernetesProvider, PSSPrivileged))
 		toCreate = append(toCreate, es.elasticsearchAllowTigeraPolicy())
 		toCreate = append(toCreate, es.elasticsearchInternalAllowTigeraPolicy())
 		toCreate = append(toCreate, elasticsearchDefaultDenyAllowTigeraPolicy())
@@ -328,7 +335,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate, es.elasticsearchCluster())
 
 		// Kibana CRs
-		toCreate = append(toCreate, CreateNamespace(KibanaNamespace, es.cfg.Installation.KubernetesProvider))
+		toCreate = append(toCreate, CreateNamespace(KibanaNamespace, es.cfg.Installation.KubernetesProvider, PSSRestricted))
 		toCreate = append(toCreate, es.kibanaAllowTigeraPolicy())
 		toCreate = append(toCreate, kibanaDefaultDenyAllowTigeraPolicy())
 		toCreate = append(toCreate, es.kibanaServiceAccount())
@@ -354,8 +361,10 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 			if es.cfg.Provider != operatorv1.ProviderOpenShift {
 				toCreate = append(toCreate,
 					es.curatorClusterRole(),
-					es.curatorClusterRoleBinding(),
-					es.curatorPodSecurityPolicy())
+					es.curatorClusterRoleBinding())
+				if es.cfg.UsePSP {
+					toCreate = append(toCreate, es.curatorPodSecurityPolicy())
+				}
 			}
 
 			toCreate = append(toCreate, es.curatorCronJob())
@@ -375,7 +384,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		}
 	} else {
 		toCreate = append(toCreate,
-			CreateNamespace(ElasticsearchNamespace, es.cfg.Installation.KubernetesProvider),
+			CreateNamespace(ElasticsearchNamespace, es.cfg.Installation.KubernetesProvider, PSSPrivileged),
 			es.elasticsearchExternalService(),
 		)
 	}
@@ -604,12 +613,14 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 				Name: csrVolumeNameHTTP,
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				}},
+				},
+			},
 			corev1.Volume{
 				Name: csrVolumeNameTransport,
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				}},
+				},
+			},
 		)
 		// Make the pod mount the serviceaccount token of tigera-elasticsearch. On behalf of it, CSRs will be submitted.
 		autoMountToken = true
@@ -1230,12 +1241,16 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 			corev1.Volume{
 				Name: csrVolumeNameHTTP,
 				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{}}},
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
 			// Volume where we place the ca cert.
 			corev1.Volume{
 				Name: caVolumeName,
 				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{}}})
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			})
 	}
 
 	count := int32(1)
@@ -1320,9 +1335,9 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 }
 
 func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
-	var f = false
-	var t = true
-	var elasticCuratorLivenessProbe = &corev1.Probe{
+	f := false
+	t := true
+	elasticCuratorLivenessProbe := &corev1.Probe{
 		Handler: corev1.Handler{
 			Exec: &corev1.ExecAction{
 				Command: []string{

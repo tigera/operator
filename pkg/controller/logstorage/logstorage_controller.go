@@ -117,6 +117,7 @@ func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.S
 		esCliCreator:       esCliCreator,
 		clusterDomain:      opts.ClusterDomain,
 		policyWatchesReady: policyWatchesReady,
+		usePSP:             opts.UsePSP,
 	}
 
 	c.status.Run(opts.ShutdownContext)
@@ -166,7 +167,8 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	// Watch all the secrets created by this controller so we can regenerate any that are deleted
 	for _, secretName := range []string{
 		render.TigeraElasticsearchGatewaySecret, render.TigeraKibanaCertSecret,
-		render.OIDCSecretName, render.DexObjectName, esmetrics.ElasticsearchMetricsServerTLSSecret} {
+		render.OIDCSecretName, render.DexObjectName, esmetrics.ElasticsearchMetricsServerTLSSecret,
+	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-storage-controller failed to watch the Secret resource: %w", err)
 		}
@@ -230,6 +232,7 @@ type ReconcileLogStorage struct {
 	esCliCreator       utils.ElasticsearchClientCreator
 	clusterDomain      string
 	policyWatchesReady *utils.ReadyFlag
+	usePSP             bool
 }
 
 // fillDefaults populates the default values onto an LogStorage object.
@@ -346,7 +349,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	} else {
 		r.status.OnCRFound()
 
-		//create predefaultpatch
+		// create predefaultpatch
 		preDefaultPatchFrom = client.MergeFrom(ls.DeepCopy())
 
 		fillDefaults(ls)
@@ -462,7 +465,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	var esLicenseType render.ElasticsearchLicenseType
 
 	if managementClusterConnection == nil {
-		var flowShards = logstoragecommon.CalculateFlowShards(ls.Spec.Nodes, logstoragecommon.DefaultElasticsearchShards)
+		flowShards := logstoragecommon.CalculateFlowShards(ls.Spec.Nodes, logstoragecommon.DefaultElasticsearchShards)
 		clusterConfig = relasticsearch.NewClusterConfig(render.DefaultElasticsearchClusterName, ls.Replicas(), logstoragecommon.DefaultElasticsearchShards, flowShards)
 
 		// Get the admin user secret to copy to the operator namespace.

@@ -86,6 +86,9 @@ type KubeControllersConfiguration struct {
 	ManagerInternalSecret        certificatemanagement.KeyPairInterface
 	KubeControllersGatewaySecret *corev1.Secret
 	TrustedBundle                certificatemanagement.TrustedBundle
+
+	// Whether or not the cluster supports pod security policies.
+	UsePSP bool
 }
 
 func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
@@ -239,7 +242,7 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 			secret.CopyToNamespace(common.CalicoNamespace, c.cfg.KubeControllersGatewaySecret)...)...)
 	}
 
-	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
+	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift && c.cfg.UsePSP {
 		objectsToCreate = append(objectsToCreate, c.controllersPodSecurityPolicy())
 	}
 

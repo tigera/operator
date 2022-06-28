@@ -129,7 +129,13 @@ func (mc *monitorComponent) SupportedOSType() rmeta.OSType {
 
 func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 	toCreate := []client.Object{
-		render.CreateNamespace(common.TigeraPrometheusNamespace, mc.cfg.Installation.KubernetesProvider, render.PSSRestricted),
+		// We create the namespace with "privileged" security context because the containers deployed by the prometheus operator
+		// do not set the following:
+		// - securityContext.allowPrivilegeEscalation=false
+		// - securityContext.capabilities.drop=["ALL"]
+		// - securityContext.runAsNonRoot=true
+		// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
+		render.CreateNamespace(common.TigeraPrometheusNamespace, mc.cfg.Installation.KubernetesProvider, render.PSSPrivileged),
 	}
 
 	// Create role and role bindings first.

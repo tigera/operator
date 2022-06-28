@@ -194,7 +194,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateMaster))
 
 		Expect(d.Spec.Template.Spec.ImagePullSecrets).To(BeEmpty())
-		Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(2))
+		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(2))
 		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-apiserver"))
 		Expect(d.Spec.Template.Spec.Containers[0].Image).To(Equal(
 			fmt.Sprintf("testregistry.com/%s:%s", components.ComponentAPIServer.Image, components.ComponentAPIServer.Version),
@@ -266,6 +266,12 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.HTTPGet.Scheme).To(BeEquivalentTo("HTTPS"))
 		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.InitialDelaySeconds).To(BeEquivalentTo(90))
 		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.PeriodSeconds).To(BeEquivalentTo(10))
+
+		Expect(*d.Spec.Template.Spec.Containers[1].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+		Expect(*d.Spec.Template.Spec.Containers[1].SecurityContext.Privileged).To(BeFalse())
+		Expect(*d.Spec.Template.Spec.Containers[1].SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+		Expect(*d.Spec.Template.Spec.Containers[1].SecurityContext.RunAsNonRoot).To(BeTrue())
+		Expect(*d.Spec.Template.Spec.Containers[1].SecurityContext.RunAsUser).To(BeEquivalentTo(1001))
 
 		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(3))
 

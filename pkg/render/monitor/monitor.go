@@ -134,7 +134,7 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		// - securityContext.capabilities.drop=["ALL"]
 		// - securityContext.runAsNonRoot=true
 		// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
-		render.CreateNamespace(common.TigeraPrometheusNamespace, mc.cfg.Installation.KubernetesProvider, render.PSSPrivileged),
+		render.CreateNamespace(common.TigeraPrometheusNamespace, mc.cfg.Installation.KubernetesProvider, render.PSSBaseline),
 	}
 
 	// Create role and role bindings first.

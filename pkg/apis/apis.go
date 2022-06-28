@@ -23,6 +23,7 @@ import (
 	ocsv1 "github.com/openshift/api/security/v1"
 	tigera "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	aggregator "k8s.io/kube-aggregator/pkg/client/clientset_generated/clientset/scheme"
@@ -45,6 +46,7 @@ func init() {
 	AddToSchemes = append(AddToSchemes, ocsv1.AddToScheme)
 	AddToSchemes = append(AddToSchemes, esv1.SchemeBuilder.AddToScheme)
 	AddToSchemes = append(AddToSchemes, kbv1.SchemeBuilder.AddToScheme)
+	AddToSchemes = append(AddToSchemes, policyv1.SchemeBuilder.AddToScheme)
 	AddToSchemes = append(AddToSchemes, policyv1beta1.SchemeBuilder.AddToScheme)
 	AddToSchemes = append(AddToSchemes, crdv1.SchemeBuilder.AddToScheme)
 }

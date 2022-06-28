@@ -36,6 +36,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -329,10 +330,10 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{Name: "elastic-internal-transport-certificates", MountPath: "/csr"},
 				})
 				compareInitContainer(initContainers[2], "key-cert-elastic", []corev1.VolumeMount{
-					{Name: "elastic-internal-http-certificates", MountPath: render.CSRCMountPath},
+					{Name: "elastic-internal-http-certificates", MountPath: certificatemanagement.CSRCMountPath},
 				})
 				compareInitContainer(initContainers[3], "key-cert-elastic-transport", []corev1.VolumeMount{
-					{Name: "elastic-internal-transport-certificates", MountPath: render.CSRCMountPath},
+					{Name: "elastic-internal-transport-certificates", MountPath: certificatemanagement.CSRCMountPath},
 				})
 				compareInitContainer(initContainers[4], "elastic-internal-init-log-selinux-context", []corev1.VolumeMount{})
 			})
@@ -469,58 +470,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			Expect(nodeSelectors["k2"]).To(Equal("v2"))
 		})
 
-		It("Configures OIDC for Kibana when the OIDC configuration is provided", func() {
-			cfg.DexCfg = render.NewDexRelyingPartyConfig(&operatorv1.Authentication{
-				Spec: operatorv1.AuthenticationSpec{
-					ManagerDomain: "https://example.com",
-					OIDC: &operatorv1.AuthenticationOIDC{
-						IssuerURL:       "https://example.com",
-						UsernameClaim:   "email",
-						GroupsClaim:     "group",
-						RequestedScopes: []string{"scope"},
-					},
-				},
-			}, render.CreateDexTLSSecret("cn"), render.CreateDexClientSecret(), "cluster.local")
-
-			component := render.LogStorage(cfg)
-
-			createResources, _ := component.Objects()
-			securitySecret := rtest.GetResource(createResources, render.ElasticsearchSecureSettingsSecretName, render.ElasticsearchNamespace, "", "", "")
-
-			Expect(securitySecret).ShouldNot(BeNil())
-			Expect(securitySecret.(*corev1.Secret).Data["xpack.security.authc.realms.oidc.oidc1.rp.client_secret"]).Should(HaveLen(24))
-			elasticsearch := getElasticsearch(createResources)
-			Expect(elasticsearch.Spec.NodeSets[0].Config.Data).Should(Equal(map[string]interface{}{
-				"cluster.max_shards_per_node": 10000,
-				"xpack.security.authc.realms.oidc.oidc1": map[string]interface{}{
-					"rp.client_id":                "tigera-manager",
-					"rp.requested_scopes":         []string{"openid", "email", "profile", "groups", "offline_access"},
-					"op.jwkset_path":              "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/keys",
-					"op.userinfo_endpoint":        "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/userinfo",
-					"claims.principal":            "email",
-					"order":                       1,
-					"rp.response_type":            "code",
-					"rp.redirect_uri":             "https://example.com/tigera-kibana/api/security/oidc/callback",
-					"op.issuer":                   "https://example.com/dex",
-					"op.authorization_endpoint":   "https://example.com/dex/auth",
-					"op.token_endpoint":           "https://tigera-dex.tigera-dex.svc.cluster.local:5556/dex/token",
-					"rp.post_logout_redirect_uri": "https://example.com/tigera-kibana/logged_out",
-					"claims.groups":               "groups",
-					"ssl.certificate_authorities": []string{"/usr/share/elasticsearch/config/dex/tls-dex.crt"},
-				},
-				"node.master": "true",
-				"node.data":   "true",
-				"node.ingest": "true",
-			}))
-
-			// Verify that there are 2 init containers for OIDC
-			initContainers := elasticsearch.Spec.NodeSets[0].PodTemplate.Spec.InitContainers
-			Expect(len(initContainers)).To(Equal(3))
-			Expect(initContainers[0].Name).To(Equal("elastic-internal-init-os-settings"))
-			Expect(initContainers[1].Name).To(Equal("elastic-internal-init-keystore"))
-			Expect(initContainers[2].Name).To(Equal("elastic-internal-init-log-selinux-context"))
-		})
-
 		It("should configures Kibana publicBaseUrl when BaseURL is specified", func() {
 			cfg.ElasticLicenseType = render.ElasticsearchLicenseTypeBasic
 			cfg.BaseURL = "https://test.domain.com"
@@ -533,39 +482,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			kibana := kb.(*kbv1.Kibana)
 			x := kibana.Spec.Config.Data["server"].(map[string]interface{})
 			Expect(x["publicBaseUrl"]).To(Equal("https://test.domain.com/tigera-kibana"))
-		})
-
-		It("should not configures OIDC for Kibana when elasticsearch basic license is used", func() {
-			cfg.DexCfg = render.NewDexRelyingPartyConfig(&operatorv1.Authentication{
-				Spec: operatorv1.AuthenticationSpec{
-					ManagerDomain: "https://example.com",
-					OIDC: &operatorv1.AuthenticationOIDC{
-						IssuerURL:       "https://example.com",
-						UsernameClaim:   "email",
-						GroupsClaim:     "group",
-						RequestedScopes: []string{"scope"},
-					},
-				},
-			}, render.CreateDexTLSSecret("cn"), render.CreateDexClientSecret(), "svc.cluster.local")
-			cfg.ElasticLicenseType = render.ElasticsearchLicenseTypeBasic
-
-			component := render.LogStorage(cfg)
-
-			createResources, _ := component.Objects()
-			securitySecret := rtest.GetResource(createResources, render.ElasticsearchSecureSettingsSecretName, render.ElasticsearchNamespace, "", "", "")
-			Expect(securitySecret).Should(BeNil())
-			elasticsearch := getElasticsearch(createResources)
-			Expect(elasticsearch.Spec.NodeSets[0].Config.Data).Should(Equal(map[string]interface{}{
-				"cluster.max_shards_per_node": 10000,
-				"node.master":                 "true",
-				"node.data":                   "true",
-				"node.ingest":                 "true",
-			}))
-
-			initContainers := elasticsearch.Spec.NodeSets[0].PodTemplate.Spec.InitContainers
-			Expect(len(initContainers)).To(Equal(2))
-			Expect(initContainers[0].Name).To(Equal("elastic-internal-init-os-settings"))
-			Expect(initContainers[1].Name).To(Equal("elastic-internal-init-log-selinux-context"))
 		})
 
 		Context("ECKOperator memory requests/limits", func() {
@@ -956,7 +872,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 		})
 		Context("Node selection", func() {
 			When("NodeSets is set but empty", func() {
-				It("returns the defualt NodeSet", func() {
+				It("returns the default NodeSet", func() {
 					cfg.LogStorage.Spec.Nodes = &operatorv1.Nodes{
 						Count:    2,
 						NodeSets: []operatorv1.NodeSet{},

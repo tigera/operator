@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,17 +15,23 @@
 package crypto
 
 import (
-	mrand "math/rand"
+	"crypto/rand"
+	"fmt"
+	"math/big"
 	"strings"
-	"time"
 )
 
+var chars = []rune("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
+var charLen = big.NewInt(int64(len(chars)))
+
 func GeneratePassword(length int) string {
-	mrand.Seed(time.Now().UnixNano())
-	chars := []rune("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
 	var b strings.Builder
-	for i := 0; i < length; i++ {
-		b.WriteRune(chars[mrand.Intn(len(chars))])
+	for b.Len() < length {
+		idx, err := rand.Int(rand.Reader, charLen)
+		if err != nil {
+			panic(fmt.Errorf("failed to read crypto/rand data: %w", err))
+		}
+		b.WriteRune(chars[idx.Int64()])
 	}
 	return b.String()
 }

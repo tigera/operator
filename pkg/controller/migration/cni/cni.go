@@ -23,7 +23,7 @@ type NetworkComponents struct {
 
 // IPAMConfig represents the IP related network configuration.
 // This nests Range because we initially only supported a single
-// range directly, and wish to preserve backwards compatability
+// range directly, and wish to preserve backwards compatibility
 type HostLocalIPAMConfig struct {
 	*Range
 	Name       string
@@ -109,7 +109,7 @@ func unmarshalCNIConfList(cniConfig string) (*libcni.NetworkConfigList, error) {
 		return confList, nil
 	}
 
-	// if an error occured, try parsing it as a single item
+	// if an error occurred, try parsing it as a single item
 	conf, err := libcni.ConfFromBytes([]byte(cniConfig))
 	if err != nil {
 		return nil, err

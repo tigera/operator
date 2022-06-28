@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,24 +28,29 @@ import (
 )
 
 func Windows(
-	cr *operatorv1.InstallationSpec,
+	cfg *WindowsConfig,
 ) Component {
-	return &windowsComponent{cr: cr}
+	return &windowsComponent{cfg: cfg}
+}
+
+type WindowsConfig struct {
+	Installation *operatorv1.InstallationSpec
+	Terminating  bool
 }
 
 type windowsComponent struct {
-	cr                  *operatorv1.InstallationSpec
+	cfg                 *WindowsConfig
 	windowsUpgradeImage string
 }
 
 func (c *windowsComponent) ResolveImages(is *operatorv1.ImageSet) error {
-	reg := c.cr.Registry
-	path := c.cr.ImagePath
-	prefix := c.cr.ImagePrefix
+	reg := c.cfg.Installation.Registry
+	path := c.cfg.Installation.ImagePath
+	prefix := c.cfg.Installation.ImagePrefix
 
-	component := components.ComponentWindows
-	if c.cr.Variant == operatorv1.TigeraSecureEnterprise {
-		component = components.ComponentTigeraWindows
+	component := components.ComponentWindowsUpgrade
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		component = components.ComponentTigeraWindowsUpgrade
 	}
 
 	image, err := components.GetReference(component, reg, path, prefix, is)
@@ -68,7 +73,11 @@ func (c *windowsComponent) Objects() ([]client.Object, []client.Object) {
 		c.windowsUpgradeDaemonset(),
 	}
 
-	if c.cr.KubernetesProvider != operatorv1.ProviderAKS {
+	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderAKS {
+		return nil, objs
+	}
+
+	if c.cfg.Terminating {
 		return nil, objs
 	}
 	return objs, nil
@@ -128,7 +137,7 @@ func (c *windowsComponent) windowsUpgradeDaemonset() *appsv1.DaemonSet {
 					Effect: corev1.TaintEffectNoSchedule,
 				},
 			},
-			ImagePullSecrets: c.cr.ImagePullSecrets,
+			ImagePullSecrets: c.cfg.Installation.ImagePullSecrets,
 			Containers:       []corev1.Container{c.windowsUpgradeContainer()},
 			Volumes:          c.calicoWindowsVolume(),
 		},

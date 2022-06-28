@@ -19,22 +19,21 @@ import (
 	"fmt"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/kubernetes"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -117,7 +116,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 			relasticsearch.PublicCertSecret, render.ElasticsearchComplianceBenchmarkerUserSecret,
 			render.ElasticsearchComplianceControllerUserSecret, render.ElasticsearchComplianceReporterUserSecret,
 			render.ElasticsearchComplianceSnapshotterUserSecret, render.ElasticsearchComplianceServerUserSecret,
-			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, render.DexCertSecretName} {
+			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, certificatemanagement.CASecretName} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("compliance-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
 			}
@@ -291,51 +290,37 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	var managerInternalTLSSecret *corev1.Secret
+	certificateManager, err := certificatemanager.Create(r.client, network, r.clusterDomain)
+	if err != nil {
+		log.Error(err, "unable to create the Tigera CA")
+		r.status.SetDegraded("Unable to create the Tigera CA", err.Error())
+		return reconcile.Result{}, err
+	}
+	var managerInternalTLSSecret certificatemanagement.CertificateInterface
 	if managementCluster != nil {
-		managerInternalTLSSecret, err = utils.ValidateCertPair(r.client,
-			common.OperatorNamespace(),
-			render.ManagerInternalTLSSecretName,
-			render.ManagerInternalSecretKeyName,
-			render.ManagerInternalSecretCertName,
-		)
+		managerInternalTLSSecret, err = certificateManager.GetCertificate(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
 		if err != nil {
-			log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", render.ManagerInternalSecretCertName))
-			r.status.SetDegraded(fmt.Sprintf("failed to retrieve / validate  %s", render.ManagerInternalSecretKeyName), err.Error())
+			log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", render.ManagerInternalTLSSecretName))
+			r.status.SetDegraded(fmt.Sprintf("failed to retrieve / validate  %s", render.ManagerInternalTLSSecretName), err.Error())
 			return reconcile.Result{}, err
 		}
 	}
+	trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret)
 
-	var complianceServerCertSecret *corev1.Secret
-	operatorManagedComplianceSecret := true
-	if network.CertificateManagement == nil {
-		complianceServerCertSecret, err = utils.ValidateCertPair(r.client,
-			common.OperatorNamespace(),
+	var complianceServerCertSecret certificatemanagement.KeyPairInterface
+	if managementClusterConnection == nil {
+		complianceServerCertSecret, err = certificateManager.GetOrCreateKeyPair(
+			r.client,
 			render.ComplianceServerCertSecret,
-			corev1.TLSPrivateKeyKey,
-			corev1.TLSCertKey,
-		)
+			common.OperatorNamespace(),
+			dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, r.clusterDomain))
 		if err != nil {
 			log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", render.ComplianceServerCertSecret))
 			r.status.SetDegraded(fmt.Sprintf("failed to retrieve / validate  %s", render.ComplianceServerCertSecret), err.Error())
 			return reconcile.Result{}, err
 		}
-
-		// Create the cert if doesn't exist. If the cert exists, check that the cert
-		// has the expected DNS names. If the cert doesn't and the cert is managed by the
-		// operator, the cert is recreated and returned. If the invalid cert is supplied by
-		// the user, set the component degraded.
-
-		complianceServerCertSecret, operatorManagedComplianceSecret, err = utils.EnsureCertificateSecret(
-			render.ComplianceServerCertSecret, complianceServerCertSecret, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, rmeta.DefaultCertificateDuration, dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, r.clusterDomain)...,
-		)
-		if err != nil {
-			r.status.SetDegraded(fmt.Sprintf("Error ensuring compliance TLS certificate %q exists and has valid DNS names", render.ComplianceServerCertSecret), err.Error())
-			return reconcile.Result{}, err
-		}
-	} else {
-		complianceServerCertSecret = render.CreateCertificateSecret(network.CertificateManagement.CACert, render.ComplianceServerCertSecret, common.OperatorNamespace())
 	}
+	certificateManager.AddToStatusManager(r.status, render.ComplianceNamespace)
 
 	// Fetch the Authentication spec. If present, we use to configure user authentication.
 	authenticationCR, err := utils.GetAuthentication(ctx, r.client)
@@ -356,11 +341,6 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		log.Error(err, "Failed to process the authentication CR.")
 		r.status.SetDegraded("Failed to process the authentication CR.", err.Error())
 		return reconcile.Result{}, err
-	}
-
-	var components []render.Component
-	if operatorManagedComplianceSecret {
-		components = append(components, render.NewPassthrough(complianceServerCertSecret))
 	}
 
 	tenantId := ""
@@ -385,7 +365,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	complianceCfg := &render.ComplianceConfiguration{
 		ESSecrets:                   esSecrets,
-		ManagerInternalTLSSecret:    managerInternalTLSSecret,
+		TrustedBundle:               trustedBundle,
 		Installation:                network,
 		ComplianceServerCertSecret:  complianceServerCertSecret,
 		ESClusterConfig:             esClusterConfig,
@@ -399,22 +379,29 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		TenantID:                    tenantId,
 	}
 	// Render the desired objects from the CRD and create or update them.
-	component, err := render.Compliance(complianceCfg)
+	comp, err := render.Compliance(complianceCfg)
 	if err != nil {
 		log.Error(err, "error rendering Compliance")
 		r.status.SetDegraded("Error rendering Compliance", err.Error())
 		return reconcile.Result{}, err
 	}
 
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, comp); err != nil {
 		log.Error(err, "Error with images from ImageSet")
 		r.status.SetDegraded("Error with images from ImageSet", err.Error())
 		return reconcile.Result{}, err
 	}
+	certificateComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+		Namespace:       render.ComplianceNamespace,
+		ServiceAccounts: []string{render.ComplianceServerSAName},
+		KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+			rcertificatemanagement.NewKeyPairOption(complianceServerCertSecret, true, true),
+		},
+		TrustedBundle: trustedBundle,
+	})
 
-	components = append(components, component)
-	for _, component := range components {
-		if err := handler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+	for _, comp := range []render.Component{comp, certificateComponent} {
+		if err := handler.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
 			r.status.SetDegraded("Error creating / updating / deleting resource", err.Error())
 			return reconcile.Result{}, err
 		}

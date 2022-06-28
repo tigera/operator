@@ -19,6 +19,9 @@ const (
 	migratorRequestMemory = "50Mi"
 	migratorLimitCPU      = "0.75"
 	migratorLimitMemory   = "150Mi"
+
+	MigratorDBMaxOpenConn = "2"
+	MigratorDBMaxIdleConn = "0"
 )
 
 func (c *component) migratorServiceAccount() *corev1.ServiceAccount {
@@ -91,6 +94,14 @@ func (c *component) migratorJob() *batchv1.Job {
 			Name:      "IMAGE_ASSURANCE_TENANT_PASSWORD",
 			ValueFrom: secret.GetEnvVarSource(PGUserSecretName, PGUserPassKey, false),
 		},
+		{
+			Name:  "IMAGE_ASSURANCE_DB_MAX_OPEN_CONNECTIONS",
+			Value: MigratorDBMaxOpenConn,
+		},
+		{
+			Name:  "IMAGE_ASSURANCE_DB_MAX_IDLE_CONNECTIONS",
+			Value: MigratorDBMaxIdleConn,
+		},
 	}
 
 	env = pgDecorateENVVars(env, PGAdminUserSecretName, MountPathPostgresCerts, PGConfigMapName)
@@ -123,10 +134,10 @@ func (c *component) migratorJob() *batchv1.Job {
 		TerminationGracePeriodSeconds: ptr.Int64ToPtr(20),
 		Containers:                    []corev1.Container{container},
 		Volumes:                       c.migratorVolumes(),
-		RestartPolicy:                 corev1.RestartPolicyNever,
+		RestartPolicy:                 corev1.RestartPolicyOnFailure,
 	}
 
-	backoffLimit := int32(3)
+	backoffLimit := int32(30)
 	j := batchv1.Job{
 		TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
 		ObjectMeta: metav1.ObjectMeta{

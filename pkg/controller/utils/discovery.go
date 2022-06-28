@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -112,6 +112,13 @@ func AutoDiscoverProvider(ctx context.Context, clientset kubernetes.Interface) (
 		return operatorv1.ProviderEKS, nil
 	}
 
+	// Attempt to detect RKE Version 2, which also cannot be done via API groups.
+	if rke2, err := isRKE2(ctx, clientset); err != nil {
+		return operatorv1.ProviderNone, fmt.Errorf("Failed to check if RKE2 is the provider: %s", err)
+	} else if rke2 {
+		return operatorv1.ProviderRKE2, nil
+	}
+
 	// Couldn't detect any specific platform.
 	return operatorv1.ProviderNone, nil
 }
@@ -145,7 +152,7 @@ func isDockerEE(ctx context.Context, c kubernetes.Interface) (bool, error) {
 		return false, err
 	}
 	for _, n := range masterNodes.Items {
-		for l, _ := range n.Labels {
+		for l := range n.Labels {
 			if strings.HasPrefix(l, "com.docker.ucp") {
 				return true, nil
 			}
@@ -159,6 +166,22 @@ func isDockerEE(ctx context.Context, c kubernetes.Interface) (bool, error) {
 // we use for other platforms in autodetectFromGroup.
 func isEKS(ctx context.Context, c kubernetes.Interface) (bool, error) {
 	cm, err := c.CoreV1().ConfigMaps("kube-system").Get(ctx, "eks-certificates-controller", metav1.GetOptions{})
+	if err != nil {
+		if kerrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	return (cm != nil), nil
+}
+
+// isRKE2 returns true if running on an RKE2 cluster, and false otherwise.
+// While the presence of Rancher can be determined based on API Groups, it's important to
+// differentiate between versions, which requires another approach. In this case,
+// the presence of an "rke2" configmap in kube-system namespace is used.
+func isRKE2(ctx context.Context, c kubernetes.Interface) (bool, error) {
+	cm, err := c.CoreV1().ConfigMaps("kube-system").Get(ctx, "rke2", metav1.GetOptions{})
 	if err != nil {
 		if kerrors.IsNotFound(err) {
 			return false, nil

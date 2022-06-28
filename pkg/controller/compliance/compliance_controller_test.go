@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -68,7 +68,7 @@ var _ = Describe("Compliance controller tests", func() {
 		Expect(operatorv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 		// Create a client that will have a crud interface of k8s objects.
-		c = fake.NewFakeClientWithScheme(scheme)
+		c = fake.NewClientBuilder().WithScheme(scheme).Build()
 		ctx = context.Background()
 
 		mockStatus = &status.MockStatus{}
@@ -77,6 +77,7 @@ var _ = Describe("Compliance controller tests", func() {
 		mockStatus.On("RemoveDeployments", mock.Anything).Return()
 		mockStatus.On("RemoveDaemonsets", mock.Anything).Return()
 		mockStatus.On("AddStatefulSets", mock.Anything).Return()
+		mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
 		mockStatus.On("AddCronJobs", mock.Anything)
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("OnCRFound").Return()
@@ -173,35 +174,6 @@ var _ = Describe("Compliance controller tests", func() {
 		}, &dpl)).NotTo(HaveOccurred())
 		Expect(dpl.Spec.Template.ObjectMeta.Name).To(Equal(render.ComplianceControllerName))
 
-	})
-
-	It("should create a new compliance server cert if the cert is owned by compliance and has the wrong DNS names", func() {
-		By("reconciling when clustertype is Standalone")
-		result, err := r.Reconcile(ctx, reconcile.Request{})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(result.Requeue).NotTo(BeTrue())
-
-		By("creating the compliance server cert secret")
-		assertExpectedCertDNSNames(c, expectedDNSNames...)
-
-		By("replacing the cert with one that has the wrong DNS names")
-		Expect(c.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ComplianceServerCertSecret,
-			Namespace: common.OperatorNamespace()}})).NotTo(HaveOccurred())
-
-		oldDNSName := "compliance.tigera-compliance.svc"
-		newSecret, err := secret.CreateTLSSecret(nil,
-			render.ComplianceServerCertSecret, common.OperatorNamespace(), corev1.TLSPrivateKeyKey,
-			corev1.TLSCertKey, rmeta.DefaultCertificateDuration, nil, oldDNSName,
-		)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, newSecret)).NotTo(HaveOccurred())
-
-		By("replacing the invalid cert")
-		result, err = r.Reconcile(ctx, reconcile.Request{})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(result.Requeue).NotTo(BeTrue())
-
-		assertExpectedCertDNSNames(c, expectedDNSNames...)
 	})
 
 	It("should reconcile if the compliance server cert is user-supplied", func() {

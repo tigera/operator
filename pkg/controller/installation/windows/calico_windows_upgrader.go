@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -179,15 +179,15 @@ func (w *calicoWindowsUpgrader) getExpectedVersion() string {
 	// For release versions, the windows upgrade component version will be equal
 	// to the top-level version.
 	if w.install.Variant == operatorv1.TigeraSecureEnterprise {
-		return components.ComponentTigeraWindows.Version
+		return components.ComponentTigeraWindowsUpgrade.Version
 	}
-	return components.ComponentWindows.Version
+	return components.ComponentWindowsUpgrade.Version
 }
 
 func sortedSliceFromMap(m map[string]*corev1.Node) []string {
 	nodeNames := make([]string, 0, len(m))
 	// Copy map keys to slice and sort.
-	for nodeName, _ := range m {
+	for nodeName := range m {
 		nodeNames = append(nodeNames, nodeName)
 	}
 	sort.Strings(nodeNames)

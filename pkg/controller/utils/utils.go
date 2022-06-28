@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -281,7 +281,22 @@ func ValidateCertPair(client client.Client, namespace, certPairSecretName, keyNa
 		}
 	}
 
+	// In v1.26 we normalized the fields for all TLS secrets to those specified in the core/v1 library. For clusters
+	// downgraded from >=v1.26 to <1.26, we need to make sure secrets are still compatible. Downgrades can happen
+	// when users convert an OSS operator installation to a Calico Cloud cluster.
+	_, certFound := secret.Data[certName]
+	coreCert, coreCertFound := secret.Data[corev1.TLSCertKey]
+	if !certFound && coreCertFound {
+		secret.Data[certName] = coreCert
+	}
+
 	if keyName != "" {
+		_, keyFound := secret.Data[keyName]
+		coreKey, coreKeyFound := secret.Data[corev1.TLSPrivateKeyKey]
+		if !keyFound && coreKeyFound {
+			secret.Data[keyName] = coreKey
+		}
+
 		if val, ok := secret.Data[keyName]; !ok || len(val) == 0 {
 			return secret, fmt.Errorf("Secret %q does not have a field named %q", certPairSecretName, keyName)
 		}
@@ -468,22 +483,19 @@ func WaitToAddResourceWatch(controller controller.Controller, client kubernetes.
 	duration := 1 * time.Second
 	ticker := time.NewTicker(duration)
 	defer ticker.Stop()
-	for {
-		select {
-		case <-ticker.C:
-			duration = duration * 2
-			if duration >= maxDuration {
-				duration = maxDuration
-			}
-			ticker.Reset(duration)
-			if isResourceReady(client, obj.GetObjectKind().GroupVersionKind().Kind) {
-				err := controller.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{})
-				if err != nil {
-					log.Info("failed to watch %s resource: %v. Will retry to add watch", obj.GetObjectKind().GroupVersionKind().Kind, err)
-				} else {
-					flag.MarkAsReady()
-					return
-				}
+	for range ticker.C {
+		duration = duration * 2
+		if duration >= maxDuration {
+			duration = maxDuration
+		}
+		ticker.Reset(duration)
+		if isResourceReady(client, obj.GetObjectKind().GroupVersionKind().Kind) {
+			err := controller.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{})
+			if err != nil {
+				log.Info("failed to watch %s resource: %v. Will retry to add watch", obj.GetObjectKind().GroupVersionKind().Kind, err)
+			} else {
+				flag.MarkAsReady()
+				return
 			}
 		}
 	}

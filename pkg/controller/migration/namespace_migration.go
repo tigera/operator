@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -58,13 +58,13 @@ const (
 	nodeDaemonSetName            = "calico-node"
 	kubeControllerDeploymentName = "calico-kube-controllers"
 
+	k8sServicesEndpointConfigMap = "kubernetes-services-endpoint"
+
 	defaultMaxUnavailable int32 = 1
 )
 
 var (
-	preOperatorNodeLabel = map[string]string{nodeSelectorKey: nodeSelectorValuePre}
-	migratedNodeLabel    = map[string]string{nodeSelectorKey: nodeSelectorValuePost}
-	calicoPodLabel       = map[string]string{"k8s-app": "calico-node"}
+	migratedNodeLabel = map[string]string{nodeSelectorKey: nodeSelectorValuePost}
 )
 
 type NamespaceMigration interface {
@@ -87,7 +87,7 @@ type CoreNamespaceMigration struct {
 // It checks the following in the kube-system namespace:
 // calico-kube-controllers deployment, typha deployment, or calico-node deployment
 func (m *CoreNamespaceMigration) NeedsCoreNamespaceMigration(ctx context.Context) (bool, error) {
-	if m.migrationComplete == true {
+	if m.migrationComplete {
 		return false, nil
 	}
 
@@ -248,6 +248,10 @@ func (m *CoreNamespaceMigration) Run(ctx context.Context, log logr.Logger) error
 	if err := m.deleteKubeSystemTypha(ctx); err != nil {
 		return fmt.Errorf("failed to delete kube-system typha Deployment: %s", err.Error())
 	}
+	log.V(1).Info("kube-system typha deployment deleted")
+	if err := m.deleteKubeSystemServiceEndPointConfigMap(ctx, log); err != nil {
+		return fmt.Errorf("failed to delete kube-system k8sServicesEndpoint ConfigMap: %s", err.Error())
+	}
 	log.Info("Namespace migration complete")
 
 	return nil
@@ -354,6 +358,20 @@ func (m *CoreNamespaceMigration) CleanupMigration(ctx context.Context) error {
 	close(m.stopCh)
 
 	m.migrationComplete = true
+	return nil
+}
+
+// deleteKubeSystemServiceEndPointConfigMap deletes the kubernetes-services-endpoint configmap
+// in the kube-system namespace
+func (m *CoreNamespaceMigration) deleteKubeSystemServiceEndPointConfigMap(ctx context.Context, log logr.Logger) error {
+	err := m.client.CoreV1().ConfigMaps(kubeSystem).Delete(ctx, k8sServicesEndpointConfigMap, metav1.DeleteOptions{})
+	if err != nil {
+		if !apierrs.IsNotFound(err) {
+			return err
+		}
+	} else {
+		log.V(1).Info("kube-system services endpoint configmap deleted")
+	}
 	return nil
 }
 
@@ -727,18 +745,4 @@ func (m *CoreNamespaceMigration) removeNodeLabel(ctx context.Context, nodeName, 
 		// no update needed
 		return true, nil
 	})
-}
-
-// isPodRunningAndReady returns true if the passed in pod is ready.
-func isPodRunningAndReady(pod v1.Pod) bool {
-	if pod.Status.Phase != v1.PodRunning {
-		return false
-	}
-	for _, c := range pod.Status.Conditions {
-		if c.Type == v1.PodReady && c.Status == v1.ConditionTrue {
-			return true
-		}
-	}
-
-	return false
 }

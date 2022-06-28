@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -113,6 +113,9 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 		// system as specified by the osType.
 		ensureOSSchedulingRestrictions(obj, osType)
 
+		// Make sure any objects with images also have an image pull policy.
+		modifyPodSpec(obj, setImagePullPolicy)
+
 		// Keep track of some objects so we can report on their status.
 		switch obj.(type) {
 		case *apps.Deployment:
@@ -166,6 +169,27 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 
 				if err := c.client.Create(ctx, obj); err != nil {
 					return err
+				}
+			case *v1.Secret:
+				objSecret := obj.(*v1.Secret)
+				curSecret := cur.(*v1.Secret)
+				// Secret types are immutable, we need to delete the old version if the type has changed. If the
+				// object type is unset, it will result in SecretTypeOpaque, so this difference can be excluded.
+				if objSecret.Type != curSecret.Type &&
+					!(len(objSecret.Type) == 0 && curSecret.Type == v1.SecretTypeOpaque) {
+					if err := c.client.Delete(ctx, obj); err != nil {
+						logCtx.WithValues("key", key).Info("Failed to delete secret for recreation.")
+						return err
+					}
+					obj.SetResourceVersion("")
+					if err := c.client.Create(ctx, obj); err != nil {
+						return err
+					}
+				} else {
+					if err := c.client.Update(ctx, mobj); err != nil {
+						logCtx.WithValues("key", key).Info("Failed to update object.")
+						return err
+					}
 				}
 			default:
 				if err := c.client.Update(ctx, mobj); err != nil {
@@ -274,6 +298,36 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 		if dd.Spec.Replicas == nil {
 			dd.Spec.Replicas = cd.Spec.Replicas
 		}
+
+		// Merge the template's labels.
+		currentLabels := mapExistsOrInitialize(cd.Spec.Template.GetObjectMeta().GetLabels())
+		desiredLabels := mapExistsOrInitialize(dd.Spec.Template.GetObjectMeta().GetLabels())
+		mergedLabels := mergeMaps(currentLabels, desiredLabels)
+		dd.Spec.Template.SetLabels(mergedLabels)
+
+		// Merge the template's annotations.
+		currentAnnotations := mapExistsOrInitialize(cd.Spec.Template.GetObjectMeta().GetAnnotations())
+		desiredAnnotations := mapExistsOrInitialize(dd.Spec.Template.GetObjectMeta().GetAnnotations())
+		mergedAnnotations := mergeMaps(currentAnnotations, desiredAnnotations)
+		dd.Spec.Template.SetAnnotations(mergedAnnotations)
+
+		return dd
+	case *apps.DaemonSet:
+		cd := current.(*apps.DaemonSet)
+		dd := desired.(*apps.DaemonSet)
+
+		// Merge the template's labels.
+		currentLabels := mapExistsOrInitialize(cd.Spec.Template.GetObjectMeta().GetLabels())
+		desiredLabels := mapExistsOrInitialize(dd.Spec.Template.GetObjectMeta().GetLabels())
+		mergedLabels := mergeMaps(currentLabels, desiredLabels)
+		dd.Spec.Template.SetLabels(mergedLabels)
+
+		// Merge the template's annotations.
+		currentAnnotations := mapExistsOrInitialize(cd.Spec.Template.GetObjectMeta().GetAnnotations())
+		desiredAnnotations := mapExistsOrInitialize(dd.Spec.Template.GetObjectMeta().GetAnnotations())
+		mergedAnnotations := mergeMaps(currentAnnotations, desiredAnnotations)
+		dd.Spec.Template.SetAnnotations(mergedAnnotations)
+
 		return dd
 	case *v1.ServiceAccount:
 		// ServiceAccounts generate a new token if we don't include the existing one.
@@ -335,6 +389,41 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 	}
 }
 
+// modifyPodSpec is a helper for pulling out pod specifications from an arbitrary object.
+func modifyPodSpec(obj client.Object, f func(*v1.PodSpec)) {
+	switch x := obj.(type) {
+	case *v1.PodTemplate:
+		f(&x.Template.Spec)
+	case *apps.Deployment:
+		f(&x.Spec.Template.Spec)
+	case *apps.DaemonSet:
+		f(&x.Spec.Template.Spec)
+	case *apps.StatefulSet:
+		f(&x.Spec.Template.Spec)
+	case *batchv1beta.CronJob:
+		f(&x.Spec.JobTemplate.Spec.Template.Spec)
+	case *batchv1.Job:
+		f(&x.Spec.Template.Spec)
+	case *kbv1.Kibana:
+		f(&x.Spec.PodTemplate.Spec)
+	case *esv1.Elasticsearch:
+		// elasticsearch resource describes multiple nodeSets which each have a pod spec.
+		nodeSets := x.Spec.NodeSets
+		for i := range nodeSets {
+			f(&nodeSets[i].PodTemplate.Spec)
+		}
+	}
+}
+
+// setImagePullPolicy ensures that an image pull policy is set if not set already.
+func setImagePullPolicy(podSpec *v1.PodSpec) {
+	for i := range podSpec.Containers {
+		if len(podSpec.Containers[i].ImagePullPolicy) == 0 {
+			podSpec.Containers[i].ImagePullPolicy = v1.PullIfNotPresent
+		}
+	}
+}
+
 // ensureOSSchedulingRestrictions ensures that if obj is a type that creates pods and if osType is not OSTypeAny that a
 // node selector is set on the pod template for the "kubernetes.io/os" label to ensure that the pod is scheduled
 // on a node running an operating system as specified by osType.
@@ -343,50 +432,30 @@ func ensureOSSchedulingRestrictions(obj client.Object, osType rmeta.OSType) {
 		return
 	}
 
-	var podSpecs []*v1.PodSpec
-	switch obj.(type) {
-	case *v1.PodTemplate:
-		podSpecs = []*v1.PodSpec{&obj.(*v1.PodTemplate).Template.Spec}
-	case *apps.Deployment:
-		podSpecs = []*v1.PodSpec{&obj.(*apps.Deployment).Spec.Template.Spec}
-	case *apps.DaemonSet:
-		podSpecs = []*v1.PodSpec{&obj.(*apps.DaemonSet).Spec.Template.Spec}
-	case *apps.StatefulSet:
-		podSpecs = []*v1.PodSpec{&obj.(*apps.StatefulSet).Spec.Template.Spec}
-	case *batchv1beta.CronJob:
-		podSpecs = []*v1.PodSpec{&obj.(*batchv1beta.CronJob).Spec.JobTemplate.Spec.Template.Spec}
-	case *batchv1.Job:
-		podSpecs = []*v1.PodSpec{&obj.(*batchv1.Job).Spec.Template.Spec}
-	case *kbv1.Kibana:
-		podSpecs = []*v1.PodSpec{&obj.(*kbv1.Kibana).Spec.PodTemplate.Spec}
-	case *esv1.Elasticsearch:
-		// elasticsearch resource describes multiple nodeSets which each have a nodeSelector.
-		nodeSets := obj.(*esv1.Elasticsearch).Spec.NodeSets
-		for i := range nodeSets {
-			podSpecs = append(podSpecs, &nodeSets[i].PodTemplate.Spec)
-		}
+	// Some object types don't have a v1.PodSpec an instead use a custom spec. Handle those here.
+	switch x := obj.(type) {
 	case *monitoringv1.Alertmanager:
 		// Prometheus operator types don't have a template spec which is of v1.PodSpec type.
 		// We can't add it to the podSpecs list and assign osType in the for loop below.
-		podSpec := &obj.(*monitoringv1.Alertmanager).Spec
+		podSpec := &x.Spec
 		podSpec.NodeSelector = map[string]string{"kubernetes.io/os": string(osType)}
 		return
 	case *monitoringv1.Prometheus:
 		// Prometheus operator types don't have a template spec which is of v1.PodSpec type.
 		// We can't add it to the podSpecs list and assign osType in the for loop below.
-		podSpec := &obj.(*monitoringv1.Prometheus).Spec
+		podSpec := &x.Spec
 		podSpec.NodeSelector = map[string]string{"kubernetes.io/os": string(osType)}
-		return
-	default:
 		return
 	}
 
-	for _, podSpec := range podSpecs {
+	// Handle objects that do use a v1.PodSpec.
+	f := func(podSpec *v1.PodSpec) {
 		if podSpec.NodeSelector == nil {
 			podSpec.NodeSelector = make(map[string]string)
 		}
 		podSpec.NodeSelector["kubernetes.io/os"] = string(osType)
 	}
+	modifyPodSpec(obj, f)
 }
 
 // mergeMaps merges current and desired maps. If both current and desired maps contain the same key, the

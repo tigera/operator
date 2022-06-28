@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,6 +11,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+// Components defined here are required to be kept in sync with
+// config/enterprise_versions.yml
 
 package components
 
@@ -136,6 +139,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "anomaly_detection_jobs" }}
+	ComponentAnomalyDetectionJobs = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with .Components.kibana }}
 	ComponentKibana = component{
 		Version: "tesla-{{ .Version }}",
@@ -174,6 +183,12 @@ var (
 {{- end }}
 {{ with index .Components "envoy" }}
 	ComponentEnvoyProxy = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
+{{ with index .Components "dikastes" }}
+	ComponentDikastes = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
@@ -250,6 +265,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "windows-upgrade" }}
+	ComponentTigeraWindowsUpgrade = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "image-assurance-api" }}
 	ComponentImageAssuranceApi = component{
 		Version: "{{ .Version }}",
@@ -280,12 +301,6 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index .Components "windows" }}
-	ComponentTigeraWindows = component{
-		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
-	}
-{{- end }}
 	EnterpriseComponents = []component{
 		ComponentAPIServer,
 		ComponentComplianceBenchmarker,
@@ -306,6 +321,7 @@ var (
 		ComponentFluentdWindows,
 		ComponentGuardian,
 		ComponentIntrusionDetectionController,
+		ComponentAnomalyDetectionJobs,
 		ComponentKibana,
 		ComponentManager,
 		ComponentDex,
@@ -326,11 +342,12 @@ var (
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
+		ComponentTigeraWindowsUpgrade,
+		ComponentDikastes,
 		ComponentImageAssuranceApi,
 		ComponentImageAssuranceScanner,
 		ComponentImageAssuranceDBMigrator,
 		ComponentImageAssuranceCAW,
-		ComponentTigeraWindows,
 		ComponentSasha,
 	}
 )

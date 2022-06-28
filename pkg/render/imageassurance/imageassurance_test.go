@@ -3,24 +3,31 @@
 package imageassurance_test
 
 import (
+	"fmt"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcimageassurance "github.com/tigera/operator/pkg/render/common/imageassurance"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/imageassurance"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 var _ = Describe("Image Assurance Render", func() {
@@ -30,10 +37,10 @@ var _ = Describe("Image Assurance Render", func() {
 		pgUserSecret              corev1.Secret
 		pgServerCertSecret        corev1.Secret
 		tlsSecrets                corev1.Secret
-		mgrSecrets                corev1.Secret
 		pgConfig                  corev1.ConfigMap
 		config                    corev1.ConfigMap
 		tenantEncryptionKeySecret corev1.Secret
+		bundle                    certificatemanagement.TrustedBundle
 	)
 
 	BeforeEach(func() {
@@ -117,14 +124,12 @@ var _ = Describe("Image Assurance Render", func() {
 			Data: map[string][]byte{"tls.key": []byte("tlskey"), "tls.cert": []byte("tlscert")},
 		}
 
-		mgrSecrets = corev1.Secret{
-			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      imageassurance.ManagerCertSecretName,
-				Namespace: common.OperatorNamespace(),
-			},
-			Data: map[string][]byte{"tls.key": []byte("mgrkey"), "tls.cert": []byte("mgrcert")},
-		}
+		scheme := runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
+		certificateManager, err := certificatemanager.Create(cli, nil, dns.DefaultClusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+		bundle = certificateManager.CreateTrustedBundle()
 
 		tenantEncryptionKeySecret = corev1.Secret{
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
@@ -144,7 +149,7 @@ var _ = Describe("Image Assurance Render", func() {
 		kind    string
 	}
 
-	var resources = func(enableOIDC bool) []expectedResource {
+	var resources = func() []expectedResource {
 		res := []expectedResource{
 			{name: imageassurance.NameSpaceImageAssurance, ns: "", group: "", version: "v1", kind: "Namespace"},
 
@@ -163,7 +168,6 @@ var _ = Describe("Image Assurance Render", func() {
 
 			// image assurance adp resources
 			{name: imageassurance.APICertSecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
-			{name: imageassurance.ManagerCertSecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
 			{name: imageassurance.TenantEncryptionKeySecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
 
 			{name: imageassurance.ResourceNameImageAssuranceAPI, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ServiceAccount"},
@@ -185,14 +189,7 @@ var _ = Describe("Image Assurance Render", func() {
 			{name: imageassurance.ResourceNameImageAssuranceCAW, ns: imageassurance.NameSpaceImageAssurance, group: "apps", version: "v1", kind: "Deployment"},
 			{name: imageassurance.AdmissionControllerAPIClusterRoleName, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
 		}
-		if enableOIDC {
-			var oidc = []expectedResource{
-				{name: "tigera-dex-tls", ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
-			}
-			res = append(res, oidc...)
-		}
 		return res
-
 	}
 
 	var apiExpectedENV = func(enableOIDC bool) []corev1.EnvVar {
@@ -200,6 +197,7 @@ var _ = Describe("Image Assurance Render", func() {
 			{Name: "IMAGE_ASSURANCE_HTTPS_CERT", Value: "/certs/https/tls.crt"},
 			{Name: "IMAGE_ASSURANCE_HTTPS_KEY", Value: "/certs/https/tls.key"},
 			{Name: "IMAGE_ASSURANCE_TENANT_ENCRYPTION_KEY", Value: "/tenant-key/encryption_key"},
+			{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: certificatemanagement.TrustedCertBundleMountPath},
 			{Name: "IMAGE_ASSURANCE_DB_SSL_ROOT_CERT", Value: "/certs/db/server-ca"},
 			{Name: "IMAGE_ASSURANCE_DB_SSL_CERT", Value: "/certs/db/client-cert"},
 			{Name: "IMAGE_ASSURANCE_DB_SSL_KEY", Value: "/certs/db/client-key"},
@@ -256,6 +254,8 @@ var _ = Describe("Image Assurance Render", func() {
 					},
 				},
 			},
+			{Name: "IMAGE_ASSURANCE_DB_MAX_OPEN_CONNECTIONS", Value: imageassurance.ApiDBMaxOpenConn},
+			{Name: "IMAGE_ASSURANCE_DB_MAX_IDLE_CONNECTIONS", Value: imageassurance.ApiDBMaxIdleConn},
 			rcimageassurance.EnvOrganizationID(),
 		}
 
@@ -307,19 +307,15 @@ var _ = Describe("Image Assurance Render", func() {
 		return env
 	}
 
-	var apiExpectedVolMounts = func(enableOIDC bool) []corev1.VolumeMount {
+	var apiExpectedVolMounts = func() []corev1.VolumeMount {
 		vms := []corev1.VolumeMount{
 			{Name: imageassurance.APICertSecretName, MountPath: "/certs/https/"},
 			{Name: imageassurance.PGCertSecretName, MountPath: "/certs/db/"},
-			{Name: imageassurance.ManagerCertSecretName, MountPath: "/manager-tls/"},
+			{
+				Name:      certificatemanagement.TrustedCertConfigMapName,
+				MountPath: certificatemanagement.TrustedCertVolumeMountPath,
+			},
 			{Name: imageassurance.TenantEncryptionKeySecretName, MountPath: "/tenant-key/"},
-		}
-		if enableOIDC {
-			vms = append(vms, corev1.VolumeMount{
-				Name:      "tigera-dex-tls-crt",
-				ReadOnly:  false,
-				MountPath: "/etc/ssl/certs",
-			})
 		}
 
 		return vms
@@ -327,7 +323,7 @@ var _ = Describe("Image Assurance Render", func() {
 
 	It("should render all resources with default image assurance configuration", func() {
 
-		expectedResources := resources(false)
+		expectedResources := resources()
 		// Should render the correct resources.
 		component := imageassurance.ImageAssurance(&imageassurance.Config{
 			PullSecrets:               nil,
@@ -339,14 +335,14 @@ var _ = Describe("Image Assurance Render", func() {
 			PGConfig:                  &pgConfig,
 			ConfigurationConfigMap:    &config,
 			TLSSecret:                 &tlsSecrets,
-			InternalMgrSecret:         &mgrSecrets,
+			TrustedCertBundle:         bundle,
 			NeedsMigrating:            false,
 			ComponentsUp:              false,
 			TenantEncryptionKeySecret: &tenantEncryptionKeySecret,
 		})
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(len(expectedResources)))
+		Expect(resources).To(HaveLen(len(expectedResources)))
 
 		// Should render the correct resources.
 		i := 0
@@ -453,6 +449,14 @@ var _ = Describe("Image Assurance Render", func() {
 					},
 				},
 			},
+			{
+				Name:  "IMAGE_ASSURANCE_DB_MAX_OPEN_CONNECTIONS",
+				Value: imageassurance.MigratorDBMaxOpenConn,
+			},
+			{
+				Name:  "IMAGE_ASSURANCE_DB_MAX_IDLE_CONNECTIONS",
+				Value: imageassurance.MigratorDBMaxIdleConn,
+			},
 		}
 
 		Expect(len(migratorExpectedENV)).To(Equal(len(migrator.Containers[0].Env)))
@@ -483,7 +487,7 @@ var _ = Describe("Image Assurance Render", func() {
 		apiEnvs := api.Containers[0].Env
 		apiExpectedENV := apiExpectedENV(false)
 
-		Expect(len(apiExpectedENV)).To(Equal(len(api.Containers[0].Env)))
+		Expect(api.Containers[0].Env).To(HaveLen(len(apiExpectedENV)), fmt.Sprintf("env var count was %d", len(api.Containers[0].Env)))
 		for _, expected := range apiExpectedENV {
 			rtest.ExpectEnv(apiEnvs, expected.Name, expected.Value)
 		}
@@ -491,7 +495,7 @@ var _ = Describe("Image Assurance Render", func() {
 		Expect(*api.Containers[0].SecurityContext.Privileged).To(BeTrue())
 
 		apiVMs := api.Containers[0].VolumeMounts
-		apiExpectedVMs := apiExpectedVolMounts(false)
+		apiExpectedVMs := apiExpectedVolMounts()
 
 		Expect(len(apiExpectedVMs)).To(Equal(len(apiVMs)))
 		for _, expected := range apiExpectedVMs {
@@ -623,7 +627,7 @@ var _ = Describe("Image Assurance Render", func() {
 			PGConfig:                  &pgConfig,
 			ConfigurationConfigMap:    &config,
 			TLSSecret:                 &tlsSecrets,
-			InternalMgrSecret:         &mgrSecrets,
+			TrustedCertBundle:         bundle,
 			NeedsMigrating:            true,
 			ComponentsUp:              false,
 			TenantEncryptionKeySecret: &tenantEncryptionKeySecret,
@@ -665,7 +669,7 @@ var _ = Describe("Image Assurance Render", func() {
 			PGConfig:                  &pgConfig,
 			ConfigurationConfigMap:    &config,
 			TLSSecret:                 &tlsSecrets,
-			InternalMgrSecret:         &mgrSecrets,
+			TrustedCertBundle:         bundle,
 			NeedsMigrating:            true,
 			ComponentsUp:              true,
 			TenantEncryptionKeySecret: &tenantEncryptionKeySecret,
@@ -684,13 +688,12 @@ var _ = Describe("Image Assurance Render", func() {
 
 	It("should API resource correctly with Authentication Enabled", func() {
 		// Should render the correct resources.
-		var authentication *operatorv1.Authentication
-		authentication = &operatorv1.Authentication{
+		authentication := &operatorv1.Authentication{
 			Spec: operatorv1.AuthenticationSpec{
 				ManagerDomain: "https://127.0.0.1",
 				OIDC:          &operatorv1.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"}}}
 
-		var dexCfg = render.NewDexKeyValidatorConfig(authentication, nil, render.CreateDexTLSSecret("cn"), dns.DefaultClusterDomain)
+		var dexCfg = render.NewDexKeyValidatorConfig(authentication, nil, dns.DefaultClusterDomain)
 
 		component := imageassurance.ImageAssurance(&imageassurance.Config{
 			PullSecrets:               nil,
@@ -702,16 +705,16 @@ var _ = Describe("Image Assurance Render", func() {
 			PGConfig:                  &pgConfig,
 			ConfigurationConfigMap:    &config,
 			TLSSecret:                 &tlsSecrets,
-			InternalMgrSecret:         &mgrSecrets,
+			TrustedCertBundle:         bundle,
 			KeyValidatorConfig:        dexCfg,
 			NeedsMigrating:            false,
 			ComponentsUp:              false,
 			TenantEncryptionKeySecret: &tenantEncryptionKeySecret,
 		})
-		expectedResources := resources(true)
+		expectedResources := resources()
 		resources, _ := component.Objects()
 		Expect(component.ResolveImages(nil)).To(BeNil())
-		Expect(len(resources)).To(Equal(len(expectedResources)))
+		Expect(resources).To(HaveLen(len(expectedResources)), fmt.Sprintf("had length %d", len(resources)))
 
 		// Should render the correct resources.
 		i := 0
@@ -739,9 +742,9 @@ var _ = Describe("Image Assurance Render", func() {
 		}
 
 		apiVMs := api.Containers[0].VolumeMounts
-		apiExpectedVMs := apiExpectedVolMounts(true)
+		apiExpectedVMs := apiExpectedVolMounts()
 
-		Expect(len(apiExpectedVMs)).To(Equal(len(apiVMs)))
+		Expect(api.Containers[0].VolumeMounts).To(HaveLen(len(apiVMs)))
 		for _, expected := range apiExpectedVMs {
 			rtest.ExpectVolumeMount(apiVMs, expected.Name, expected.MountPath)
 		}

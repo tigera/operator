@@ -175,6 +175,19 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				compareResources(createResources, expectedCreateResources)
 				compareResources(deleteResources, []resourceTestObj{})
 
+				// Check the namespaces.
+				namespace := rtest.GetResource(createResources, "tigera-eck-operator", "", "", "v1", "Namespace").(*corev1.Namespace)
+				Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("baseline"))
+				Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
+
+				namespace = rtest.GetResource(createResources, "tigera-elasticsearch", "", "", "v1", "Namespace").(*corev1.Namespace)
+				Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("privileged"))
+				Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
+
+				namespace = rtest.GetResource(createResources, "tigera-kibana", "", "", "v1", "Namespace").(*corev1.Namespace)
+				Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("baseline"))
+				Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
+
 				resultES := rtest.GetResource(createResources, render.ElasticsearchName, render.ElasticsearchNamespace,
 					"elasticsearch.k8s.elastic.co", "v1", "Elasticsearch").(*esv1.Elasticsearch)
 

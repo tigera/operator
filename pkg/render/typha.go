@@ -40,7 +40,6 @@ const (
 	TyphaPortName                 = "calico-typha"
 	TyphaK8sAppName               = "calico-typha"
 	TyphaServiceAccountName       = "calico-typha"
-	AppLabelName                  = "k8s-app"
 	TyphaPort               int32 = 5473
 )
 
@@ -132,7 +131,7 @@ func (c *typhaComponent) typhaPodDisruptionBudget() *policyv1.PodDisruptionBudge
 			MaxUnavailable: &maxUnavailable,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					AppLabelName: TyphaK8sAppName,
+					K8sAppLabelName: TyphaK8sAppName,
 				},
 			},
 		},
@@ -559,7 +558,7 @@ func (c *typhaComponent) typhaService() *corev1.Service {
 			Name:      TyphaServiceName,
 			Namespace: common.CalicoNamespace,
 			Labels: map[string]string{
-				AppLabelName: TyphaK8sAppName,
+				K8sAppLabelName: TyphaK8sAppName,
 			},
 		},
 		Spec: corev1.ServiceSpec{
@@ -572,7 +571,7 @@ func (c *typhaComponent) typhaService() *corev1.Service {
 				},
 			},
 			Selector: map[string]string{
-				AppLabelName: TyphaK8sAppName,
+				K8sAppLabelName: TyphaK8sAppName,
 			},
 		},
 	}
@@ -611,7 +610,7 @@ func (c *typhaComponent) affinity() (aff *corev1.Affinity) {
 					LabelSelector: &metav1.LabelSelector{
 						MatchExpressions: []metav1.LabelSelectorRequirement{
 							{
-								Key:      AppLabelName,
+								Key:      K8sAppLabelName,
 								Operator: metav1.LabelSelectorOpIn,
 								Values:   []string{TyphaK8sAppName},
 							},

@@ -33,7 +33,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/ptr"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -46,6 +45,7 @@ const (
 
 	auditLogsVolumeName   = "tigera-audit-logs"
 	auditPolicyVolumeName = "tigera-audit-policy"
+	APIServerK8sAppName   = "calico-apiserver"
 )
 
 // The following functions are helpers for determining resource names based on
@@ -774,7 +774,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 	}
 
 	if c.cfg.Installation.ControlPlaneReplicas != nil && *c.cfg.Installation.ControlPlaneReplicas > 1 {
-		d.Spec.Template.Spec.Affinity = podaffinity.NewPodAntiAffinity(name, rmeta.APIServerNamespace(c.cfg.Installation.Variant))
+		d.Spec.Template.Spec.Affinity = c.affinity()
 	}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
@@ -1656,4 +1656,46 @@ rules:
 			"config": defaultAuditPolicy,
 		},
 	}
+}
+
+// affinity sets up default host/zone affinity rules for calico-apiserver.
+func (c *apiServerComponent) affinity() (aff *corev1.Affinity) {
+
+	// TODO: allow user to configure pod/node affinity for Calico API Server.
+	var name string
+	switch c.cfg.Installation.Variant {
+	case operatorv1.TigeraSecureEnterprise:
+		name = "tigera-apiserver"
+	case operatorv1.Calico:
+		name = "calico-apiserver"
+	}
+
+	labelSelector := &metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			K8sAppLabelName: name,
+		},
+	}
+
+	// Default to spreading replicas across hosts & zones.
+	aff = &corev1.Affinity{}
+	aff.PodAntiAffinity = &corev1.PodAntiAffinity{
+		PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
+			{
+				Weight: 100,
+				PodAffinityTerm: corev1.PodAffinityTerm{
+					LabelSelector: labelSelector,
+					TopologyKey:   "topology.kubernetes.io/zone",
+				},
+			},
+			{
+				Weight: 100,
+				PodAffinityTerm: corev1.PodAffinityTerm{
+					LabelSelector: labelSelector,
+					Namespaces:    []string{rmeta.APIServerNamespace(c.cfg.Installation.Variant)},
+					TopologyKey:   "kubernetes.io/hostname",
+				},
+			},
+		},
+	}
+	return aff
 }

@@ -258,7 +258,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 			// - securityContext.capabilities.drop=["ALL"]
 			// - securityContext.runAsNonRoot=true
 			// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
-			CreateNamespace(ECKOperatorNamespace, es.cfg.Installation.KubernetesProvider, PSSPrivileged),
+			CreateNamespace(ECKOperatorNamespace, es.cfg.Installation.KubernetesProvider, PSSBaseline),
 		)
 
 		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ECKOperatorNamespace, es.cfg.PullSecrets...)...)...)
@@ -314,7 +314,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		// - securityContext.capabilities.drop=["ALL"]
 		// - securityContext.runAsNonRoot=true
 		// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
-		toCreate = append(toCreate, CreateNamespace(KibanaNamespace, es.cfg.Installation.KubernetesProvider, PSSPrivileged))
+		toCreate = append(toCreate, CreateNamespace(KibanaNamespace, es.cfg.Installation.KubernetesProvider, PSSBaseline))
 		toCreate = append(toCreate, es.kibanaServiceAccount())
 
 		if len(es.cfg.PullSecrets) > 0 {

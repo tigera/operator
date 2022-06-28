@@ -251,9 +251,14 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 	if es.cfg.ManagementClusterConnection == nil {
 
-		// ECK CRs
+		// ECK operator
 		toCreate = append(toCreate,
-			CreateNamespace(ECKOperatorNamespace, es.cfg.Installation.KubernetesProvider, PSSRestricted),
+			// In order to use restricted, we need to change:
+			// - securityContext.allowPrivilegeEscalation=false
+			// - securityContext.capabilities.drop=["ALL"]
+			// - securityContext.runAsNonRoot=true
+			// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
+			CreateNamespace(ECKOperatorNamespace, es.cfg.Installation.KubernetesProvider, PSSPrivileged),
 		)
 
 		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ECKOperatorNamespace, es.cfg.PullSecrets...)...)...)
@@ -304,7 +309,12 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate, es.elasticsearchCluster())
 
 		// Kibana CRs
-		toCreate = append(toCreate, CreateNamespace(KibanaNamespace, es.cfg.Installation.KubernetesProvider, PSSRestricted))
+		// In order to use restricted, we need to change:
+		// - securityContext.allowPrivilegeEscalation=false)
+		// - securityContext.capabilities.drop=["ALL"]
+		// - securityContext.runAsNonRoot=true
+		// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
+		toCreate = append(toCreate, CreateNamespace(KibanaNamespace, es.cfg.Installation.KubernetesProvider, PSSPrivileged))
 		toCreate = append(toCreate, es.kibanaServiceAccount())
 
 		if len(es.cfg.PullSecrets) > 0 {

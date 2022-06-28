@@ -41,11 +41,16 @@ import (
 )
 
 const (
-	apiServerPort   = 5443
-	queryServerPort = 8080
+	apiServerPort = 5443
 
 	auditLogsVolumeName   = "tigera-audit-logs"
 	auditPolicyVolumeName = "tigera-audit-policy"
+)
+
+const (
+	QueryServerPort        = 8080
+	QueryserverNamespace   = "tigera-system"
+	QueryserverServiceName = "tigera-api"
 )
 
 // The following functions are helpers for determining resource names based on
@@ -692,9 +697,9 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 		s.Spec.Ports = append(s.Spec.Ports,
 			corev1.ServicePort{
 				Name:       "queryserver",
-				Port:       queryServerPort,
+				Port:       QueryServerPort,
 				Protocol:   corev1.ProtocolTCP,
-				TargetPort: intstr.FromInt(queryServerPort),
+				TargetPort: intstr.FromInt(QueryServerPort),
 			},
 		)
 	}
@@ -907,6 +912,9 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		// Set queryserver logging to "info"
 		{Name: "LOGLEVEL", Value: "info"},
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+		{Name: "LISTEN_ADDR", Value: fmt.Sprintf(":%d", QueryServerPort)},
+		{Name: "TLS_CERT", Value: fmt.Sprintf("/%s/tls.crt", ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant))},
+		{Name: "TLS_KEY", Value: fmt.Sprintf("/%s/tls.key", ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant))},
 	}
 
 	env = append(env, c.cfg.K8SServiceEndpoint.EnvVars(c.hostNetwork(), c.cfg.Installation.KubernetesProvider)...)
@@ -914,6 +922,10 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 
 	if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
 		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
+	}
+
+	volumeMounts := []corev1.VolumeMount{
+		c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()),
 	}
 
 	container := corev1.Container{
@@ -924,7 +936,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path:   "/version",
-					Port:   intstr.FromInt(queryServerPort),
+					Port:   intstr.FromInt(QueryServerPort),
 					Scheme: corev1.URISchemeHTTPS,
 				},
 			},
@@ -932,6 +944,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 			PeriodSeconds:       10,
 		},
 		SecurityContext: podsecuritycontext.NewBaseContext(),
+		VolumeMounts:    volumeMounts,
 	}
 	return container
 }

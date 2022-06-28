@@ -85,7 +85,15 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(resources).To(HaveLen(expectedResourcesNumber))
 
 		deployment := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(len(deployment.Spec.Template.Spec.Containers)).Should(Equal(3))
+
+		// deployment
+		Expect(deployment.Spec.Template.Spec.Volumes).To(HaveLen(2))
+		Expect(deployment.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ManagerTLSSecretName))
+		Expect(deployment.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ManagerTLSSecretName))
+		Expect(deployment.Spec.Template.Spec.Volumes[1].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+		Expect(deployment.Spec.Template.Spec.Volumes[1].VolumeSource.ConfigMap.Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+
+		Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(3))
 		manager := deployment.Spec.Template.Spec.Containers[0]
 		esProxy := deployment.Spec.Template.Spec.Containers[1]
 		voltron := deployment.Spec.Template.Spec.Containers[2]
@@ -94,33 +102,47 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(esProxy.Image).Should(Equal(components.TigeraRegistry + "tigera/es-proxy:" + components.ComponentEsProxy.Version))
 		Expect(voltron.Image).Should(Equal(components.TigeraRegistry + "tigera/voltron:" + components.ComponentManagerProxy.Version))
 
-		Expect(voltron.Env).Should(ContainElements([]corev1.EnvVar{
-			{Name: "VOLTRON_QUERYSERVER_ENDPOINT", Value: "https://tigera-api.tigera-system.svc:8080"},
-			{Name: "VOLTRON_QUERYSERVER_BASE_PATH", Value: "/api/v1/namespaces/tigera-system/services/https:tigera-api:8080/proxy/"},
-			{Name: "VOLTRON_QUERYSERVER_CA_BUNDLE_PATH", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
-		},
-		))
+		// manager container
+		Expect(*manager.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+		Expect(*manager.SecurityContext.Privileged).To(BeFalse())
+		Expect(*manager.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+		Expect(*manager.SecurityContext.RunAsNonRoot).To(BeTrue())
+		Expect(*manager.SecurityContext.RunAsUser).To(BeEquivalentTo(999))
 
+		// es-proxy container
 		Expect(esProxy.Env).Should(ContainElements(
 			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
 		))
-		Expect(len(esProxy.VolumeMounts)).To(Equal(1))
+
+		Expect(esProxy.VolumeMounts).To(HaveLen(1))
 		Expect(esProxy.VolumeMounts[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 		Expect(esProxy.VolumeMounts[0].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
 
-		Expect(len(voltron.VolumeMounts)).To(Equal(2))
+		Expect(*esProxy.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+		Expect(*esProxy.SecurityContext.Privileged).To(BeFalse())
+		Expect(*esProxy.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+		Expect(*esProxy.SecurityContext.RunAsNonRoot).To(BeTrue())
+		Expect(*esProxy.SecurityContext.RunAsUser).To(BeEquivalentTo(1001))
+
+		// voltron container
+		Expect(voltron.Env).To(ContainElements([]corev1.EnvVar{
+			{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: "true"},
+			{Name: "VOLTRON_QUERYSERVER_ENDPOINT", Value: "https://tigera-api.tigera-system.svc:8080"},
+			{Name: "VOLTRON_QUERYSERVER_BASE_PATH", Value: "/api/v1/namespaces/tigera-system/services/https:tigera-api:8080/proxy/"},
+			{Name: "VOLTRON_QUERYSERVER_CA_BUNDLE_PATH", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
+		}))
+
+		Expect(voltron.VolumeMounts).To(HaveLen(2))
 		Expect(voltron.VolumeMounts[0].Name).To(Equal(render.ManagerTLSSecretName))
 		Expect(voltron.VolumeMounts[0].MountPath).To(Equal("/manager-tls"))
 		Expect(voltron.VolumeMounts[1].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 		Expect(voltron.VolumeMounts[1].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
 
-		Expect(voltron.Env).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: "true"}))
-
-		Expect(len(deployment.Spec.Template.Spec.Volumes)).To(Equal(2))
-		Expect(deployment.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ManagerTLSSecretName))
-		Expect(deployment.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ManagerTLSSecretName))
-		Expect(deployment.Spec.Template.Spec.Volumes[1].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
-		Expect(deployment.Spec.Template.Spec.Volumes[1].VolumeSource.ConfigMap.Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+		Expect(*voltron.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+		Expect(*voltron.SecurityContext.Privileged).To(BeFalse())
+		Expect(*voltron.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+		Expect(*voltron.SecurityContext.RunAsNonRoot).To(BeTrue())
+		Expect(*voltron.SecurityContext.RunAsUser).To(BeEquivalentTo(1001))
 	})
 
 	It("should not proxy compliance if the feature is not active", func() {

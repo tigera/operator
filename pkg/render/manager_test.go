@@ -143,6 +143,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(*voltron.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
 		Expect(*voltron.SecurityContext.RunAsNonRoot).To(BeTrue())
 		Expect(*voltron.SecurityContext.RunAsUser).To(BeEquivalentTo(1001))
+
+		// Check the namespace.
+		ns := rtest.GetResource(resources, "tigera-manager", "", "", "v1", "Namespace").(*corev1.Namespace)
+		Expect(ns.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("baseline"))
+		Expect(ns.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
 	})
 
 	It("should not proxy compliance if the feature is not active", func() {

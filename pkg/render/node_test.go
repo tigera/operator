@@ -149,6 +149,7 @@ var _ = Describe("Node rendering tests", func() {
 			i++
 		}
 
+		// Check CNI configmap.
 		cniCmResource := rtest.GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
 		Expect(cniCmResource).ToNot(BeNil())
 		cniCm := cniCmResource.(*corev1.ConfigMap)
@@ -2870,7 +2871,6 @@ var _ = Describe("Node rendering tests", func() {
 				corev1.EnvVar{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp,vpp"},
 			))
 		})
-
 	})
 
 	Context("with k8s overrides set", func() {

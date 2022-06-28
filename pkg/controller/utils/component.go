@@ -66,6 +66,105 @@ type componentHandler struct {
 	log    logr.Logger
 }
 
+func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.Object, metaObj metav1.Object, osType rmeta.OSType) error {
+	// Add owner ref for controller owned resources,
+	switch obj.(type) {
+	case *v3.UISettings:
+		// Never add controller ref for UISettings since these are always GCd through the UISettingsGroup.
+	default:
+		if c.cr != nil {
+			if err := controllerutil.SetControllerReference(c.cr, metaObj, c.scheme); err != nil {
+				return err
+			}
+		}
+	}
+
+	logCtx := ContextLoggerForResource(c.log, obj)
+	key := client.ObjectKeyFromObject(obj)
+
+	// Ensure that if the object is something the creates a pod that it is scheduled on nodes running the operating
+	// system as specified by the osType.
+	ensureOSSchedulingRestrictions(obj, osType)
+
+	// Make sure any objects with images also have an image pull policy.
+	modifyPodSpec(obj, setImagePullPolicy)
+
+	// Make sure we have our standard selector and pod labels
+	setStandardSelectorAndLabels(obj)
+
+	cur, ok := obj.DeepCopyObject().(client.Object)
+	if !ok {
+		logCtx.V(2).Info("Failed converting object", "obj", obj)
+		return fmt.Errorf("Failed converting object %+v", obj)
+	}
+	// Check to see if the object exists or not.
+	err := c.client.Get(ctx, key, cur)
+	if err != nil {
+		if !errors.IsNotFound(err) {
+			// Anything other than "Not found" we should retry.
+			return err
+		}
+
+		// Otherwise, if it was not found, we should create it and move on.
+		logCtx.V(2).Info("Object does not exist, creating it", "error", err)
+		err = c.client.Create(ctx, obj)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// The object exists. Update it, unless the user has marked it as "ignored".
+	if IgnoreObject(cur) {
+		logCtx.Info("Ignoring annotated object")
+		return nil
+	}
+	logCtx.V(1).Info("Resource already exists, update it")
+
+	// if mergeState returns nil we don't want to update the object
+	if mobj := mergeState(obj, cur); mobj != nil {
+		switch obj.(type) {
+		case *batchv1.Job:
+			// Jobs can't be updated, they can only be deleted then created
+			if err := c.client.Delete(ctx, obj); err != nil {
+				logCtx.WithValues("key", key).Info("Failed to delete job for recreation.")
+				return err
+			}
+
+			if err := c.client.Create(ctx, obj); err != nil {
+				return err
+			}
+		case *v1.Secret:
+			objSecret := obj.(*v1.Secret)
+			curSecret := cur.(*v1.Secret)
+			// Secret types are immutable, we need to delete the old version if the type has changed. If the
+			// object type is unset, it will result in SecretTypeOpaque, so this difference can be excluded.
+			if objSecret.Type != curSecret.Type &&
+				!(len(objSecret.Type) == 0 && curSecret.Type == v1.SecretTypeOpaque) {
+				if err := c.client.Delete(ctx, obj); err != nil {
+					logCtx.WithValues("key", key).Info("Failed to delete secret for recreation.")
+					return err
+				}
+				obj.SetResourceVersion("")
+				if err := c.client.Create(ctx, obj); err != nil {
+					return err
+				}
+			} else {
+				if err := c.client.Update(ctx, mobj); err != nil {
+					logCtx.WithValues("key", key).Info("Failed to update object.")
+					return err
+				}
+			}
+		default:
+			if err := c.client.Update(ctx, mobj); err != nil {
+				logCtx.WithValues("key", key).Info("Failed to update object.")
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component render.Component, status status.StatusManager) error {
 	// Before creating the component, make sure that it is ready. This provides a hook to do
 	// dependency checking for the component.
@@ -87,105 +186,6 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 	objsToCreate, objsToDelete := component.Objects()
 	osType := component.SupportedOSType()
 
-	createOrUpdateObject := func(obj client.Object, metaObj metav1.Object) error {
-		// Add owner ref for controller owned resources,
-		switch obj.(type) {
-		case *v3.UISettings:
-			// Never add controller ref for UISettings since these are always GCd through the UISettingsGroup.
-		default:
-			if c.cr != nil {
-				if err := controllerutil.SetControllerReference(c.cr, metaObj, c.scheme); err != nil {
-					return err
-				}
-			}
-		}
-
-		logCtx := ContextLoggerForResource(c.log, obj)
-		key := client.ObjectKeyFromObject(obj)
-
-		// Ensure that if the object is something the creates a pod that it is scheduled on nodes running the operating
-		// system as specified by the osType.
-		ensureOSSchedulingRestrictions(obj, osType)
-
-		// Make sure any objects with images also have an image pull policy.
-		modifyPodSpec(obj, setImagePullPolicy)
-
-		// Make sure we have our standard selector and pod labels
-		setStandardSelectorAndLabels(obj)
-
-		cur, ok := obj.DeepCopyObject().(client.Object)
-		if !ok {
-			logCtx.V(2).Info("Failed converting object", "obj", obj)
-			return fmt.Errorf("Failed converting object %+v", obj)
-		}
-		// Check to see if the object exists or not.
-		err := c.client.Get(ctx, key, cur)
-		if err != nil {
-			if !errors.IsNotFound(err) {
-				// Anything other than "Not found" we should retry.
-				return err
-			}
-
-			// Otherwise, if it was not found, we should create it and move on.
-			logCtx.V(2).Info("Object does not exist, creating it", "error", err)
-			err = c.client.Create(ctx, obj)
-			if err != nil {
-				return err
-			}
-			return nil
-		}
-
-		// The object exists. Update it, unless the user has marked it as "ignored".
-		if IgnoreObject(cur) {
-			logCtx.Info("Ignoring annotated object")
-			return nil
-		}
-		logCtx.V(1).Info("Resource already exists, update it")
-
-		// if mergeState returns nil we don't want to update the object
-		if mobj := mergeState(obj, cur); mobj != nil {
-			switch obj.(type) {
-			case *batchv1.Job:
-				// Jobs can't be updated, they can only be deleted then created
-				if err := c.client.Delete(ctx, obj); err != nil {
-					logCtx.WithValues("key", key).Info("Failed to delete job for recreation.")
-					return err
-				}
-
-				if err := c.client.Create(ctx, obj); err != nil {
-					return err
-				}
-			case *v1.Secret:
-				objSecret := obj.(*v1.Secret)
-				curSecret := cur.(*v1.Secret)
-				// Secret types are immutable, we need to delete the old version if the type has changed. If the
-				// object type is unset, it will result in SecretTypeOpaque, so this difference can be excluded.
-				if objSecret.Type != curSecret.Type &&
-					!(len(objSecret.Type) == 0 && curSecret.Type == v1.SecretTypeOpaque) {
-					if err := c.client.Delete(ctx, obj); err != nil {
-						logCtx.WithValues("key", key).Info("Failed to delete secret for recreation.")
-						return err
-					}
-					obj.SetResourceVersion("")
-					if err := c.client.Create(ctx, obj); err != nil {
-						return err
-					}
-				} else {
-					if err := c.client.Update(ctx, mobj); err != nil {
-						logCtx.WithValues("key", key).Info("Failed to update object.")
-						return err
-					}
-				}
-			default:
-				if err := c.client.Update(ctx, mobj); err != nil {
-					logCtx.WithValues("key", key).Info("Failed to update object.")
-					return err
-				}
-			}
-		}
-		return nil
-	}
-
 	for _, obj := range objsToCreate {
 		om, ok := obj.(metav1.ObjectMetaAccessor)
 		if !ok {
@@ -194,11 +194,13 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 
 		key := client.ObjectKeyFromObject(obj)
 
-		err := createOrUpdateObject(obj, om.GetObjectMeta())
+		// Pass in a DeepCopy so any modifications made by createOrUpdateObject won't be included
+		// if we need to retry the function
+		err := c.createOrUpdateObject(ctx, obj.DeepCopyObject().(client.Object), om.GetObjectMeta(), osType)
 		// If the error is a resource Conflict, try the update again
 		if err != nil && errors.IsConflict(err) {
 			cmpLog.WithValues("key", key, "conflict_message", err).Info("Failed to update object, retrying.")
-			err = createOrUpdateObject(obj, om.GetObjectMeta())
+			err = c.createOrUpdateObject(ctx, obj, om.GetObjectMeta(), osType)
 			if err != nil {
 				return err
 			}

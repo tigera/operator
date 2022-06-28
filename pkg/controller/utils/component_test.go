@@ -1306,7 +1306,7 @@ type mockClient struct {
 	Index int
 }
 
-func (mc *mockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object) error {
+func (mc *mockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object) error { //nolint:staticcheck ignore SA4009: argument obj is overwritten before first use
 	defer func() { mc.Index++ }()
 	funcName := "Get"
 	if len(mc.Info) <= mc.Index {
@@ -1316,6 +1316,7 @@ func (mc *mockClient) Get(ctx context.Context, key client.ObjectKey, obj client.
 		panic(fmt.Sprintf("mockClient current (%d) call is for %v, not %s", mc.Index, mc.Info[mc.Index].Method, funcName))
 	}
 	if mc.Info[mc.Index].Return == nil {
+		//nolint ignore SA4005 ignore ineffassign
 		obj = mc.Info[mc.Index].Obj
 		return nil
 	}
@@ -1330,16 +1331,14 @@ func (mc *mockClient) Get(ctx context.Context, key client.ObjectKey, obj client.
 
 func (mc *mockClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	panic("List not implemented in mockClient")
-	return nil
 }
 func (mc *mockClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 	panic("Create not implemented in mockClient")
-	return nil
 }
 func (mc *mockClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
 	panic("Delete not implemented in mockClient")
-	return nil
 }
+
 func (mc *mockClient) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
 	defer func() { mc.Index++ }()
 	funcName := "Update"
@@ -1350,6 +1349,7 @@ func (mc *mockClient) Update(ctx context.Context, obj client.Object, opts ...cli
 		panic(fmt.Sprintf("mockClient current (%d) call is for %v, not %s", mc.Index, mc.Info[mc.Index].Method, funcName))
 	}
 	if mc.Info[mc.Index].Return == nil {
+		//nolint ignore SA4005 ignore ineffassign
 		obj = mc.Info[mc.Index].Obj
 		return nil
 	}
@@ -1363,22 +1363,17 @@ func (mc *mockClient) Update(ctx context.Context, obj client.Object, opts ...cli
 }
 func (mc *mockClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
 	panic("Patch not implemented in mockClient")
-	return nil
 }
 func (mc *mockClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
 	panic("DeleteAll not implemented in mockClient")
-	return nil
 }
 
 func (mc *mockClient) Status() client.StatusWriter {
 	panic("Status not implemented in mockClient")
-	return nil
 }
 func (mc *mockClient) Scheme() *runtime.Scheme {
 	panic("Scheme not implemented in mockClient")
-	return nil
 }
 func (mc *mockClient) RESTMapper() restMeta.RESTMapper {
 	panic("RESTMapper not implemented in mockClient")
-	return nil
 }

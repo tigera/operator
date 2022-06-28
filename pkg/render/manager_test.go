@@ -114,6 +114,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ManagerTLSSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[1].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 		Expect(deployment.Spec.Template.Spec.Volumes[1].VolumeSource.ConfigMap.Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+
+		// Check the namespace.
+		ns := rtest.GetResource(resources, "tigera-manager", "", "", "v1", "Namespace").(*corev1.Namespace)
+		Expect(ns.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("restricted"))
+		Expect(ns.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
 	})
 
 	It("should not proxy compliance if the feature is not active", func() {

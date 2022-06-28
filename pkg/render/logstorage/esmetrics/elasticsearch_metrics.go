@@ -30,6 +30,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -158,9 +159,10 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 					Containers: []corev1.Container{
 						relasticsearch.ContainerDecorate(
 							corev1.Container{
-								Name:    ElasticsearchMetricsName,
-								Image:   e.esMetricsImage,
-								Command: []string{"/bin/elasticsearch_exporter"},
+								Name:            ElasticsearchMetricsName,
+								Image:           e.esMetricsImage,
+								SecurityContext: securitycontext.NewBaseContext(securitycontext.RunAsUserID, securitycontext.RunAsGroupID),
+								Command:         []string{"/bin/elasticsearch_exporter"},
 								Args: []string{"--es.uri=https://$(ELASTIC_USERNAME):$(ELASTIC_PASSWORD)@$(ELASTIC_HOST):$(ELASTIC_PORT)",
 									"--es.all", "--es.indices", "--es.indices_settings", "--es.shards", "--es.cluster_settings",
 									"--es.timeout=30s", "--es.ca=$(ELASTIC_CA)", "--web.listen-address=:9081",

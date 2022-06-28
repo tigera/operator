@@ -32,9 +32,9 @@ import (
 	rkibana "github.com/tigera/operator/pkg/render/common/kibana"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
-	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -348,11 +348,12 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 // managerContainer returns the manager container.
 func (c *managerComponent) managerContainer() corev1.Container {
 	tm := corev1.Container{
-		Name:            "tigera-manager",
-		Image:           c.managerImage,
-		Env:             c.managerEnvVars(),
-		LivenessProbe:   c.managerProbe(),
-		SecurityContext: podsecuritycontext.NewBaseContext(),
+		Name:          "tigera-manager",
+		Image:         c.managerImage,
+		Env:           c.managerEnvVars(),
+		LivenessProbe: c.managerProbe(),
+		// UID 999 is used in the manager Dockerfile.
+		SecurityContext: securitycontext.NewBaseContext(999, 0),
 		VolumeMounts:    c.managerVolumeMounts(),
 	}
 
@@ -424,12 +425,13 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:            VoltronName,
-		Image:           c.proxyImage,
-		Env:             env,
-		VolumeMounts:    c.volumeMountsForProxyManager(),
-		LivenessProbe:   c.managerProxyProbe(),
-		SecurityContext: podsecuritycontext.NewBaseContext(),
+		Name:          VoltronName,
+		Image:         c.proxyImage,
+		Env:           env,
+		VolumeMounts:  c.volumeMountsForProxyManager(),
+		LivenessProbe: c.managerProxyProbe(),
+		// UID 1001 is used in the voltron Dockerfile.
+		SecurityContext: securitycontext.NewBaseContext(1001, 0),
 	}
 }
 
@@ -464,10 +466,11 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:            "tigera-es-proxy",
-		Image:           c.esProxyImage,
-		LivenessProbe:   c.managerEsProxyProbe(),
-		SecurityContext: podsecuritycontext.NewBaseContext(),
+		Name:          "tigera-es-proxy",
+		Image:         c.esProxyImage,
+		LivenessProbe: c.managerEsProxyProbe(),
+		// UID 1001 is used in the es-proxy Dockerfile.
+		SecurityContext: securitycontext.NewBaseContext(1001, 0),
 		Env:             env,
 		VolumeMounts:    volumeMounts,
 	}

@@ -149,6 +149,11 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		pss = PSSPrivileged
 	}
 	objs := []client.Object{
+		// In order to switch to a restricted policy, we need to set the following on all containers in the namespace:
+		// - securityContext.allowPrivilegeEscalation=false)
+		// - securityContext.capabilities.drop=["ALL"]
+		// - securityContext.runAsNonRoot=true)
+		// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
 		CreateNamespace(IntrusionDetectionNamespace, c.cfg.Installation.KubernetesProvider, PodSecurityStandard(pss)),
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(IntrusionDetectionNamespace, c.cfg.PullSecrets...)...)...)

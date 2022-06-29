@@ -27,6 +27,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/ptr"
+	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
@@ -215,7 +216,10 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, c.nodePodSecurityPolicy())
 	}
 
-	objs = append(objs, c.nodeDaemonset(cniConfig))
+	// Note: this will override the values from nodeResources() (if it was defined for calico-node).
+	overrides := c.cfg.Installation.CalicoNodeDaemonSet
+	ds := rcomp.ApplyDaemonSetOverrides(c.nodeDaemonset(cniConfig), overrides)
+	objs = append(objs, ds)
 
 	// This controller creates the cluster role for any pod in the cluster that requires certificate management.
 	if c.cfg.Installation.CertificateManagement != nil {

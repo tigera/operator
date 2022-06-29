@@ -59,7 +59,6 @@ var _ = Describe("monitor rendering tests", func() {
 	var prometheusKeyPair certificatemanagement.KeyPairInterface
 
 	BeforeEach(func() {
-
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
@@ -127,6 +126,11 @@ var _ = Describe("monitor rendering tests", func() {
 
 		obj := toDelete[0]
 		rtest.ExpectResource(obj, "elasticearch-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind)
+
+		// Check the namespace.
+		namespace := rtest.GetResource(toCreate, "tigera-prometheus", "", "", "v1", "Namespace").(*corev1.Namespace)
+		Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("baseline"))
+		Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
 	})
 
 	It("Should render Prometheus resource Specs correctly", func() {
@@ -342,7 +346,9 @@ var _ = Describe("monitor rendering tests", func() {
 				ManagerDomain:  "https://127.0.0.1",
 				GroupsPrefix:   "g:",
 				UsernamePrefix: "u:",
-				OIDC:           &operatorv1.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email", GroupsClaim: "grp"}}}
+				OIDC:           &operatorv1.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email", GroupsClaim: "grp"},
+			},
+		}
 
 		dexCfg := render.NewDexKeyValidatorConfig(authentication,
 			nil,

@@ -1,0 +1,20 @@
+version: v1.0
+name: Operator Clean Up
+
+execution_time_limit:
+  hours: 4
+
+agent:
+  machine:
+    type: e1-standard-2
+    os_image: ubuntu1804
+
+blocks:
+  - name: Cleanup Cache
+    task:
+      jobs:
+        - name: Build
+          commands:
+            - 'cache delete go-pkg-cache-${SEMAPHORE_GIT_SHA}'
+            - 'cache delete go-mod-cache-${SEMAPHORE_GIT_SHA}'
+            - 'cache delete bin-${SEMAPHORE_GIT_SHA}'

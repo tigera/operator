@@ -165,7 +165,10 @@ func (c *managerComponent) SupportedOSType() rmeta.OSType {
 
 func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
-		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted),
+		// In order to switch to a restricted namespace, we need to set:
+		// - securityContext.capabilities.drop=["ALL"]
+		// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
+		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSBaseline),
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.cfg.PullSecrets...)...)...)
 

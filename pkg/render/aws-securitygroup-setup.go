@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019,2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 )
 
 func AWSSecurityGroupSetup(cfg *AWSSGSetupConfiguration) (Component, error) {
@@ -110,7 +110,8 @@ func (c *awsSGSetupComponent) setupJob() *batchv1.Job {
 								Value: "/etc/kubernetes/kubeconfig",
 							},
 						},
-						SecurityContext: podsecuritycontext.NewBaseContext(),
+						// UID 1001 is used in the operator Dockerfile.
+						SecurityContext: securitycontext.NewBaseContext(1001, 0),
 					}},
 				},
 			},

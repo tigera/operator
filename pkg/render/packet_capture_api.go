@@ -15,6 +15,7 @@
 package render
 
 import (
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -44,6 +45,7 @@ const (
 	PacketCaptureClusterRoleBindingName = PacketCaptureName
 	PacketCaptureDeploymentName         = PacketCaptureName
 	PacketCaptureServiceName            = PacketCaptureName
+	PacketCapturePolicyName             = networkpolicy.TigeraComponentPolicyPrefix + PacketCaptureName
 	PacketCapturePort                   = 8444
 
 	PacketCaptureCertSecret = "tigera-packetcapture-server-tls"
@@ -54,13 +56,15 @@ var PacketCaptureSourceEntityRule = networkpolicy.CreateSourceEntityRule(PacketC
 
 // PacketCaptureApiConfiguration contains all the config information needed to render the component.
 type PacketCaptureApiConfiguration struct {
-	PullSecrets        []*corev1.Secret
-	Openshift          bool
-	Installation       *operatorv1.InstallationSpec
-	KeyValidatorConfig authentication.KeyValidatorConfig
-	ServerCertSecret   certificatemanagement.KeyPairInterface
-	TrustedBundle      certificatemanagement.TrustedBundle
-	ClusterDomain      string
+	PullSecrets                  []*corev1.Secret
+	Openshift                    bool
+	Installation                 *operatorv1.InstallationSpec
+	KeyValidatorConfig           authentication.KeyValidatorConfig
+	ServerCertSecret             certificatemanagement.KeyPairInterface
+	TrustedBundle                certificatemanagement.TrustedBundle
+	ClusterDomain                string
+	ManagementClusterConnection  *operatorv1.ManagementClusterConnection
+	NetworkPolicyRequirementsMet bool
 }
 
 type packetCaptureApiComponent struct {
@@ -94,6 +98,9 @@ func (pc *packetCaptureApiComponent) SupportedOSType() rmeta.OSType {
 func (pc *packetCaptureApiComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
 		CreateNamespace(PacketCaptureNamespace, pc.cfg.Installation.KubernetesProvider, PSSRestricted),
+	}
+	if pc.cfg.NetworkPolicyRequirementsMet {
+		objs = append(objs, pc.allowTigeraPolicy())
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PacketCaptureNamespace, pc.cfg.PullSecrets...)...)...)
 
@@ -304,4 +311,60 @@ func (pc *packetCaptureApiComponent) annotations() map[string]string {
 	}
 
 	return annotations
+}
+
+func (pc *packetCaptureApiComponent) allowTigeraPolicy() *v3.NetworkPolicy {
+	managedCluster := pc.cfg.ManagementClusterConnection != nil
+	egressRules := []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
+		},
+	}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, pc.cfg.Openshift)
+	if !managedCluster {
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: DexEntityRule,
+		})
+	}
+
+	ingressRules := []v3.Rule{}
+	if managedCluster {
+		ingressRules = append(ingressRules, v3.Rule{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source:   GuardianSourceEntityRule,
+			Destination: v3.EntityRule{
+				Ports: networkpolicy.Ports(PacketCapturePort),
+			},
+		})
+	} else {
+		ingressRules = append(ingressRules, v3.Rule{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source:   ManagerSourceEntityRule,
+			Destination: v3.EntityRule{
+				Ports: networkpolicy.Ports(PacketCapturePort),
+			},
+		})
+	}
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      PacketCapturePolicyName,
+			Namespace: PacketCaptureNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(PacketCaptureName),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Ingress:  ingressRules,
+			Egress:   egressRules,
+		},
+	}
 }

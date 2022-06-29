@@ -31,18 +31,8 @@ import (
 var _ = Describe("Tiers rendering tests", func() {
 	var cfg *tiers.Config
 
-	apiServerPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/apiserver.json")
-	apiServerPolicyForOCP := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/apiserver_ocp.json")
 	clusterDNSPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/dns.json")
 	clusterDNSPolicyForOCP := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/dns_ocp.json")
-	kcPolicyForUnmanaged := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/kubecontrollers.json")
-	kcPolicyForUnmanagedOCP := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/kubecontrollers_ocp.json")
-	kcPolicyForManaged := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/kubecontrollers_managed.json")
-	kcPolicyForManagedOCP := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/kubecontrollers_managed_ocp.json")
-	pcPolicyForUnmanaged := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/packetcapture.json")
-	pcPolicyForUnmanagedOCP := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/packetcapture_ocp.json")
-	pcPolicyForManaged := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/packetcapture_managed.json")
-	pcPolicyForManagedOCP := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/packetcapture_managed_ocp.json")
 	guardianPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/guardian.json")
 	guardianPolicyForOCP := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/guardian_ocp.json")
 	expectedAlertmanagerPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/alertmanager.json")
@@ -66,18 +56,13 @@ var _ = Describe("Tiers rendering tests", func() {
 
 	Context("allow-tigera rendering", func() {
 		policyNames := []types.NamespacedName{
-			{Name: "allow-tigera.cnx-apiserver-access", Namespace: "tigera-system"},
 			{Name: "allow-tigera.cluster-dns", Namespace: "kube-system"},
 			{Name: "allow-tigera.cluster-dns", Namespace: "openshift-dns"},
-			{Name: "allow-tigera.kube-controller-access", Namespace: "calico-system"},
-			{Name: "allow-tigera.tigera-packetcapture", Namespace: "tigera-packetcapture"},
 			{Name: "allow-tigera.guardian-access", Namespace: "tigera-guardian"},
 		}
 
 		getExpectedPolicy := func(name types.NamespacedName, scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
-			if name.Name == "allow-tigera.cnx-apiserver-access" {
-				return testutils.SelectPolicyByProvider(scenario, apiServerPolicy, apiServerPolicyForOCP)
-			} else if name.Name == "allow-tigera.calico-node-alertmanager" {
+			if name.Name == "allow-tigera.calico-node-alertmanager" {
 				return testutils.SelectPolicyByProvider(scenario, expectedAlertmanagerPolicy, expectedAlertmanagerPolicyForOpenshift)
 			} else if name.Name == "allow-tigera.calico-node-alertmanager-mesh" {
 				return testutils.SelectPolicyByProvider(scenario, expectedAlertmanagerMeshPolicy, expectedAlertmanagerMeshPolicyForOpenshift)
@@ -89,22 +74,6 @@ var _ = Describe("Tiers rendering tests", func() {
 				return testutils.SelectPolicyByProvider(scenario, expectedPrometheusOperatorPolicy, expectedPrometheusOperatorPolicyOpenshift)
 			} else if name.Name == "allow-tigera.guardian-access" && scenario.ManagedCluster {
 				return testutils.SelectPolicyByProvider(scenario, guardianPolicy, guardianPolicyForOCP)
-			} else if name.Name == "allow-tigera.kube-controller-access" {
-				return testutils.SelectPolicyByClusterTypeAndProvider(
-					scenario,
-					kcPolicyForUnmanaged,
-					kcPolicyForUnmanagedOCP,
-					kcPolicyForManaged,
-					kcPolicyForManagedOCP,
-				)
-			} else if name.Name == "allow-tigera.tigera-packetcapture" {
-				return testutils.SelectPolicyByClusterTypeAndProvider(
-					scenario,
-					pcPolicyForUnmanaged,
-					pcPolicyForUnmanagedOCP,
-					pcPolicyForManaged,
-					pcPolicyForManagedOCP,
-				)
 			} else if name.Name == "allow-tigera.cluster-dns" &&
 				((scenario.Openshift && name.Namespace == "openshift-dns") || (!scenario.Openshift && name.Namespace == "kube-system")) {
 				return testutils.SelectPolicyByProvider(scenario, clusterDNSPolicy, clusterDNSPolicyForOCP)

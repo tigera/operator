@@ -19,6 +19,8 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"github.com/tigera/operator/pkg/render/testutils"
+	"k8s.io/apimachinery/pkg/types"
 	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -55,6 +57,8 @@ import (
 )
 
 var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
+	apiServerPolicy := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/apiserver.json")
+	apiServerPolicyForOCP := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/apiserver_ocp.json")
 	var (
 		instance           *operatorv1.InstallationSpec
 		managementCluster  = &operatorv1.ManagementCluster{Spec: operatorv1.ManagementClusterSpec{Address: "example.com:1234"}}
@@ -851,6 +855,33 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(deploy.Spec.Template.Spec.Affinity).NotTo(BeNil())
 		Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("tigera-apiserver", "tigera-system")))
 	})
+
+	Context("allow-tigera rendering", func() {
+		policyName := types.NamespacedName{Name: "allow-tigera.cnx-apiserver-access", Namespace: "tigera-system"}
+
+		DescribeTable("should render allow-tigera policy",
+			func(scenario testutils.AllowTigeraScenario) {
+				cfg.Openshift = scenario.Openshift
+				if scenario.ManagedCluster {
+					cfg.ManagementClusterConnection = &operatorv1.ManagementClusterConnection{}
+				} else {
+					cfg.ManagementClusterConnection = nil
+				}
+
+				component := render.APIServerPolicy(cfg)
+				resources, _ := component.Objects()
+
+				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+				expectedPolicy := testutils.SelectPolicyByProvider(scenario, apiServerPolicy, apiServerPolicyForOCP)
+				Expect(policy).To(Equal(expectedPolicy))
+			},
+			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
+			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
+			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
+		)
+	})
+
 })
 
 func verifyAPIService(service *apiregv1.APIService, enterprise bool, clusterDomain string) {

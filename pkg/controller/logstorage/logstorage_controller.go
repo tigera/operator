@@ -101,7 +101,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.KibanaNamespace},
 		{Name: esgateway.PolicyName, Namespace: render.ElasticsearchNamespace},
 		{Name: esmetrics.ElasticsearchMetricsPolicyName, Namespace: render.ElasticsearchNamespace},
-		{Name: kubecontrollers.EsKubeControllerPolicyName, Namespace: common.CalicoNamespace},
+		{Name: kubecontrollers.EsKubeControllerNetworkPolicyName, Namespace: common.CalicoNamespace},
 	})
 
 	return add(mgr, c)

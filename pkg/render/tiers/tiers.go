@@ -22,8 +22,6 @@ import (
 	"github.com/tigera/api/pkg/lib/numorstring"
 	"github.com/tigera/operator/pkg/render/monitor"
 
-	"github.com/tigera/operator/pkg/render/kubecontrollers"
-
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -35,14 +33,7 @@ import (
 )
 
 const (
-	APIServerPolicyName  = networkpolicy.TigeraComponentPolicyPrefix + "cnx-apiserver-access"
 	ClusterDNSPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "cluster-dns"
-
-	// Rendered here rather than kubecontrollers since creation of NetworkPolicy depends on the API server, which depends on installation controller.
-	KubeControllerPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "kube-controller-access"
-
-	// Rendered here rather than apiserver since creation of NetworkPolicy depends on the API server.
-	PacketCapturePolicyName = networkpolicy.TigeraComponentPolicyPrefix + render.PacketCaptureName
 
 	// Rendered here rather than guardian since creation of its containing Tier needs license pushed from management cluster, which depends on guardian.
 	GuardianPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "guardian-access"
@@ -99,9 +90,6 @@ func (t tiersComponent) Objects() ([]client.Object, []client.Object) {
 	objsToCreate := []client.Object{
 		t.allowTigeraTier(),
 		t.allowTigeraClusterDNSPolicy(),
-		t.allowTigeraAPIServerPolicy(),
-		t.allowTigeraKubeControllersPolicy(),
-		t.allowTigeraPacketCapturePolicy(),
 		t.allowTigeraAlertManagerPolicy(),
 		t.allowTigeraAlertManagerMeshPolicy(),
 		t.allowTigeraPrometheusPolicy(),
@@ -189,163 +177,6 @@ func (t tiersComponent) allowTigeraClusterDNSPolicy() *v3.NetworkPolicy {
 				},
 			},
 			Types: []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
-		},
-	}
-}
-
-// Allow the Kubernetes API Server access to Calico Enterprise API Server.
-func (t *tiersComponent) allowTigeraAPIServerPolicy() *v3.NetworkPolicy {
-	egressRules := []v3.Rule{}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, t.cfg.Openshift)
-	egressRules = append(egressRules, []v3.Rule{
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerEntityRule,
-		},
-		{
-			// Pass to subsequent tiers for further enforcement
-			Action: v3.Pass,
-		},
-	}...)
-
-	// The ports Calico Enterprise API Server and Calico Enterprise Query Server are configured to listen on.
-	ingressPorts := networkpolicy.Ports(443, render.ApiServerPort, render.QueryServerPort, 10443)
-
-	return &v3.NetworkPolicy{
-		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      APIServerPolicyName,
-			Namespace: rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise),
-		},
-		Spec: v3.NetworkPolicySpec{
-			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
-			Selector: networkpolicy.KubernetesAppSelector("tigera-apiserver"),
-			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
-			Ingress: []v3.Rule{
-				{
-					Action:   v3.Allow,
-					Protocol: &networkpolicy.TCPProtocol,
-					// This policy allows Calico Enterprise API Server access from anywhere.
-					Source: v3.EntityRule{
-						Nets: []string{"0.0.0.0/0"},
-					},
-					Destination: v3.EntityRule{
-						Ports: ingressPorts,
-					},
-				},
-				{
-					Action:   v3.Allow,
-					Protocol: &networkpolicy.TCPProtocol,
-					Source: v3.EntityRule{
-						Nets: []string{"::/0"},
-					},
-					Destination: v3.EntityRule{
-						Ports: ingressPorts,
-					},
-				},
-			},
-			Egress: egressRules,
-		},
-	}
-}
-
-func (t *tiersComponent) allowTigeraKubeControllersPolicy() *v3.NetworkPolicy {
-	egressRules := []v3.Rule{}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, t.cfg.Openshift)
-	egressRules = append(egressRules, []v3.Rule{
-		{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.TCPProtocol,
-			Destination: v3.EntityRule{
-				Ports: networkpolicy.Ports(443, 6443, 12388),
-			},
-		},
-	}...)
-
-	if t.cfg.ManagementClusterConnection != nil {
-		egressRules = append(egressRules, v3.Rule{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: render.GuardianEntityRule,
-		})
-	} else {
-		egressRules = append(egressRules, v3.Rule{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: render.ManagerEntityRule,
-		})
-	}
-
-	return &v3.NetworkPolicy{
-		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      KubeControllerPolicyName,
-			Namespace: common.CalicoNamespace,
-		},
-		Spec: v3.NetworkPolicySpec{
-			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
-			Selector: networkpolicy.KubernetesAppSelector(kubecontrollers.KubeController),
-			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
-			Egress:   egressRules,
-		},
-	}
-}
-
-func (t *tiersComponent) allowTigeraPacketCapturePolicy() *v3.NetworkPolicy {
-	managedCluster := t.cfg.ManagementClusterConnection != nil
-	egressRules := []v3.Rule{
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerEntityRule,
-		},
-	}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, t.cfg.Openshift)
-	if !managedCluster {
-		egressRules = append(egressRules, v3.Rule{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: render.DexEntityRule,
-		})
-	}
-
-	ingressRules := []v3.Rule{}
-	if managedCluster {
-		ingressRules = append(ingressRules, v3.Rule{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.TCPProtocol,
-			Source:   render.GuardianSourceEntityRule,
-			Destination: v3.EntityRule{
-				Ports: networkpolicy.Ports(render.PacketCapturePort),
-			},
-		})
-	} else {
-		ingressRules = append(ingressRules, v3.Rule{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.TCPProtocol,
-			Source:   render.ManagerSourceEntityRule,
-			Destination: v3.EntityRule{
-				Ports: networkpolicy.Ports(render.PacketCapturePort),
-			},
-		})
-	}
-
-	return &v3.NetworkPolicy{
-		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      PacketCapturePolicyName,
-			Namespace: render.PacketCaptureNamespace,
-		},
-		Spec: v3.NetworkPolicySpec{
-			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
-			Selector: networkpolicy.KubernetesAppSelector(render.PacketCaptureName),
-			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
-			Ingress:  ingressRules,
-			Egress:   egressRules,
 		},
 	}
 }

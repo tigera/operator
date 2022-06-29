@@ -47,6 +47,7 @@ const (
 	KubeControllerRoleBinding       = "calico-kube-controllers"
 	KubeControllerPodSecurityPolicy = "calico-kube-controllers"
 	KubeControllerMetrics           = "calico-kube-controllers-metrics"
+	KubeControllerNetworkPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "kube-controller-access"
 
 	EsKubeController                  = "es-calico-kube-controllers"
 	EsKubeControllerServiceAccount    = "calico-kube-controllers"
@@ -54,7 +55,7 @@ const (
 	EsKubeControllerRoleBinding       = "es-calico-kube-controllers"
 	EsKubeControllerPodSecurityPolicy = "es-calico-kube-controllers"
 	EsKubeControllerMetrics           = "es-calico-kube-controllers-metrics"
-	EsKubeControllerPolicyName        = networkpolicy.TigeraComponentPolicyPrefix + "es-kube-controller-access"
+	EsKubeControllerNetworkPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "es-kube-controller-access"
 
 	ElasticsearchKubeControllersUserSecret             = "tigera-ee-kube-controllers-elasticsearch-access"
 	ElasticsearchKubeControllersUserName               = "tigera-ee-kube-controllers"
@@ -89,10 +90,11 @@ type KubeControllersConfiguration struct {
 
 	// Whether or not the cluster supports pod security policies.
 	UsePSP bool
+
+	IncludeV3NetworkPolicy bool
 }
 
 func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
-	var kubeControllerAllowTigeraPolicy *v3.NetworkPolicy
 	kubeControllerRolePolicyRules := kubeControllersRoleCommonRules(cfg, KubeController)
 	enabledControllers := []string{"node"}
 	if cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
@@ -115,10 +117,6 @@ func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeController
 			},
 		)
 		enabledControllers = append(enabledControllers, "service", "federatedservices")
-
-		// The Calico kube-controllers component is reconciled by the core controller, which is a pre-requisite for the API
-		// server controller. Since v3 policy reconciling requires the API server, this policy must live in a different component.
-		kubeControllerAllowTigeraPolicy = nil
 	}
 
 	return &kubeControllersComponent{
@@ -130,9 +128,12 @@ func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeController
 		kubeControllerConfigName:         "default",
 		kubeControllerMetricsName:        KubeControllerMetrics,
 		kubeControllersRules:             kubeControllerRolePolicyRules,
-		kubeControllerAllowTigeraPolicy:  kubeControllerAllowTigeraPolicy,
 		enabledControllers:               enabledControllers,
 	}
+}
+
+func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration) render.Component {
+	return render.NewPassthrough(kubeControllersAllowTigeraPolicy(cfg))
 }
 
 func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
@@ -163,7 +164,9 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 			},
 		)
 
-		kubeControllerAllowTigeraPolicy = esKubeControllersAllowTigeraPolicy(cfg)
+		if cfg.IncludeV3NetworkPolicy {
+			kubeControllerAllowTigeraPolicy = esKubeControllersAllowTigeraPolicy(cfg)
+		}
 	}
 
 	enabledControllers := []string{"authorization", "elasticsearchconfiguration"}
@@ -621,6 +624,49 @@ func (c *kubeControllersComponent) kubeControllersVolumes() []corev1.Volume {
 	return volumes
 }
 
+func kubeControllersAllowTigeraPolicy(cfg *KubeControllersConfiguration) *v3.NetworkPolicy {
+	egressRules := []v3.Rule{}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift)
+	egressRules = append(egressRules, []v3.Rule{
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Ports: networkpolicy.Ports(443, 6443, 12388),
+			},
+		},
+	}...)
+
+	if cfg.ManagementClusterConnection != nil {
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: render.GuardianEntityRule,
+		})
+	} else {
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: render.ManagerEntityRule,
+		})
+	}
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      KubeControllerNetworkPolicyName,
+			Namespace: common.CalicoNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(KubeController),
+			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
+			Egress:   egressRules,
+		},
+	}
+}
+
 func esKubeControllersAllowTigeraPolicy(cfg *KubeControllersConfiguration) *v3.NetworkPolicy {
 	if cfg.ManagementClusterConnection != nil {
 		return nil
@@ -651,7 +697,7 @@ func esKubeControllersAllowTigeraPolicy(cfg *KubeControllersConfiguration) *v3.N
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      EsKubeControllerPolicyName,
+			Name:      EsKubeControllerNetworkPolicyName,
 			Namespace: common.CalicoNamespace,
 		},
 		Spec: v3.NetworkPolicySpec{

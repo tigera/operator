@@ -26,7 +26,6 @@ import (
 
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/tiers"
 	"k8s.io/apimachinery/pkg/types"
@@ -89,9 +88,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, tierWatchReady)
 
 	policyNames := []types.NamespacedName{
-		{Name: tiers.APIServerPolicyName, Namespace: rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise)},
-		{Name: tiers.KubeControllerPolicyName, Namespace: common.CalicoNamespace},
-		{Name: tiers.PacketCapturePolicyName, Namespace: render.PacketCaptureNamespace},
 		{Name: tiers.GuardianPolicyName, Namespace: render.GuardianNamespace},
 		{Name: tiers.PrometheusPolicyName, Namespace: common.TigeraPrometheusNamespace},
 		{Name: tiers.PrometheusAPIPolicyName, Namespace: common.TigeraPrometheusNamespace},

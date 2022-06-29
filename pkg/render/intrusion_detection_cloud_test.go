@@ -33,16 +33,19 @@ var _ = Describe("Tigera Secure Cloud Intrusion Detection Controller rendering t
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
+		adAPIKeyPair, err := certificatemanagement.NewKeyPair(rtest.CreateCertSecret(render.ADAPITLSSecretName, common.OperatorNamespace(), render.ADAPITLSSecretName), []string{""}, "")
+		Expect(err).NotTo(HaveOccurred())
 		bundle := certificateManager.CreateTrustedBundle()
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
 		cfg = &render.IntrusionDetectionConfiguration{
-			TrustedCertBundle: bundle,
-			Installation:      &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
-			ESClusterConfig:   relasticsearch.NewClusterConfig("tenant_id.clusterTestName", 1, 1, 1),
-			ClusterDomain:     dns.DefaultClusterDomain,
-			ESLicenseType:     render.ElasticsearchLicenseTypeUnknown,
-			ManagedCluster:    notManagedCluster,
+			TrustedCertBundle:     bundle,
+			ADAPIServerCertSecret: adAPIKeyPair,
+			Installation:          &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
+			ESClusterConfig:       relasticsearch.NewClusterConfig("tenant_id.clusterTestName", 1, 1, 1),
+			ClusterDomain:         dns.DefaultClusterDomain,
+			ESLicenseType:         render.ElasticsearchLicenseTypeUnknown,
+			ManagedCluster:        notManagedCluster,
 			CloudResources: render.IntrusionDetectionCloudResources{
 				ImageAssuranceResources: &rcimageassurance.Resources{
 					ConfigurationConfigMap: &corev1.ConfigMap{

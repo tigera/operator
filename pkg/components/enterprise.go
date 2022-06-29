@@ -125,6 +125,11 @@ var (
 		Image:   "tigera/anomaly_detection_jobs",
 	}
 
+	ComponentAnomalyDetectionAPI = component{
+		Version: "v3.14.0-3",
+		Image:   "tigera/anomaly-detection-api",
+	}
+
 	ComponentKibana = component{
 		Version: "tesla-v3.14.0-3",
 		Image:   "tigera/kibana",
@@ -275,6 +280,7 @@ var (
 		ComponentGuardian,
 		ComponentIntrusionDetectionController,
 		ComponentAnomalyDetectionJobs,
+		ComponentAnomalyDetectionAPI,
 		ComponentKibana,
 		ComponentManager,
 		ComponentDex,

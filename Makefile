@@ -83,7 +83,7 @@ join_platforms = $(subst $(space),$(comma),$(call prefix_linux,$(strip $1)))
 # This is only needed when running non-native binaries.
 register:
 ifneq ($(BUILDARCH),$(ARCH))
-	docker run --rm --privileged multiarch/qemu-user-static:register || true
+	docker run --rm --privileged multiarch/qemu-user-static:register --reset || true
 endif
 
 # list of arches *not* to build when doing *-all
@@ -221,7 +221,7 @@ else
   GIT_VERSION?=$(shell git describe --tags --dirty --always --abbrev=12)
 endif
 
-build: fmt vet $(BINDIR)/operator-$(ARCH)
+build: fmt $(BINDIR)/operator-$(ARCH)
 $(BINDIR)/operator-$(ARCH): $(SRC_FILES)
 	mkdir -p $(BINDIR)
 	$(CONTAINERIZED) -e CGO_ENABLED=$(CGO_ENABLED) $(CALICO_BUILD) \
@@ -280,12 +280,17 @@ WHAT?=.
 GINKGO_ARGS?= -v
 GINKGO_FOCUS?=.*
 
-## Run the full set of tests
-ut: cluster-create run-uts cluster-destroy
-run-uts:
+ut:
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
-	ginkgo -r --skipPackage ./vendor -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(WHAT)"'
+	ginkgo -r --skipPackage "./vendor,./test" -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(WHAT)"'
+
+## Run the functional tests
+fv: cluster-create run-fvs cluster-destroy
+run-fvs:
+	-mkdir -p .go-pkg-cache report
+	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
+	ginkgo -pkgdir test -r --skipPackage ./vendor -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(WHAT)"'
 
 ## Create a local kind dual stack cluster.
 KUBECONFIG?=./kubeconfig.yaml
@@ -388,7 +393,7 @@ validate-gen-versions:
 	make dirty-check
 
 ## Deploys images to registry
-cd:
+cd: image-all
 ifndef CONFIRM
 	$(error CONFIRM is undefined - run using make <target> CONFIRM=true)
 endif
@@ -654,7 +659,7 @@ fmt:
 	go fmt ./...'
 
 # Run go vet against code
-vet:
+vet: register
 	$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
 	go vet ./...'

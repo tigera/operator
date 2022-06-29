@@ -1,0 +1,55 @@
+version: v1.0
+name: Operator CD
+agent:
+  machine:
+    type: e1-standard-8
+    os_image: ubuntu1804
+global_job_config:
+  secrets:
+    - name: docker-hub
+    # Mount the github SSH secret for pulling private repositories.
+    - name: private-repo
+  prologue:
+    commands:
+      - echo $DOCKERHUB_PASSWORD | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+      # Correct permissions since they are too open by default:
+      - chmod 0600 ~/.keys/*
+      # Add the key to the ssh agent:
+      - ssh-add ~/.keys/*
+      # Free up some space
+      - sudo rm -rf ~/.kiex ~/.phpbrew ~/.rbenv ~/.nvm ~/.kerl
+      # Semaphore mounts a copy-on-write FS as /var/lib/docker in order to provide a pre-loaded cache of
+      # some images. However, the cache is not useful to us and the copy-on-write FS is a big problem given
+      # how much we churn docker containers during testing.  Disable it.
+      - sudo systemctl stop docker
+      - sudo umount /var/lib/docker && sudo killall qemu-nbd || true
+      - sudo systemctl start docker
+      - checkout
+      # Note that the 'cache restore' commands require that the "Build" block has been run. The "Build" block is what populates
+      # the cache, therefore every block that requires the use of these cached items must make the "Build" block one of
+      # it's dependencies.
+      - 'cache restore go-pkg-cache-${SEMAPHORE_GIT_SHA}'
+      - 'cache restore go-mod-cache-${SEMAPHORE_GIT_SHA}'
+      - 'cache restore bin-${SEMAPHORE_GIT_SHA}'
+
+blocks:
+  - name: Push Images / Maybe Release
+    task:
+      secrets:
+        - name: quay-robot-semaphore_v2
+        - name: operator-redhat-connect
+      prologue:
+        commands:
+          - docker login -u="$QUAY_USERNAME" -p="$QUAY_TOKEN" quay.io;
+          - export BRANCH_NAME=$SEMAPHORE_GIT_BRANCH
+      jobs:
+        - name: Build
+          commands:
+            - make cd CONFIRM=true;
+            - make maybe-build-release;
+
+promotions:
+  - name: Clean Up
+    pipeline_file: cleanup.yml
+    auto_promote:
+      when: "true"

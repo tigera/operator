@@ -96,6 +96,47 @@ var _ = Describe("Component handler tests", func() {
 		handler = NewComponentHandler(log, c, scheme, instance)
 	})
 
+	It("adds Owner references when Custom Resource is provided", func() {
+		fc := &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs: []client.Object{&apps.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-ds",
+					Namespace: "default",
+				},
+				Spec: apps.DaemonSetSpec{
+					Template: v1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Annotations: map[string]string{
+								fakeComponentAnnotationKey: fakeComponentAnnotationValue,
+							},
+						},
+					},
+				},
+			}},
+		}
+
+		err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).To(BeNil())
+
+		dsKey := client.ObjectKey{
+			Name:      "test-ds",
+			Namespace: "default",
+		}
+		ds := &apps.DaemonSet{}
+		_ = c.Get(ctx, dsKey, ds)
+		Expect(ds.OwnerReferences).To(HaveLen(1))
+		t := true
+		expectOR := metav1.OwnerReference{
+			APIVersion:         "operator.tigera.io/v1",
+			Kind:               "Manager",
+			Name:               "tigera-secure",
+			Controller:         &t,
+			BlockOwnerDeletion: &t,
+		}
+		Expect(ds.OwnerReferences[0]).To(Equal(expectOR))
+	})
+
 	It("merges daemonset template annotations and reconciles only operator added annotations", func() {
 		fc := &fakeComponent{
 			supportedOSType: rmeta.OSTypeLinux,

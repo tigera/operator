@@ -66,14 +66,19 @@ type componentHandler struct {
 	log    logr.Logger
 }
 
-func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.Object, metaObj metav1.Object, osType rmeta.OSType) error {
+func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.Object, osType rmeta.OSType) error {
+	om, ok := obj.(metav1.ObjectMetaAccessor)
+	if !ok {
+		return fmt.Errorf("Object is not ObjectMetaAccessor")
+	}
+
 	// Add owner ref for controller owned resources,
 	switch obj.(type) {
 	case *v3.UISettings:
 		// Never add controller ref for UISettings since these are always GCd through the UISettingsGroup.
 	default:
 		if c.cr != nil {
-			if err := controllerutil.SetControllerReference(c.cr, metaObj, c.scheme); err != nil {
+			if err := controllerutil.SetControllerReference(c.cr, om.GetObjectMeta(), c.scheme); err != nil {
 				return err
 			}
 		}
@@ -187,20 +192,15 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 	osType := component.SupportedOSType()
 
 	for _, obj := range objsToCreate {
-		om, ok := obj.(metav1.ObjectMetaAccessor)
-		if !ok {
-			return fmt.Errorf("Object is not ObjectMetaAccessor")
-		}
-
 		key := client.ObjectKeyFromObject(obj)
 
 		// Pass in a DeepCopy so any modifications made by createOrUpdateObject won't be included
 		// if we need to retry the function
-		err := c.createOrUpdateObject(ctx, obj.DeepCopyObject().(client.Object), om.GetObjectMeta(), osType)
+		err := c.createOrUpdateObject(ctx, obj.DeepCopyObject().(client.Object), osType)
 		// If the error is a resource Conflict, try the update again
 		if err != nil && errors.IsConflict(err) {
 			cmpLog.WithValues("key", key, "conflict_message", err).Info("Failed to update object, retrying.")
-			err = c.createOrUpdateObject(ctx, obj, om.GetObjectMeta(), osType)
+			err = c.createOrUpdateObject(ctx, obj, osType)
 			if err != nil {
 				return err
 			}

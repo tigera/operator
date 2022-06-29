@@ -1,8 +1,18 @@
 version: v1.0
 name: Initial Pipeline
+
+execution_time_limit:
+  hours: 4
+
+auto_cancel:
+  running:
+    when: "branch != 'master'"
+  queued:
+    when: "branch != 'master'"
+
 agent:
   machine:
-    type: e1-standard-8
+    type: e1-standard-2
     os_image: ubuntu1804
 global_job_config:
   secrets:
@@ -27,20 +37,12 @@ global_job_config:
 
 blocks:
   - name: Build
+    dependencies: []
     task:
       jobs:
         - name: Build
           commands:
-            - export BRANCH_NAME=$SEMAPHORE_GIT_BRANCH
-            - make ci
-            - >-
-              if [ -z "${SEMAPHORE_GIT_PR_NUMBER}" ]; then 
-                make cd CONFIRM=true;
-              fi
-            - >-
-              if [ -z "${SEMAPHORE_GIT_PR_NUMBER}" ]; then
-                make maybe-build-release;
-              fi
+            - make build
       secrets:
         - name: quay-robot-semaphore_v2
         - name: operator-redhat-connect
@@ -60,3 +62,82 @@ blocks:
           commands:
             - cache store go-pkg-cache .go-pkg-cache
             - 'cache store go-mod-cache ${HOME}/go/pkg/mod/cache'
+  - name: Pre Tests
+    dependencies: ["Build"]
+    task:
+      jobs:
+        - name: Format Check
+          commands:
+            - make format-check
+        - name: Validate Gen Versions
+          commands:
+            - make validate-gen-versions
+        - name: Static Checks
+          commands:
+            - make static-checks
+        - name: Format
+          commands:
+            - make fmt dirty-check
+        - name: Vet
+          commands:
+            - make vet
+        - name: Test CRDs
+          commands:
+            - make test-crds
+      secrets:
+        - name: quay-robot-semaphore_v2
+        - name: operator-redhat-connect
+      prologue:
+        commands:
+          - checkout
+          - >-
+            if [[ -v SEMAPHORE_GIT_PR_NUMBER ]]; then
+              unset QUAY_USERNAME QUAY_TOKEN; docker logout; docker logout quay.io;
+            else
+              docker login -u="$QUAY_USERNAME" -p="$QUAY_TOKEN" quay.io;
+            fi
+          - cache restore go-pkg-cache
+          - cache restore go-mod-cache
+      epilogue:
+        on_pass:
+          commands:
+            - cache store go-pkg-cache .go-pkg-cache
+            - 'cache store go-mod-cache ${HOME}/go/pkg/mod/cache'
+  - name: Tests
+    dependencies: ["Pre Tests"]
+    task:
+      agent:
+        machine:
+          type: e1-standard-8
+          os_image: ubuntu1804
+      jobs:
+        - name: UTs / FVs
+          commands:
+            - make image-all ut
+      secrets:
+        - name: quay-robot-semaphore_v2
+        - name: operator-redhat-connect
+      prologue:
+        commands:
+          - checkout
+          - >-
+            if [[ -v SEMAPHORE_GIT_PR_NUMBER ]]; then
+              unset QUAY_USERNAME QUAY_TOKEN; docker logout; docker logout quay.io;
+            else
+              docker login -u="$QUAY_USERNAME" -p="$QUAY_TOKEN" quay.io;
+            fi
+          - cache restore go-pkg-cache
+          - cache restore go-mod-cache
+      epilogue:
+        on_pass:
+          commands:
+            - cache store go-pkg-cache .go-pkg-cache
+            - 'cache store go-mod-cache ${HOME}/go/pkg/mod/cache'
+
+promotions:
+  - name: Push operator images
+    pipeline_file: push-images.yml
+    auto_promote:
+      when: "branch =~ 'master|release-.*'"
+  - name: Push operator images
+    pipeline_file: cut-release-image.yml

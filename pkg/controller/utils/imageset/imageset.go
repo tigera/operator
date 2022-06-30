@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -94,7 +94,7 @@ func ValidateImageSet(is *operator.ImageSet) error {
 	unknownImages := []string{}
 	for _, img := range is.Spec.Images {
 		valid := false
-		for _, x := range components.CalicoComponents {
+		for _, x := range components.CalicoImages {
 			if img.Image == x.Image {
 				valid = true
 				break
@@ -103,7 +103,7 @@ func ValidateImageSet(is *operator.ImageSet) error {
 		if valid {
 			continue
 		}
-		for _, x := range components.EnterpriseComponents {
+		for _, x := range components.EnterpriseImages {
 			if img.Image == x.Image {
 				valid = true
 				break
@@ -113,7 +113,7 @@ func ValidateImageSet(is *operator.ImageSet) error {
 			continue
 		}
 
-		for _, x := range components.CommonComponents {
+		for _, x := range components.CommonImages {
 			if img.Image == x.Image {
 				valid = true
 				break

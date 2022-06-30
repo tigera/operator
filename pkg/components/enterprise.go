@@ -57,12 +57,10 @@ var (
 
 	ComponentEckElasticsearch = component{
 		Version: "7.16.2",
-		Image:   "tigera/elasticsearch",
 	}
 
 	ComponentEckKibana = component{
 		Version: "7.16.2",
-		Image:   "tigera/kibana",
 	}
 
 	ComponentElasticTseeInstaller = component{
@@ -77,7 +75,6 @@ var (
 
 	ComponentECKElasticsearchOperator = component{
 		Version: "1.8.0",
-		Image:   "tigera/eck-operator",
 	}
 
 	ComponentElasticsearchOperator = component{
@@ -172,7 +169,6 @@ var (
 
 	ComponentCoreOSPrometheus = component{
 		Version: "v2.32.0",
-		Image:   "tigera/prometheus",
 	}
 
 	ComponentPrometheus = component{
@@ -187,7 +183,6 @@ var (
 
 	ComponentCoreOSAlertmanager = component{
 		Version: "v0.23.0",
-		Image:   "tigera/alertmanager",
 	}
 
 	ComponentPrometheusAlertmanager = component{
@@ -234,6 +229,8 @@ var (
 		Version: "master",
 		Image:   "tigera/calico-windows-upgrade",
 	}
+	// Only components that correspond directly to images should be included in this list,
+	// Components that are only for providing a version should be left out of this list.
 	EnterpriseComponents = []component{
 		ComponentAPIServer,
 		ComponentComplianceBenchmarker,
@@ -242,11 +239,8 @@ var (
 		ComponentComplianceServer,
 		ComponentComplianceSnapshotter,
 		ComponentDeepPacketInspection,
-		ComponentEckElasticsearch,
-		ComponentEckKibana,
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,
-		ComponentECKElasticsearchOperator,
 		ComponentElasticsearchOperator,
 		ComponentEsCurator,
 		ComponentEsProxy,
@@ -263,10 +257,8 @@ var (
 		ComponentPacketCapture,
 		ComponentL7Collector,
 		ComponentEnvoyProxy,
-		ComponentCoreOSPrometheus,
 		ComponentPrometheus,
 		ComponentTigeraPrometheusService,
-		ComponentCoreOSAlertmanager,
 		ComponentPrometheusAlertmanager,
 		ComponentQueryServer,
 		ComponentTigeraKubeControllers,

@@ -64,13 +64,11 @@ var (
 {{ with index .Components "eck-elasticsearch" }}
 	ComponentEckElasticsearch = component{
 		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
 	}
 {{- end }}
 {{ with index .Components "eck-kibana" }}
 	ComponentEckKibana = component{
 		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
 	}
 {{- end }}
 {{ with index .Components "elastic-tsee-installer" }}
@@ -88,7 +86,6 @@ var (
 {{ with index .Components "eck-elasticsearch-operator" }}
 	ComponentECKElasticsearchOperator = component{
 		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
 	}
 {{- end }}
 {{ with index .Components "elasticsearch-operator" }}
@@ -202,7 +199,6 @@ var (
 {{ with index .Components "coreos-prometheus" }}
 	ComponentCoreOSPrometheus = component{
 		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
 	}
 {{- end }}
 {{ with index .Components "prometheus" }}
@@ -220,7 +216,6 @@ var (
 {{ with index .Components "coreos-alertmanager" }}
 	ComponentCoreOSAlertmanager = component{
 		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
 	}
 {{- end }}
 {{ with index .Components "alertmanager" }}
@@ -277,6 +272,8 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+	// Only components that correspond directly to images should be included in this list,
+	// Components that are only for providing a version should be left out of this list.
 	EnterpriseComponents = []component{
 		ComponentAPIServer,
 		ComponentComplianceBenchmarker,
@@ -285,11 +282,8 @@ var (
 		ComponentComplianceServer,
 		ComponentComplianceSnapshotter,
 		ComponentDeepPacketInspection,
-		ComponentEckElasticsearch,
-		ComponentEckKibana,
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,
-		ComponentECKElasticsearchOperator,
 		ComponentElasticsearchOperator,
 		ComponentEsCurator,
 		ComponentEsProxy,
@@ -306,10 +300,8 @@ var (
 		ComponentPacketCapture,
 		ComponentL7Collector,
 		ComponentEnvoyProxy,
-		ComponentCoreOSPrometheus,
 		ComponentPrometheus,
 		ComponentTigeraPrometheusService,
-		ComponentCoreOSAlertmanager,
 		ComponentPrometheusAlertmanager,
 		ComponentQueryServer,
 		ComponentTigeraKubeControllers,

@@ -15,14 +15,11 @@
 package tiers
 
 import (
-	"fmt"
 	"net"
 	"strings"
 
-	"github.com/tigera/api/pkg/lib/numorstring"
-	"github.com/tigera/operator/pkg/render/monitor"
-
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/api/pkg/lib/numorstring"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
@@ -37,13 +34,6 @@ const (
 
 	// Rendered here rather than guardian since creation of its containing Tier needs license pushed from management cluster, which depends on guardian.
 	GuardianPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "guardian-access"
-
-	// Reconciled here rather than monitor since creation of guardian depends on resources from monitor.
-	PrometheusPolicyName         = networkpolicy.TigeraComponentPolicyPrefix + "prometheus"
-	PrometheusAPIPolicyName      = networkpolicy.TigeraComponentPolicyPrefix + "tigera-prometheus-api"
-	PrometheusOperatorPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "prometheus-operator"
-	AlertManagerPolicyName       = networkpolicy.TigeraComponentPolicyPrefix + monitor.CalicoNodeAlertmanager
-	MeshAlertManagerPolicyName   = AlertManagerPolicyName + "-mesh"
 )
 
 var DNSIngressNamespaceSelector = createDNSIngressNamespaceSelector(
@@ -63,10 +53,6 @@ var DNSIngressNamespaceSelector = createDNSIngressNamespaceSelector(
 	common.CalicoNamespace,
 )
 
-var alertManagerSelector = fmt.Sprintf(
-	"(app == 'alertmanager' && alertmanager == '%[1]s') || (app.kubernetes.io/name == 'alertmanager' && alertmanager == '%[1]s')",
-	monitor.CalicoNodeAlertmanager,
-)
 var defaultTierOrder = 100.0
 
 func Tiers(cfg *Config) render.Component {
@@ -90,12 +76,6 @@ func (t tiersComponent) Objects() ([]client.Object, []client.Object) {
 	objsToCreate := []client.Object{
 		t.allowTigeraTier(),
 		t.allowTigeraClusterDNSPolicy(),
-		t.allowTigeraAlertManagerPolicy(),
-		t.allowTigeraAlertManagerMeshPolicy(),
-		t.allowTigeraPrometheusPolicy(),
-		t.allowTigeraPrometheusAPIPolicy(),
-		t.allowTigeraPrometheusOperatorPolicy(),
-		prometheusAllowTigeraDefaultDeny(),
 	}
 
 	if t.cfg.ManagementClusterConnection != nil {
@@ -311,228 +291,6 @@ func (t *tiersComponent) guardianAllowTigeraPolicy() (*v3.NetworkPolicy, error) 
 	}
 
 	return policy, nil
-}
-
-// Creates a network policy to allow traffic to Alertmanager (TCP port 9093).
-func (t *tiersComponent) allowTigeraAlertManagerPolicy() *v3.NetworkPolicy {
-	egressRules := []v3.Rule{}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, t.cfg.Openshift)
-	egressRules = append(egressRules, v3.Rule{
-		// Allows all egress traffic from AlertManager.
-		Action:   v3.Allow,
-		Protocol: &networkpolicy.TCPProtocol,
-	})
-
-	return &v3.NetworkPolicy{
-		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      AlertManagerPolicyName,
-			Namespace: common.TigeraPrometheusNamespace,
-		},
-		Spec: v3.NetworkPolicySpec{
-			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
-			Selector: alertManagerSelector,
-			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
-			Ingress: []v3.Rule{
-				{
-					Action:   v3.Allow,
-					Protocol: &networkpolicy.TCPProtocol,
-					Destination: v3.EntityRule{
-						Ports: networkpolicy.Ports(monitor.AlertmanagerPort),
-					},
-				},
-			},
-			Egress: egressRules,
-		},
-	}
-}
-
-// Creates a network policy to allow traffic between Alertmanagers for HA configuration (TCP port 6783).
-func (t *tiersComponent) allowTigeraAlertManagerMeshPolicy() *v3.NetworkPolicy {
-	egressRules := []v3.Rule{
-		{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.TCPProtocol,
-			Destination: v3.EntityRule{
-				Selector: alertManagerSelector,
-				Ports:    networkpolicy.Ports(9094),
-			},
-		},
-		{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.UDPProtocol,
-			Destination: v3.EntityRule{
-				Selector: alertManagerSelector,
-				Ports:    networkpolicy.Ports(9094),
-			},
-		},
-	}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, t.cfg.Openshift)
-
-	return &v3.NetworkPolicy{
-		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      MeshAlertManagerPolicyName,
-			Namespace: common.TigeraPrometheusNamespace,
-		},
-		Spec: v3.NetworkPolicySpec{
-			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
-			Selector: alertManagerSelector,
-			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
-			Ingress: []v3.Rule{
-				{
-					Action:   v3.Allow,
-					Protocol: &networkpolicy.TCPProtocol,
-					Destination: v3.EntityRule{
-						Selector: alertManagerSelector,
-						Ports:    networkpolicy.Ports(9094),
-					},
-				},
-				{
-					Action:   v3.Allow,
-					Protocol: &networkpolicy.UDPProtocol,
-					Destination: v3.EntityRule{
-						Selector: alertManagerSelector,
-						Ports:    networkpolicy.Ports(9094),
-					},
-				},
-			},
-			Egress: egressRules,
-		},
-	}
-}
-
-// Creates a network policy to allow traffic to access the Prometheus (TCP port 9095).
-func (t *tiersComponent) allowTigeraPrometheusPolicy() *v3.NetworkPolicy {
-	egressRules := []v3.Rule{}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, t.cfg.Openshift)
-	egressRules = append(egressRules, []v3.Rule{
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerEntityRule,
-		},
-		{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.TCPProtocol,
-			Destination: v3.EntityRule{
-				// Egress access for Felix metrics
-				Ports: networkpolicy.Ports(9081, 9091),
-			},
-		},
-		{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.TCPProtocol,
-			Destination: v3.EntityRule{
-				// Egress access for BGP metrics
-				Ports: networkpolicy.Ports(9900),
-			},
-		},
-		{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.TCPProtocol,
-			Destination: v3.EntityRule{
-				Selector: alertManagerSelector,
-				Ports:    networkpolicy.Ports(monitor.AlertmanagerPort),
-			},
-		},
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: render.DexEntityRule,
-		},
-	}...)
-
-	return &v3.NetworkPolicy{
-		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      PrometheusPolicyName,
-			Namespace: common.TigeraPrometheusNamespace,
-		},
-		Spec: v3.NetworkPolicySpec{
-			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
-			Selector: networkpolicy.PrometheusSelector,
-			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
-			Ingress: []v3.Rule{
-				{
-					Action:   v3.Allow,
-					Protocol: &networkpolicy.TCPProtocol,
-					Destination: v3.EntityRule{
-						Ports: networkpolicy.Ports(monitor.PrometheusProxyPort),
-					},
-				},
-			},
-			Egress: egressRules,
-		},
-	}
-}
-
-// Creates a network policy to allow traffic to access through tigera-prometheus-api
-func (t *tiersComponent) allowTigeraPrometheusAPIPolicy() *v3.NetworkPolicy {
-	egressRules := []v3.Rule{}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, t.cfg.Openshift)
-	egressRules = append(egressRules, v3.Rule{
-		Action:      v3.Allow,
-		Protocol:    &networkpolicy.TCPProtocol,
-		Destination: networkpolicy.PrometheusEntityRule,
-	})
-
-	return &v3.NetworkPolicy{
-		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      PrometheusAPIPolicyName,
-			Namespace: common.TigeraPrometheusNamespace,
-		},
-		Spec: v3.NetworkPolicySpec{
-			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
-			Selector: networkpolicy.KubernetesAppSelector("tigera-prometheus-api"),
-			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
-			Ingress: []v3.Rule{
-				{
-					Action:   v3.Allow,
-					Protocol: &networkpolicy.TCPProtocol,
-					Destination: v3.EntityRule{
-						Ports: networkpolicy.Ports(monitor.PrometheusProxyPort),
-					},
-				},
-			},
-			Egress: egressRules,
-		},
-	}
-}
-
-// Creates a network policy to allow the prometheus-operatorto access the kube-apiserver
-func (t *tiersComponent) allowTigeraPrometheusOperatorPolicy() *v3.NetworkPolicy {
-	egressRules := []v3.Rule{}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, t.cfg.Openshift)
-	egressRules = append(egressRules, v3.Rule{
-		Action:      v3.Allow,
-		Protocol:    &networkpolicy.TCPProtocol,
-		Destination: networkpolicy.KubeAPIServerEntityRule,
-	})
-
-	return &v3.NetworkPolicy{
-		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      PrometheusOperatorPolicyName,
-			Namespace: common.TigeraPrometheusNamespace,
-		},
-		Spec: v3.NetworkPolicySpec{
-			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
-			Selector: "operator == 'prometheus'",
-			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
-			Egress:   egressRules,
-		},
-	}
-}
-
-func prometheusAllowTigeraDefaultDeny() *v3.NetworkPolicy {
-	return networkpolicy.AllowTigeraDefaultDeny(common.TigeraPrometheusNamespace)
 }
 
 func guardianDefaultDenyAllowTigeraPolicy() *v3.NetworkPolicy {

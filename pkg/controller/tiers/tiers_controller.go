@@ -89,11 +89,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	policyNames := []types.NamespacedName{
 		{Name: tiers.GuardianPolicyName, Namespace: render.GuardianNamespace},
-		{Name: tiers.PrometheusPolicyName, Namespace: common.TigeraPrometheusNamespace},
-		{Name: tiers.PrometheusAPIPolicyName, Namespace: common.TigeraPrometheusNamespace},
-		{Name: tiers.PrometheusOperatorPolicyName, Namespace: common.TigeraPrometheusNamespace},
-		{Name: tiers.AlertManagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
-		{Name: tiers.MeshAlertManagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: common.TigeraPrometheusNamespace},
 	}
 	if opts.DetectedProvider == operatorv1.ProviderOpenShift {

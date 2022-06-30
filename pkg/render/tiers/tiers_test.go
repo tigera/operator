@@ -35,16 +35,6 @@ var _ = Describe("Tiers rendering tests", func() {
 	clusterDNSPolicyForOCP := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/dns_ocp.json")
 	guardianPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/guardian.json")
 	guardianPolicyForOCP := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/guardian_ocp.json")
-	expectedAlertmanagerPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/alertmanager.json")
-	expectedAlertmanagerMeshPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/alertmanager-mesh.json")
-	expectedPrometheusPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/prometheus.json")
-	expectedPrometheusApiPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/prometheus-api.json")
-	expectedPrometheusOperatorPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/prometheus-operator.json")
-	expectedAlertmanagerPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/alertmanager_ocp.json")
-	expectedAlertmanagerMeshPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/alertmanager-mesh_ocp.json")
-	expectedPrometheusPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/prometheus_ocp.json")
-	expectedPrometheusApiPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/prometheus-api_ocp.json")
-	expectedPrometheusOperatorPolicyOpenshift := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/prometheus-operator_ocp.json")
 
 	BeforeEach(func() {
 		// Establish default config for test cases to override.
@@ -62,17 +52,7 @@ var _ = Describe("Tiers rendering tests", func() {
 		}
 
 		getExpectedPolicy := func(name types.NamespacedName, scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
-			if name.Name == "allow-tigera.calico-node-alertmanager" {
-				return testutils.SelectPolicyByProvider(scenario, expectedAlertmanagerPolicy, expectedAlertmanagerPolicyForOpenshift)
-			} else if name.Name == "allow-tigera.calico-node-alertmanager-mesh" {
-				return testutils.SelectPolicyByProvider(scenario, expectedAlertmanagerMeshPolicy, expectedAlertmanagerMeshPolicyForOpenshift)
-			} else if name.Name == "allow-tigera.prometheus" {
-				return testutils.SelectPolicyByProvider(scenario, expectedPrometheusPolicy, expectedPrometheusPolicyForOpenshift)
-			} else if name.Name == "allow-tigera.tigera-prometheus-api" {
-				return testutils.SelectPolicyByProvider(scenario, expectedPrometheusApiPolicy, expectedPrometheusApiPolicyForOpenshift)
-			} else if name.Name == "allow-tigera.prometheus-operator" {
-				return testutils.SelectPolicyByProvider(scenario, expectedPrometheusOperatorPolicy, expectedPrometheusOperatorPolicyOpenshift)
-			} else if name.Name == "allow-tigera.guardian-access" && scenario.ManagedCluster {
+			if name.Name == "allow-tigera.guardian-access" && scenario.ManagedCluster {
 				return testutils.SelectPolicyByProvider(scenario, guardianPolicy, guardianPolicyForOCP)
 			} else if name.Name == "allow-tigera.cluster-dns" &&
 				((scenario.Openshift && name.Namespace == "openshift-dns") || (!scenario.Openshift && name.Namespace == "kube-system")) {
@@ -139,6 +119,5 @@ var _ = Describe("Tiers rendering tests", func() {
 			Expect(managementClusterEgressRule.Destination.Domains).To(Equal([]string{"mydomain.io"}))
 			Expect(managementClusterEgressRule.Destination.Ports).To(Equal(networkpolicy.Ports(8080)))
 		})
-
 	})
 })

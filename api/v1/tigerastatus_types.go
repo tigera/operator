@@ -127,6 +127,7 @@ const (
 	ResourceNotFound          TigeraStatusReason = "ResourceNotFound"
 	ResourcePatchError        TigeraStatusReason = "ResourcePatchError"
 	ResourceReadError         TigeraStatusReason = "ResourceReadError"
+	ResourceRenderingError    TigeraStatusReason = "ResourceRenderingError"
 	ResourceScalingError      TigeraStatusReason = "ResourceScalingError"
 	ResourceUpdateError       TigeraStatusReason = "ResourceUpdateError"
 	ResourceValidationError   TigeraStatusReason = "ResourceValidationError"
@@ -134,6 +135,7 @@ const (
 	InternalServerError       TigeraStatusReason = "InternalServerError"
 	NotApplicable             TigeraStatusReason = "NotApplicable"
 	Unknown                   TigeraStatusReason = "Unknown"
+	ImageSetError             TigeraStatusReason = "ImageSetError"
 )
 
 func init() {

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -42,7 +43,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-const controllerName = "clusterconnection-controller"
+const (
+	controllerName = "clusterconnection-controller"
+	ResourceName   = "management-cluster-connection"
+)
 
 var log = logf.Log.WithName(controllerName)
 
@@ -116,6 +120,11 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("%s failed to watch ImageSet: %w", controllerName, err)
 	}
 
+	// Watch for changes to TigeraStatus.
+	if err = utils.AddTigeraStatusWatch(c, ResourceName); err != nil {
+		return fmt.Errorf("clusterconnection-controller failed to watch management-cluster-connection Tigerastatus: %w", err)
+	}
+
 	return nil
 }
 
@@ -147,25 +156,41 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	managementCluster, err := utils.GetManagementCluster(ctx, r.Client)
 	if err != nil {
-		log.Error(err, "Error reading ManagementCluster")
-		r.status.SetDegraded("Error reading ManagementCluster", err.Error())
+		r.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	// Fetch the managementClusterConnection.
 	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.Client)
 	if err != nil {
-		r.status.SetDegraded("Error querying ManagementClusterConnection", err.Error())
+		r.SetDegraded(operatorv1.ResourceReadError, "Error querying ManagementClusterConnection", err, reqLogger)
 		return result, err
 	} else if managementClusterConnection == nil {
 		r.status.OnCRNotFound()
 		return result, nil
 	}
+	//Set the meta info in the tigerastatus like observedGenerations
+	if managementClusterConnection != nil {
+		defer r.status.SetMetaData(&managementClusterConnection.ObjectMeta)
+	}
+
+	// Changes for updating managementClusterConnection status conditions
+	if request.Name == ResourceName && request.Namespace == "" {
+		ts := &operatorv1.TigeraStatus{}
+		err := r.Client.Get(ctx, types.NamespacedName{Name: ResourceName}, ts)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+		managementClusterConnection.Status.Conditions = status.UpdateStatusCondition(managementClusterConnection.Status.Conditions, ts.Status.Conditions)
+		if err := r.Client.Status().Update(ctx, managementClusterConnection); err != nil {
+			log.WithValues("reason", err).Info("Failed to create managementClusterConnection status conditions.")
+			return reconcile.Result{}, err
+		}
+	}
 
 	if managementClusterConnection != nil && managementCluster != nil {
 		err = fmt.Errorf("having both a ManagementCluster and a ManagementClusterConnection is not supported")
-		log.Error(err, "")
-		r.status.SetDegraded(err.Error(), "")
+		r.SetDegraded(operatorv1.ResourceValidationError, "", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -174,15 +199,13 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(instl, r.Client)
 	if err != nil {
-		log.Error(err, "Error with Pull secrets")
-		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
+		r.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		return result, err
 	}
 
 	certificateManager, err := certificatemanager.Create(r.Client, instl, r.clusterDomain)
 	if err != nil {
-		log.Error(err, "unable to create the Tigera CA")
-		r.status.SetDegraded("Unable to create the Tigera CA", err.Error())
+		r.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -190,7 +213,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	tunnelSecret := &corev1.Secret{}
 	err = r.Client.Get(ctx, types.NamespacedName{Name: render.GuardianSecretName, Namespace: common.OperatorNamespace()}, tunnelSecret)
 	if err != nil {
-		r.status.SetDegraded("Error retrieving secrets from guardian namespace", err.Error())
+		r.SetDegraded(operatorv1.ResourceReadError, "Error retrieving secrets from guardian namespace", err, reqLogger)
 		if !k8serrors.IsNotFound(err) {
 			return result, nil
 		}
@@ -201,12 +224,11 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	for _, secretName := range []string{render.PacketCaptureCertSecret, render.PrometheusTLSSecretName} {
 		secret, err := certificateManager.GetCertificate(r.Client, secretName, common.OperatorNamespace())
 		if err != nil {
-			reqLogger.Error(err, fmt.Sprintf("failed to retrieve %s", secretName))
-			r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s", secretName), err.Error())
+			r.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve %s", secretName), err, reqLogger)
 			return reconcile.Result{}, err
 		} else if secret == nil {
 			reqLogger.Info(fmt.Sprintf("Waiting for secret '%s' to become available", secretName))
-			r.status.SetDegraded(fmt.Sprintf("Waiting for secret '%s' to become available", secretName), "")
+			r.status.SetDegraded(string(operatorv1.ResourceNotReady), fmt.Sprintf("Waiting for secret '%s' to become available", secretName))
 			return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 		trustedCertBundle.AddCertificates(secret)
@@ -224,13 +246,12 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	component := render.Guardian(guardianCfg)
 
 	if err = imageset.ApplyImageSet(ctx, r.Client, variant, component); err != nil {
-		log.Error(err, "Error with images from ImageSet")
-		r.status.SetDegraded("Error with images from ImageSet", err.Error())
+		r.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	if err := ch.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
-		r.status.SetDegraded("Error creating / updating resource", err.Error())
+		r.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 		return result, err
 	}
 
@@ -238,4 +259,12 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	//We should create the Guardian deployment.
 	return result, nil
+}
+func (r *ReconcileConnection) SetDegraded(reason operatorv1.TigeraStatusReason, message string, err error, log logr.Logger) {
+	log.WithValues(string(reason), message).Error(err, string(reason))
+	errormsg := ""
+	if err != nil {
+		errormsg = err.Error()
+	}
+	r.status.SetDegraded(string(reason), fmt.Sprintf("%s - Error: %s", message, errormsg))
 }

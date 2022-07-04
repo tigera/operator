@@ -22,6 +22,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-logr/logr"
+
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	appsv1 "k8s.io/api/apps/v1"
@@ -1030,4 +1032,13 @@ func UpdateStatusCondition(statuscondition []metav1.Condition, conditions []oper
 		}
 	}
 	return statuscondition
+}
+
+func SetDegraded(status StatusManager, reason operator.TigeraStatusReason, message string, err error, log logr.Logger) {
+	log.WithValues(string(reason), message).Error(err, string(reason))
+	errormsg := ""
+	if err != nil {
+		errormsg = err.Error()
+	}
+	status.SetDegraded(string(reason), fmt.Sprintf("%s - Error: %s", message, errormsg))
 }

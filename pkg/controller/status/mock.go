@@ -16,6 +16,8 @@ package status
 import (
 	"context"
 
+	operator "github.com/tigera/operator/api/v1"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/stretchr/testify/mock"
@@ -87,7 +89,7 @@ func (m *MockStatus) SetWindowsUpgradeStatus(pending, inProgress, completed []st
 	m.Called(pending, inProgress, completed, err)
 }
 
-func (m *MockStatus) SetDegraded(reason, msg string) {
+func (m *MockStatus) SetDegraded(reason operator.TigeraStatusReason, msg string) {
 	m.Called(reason, msg)
 }
 

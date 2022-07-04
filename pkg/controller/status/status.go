@@ -982,6 +982,7 @@ func UpdateStatusCondition(statuscondition []metav1.Condition, conditions []oper
 				if !reflect.DeepEqual(c.Status, condition.Status) {
 					ic.LastTransitionTime = metav1.NewTime(time.Now())
 				}
+
 				statuscondition[i] = ic
 				found = true
 			}

@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -48,6 +49,8 @@ import (
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/url"
 )
+
+const ResourceName = "log-collector"
 
 var log = logf.Log.WithName("controller_logcollector")
 
@@ -140,6 +143,11 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	err = c.Watch(&source.Kind{Type: &corev1.Node{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("logcollector-controller failed to watch the node resource: %w", err)
+	}
+
+	// Watch for changes to TigeraStatus.
+	if err = utils.AddTigeraStatusWatch(c, ResourceName); err != nil {
+		return fmt.Errorf("logcollector-controller failed to watch log-collector Tigerastatus: %w", err)
 	}
 
 	return nil
@@ -235,42 +243,57 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
-		r.status.SetDegraded("Error querying for LogCollector", err.Error())
+		r.SetDegraded(operatorv1.ResourceReadError, "Error querying for LogCollector", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 	r.status.OnCRFound()
+	//Set the meta info in the tigerastatus like observedGenerations
+	if instance != nil {
+		defer r.status.SetMetaData(&instance.ObjectMeta)
+	}
+
+	// Changes for updating logcollector status conditions
+	if request.Name == ResourceName && request.Namespace == "" {
+		ts := &operatorv1.TigeraStatus{}
+		err := r.client.Get(ctx, types.NamespacedName{Name: ResourceName}, ts)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+		instance.Status.Conditions = status.UpdateStatusCondition(instance.Status.Conditions, ts.Status.Conditions)
+		if err := r.client.Status().Update(ctx, instance); err != nil {
+			log.WithValues("reason", err).Info("Failed to create logcollector status conditions.")
+			return reconcile.Result{}, err
+		}
+	}
+
 	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
 
 	if !utils.IsAPIServerReady(r.client, reqLogger) {
-		r.status.SetDegraded("Waiting for Tigera API server to be ready", "")
+		r.status.SetDegraded(string(operatorv1.ResourceNotReady), "Waiting for Tigera API server to be ready")
 		return reconcile.Result{}, nil
 	}
 
 	if !r.licenseAPIReady.IsReady() {
-		r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
+		r.status.SetDegraded(string(operatorv1.ResourceNotReady), "Waiting for LicenseKeyAPI to be ready")
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	license, err := utils.FetchLicenseKey(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			r.status.SetDegraded("License not found", err.Error())
+			r.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, reqLogger)
 			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 		}
-		r.status.SetDegraded("Error querying license", err.Error())
+		r.SetDegraded(operatorv1.ResourceReadError, "Error querying license", err, reqLogger)
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 	modifiedFields := fillDefaults(instance)
 	// Update the LogCollector instance with any changes that have occurred.
 	if err = r.client.Patch(ctx, instance, preDefaultPatchFrom); err != nil {
-		r.status.SetDegraded(
-			fmt.Sprintf(
-				"Failed to set defaults for LogCollector fields: [%s]",
-				strings.Join(modifiedFields, ", "),
-			),
-			err.Error(),
-		)
+		r.SetDegraded(operatorv1.ResourcePatchError, fmt.Sprintf("Failed to set defaults for LogCollector fields: [%s]",
+			strings.Join(modifiedFields, ", "),
+		), err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -280,75 +303,66 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	variant, installation, err := utils.GetInstallation(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			r.status.SetDegraded("Installation not found", err.Error())
+			r.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-		r.status.SetDegraded("Error querying installation", err.Error())
+		r.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	esClusterConfig, err := utils.GetElasticsearchClusterConfig(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			log.Info("Elasticsearch cluster configuration is not available, waiting for it to become available")
-			r.status.SetDegraded("Elasticsearch cluster configuration is not available, waiting for it to become available", err.Error())
+			r.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch cluster configuration is not available, waiting for it to become available", err, reqLogger)
 			return reconcile.Result{}, nil
 		}
-		log.Error(err, "Failed to get the elasticsearch cluster configuration")
-		r.status.SetDegraded("Failed to get the elasticsearch cluster configuration", err.Error())
+		r.SetDegraded(operatorv1.ResourceReadError, "Failed to get the elasticsearch cluster configuration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
 	if err != nil {
-		log.Error(err, "Error with Pull secrets")
-		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
+		r.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	esSecrets, err := utils.ElasticsearchSecrets(ctx, []string{render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret}, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			log.Info("Elasticsearch secrets are not available yet, waiting until they become available")
-			r.status.SetDegraded("Elasticsearch secrets are not available yet, waiting until they become available", err.Error())
+			r.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch secrets are not available yet, waiting until they become available", err, reqLogger)
 			return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
 		}
-		r.status.SetDegraded("Failed to get Elasticsearch credentials", err.Error())
+		r.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch credentials", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	certificateManager, err := certificatemanager.Create(r.client, installation, r.clusterDomain)
 	if err != nil {
-		log.Error(err, "unable to create the Tigera CA")
-		r.status.SetDegraded("Unable to create the Tigera CA", err.Error())
+		r.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	fluentdPrometheusTLS, err := certificateManager.GetOrCreateKeyPair(r.client, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), []string{render.FluentdPrometheusTLSSecretName})
 	if err != nil {
-		log.Error(err, "Error creating TLS certificate")
-		r.status.SetDegraded("Error creating TLS certificate", err.Error())
+		r.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	prometheusCertificate, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
 	if err != nil {
-		log.Error(err, "Failed to get certificate")
-		r.status.SetDegraded("Failed to get certificate", err.Error())
+		r.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, reqLogger)
 		return reconcile.Result{}, err
 	} else if prometheusCertificate == nil {
-		log.Info("Prometheus secrets are not available yet, waiting until they become available")
-		r.status.SetDegraded("Prometheus secrets are not available yet, waiting until they become available", "")
+		r.status.SetDegraded(string(operatorv1.ResourceNotReady), "Prometheus secrets are not available yet, waiting until they become available")
 		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
 	esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
 	if err != nil {
-		log.Error(err, fmt.Sprintf("failed to retrieve / validate %s", relasticsearch.PublicCertSecret))
-		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err.Error())
+		r.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err, reqLogger)
 		return reconcile.Result{}, err
 	} else if esgwCertificate == nil {
 		log.Info("Elasticsearch gateway certificate is not available yet, waiting until they become available")
-		r.status.SetDegraded("Elasticsearch gateway certificate are not available yet, waiting until they become available", "")
+		r.status.SetDegraded(string(operatorv1.ResourceNotReady), "Elasticsearch gateway certificate are not available yet, waiting until they become available")
 		return reconcile.Result{}, nil
 	}
 
@@ -358,7 +372,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 
 	exportLogs := utils.IsFeatureActive(license, common.ExportLogsFeature)
 	if !exportLogs && instance.Spec.AdditionalStores != nil {
-		r.status.SetDegraded("Feature is not active", "License does not support feature: export-logs")
+		r.status.SetDegraded(string(operatorv1.ResourceValidationError), "Feature is not active - License does not support feature: export-logs")
 		return reconcile.Result{}, err
 	}
 
@@ -367,13 +381,11 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		if instance.Spec.AdditionalStores.S3 != nil {
 			s3Credential, err = getS3Credential(r.client)
 			if err != nil {
-				log.Error(err, "Error with S3 credential secret")
-				r.status.SetDegraded("Error with S3 credential secret", err.Error())
+				r.SetDegraded(operatorv1.ResourceValidationError, "Error with S3 credential secret", err, reqLogger)
 				return reconcile.Result{}, err
 			}
 			if s3Credential == nil {
-				log.Info("S3 credential secret does not exist")
-				r.status.SetDegraded("S3 credential secret does not exist", "")
+				r.status.SetDegraded(string(operatorv1.ResourceNotFound), "S3 credential secret does not exist")
 				return reconcile.Result{}, nil
 			}
 		}
@@ -384,13 +396,11 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		if instance.Spec.AdditionalStores.Splunk != nil {
 			splunkCredential, err = getSplunkCredential(r.client)
 			if err != nil {
-				log.Error(err, "Error with Splunk credential secret")
-				r.status.SetDegraded("Error with Splunk credential secret", err.Error())
+				r.SetDegraded(operatorv1.ResourceValidationError, "Error with Splunk credential secret", err, reqLogger)
 				return reconcile.Result{}, err
 			}
 			if splunkCredential == nil {
-				log.Info("Splunk credential secret does not exist")
-				r.status.SetDegraded("Splunk credential secret does not exist", "")
+				r.status.SetDegraded(string(operatorv1.ResourceNotFound), "Splunk credential secret does not exist")
 				return reconcile.Result{}, nil
 			}
 		}
@@ -407,10 +417,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 				// Not finding a ManagementClusterConnection CR is not an error, as only a managed cluster will
 				// have this CR available, but we should communicate any other kind of error that we encounter.
 				if !errors.IsNotFound(err) {
-					r.status.SetDegraded(
-						"An error occurred while looking for a ManagementClusterConnection",
-						err.Error(),
-					)
+					r.SetDegraded(operatorv1.ResourceNotFound, "An error occurred while looking for a ManagementClusterConnection", err, reqLogger)
 					return reconcile.Result{}, err
 				}
 			}
@@ -424,10 +431,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 					for _, l := range syslog.LogTypes {
 						// Set status to degraded to warn user and let them fix the issue themselves.
 						if l == v1.SyslogLogIDSEvents {
-							r.status.SetDegraded(
-								"IDSEvents option is not supported for Syslog config in a managed cluster",
-								"",
-							)
+							r.status.SetDegraded(string(operatorv1.ResourceValidationError), "IDSEvents option is not supported for Syslog config in a managed cluster")
 							return reconcile.Result{}, err
 						}
 					}
@@ -438,8 +442,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 
 	filters, err := getFluentdFilters(r.client)
 	if err != nil {
-		log.Error(err, "Error retrieving Fluentd filters")
-		r.status.SetDegraded("Error retrieving Fluentd filters", err.Error())
+		r.SetDegraded(operatorv1.ResourceReadError, "Error retrieving Fluentd filters", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -454,8 +457,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 					instance.Spec.AdditionalSources.EksCloudwatchLog.GroupName,
 					instance.Spec.AdditionalSources.EksCloudwatchLog.StreamPrefix)
 				if err != nil {
-					log.Error(err, "Error retrieving EKS Cloudwatch Logs configuration")
-					r.status.SetDegraded("Error retrieving EKS Cloudwatch Logs configuration", err.Error())
+					r.SetDegraded(operatorv1.ResourceReadError, "Error retrieving EKS Cloudwatch Logs configuration", err, reqLogger)
 					return reconcile.Result{}, err
 				}
 			}
@@ -496,14 +498,13 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, comp); err != nil {
-		reqLogger.Error(err, "Error with images from ImageSet")
-		r.status.SetDegraded("Error with images from ImageSet", err.Error())
+		r.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	for _, comp := range components {
 		if err := handler.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
-			r.status.SetDegraded("Error creating / updating resource", err.Error())
+			r.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
@@ -533,8 +534,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		comp = render.Fluentd(fluentdCfg)
 
 		if err = imageset.ApplyImageSet(ctx, r.client, variant, comp); err != nil {
-			reqLogger.Error(err, "Error with images from ImageSet")
-			r.status.SetDegraded("Error with images from ImageSet", err.Error())
+			r.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
@@ -542,7 +542,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		handler = utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 		if err := handler.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
-			r.status.SetDegraded("Error creating / updating resource", err.Error())
+			r.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
@@ -716,4 +716,13 @@ func getEksCloudwatchLogConfig(client client.Client, interval int32, region, gro
 		StreamPrefix:  prefix,
 		FetchInterval: interval,
 	}, nil
+}
+
+func (r *ReconcileLogCollector) SetDegraded(reason operatorv1.TigeraStatusReason, message string, err error, log logr.Logger) {
+	log.WithValues(string(reason), message).Error(err, string(reason))
+	errormsg := ""
+	if err != nil {
+		errormsg = err.Error()
+	}
+	r.status.SetDegraded(string(reason), fmt.Sprintf("%s - Error: %s", message, errormsg))
 }

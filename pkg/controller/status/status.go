@@ -23,6 +23,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-logr/logr"
+
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	appsv1 "k8s.io/api/apps/v1"
@@ -71,7 +73,7 @@ type StatusManager interface {
 	RemoveCronJobs(cjs ...types.NamespacedName)
 	RemoveCertificateSigningRequests(name string)
 	SetWindowsUpgradeStatus(pending, inProgress, completed []string, err error)
-	SetDegraded(reason, msg string)
+	SetDegraded(reason operator.TigeraStatusReason, msg string)
 	ClearDegraded()
 	IsAvailable() bool
 	IsProgressing() bool
@@ -416,11 +418,11 @@ func (m *statusManager) RemoveCertificateSigningRequests(name string) {
 }
 
 // SetDegraded sets degraded state with the provided reason and message.
-func (m *statusManager) SetDegraded(reason, msg string) {
+func (m *statusManager) SetDegraded(reason operator.TigeraStatusReason, msg string) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.degraded = true
-	m.explicitDegradedReason = reason
+	m.explicitDegradedReason = string(reason)
 	m.explicitDegradedMsg = msg
 }
 
@@ -1062,4 +1064,13 @@ func UpdateStatusCondition(statuscondition []metav1.Condition, conditions []oper
 		}
 	}
 	return statuscondition
+}
+
+func SetDegraded(status StatusManager, reason operator.TigeraStatusReason, message string, err error, log logr.Logger) {
+	log.WithValues(string(reason), message).Error(err, string(reason))
+	errormsg := ""
+	if err != nil {
+		errormsg = err.Error()
+	}
+	status.SetDegraded(reason, fmt.Sprintf("%s - Error: %s", message, errormsg))
 }

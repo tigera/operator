@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -141,6 +141,13 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		inst.NonPrivileged = override.NonPrivileged
 	}
 
+	switch compareFields(inst.CalicoNodeDaemonSet, override.CalicoNodeDaemonSet) {
+	case BOnlySet:
+		inst.CalicoNodeDaemonSet = override.CalicoNodeDaemonSet.DeepCopy()
+	case Different:
+		inst.CalicoNodeDaemonSet = mergeCalicoNodeDaemonSet(inst.CalicoNodeDaemonSet, override.CalicoNodeDaemonSet)
+	}
+
 	return inst
 }
 
@@ -229,5 +236,118 @@ func mergeCalicoNetwork(cfg, override *operatorv1.CalicoNetworkSpec) *operatorv1
 	case BOnlySet, Different:
 		out.ContainerIPForwarding = override.ContainerIPForwarding
 	}
+	return out
+}
+
+func mergeMetadata(cfg, override *operatorv1.Metadata) *operatorv1.Metadata {
+	out := cfg.DeepCopy()
+
+	switch compareFields(out.Labels, override.Labels) {
+	case BOnlySet, Different:
+		out.Labels = make(map[string]string, len(override.Labels))
+		for key, val := range override.Labels {
+			out.Labels[key] = val
+		}
+	}
+
+	switch compareFields(out.Annotations, override.Annotations) {
+	case BOnlySet, Different:
+		out.Annotations = make(map[string]string, len(override.Annotations))
+		for key, val := range override.Annotations {
+			out.Annotations[key] = val
+		}
+	}
+	return out
+}
+
+func mergeCalicoNodeDaemonSet(cfg, override *operatorv1.CalicoNodeDaemonSet) *operatorv1.CalicoNodeDaemonSet {
+	out := cfg.DeepCopy()
+
+	switch compareFields(out.Metadata, override.Metadata) {
+	case BOnlySet:
+		out.Metadata = override.Metadata.DeepCopy()
+	case Different:
+		out.Metadata = mergeMetadata(out.Metadata, override.Metadata)
+	}
+
+	mergePodSpec := func(cfg, override *operatorv1.CalicoNodeDaemonSetPodSpec) *operatorv1.CalicoNodeDaemonSetPodSpec {
+		out := cfg.DeepCopy()
+
+		switch compareFields(out.InitContainers, override.InitContainers) {
+		case BOnlySet, Different:
+			out.InitContainers = make([]operatorv1.CalicoNodeInitContainer, len(override.InitContainers))
+			copy(out.InitContainers, override.InitContainers)
+		}
+
+		switch compareFields(out.Containers, override.Containers) {
+		case BOnlySet, Different:
+			out.Containers = make([]operatorv1.CalicoNodeContainer, len(override.Containers))
+			copy(out.Containers, override.Containers)
+		}
+
+		switch compareFields(out.Affinity, override.Affinity) {
+		case BOnlySet, Different:
+			out.Affinity = override.Affinity
+		}
+
+		switch compareFields(out.NodeSelector, override.NodeSelector) {
+		case BOnlySet, Different:
+			out.NodeSelector = make(map[string]string, len(override.NodeSelector))
+			for key, val := range override.NodeSelector {
+				out.NodeSelector[key] = val
+			}
+		}
+
+		switch compareFields(out.Tolerations, override.Tolerations) {
+		case BOnlySet, Different:
+			out.Tolerations = make([]v1.Toleration, len(override.Tolerations))
+			copy(out.Tolerations, override.Tolerations)
+		}
+		return out
+	}
+	mergeTemplateSpec := func(cfg, override *operatorv1.CalicoNodeDaemonSetPodTemplateSpec) *operatorv1.CalicoNodeDaemonSetPodTemplateSpec {
+		out := cfg.DeepCopy()
+
+		switch compareFields(out.Metadata, override.Metadata) {
+		case BOnlySet:
+			out.Metadata = override.Metadata.DeepCopy()
+		case Different:
+			out.Metadata = mergeMetadata(out.Metadata, override.Metadata)
+		}
+
+		switch compareFields(out.Spec, override.Spec) {
+		case BOnlySet:
+			out.Spec = override.Spec.DeepCopy()
+		case Different:
+			out.Spec = mergePodSpec(out.Spec, override.Spec)
+		}
+
+		return out
+	}
+	mergeSpec := func(cfg, override *operatorv1.CalicoNodeDaemonSetSpec) *operatorv1.CalicoNodeDaemonSetSpec {
+		out := cfg.DeepCopy()
+
+		switch compareFields(out.MinReadySeconds, override.MinReadySeconds) {
+		case BOnlySet, Different:
+			out.MinReadySeconds = override.MinReadySeconds
+		}
+
+		switch compareFields(out.Template, override.Template) {
+		case BOnlySet:
+			out.Template = override.Template.DeepCopy()
+		case Different:
+			out.Template = mergeTemplateSpec(out.Template, override.Template)
+		}
+
+		return out
+	}
+
+	switch compareFields(out.Spec, override.Spec) {
+	case BOnlySet:
+		out.Spec = override.Spec.DeepCopy()
+	case Different:
+		out.Spec = mergeSpec(out.Spec, override.Spec)
+	}
+
 	return out
 }

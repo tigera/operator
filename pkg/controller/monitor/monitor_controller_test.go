@@ -298,6 +298,7 @@ var _ = Describe("Monitor controller tests", func() {
 				Name:      "monitor",
 				Namespace: "",
 			}})
+			Expect(err).ShouldNot(HaveOccurred())
 			instance, err := r.getMonitor(ctx)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -320,6 +321,7 @@ var _ = Describe("Monitor controller tests", func() {
 				Name:      "monitor",
 				Namespace: "",
 			}})
+			Expect(err).ShouldNot(HaveOccurred())
 			instance, err := r.getMonitor(ctx)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -361,7 +363,7 @@ var _ = Describe("Monitor controller tests", func() {
 				Name:      "monitor",
 				Namespace: "",
 			}})
-
+			Expect(err).ShouldNot(HaveOccurred())
 			instance, err := r.getMonitor(ctx)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -420,6 +422,8 @@ var _ = Describe("Monitor controller tests", func() {
 				Name:      "monitor",
 				Namespace: "",
 			}})
+			Expect(err).ShouldNot(HaveOccurred())
+
 			instance, err := r.getMonitor(ctx)
 			Expect(err).ShouldNot(HaveOccurred())
 

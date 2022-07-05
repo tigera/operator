@@ -195,6 +195,7 @@ var _ = Describe("amazoncloudintegration controller tests", func() {
 				Name:      "amazon-cloud-integration",
 				Namespace: "",
 			}})
+			Expect(err).ShouldNot(HaveOccurred())
 			instance, err := utils.GetAmazonCloudIntegration(ctx, cli)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(instance.Status.Conditions).To(HaveLen(0))

@@ -302,19 +302,8 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 			Resources: []string{"deployments"},
 			Verbs:     []string{"get"},
 		},
-		{
-			APIGroups: []string{
-				"batch",
-			},
-			Resources: []string{
-				"cronjobs",
-				"jobs",
-			},
-			Verbs: []string{
-				"get", "list", "watch", "create", "update", "patch", "delete",
-			},
-		},
 	}
+
 	if !c.cfg.ManagedCluster {
 		managementRule := []rbacv1.PolicyRule{
 			{
@@ -327,7 +316,28 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 				Resources: []string{"tokenreviews"},
 				Verbs:     []string{"create"},
 			},
+			{
+				APIGroups: []string{"batch"},
+				Resources: []string{"cronjobs", "jobs"},
+				Verbs: []string{
+					"get", "list", "watch", "create", "update", "patch", "delete",
+				},
+			},
 		}
+
+		// Used when IDS Controller creates Cronjobs for AD as the IDS deployment
+		// is the owner of the AD Cronjobs - Openshift blocks setting an
+		// blockOwnerDeletion to true if an ownerReference refers to a resource
+		// you can't set finalizers on
+		if c.cfg.Openshift {
+			managementRule = append(managementRule,
+				rbacv1.PolicyRule{
+					APIGroups: []string{"apps"},
+					Resources: []string{"deployments/finalizers"},
+					Verbs:     []string{"update"},
+				})
+		}
+
 		rules = append(rules, managementRule...)
 	}
 	return &rbacv1.ClusterRole{

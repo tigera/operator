@@ -420,8 +420,15 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			},
 			{
 				APIGroups: []string{"authorization.k8s.io"},
-				Resources: []string{"subjectaccessreviews"},
+				Resources: []string{"tokenreviews"},
 				Verbs:     []string{"create"},
+			},
+			{
+				APIGroups: []string{"batch"},
+				Resources: []string{"cronjobs", "jobs"},
+				Verbs: []string{
+					"get", "list", "watch", "create", "update", "patch", "delete",
+				},
 			},
 		}))
 	})

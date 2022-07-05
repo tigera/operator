@@ -763,9 +763,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Mark CR found so we can report converter problems via tigerastatus
 	r.status.OnCRFound()
 	//Set the meta info in the tigerastatus like observedGenerations
-	if instance != nil {
-		defer r.status.SetMetaData(&instance.ObjectMeta)
-	}
+	defer r.status.SetMetaData(&instance.ObjectMeta)
+
 	// Changes for updating installation status conditions
 	if request.Name == InstallationName && request.Namespace == "" {
 		ts := &operator.TigeraStatus{}

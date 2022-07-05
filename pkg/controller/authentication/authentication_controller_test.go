@@ -101,6 +101,37 @@ var _ = Describe("authentication controller tests", func() {
 	})
 
 	Context("Reconcile for Condition status", func() {
+		BeforeEach(func() {
+			Expect(cli.Create(ctx, &operatorv1.Installation{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+				Status: operatorv1.InstallationStatus{
+					Variant:  operatorv1.TigeraSecureEnterprise,
+					Computed: &operatorv1.InstallationSpec{},
+				},
+				Spec: operatorv1.InstallationSpec{
+					ControlPlaneReplicas: &replicas,
+					Variant:              operatorv1.TigeraSecureEnterprise,
+					Registry:             "some.registry.org/",
+				},
+			})).To(BeNil())
+			Expect(cli.Create(ctx, &operatorv1.Authentication{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.AuthenticationSpec{
+					ManagerDomain: "https://example.com",
+					OIDC: &operatorv1.AuthenticationOIDC{
+						IssuerURL:      "https://example.com",
+						UsernameClaim:  "email",
+						GroupsClaim:    "group",
+						GroupsPrefix:   "g",
+						UsernamePrefix: "u",
+					},
+				},
+			})).ToNot(HaveOccurred())
+			Expect(cli.Create(ctx, idpSecret)).ToNot(HaveOccurred())
+			Expect(cli.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-dex"}})).ToNot(HaveOccurred())
+		})
 		generation := int64(2)
 		It("should reconcile with creating new status condition with one item", func() {
 			ts := &operatorv1.TigeraStatus{
@@ -119,13 +150,12 @@ var _ = Describe("authentication controller tests", func() {
 				},
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
-			Expect(cli.Create(ctx, auth)).ToNot(HaveOccurred())
-
 			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, ""}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      "authentication",
 				Namespace: "",
 			}})
+			Expect(err).ShouldNot(HaveOccurred())
 			instance, err := utils.GetAuthentication(ctx, r.client)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -144,13 +174,13 @@ var _ = Describe("authentication controller tests", func() {
 			}
 
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
-			Expect(cli.Create(ctx, auth)).ToNot(HaveOccurred())
 
 			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, ""}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      "authentication",
 				Namespace: "",
 			}})
+			Expect(err).ShouldNot(HaveOccurred())
 			instance, err := utils.GetAuthentication(ctx, r.client)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(instance.Status.Conditions).To(HaveLen(0))
@@ -186,13 +216,12 @@ var _ = Describe("authentication controller tests", func() {
 				},
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
-			Expect(cli.Create(ctx, auth)).ToNot(HaveOccurred())
-
 			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, ""}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      "authentication",
 				Namespace: "",
 			}})
+			Expect(err).ShouldNot(HaveOccurred())
 			instance, err := utils.GetAuthentication(ctx, r.client)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -247,13 +276,12 @@ var _ = Describe("authentication controller tests", func() {
 				},
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
-			Expect(cli.Create(ctx, auth)).ToNot(HaveOccurred())
-
 			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, ""}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      "authentication",
 				Namespace: "",
 			}})
+			Expect(err).ShouldNot(HaveOccurred())
 			instance, err := utils.GetAuthentication(ctx, r.client)
 			Expect(err).ShouldNot(HaveOccurred())
 

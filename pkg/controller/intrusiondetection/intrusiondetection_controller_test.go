@@ -589,6 +589,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				Name:      "intrusion-detection",
 				Namespace: "",
 			}})
+			Expect(err).ShouldNot(HaveOccurred())
 			instance := &operatorv1.IntrusionDetection{}
 			err = r.client.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -613,6 +614,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				Name:      "intrusion-detection",
 				Namespace: "",
 			}})
+			Expect(err).ShouldNot(HaveOccurred())
 			instance := &operatorv1.IntrusionDetection{}
 			err = r.client.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -656,6 +658,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				Name:      "intrusion-detection",
 				Namespace: "",
 			}})
+			Expect(err).ShouldNot(HaveOccurred())
 			instance := &operatorv1.IntrusionDetection{}
 			err = r.client.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -716,6 +719,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				Name:      "intrusion-detection",
 				Namespace: "",
 			}})
+			Expect(err).ShouldNot(HaveOccurred())
 			instance := &operatorv1.IntrusionDetection{}
 			err = r.client.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
 			Expect(err).ShouldNot(HaveOccurred())

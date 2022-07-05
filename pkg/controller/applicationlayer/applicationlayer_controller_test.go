@@ -206,6 +206,7 @@ var _ = Describe("Application layer controller tests", func() {
 					Name:      "applicationlayer",
 					Namespace: "",
 				}})
+				Expect(err).ShouldNot(HaveOccurred())
 				instance, err := getApplicationLayer(ctx, r.client)
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -228,6 +229,7 @@ var _ = Describe("Application layer controller tests", func() {
 					Name:      "applicationlayer",
 					Namespace: "",
 				}})
+				Expect(err).ShouldNot(HaveOccurred())
 				instance, err := getApplicationLayer(ctx, r.client)
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(instance.Status.Conditions).To(HaveLen(0))
@@ -268,6 +270,7 @@ var _ = Describe("Application layer controller tests", func() {
 					Name:      "applicationlayer",
 					Namespace: "",
 				}})
+				Expect(err).ShouldNot(HaveOccurred())
 				instance, err := getApplicationLayer(ctx, r.client)
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -326,6 +329,7 @@ var _ = Describe("Application layer controller tests", func() {
 					Name:      "applicationlayer",
 					Namespace: "",
 				}})
+				Expect(err).ShouldNot(HaveOccurred())
 				instance, err := getApplicationLayer(ctx, r.client)
 				Expect(err).ShouldNot(HaveOccurred())
 

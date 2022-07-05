@@ -494,6 +494,7 @@ var _ = Describe("Manager controller tests", func() {
 					Name:      "manager",
 					Namespace: "",
 				}})
+				Expect(err).ShouldNot(HaveOccurred())
 				instance, err := GetManager(ctx, r.client)
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -517,6 +518,7 @@ var _ = Describe("Manager controller tests", func() {
 					Name:      "manager",
 					Namespace: "",
 				}})
+				Expect(err).ShouldNot(HaveOccurred())
 				instance, err := GetManager(ctx, r.client)
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -560,6 +562,7 @@ var _ = Describe("Manager controller tests", func() {
 					Name:      "manager",
 					Namespace: "",
 				}})
+				Expect(err).ShouldNot(HaveOccurred())
 				instance, err := GetManager(ctx, r.client)
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -619,6 +622,7 @@ var _ = Describe("Manager controller tests", func() {
 					Name:      "manager",
 					Namespace: "",
 				}})
+				Expect(err).ShouldNot(HaveOccurred())
 				instance, err := GetManager(ctx, r.client)
 				Expect(err).ShouldNot(HaveOccurred())
 

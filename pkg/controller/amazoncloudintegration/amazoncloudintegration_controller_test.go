@@ -227,6 +227,7 @@ var _ = Describe("amazoncloudintegration controller tests", func() {
 				Name:      "amazon-cloud-integration",
 				Namespace: "",
 			}})
+			Expect(err).ShouldNot(HaveOccurred())
 			instance, err := utils.GetAmazonCloudIntegration(ctx, cli)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -279,6 +280,8 @@ var _ = Describe("amazoncloudintegration controller tests", func() {
 				Name:      "amazon-cloud-integration",
 				Namespace: "",
 			}})
+			Expect(err).ShouldNot(HaveOccurred())
+
 			instance, err := utils.GetAmazonCloudIntegration(ctx, cli)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -343,6 +346,7 @@ var _ = Describe("amazoncloudintegration controller tests", func() {
 				Name:      "amazon-cloud-integration",
 				Namespace: "",
 			}})
+			Expect(err).ShouldNot(HaveOccurred())
 			instance, err := utils.GetAmazonCloudIntegration(ctx, cli)
 			Expect(err).ShouldNot(HaveOccurred())
 

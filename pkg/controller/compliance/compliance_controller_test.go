@@ -626,6 +626,7 @@ var _ = Describe("Compliance controller tests", func() {
 				Name:      "compliance",
 				Namespace: "",
 			}})
+			Expect(err).ShouldNot(HaveOccurred())
 			instance, err := GetCompliance(ctx, r.client)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -648,6 +649,7 @@ var _ = Describe("Compliance controller tests", func() {
 				Name:      "compliance",
 				Namespace: "",
 			}})
+			Expect(err).ShouldNot(HaveOccurred())
 			instance, err := GetCompliance(ctx, r.client)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(instance.Status.Conditions).To(HaveLen(0))
@@ -688,6 +690,7 @@ var _ = Describe("Compliance controller tests", func() {
 				Name:      "compliance",
 				Namespace: "",
 			}})
+			Expect(err).ShouldNot(HaveOccurred())
 			instance, err := GetCompliance(ctx, r.client)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -746,6 +749,7 @@ var _ = Describe("Compliance controller tests", func() {
 				Name:      "compliance",
 				Namespace: "",
 			}})
+			Expect(err).ShouldNot(HaveOccurred())
 			instance, err := GetCompliance(ctx, r.client)
 			Expect(err).ShouldNot(HaveOccurred())
 

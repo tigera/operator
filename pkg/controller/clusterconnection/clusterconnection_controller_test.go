@@ -214,7 +214,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				Name:      "management-cluster-connection",
 				Namespace: "",
 			}})
-
+			Expect(err).ShouldNot(HaveOccurred())
 			instance, err := utils.GetManagementClusterConnection(ctx, c)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(instance.Status.Conditions).To(HaveLen(0))
@@ -241,7 +241,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				Name:      "management-cluster-connection",
 				Namespace: "",
 			}})
-
+			Expect(err).ShouldNot(HaveOccurred())
 			instance, err := utils.GetManagementClusterConnection(ctx, c)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -289,7 +289,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				Name:      "management-cluster-connection",
 				Namespace: "",
 			}})
-
+			Expect(err).ShouldNot(HaveOccurred())
 			instance, err := utils.GetManagementClusterConnection(ctx, c)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -348,7 +348,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				Name:      "management-cluster-connection",
 				Namespace: "",
 			}})
-
+			Expect(err).ShouldNot(HaveOccurred())
 			instance, err := utils.GetManagementClusterConnection(ctx, c)
 			Expect(err).ShouldNot(HaveOccurred())
 

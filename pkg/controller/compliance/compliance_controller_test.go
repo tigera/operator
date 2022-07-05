@@ -146,7 +146,7 @@ var _ = Describe("Compliance controller tests", func() {
 		Expect(c.Create(ctx, gwKeyPair.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 		// Apply the compliance CR to the fake cluster.
-		cr = &operatorv1.Compliance{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure", Generation: 3}}
+		cr = &operatorv1.Compliance{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}}
 		Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 
 		// mark that the watch for license key was successful

@@ -356,7 +356,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		// Fetch the Authentication spec. If present, we use to configure user authentication.
 		authenticationCR, err := utils.GetAuthentication(ctx, r.client)
 		if err != nil && !errors.IsNotFound(err) {
-			r.SetDegraded(operatorv1.ResourceNotFound, "Error querying Authentication", err, reqLogger)
+			r.SetDegraded(operatorv1.ResourceReadError, "Error querying Authentication", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 

@@ -344,7 +344,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 			common.OperatorNamespace(),
 			dns.GetServiceDNSNames(render.ComplianceServiceName, render.ComplianceNamespace, r.clusterDomain))
 		if err != nil {
-			r.SetDegraded(operatorv1.CertificateError, fmt.Sprintf("failed to retrieve / validate  %s", render.ComplianceServerCertSecret), err, reqLogger)
+			r.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("failed to retrieve / validate  %s", render.ComplianceServerCertSecret), err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}

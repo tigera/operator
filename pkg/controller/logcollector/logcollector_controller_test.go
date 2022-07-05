@@ -139,7 +139,7 @@ var _ = Describe("LogCollector controller tests", func() {
 
 			// Apply the logcollector CR to the fake cluster.
 			Expect(c.Create(ctx, &operatorv1.LogCollector{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure", Generation: 3}})).NotTo(HaveOccurred())
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
 
 			// mark that the watch for license key was successful
 			r.licenseAPIReady.MarkAsReady()

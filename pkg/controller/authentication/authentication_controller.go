@@ -237,7 +237,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	dnsNames := dns.GetServiceDNSNames(render.DexObjectName, render.DexNamespace, r.clusterDomain)
 	tlsKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.DexTLSSecretName, common.OperatorNamespace(), dnsNames)
 	if err != nil {
-		r.SetDegraded(oprv1.CertificateError, "Unable to get or create tls key pair", err, reqLogger)
+		r.SetDegraded(oprv1.ResourceReadError, "Unable to get or create tls key pair", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

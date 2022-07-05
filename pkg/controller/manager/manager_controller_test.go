@@ -386,7 +386,7 @@ var _ = Describe("Manager controller tests", func() {
 
 			Expect(c.Create(ctx, &operatorv1.Manager{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "tigera-secure", Generation: 3,
+					Name: "tigera-secure",
 				},
 			})).NotTo(HaveOccurred())
 

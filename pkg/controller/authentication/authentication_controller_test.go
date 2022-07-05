@@ -91,7 +91,7 @@ var _ = Describe("authentication controller tests", func() {
 				"clientSecret": []byte("my-secret"),
 			}}
 		auth = &operatorv1.Authentication{
-			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure", Generation: 3},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 			Spec: operatorv1.AuthenticationSpec{
 				ManagerDomain: "https://example.com",
 			},

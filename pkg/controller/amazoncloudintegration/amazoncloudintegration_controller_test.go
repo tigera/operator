@@ -99,7 +99,7 @@ var _ = Describe("amazoncloudintegration controller tests", func() {
 		})).To(BeNil())
 		// Apply prerequisites for the basic reconcile to succeed.
 		Expect(cli.Create(ctx, &operatorv1.AmazonCloudIntegration{
-			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure", Generation: 3},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 			Spec: operatorv1.AmazonCloudIntegrationSpec{
 				NodeSecurityGroupIDs:         []string{"sg-nodesgid"},
 				PodSecurityGroupID:           "sg-podsgid",

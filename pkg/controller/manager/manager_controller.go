@@ -296,7 +296,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		common.OperatorNamespace(),
 		svcDNSNames)
 	if err != nil {
-		r.SetDegraded(operatorv1.CertificateError, "Error getting or creating manager TLS certificate", err, reqLogger)
+		r.SetDegraded(operatorv1.ResourceReadError, "Error getting or creating manager TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

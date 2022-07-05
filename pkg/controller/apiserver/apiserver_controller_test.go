@@ -94,7 +94,7 @@ var _ = Describe("apiserver controller tests", func() {
 		}
 		// Apply prerequisites for the basic reconcile to succeed.
 		Expect(cli.Create(ctx, &operatorv1.APIServer{
-			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure", Generation: 2},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 		})).ToNot(HaveOccurred())
 		cryptoCA, err := tls.MakeCA("byo-ca")
 		Expect(err).NotTo(HaveOccurred())

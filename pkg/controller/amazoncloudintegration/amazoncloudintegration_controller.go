@@ -231,7 +231,7 @@ func (r *ReconcileAmazonCloudIntegration) Reconcile(ctx context.Context, request
 	}
 
 	if err := handler.CreateOrUpdateOrDelete(context.Background(), component, r.status); err != nil {
-		r.SetDegraded(operatorv1.ResourceCreateError, "Error creating / updating resource", err, reqLogger)
+		r.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

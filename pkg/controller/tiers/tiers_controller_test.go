@@ -199,35 +199,4 @@ var _ = Describe("tier controller tests", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 		mockStatus.AssertExpectations(GinkgoT())
 	})
-
-	It("should require license with egress access control feature for domain-based management cluster addresses", func() {
-		license := &v3.LicenseKey{
-			ObjectMeta: metav1.ObjectMeta{Name: "default"},
-			Status: v3.LicenseKeyStatus{
-				Features: []string{
-					common.TiersFeature,
-				},
-			},
-		}
-		managementClusterConnection := &operatorv1.ManagementClusterConnection{
-			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-			Spec:       operatorv1.ManagementClusterConnectionSpec{ManagementClusterAddr: "mydomain.io:443"},
-		}
-		Expect(c.Delete(ctx, &v3.LicenseKey{ObjectMeta: license.ObjectMeta}))
-		Expect(c.Create(ctx, license)).ToNot(HaveOccurred())
-		Expect(c.Create(ctx, managementClusterConnection)).NotTo(HaveOccurred())
-		mockStatus = &status.MockStatus{}
-		r = ReconcileTiers{
-			Client:             c,
-			scheme:             scheme,
-			provider:           operatorv1.ProviderNone,
-			status:             mockStatus,
-			tierWatchReady:     readyFlag,
-			policyWatchesReady: readyFlag,
-		}
-		mockStatus.On("SetDegraded", "Feature is not active", "License does not support feature: egress-access-control").Return()
-		_, err := r.Reconcile(ctx, reconcile.Request{})
-		Expect(err).ShouldNot(HaveOccurred())
-		mockStatus.AssertExpectations(GinkgoT())
-	})
 })

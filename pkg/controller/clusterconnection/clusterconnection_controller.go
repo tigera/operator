@@ -17,6 +17,8 @@ package clusterconnection
 import (
 	"context"
 	"fmt"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"net"
 	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -56,7 +58,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	statusManager := status.New(mgr.GetClient(), "management-cluster-connection", opts.KubernetesVersion)
 
 	// Create the reconciler
-	reconciler := newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider, opts)
+	policyWatchesReady := &utils.ReadyFlag{}
+	reconciler := newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider, policyWatchesReady, opts)
 
 	// Create a new controller
 	controller, err := controller.New(controllerName, mgr, controller.Options{Reconciler: reconciler})
@@ -68,13 +71,14 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, p operatorv1.Provider, opts options.AddOptions) *ReconcileConnection {
+func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, p operatorv1.Provider, policyWatchesReady *utils.ReadyFlag, opts options.AddOptions) *ReconcileConnection {
 	c := &ReconcileConnection{
-		Client:        cli,
-		Scheme:        schema,
-		Provider:      p,
-		status:        statusMgr,
-		clusterDomain: opts.ClusterDomain,
+		Client:             cli,
+		Scheme:             schema,
+		Provider:           p,
+		status:             statusMgr,
+		clusterDomain:      opts.ClusterDomain,
+		policyWatchesReady: policyWatchesReady,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
@@ -128,11 +132,12 @@ var _ reconcile.Reconciler = &ReconcileConnection{}
 
 // ReconcileConnection reconciles a ManagementClusterConnection object
 type ReconcileConnection struct {
-	Client        client.Client
-	Scheme        *runtime.Scheme
-	Provider      operatorv1.Provider
-	status        status.StatusManager
-	clusterDomain string
+	Client             client.Client
+	Scheme             *runtime.Scheme
+	Provider           operatorv1.Provider
+	status             status.StatusManager
+	clusterDomain      string
+	policyWatchesReady *utils.ReadyFlag
 }
 
 // Reconcile reads that state of the cluster for a ManagementClusterConnection object and makes changes based on the
@@ -216,14 +221,59 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		trustedCertBundle.AddCertificates(secret)
 	}
 
+	// In managed clusters, successful reconciliation of non-NetworkPolicy resources in the clusterconnection controller
+	// ensures that NetworkPolicy is reconcilable (by enabling* the creation of containing Tier and License). Therefore,
+	// to prevent a chicken-and-egg scenario, we only reconcile non-NetworkPolicy resources once we can confirm that all
+	// requirements to reconcile NetworkPolicy have been met.
+	//
+	// * In managed clusters, the License can only be pushed once Guardian has been deployed, and (as always) the Tier
+	//   can only be created once the License is available.
+	includeNetworkPolicy := true
+	var egressAccessControlFeatureRequired bool
+	var networkPolicyIsReconcilable bool
+	if clusterAddrHasDomain, err := managementClusterAddrHasDomain(managementClusterConnection); err == nil && clusterAddrHasDomain {
+		egressAccessControlFeatureRequired = true
+		networkPolicyIsReconcilable = utils.IsV3NetworkPolicyReconcilable(ctx, r.Client, networkpolicy.TigeraComponentTierName, common.EgressAccessControlFeature)
+	} else {
+		egressAccessControlFeatureRequired = false
+		networkPolicyIsReconcilable = utils.IsV3NetworkPolicyReconcilable(ctx, r.Client, networkpolicy.TigeraComponentTierName)
+	}
+
+	if networkPolicyIsReconcilable {
+		if egressAccessControlFeatureRequired {
+			license, err := utils.FetchLicenseKey(ctx, r.Client)
+			if err != nil {
+				if k8serrors.IsNotFound(err) {
+					r.status.SetDegraded("License not found", err.Error())
+					return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+				}
+				r.status.SetDegraded("Error querying license", err.Error())
+				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			}
+
+			if !utils.IsFeatureActive(license, common.EgressAccessControlFeature) {
+				r.status.SetDegraded("Feature is not active", "License does not support feature: egress-access-control")
+				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			}
+		}
+
+		if !r.policyWatchesReady.IsReady() {
+			r.status.SetDegraded("Waiting for NetworkPolicy watches to be established", "")
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+	} else {
+		includeNetworkPolicy = false
+	}
+
 	ch := utils.NewComponentHandler(log, r.Client, r.Scheme, managementClusterConnection)
 	guardianCfg := &render.GuardianConfiguration{
-		URL:               managementClusterConnection.Spec.ManagementClusterAddr,
-		PullSecrets:       pullSecrets,
-		Openshift:         r.Provider == operatorv1.ProviderOpenShift,
-		Installation:      instl,
-		TunnelSecret:      tunnelSecret,
-		TrustedCertBundle: trustedCertBundle,
+		URL:                  managementClusterConnection.Spec.ManagementClusterAddr,
+		PullSecrets:          pullSecrets,
+		Openshift:            r.Provider == operatorv1.ProviderOpenShift,
+		Installation:         instl,
+		TunnelSecret:         tunnelSecret,
+		TrustedCertBundle:    trustedCertBundle,
+		IncludeNetworkPolicy: includeNetworkPolicy,
 	}
 	component := render.Guardian(guardianCfg)
 
@@ -240,6 +290,15 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	r.status.ClearDegraded()
 
-	//We should create the Guardian deployment.
+	// We should create the Guardian deployment.
 	return result, nil
+}
+
+func managementClusterAddrHasDomain(connection *operatorv1.ManagementClusterConnection) (bool, error) {
+	host, _, err := net.SplitHostPort(connection.Spec.ManagementClusterAddr)
+	if err != nil {
+		return false, err
+	}
+
+	return net.ParseIP(host) == nil, nil
 }

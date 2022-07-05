@@ -19,12 +19,9 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/render/tiers"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -33,28 +30,20 @@ var _ = Describe("Tiers rendering tests", func() {
 
 	clusterDNSPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/dns.json")
 	clusterDNSPolicyForOCP := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/dns_ocp.json")
-	guardianPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/guardian.json")
-	guardianPolicyForOCP := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/guardian_ocp.json")
 
 	BeforeEach(func() {
 		// Establish default config for test cases to override.
-		cfg = &tiers.Config{
-			Openshift:                   false,
-			ManagementClusterConnection: nil,
-		}
+		cfg = &tiers.Config{Openshift: false}
 	})
 
 	Context("allow-tigera rendering", func() {
 		policyNames := []types.NamespacedName{
 			{Name: "allow-tigera.cluster-dns", Namespace: "kube-system"},
 			{Name: "allow-tigera.cluster-dns", Namespace: "openshift-dns"},
-			{Name: "allow-tigera.guardian-access", Namespace: "tigera-guardian"},
 		}
 
 		getExpectedPolicy := func(name types.NamespacedName, scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
-			if name.Name == "allow-tigera.guardian-access" && scenario.ManagedCluster {
-				return testutils.SelectPolicyByProvider(scenario, guardianPolicy, guardianPolicyForOCP)
-			} else if name.Name == "allow-tigera.cluster-dns" &&
+			if name.Name == "allow-tigera.cluster-dns" &&
 				((scenario.Openshift && name.Namespace == "openshift-dns") || (!scenario.Openshift && name.Namespace == "kube-system")) {
 				return testutils.SelectPolicyByProvider(scenario, clusterDNSPolicy, clusterDNSPolicyForOCP)
 			}
@@ -65,12 +54,6 @@ var _ = Describe("Tiers rendering tests", func() {
 		DescribeTable("should render allow-tigera policy",
 			func(scenario testutils.AllowTigeraScenario) {
 				cfg.Openshift = scenario.Openshift
-				if scenario.ManagedCluster {
-					cfg.ManagementClusterConnection = &operatorv1.ManagementClusterConnection{
-						ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-						Spec:       operatorv1.ManagementClusterConnectionSpec{ManagementClusterAddr: "127.0.0.1:1234"},
-					}
-				}
 				component := tiers.Tiers(cfg)
 				resourcesToCreate, resourcesToDelete := component.Objects()
 
@@ -101,23 +84,5 @@ var _ = Describe("Tiers rendering tests", func() {
 			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
 			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
 		)
-
-		// The test matrix above validates against an IP-based management cluster address.
-		// Validate policy adaptation for domain-based management cluster address here.
-		It("should adapt Guardian policy if ManagementClusterAddr is domain-based", func() {
-			component := tiers.Tiers(&tiers.Config{
-				Openshift: false,
-				ManagementClusterConnection: &operatorv1.ManagementClusterConnection{
-					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-					Spec:       operatorv1.ManagementClusterConnectionSpec{ManagementClusterAddr: "mydomain.io:8080"},
-				},
-			})
-			resourcesToCreate, _ := component.Objects()
-			policyName := types.NamespacedName{Name: "allow-tigera.guardian-access", Namespace: "tigera-guardian"}
-			policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resourcesToCreate)
-			managementClusterEgressRule := policy.Spec.Egress[4]
-			Expect(managementClusterEgressRule.Destination.Domains).To(Equal([]string{"mydomain.io"}))
-			Expect(managementClusterEgressRule.Destination.Ports).To(Equal(networkpolicy.Ports(8080)))
-		})
 	})
 })

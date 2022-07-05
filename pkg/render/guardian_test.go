@@ -16,7 +16,12 @@ package render_test
 
 import (
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/testutils"
+	"k8s.io/apimachinery/pkg/types"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
@@ -39,8 +44,10 @@ var _ = Describe("Rendering tests", func() {
 	var g render.Component
 	var resources []client.Object
 
-	var renderGuardian = func(i operatorv1.InstallationSpec) {
-		addr := "127.0.0.1:1234"
+	guardianPolicy := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/guardian.json")
+	guardianPolicyForOCP := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/guardian_ocp.json")
+
+	var renderGuardian = func(i operatorv1.InstallationSpec, includeNetworkPolicy bool, addr string, openshift bool) {
 		secret := &corev1.Secret{
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
@@ -68,9 +75,11 @@ var _ = Describe("Rendering tests", func() {
 					Namespace: common.OperatorNamespace(),
 				},
 			}},
-			Installation:      &i,
-			TunnelSecret:      secret,
-			TrustedCertBundle: bundle,
+			Installation:         &i,
+			TunnelSecret:         secret,
+			TrustedCertBundle:    bundle,
+			Openshift:            openshift,
+			IncludeNetworkPolicy: includeNetworkPolicy,
 		}
 		g = render.Guardian(cfg)
 		Expect(g.ResolveImages(nil)).To(BeNil())
@@ -78,7 +87,7 @@ var _ = Describe("Rendering tests", func() {
 	}
 
 	BeforeEach(func() {
-		renderGuardian(operatorv1.InstallationSpec{Registry: "my-reg/"})
+		renderGuardian(operatorv1.InstallationSpec{Registry: "my-reg/"}, true, "127.0.0.1:1234", false)
 	})
 
 	It("should render all resources for a managed cluster", func() {
@@ -90,6 +99,8 @@ var _ = Describe("Rendering tests", func() {
 			kind    string
 		}{
 			{name: render.GuardianNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.GuardianPolicyName, ns: render.GuardianNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: networkpolicy.TigeraComponentDefaultDenyPolicyName, ns: render.GuardianNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: "pull-secret", ns: render.GuardianNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: render.GuardianServiceAccountName, ns: render.GuardianNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: render.GuardianClusterRoleName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
@@ -122,10 +133,55 @@ var _ = Describe("Rendering tests", func() {
 			Operator: corev1.TolerationOpEqual,
 			Value:    "bar",
 		}
-		renderGuardian(operatorv1.InstallationSpec{
-			ControlPlaneTolerations: []corev1.Toleration{t},
-		})
+		renderGuardian(
+			operatorv1.InstallationSpec{
+				ControlPlaneTolerations: []corev1.Toleration{t},
+			},
+			true,
+			"127.0.0.1:1234",
+			false,
+		)
 		deployment := rtest.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(deployment.Spec.Template.Spec.Tolerations).Should(ContainElements(t, rmeta.TolerateCriticalAddonsOnly, rmeta.TolerateMaster))
+	})
+
+	Context("allow-tigera rendering", func() {
+		policyName := types.NamespacedName{Name: "allow-tigera.guardian-access", Namespace: "tigera-guardian"}
+
+		getExpectedPolicy := func(name types.NamespacedName, scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
+			if name.Name == "allow-tigera.guardian-access" && scenario.ManagedCluster {
+				return testutils.SelectPolicyByProvider(scenario, guardianPolicy, guardianPolicyForOCP)
+			}
+
+			return nil
+		}
+
+		DescribeTable("should render allow-tigera policy",
+			func(scenario testutils.AllowTigeraScenario) {
+				// Validate policy is rendered when policy flag is set.
+				renderGuardian(operatorv1.InstallationSpec{Registry: "my-reg/"}, true, "127.0.0.1:1234", scenario.Openshift)
+				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+				expectedPolicy := getExpectedPolicy(policyName, scenario)
+				Expect(policy).To(Equal(expectedPolicy))
+
+				// Validate policy is not rendered when policy flag is not set.
+				renderGuardian(operatorv1.InstallationSpec{Registry: "my-reg/"}, false, "127.0.0.1:1234", scenario.Openshift)
+				for _, obj := range resources {
+					Expect(obj.GetObjectKind().GroupVersionKind().Kind).ToNot(Equal("NetworkPolicy"))
+				}
+			},
+			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
+			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
+		)
+
+		// The test matrix above validates against an IP-based management cluster address.
+		// Validate policy adaptation for domain-based management cluster address here.
+		It("should adapt Guardian policy if ManagementClusterAddr is domain-based", func() {
+			renderGuardian(operatorv1.InstallationSpec{Registry: "my-reg/"}, true, "mydomain.io:8080", false)
+			policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+			managementClusterEgressRule := policy.Spec.Egress[4]
+			Expect(managementClusterEgressRule.Destination.Domains).To(Equal([]string{"mydomain.io"}))
+			Expect(managementClusterEgressRule.Destination.Ports).To(Equal(networkpolicy.Ports(8080)))
+		})
 	})
 })

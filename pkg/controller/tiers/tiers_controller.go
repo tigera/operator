@@ -17,7 +17,6 @@ package tiers
 import (
 	"context"
 	"fmt"
-	"net"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -25,7 +24,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/tiers"
 	"k8s.io/apimachinery/pkg/types"
@@ -42,22 +40,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// The Tiers controller reconciles Tier and NetworkPolicy resources using the v3 API. Specifically, this controller
-// reconciles Tier/NetworkPolicy resources that do not belong in a specific component controller, or NetworkPolicy
-// resources that cannot be placed in the appropriate component controller due to dependency ordering.
-//
-// Regarding dependency ordering:
-// Resources can only be reconciled using the v3 API once the Tigera API server and an enterprise license are available.
-// The Tigera API server is available once the core/installation and apiserver components are ready.
-// The enterprise license is available once:
-// - A cluster adminstrator has provisioned the license (for management/standalone clusters),
-//   or
-// - Once Guardian is available (for managed clusters). This enables the management cluster to propagate the license.
-//   - Guardian itself can only become available once the apiserver and monitor components are ready.
-//
-// This means that components cannot reconcile NetworkPolicy into a Tier before core, apiserver, monitor, and guardian are available.
-// Therefore, the policies for core, apiserver, monitor and guardian components are reconciled in this controller since the necessary
-// dependencies for policy reconciliation via v3 API will not be met until after those controllers have completed reconciling.
+// The Tiers controller reconciles Tiers and NetworkPolicies that are shared across components or do not directly
+// relate to any particular component.
 
 var log = logf.Log.WithName("controller_tiers")
 
@@ -87,10 +71,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, tierWatchReady)
 
-	policyNames := []types.NamespacedName{
-		{Name: tiers.GuardianPolicyName, Namespace: render.GuardianNamespace},
-		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: common.TigeraPrometheusNamespace},
-	}
+	policyNames := []types.NamespacedName{}
 	if opts.DetectedProvider == operatorv1.ProviderOpenShift {
 		policyNames = append(policyNames, types.NamespacedName{Name: tiers.ClusterDNSPolicyName, Namespace: "openshift-dns"})
 	} else {
@@ -174,25 +155,7 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
-	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.Client)
-	if err != nil {
-		log.Error(err, "Failed to read ManagementClusterConnection")
-		r.status.SetDegraded("Failed to read ManagementClusterConnection", err.Error())
-		return reconcile.Result{}, err
-	}
-	if managementClusterConnection != nil {
-		// If the management cluster address contains a domain, policy will be created to allow egress to that domain.
-		egressAccessControlFeatureRequired, err := managementClusterAddrHasDomain(managementClusterConnection)
-		if err == nil && egressAccessControlFeatureRequired && !utils.IsFeatureActive(license, common.EgressAccessControlFeature) {
-			r.status.SetDegraded("Feature is not active", "License does not support feature: egress-access-control")
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-		}
-	}
-
-	component := tiers.Tiers(&tiers.Config{
-		Openshift:                   r.provider == operatorv1.ProviderOpenShift,
-		ManagementClusterConnection: managementClusterConnection,
-	})
+	component := tiers.Tiers(&tiers.Config{Openshift: r.provider == operatorv1.ProviderOpenShift})
 
 	componentHandler := utils.NewComponentHandler(log, r.Client, r.scheme, nil)
 	err = componentHandler.CreateOrUpdateOrDelete(ctx, component, nil)
@@ -202,13 +165,4 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 
 	return reconcile.Result{}, nil
-}
-
-func managementClusterAddrHasDomain(connection *operatorv1.ManagementClusterConnection) (bool, error) {
-	host, _, err := net.SplitHostPort(connection.Spec.ManagementClusterAddr)
-	if err != nil {
-		return false, err
-	}
-
-	return net.ParseIP(host) == nil, nil
 }

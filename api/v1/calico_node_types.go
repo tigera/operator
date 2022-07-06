@@ -27,7 +27,8 @@ type CalicoNodeContainer struct {
 	Name string `json:"name"`
 
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
-	Resources *v1.ResourceRequirements `json:"resources"`
+	// +optional
+	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 // CalicoNodeInitContainer is a calico-node DaemonSet init container.
@@ -37,7 +38,8 @@ type CalicoNodeInitContainer struct {
 	Name string `json:"name"`
 
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
-	Resources *v1.ResourceRequirements `json:"resources"`
+	// +optional
+	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 // CalicoNodeDaemonSetPodSpec is the calico-node DaemonSet's PodSpec.

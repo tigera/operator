@@ -1,8 +1,18 @@
 version: v1.0
-name: Initial Pipeline
+name: Operator CI
+
+execution_time_limit:
+  hours: 4
+
+auto_cancel:
+  running:
+    when: "branch != 'master'"
+  queued:
+    when: "branch != 'master'"
+
 agent:
   machine:
-    type: e1-standard-8
+    type: e1-standard-2
     os_image: ubuntu1804
 global_job_config:
   secrets:
@@ -11,52 +21,116 @@ global_job_config:
   - name: private-repo
   prologue:
     commands:
-    - echo $DOCKERHUB_PASSWORD | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
-    # Correct permissions since they are too open by default:
-    - chmod 0600 ~/.keys/*
-    # Add the key to the ssh agent:
-    - ssh-add ~/.keys/*
-    # Free up some space
-    - sudo rm -rf ~/.kiex ~/.phpbrew ~/.rbenv ~/.nvm ~/.kerl
-    # Semaphore mounts a copy-on-write FS as /var/lib/docker in order to provide a pre-loaded cache of
-    # some images. However, the cache is not useful to us and the copy-on-write FS is a big problem given
-    # how much we churn docker containers during testing.  Disable it.
-    - sudo systemctl stop docker
-    - sudo umount /var/lib/docker && sudo killall qemu-nbd || true
-    - sudo systemctl start docker
+      - echo $DOCKERHUB_PASSWORD | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+      # Correct permissions since they are too open by default:
+      - chmod 0600 ~/.keys/*
+      # Add the key to the ssh agent:
+      - ssh-add ~/.keys/*
+      # Free up some space
+      - sudo rm -rf ~/.kiex ~/.phpbrew ~/.rbenv ~/.nvm ~/.kerl
+      # Semaphore mounts a copy-on-write FS as /var/lib/docker in order to provide a pre-loaded cache of
+      # some images. However, the cache is not useful to us and the copy-on-write FS is a big problem given
+      # how much we churn docker containers during testing.  Disable it.
+      - sudo systemctl stop docker
+      - sudo umount /var/lib/docker && sudo killall qemu-nbd || true
+      - sudo systemctl start docker
+      - checkout
+      # Note that the 'cache restore' commands require that the "Build" block has been run. The "Build" block is what populates
+      # the cache, therefore every block that requires the use of these cached items must make the "Build" block one of
+      # it's dependencies.
+      - 'cache restore go-pkg-cache-amd64-${SEMAPHORE_GIT_SHA}'
+      - 'cache restore go-mod-cache-amd64-${SEMAPHORE_GIT_SHA}'
+      - 'cache restore bin-amd64-${SEMAPHORE_GIT_SHA}'
 
 blocks:
-  - name: Build
+  - name: 'Build amd64'
+    dependencies: []
     task:
       jobs:
-        - name: Build
+        - name: Build amd64
+          execution_time_limit:
+            minutes: 45
           commands:
-            - export BRANCH_NAME=$SEMAPHORE_GIT_BRANCH
-            - make ci
-            - >-
-              if [ -z "${SEMAPHORE_GIT_PR_NUMBER}" ]; then 
-                make cd CONFIRM=true;
-              fi
-            - >-
-              if [ -z "${SEMAPHORE_GIT_PR_NUMBER}" ]; then
-                make maybe-build-release;
-              fi
-      secrets:
-        - name: quay-robot-semaphore_v2
-        - name: operator-redhat-connect
+            - make build
+            - make dirty-check
+            # Store in cache for other builds in this run
+            - 'cache store bin-amd64-${SEMAPHORE_GIT_SHA} build/_output/bin'
+            - 'cache store go-pkg-cache-amd64-${SEMAPHORE_GIT_SHA} .go-pkg-cache'
+            - 'cache store go-mod-cache-amd64-${SEMAPHORE_GIT_SHA} ${HOME}/go/pkg/mod/cache'
+  - name: 'Build / Cache arm64 and ppc64le'
+    dependencies: [ "Build amd64" ]
+    task:
       prologue:
         commands:
-          - checkout
-          - >-
-            if [[ -v SEMAPHORE_GIT_PR_NUMBER ]]; then
-              unset QUAY_USERNAME QUAY_TOKEN; docker logout; docker logout quay.io;
-            else
-              docker login -u="$QUAY_USERNAME" -p="$QUAY_TOKEN" quay.io;
-            fi
-          - cache restore go-pkg-cache
-          - cache restore go-mod-cache
-      epilogue:
-        on_pass:
+          - cache restore go-pkg-cache-amd64-${SEMAPHORE_GIT_SHA}
+          - cache restore go-mod-cache-amd64-${SEMAPHORE_GIT_SHA}
+      jobs:
+        - name: Build arm64
+          execution_time_limit:
+            minutes: 45
           commands:
-            - cache store go-pkg-cache .go-pkg-cache
-            - 'cache store go-mod-cache ${HOME}/go/pkg/mod/cache'
+            - make register build ARCH=arm64
+            # Store in cache for other builds in this run
+            - 'cache store bin-arm64-${SEMAPHORE_GIT_SHA} build/_output/bin'
+            - 'cache store go-pkg-cache-arm64-${SEMAPHORE_GIT_SHA} .go-pkg-cache'
+            - 'cache store go-mod-cache-arm64-${SEMAPHORE_GIT_SHA} ${HOME}/go/pkg/mod/cache'
+        - name: Build ppc64le
+          execution_time_limit:
+            minutes: 45
+          commands:
+            - make register build ARCH=ppc64le
+            # Store in cache for other builds in this run
+            - 'cache store bin-ppc64le-${SEMAPHORE_GIT_SHA} build/_output/bin'
+            - 'cache store go-pkg-cache-ppc64le-${SEMAPHORE_GIT_SHA} .go-pkg-cache'
+            - 'cache store go-mod-cache-ppc64le-${SEMAPHORE_GIT_SHA} ${HOME}/go/pkg/mod/cache'
+  - name: 'Static / File Generation Checks'
+    dependencies: [ "Build amd64" ]
+    task:
+      jobs:
+        - name: Static / File Generation Checks, Vet
+          execution_time_limit:
+            minutes: 15
+          commands:
+            - make format-check validate-gen-versions fmt test-crds
+            - make dirty-check
+            - make vet
+
+  - name: 'UT'
+    dependencies: [ "Build amd64" ]
+    task:
+      jobs:
+        - name: Run UTs
+          execution_time_limit:
+            minutes: 30
+          commands:
+            - make ut
+            - make dirty-check
+
+  - name: 'FV'
+    dependencies: [ "Build amd64" ]
+    task:
+      agent:
+        machine:
+          type: e1-standard-4
+          os_image: ubuntu1804
+      jobs:
+        - name: Run FVs
+          execution_time_limit:
+            minutes: 30
+          commands:
+            - make fv
+            - make dirty-check
+
+promotions:
+  - name: Push Images
+    pipeline_file: push_images.yml
+    auto_promote:
+      when: "branch =~ 'master|release-.*'"
+  - name: Clean Up
+    pipeline_file: clean_up.yml
+    # Don't auto promote if this is master or a release branch so the cache is available for the Push Images pipeline.
+    auto_promote:
+      when: "(branch !~ 'master|release-.*') OR (result != 'passed')"
+  - name: Clear Cache
+    # Never auto promote this, this is only to give an easy way for people to clear the cache.
+    pipeline_file: clear_cache.yml

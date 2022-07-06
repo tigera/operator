@@ -20,20 +20,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-// Metadata contains the standard Kubernetes labels and annotations fields.
-type Metadata struct {
-	// Labels is a map of string keys and values that may match replicaset and
-	// service selectors. Each of these key/value pairs are added to the
-	// object's labels provided the key does not already exist in the object's labels.
-	// +optional
-	Labels map[string]string `json:"labels,omitempty"`
-	// Annotations is a map of arbitrary non-identifying metadata. Each of these
-	// key/value pairs are added to the object's annotations provided the key does not
-	// already exist in the object's labels.
-	// +optional
-	Annotations map[string]string `json:"annotations,omitempty"`
-}
-
 // CalicoNodeContainer is a calico-node DaemonSet container.
 type CalicoNodeContainer struct {
 	// Name is an enum which identifies the calico-node DaemonSet container by name.

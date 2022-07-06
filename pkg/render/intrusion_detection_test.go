@@ -434,7 +434,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		))
 
 		clusterRole := rtest.GetResource(resources, "intrusion-detection-controller", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(clusterRole.Rules).NotTo(ConsistOf([]rbacv1.PolicyRule{
+		Expect(clusterRole.Rules).NotTo(ContainElements([]rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},

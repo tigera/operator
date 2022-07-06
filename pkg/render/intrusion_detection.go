@@ -392,7 +392,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 				rbacv1.PolicyRule{
 					APIGroups: []string{"apps"},
 					Resources: []string{"deployments/finalizers"},
-					Verbs:     []string{"*"},
+					Verbs:     []string{"update"},
 				})
 		}
 

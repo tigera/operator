@@ -229,6 +229,21 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		}))
 	})
 
+	It("should render finalizers rbac resources in the IDS ClusterRole for an Openshift management/standalone cluster", func() {
+		cfg.Openshift = openshift
+		cfg.ManagedCluster = false
+		component := render.IntrusionDetection(cfg)
+		resources, _ := component.Objects()
+
+		idsControllerRole := rtest.GetResource(resources, render.IntrusionDetectionName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+
+		Expect(idsControllerRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"apps"},
+			Resources: []string{"deployments/finalizers"},
+			Verbs:     []string{"update"},
+		}))
+	})
+
 	It("should render all resources for a configuration that includes event forwarding turned on (Syslog)", func() {
 		// Initialize a default LogCollector instance to use.
 		cfg.LogCollector = &operatorv1.LogCollector{}

@@ -27,6 +27,9 @@ type CalicoNodeContainer struct {
 	Name string `json:"name"`
 
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
+	// If specified, this overrides the named calico-node DaemonSet container's resources.
+	// If omitted, the calico-node DaemonSet will use its default value for this container's resources.
+	// If used in conjunction with the deprecated ComponentResources, then this value takes precedence.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
@@ -38,6 +41,9 @@ type CalicoNodeInitContainer struct {
 	Name string `json:"name"`
 
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
+	// If specified, this overrides the named calico-node DaemonSet init container's resources.
+	// If omitted, the calico-node DaemonSet will use its default value for this container's resources.
+	// If used in conjunction with the deprecated ComponentResources, then this value takes precedence.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
@@ -45,22 +51,32 @@ type CalicoNodeInitContainer struct {
 // CalicoNodeDaemonSetPodSpec is the calico-node DaemonSet's PodSpec.
 type CalicoNodeDaemonSetPodSpec struct {
 	// InitContainers is a list of calico-node init containers.
+	// If specified, this overrides the specified calico-node DaemonSet init containers.
+	// If omitted, the calico-node DaemonSet will use its default values for its init containers.
 	// +optional
 	InitContainers []CalicoNodeInitContainer `json:"initContainers,omitempty"`
 
 	// Containers is a list of calico-node containers.
+	// If specified, this overrides the specified calico-node DaemonSet containers.
+	// If omitted, the calico-node DaemonSet will use its default values for its containers.
 	// +optional
 	Containers []CalicoNodeContainer `json:"containers,omitempty"`
 
 	// Affinity is a group of affinity scheduling rules for the calico-node pods.
+	// If specified, this overrides any affinity that may be set on the calico-node DaemonSet.
+	// If omitted, the calico-node DaemonSet will use its default value for affinity.
 	// +optional
 	Affinity *v1.Affinity `json:"affinity,omitempty"`
 
 	// NodeSelector is the calico-node pod's scheduling constraints.
+	// If specified, this overrides any nodeSelector that may be set on the calico-node DaemonSet.
+	// If omitted, the calico-node DaemonSet will use its default value for nodeSelector.
 	// +optional
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 
 	// Tolerations is the calico-node pod's tolerations.
+	// If specified, this overrides any tolerations that may be set on the calico-node DaemonSet.
+	// If omitted, the calico-node DaemonSet will use its default value for tolerations.
 	// +optional
 	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
 }
@@ -91,9 +107,9 @@ type CalicoNodeDaemonSet struct {
 // CalicoNodeDaemonSetSpec defines configuration for the calico-node DaemonSet.
 type CalicoNodeDaemonSetSpec struct {
 	// MinReadySeconds is the minimum number of seconds for which a newly created DaemonSet pod should
-	// be ready without any of its container crashing, for it to be considered
-	// available. Defaults to 0 (pod will be considered available as soon as it
-	// is ready).
+	// be ready without any of its container crashing, for it to be considered available.
+	// If specified, this overrides any minReadySeconds value that may be set on the calico-node DaemonSet.
+	// If omitted, the calico-node DaemonSet will use its default value for minReadySeconds.
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=2147483647

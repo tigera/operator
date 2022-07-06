@@ -25,6 +25,7 @@ type CalicoNodeContainer struct {
 	// Name is an enum which identifies the calico-node DaemonSet container by name.
 	// +kubebuilder:validation:Enum=calico-node
 	Name string `json:"name"`
+
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
 	Resources *v1.ResourceRequirements `json:"resources"`
 }
@@ -34,6 +35,7 @@ type CalicoNodeInitContainer struct {
 	// Name is an enum which identifies the calico-node DaemonSet init container by name.
 	// +kubebuilder:validation:Enum=install-cni;hostpath-init;flexvol-driver;mount-bpffs;node-certs-key-cert-provisioner;calico-node-prometheus-server-tls-key-cert-provisioner
 	Name string `json:"name"`
+
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
 	Resources *v1.ResourceRequirements `json:"resources"`
 }
@@ -43,15 +45,19 @@ type CalicoNodeDaemonSetPodSpec struct {
 	// InitContainers is a list of calico-node init containers.
 	// +optional
 	InitContainers []CalicoNodeInitContainer `json:"initContainers,omitempty"`
+
 	// Containers is a list of calico-node containers.
 	// +optional
 	Containers []CalicoNodeContainer `json:"containers,omitempty"`
+
 	// Affinity is a group of affinity scheduling rules for the calico-node pods.
 	// +optional
 	Affinity *v1.Affinity `json:"affinity,omitempty"`
+
 	// NodeSelector is the calico-node pod's scheduling constraints.
 	// +optional
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
 	// Tolerations is the calico-node pod's tolerations.
 	// +optional
 	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
@@ -63,6 +69,7 @@ type CalicoNodeDaemonSetPodTemplateSpec struct {
 	// the pod's metadata.
 	// +optional
 	Metadata *Metadata `json:"metadata,omitempty"`
+
 	// Spec is the calico-node DaemonSet's PodSpec.
 	// +optional
 	Spec *CalicoNodeDaemonSetPodSpec `json:"spec,omitempty"`
@@ -73,6 +80,7 @@ type CalicoNodeDaemonSet struct {
 	// Metadata is a subset of a Kubernetes object's metadata that is added to the DaemonSet.
 	// +optional
 	Metadata *Metadata `json:"metadata,omitempty"`
+
 	// Spec is the specification of the calico-node DaemonSet.
 	// +optional
 	Spec *CalicoNodeDaemonSetSpec `json:"spec,omitempty"`
@@ -88,6 +96,7 @@ type CalicoNodeDaemonSetSpec struct {
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=2147483647
 	MinReadySeconds *int32 `json:"minReadySeconds,omitempty"`
+
 	// Template describes the calico-node DaemonSet pod that will be created.
 	// +optional
 	Template *CalicoNodeDaemonSetPodTemplateSpec `json:"template,omitempty"`

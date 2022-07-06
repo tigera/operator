@@ -165,17 +165,24 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 
 		clusterRole := rtest.GetResource(resources, "intrusion-detection-controller", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 
-		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"managedclusters"},
-			Verbs:     []string{"watch", "list", "get"},
-		}))
-
-		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
-			APIGroups: []string{"authentication.k8s.io"},
-			Resources: []string{"tokenreviews"},
-			Verbs:     []string{"create"},
-		}))
+		Expect(clusterRole.Rules).To(ContainElements(
+			rbacv1.PolicyRule{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs:     []string{"watch", "list", "get"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"authentication.k8s.io"},
+				Resources: []string{"tokenreviews"},
+				Verbs:     []string{"create"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"batch"},
+				Resources: []string{"cronjobs", "jobs"},
+				Verbs: []string{
+					"get", "list", "watch", "create", "update", "patch", "delete",
+				},
+			}))
 
 		// secrets are mounted
 		adAPIDeployment := rtest.GetResource(resources, render.ADAPIObjectName, render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)

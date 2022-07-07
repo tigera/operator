@@ -16,6 +16,8 @@ package components
 
 import (
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -90,13 +92,13 @@ func ApplyDaemonSetOverrides(ds *appsv1.DaemonSet, overrides interface{}) *appsv
 			if ds.Labels == nil {
 				ds.SetLabels(make(map[string]string))
 			}
-			mergeMaps(ds.Labels, metadata.Labels)
+			common.MergeMaps(metadata.Labels, ds.Labels)
 		}
 		if len(metadata.Annotations) > 0 {
 			if ds.GetAnnotations() == nil {
 				ds.SetAnnotations(make(map[string]string))
 			}
-			mergeMaps(ds.GetAnnotations(), metadata.Annotations)
+			common.MergeMaps(metadata.Annotations, ds.GetAnnotations())
 		}
 	}
 
@@ -109,13 +111,13 @@ func ApplyDaemonSetOverrides(ds *appsv1.DaemonSet, overrides interface{}) *appsv
 			if ds.Spec.Template.GetLabels() == nil {
 				ds.Spec.Template.SetLabels(make(map[string]string))
 			}
-			mergeMaps(ds.Spec.Template.GetLabels(), podTemplateMetadata.Labels)
+			common.MergeMaps(podTemplateMetadata.Labels, ds.Spec.Template.GetLabels())
 		}
 		if len(podTemplateMetadata.Annotations) > 0 {
 			if ds.Spec.Template.GetAnnotations() == nil {
 				ds.Spec.Template.SetAnnotations(make(map[string]string))
 			}
-			mergeMaps(ds.Spec.Template.GetAnnotations(), podTemplateMetadata.Annotations)
+			common.MergeMaps(podTemplateMetadata.Annotations, ds.Spec.Template.GetAnnotations())
 		}
 	}
 
@@ -137,18 +139,6 @@ func ApplyDaemonSetOverrides(ds *appsv1.DaemonSet, overrides interface{}) *appsv
 	}
 
 	return ds
-}
-
-// mergeMaps adds all key/value pairs from the provided map to the current map
-// if those keys do not already exist in the current map.
-func mergeMaps(current map[string]string, provided map[string]string) {
-	for k, v := range provided {
-		// Only copy this key/value pair from the provided map if it does
-		// not already exist.
-		if _, ok := current[k]; !ok {
-			current[k] = v
-		}
-	}
 }
 
 // mergeContainers copies the ResourceRequirements from the provided containers

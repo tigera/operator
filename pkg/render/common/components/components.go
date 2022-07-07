@@ -17,18 +17,15 @@ package components
 import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 )
 
-type container struct {
-	Name      string                       `json:"name"`
-	Resources *corev1.ResourceRequirements `json:"resources"`
-}
-
 // ApplyDaemonSetOverrides applies the overrides to the given DaemonSet.
-func ApplyDaemonSetOverrides(ds *appsv1.DaemonSet, overrides interface{}) *appsv1.DaemonSet {
+// Note: overrides must not be nil pointer.
+func ApplyDaemonSetOverrides(ds *appsv1.DaemonSet, overrides components.DaemonSetOverride) *appsv1.DaemonSet {
 	// Catch if caller passes in an explicit nil.
 	if overrides == nil {
 		return ds
@@ -41,51 +38,18 @@ func ApplyDaemonSetOverrides(ds *appsv1.DaemonSet, overrides interface{}) *appsv
 	var affinity *corev1.Affinity
 	var tolerations []corev1.Toleration
 	var nodeSelector map[string]string
-	var initContainers []container
-	var containers []container
+	var initContainers []operatorv1.Container
+	var containers []operatorv1.Container
 
-	switch obj := overrides.(type) {
-	case *operatorv1.CalicoNodeDaemonSet:
-		// If overrides was a pointer to nil, then just return the original ds.
-		if obj == nil {
-			return ds
-		}
+	metadata = overrides.GetMetadata()
+	podTemplateMetadata = overrides.GetPodTemplateMetadata()
+	minReadySeconds = overrides.GetMinReadySeconds()
+	affinity = overrides.GetAffinity()
+	tolerations = overrides.GetTolerations()
+	nodeSelector = overrides.GetNodeSelector()
 
-		metadata = obj.Metadata
-
-		// Skip the rest of the case if no spec.
-		if obj.Spec == nil {
-			break
-		}
-
-		minReadySeconds = obj.Spec.MinReadySeconds
-
-		// Skip the rest of the case if no pod template spec.
-		if obj.Spec.Template == nil {
-			break
-		}
-
-		podTemplateMetadata = obj.Spec.Template.Metadata
-
-		if obj.Spec.Template.Spec != nil {
-			affinity = obj.Spec.Template.Spec.Affinity
-			tolerations = obj.Spec.Template.Spec.Tolerations
-			nodeSelector = obj.Spec.Template.Spec.NodeSelector
-
-			if len(obj.Spec.Template.Spec.InitContainers) > 0 {
-				for _, v := range obj.Spec.Template.Spec.InitContainers {
-					c := container{Name: v.Name, Resources: v.Resources}
-					initContainers = append(initContainers, c)
-				}
-			}
-			if len(obj.Spec.Template.Spec.Containers) > 0 {
-				for _, v := range obj.Spec.Template.Spec.Containers {
-					c := container{Name: v.Name, Resources: v.Resources}
-					containers = append(containers, c)
-				}
-			}
-		}
-	}
+	initContainers = overrides.GetInitContainers()
+	containers = overrides.GetContainers()
 
 	if metadata != nil {
 		if len(metadata.Labels) > 0 {
@@ -143,8 +107,8 @@ func ApplyDaemonSetOverrides(ds *appsv1.DaemonSet, overrides interface{}) *appsv
 
 // mergeContainers copies the ResourceRequirements from the provided containers
 // to the current corev1.Containers.
-func mergeContainers(current []corev1.Container, provided []container) {
-	providedMap := make(map[string]container)
+func mergeContainers(current []corev1.Container, provided []operatorv1.Container) {
+	providedMap := make(map[string]operatorv1.Container)
 	for _, c := range provided {
 		providedMap[c.Name] = c
 	}

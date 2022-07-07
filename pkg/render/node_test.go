@@ -211,6 +211,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
+			{Name: "FELIX_HEALTHPORT", Value: "9099"},
 			{
 				Name: "NODENAME",
 				ValueFrom: &corev1.EnvVarSource{
@@ -329,6 +330,7 @@ var _ = Describe("Node rendering tests", func() {
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
+		defaultInstance.Variant = operatorv1.Calico
 		defaultInstance.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
 		dpBPF := operatorv1.LinuxDataplaneBPF
 		defaultInstance.CalicoNetwork.LinuxDataplane = &dpBPF
@@ -434,6 +436,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
+			{Name: "FELIX_HEALTHPORT", Value: "9099"},
 			{
 				Name: "NODENAME",
 				ValueFrom: &corev1.EnvVarSource{
@@ -656,6 +659,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
+			{Name: "FELIX_HEALTHPORT", Value: "9099"},
 			{
 				Name: "NODENAME",
 				ValueFrom: &corev1.EnvVarSource{
@@ -935,6 +939,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
+			{Name: "FELIX_HEALTHPORT", Value: "9099"},
 			{
 				Name: "NODENAME",
 				ValueFrom: &corev1.EnvVarSource{
@@ -1092,6 +1097,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
+			{Name: "FELIX_HEALTHPORT", Value: "9099"},
 			{
 				Name: "NODENAME",
 				ValueFrom: &corev1.EnvVarSource{
@@ -1339,6 +1345,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
+			{Name: "FELIX_HEALTHPORT", Value: "9099"},
 			{
 				Name: "NODENAME",
 				ValueFrom: &corev1.EnvVarSource{
@@ -1493,6 +1500,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
+			{Name: "FELIX_HEALTHPORT", Value: "9099"},
 			{
 				Name: "NODENAME",
 				ValueFrom: &corev1.EnvVarSource{
@@ -1661,6 +1669,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
+			{Name: "FELIX_HEALTHPORT", Value: "9199"},
 			{
 				Name: "NODENAME",
 				ValueFrom: &corev1.EnvVarSource{
@@ -1742,6 +1751,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
+			{Name: "FELIX_HEALTHPORT", Value: "9199"},
 			{
 				Name: "NODENAME",
 				ValueFrom: &corev1.EnvVarSource{
@@ -2756,6 +2766,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
+			{Name: "FELIX_HEALTHPORT", Value: "9099"},
 			{
 				Name: "NODENAME",
 				ValueFrom: &corev1.EnvVarSource{

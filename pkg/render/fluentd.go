@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -190,7 +190,7 @@ func (c *fluentdComponent) fluentdNodeName() string {
 func (c *fluentdComponent) readinessCmd() []string {
 	if c.cfg.OSType == rmeta.OSTypeWindows {
 		// On Windows, we rely on bash via msys2 installed by the fluentd base image.
-		return []string{`c:\ruby26\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/readiness.sh`}
+		return []string{`c:\ruby\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/readiness.sh`}
 	}
 	return []string{"sh", "-c", "/bin/readiness.sh"}
 }
@@ -198,7 +198,7 @@ func (c *fluentdComponent) readinessCmd() []string {
 func (c *fluentdComponent) livenessCmd() []string {
 	if c.cfg.OSType == rmeta.OSTypeWindows {
 		// On Windows, we rely on bash via msys2 installed by the fluentd base image.
-		return []string{`c:\ruby26\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/liveness.sh`}
+		return []string{`c:\ruby\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/liveness.sh`}
 	}
 	return []string{"sh", "-c", "/bin/liveness.sh"}
 }

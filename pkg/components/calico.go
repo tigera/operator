@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,40 +20,40 @@ package components
 import "github.com/tigera/operator/version"
 
 var (
-	CalicoRelease string = "v3.23.0"
+	CalicoRelease string = "v3.23.2"
 
 	ComponentCalicoCNI = component{
-		Version: "v3.23.0",
+		Version: "v3.23.2",
 		Image:   "calico/cni",
 	}
 
 	ComponentCalicoKubeControllers = component{
-		Version: "v3.23.0",
+		Version: "v3.23.2",
 		Image:   "calico/kube-controllers",
 	}
 
 	ComponentCalicoNode = component{
-		Version: "v3.23.0",
+		Version: "v3.23.2",
 		Image:   "calico/node",
 	}
 
 	ComponentCalicoTypha = component{
-		Version: "v3.23.0",
+		Version: "v3.23.2",
 		Image:   "calico/typha",
 	}
 
 	ComponentFlexVolume = component{
-		Version: "v3.23.0",
+		Version: "v3.23.2",
 		Image:   "calico/pod2daemon-flexvol",
 	}
 
 	ComponentCalicoAPIServer = component{
-		Version: "v3.23.0",
+		Version: "v3.23.2",
 		Image:   "calico/apiserver",
 	}
 
-	ComponentWindows = component{
-		Version: "v3.23.0",
+	ComponentWindowsUpgrade = component{
+		Version: "v3.23.2",
 		Image:   "calico/windows-upgrade",
 	}
 	ComponentOperatorInit = component{
@@ -69,6 +69,6 @@ var (
 		ComponentFlexVolume,
 		ComponentOperatorInit,
 		ComponentCalicoAPIServer,
-		ComponentWindows,
+		ComponentWindowsUpgrade,
 	}
 )

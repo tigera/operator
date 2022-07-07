@@ -17,19 +17,19 @@ require (
 	github.com/openshift/api v0.0.0-20200923080607-2a18526802e3
 	github.com/openshift/library-go v0.0.0-20200924151131-575c4875cdbe
 	github.com/pkg/errors v0.9.1
-	github.com/projectcalico/api v0.0.0-20220129171754-5c0717447274 // indirect
+	github.com/projectcalico/api v0.0.0-20220129171754-5c0717447274
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.52.1
 	github.com/r3labs/diff/v2 v2.8.0
 	github.com/stretchr/testify v1.7.0
-	github.com/tigera/api v0.0.0-20220325204048-b3e0b35ba256
+	github.com/tigera/api v0.0.0-20220603215721-ad6ee3d7b14c
 	go.uber.org/zap v1.19.0
 	golang.org/x/crypto v0.0.0-20210220033148-5ea612d1eb83
 	gopkg.in/inf.v0 v0.9.1
 	gopkg.in/yaml.v2 v2.4.0
-	k8s.io/api v0.22.3
+	k8s.io/api v0.23.2
 	k8s.io/apiextensions-apiserver v0.22.3
-	k8s.io/apimachinery v0.22.3
-	k8s.io/client-go v0.21.8
+	k8s.io/apimachinery v0.23.2
+	k8s.io/client-go v0.23.2
 	k8s.io/kube-aggregator v0.21.7
 	sigs.k8s.io/controller-runtime v0.9.7
 	sigs.k8s.io/kind v0.11.1 // Do not remove, not used by code but used by build

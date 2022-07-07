@@ -421,6 +421,13 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				Resources: []string{"blockaffinities"},
 				Verbs:     []string{"watch"},
 			},
+			{
+				// Allows Calico to use the K8s TokenRequest API to create the tokens used by the CNI plugin.
+				APIGroups:     []string{""},
+				Resources:     []string{"serviceaccounts/token"},
+				ResourceNames: []string{"calico-node"},
+				Verbs:         []string{"create"},
+			},
 		},
 	}
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
@@ -839,6 +846,11 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 			// Volume used by mount-cgroupv2 init container to access root cgroup name space of node.
 			corev1.Volume{Name: "nodeproc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc"}}},
 		)
+
+		if c.cfg.Installation.Variant == operatorv1.Calico {
+			// Volume used by mount-cgroupv2 init container to access root cgroup name space of node.
+			volumes = append(volumes, corev1.Volume{Name: "init-proc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc/1"}}})
+		}
 	}
 
 	if c.vppDataplaneEnabled() {
@@ -992,6 +1004,14 @@ func (c *nodeComponent) bpffsInitContainer() corev1.Container {
 			Name:      "nodeproc",
 			ReadOnly:  true,
 		},
+	}
+
+	if c.cfg.Installation.Variant == operatorv1.Calico {
+		mounts = append(mounts, corev1.VolumeMount{
+			MountPath: "/initproc",
+			Name:      "init-proc",
+			ReadOnly:  true,
+		})
 	}
 
 	return corev1.Container{
@@ -1188,6 +1208,7 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
 		{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 		{Name: "FELIX_HEALTHENABLED", Value: "true"},
+		{Name: "FELIX_HEALTHPORT", Value: fmt.Sprintf("%d", c.cfg.FelixHealthPort)},
 		{
 			Name: "NODENAME",
 			ValueFrom: &corev1.EnvVarSource{

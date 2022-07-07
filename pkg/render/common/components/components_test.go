@@ -99,14 +99,6 @@ var _ = Describe("Common components render tests", func() {
 			result := ApplyDaemonSetOverrides(&orig, template)
 			expectations(*result)
 		},
-		Entry("nil",
-			defaultedDaemonSet,
-			func() *v1.CalicoNodeDaemonSet {
-				return nil
-			},
-			func(result appsv1.DaemonSet) {
-				Expect(result).To(Equal(defaultedDaemonSet()))
-			}),
 		Entry("empty",
 			defaultedDaemonSet,
 			func() *v1.CalicoNodeDaemonSet {

@@ -119,3 +119,92 @@ type CalicoNodeDaemonSetSpec struct {
 	// +optional
 	Template *CalicoNodeDaemonSetPodTemplateSpec `json:"template,omitempty"`
 }
+
+func (c *CalicoNodeDaemonSet) GetMetadata() *Metadata {
+	return c.Metadata
+}
+
+func (c *CalicoNodeDaemonSet) GetMinReadySeconds() *int32 {
+	if c.Spec != nil {
+		return c.Spec.MinReadySeconds
+	}
+	return nil
+}
+
+func (c *CalicoNodeDaemonSet) GetPodTemplateMetadata() *Metadata {
+	if c.Spec != nil {
+		if c.Spec.Template != nil {
+			return c.Spec.Template.Metadata
+		}
+	}
+	return nil
+}
+
+func (c *CalicoNodeDaemonSet) GetInitContainers() []Container {
+	if c.Spec != nil {
+		if c.Spec.Template != nil {
+			if c.Spec.Template.Spec != nil {
+				if c.Spec.Template.Spec.InitContainers != nil {
+					cs := make([]Container, len(c.Spec.Template.Spec.InitContainers))
+					for i, v := range c.Spec.Template.Spec.InitContainers {
+						c := Container{Name: v.Name, Resources: v.Resources}
+						cs[i] = c
+					}
+					return cs
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (c *CalicoNodeDaemonSet) GetContainers() []Container {
+	if c.Spec != nil {
+		if c.Spec.Template != nil {
+			if c.Spec.Template.Spec != nil {
+				if c.Spec.Template.Spec.Containers != nil {
+					cs := make([]Container, len(c.Spec.Template.Spec.Containers))
+					for i, v := range c.Spec.Template.Spec.Containers {
+						c := Container{Name: v.Name, Resources: v.Resources}
+						cs[i] = c
+					}
+					return cs
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (c *CalicoNodeDaemonSet) GetAffinity() *v1.Affinity {
+	if c.Spec != nil {
+		if c.Spec.Template != nil {
+			if c.Spec.Template.Spec != nil {
+				return c.Spec.Template.Spec.Affinity
+			}
+		}
+	}
+	return nil
+}
+
+func (c *CalicoNodeDaemonSet) GetNodeSelector() map[string]string {
+	if c.Spec != nil {
+		if c.Spec.Template != nil {
+			if c.Spec.Template.Spec != nil {
+				return c.Spec.Template.Spec.NodeSelector
+			}
+		}
+	}
+	return nil
+}
+
+func (c *CalicoNodeDaemonSet) GetTolerations() []v1.Toleration {
+	if c.Spec != nil {
+		if c.Spec.Template != nil {
+			if c.Spec.Template.Spec != nil {
+				return c.Spec.Template.Spec.Tolerations
+			}
+		}
+	}
+	return nil
+}

@@ -796,8 +796,10 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 		migration.LimitDaemonSetToMigratedNodes(&ds)
 	}
 
-	overrides := c.cfg.Installation.CalicoNodeDaemonSet
-	return rcomp.ApplyDaemonSetOverrides(&ds, overrides)
+	if overrides := c.cfg.Installation.CalicoNodeDaemonSet; overrides != nil {
+		rcomp.ApplyDaemonSetOverrides(&ds, overrides)
+	}
+	return &ds
 }
 
 // cniDirectories returns the binary and network config directories for the configured platform.

@@ -25,7 +25,7 @@ import (
 
 // ApplyDaemonSetOverrides applies the overrides to the given DaemonSet.
 // Note: overrides must not be nil pointer.
-func ApplyDaemonSetOverrides(ds *appsv1.DaemonSet, overrides components.DaemonSetOverride) *appsv1.DaemonSet {
+func ApplyDaemonSetOverrides(ds *appsv1.DaemonSet, overrides components.DaemonSetOverrides) *appsv1.DaemonSet {
 	// Catch if caller passes in an explicit nil.
 	if overrides == nil {
 		return ds

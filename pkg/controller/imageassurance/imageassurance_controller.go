@@ -123,6 +123,10 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("ImageAssurance-controller failed to watch Secret %s: %v", imageassurance.PGUserSecretName, err)
 	}
 
+	if err = utils.AddServiceAccountWatch(c, imageassurance.ScannerAPIAccessServiceAccountName); err != nil {
+		return fmt.Errorf("ImageAssurance-controller failed to watch ServiceAccount %s: %v", imageassurance.ScannerAPIAccessServiceAccountName, err)
+	}
+
 	if err = utils.AddJobWatch(c, imageassurance.ResourceNameImageAssuranceDBMigrator, imageassurance.NameSpaceImageAssurance); err != nil {
 		return fmt.Errorf("ImageAssurance-controller failed to watch Job %s: %v", imageassurance.ResourceNameImageAssuranceDBMigrator, err)
 	}
@@ -271,6 +275,12 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		reqLogger.Error(err, err.Error())
 		r.status.SetDegraded("Error in retrieving scanner API access token", err.Error())
 		return reconcile.Result{}, err
+	}
+
+	if scannerAPIToken == nil {
+		reqLogger.Info("Waiting for scanner api token to be available")
+		r.status.SetDegraded("Waiting for scanner api access service account secret to be available", "")
+		return reconcile.Result{}, nil
 	}
 
 	tenantEncryptionKeySecret, err := getTenantEncryptionKeySecret(r.client)
@@ -707,7 +717,7 @@ func getScannerAPIAccessToken(client client.Client) ([]byte, error) {
 	}
 
 	if len(sa.Secrets) == 0 {
-		return nil, fmt.Errorf("waiting for service account '%s' secrets to become available", imageassurance.ScannerAPIAccessServiceAccountName)
+		return nil, nil
 	}
 
 	saSecret := &corev1.Secret{}

@@ -12,3 +12,4 @@ pkg/render/imageassurance/imageassurance_scanner.go
 pkg/controller/imageassurance/imageassurance_controller_test.go
 pkg/render/imageassurance/imageassurance_test.go
 pkg/render/kubecontrollers/kube-controllers-cloud.go
+pkg/controller/utils/utils_cloud.go

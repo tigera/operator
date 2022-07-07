@@ -68,7 +68,7 @@ var (
 		Image:   "tigera/operator",
 	}
 
-	CalicoComponents = []component{
+	CalicoImages = []component{
 		ComponentCalicoCNI,
 		ComponentCalicoKubeControllers,
 		ComponentCalicoNode,

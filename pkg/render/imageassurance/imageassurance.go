@@ -39,7 +39,7 @@ const (
 	// tls certificates for tigera-manager and image assurance api
 	APICertSecretName = "tigera-image-assurance-api-cert-pair"
 
-	ScannerClusterRoleName             = "tigera-image-assurance-scanner"
+	ScannerClusterRoleName             = "tigera-image-assurance-scanner-api-access"
 	ScannerAPIAccessServiceAccountName = "tigera-image-assurance-scanner-api-access"
 	ScannerAPIAccessSecretName         = "scanner-image-assurance-api-token"
 

@@ -39,6 +39,10 @@ const (
 	// tls certificates for tigera-manager and image assurance api
 	APICertSecretName = "tigera-image-assurance-api-cert-pair"
 
+	ScannerClusterRoleName             = "tigera-image-assurance-scanner"
+	ScannerAPIAccessServiceAccountName = "tigera-image-assurance-scanner-api-access"
+	ScannerAPIAccessSecretName         = "scanner-image-assurance-api-token"
+
 	MountPathPostgresCerts = "/certs/db/"
 	mountPathAPITLSCerts   = "/certs/https/"
 
@@ -84,6 +88,7 @@ type Config struct {
 	TrustedCertBundle         certificatemanagement.TrustedBundle
 	KeyValidatorConfig        authentication.KeyValidatorConfig
 	TenantEncryptionKeySecret *corev1.Secret
+	ScannerAPIAccessToken     []byte
 
 	NeedsMigrating bool
 	ComponentsUp   bool
@@ -206,7 +211,9 @@ func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
 	objs = append(objs,
 		c.scannerServiceAccount(),
 		c.scannerRole(),
+		c.scannerClusterRole(),
 		c.scannerRoleBinding(),
+		c.scannerAPIAccessTokenSecret(),
 		c.scannerDeployment(),
 	)
 

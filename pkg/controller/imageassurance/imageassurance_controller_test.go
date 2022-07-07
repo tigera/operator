@@ -168,6 +168,18 @@ var _ = Describe("Image Assurance Controller", func() {
 				},
 			},
 		})).NotTo(HaveOccurred())
+
+		Expect(c.Create(ctx, &corev1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.ScannerAPIAccessServiceAccountName, Namespace: common.OperatorNamespace()},
+			Secrets:    []corev1.ObjectReference{{Name: "sa-secret"}},
+		})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "sa-secret",
+				Namespace: common.OperatorNamespace(),
+			},
+			Data: map[string][]byte{"token": []byte("token")},
+		})).NotTo(HaveOccurred())
 	})
 
 	It("should render accurate resources for image assurance", func() {

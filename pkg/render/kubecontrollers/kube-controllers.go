@@ -157,8 +157,18 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 			// permissions to something you don't have permissions for).
 			rbacv1.PolicyRule{
 				APIGroups: []string{"imageassurance.tigera.io"},
-				Resources: []string{"organizations", "registries", "repositories", "images"},
+				Resources: []string{"organizations", "repositories"},
 				Verbs:     []string{"get", "list"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"imageassurance.tigera.io"},
+				Resources: []string{"registries", "images"},
+				Verbs:     []string{"get", "list", "update"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"imageassurance.tigera.io"},
+				Resources: []string{"vulnerabilities"},
+				Verbs:     []string{"create"},
 			},
 			rbacv1.PolicyRule{
 				APIGroups: []string{"imageassurance.tigera.io"},

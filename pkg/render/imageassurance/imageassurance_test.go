@@ -180,7 +180,9 @@ var _ = Describe("Image Assurance Render", func() {
 
 			{name: imageassurance.ResourceNameImageAssuranceScanner, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: imageassurance.ResourceNameImageAssuranceScanner, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "Role"},
+			{name: imageassurance.ScannerClusterRoleName, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
 			{name: imageassurance.ResourceNameImageAssuranceScanner, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "RoleBinding"},
+			{name: imageassurance.ScannerAPIAccessSecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
 			{name: imageassurance.ResourceNameImageAssuranceScanner, ns: imageassurance.NameSpaceImageAssurance, group: "apps", version: "v1", kind: "Deployment"},
 
 			{name: imageassurance.ResourceNameImageAssuranceCAW, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ServiceAccount"},
@@ -515,63 +517,12 @@ var _ = Describe("Image Assurance Render", func() {
 		scannerEnv := scanner.Containers[0].Env
 		scannerExpectedENV := []corev1.EnvVar{
 			{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
-			{Name: "IMAGE_ASSURANCE_DB_LOG_LEVEL", Value: "SILENT"},
 			{Name: "IMAGE_ASSURANCE_TENANT_ENCRYPTION_KEY", Value: "/tenant-key/encryption_key"},
-			{Name: "IMAGE_ASSURANCE_DB_SSL_ROOT_CERT", Value: "/certs/db/server-ca"},
-			{Name: "IMAGE_ASSURANCE_DB_SSL_CERT", Value: "/certs/db/client-cert"},
-			{Name: "IMAGE_ASSURANCE_DB_SSL_KEY", Value: "/certs/db/client-key"},
 			{Name: "IMAGE_ASSURANCE_SCANNER_RETRIES", Value: "3"},
-			{Name: "IMAGE_ASSURANCE_DB_HOST_ADDR", Value: "",
-				ValueFrom: &corev1.EnvVarSource{
-					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: imageassurance.PGConfigMapName,
-						},
-						Key: imageassurance.PGConfigHostKey,
-					},
-				},
-			},
-			{Name: "IMAGE_ASSURANCE_DB_PORT", Value: "",
-				ValueFrom: &corev1.EnvVarSource{
-					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: imageassurance.PGConfigMapName,
-						},
-						Key: imageassurance.PGConfigPortKey,
-					},
-				},
-			},
-			{Name: "IMAGE_ASSURANCE_DB_NAME", Value: "",
-				ValueFrom: &corev1.EnvVarSource{
-					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: imageassurance.PGConfigMapName,
-						},
-						Key: imageassurance.PGConfigNameKey,
-					},
-				},
-			},
-			{Name: "IMAGE_ASSURANCE_DB_USER_NAME", Value: "",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: imageassurance.PGUserSecretName,
-						},
-						Key: imageassurance.PGUserSecretKey,
-					},
-				},
-			},
-			{Name: "IMAGE_ASSURANCE_DB_PASSWORD", Value: "",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: imageassurance.PGUserSecretName,
-						},
-						Key: imageassurance.PGUserPassKey,
-					},
-				},
-			},
 			rcimageassurance.EnvOrganizationID(),
+			{Name: "IMAGE_ASSURANCE_CA_BUNDLE_PATH", Value: "/certs/bast/tls.crt"},
+			{Name: "IMAGE_ASSURANCE_API_SERVICE_URL", Value: "https://tigera-image-assurance-api.tigera-image-assurance.svc:9443"},
+			{Name: "IMAGE_ASSURANCE_API_TOKEN", Value: ""},
 		}
 
 		Expect(len(scannerExpectedENV)).To(Equal(len(scannerEnv)))

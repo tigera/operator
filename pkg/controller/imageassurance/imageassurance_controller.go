@@ -266,6 +266,13 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
+	scannerAPIToken, err := getScannerAPIAccessToken(r.client)
+	if err != nil {
+		reqLogger.Error(err, err.Error())
+		r.status.SetDegraded("Error in retrieving scanner API access token", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	tenantEncryptionKeySecret, err := getTenantEncryptionKeySecret(r.client)
 	if err != nil {
 		reqLogger.Error(err, "Error retrieving tenant key")
@@ -343,6 +350,7 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		KeyValidatorConfig:        kvc,
 		TenantEncryptionKeySecret: tenantEncryptionKeySecret,
 		TrustedCertBundle:         trustedBundle,
+		ScannerAPIAccessToken:     scannerAPIToken,
 	}
 
 	components := []render.Component{
@@ -686,4 +694,29 @@ func getTenantEncryptionKeySecret(client client.Client) (*corev1.Secret, error) 
 	}
 
 	return cs, nil
+}
+
+// getScannerAPIAccessToken returns the image assurance service account secret token created by kube-controllers.
+func getScannerAPIAccessToken(client client.Client) ([]byte, error) {
+	sa := &corev1.ServiceAccount{}
+	if err := client.Get(context.Background(), types.NamespacedName{
+		Name:      imageassurance.ScannerAPIAccessServiceAccountName,
+		Namespace: common.OperatorNamespace(),
+	}, sa); err != nil {
+		return nil, err
+	}
+
+	if len(sa.Secrets) == 0 {
+		return nil, fmt.Errorf("waiting for service account '%s' secrets to become available", imageassurance.ScannerAPIAccessServiceAccountName)
+	}
+
+	saSecret := &corev1.Secret{}
+	if err := client.Get(context.Background(), types.NamespacedName{
+		Name:      sa.Secrets[0].Name,
+		Namespace: common.OperatorNamespace(),
+	}, saSecret); err != nil {
+		return nil, err
+	}
+
+	return saSecret.Data["token"], nil
 }

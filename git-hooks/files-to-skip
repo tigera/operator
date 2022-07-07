@@ -9,6 +9,7 @@ pkg/render/imageassurance/imageassurance_api.go
 pkg/controller/logstorage/logstorage_controller_cloud_test.go
 pkg/controller/logstorage/cloudmodifications.go
 pkg/render/imageassurance/imageassurance_scanner.go
+pkg/render/imageassurance/imageassurance_podwatcher.go
 pkg/controller/imageassurance/imageassurance_controller_test.go
 pkg/render/imageassurance/imageassurance_test.go
 pkg/render/kubecontrollers/kube-controllers-cloud.go

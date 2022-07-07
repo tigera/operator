@@ -25,6 +25,7 @@ const (
 	ResourceNameImageAssuranceScanner    = "tigera-image-assurance-scanner"
 	ResourceNameImageAssuranceDBMigrator = "tigera-image-assurance-db-migrator"
 	ResourceNameImageAssuranceCAW        = "tigera-image-assurance-caw"
+	ResourceNameImageAssurancePodWatcher = "tigera-image-assurance-pod-watcher"
 
 	PGConfigMapName  = "tigera-image-assurance-postgres"
 	PGCertSecretName = "tigera-image-assurance-postgres-cert"
@@ -42,6 +43,10 @@ const (
 	ScannerClusterRoleName             = "tigera-image-assurance-scanner-api-access"
 	ScannerAPIAccessServiceAccountName = "tigera-image-assurance-scanner-api-access"
 	ScannerAPIAccessSecretName         = "scanner-image-assurance-api-token"
+
+	PodWatcherClusterRoleName             = "tigera-image-assurance-pod-watcher-api-access"
+	PodWatcherAPIAccessServiceAccountName = "tigera-image-assurance-pod-watcher-api-access"
+	PodWatcherAPIAccessSecretName         = "pod-watcher-image-assurance-api-token"
 
 	MountPathPostgresCerts = "/certs/db/"
 	mountPathAPITLSCerts   = "/certs/https/"
@@ -94,11 +99,14 @@ type Config struct {
 	ComponentsUp   bool
 
 	// Calculated internal fields.
-	tlsHash       string
-	apiImage      string
-	scannerImage  string
-	migratorImage string
-	cawImage      string
+	tlsHash         string
+	apiImage        string
+	scannerImage    string
+	migratorImage   string
+	cawImage        string
+	podWatcherImage string
+
+	PodWatcherAPIAccessToken []byte
 }
 
 type component struct {
@@ -133,6 +141,11 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	c.config.cawImage, err = components.GetReference(components.ComponentImageAssuranceCAW, reg, path, prefix, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	c.config.podWatcherImage, err = components.GetReference(components.ComponentImageAssurancePodWatcher, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -228,6 +241,15 @@ func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
 	// admission controller resources
 	objs = append(objs,
 		c.admissionControllerClusterRole(),
+	)
+
+	objs = append(objs,
+		c.podWatcherServiceAccount(),
+		c.podWatcherRole(),
+		c.podWatcherClusterRole(),
+		c.podWatcherRoleBinding(),
+		c.podWatcherAPIAccessTokenSecret(),
+		c.podWatcherDeployment(),
 	)
 
 	if c.config.KeyValidatorConfig != nil {

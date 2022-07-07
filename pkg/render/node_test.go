@@ -330,7 +330,6 @@ var _ = Describe("Node rendering tests", func() {
 			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
-		defaultInstance.Variant = operatorv1.Calico
 		defaultInstance.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
 		dpBPF := operatorv1.LinuxDataplaneBPF
 		defaultInstance.CalicoNetwork.LinuxDataplane = &dpBPF

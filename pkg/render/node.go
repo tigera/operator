@@ -846,11 +846,6 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 			// Volume used by mount-cgroupv2 init container to access root cgroup name space of node.
 			corev1.Volume{Name: "nodeproc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc"}}},
 		)
-
-		if c.cfg.Installation.Variant == operatorv1.Calico {
-			// Volume used by mount-cgroupv2 init container to access root cgroup name space of node.
-			volumes = append(volumes, corev1.Volume{Name: "init-proc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc/1"}}})
-		}
 	}
 
 	if c.vppDataplaneEnabled() {
@@ -1004,14 +999,6 @@ func (c *nodeComponent) bpffsInitContainer() corev1.Container {
 			Name:      "nodeproc",
 			ReadOnly:  true,
 		},
-	}
-
-	if c.cfg.Installation.Variant == operatorv1.Calico {
-		mounts = append(mounts, corev1.VolumeMount{
-			MountPath: "/initproc",
-			Name:      "init-proc",
-			ReadOnly:  true,
-		})
 	}
 
 	return corev1.Container{

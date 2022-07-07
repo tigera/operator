@@ -1338,20 +1338,13 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			Verbs:     []string{"create"},
 		},
 		// User can:
-		// - read UISettings in the cluster-settings group
 		// - read and write UISettings in the user-settings group
 		// Default settings group and settings are created in manager.go.
 		{
 			APIGroups:     []string{"projectcalico.org"},
 			Resources:     []string{"uisettingsgroups"},
 			Verbs:         []string{"get"},
-			ResourceNames: []string{"cluster-settings", "user-settings"},
-		},
-		{
-			APIGroups:     []string{"projectcalico.org"},
-			Resources:     []string{"uisettingsgroups/data"},
-			Verbs:         []string{"get", "list", "watch"},
-			ResourceNames: []string{"cluster-settings"},
+			ResourceNames: []string{"user-settings"},
 		},
 		{
 			APIGroups:     []string{"projectcalico.org"},
@@ -1486,20 +1479,19 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 			Verbs:     []string{"create"},
 		},
 		// User can:
-		// - read and write UISettings in the cluster-settings group, and rename the group
-		// - read and write UISettings in the user-settings group, and rename the group
+		// - read and write UISettings in the user-settings group
 		// Default settings group and settings are created in manager.go.
 		{
 			APIGroups:     []string{"projectcalico.org"},
 			Resources:     []string{"uisettingsgroups"},
-			Verbs:         []string{"get", "patch", "update"},
-			ResourceNames: []string{"cluster-settings", "user-settings"},
+			Verbs:         []string{"get"},
+			ResourceNames: []string{"user-settings"},
 		},
 		{
 			APIGroups:     []string{"projectcalico.org"},
 			Resources:     []string{"uisettingsgroups/data"},
 			Verbs:         []string{"*"},
-			ResourceNames: []string{"cluster-settings", "user-settings"},
+			ResourceNames: []string{"user-settings"},
 		},
 	}
 
@@ -1511,7 +1503,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 			APIGroups: []string{"lma.tigera.io"},
 			Resources: []string{"*"},
 			ResourceNames: []string{
-				"flows", "audit*", "l7", "events", "dns", "elasticsearch_superuser",
+				"flows", "audit*", "l7", "events", "dns", "kibana_login", "elasticsearch_superuser",
 			},
 			Verbs: []string{"get"},
 		})

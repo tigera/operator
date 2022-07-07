@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020, 2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -237,6 +237,23 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentAnomalyDetectionJobs.Image,
 					components.ComponentAnomalyDetectionJobs.Version)))
+
+			adAPI := appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "anomaly-detection-api",
+					Namespace: render.IntrusionDetectionNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &adAPI)).To(BeNil())
+			Expect(adAPI.Spec.Template.Spec.Containers).To(HaveLen(1))
+			adAPIContainer := test.GetContainer(adAPI.Spec.Template.Spec.Containers, "anomaly-detection-api")
+			Expect(adAPIContainer).ToNot(BeNil())
+			Expect(adAPIContainer.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentAnomalyDetectionAPI.Image,
+					components.ComponentAnomalyDetectionAPI.Version)))
+
 		})
 		It("should use images from imageset", func() {
 			Expect(c.Create(ctx, &operatorv1.ImageSet{
@@ -247,6 +264,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 						{Image: "tigera/intrusion-detection-controller", Digest: "sha256:intrusiondetectioncontrollerhash"},
 						{Image: "tigera/deep-packet-inspection", Digest: "sha256:deeppacketinspectionhash"},
 						{Image: "tigera/anomaly_detection_jobs", Digest: "sha256:anomalydetectionjobs"},
+						{Image: "tigera/anomaly-detection-api", Digest: "sha256:anomalydetectionapi"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -339,6 +357,21 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 					components.ComponentAnomalyDetectionJobs.Image,
 					"sha256:anomalydetectionjobs")))
 
+			adAPI := appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "anomaly-detection-api",
+					Namespace: render.IntrusionDetectionNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &adAPI)).To(BeNil())
+			Expect(adAPI.Spec.Template.Spec.Containers).To(HaveLen(1))
+			adAPIContainer := test.GetContainer(adAPI.Spec.Template.Spec.Containers, "anomaly-detection-api")
+			Expect(adAPIContainer).ToNot(BeNil())
+			Expect(adAPIContainer.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentAnomalyDetectionAPI.Image,
+					"sha256:anomalydetectionapi")))
 		})
 		It("should not register intrusion-detection-job-installer image when cluster is managed", func() {
 			Expect(c.Create(ctx, &operatorv1.ManagementClusterConnection{

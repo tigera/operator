@@ -12,6 +12,7 @@ spec:
     listKind: UISettingsGroupList
     plural: uisettingsgroups
     singular: uisettingsgroup
+  preserveUnknownFields: false
   scope: Cluster
   versions:
   - name: v1

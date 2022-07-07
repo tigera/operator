@@ -179,9 +179,9 @@ func (w *calicoWindowsUpgrader) getExpectedVersion() string {
 	// For release versions, the windows upgrade component version will be equal
 	// to the top-level version.
 	if w.install.Variant == operatorv1.TigeraSecureEnterprise {
-		return components.ComponentTigeraWindows.Version
+		return components.ComponentTigeraWindowsUpgrade.Version
 	}
-	return components.ComponentWindows.Version
+	return components.ComponentWindowsUpgrade.Version
 }
 
 func sortedSliceFromMap(m map[string]*corev1.Node) []string {

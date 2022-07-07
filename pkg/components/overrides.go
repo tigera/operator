@@ -20,8 +20,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// DaemonSetOverride represents a type that contains the data needed to override a component DaemonSet resource.
-type DaemonSetOverride interface {
+// DaemonSetOverrides represents a type that contains the data needed to override a component DaemonSet resource.
+type DaemonSetOverrides interface {
 	GetMetadata() *opv1.Metadata
 	GetMinReadySeconds() *int32
 	GetPodTemplateMetadata() *opv1.Metadata

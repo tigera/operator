@@ -1,10 +1,11 @@
 package kubecontrollers
 
 import (
+	corev1 "k8s.io/api/core/v1"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/imageassurance"
-	corev1 "k8s.io/api/core/v1"
 )
 
 type CloudConfig struct {
@@ -26,6 +27,7 @@ func (c *kubeControllersComponent) cloudDecorateContainer(container corev1.Conta
 		container.Env = append(container.Env,
 			corev1.EnvVar{Name: "IMAGE_ASSURANCE_ADMISSION_CONTROLLER_CLUSTER_ROLE_NAME", Value: imageassurance.AdmissionControllerAPIClusterRoleName},
 			corev1.EnvVar{Name: "IMAGE_ASSURANCE_INTRUSION_DETECTION_CONTROLLER_CLUSTER_ROLE_NAME", Value: render.IntrusionDetectionControllerImageAssuranceAPIClusterRoleName},
+			corev1.EnvVar{Name: "IMAGE_ASSURANCE_SCANNER_CLUSTER_ROLE_NAME", Value: imageassurance.ScannerClusterRoleName},
 		)
 	}
 

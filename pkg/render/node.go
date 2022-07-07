@@ -216,9 +216,7 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, c.nodePodSecurityPolicy())
 	}
 
-	// Note: this will override the values from nodeResources() (if it was defined for calico-node).
-	overrides := c.cfg.Installation.CalicoNodeDaemonSet
-	ds := rcomp.ApplyDaemonSetOverrides(c.nodeDaemonset(cniConfig), overrides)
+	ds := c.nodeDaemonset(cniConfig)
 	objs = append(objs, ds)
 
 	// This controller creates the cluster role for any pod in the cluster that requires certificate management.
@@ -797,7 +795,9 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 	if c.cfg.MigrateNamespaces {
 		migration.LimitDaemonSetToMigratedNodes(&ds)
 	}
-	return &ds
+
+	overrides := c.cfg.Installation.CalicoNodeDaemonSet
+	return rcomp.ApplyDaemonSetOverrides(&ds, overrides)
 }
 
 // cniDirectories returns the binary and network config directories for the configured platform.

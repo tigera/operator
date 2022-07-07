@@ -278,7 +278,7 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 	}
 
 	if scannerAPIToken == nil {
-		reqLogger.Info("Waiting for scanner api token to be available")
+		reqLogger.Info("Waiting for scanner api access service account secret to be available")
 		r.status.SetDegraded("Waiting for scanner api access service account secret to be available", "")
 		return reconcile.Result{}, nil
 	}

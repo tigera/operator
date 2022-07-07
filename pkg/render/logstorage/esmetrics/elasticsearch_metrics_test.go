@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -223,10 +223,17 @@ var _ = Describe("Elasticsearch metrics", func() {
 			Expect(service.Spec).To(Equal(expectedService.Spec))
 			Expect(deploy.Annotations).To(Equal(expectedDeploy.Annotations))
 			Expect(deploy.Spec.Template.Spec.Volumes).To(Equal(expectedDeploy.Spec.Template.Spec.Volumes))
+			Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
 			Expect(deploy.Spec.Template.Spec.Containers[0].VolumeMounts).To(Equal(expectedDeploy.Spec.Template.Spec.Containers[0].VolumeMounts))
 			Expect(deploy.Spec.Template.Spec.Containers[0].Args).To(Equal(expectedDeploy.Spec.Template.Spec.Containers[0].Args))
 			Expect(deploy.Spec.Template.Spec.Containers[0].Env).To(Equal(expectedDeploy.Spec.Template.Spec.Containers[0].Env))
 			Expect(deploy.Spec.Template.Spec.Containers[0].Command).To(Equal(expectedDeploy.Spec.Template.Spec.Containers[0].Command))
+
+			Expect(*deploy.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+			Expect(*deploy.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
+			Expect(*deploy.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
+			Expect(*deploy.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(BeTrue())
+			Expect(*deploy.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
 		})
 
 		It("should apply controlPlaneNodeSelector correctly", func() {

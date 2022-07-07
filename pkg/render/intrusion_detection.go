@@ -34,11 +34,13 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/ptr"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rkibana "github.com/tigera/operator/pkg/render/common/kibana"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/url"
 )
@@ -541,7 +543,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 		},
 	}
 
-	privileged := false
+	sc := securitycontext.NewBaseContext(securitycontext.RunAsUserID, securitycontext.RunAsGroupID)
 
 	// If syslog forwarding is enabled then set the necessary ENV var and volume mount to
 	// write logs for Fluentd.
@@ -556,7 +558,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 		// On OpenShift, if we need the volume mount to hostpath volume for syslog forwarding,
 		// then ID controller needs privileged access to write event logs to that volume
 		if c.cfg.Openshift {
-			privileged = true
+			sc.Privileged = ptr.BoolToPtr(true)
 		}
 	}
 
@@ -576,10 +578,8 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 			},
 			InitialDelaySeconds: 5,
 		},
-		SecurityContext: &corev1.SecurityContext{
-			Privileged: &privileged,
-		},
-		VolumeMounts: volumeMounts,
+		SecurityContext: sc,
+		VolumeMounts:    volumeMounts,
 	}
 }
 

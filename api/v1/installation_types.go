@@ -91,6 +91,7 @@ type InstallationSpec struct {
 	// +optional
 	CalicoNetwork *CalicoNetworkSpec `json:"calicoNetwork,omitempty"`
 
+	// Deprecated. Please use Installation.Spec.TyphaDeployment instead.
 	// TyphaAffinity allows configuration of node affinity characteristics for Typha pods.
 	// +optional
 	TyphaAffinity *TyphaAffinity `json:"typhaAffinity,omitempty"`
@@ -131,6 +132,7 @@ type InstallationSpec struct {
 	// +optional
 	NodeUpdateStrategy appsv1.DaemonSetUpdateStrategy `json:"nodeUpdateStrategy,omitempty"`
 
+	// Deprecated. Please use CalicoNodeDaemonSet, TyphaDeployment, and KubeControllersDeployment.
 	// ComponentResources can be used to customize the resource requirements for each component.
 	// Node, Typha, and KubeControllers are supported for installations.
 	// +optional
@@ -145,6 +147,14 @@ type InstallationSpec struct {
 	// NonPrivileged configures Calico to be run in non-privileged containers as non-root users where possible.
 	// +optional
 	NonPrivileged *NonPrivilegedType `json:"nonPrivileged,omitempty"`
+
+	// CalicoNodeDaemonSet configures the calico-node DaemonSet. If used in
+	// conjunction with the deprecated ComponentResources, then these overrides take precedence.
+	// WARNING: Please note that this configuration overrides the operator's
+	// default calico-node DaemonSet configuration. The operator cannot validate
+	// that the provided configuration will work in your cluster. An invalid
+	// configuration may may cause networking disruption or even catastrophic failure!
+	CalicoNodeDaemonSet *CalicoNodeDaemonSet `json:"calicoNodeDaemonSet,omitempty"`
 }
 
 // TyphaAffinity allows configuration of node affinity characteristics for Typha pods.
@@ -189,11 +199,13 @@ const (
 	ComponentNameKubeControllers ComponentName = "KubeControllers"
 )
 
+// Deprecated. Please use component resource config fields in Installation.Spec instead.
 // The ComponentResource struct associates a ResourceRequirements with a component by name
 type ComponentResource struct {
 	// ComponentName is an enum which identifies the component
 	// +kubebuilder:validation:Enum=Node;Typha;KubeControllers
 	ComponentName ComponentName `json:"componentName"`
+
 	// ResourceRequirements allows customization of limits and requests for compute resources such as cpu and memory.
 	ResourceRequirements *v1.ResourceRequirements `json:"resourceRequirements"`
 }

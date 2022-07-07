@@ -144,23 +144,14 @@ func ApplyDaemonSetOverrides(ds *appsv1.DaemonSet, overrides interface{}) *appsv
 // mergeContainers copies the ResourceRequirements from the provided containers
 // to the current corev1.Containers.
 func mergeContainers(current []corev1.Container, provided []container) {
-	for _, pc := range provided {
-		// Skip if no resources defined.
-		if pc.Resources == nil {
-			continue
-		}
+	providedMap := make(map[string]container)
+	for _, c := range provided {
+		providedMap[c.Name] = c
+	}
 
-		var index int
-		var found bool
-		for i, cc := range current {
-			if cc.Name == pc.Name {
-				index = i
-				found = true
-				break
-			}
-		}
-		if found {
-			current[index].Resources = *pc.Resources
+	for i, c := range current {
+		if override, ok := providedMap[c.Name]; ok {
+			current[i].Resources = *override.Resources
 		}
 	}
 }

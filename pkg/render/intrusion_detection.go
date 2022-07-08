@@ -1527,16 +1527,16 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 								Value: strconv.Itoa(ElasticsearchDefaultPort),
 							},
 							{
+								Name:  "ES_CA_CERT",
+								Value: "/certs/es-ca.pem",
+							},
+							{
 								Name:      "ES_USERNAME",
 								ValueFrom: secret.GetEnvVarSource(ElasticsearchADJobUserSecret, "username", false),
 							},
 							{
 								Name:      "ES_PASSWORD",
 								ValueFrom: secret.GetEnvVarSource(ElasticsearchADJobUserSecret, "password", false),
-							},
-							{
-								Name:  "ES_CA_CERT",
-								Value: "/certs/es-ca.pem",
 							},
 							{
 								Name: "MODEL_STORAGE_API_HOST",

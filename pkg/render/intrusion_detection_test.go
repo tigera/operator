@@ -15,6 +15,8 @@
 package render_test
 
 import (
+	"strconv"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -39,10 +41,18 @@ var (
 	notManagedCluster = false
 )
 
+type expectedEnvVar struct {
+	name       string
+	val        string
+	secretName string
+	secretKey  string
+}
+
 var _ = Describe("Intrusion Detection rendering tests", func() {
 	var cfg *render.IntrusionDetectionConfiguration
 	var bundle certificatemanagement.TrustedBundle
 	var adAPIKeyPair certificatemanagement.KeyPairInterface
+
 	BeforeEach(func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
@@ -197,10 +207,35 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(detectorsSecret.GetObjectMeta().GetAnnotations()[corev1.ServiceAccountNameKey]).To(Equal("anomaly-detectors"))
 
 		detectorsRole := rtest.GetResource(resources, "anomaly-detectors", render.IntrusionDetectionNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
-		Expect(len(detectorsRole.Rules)).To(Equal(1))
-		Expect(detectorsRole.Rules[0].APIGroups).To(ConsistOf(render.ADResourceGroup))
-		Expect(detectorsRole.Rules[0].Resources).To(ConsistOf(render.ADDetectorsModelResourceName))
-		Expect(detectorsRole.Rules[0].Verbs).To(ConsistOf("get", "create", "update"))
+		Expect(len(detectorsRole.Rules)).To(Equal(2))
+		Expect(detectorsRole.Rules).To(ContainElements(
+			rbacv1.PolicyRule{
+				APIGroups: []string{
+					render.ADResourceGroup,
+				},
+				Resources: []string{
+					render.ADDetectorsModelResourceName,
+				},
+				Verbs: []string{
+					"get",
+					"create",
+					"update",
+				},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{
+					render.ADResourceGroup,
+				},
+				Resources: []string{
+					render.ADLogTypeMetaDataResourceName,
+				},
+				Verbs: []string{
+					"get",
+					"create",
+					"update",
+				},
+			},
+		))
 
 		detectorsRoleBinding := rtest.GetResource(resources, "anomaly-detectors", render.IntrusionDetectionNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
 		Expect(detectorsRoleBinding.RoleRef).To(Equal(rbacv1.RoleRef{
@@ -336,31 +371,35 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		dp := rtest.GetResource(resources, "intrusion-detection-controller", "tigera-intrusion-detection", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		envs := dp.Spec.Template.Spec.Containers[0].Env
 
-		expectedEnvs := []struct {
-			name       string
-			val        string
-			secretName string
-			secretKey  string
-		}{
+		expectedEnvs := []expectedEnvVar{
 			{"CLUSTER_NAME", cfg.ESClusterConfig.ClusterName(), "", ""},
 			{"MULTI_CLUSTER_FORWARDING_CA", cfg.TrustedCertBundle.MountPath(), "", ""},
 			{"IDS_ENABLE_EVENT_FORWARDING", "true", "", ""},
 		}
-		for _, expected := range expectedEnvs {
-			if expected.val != "" {
-				Expect(envs).To(ContainElement(corev1.EnvVar{Name: expected.name, Value: expected.val}))
-			} else {
-				Expect(envs).To(ContainElement(corev1.EnvVar{
-					Name: expected.name,
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: expected.secretName},
-							Key:                  expected.secretKey,
-						},
-					},
-				}))
-			}
+
+		assertEnvVarlistMatch(envs, expectedEnvs)
+
+		// expect AD PodTemplate EnvVars
+		expectedADEnvs := []expectedEnvVar{
+			{"ES_HOST", dns.GetServiceDNSNames(render.ESGatewayServiceName, render.ElasticsearchNamespace, cfg.ClusterDomain)[2], "", ""},
+			{"ES_PORT", strconv.Itoa(render.ElasticsearchDefaultPort), "", ""},
+			{"ES_CA_CERT", "/certs/es-ca.pem", "", ""},
+			{"ES_USERNAME", "", render.ElasticsearchADJobUserSecret, "username"},
+			{"ES_PASSWORD", "", render.ElasticsearchADJobUserSecret, "password"},
+			{"MODEL_STORAGE_API_HOST", dns.GetServiceDNSNames(render.ADAPIObjectName, render.IntrusionDetectionNamespace, cfg.ClusterDomain)[2], "", ""},
+			{"MODEL_STORAGE_API_PORT", strconv.Itoa(8080), "", ""},
+			{"MODEL_STORAGE_CLIENT_CERT", cfg.ADAPIServerCertSecret.VolumeMountCertificateFilePath(), "", ""},
+			{"MODEL_STORAGE_API_TOKEN", "", "anomaly-detectors", "token"},
 		}
+
+		adDetectionPodtemplate := rtest.GetResource(resources, render.ADJobPodTemplateBaseName+".detection", "tigera-intrusion-detection", "", "v1", "PodTemplate").(*corev1.PodTemplate)
+		adDetectionEnvs := adDetectionPodtemplate.Template.Spec.Containers[0].Env
+
+		adTrainingPodtemplate := rtest.GetResource(resources, render.ADJobPodTemplateBaseName+".training", "tigera-intrusion-detection", "", "v1", "PodTemplate").(*corev1.PodTemplate)
+		adTrainingEnvs := adTrainingPodtemplate.Template.Spec.Containers[0].Env
+
+		assertEnvVarlistMatch(adDetectionEnvs, expectedADEnvs)
+		assertEnvVarlistMatch(adTrainingEnvs, expectedADEnvs)
 	})
 
 	It("should not render intrusion-detection-es-job-installer and should disable GlobalAlert controller when cluster is managed", func() {
@@ -498,3 +537,21 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(job.Spec.Template.Spec.Tolerations).To(ConsistOf(t))
 	})
 })
+
+func assertEnvVarlistMatch(envVars []corev1.EnvVar, expectedEnvVars []expectedEnvVar) {
+	for _, expected := range expectedEnvVars {
+		if expected.val != "" {
+			Expect(envVars).To(ContainElement(corev1.EnvVar{Name: expected.name, Value: expected.val}))
+		} else {
+			Expect(envVars).To(ContainElement(corev1.EnvVar{
+				Name: expected.name,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: expected.secretName},
+						Key:                  expected.secretKey,
+					},
+				},
+			}))
+		}
+	}
+}

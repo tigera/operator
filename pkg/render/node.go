@@ -67,7 +67,45 @@ var (
 	nodeBGPReporterPort int32 = 9900
 
 	NodeTLSSecretName = "node-certs"
+
+	// calico-node DaemonSet container names. These are used for validation.
+	calicoNodeDaemonSetContainerNames     map[string]struct{}
+	calicoNodeDaemonSetInitContainerNames map[string]struct{}
+
+	ValidateCalicoNodeDaemonSetContainers     func(container operatorv1.Container) error
+	ValidateCalicoNodeDaemonSetInitContainers func(container operatorv1.Container) error
 )
+
+func init() {
+	// This should match CalicoNodeContainer.Name validation on the CalicoNodeDaemonSet type.
+	calicoNodeDaemonSetContainerNames = map[string]struct{}{
+		CalicoNodeObjectName: {},
+	}
+
+	// This should match CalicoInitNodeContainer.Name validation on the CalicoNodeDaemonSet type.
+	calicoNodeDaemonSetInitContainerNames = map[string]struct{}{
+		"install-cni":    {},
+		"hostpath-init":  {},
+		"flexvol-driver": {},
+		"mount-bpffs":    {},
+		fmt.Sprintf("%s-%s", NodeTLSSecretName, certificatemanagement.CSRInitContainerName):             {},
+		fmt.Sprintf("%s-%s", NodePrometheusTLSServerSecret, certificatemanagement.CSRInitContainerName): {},
+	}
+
+	ValidateCalicoNodeDaemonSetContainers = func(container operatorv1.Container) error {
+		if _, ok := calicoNodeDaemonSetContainerNames[container.Name]; !ok {
+			return fmt.Errorf("Installation spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers[%q] is not a supported container", container.Name)
+		}
+		return nil
+	}
+
+	ValidateCalicoNodeDaemonSetInitContainers = func(container operatorv1.Container) error {
+		if _, ok := calicoNodeDaemonSetInitContainerNames[container.Name]; !ok {
+			return fmt.Errorf("Installation spec.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers[%q] is not a supported init container", container.Name)
+		}
+		return nil
+	}
+}
 
 // TyphaNodeTLS holds configuration for Node and Typha to establish TLS.
 type TyphaNodeTLS struct {

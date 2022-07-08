@@ -1669,7 +1669,7 @@ func (es *elasticsearchComponent) elasticsearchAllowTigeraPolicy() *v3.NetworkPo
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.EsGatewayEntityRule,
+			Destination: networkpolicy.ESGatewayEntityRule,
 		},
 		{
 			Action:      v3.Allow,
@@ -1702,7 +1702,7 @@ func (es *elasticsearchComponent) elasticsearchAllowTigeraPolicy() *v3.NetworkPo
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      networkpolicy.EsGatewaySourceEntityRule,
+					Source:      networkpolicy.ESGatewaySourceEntityRule,
 					Destination: elasticSearchIngressDestinationEntityRule,
 				},
 				{
@@ -1779,7 +1779,7 @@ func (es *elasticsearchComponent) kibanaAllowTigeraPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.EsGatewayEntityRule,
+			Destination: networkpolicy.ESGatewayEntityRule,
 		},
 	}...)
 
@@ -1819,7 +1819,7 @@ func (es *elasticsearchComponent) kibanaAllowTigeraPolicy() *v3.NetworkPolicy {
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      networkpolicy.EsGatewaySourceEntityRule,
+					Source:      networkpolicy.ESGatewaySourceEntityRule,
 					Destination: kibanaPortIngressDestination,
 				},
 				{
@@ -1841,7 +1841,7 @@ func (es *elasticsearchComponent) esCuratorAllowTigeraPolicy() *v3.NetworkPolicy
 		Action:      v3.Allow,
 		Protocol:    &networkpolicy.TCPProtocol,
 		Source:      v3.EntityRule{},
-		Destination: networkpolicy.EsGatewayEntityRule,
+		Destination: networkpolicy.ESGatewayEntityRule,
 	})
 
 	return &v3.NetworkPolicy{

@@ -685,7 +685,7 @@ func esKubeControllersAllowTigeraPolicy(cfg *KubeControllersConfiguration) *v3.N
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.EsGatewayEntityRule,
+			Destination: networkpolicy.ESGatewayEntityRule,
 		},
 		{
 			Action:      v3.Allow,

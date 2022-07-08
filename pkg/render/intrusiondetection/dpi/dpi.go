@@ -358,7 +358,7 @@ func (d *dpiComponent) dpiAllowTigeraPolicy() *v3.NetworkPolicy {
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.EsGatewayServiceSelectorEntityRule,
+			Destination: networkpolicy.ESGatewayServiceSelectorEntityRule,
 		})
 	}
 

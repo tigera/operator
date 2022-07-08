@@ -44,7 +44,7 @@ import (
 )
 
 const (
-	ApiServerPort       = 5443
+	APIServerPort       = 5443
 	APIServerPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "cnx-apiserver-access"
 
 	auditLogsVolumeName   = "tigera-audit-logs"
@@ -393,7 +393,7 @@ func allowTigeraAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy {
 	}...)
 
 	// The ports Calico Enterprise API Server and Calico Enterprise Query Server are configured to listen on.
-	ingressPorts := networkpolicy.Ports(443, ApiServerPort, QueryServerPort, 10443)
+	ingressPorts := networkpolicy.Ports(443, APIServerPort, QueryServerPort, 10443)
 
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
@@ -748,7 +748,7 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 					Name:       "apiserver",
 					Port:       443,
 					Protocol:   corev1.ProtocolTCP,
-					TargetPort: intstr.FromInt(ApiServerPort),
+					TargetPort: intstr.FromInt(APIServerPort),
 				},
 			},
 			Selector: map[string]string{
@@ -920,7 +920,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path:   "/version",
-					Port:   intstr.FromInt(ApiServerPort),
+					Port:   intstr.FromInt(APIServerPort),
 					Scheme: corev1.URISchemeHTTPS,
 				},
 			},
@@ -946,7 +946,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 func (c *apiServerComponent) startUpArgs() []string {
 	args := []string{
-		fmt.Sprintf("--secure-port=%d", ApiServerPort),
+		fmt.Sprintf("--secure-port=%d", APIServerPort),
 		fmt.Sprintf("--tls-private-key-file=%s", c.cfg.TLSKeyPair.VolumeMountKeyFilePath()),
 		fmt.Sprintf("--tls-cert-file=%s", c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()),
 	}

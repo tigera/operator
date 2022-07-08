@@ -184,9 +184,9 @@ var KubeAPIServerServiceSelectorEntityRule = v3.EntityRule{
 }
 
 // The entity rules below are extracted from render subpackages to prevent cyclic dependencies.
-var EsGatewayEntityRule = CreateEntityRule("tigera-elasticsearch", "tigera-secure-es-gateway", 5554)
-var EsGatewaySourceEntityRule = CreateSourceEntityRule("tigera-elasticsearch", "tigera-secure-es-gateway")
-var EsGatewayServiceSelectorEntityRule = CreateServiceSelectorEntityRule("tigera-elasticsearch", "tigera-secure-es-gateway-http")
+var ESGatewayEntityRule = CreateEntityRule("tigera-elasticsearch", "tigera-secure-es-gateway", 5554)
+var ESGatewaySourceEntityRule = CreateSourceEntityRule("tigera-elasticsearch", "tigera-secure-es-gateway")
+var ESGatewayServiceSelectorEntityRule = CreateServiceSelectorEntityRule("tigera-elasticsearch", "tigera-secure-es-gateway-http")
 
 const PrometheusSelector = "(app == 'prometheus' && prometheus == 'calico-node-prometheus') || (app.kubernetes.io/name == 'prometheus' && prometheus == 'calico-node-prometheus')"
 

@@ -174,7 +174,7 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
 		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted),
 		c.managerAllowTigeraNetworkPolicy(),
-		managerAllowTigeraDefaultDeny(),
+		networkpolicy.AllowTigeraDefaultDeny(ManagerNamespace),
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.cfg.PullSecrets...)...)...)
 
@@ -784,10 +784,6 @@ func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 			Egress:   egressRules,
 		},
 	}
-}
-
-func managerAllowTigeraDefaultDeny() *v3.NetworkPolicy {
-	return networkpolicy.AllowTigeraDefaultDeny(ManagerNamespace)
 }
 
 // managerClusterWideSettingsGroup returns a UISettingsGroup with the description "cluster-wide settings"

@@ -53,15 +53,10 @@ var _ = Describe("compliance rendering tests", func() {
 	var cli client.Client
 
 	expectedCompliancePolicyForUnmanaged := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/compliance_unmanaged.json")
-
 	expectedCompliancePolicyForManaged := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/compliance_managed.json")
-
 	expectedCompliancePolicyForUnmanagedOpenshift := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/compliance_unmanaged_ocp.json")
-
 	expectedCompliancePolicyForManagedOpenshift := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/compliance_managed_ocp.json")
-
 	expectedComplianceServerPolicy := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/compliance-server.json")
-
 	expectedComplianceServerPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/compliance-server_ocp.json")
 
 	BeforeEach(func() {

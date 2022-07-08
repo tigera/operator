@@ -99,7 +99,7 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		if err == nil {
 			objs = append(objs,
 				guardianAccessPolicy,
-				guardianDefaultDenyAllowTigeraPolicy(),
+				networkpolicy.AllowTigeraDefaultDeny(GuardianNamespace),
 			)
 		}
 	}
@@ -443,8 +443,4 @@ func (c *GuardianComponent) guardianAllowTigeraPolicy() (*v3.NetworkPolicy, erro
 	}
 
 	return policy, nil
-}
-
-func guardianDefaultDenyAllowTigeraPolicy() *v3.NetworkPolicy {
-	return networkpolicy.AllowTigeraDefaultDeny(GuardianNamespace)
 }

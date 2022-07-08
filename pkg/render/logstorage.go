@@ -319,7 +319,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate, CreateNamespace(ElasticsearchNamespace, es.cfg.Installation.KubernetesProvider, PSSPrivileged))
 		toCreate = append(toCreate, es.elasticsearchAllowTigeraPolicy())
 		toCreate = append(toCreate, es.elasticsearchInternalAllowTigeraPolicy())
-		toCreate = append(toCreate, elasticsearchDefaultDenyAllowTigeraPolicy())
+		toCreate = append(toCreate, networkpolicy.AllowTigeraDefaultDeny(ElasticsearchNamespace))
 
 		if len(es.cfg.PullSecrets) > 0 {
 			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.cfg.PullSecrets...)...)...)
@@ -337,7 +337,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		// Kibana CRs
 		toCreate = append(toCreate, CreateNamespace(KibanaNamespace, es.cfg.Installation.KubernetesProvider, PSSRestricted))
 		toCreate = append(toCreate, es.kibanaAllowTigeraPolicy())
-		toCreate = append(toCreate, kibanaDefaultDenyAllowTigeraPolicy())
+		toCreate = append(toCreate, networkpolicy.AllowTigeraDefaultDeny(KibanaNamespace))
 		toCreate = append(toCreate, es.kibanaServiceAccount())
 
 		if len(es.cfg.PullSecrets) > 0 {
@@ -1842,14 +1842,6 @@ func (es *elasticsearchComponent) esCuratorAllowTigeraPolicy() *v3.NetworkPolicy
 			Egress:   egressRules,
 		},
 	}
-}
-
-func elasticsearchDefaultDenyAllowTigeraPolicy() *v3.NetworkPolicy {
-	return networkpolicy.AllowTigeraDefaultDeny(ElasticsearchNamespace)
-}
-
-func kibanaDefaultDenyAllowTigeraPolicy() *v3.NetworkPolicy {
-	return networkpolicy.AllowTigeraDefaultDeny(KibanaNamespace)
 }
 
 // overrideResourceRequirements replaces individual ResourceRequirements field's default value with user's value.

@@ -109,7 +109,7 @@ func (*dexComponent) SupportedOSType() rmeta.OSType {
 func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
 		c.allowTigeraNetworkPolicy(),
-		allowTigeraDefaultDeny(),
+		networkpolicy.AllowTigeraDefaultDeny(DexNamespace),
 		c.serviceAccount(),
 		c.deployment(),
 		c.service(),
@@ -419,8 +419,4 @@ func (c *dexComponent) allowTigeraNetworkPolicy() *v3.NetworkPolicy {
 			Egress: egressRules,
 		},
 	}
-}
-
-func allowTigeraDefaultDeny() *v3.NetworkPolicy {
-	return networkpolicy.AllowTigeraDefaultDeny(DexNamespace)
 }

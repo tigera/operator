@@ -161,7 +161,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 	objs := []client.Object{
 		CreateNamespace(IntrusionDetectionNamespace, c.cfg.Installation.KubernetesProvider, PodSecurityStandard(pss)),
 		c.intrusionDetectionControllerAllowTigeraPolicy(),
-		intrusionDetectionDefaultDenyAllowTigeraPolicy(),
+		networkpolicy.AllowTigeraDefaultDeny(IntrusionDetectionNamespace),
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(IntrusionDetectionNamespace, c.cfg.PullSecrets...)...)...)
 
@@ -1644,8 +1644,4 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchAllowTigera
 			Egress:   egressRules,
 		},
 	}
-}
-
-func intrusionDetectionDefaultDenyAllowTigeraPolicy() *v3.NetworkPolicy {
-	return networkpolicy.AllowTigeraDefaultDeny(IntrusionDetectionNamespace)
 }

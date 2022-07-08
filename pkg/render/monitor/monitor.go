@@ -153,7 +153,7 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 			mc.allowTigeraPrometheusPolicy(),
 			mc.allowTigeraPrometheusAPIPolicy(),
 			mc.allowTigeraPrometheusOperatorPolicy(),
-			prometheusAllowTigeraDefaultDeny(),
+			networkpolicy.AllowTigeraDefaultDeny(common.TigeraPrometheusNamespace),
 		)
 	}
 
@@ -924,8 +924,4 @@ func (mc *monitorComponent) allowTigeraPrometheusOperatorPolicy() *v3.NetworkPol
 			Egress:   egressRules,
 		},
 	}
-}
-
-func prometheusAllowTigeraDefaultDeny() *v3.NetworkPolicy {
-	return networkpolicy.AllowTigeraDefaultDeny(common.TigeraPrometheusNamespace)
 }

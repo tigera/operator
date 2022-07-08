@@ -153,7 +153,7 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 	complianceObjs := []client.Object{
 		CreateNamespace(ComplianceNamespace, c.cfg.Installation.KubernetesProvider, PSSPrivileged),
 		c.complianceAccessAllowTigeraNetworkPolicy(),
-		complianceAllowTigeraDefaultDeny(),
+		networkpolicy.AllowTigeraDefaultDeny(ComplianceNamespace),
 	}
 	complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(ComplianceNamespace, c.cfg.PullSecrets...)...)...)
 	complianceObjs = append(complianceObjs,
@@ -1480,8 +1480,4 @@ func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.Net
 			Egress:   egressRules,
 		},
 	}
-}
-
-func complianceAllowTigeraDefaultDeny() *v3.NetworkPolicy {
-	return networkpolicy.AllowTigeraDefaultDeny(ComplianceNamespace)
 }

@@ -71,13 +71,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, tierWatchReady)
 
-	policyNames := []types.NamespacedName{}
-	if opts.DetectedProvider == operatorv1.ProviderOpenShift {
-		policyNames = append(policyNames, types.NamespacedName{Name: tiers.ClusterDNSPolicyName, Namespace: "openshift-dns"})
-	} else {
-		policyNames = append(policyNames, types.NamespacedName{Name: tiers.ClusterDNSPolicyName, Namespace: "kube-system"})
-	}
-	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, policyWatchesReady, policyNames)
+	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, policyWatchesReady, []types.NamespacedName{
+		{Name: tiers.ClusterDNSPolicyName, Namespace: "openshift-dns"},
+		{Name: tiers.ClusterDNSPolicyName, Namespace: "kube-system"},
+	})
 
 	return add(mgr, c)
 }
@@ -85,7 +82,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, opts options.AddOptions, tierWatchReady *utils.ReadyFlag, policyWatchesReady *utils.ReadyFlag) reconcile.Reconciler {
 	r := &ReconcileTiers{
-		Client:             mgr.GetClient(),
+		client:             mgr.GetClient(),
 		scheme:             mgr.GetScheme(),
 		provider:           opts.DetectedProvider,
 		status:             status.New(mgr.GetClient(), "tiers", opts.KubernetesVersion),
@@ -112,7 +109,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 var _ reconcile.Reconciler = &ReconcileTiers{}
 
 type ReconcileTiers struct {
-	client.Client
+	client             client.Client
 	scheme             *runtime.Scheme
 	provider           operatorv1.Provider
 	status             status.StatusManager
@@ -124,7 +121,7 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling Tiers")
 
-	if !utils.IsAPIServerReady(r.Client, reqLogger) {
+	if !utils.IsAPIServerReady(r.client, reqLogger) {
 		r.status.SetDegraded("Waiting for Tigera API server to be ready", "")
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
@@ -140,7 +137,7 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 
 	// Ensure that a license is present so this controller can establish/manage tiers and domain-based policy.
-	license, err := utils.FetchLicenseKey(ctx, r.Client)
+	license, err := utils.FetchLicenseKey(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded("License not found", err.Error())
@@ -157,7 +154,7 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 
 	component := tiers.Tiers(&tiers.Config{Openshift: r.provider == operatorv1.ProviderOpenShift})
 
-	componentHandler := utils.NewComponentHandler(log, r.Client, r.scheme, nil)
+	componentHandler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
 	err = componentHandler.CreateOrUpdateOrDelete(ctx, component, nil)
 	if err != nil {
 		r.status.SetDegraded("Error creating / updating resource", err.Error())

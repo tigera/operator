@@ -60,7 +60,7 @@ var _ = Describe("tier controller tests", func() {
 
 		// Create an object we can use throughout the test to perform the reconcile loops.
 		r = ReconcileTiers{
-			Client:             c,
+			client:             c,
 			scheme:             scheme,
 			provider:           operatorv1.ProviderNone,
 			status:             mockStatus,
@@ -118,7 +118,7 @@ var _ = Describe("tier controller tests", func() {
 	It("waits for API server to be available before reconciling", func() {
 		mockStatus = &status.MockStatus{}
 		r = ReconcileTiers{
-			Client:             c,
+			client:             c,
 			scheme:             scheme,
 			provider:           operatorv1.ProviderNone,
 			status:             mockStatus,
@@ -131,7 +131,7 @@ var _ = Describe("tier controller tests", func() {
 	It("should wait if policy watches are not ready", func() {
 		mockStatus = &status.MockStatus{}
 		r = ReconcileTiers{
-			Client:             c,
+			client:             c,
 			scheme:             scheme,
 			provider:           operatorv1.ProviderNone,
 			status:             mockStatus,
@@ -144,7 +144,7 @@ var _ = Describe("tier controller tests", func() {
 	It("should wait if tier watch is not ready", func() {
 		mockStatus = &status.MockStatus{}
 		r = ReconcileTiers{
-			Client:             c,
+			client:             c,
 			scheme:             scheme,
 			provider:           operatorv1.ProviderNone,
 			status:             mockStatus,
@@ -161,7 +161,7 @@ var _ = Describe("tier controller tests", func() {
 		Expect(c.Delete(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}})).ToNot(HaveOccurred())
 		mockStatus = &status.MockStatus{}
 		r = ReconcileTiers{
-			Client:             c,
+			client:             c,
 			scheme:             scheme,
 			provider:           operatorv1.ProviderNone,
 			status:             mockStatus,
@@ -187,7 +187,7 @@ var _ = Describe("tier controller tests", func() {
 		Expect(c.Create(ctx, license)).ToNot(HaveOccurred())
 		mockStatus = &status.MockStatus{}
 		r = ReconcileTiers{
-			Client:             c,
+			client:             c,
 			scheme:             scheme,
 			provider:           operatorv1.ProviderNone,
 			status:             mockStatus,

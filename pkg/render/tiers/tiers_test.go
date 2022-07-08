@@ -55,7 +55,7 @@ var _ = Describe("Tiers rendering tests", func() {
 			func(scenario testutils.AllowTigeraScenario) {
 				cfg.Openshift = scenario.Openshift
 				component := tiers.Tiers(cfg)
-				resourcesToCreate, resourcesToDelete := component.Objects()
+				resourcesToCreate, _ := component.Objects()
 
 				// Validate tier render
 				allowTigera := rtest.GetResource(resourcesToCreate, "allow-tigera", "", "projectcalico.org", "v3", "Tier").(*v3.Tier)
@@ -66,17 +66,6 @@ var _ = Describe("Tiers rendering tests", func() {
 					policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resourcesToCreate)
 					expectedPolicy := getExpectedPolicy(policyName, scenario)
 					Expect(policy).To(Equal(expectedPolicy))
-				}
-
-				// Validate deleted policy render
-				if !scenario.Openshift {
-					Expect(resourcesToDelete).To(HaveLen(2))
-					Expect(resourcesToDelete[0].GetName()).To(Equal("allow-tigera.kube-dns"))
-					Expect(resourcesToDelete[0].GetNamespace()).To(Equal("kube-system"))
-					Expect(resourcesToDelete[1].GetName()).To(Equal("allow-tigera.kube-dns-egress"))
-					Expect(resourcesToDelete[1].GetNamespace()).To(Equal("kube-system"))
-				} else {
-					Expect(resourcesToDelete).To(BeEmpty())
 				}
 			},
 			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),

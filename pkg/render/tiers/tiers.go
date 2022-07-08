@@ -72,14 +72,7 @@ func (t tiersComponent) Objects() ([]client.Object, []client.Object) {
 		t.allowTigeraClusterDNSPolicy(),
 	}
 
-	// Delete equivalent policies under different namespaced names previously managed outside the operator.
-	objsToDelete := []client.Object{}
-	if !t.cfg.Openshift {
-		objsToDelete = append(objsToDelete, &v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.kube-dns", Namespace: "kube-system"}})
-		objsToDelete = append(objsToDelete, &v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.kube-dns-egress", Namespace: "kube-system"}})
-	}
-
-	return objsToCreate, objsToDelete
+	return objsToCreate, nil
 }
 
 func (t tiersComponent) Ready() bool {

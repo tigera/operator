@@ -35,17 +35,7 @@ func ApplyDaemonSetOverrides(ds *appsv1.DaemonSet, overrides components.DaemonSe
 		return ds
 	}
 
-	metadata := overrides.GetMetadata()
-	podTemplateMetadata := overrides.GetPodTemplateMetadata()
-	minReadySeconds := overrides.GetMinReadySeconds()
-	affinity := overrides.GetAffinity()
-	tolerations := overrides.GetTolerations()
-	nodeSelector := overrides.GetNodeSelector()
-
-	initContainers := overrides.GetInitContainers()
-	containers := overrides.GetContainers()
-
-	if metadata != nil {
+	if metadata := overrides.GetMetadata(); metadata != nil {
 		if len(metadata.Labels) > 0 {
 			if ds.Labels == nil {
 				ds.SetLabels(make(map[string]string))
@@ -59,12 +49,10 @@ func ApplyDaemonSetOverrides(ds *appsv1.DaemonSet, overrides components.DaemonSe
 			common.MergeMaps(metadata.Annotations, ds.GetAnnotations())
 		}
 	}
-
-	if minReadySeconds != nil {
+	if minReadySeconds := overrides.GetMinReadySeconds(); minReadySeconds != nil {
 		ds.Spec.MinReadySeconds = *minReadySeconds
 	}
-
-	if podTemplateMetadata != nil {
+	if podTemplateMetadata := overrides.GetPodTemplateMetadata(); podTemplateMetadata != nil {
 		if len(podTemplateMetadata.Labels) > 0 {
 			if ds.Spec.Template.GetLabels() == nil {
 				ds.Spec.Template.SetLabels(make(map[string]string))
@@ -78,21 +66,19 @@ func ApplyDaemonSetOverrides(ds *appsv1.DaemonSet, overrides components.DaemonSe
 			common.MergeMaps(podTemplateMetadata.Annotations, ds.Spec.Template.GetAnnotations())
 		}
 	}
-
-	// Merge all other fields in the overrides spec if they exist.
-	if initContainers != nil {
+	if initContainers := overrides.GetInitContainers(); initContainers != nil {
 		mergeContainers(ds.Spec.Template.Spec.InitContainers, initContainers)
 	}
-	if containers != nil {
+	if containers := overrides.GetContainers(); containers != nil {
 		mergeContainers(ds.Spec.Template.Spec.Containers, containers)
 	}
-	if affinity != nil {
+	if affinity := overrides.GetAffinity(); affinity != nil {
 		ds.Spec.Template.Spec.Affinity = affinity
 	}
-	if nodeSelector != nil {
+	if nodeSelector := overrides.GetNodeSelector(); nodeSelector != nil {
 		ds.Spec.Template.Spec.NodeSelector = nodeSelector
 	}
-	if tolerations != nil {
+	if tolerations := overrides.GetTolerations(); tolerations != nil {
 		ds.Spec.Template.Spec.Tolerations = tolerations
 	}
 

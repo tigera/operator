@@ -146,7 +146,7 @@ func (c *intrusionDetectionComponent) SupportedOSType() rmeta.OSType {
 func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Object) {
 	// Configure pod security standard. If syslog forwarding is enabled, we
 	// need hostpath volumes which require a privileged PSS.
-	pss := PSSRestricted
+	pss := PSSBaseline
 	if c.syslogForwardingIsEnabled() {
 		pss = PSSPrivileged
 	}

@@ -17,10 +17,11 @@ package apiserver
 import (
 	"context"
 	"fmt"
+	"time"
+
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/controller/utils"
 	netv1 "k8s.io/api/networking/v1"
-	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"

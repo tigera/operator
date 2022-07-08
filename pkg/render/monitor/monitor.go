@@ -17,9 +17,10 @@ package monitor
 import (
 	_ "embed"
 	"fmt"
+	"strings"
+
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	"strings"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -30,6 +31,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
@@ -144,7 +146,13 @@ func (mc *monitorComponent) SupportedOSType() rmeta.OSType {
 
 func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 	toCreate := []client.Object{
-		render.CreateNamespace(common.TigeraPrometheusNamespace, mc.cfg.Installation.KubernetesProvider, render.PSSRestricted),
+		// We create the namespace with "privileged" security context because the containers deployed by the prometheus operator
+		// do not set the following:
+		// - securityContext.allowPrivilegeEscalation=false
+		// - securityContext.capabilities.drop=["ALL"]
+		// - securityContext.runAsNonRoot=true
+		// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
+		render.CreateNamespace(common.TigeraPrometheusNamespace, mc.cfg.Installation.KubernetesProvider, render.PSSBaseline),
 	}
 	if mc.cfg.IncludeV3NetworkPolicy {
 		toCreate = append(toCreate,
@@ -262,6 +270,11 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 			Version:          components.ComponentCoreOSAlertmanager.Version,
 			Tolerations:      mc.cfg.Installation.ControlPlaneTolerations,
 			NodeSelector:     mc.cfg.Installation.ControlPlaneNodeSelector,
+			SecurityContext: &corev1.PodSecurityContext{
+				RunAsGroup:   &securitycontext.RunAsGroupID,
+				RunAsNonRoot: ptr.BoolToPtr(true),
+				RunAsUser:    &securitycontext.RunAsUserID,
+			},
 		},
 	}
 }
@@ -413,6 +426,11 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 						Scheme:    string(corev1.URISchemeHTTP),
 					},
 				},
+			},
+			SecurityContext: &corev1.PodSecurityContext{
+				RunAsGroup:   &securitycontext.RunAsGroupID,
+				RunAsNonRoot: ptr.BoolToPtr(true),
+				RunAsUser:    &securitycontext.RunAsUserID,
 			},
 		},
 	}

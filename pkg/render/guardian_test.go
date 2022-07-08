@@ -47,7 +47,7 @@ var _ = Describe("Rendering tests", func() {
 	guardianPolicy := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/guardian.json")
 	guardianPolicyForOCP := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/guardian_ocp.json")
 
-	var renderGuardian = func(i operatorv1.InstallationSpec, includeNetworkPolicy bool, addr string, openshift bool) {
+	renderGuardian := func(i operatorv1.InstallationSpec, includeNetworkPolicy bool, addr string, openshift bool) {
 		secret := &corev1.Secret{
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
@@ -124,7 +124,19 @@ var _ = Describe("Rendering tests", func() {
 		}
 
 		deployment := rtest.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(deployment.Spec.Template.Spec.Containers[0].Image).Should(Equal("my-reg/tigera/guardian:" + components.ComponentGuardian.Version))
+
+		Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+		Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
+		Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+		Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(BeTrue())
+		Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(1001))
+
+		// Check the namespace.
+		ns := rtest.GetResource(resources, "tigera-guardian", "", "", "v1", "Namespace").(*corev1.Namespace)
+		Expect(ns.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("restricted"))
+		Expect(ns.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
 	})
 
 	It("should render controlPlaneTolerations", func() {

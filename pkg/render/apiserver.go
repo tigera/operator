@@ -16,9 +16,10 @@ package render
 
 import (
 	"fmt"
+	"strings"
+
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -36,20 +37,24 @@ import (
 	"github.com/tigera/operator/pkg/ptr"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
-	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
-	ApiServerPort   = 5443
-	QueryServerPort = 8080
-
+	ApiServerPort       = 5443
 	APIServerPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "cnx-apiserver-access"
 
 	auditLogsVolumeName   = "tigera-audit-logs"
 	auditPolicyVolumeName = "tigera-audit-policy"
+)
+
+const (
+	QueryServerPort        = 8080
+	QueryserverNamespace   = "tigera-system"
+	QueryserverServiceName = "tigera-api"
 )
 
 // The following functions are helpers for determining resource names based on
@@ -192,9 +197,6 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	// Global enterprise-only objects.
 	globalEnterpriseObjects := []client.Object{
 		CreateNamespace(rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise), c.cfg.Installation.KubernetesProvider, PSSPrivileged),
-	}
-
-	globalEnterpriseObjects = append(globalEnterpriseObjects,
 		c.tigeraCustomResourcesClusterRole(),
 		c.tigeraCustomResourcesClusterRoleBinding(),
 		c.tierGetterClusterRole(),
@@ -207,7 +209,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		c.tieredPolicyPassthruClusterRolebinding(),
 		c.uiSettingsPassthruClusterRole(),
 		c.uiSettingsPassthruClusterRolebinding(),
-	)
+	}
 
 	// Namespaced enterprise-only objects.
 	namespacedEnterpriseObjects := []client.Object{
@@ -975,6 +977,9 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		// Set queryserver logging to "info"
 		{Name: "LOGLEVEL", Value: "info"},
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+		{Name: "LISTEN_ADDR", Value: fmt.Sprintf(":%d", QueryServerPort)},
+		{Name: "TLS_CERT", Value: fmt.Sprintf("/%s/tls.crt", ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant))},
+		{Name: "TLS_KEY", Value: fmt.Sprintf("/%s/tls.key", ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant))},
 	}
 
 	env = append(env, c.cfg.K8SServiceEndpoint.EnvVars(c.hostNetwork(), c.cfg.Installation.KubernetesProvider)...)
@@ -982,6 +987,10 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 
 	if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
 		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
+	}
+
+	volumeMounts := []corev1.VolumeMount{
+		c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()),
 	}
 
 	container := corev1.Container{
@@ -999,7 +1008,9 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 			InitialDelaySeconds: 90,
 			PeriodSeconds:       10,
 		},
-		SecurityContext: podsecuritycontext.NewBaseContext(),
+		// UID 1001 is used in the queryserver Dockerfile.
+		SecurityContext: securitycontext.NewBaseContext(1001, 0),
+		VolumeMounts:    volumeMounts,
 	}
 	return container
 }

@@ -18,10 +18,11 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"reflect"
 	"time"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"

@@ -16,6 +16,7 @@ package monitor_test
 
 import (
 	"fmt"
+
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/render/testutils"
 	"k8s.io/apimachinery/pkg/types"
@@ -73,7 +74,6 @@ var _ = Describe("monitor rendering tests", func() {
 	var prometheusKeyPair certificatemanagement.KeyPairInterface
 
 	BeforeEach(func() {
-
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
@@ -148,6 +148,11 @@ var _ = Describe("monitor rendering tests", func() {
 
 		obj := toDelete[0]
 		rtest.ExpectResource(obj, "elasticearch-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind)
+
+		// Check the namespace.
+		namespace := rtest.GetResource(toCreate, "tigera-prometheus", "", "", "v1", "Namespace").(*corev1.Namespace)
+		Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("baseline"))
+		Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
 	})
 
 	It("Should render Prometheus resource Specs correctly", func() {
@@ -162,6 +167,9 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(*alertmanagerObj.Spec.Image).To(Equal(fmt.Sprintf("%s%s:%s", components.TigeraRegistry, alertmanagerCom.Image, alertmanagerCom.Version)))
 		Expect(*alertmanagerObj.Spec.Replicas).To(Equal(int32(3)))
 		Expect(alertmanagerObj.Spec.Version).To(Equal(components.ComponentCoreOSAlertmanager.Version))
+		Expect(*alertmanagerObj.Spec.SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
+		Expect(*alertmanagerObj.Spec.SecurityContext.RunAsNonRoot).To(BeTrue())
+		Expect(*alertmanagerObj.Spec.SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
 
 		// Alertmanager Service
 		serviceObj, ok := rtest.GetResource(toCreate, "calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Service").(*corev1.Service)
@@ -197,6 +205,9 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(prometheusObj.Spec.Alerting.Alertmanagers[0].Namespace).To(Equal("tigera-prometheus"))
 		Expect(prometheusObj.Spec.Alerting.Alertmanagers[0].Port).To(Equal(intstr.FromString("web")))
 		Expect(prometheusObj.Spec.Alerting.Alertmanagers[0].Scheme).To(Equal("HTTP"))
+		Expect(*prometheusObj.Spec.SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
+		Expect(*prometheusObj.Spec.SecurityContext.RunAsNonRoot).To(BeTrue())
+		Expect(*prometheusObj.Spec.SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
 
 		// Prometheus ServiceAccount
 		_, ok = rtest.GetResource(toCreate, "prometheus", common.TigeraPrometheusNamespace, "", "v1", "ServiceAccount").(*corev1.ServiceAccount)
@@ -357,7 +368,9 @@ var _ = Describe("monitor rendering tests", func() {
 				ManagerDomain:  "https://127.0.0.1",
 				GroupsPrefix:   "g:",
 				UsernamePrefix: "u:",
-				OIDC:           &operatorv1.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email", GroupsClaim: "grp"}}}
+				OIDC:           &operatorv1.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email", GroupsClaim: "grp"},
+			},
+		}
 
 		dexCfg := render.NewDexKeyValidatorConfig(authentication,
 			nil,

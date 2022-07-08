@@ -16,6 +16,7 @@ package render_test
 
 import (
 	"fmt"
+
 	"github.com/tigera/operator/pkg/render/testutils"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -64,7 +65,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 	})
 
 	// Pull secret
-	var pullSecrets = []*corev1.Secret{{
+	pullSecrets := []*corev1.Secret{{
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "pull-secret",
@@ -72,10 +73,10 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		},
 	}}
 	// Installation with minimal setup
-	var defaultInstallation = operatorv1.InstallationSpec{}
+	defaultInstallation := operatorv1.InstallationSpec{}
 
 	// Rendering packet capture resources
-	var renderPacketCapture = func(i operatorv1.InstallationSpec, config authentication.KeyValidatorConfig) (resources []client.Object) {
+	renderPacketCapture := func(i operatorv1.InstallationSpec, config authentication.KeyValidatorConfig) (resources []client.Object) {
 		cfg := &render.PacketCaptureApiConfiguration{
 			PullSecrets:                  pullSecrets,
 			Installation:                 &i,
@@ -83,7 +84,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 			ServerCertSecret:             secret,
 			NetworkPolicyRequirementsMet: true,
 		}
-		var pc = render.PacketCaptureAPI(cfg)
+		pc := render.PacketCaptureAPI(cfg)
 		Expect(pc.ResolveImages(nil)).To(BeNil())
 		resources, _ = pc.Objects()
 		return resources
@@ -97,8 +98,8 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		kind    string
 	}
 	// Generate expected resources
-	var expectedResources = func(useCSR, enableOIDC bool) []expectedResource {
-		var resources = []expectedResource{
+	expectedResources := func(useCSR, enableOIDC bool) []expectedResource {
+		resources := []expectedResource{
 			{name: render.PacketCaptureNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: render.PacketCapturePolicyName, ns: render.PacketCaptureNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: "pull-secret", ns: render.PacketCaptureNamespace, group: "", version: "v1", kind: "Secret"},
@@ -110,12 +111,11 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		}
 
 		return resources
-
 	}
 
 	// Generate expected environment variables
-	var expectedEnvVars = func(enableOIDC bool) []corev1.EnvVar {
-		var envVars = []corev1.EnvVar{
+	expectedEnvVars := func(enableOIDC bool) []corev1.EnvVar {
+		envVars := []corev1.EnvVar{
 			{Name: "PACKETCAPTURE_API_LOG_LEVEL", Value: "Info"},
 			{
 				Name:  "PACKETCAPTURE_API_HTTPS_KEY",
@@ -176,8 +176,8 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 	}
 
 	// Generate expected volume mounts
-	var expectedVolumeMounts = func() []corev1.VolumeMount {
-		var volumeMounts = []corev1.VolumeMount{
+	expectedVolumeMounts := func() []corev1.VolumeMount {
+		volumeMounts := []corev1.VolumeMount{
 			{
 				Name:      render.PacketCaptureCertSecret,
 				MountPath: "/tigera-packetcapture-server-tls",
@@ -187,17 +187,20 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		return volumeMounts
 	}
 	// Generate expected containers
-	var expectedContainers = func(enableOIDC bool) []corev1.Container {
-		var volumeMounts = expectedVolumeMounts()
-		var envVars = expectedEnvVars(enableOIDC)
+	expectedContainers := func(enableOIDC bool) []corev1.Container {
+		volumeMounts := expectedVolumeMounts()
+		envVars := expectedEnvVars(enableOIDC)
 
 		return []corev1.Container{
 			{
 				Name:  render.PacketCaptureContainerName,
 				Image: fmt.Sprintf("%s%s:%s", components.TigeraRegistry, components.ComponentPacketCapture.Image, components.ComponentPacketCapture.Version),
 				SecurityContext: &corev1.SecurityContext{
-					RunAsNonRoot:             ptr.BoolToPtr(true),
 					AllowPrivilegeEscalation: ptr.BoolToPtr(false),
+					Privileged:               ptr.BoolToPtr(false),
+					RunAsGroup:               ptr.Int64ToPtr(0),
+					RunAsNonRoot:             ptr.BoolToPtr(true),
+					RunAsUser:                ptr.Int64ToPtr(1001),
 				},
 				ReadinessProbe: &corev1.Probe{
 					Handler: corev1.Handler{
@@ -228,7 +231,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 	}
 
 	// Generate expected volumes
-	var expectedVolumes = func(useCSR bool) []corev1.Volume {
+	expectedVolumes := func(useCSR bool) []corev1.Volume {
 		var volumes []corev1.Volume
 		if useCSR {
 			volumes = append(volumes, corev1.Volume{
@@ -238,7 +241,6 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 				},
 			})
 		} else {
-
 			volumes = append(volumes, corev1.Volume{
 				Name: render.PacketCaptureCertSecret,
 				VolumeSource: corev1.VolumeSource{
@@ -248,17 +250,21 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 					},
 				},
 			})
-
 		}
 
 		return volumes
 	}
 
-	var checkPacketCaptureResources = func(resources []client.Object, useCSR, enableOIDC bool) {
+	checkPacketCaptureResources := func(resources []client.Object, useCSR, enableOIDC bool) {
 		for i, expectedRes := range expectedResources(useCSR, enableOIDC) {
 			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 		Expect(len(resources)).To(Equal(len(expectedResources(useCSR, enableOIDC))))
+
+		// Check the namespace.
+		namespace := rtest.GetResource(resources, render.PacketCaptureNamespace, "", "", "v1", "Namespace").(*corev1.Namespace)
+		Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("baseline"))
+		Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
 
 		// Check deployment
 		deployment := rtest.GetResource(resources, render.PacketCaptureDeploymentName, render.PacketCaptureNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -323,11 +329,12 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 				Port:       443,
 				Protocol:   corev1.ProtocolTCP,
 				TargetPort: intstr.FromInt(8444),
-			}}))
+			},
+		}))
 	}
 
 	It("should render all resources for default installation", func() {
-		var resources = renderPacketCapture(defaultInstallation, nil)
+		resources := renderPacketCapture(defaultInstallation, nil)
 
 		checkPacketCaptureResources(resources, false, false)
 	})
@@ -338,7 +345,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 			Operator: corev1.TolerationOpEqual,
 			Value:    "bar",
 		}
-		var resources = renderPacketCapture(operatorv1.InstallationSpec{
+		resources := renderPacketCapture(operatorv1.InstallationSpec{
 			ControlPlaneTolerations: []corev1.Toleration{t},
 		}, nil)
 
@@ -358,7 +365,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		secret, err = certificateManager.GetOrCreateKeyPair(cli, render.PacketCaptureCertSecret, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
 
-		var resources = renderPacketCapture(installation, nil)
+		resources := renderPacketCapture(installation, nil)
 		checkPacketCaptureResources(resources, true, false)
 	})
 
@@ -366,10 +373,12 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		authentication := &operatorv1.Authentication{
 			Spec: operatorv1.AuthenticationSpec{
 				ManagerDomain: "https://127.0.0.1",
-				OIDC:          &operatorv1.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"}}}
+				OIDC:          &operatorv1.AuthenticationOIDC{IssuerURL: "https://accounts.google.com", UsernameClaim: "email"},
+			},
+		}
 
-		var dexCfg = render.NewDexKeyValidatorConfig(authentication, nil, dns.DefaultClusterDomain)
-		var resources = renderPacketCapture(defaultInstallation, dexCfg)
+		dexCfg := render.NewDexKeyValidatorConfig(authentication, nil, dns.DefaultClusterDomain)
+		resources := renderPacketCapture(defaultInstallation, dexCfg)
 
 		checkPacketCaptureResources(resources, false, true)
 	})

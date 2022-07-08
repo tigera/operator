@@ -157,6 +157,11 @@ var _ = Describe("compliance rendering tests", func() {
 			rtest.ExpectGlobalReportType(rtest.GetResource(resources, "policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"), "policy-audit")
 			rtest.ExpectGlobalReportType(rtest.GetResource(resources, "cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"), "cis-benchmark")
 
+			// Check the namespace.
+			namespace := rtest.GetResource(resources, "tigera-compliance", "", "", "v1", "Namespace").(*corev1.Namespace)
+			Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("privileged"))
+			Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
+
 			clusterRole := rtest.GetResource(resources, "tigera-compliance-server", "", rbac, "v1", "ClusterRole").(*rbacv1.ClusterRole)
 			Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
 				{

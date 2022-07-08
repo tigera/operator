@@ -19,9 +19,10 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"time"
+
 	"github.com/tigera/operator/pkg/render/testutils"
 	"k8s.io/apimachinery/pkg/types"
-	"time"
 
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -198,7 +199,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateMaster))
 
 		Expect(d.Spec.Template.Spec.ImagePullSecrets).To(BeEmpty())
-		Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(2))
+		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(2))
 		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-apiserver"))
 		Expect(d.Spec.Template.Spec.Containers[0].Image).To(Equal(
 			fmt.Sprintf("testregistry.com/%s:%s", components.ComponentAPIServer.Image, components.ComponentAPIServer.Version),
@@ -235,7 +236,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			fmt.Sprintf("testregistry.com/%s:%s", components.ComponentQueryServer.Image, components.ComponentQueryServer.Version),
 		))
 		Expect(d.Spec.Template.Spec.Containers[1].Args).To(BeEmpty())
-		Expect(len(d.Spec.Template.Spec.Containers[1].Env)).To(Equal(2))
+		Expect(len(d.Spec.Template.Spec.Containers[1].Env)).To(Equal(5))
 
 		Expect(d.Spec.Template.Spec.Containers[1].Env[0].Name).To(Equal("LOGLEVEL"))
 		Expect(d.Spec.Template.Spec.Containers[1].Env[0].Value).To(Equal("info"))
@@ -243,17 +244,39 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(d.Spec.Template.Spec.Containers[1].Env[1].Name).To(Equal("DATASTORE_TYPE"))
 		Expect(d.Spec.Template.Spec.Containers[1].Env[1].Value).To(Equal("kubernetes"))
 		Expect(d.Spec.Template.Spec.Containers[1].Env[1].ValueFrom).To(BeNil())
+		Expect(d.Spec.Template.Spec.Containers[1].Env[2].Name).To(Equal("LISTEN_ADDR"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[2].Value).To(Equal(":8080"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[2].ValueFrom).To(BeNil())
+		Expect(d.Spec.Template.Spec.Containers[1].Env[3].Name).To(Equal("TLS_CERT"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[3].Value).To(Equal("/tigera-apiserver-certs/tls.crt"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[3].ValueFrom).To(BeNil())
+		Expect(d.Spec.Template.Spec.Containers[1].Env[4].Name).To(Equal("TLS_KEY"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[4].Value).To(Equal("/tigera-apiserver-certs/tls.key"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[4].ValueFrom).To(BeNil())
 
 		// Expect the SECURITY_GROUP env variables to not be set
 		Expect(d.Spec.Template.Spec.Containers[1].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_DEFAULT_SECURITY_GROUPS")})))
 		Expect(d.Spec.Template.Spec.Containers[1].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_POD_SECURITY_GROUP")})))
 
-		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts).To(BeEmpty())
+		Expect(len(d.Spec.Template.Spec.Containers[1].VolumeMounts)).To(Equal(1))
+		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts[0].Name).To(Equal("tigera-apiserver-certs"))
+		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts[0].MountPath).To(Equal("/tigera-apiserver-certs"))
+		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts[0].ReadOnly).To(BeTrue())
+		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts[0].SubPath).To(Equal(""))
+		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts[0].MountPropagation).To(BeNil())
+		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts[0].SubPathExpr).To(Equal(""))
+
 		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.HTTPGet.Path).To(Equal("/version"))
 		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.HTTPGet.Port.String()).To(BeEquivalentTo("8080"))
 		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.HTTPGet.Scheme).To(BeEquivalentTo("HTTPS"))
 		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.InitialDelaySeconds).To(BeEquivalentTo(90))
 		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.PeriodSeconds).To(BeEquivalentTo(10))
+
+		Expect(*d.Spec.Template.Spec.Containers[1].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+		Expect(*d.Spec.Template.Spec.Containers[1].SecurityContext.Privileged).To(BeFalse())
+		Expect(*d.Spec.Template.Spec.Containers[1].SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+		Expect(*d.Spec.Template.Spec.Containers[1].SecurityContext.RunAsNonRoot).To(BeTrue())
+		Expect(*d.Spec.Template.Spec.Containers[1].SecurityContext.RunAsUser).To(BeEquivalentTo(1001))
 
 		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(3))
 

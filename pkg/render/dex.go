@@ -27,8 +27,8 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
-	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"gopkg.in/yaml.v2"
 
@@ -224,11 +224,12 @@ func (c *dexComponent) deployment() client.Object {
 					InitContainers:     initContainers,
 					Containers: []corev1.Container{
 						{
-							Name:            DexObjectName,
-							Image:           c.image,
-							Env:             c.cfg.DexConfig.RequiredEnv(""),
-							LivenessProbe:   c.probe(),
-							SecurityContext: podsecuritycontext.NewBaseContext(),
+							Name:          DexObjectName,
+							Image:         c.image,
+							Env:           c.cfg.DexConfig.RequiredEnv(""),
+							LivenessProbe: c.probe(),
+							// UID and GID 1001:1001 are used in dex Dockerfile.
+							SecurityContext: securitycontext.NewBaseContext(1001, 1001),
 
 							Command: []string{"/usr/local/bin/dex", "serve", "/etc/dex/baseCfg/config.yaml"},
 

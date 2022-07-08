@@ -36,11 +36,13 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/ptr"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rkibana "github.com/tigera/operator/pkg/render/common/kibana"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/url"
 )
@@ -159,6 +161,11 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		pss = PSSPrivileged
 	}
 	objs := []client.Object{
+		// In order to switch to a restricted policy, we need to set the following on all containers in the namespace:
+		// - securityContext.allowPrivilegeEscalation=false)
+		// - securityContext.capabilities.drop=["ALL"]
+		// - securityContext.runAsNonRoot=true)
+		// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
 		CreateNamespace(IntrusionDetectionNamespace, c.cfg.Installation.KubernetesProvider, PodSecurityStandard(pss)),
 		c.intrusionDetectionControllerAllowTigeraPolicy(),
 		networkpolicy.AllowTigeraDefaultDeny(IntrusionDetectionNamespace),
@@ -366,19 +373,8 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 			Resources: []string{"deployments"},
 			Verbs:     []string{"get"},
 		},
-		{
-			APIGroups: []string{
-				"batch",
-			},
-			Resources: []string{
-				"cronjobs",
-				"jobs",
-			},
-			Verbs: []string{
-				"get", "list", "watch", "create", "update", "patch", "delete",
-			},
-		},
 	}
+
 	if !c.cfg.ManagedCluster {
 		managementRule := []rbacv1.PolicyRule{
 			{
@@ -391,7 +387,28 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 				Resources: []string{"tokenreviews"},
 				Verbs:     []string{"create"},
 			},
+			{
+				APIGroups: []string{"batch"},
+				Resources: []string{"cronjobs", "jobs"},
+				Verbs: []string{
+					"get", "list", "watch", "create", "update", "patch", "delete",
+				},
+			},
 		}
+
+		// Used when IDS Controller creates Cronjobs for AD as the IDS deployment
+		// is the owner of the AD Cronjobs - Openshift blocks setting an
+		// blockOwnerDeletion to true if an ownerReference refers to a resource
+		// you can't set finalizers on
+		if c.cfg.Openshift {
+			managementRule = append(managementRule,
+				rbacv1.PolicyRule{
+					APIGroups: []string{"apps"},
+					Resources: []string{"deployments/finalizers"},
+					Verbs:     []string{"update"},
+				})
+		}
+
 		rules = append(rules, managementRule...)
 	}
 	return &rbacv1.ClusterRole{
@@ -556,7 +573,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 		},
 	}
 
-	privileged := false
+	sc := securitycontext.NewBaseContext(securitycontext.RunAsUserID, securitycontext.RunAsGroupID)
 
 	// If syslog forwarding is enabled then set the necessary ENV var and volume mount to
 	// write logs for Fluentd.
@@ -571,7 +588,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 		// On OpenShift, if we need the volume mount to hostpath volume for syslog forwarding,
 		// then ID controller needs privileged access to write event logs to that volume
 		if c.cfg.Openshift {
-			privileged = true
+			sc.Privileged = ptr.BoolToPtr(true)
 		}
 	}
 
@@ -591,10 +608,8 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 			},
 			InitialDelaySeconds: 5,
 		},
-		SecurityContext: &corev1.SecurityContext{
-			Privileged: &privileged,
-		},
-		VolumeMounts: volumeMounts,
+		SecurityContext: sc,
+		VolumeMounts:    volumeMounts,
 	}
 }
 

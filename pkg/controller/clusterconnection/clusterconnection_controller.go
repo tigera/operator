@@ -17,9 +17,10 @@ package clusterconnection
 import (
 	"context"
 	"fmt"
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"net"
 	"time"
+
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"

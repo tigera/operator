@@ -34,9 +34,9 @@ import (
 	rkibana "github.com/tigera/operator/pkg/render/common/kibana"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
-	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -172,7 +172,10 @@ func (c *managerComponent) SupportedOSType() rmeta.OSType {
 
 func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
-		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted),
+		// In order to switch to a restricted namespace, we need to set:
+		// - securityContext.capabilities.drop=["ALL"]
+		// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
+		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSBaseline),
 		c.managerAllowTigeraNetworkPolicy(),
 		networkpolicy.AllowTigeraDefaultDeny(ManagerNamespace),
 	}
@@ -357,11 +360,12 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 // managerContainer returns the manager container.
 func (c *managerComponent) managerContainer() corev1.Container {
 	tm := corev1.Container{
-		Name:            "tigera-manager",
-		Image:           c.managerImage,
-		Env:             c.managerEnvVars(),
-		LivenessProbe:   c.managerProbe(),
-		SecurityContext: podsecuritycontext.NewBaseContext(),
+		Name:          "tigera-manager",
+		Image:         c.managerImage,
+		Env:           c.managerEnvVars(),
+		LivenessProbe: c.managerProbe(),
+		// UID 999 is used in the manager Dockerfile.
+		SecurityContext: securitycontext.NewBaseContext(999, 0),
 		VolumeMounts:    c.managerVolumeMounts(),
 	}
 
@@ -413,6 +417,9 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		{Name: "VOLTRON_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_COMPLIANCE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_DEX_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+		{Name: "VOLTRON_QUERYSERVER_ENDPOINT", Value: fmt.Sprintf("https://%s.%s.svc:%d", QueryserverServiceName, QueryserverNamespace, QueryServerPort)},
+		{Name: "VOLTRON_QUERYSERVER_BASE_PATH", Value: fmt.Sprintf("/api/v1/namespaces/%s/services/https:%s:%d/proxy/", QueryserverNamespace, QueryserverServiceName, QueryServerPort)},
+		{Name: "VOLTRON_QUERYSERVER_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_HTTPS_KEY", Value: keyPath},
 		{Name: "VOLTRON_HTTPS_CERT", Value: certPath},
 		{Name: "VOLTRON_TUNNEL_KEY", Value: tunnelKeyPath},
@@ -430,12 +437,13 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:            VoltronName,
-		Image:           c.proxyImage,
-		Env:             env,
-		VolumeMounts:    c.volumeMountsForProxyManager(),
-		LivenessProbe:   c.managerProxyProbe(),
-		SecurityContext: podsecuritycontext.NewBaseContext(),
+		Name:          VoltronName,
+		Image:         c.proxyImage,
+		Env:           env,
+		VolumeMounts:  c.volumeMountsForProxyManager(),
+		LivenessProbe: c.managerProxyProbe(),
+		// UID 1001 is used in the voltron Dockerfile.
+		SecurityContext: securitycontext.NewBaseContext(1001, 0),
 	}
 }
 
@@ -470,10 +478,11 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:            "tigera-es-proxy",
-		Image:           c.esProxyImage,
-		LivenessProbe:   c.managerEsProxyProbe(),
-		SecurityContext: podsecuritycontext.NewBaseContext(),
+		Name:          "tigera-es-proxy",
+		Image:         c.esProxyImage,
+		LivenessProbe: c.managerEsProxyProbe(),
+		// UID 1001 is used in the es-proxy Dockerfile.
+		SecurityContext: securitycontext.NewBaseContext(1001, 0),
 		Env:             env,
 		VolumeMounts:    volumeMounts,
 	}

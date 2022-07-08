@@ -17,6 +17,7 @@ package clusterconnection_test
 import (
 	"context"
 	"fmt"
+
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"

@@ -149,6 +149,7 @@ var _ = Describe("Node rendering tests", func() {
 			i++
 		}
 
+		// Check CNI configmap.
 		cniCmResource := rtest.GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
 		Expect(cniCmResource).ToNot(BeNil())
 		cniCm := cniCmResource.(*corev1.ConfigMap)
@@ -504,7 +505,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
 			{Name: "sys-fs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
 			{Name: "bpffs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
-			{Name: "init-proc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc/1"}}},
+			{Name: "nodeproc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc"}}},
 			{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 			{
 				Name: certificatemanagement.TrustedCertConfigMapName,
@@ -2870,7 +2871,6 @@ var _ = Describe("Node rendering tests", func() {
 				corev1.EnvVar{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp,vpp"},
 			))
 		})
-
 	})
 
 	Context("with k8s overrides set", func() {

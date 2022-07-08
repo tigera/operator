@@ -53,6 +53,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -278,9 +279,14 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 	if es.cfg.ManagementClusterConnection == nil {
 
-		// ECK CRs
+		// ECK operator
 		toCreate = append(toCreate,
-			CreateNamespace(ECKOperatorNamespace, es.cfg.Installation.KubernetesProvider, PSSRestricted),
+			// In order to use restricted, we need to change:
+			// - securityContext.allowPrivilegeEscalation=false
+			// - securityContext.capabilities.drop=["ALL"]
+			// - securityContext.runAsNonRoot=true
+			// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
+			CreateNamespace(ECKOperatorNamespace, es.cfg.Installation.KubernetesProvider, PSSBaseline),
 			es.eckOperatorAllowTigeraPolicy(),
 		)
 
@@ -335,7 +341,12 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate, es.elasticsearchCluster())
 
 		// Kibana CRs
-		toCreate = append(toCreate, CreateNamespace(KibanaNamespace, es.cfg.Installation.KubernetesProvider, PSSRestricted))
+		// In order to use restricted, we need to change:
+		// - securityContext.allowPrivilegeEscalation=false)
+		// - securityContext.capabilities.drop=["ALL"]
+		// - securityContext.runAsNonRoot=true
+		// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
+		toCreate = append(toCreate, CreateNamespace(KibanaNamespace, es.cfg.Installation.KubernetesProvider, PSSBaseline))
 		toCreate = append(toCreate, es.kibanaAllowTigeraPolicy())
 		toCreate = append(toCreate, networkpolicy.AllowTigeraDefaultDeny(KibanaNamespace))
 		toCreate = append(toCreate, es.kibanaServiceAccount())
@@ -642,15 +653,15 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 
 	// Init container that logs the SELinux context of the `/usr/share/elasticsearch` folder.
 	// This init container is added as a workaround for a bug where Elasticsearch fails to starts when
-	// under some scenarios Kuberentes starts the main container before all the init containers have
+	// under some scenarios Kubernetes starts the main container before all the init containers have
 	// completed, SELinux is also enabled on the node, and Kubernetes/kubelet is using the Docker runtime.
 	//
 	// When SELinux is enabled, SELinux policy only allows a container to read a file/folder when their
 	// SELinux labels match or when the mounts are configured to be shared among multiple containers (the
 	// latter isn't used by Kubernetes). These SELinux labels are managed by the container runtime.
-	// This assignement of SELinux labels and relabelling of files/folders happen when the container is started.
+	// This assignment of SELinux labels and relabelling of files/folders happen when the container is started.
 	// The container runtime also assigns the same SELinux labels to containers created within the same sandbox.
-	// The exception to this SELinux label assignement being when a container is privileged, the Docker runtime
+	// The exception to this SELinux label assignment being when a container is privileged, the Docker runtime
 	// mounts the container's files/folders with a different SELinux label than the one used for the sandbox.
 	//
 	// In Kubernetes, pods are created within the same sandbox. This ensures that files/folders can be shared by
@@ -1321,6 +1332,11 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 						},
 						VolumeMounts: volumeMounts,
 					}},
+					SecurityContext: &corev1.PodSecurityContext{
+						RunAsGroup:   &securitycontext.RunAsGroupID,
+						RunAsNonRoot: ptr.BoolToPtr(true),
+						RunAsUser:    &securitycontext.RunAsUserID,
+					},
 					Volumes: volumes,
 				},
 			},

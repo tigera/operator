@@ -17,10 +17,11 @@ package apiserver
 import (
 	"context"
 	"fmt"
+	"time"
+
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
-	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"

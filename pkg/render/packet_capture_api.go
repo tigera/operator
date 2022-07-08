@@ -30,8 +30,8 @@ import (
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/podsecuritycontext"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -97,7 +97,10 @@ func (pc *packetCaptureApiComponent) SupportedOSType() rmeta.OSType {
 
 func (pc *packetCaptureApiComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
-		CreateNamespace(PacketCaptureNamespace, pc.cfg.Installation.KubernetesProvider, PSSRestricted),
+		// In order to switch to a restricted namespace, we need to set:
+		// - securityContext.capabilities.drop=["ALL"]
+		// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
+		CreateNamespace(PacketCaptureNamespace, pc.cfg.Installation.KubernetesProvider, PSSBaseline),
 	}
 	if pc.cfg.NetworkPolicyRequirementsMet {
 		objs = append(objs, pc.allowTigeraPolicy())
@@ -269,11 +272,12 @@ func (pc *packetCaptureApiComponent) container() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:            PacketCaptureContainerName,
-		Image:           pc.image,
-		LivenessProbe:   pc.healthProbe(),
-		ReadinessProbe:  pc.healthProbe(),
-		SecurityContext: podsecuritycontext.NewBaseContext(),
+		Name:           PacketCaptureContainerName,
+		Image:          pc.image,
+		LivenessProbe:  pc.healthProbe(),
+		ReadinessProbe: pc.healthProbe(),
+		// UID 1001 is used in the packetcapture Dockerfile.
+		SecurityContext: securitycontext.NewBaseContext(1001, 0),
 		Env:             env,
 		VolumeMounts:    volumeMounts,
 	}

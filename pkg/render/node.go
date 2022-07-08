@@ -431,6 +431,13 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				Resources: []string{"blockaffinities"},
 				Verbs:     []string{"watch"},
 			},
+			{
+				// Allows Calico to use the K8s TokenRequest API to create the tokens used by the CNI plugin.
+				APIGroups:     []string{""},
+				Resources:     []string{"serviceaccounts/token"},
+				ResourceNames: []string{"calico-node"},
+				Verbs:         []string{"create"},
+			},
 		},
 	}
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
@@ -843,7 +850,7 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 			// Volume for the bpffs itself, used by the main node container.
 			corev1.Volume{Name: "bpffs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
 			// Volume used by mount-cgroupv2 init container to access root cgroup name space of node.
-			corev1.Volume{Name: "init-proc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc/1"}}},
+			corev1.Volume{Name: "nodeproc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc"}}},
 		)
 	}
 
@@ -987,8 +994,15 @@ func (c *nodeComponent) bpffsInitContainer() corev1.Container {
 			MountPropagation: &bidirectional,
 		},
 		{
-			MountPath: "/initproc",
-			Name:      "init-proc",
+			MountPath: "/var/run/calico",
+			Name:      "var-run-calico",
+			// Bidirectional is required to ensure that the new mount we make at /var/run/calico/cgroup propagates to the host
+			// so that it outlives the init container.
+			MountPropagation: &bidirectional,
+		},
+		{
+			MountPath: "/nodeproc",
+			Name:      "nodeproc",
 			ReadOnly:  true,
 		},
 	}

@@ -15,13 +15,18 @@
 package components
 
 import (
+	"fmt"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
+
+var log = logf.Log.WithName("components")
 
 // ApplyDaemonSetOverrides applies the overrides to the given DaemonSet.
 // Note: overrides must not be nil pointer.
@@ -31,25 +36,15 @@ func ApplyDaemonSetOverrides(ds *appsv1.DaemonSet, overrides components.DaemonSe
 		return ds
 	}
 
-	var metadata *operatorv1.Metadata
-	var minReadySeconds *int32
-	var podTemplateMetadata *operatorv1.Metadata
+	metadata := overrides.GetMetadata()
+	podTemplateMetadata := overrides.GetPodTemplateMetadata()
+	minReadySeconds := overrides.GetMinReadySeconds()
+	affinity := overrides.GetAffinity()
+	tolerations := overrides.GetTolerations()
+	nodeSelector := overrides.GetNodeSelector()
 
-	var affinity *corev1.Affinity
-	var tolerations []corev1.Toleration
-	var nodeSelector map[string]string
-	var initContainers []operatorv1.Container
-	var containers []operatorv1.Container
-
-	metadata = overrides.GetMetadata()
-	podTemplateMetadata = overrides.GetPodTemplateMetadata()
-	minReadySeconds = overrides.GetMinReadySeconds()
-	affinity = overrides.GetAffinity()
-	tolerations = overrides.GetTolerations()
-	nodeSelector = overrides.GetNodeSelector()
-
-	initContainers = overrides.GetInitContainers()
-	containers = overrides.GetContainers()
+	initContainers := overrides.GetInitContainers()
+	containers := overrides.GetContainers()
 
 	if metadata != nil {
 		if len(metadata.Labels) > 0 {
@@ -116,6 +111,8 @@ func mergeContainers(current []corev1.Container, provided []operatorv1.Container
 	for i, c := range current {
 		if override, ok := providedMap[c.Name]; ok {
 			current[i].Resources = *override.Resources
+		} else {
+			log.V(1).Info(fmt.Sprintf("WARNING: the container %q was provided for an override and passed CRD validation but the container does not currently exist", c.Name))
 		}
 	}
 }

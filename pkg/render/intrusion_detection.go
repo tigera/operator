@@ -1518,21 +1518,25 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 						},
 						Env: []corev1.EnvVar{
 							{
-								Name: "ELASTIC_HOST",
+								Name: "ES_HOST",
 								// static index 2 refres to - <svc_name>.<ns>.svc format
 								Value: dns.GetServiceDNSNames(ESGatewayServiceName, ElasticsearchNamespace, c.cfg.ClusterDomain)[2],
 							},
 							{
-								Name:  "ELASTIC_PORT",
+								Name:  "ES_PORT",
 								Value: strconv.Itoa(ElasticsearchDefaultPort),
 							},
 							{
-								Name:      "ELASTIC_USER",
+								Name:      "ES_USERNAME",
 								ValueFrom: secret.GetEnvVarSource(ElasticsearchADJobUserSecret, "username", false),
 							},
 							{
-								Name:      "ELASTIC_PASSWORD",
+								Name:      "ES_PASSWORD",
 								ValueFrom: secret.GetEnvVarSource(ElasticsearchADJobUserSecret, "password", false),
+							},
+							{
+								Name:  "ES_CA_CERT",
+								Value: "/certs/es-ca.pem",
 							},
 							{
 								Name: "MODEL_STORAGE_API_HOST",
@@ -1550,10 +1554,6 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 							{
 								Name:      "MODEL_STORAGE_API_TOKEN",
 								ValueFrom: secret.GetEnvVarSource(adDetectorServiceAccountName, "token", false),
-							},
-							{
-								Name:  "ES_CA_CERT",
-								Value: "/certs/es-ca.pem",
 							},
 						},
 						VolumeMounts: []corev1.VolumeMount{

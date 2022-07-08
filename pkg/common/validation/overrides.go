@@ -18,6 +18,8 @@ import (
 	"fmt"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	corev1 "k8s.io/api/core/v1"
+
 	"github.com/tigera/operator/pkg/common/k8svalidation"
 	"github.com/tigera/operator/pkg/components"
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -26,7 +28,7 @@ import (
 // ValidateDaemonSetOverrides validates the given DaemonSetOverrides.
 // validateContainerFn and validateInitContainerFn are used to validate the
 // containers retrieved from the DaemonSetOverrides instance.
-func ValidateDaemonSetOverrides(overrides components.DaemonSetOverrides, validateContainerFn func(container operatorv1.Container) error, validateInitContainerFn func(container operatorv1.Container) error) error {
+func ValidateDaemonSetOverrides(overrides components.DaemonSetOverrides, validateContainerFn func(container corev1.Container) error, validateInitContainerFn func(container corev1.Container) error) error {
 	if md := overrides.GetMetadata(); md != nil {
 		if err := validateMetadata(md); err != nil {
 			return fmt.Errorf("metadata is invalid: %w", err)

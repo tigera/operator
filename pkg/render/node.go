@@ -72,8 +72,8 @@ var (
 	calicoNodeDaemonSetContainerNames     map[string]struct{}
 	calicoNodeDaemonSetInitContainerNames map[string]struct{}
 
-	ValidateCalicoNodeDaemonSetContainers     func(container operatorv1.Container) error
-	ValidateCalicoNodeDaemonSetInitContainers func(container operatorv1.Container) error
+	ValidateCalicoNodeDaemonSetContainers     func(container corev1.Container) error
+	ValidateCalicoNodeDaemonSetInitContainers func(container corev1.Container) error
 )
 
 func init() {
@@ -93,14 +93,14 @@ func init() {
 	}
 
 	// TODO: revisit whether these should be here or not
-	ValidateCalicoNodeDaemonSetContainers = func(container operatorv1.Container) error {
+	ValidateCalicoNodeDaemonSetContainers = func(container corev1.Container) error {
 		if _, ok := calicoNodeDaemonSetContainerNames[container.Name]; !ok {
 			return fmt.Errorf("Installation spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers[%q] is not a supported container", container.Name)
 		}
 		return nil
 	}
 
-	ValidateCalicoNodeDaemonSetInitContainers = func(container operatorv1.Container) error {
+	ValidateCalicoNodeDaemonSetInitContainers = func(container corev1.Container) error {
 		if _, ok := calicoNodeDaemonSetInitContainerNames[container.Name]; !ok {
 			return fmt.Errorf("Installation spec.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers[%q] is not a supported init container", container.Name)
 		}

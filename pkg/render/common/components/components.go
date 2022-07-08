@@ -17,7 +17,6 @@ package components
 import (
 	"fmt"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 
@@ -102,15 +101,15 @@ func ApplyDaemonSetOverrides(ds *appsv1.DaemonSet, overrides components.DaemonSe
 
 // mergeContainers copies the ResourceRequirements from the provided containers
 // to the current corev1.Containers.
-func mergeContainers(current []corev1.Container, provided []operatorv1.Container) {
-	providedMap := make(map[string]operatorv1.Container)
+func mergeContainers(current []corev1.Container, provided []corev1.Container) {
+	providedMap := make(map[string]corev1.Container)
 	for _, c := range provided {
 		providedMap[c.Name] = c
 	}
 
 	for i, c := range current {
 		if override, ok := providedMap[c.Name]; ok {
-			current[i].Resources = *override.Resources
+			current[i].Resources = override.Resources
 		} else {
 			log.V(1).Info(fmt.Sprintf("WARNING: the container %q was provided for an override and passed CRD validation but the container does not currently exist", c.Name))
 		}

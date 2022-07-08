@@ -140,14 +140,18 @@ func (c *CalicoNodeDaemonSet) GetPodTemplateMetadata() *Metadata {
 	return nil
 }
 
-func (c *CalicoNodeDaemonSet) GetInitContainers() []Container {
+func (c *CalicoNodeDaemonSet) GetInitContainers() []v1.Container {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {
 			if c.Spec.Template.Spec != nil {
 				if c.Spec.Template.Spec.InitContainers != nil {
-					cs := make([]Container, len(c.Spec.Template.Spec.InitContainers))
+					cs := make([]v1.Container, len(c.Spec.Template.Spec.InitContainers))
 					for i, v := range c.Spec.Template.Spec.InitContainers {
-						c := Container{Name: v.Name, Resources: v.Resources}
+						// Only copy and return the container if it has resources set.
+						if v.Resources == nil {
+							continue
+						}
+						c := v1.Container{Name: v.Name, Resources: *v.Resources}
 						cs[i] = c
 					}
 					return cs
@@ -158,14 +162,18 @@ func (c *CalicoNodeDaemonSet) GetInitContainers() []Container {
 	return nil
 }
 
-func (c *CalicoNodeDaemonSet) GetContainers() []Container {
+func (c *CalicoNodeDaemonSet) GetContainers() []v1.Container {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {
 			if c.Spec.Template.Spec != nil {
 				if c.Spec.Template.Spec.Containers != nil {
-					cs := make([]Container, len(c.Spec.Template.Spec.Containers))
+					cs := make([]v1.Container, len(c.Spec.Template.Spec.Containers))
 					for i, v := range c.Spec.Template.Spec.Containers {
-						c := Container{Name: v.Name, Resources: v.Resources}
+						// Only copy and return the container if it has resources set.
+						if v.Resources == nil {
+							continue
+						}
+						c := v1.Container{Name: v.Name, Resources: *v.Resources}
 						cs[i] = c
 					}
 					return cs

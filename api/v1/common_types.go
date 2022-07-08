@@ -16,21 +16,6 @@ limitations under the License.
 
 package v1
 
-import (
-	v1 "k8s.io/api/core/v1"
-)
-
-// Container is an arbitrary Kubernetes container.
-// Note: this should not be used directly as a field type within a component resource type.
-// Component resources should define their own container types with validation.
-type Container struct {
-	// Name identifies the container by name.
-	Name string `json:"name"`
-
-	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
-	Resources *v1.ResourceRequirements `json:"resources"`
-}
-
 // Metadata contains the standard Kubernetes labels and annotations fields.
 type Metadata struct {
 	// Labels is a map of string keys and values that may match replicaset and

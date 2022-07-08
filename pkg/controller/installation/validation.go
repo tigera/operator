@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common/validation"
 	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
 )
@@ -358,6 +359,15 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		// Only allowed to run as non-privileged for OS Calico
 		if instance.Spec.Variant == operatorv1.TigeraSecureEnterprise {
 			return fmt.Errorf("Non-privileged Calico is not supported for spec.Variant=%s", operatorv1.TigeraSecureEnterprise)
+		}
+	}
+
+	// Verify the CalicoNodeDaemonSet overrides, if specified, is valid.
+	if ds := instance.Spec.CalicoNodeDaemonSet; ds != nil {
+		err := validation.ValidateDaemonSetOverrides(ds, render.ValidateCalicoNodeDaemonSetContainers, render.ValidateCalicoNodeDaemonSetInitContainers)
+		if err != nil {
+			return fmt.Errorf("Installation spec.CalicoNodeDaemonSet is not valid: %w", err)
+
 		}
 	}
 

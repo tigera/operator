@@ -92,6 +92,7 @@ func init() {
 		fmt.Sprintf("%s-%s", NodePrometheusTLSServerSecret, certificatemanagement.CSRInitContainerName): {},
 	}
 
+	// TODO: revisit whether these should be here or not
 	ValidateCalicoNodeDaemonSetContainers = func(container operatorv1.Container) error {
 		if _, ok := calicoNodeDaemonSetContainerNames[container.Name]; !ok {
 			return fmt.Errorf("Installation spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers[%q] is not a supported container", container.Name)

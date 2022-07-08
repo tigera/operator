@@ -57,12 +57,13 @@ const (
 	IntrusionDetectionInstallerJobName = "intrusion-detection-es-job-installer"
 	IntrusionDetectionControllerName   = "intrusion-detection-controller"
 
-	ADJobPodTemplateBaseName     = "tigera.io.detectors"
-	adDetectorPrefixName         = "tigera.io.detector."
-	adDetectorServiceAccountName = "anomaly-detectors"
-	adDetectionJobsDefaultPeriod = 15 * time.Minute
-	ADResourceGroup              = "detectors.tigera.io"
-	ADDetectorsModelResourceName = "models"
+	ADJobPodTemplateBaseName      = "tigera.io.detectors"
+	adDetectorPrefixName          = "tigera.io.detector."
+	adDetectorServiceAccountName  = "anomaly-detectors"
+	adDetectionJobsDefaultPeriod  = 15 * time.Minute
+	ADResourceGroup               = "detectors.tigera.io"
+	ADDetectorsModelResourceName  = "models"
+	ADLogTypeMetaDataResourceName = "metadata"
 
 	ADAPIObjectName     = "anomaly-detection-api"
 	ADAPIObjectPortName = "anomaly-detection-api-https"
@@ -1419,6 +1420,19 @@ func (c *intrusionDetectionComponent) adDetectorAccessRole() *rbacv1.Role {
 					"update",
 				},
 			},
+			{
+				APIGroups: []string{
+					ADResourceGroup,
+				},
+				Resources: []string{
+					ADLogTypeMetaDataResourceName,
+				},
+				Verbs: []string{
+					"get",
+					"create",
+					"update",
+				},
+			},
 		},
 	}
 }
@@ -1504,20 +1518,24 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 						},
 						Env: []corev1.EnvVar{
 							{
-								Name: "ELASTIC_HOST",
+								Name: "ES_HOST",
 								// static index 2 refres to - <svc_name>.<ns>.svc format
 								Value: dns.GetServiceDNSNames(ESGatewayServiceName, ElasticsearchNamespace, c.cfg.ClusterDomain)[2],
 							},
 							{
-								Name:  "ELASTIC_PORT",
+								Name:  "ES_PORT",
 								Value: strconv.Itoa(ElasticsearchDefaultPort),
 							},
 							{
-								Name:      "ELASTIC_USER",
+								Name:  "ES_CA_CERT",
+								Value: "/certs/es-ca.pem",
+							},
+							{
+								Name:      "ES_USERNAME",
 								ValueFrom: secret.GetEnvVarSource(ElasticsearchADJobUserSecret, "username", false),
 							},
 							{
-								Name:      "ELASTIC_PASSWORD",
+								Name:      "ES_PASSWORD",
 								ValueFrom: secret.GetEnvVarSource(ElasticsearchADJobUserSecret, "password", false),
 							},
 							{
@@ -1536,10 +1554,6 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 							{
 								Name:      "MODEL_STORAGE_API_TOKEN",
 								ValueFrom: secret.GetEnvVarSource(adDetectorServiceAccountName, "token", false),
-							},
-							{
-								Name:  "ES_CA_CERT",
-								Value: "/certs/es-ca.pem",
 							},
 						},
 						VolumeMounts: []corev1.VolumeMount{

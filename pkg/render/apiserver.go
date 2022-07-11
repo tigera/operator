@@ -18,6 +18,9 @@ import (
 	"fmt"
 	"strings"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
@@ -41,7 +44,8 @@ import (
 )
 
 const (
-	apiServerPort = 5443
+	APIServerPort       = 5443
+	APIServerPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "cnx-apiserver-access"
 
 	auditLogsVolumeName   = "tigera-audit-logs"
 	auditPolicyVolumeName = "tigera-audit-policy"
@@ -80,6 +84,10 @@ func APIServer(cfg *APIServerConfiguration) (Component, error) {
 	return &apiServerComponent{
 		cfg: cfg,
 	}, nil
+}
+
+func APIServerPolicy(cfg *APIServerConfiguration) Component {
+	return NewPassthrough(allowTigeraAPIServerPolicy(cfg))
 }
 
 // APIServerConfiguration contains all the config information needed to render the component.
@@ -365,6 +373,63 @@ func (c *apiServerComponent) apiServerServiceAccount() *corev1.ServiceAccount {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ApiServerServiceAccountName(c.cfg.Installation.Variant),
 			Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
+		},
+	}
+}
+
+func allowTigeraAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy {
+	egressRules := []v3.Rule{}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.Openshift)
+	egressRules = append(egressRules, []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
+		},
+		{
+			// Pass to subsequent tiers for further enforcement
+			Action: v3.Pass,
+		},
+	}...)
+
+	// The ports Calico Enterprise API Server and Calico Enterprise Query Server are configured to listen on.
+	ingressPorts := networkpolicy.Ports(443, APIServerPort, QueryServerPort, 10443)
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      APIServerPolicyName,
+			Namespace: rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise),
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector("tigera-apiserver"),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Ingress: []v3.Rule{
+				{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					// This policy allows Calico Enterprise API Server access from anywhere.
+					Source: v3.EntityRule{
+						Nets: []string{"0.0.0.0/0"},
+					},
+					Destination: v3.EntityRule{
+						Ports: ingressPorts,
+					},
+				},
+				{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Source: v3.EntityRule{
+						Nets: []string{"::/0"},
+					},
+					Destination: v3.EntityRule{
+						Ports: ingressPorts,
+					},
+				},
+			},
+			Egress: egressRules,
 		},
 	}
 }
@@ -683,7 +748,7 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 					Name:       "apiserver",
 					Port:       443,
 					Protocol:   corev1.ProtocolTCP,
-					TargetPort: intstr.FromInt(apiServerPort),
+					TargetPort: intstr.FromInt(APIServerPort),
 				},
 			},
 			Selector: map[string]string{
@@ -855,7 +920,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 			Handler: corev1.Handler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path:   "/version",
-					Port:   intstr.FromInt(apiServerPort),
+					Port:   intstr.FromInt(APIServerPort),
 					Scheme: corev1.URISchemeHTTPS,
 				},
 			},
@@ -881,7 +946,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 func (c *apiServerComponent) startUpArgs() []string {
 	args := []string{
-		fmt.Sprintf("--secure-port=%d", apiServerPort),
+		fmt.Sprintf("--secure-port=%d", APIServerPort),
 		fmt.Sprintf("--tls-private-key-file=%s", c.cfg.TLSKeyPair.VolumeMountKeyFilePath()),
 		fmt.Sprintf("--tls-cert-file=%s", c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()),
 	}

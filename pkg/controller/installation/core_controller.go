@@ -334,12 +334,6 @@ func add(c controller.Controller, r *ReconcileInstallation) error {
 			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
 		}
 
-		// Watch for changes to API server status, so that NetworkPolicy reconciliation can adapt accordingly.
-		err = utils.AddAPIServerWatch(c)
-		if err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
-		}
-
 		if r.manageCRDs {
 			if err = addCRDWatches(c, operator.TigeraSecureEnterprise); err != nil {
 				return fmt.Errorf("tigera-installation-controller failed to watch CRD resource: %v", err)
@@ -1006,7 +1000,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		// to prevent a chicken-and-egg scenario, we only reconcile non-NetworkPolicy resources once we can confirm that
 		// all requirements to reconcile NetworkPolicy have been met.
 		//
-		// We take this precaution as utils.IsV3NetworkPolicyReconcilable is not sensitive to API server availability.
+		// utils.IsV3NetworkPolicyReconcilable does not verify API server availability, so we take extra precaution
+		// when rendering components below.
 		if utils.IsV3NetworkPolicyReconcilable(ctx, r.client, networkpolicy.TigeraComponentTierName) {
 			includeV3NetworkPolicy = true
 			if !r.policyWatchesReady.IsReady() {
@@ -1298,7 +1293,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		ManagerInternalSecret:       managerInternalTLSSecret,
 		Terminating:                 terminating,
 		UsePSP:                      r.usePSP,
-		IncludeV3NetworkPolicy:      includeV3NetworkPolicy,
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 
@@ -1308,12 +1302,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	components = append(components, render.Windows(&windowsCfg))
 
+	// v3 NetworkPolicy will fail to reconcile if the API server deployment is unhealthy. In case the API Server
+	// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the core controller
+	// would resolve it, we render the network policies of components last to prevent a chicken-and-egg scenario.
+	//
+	// We take this precaution as utils.IsV3NetworkPolicyReconcilable is not sensitive to API server availability.
 	if includeV3NetworkPolicy {
-		// v3 NetworkPolicy will fail to reconcile if the API server deployment is unhealthy. In case the API Server
-		// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the core controller
-		// would resolve it, render NetworkPolicy as the last resource to prevent a chicken-and-egg scenario.
-		//
-		// We take this precaution as utils.IsV3NetworkPolicyReconcilable is not sensitive to API server availability.
 		components = append(components, kubecontrollers.NewCalicoKubeControllersPolicy(&kubeControllersCfg))
 	}
 

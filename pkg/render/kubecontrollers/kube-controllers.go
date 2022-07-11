@@ -90,8 +90,6 @@ type KubeControllersConfiguration struct {
 
 	// Whether or not the cluster supports pod security policies.
 	UsePSP bool
-
-	IncludeV3NetworkPolicy bool
 }
 
 func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
@@ -164,9 +162,7 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 			},
 		)
 
-		if cfg.IncludeV3NetworkPolicy {
-			kubeControllerAllowTigeraPolicy = esKubeControllersAllowTigeraPolicy(cfg)
-		}
+		kubeControllerAllowTigeraPolicy = esKubeControllersAllowTigeraPolicy(cfg)
 	}
 
 	enabledControllers := []string{"authorization", "elasticsearchconfiguration"}

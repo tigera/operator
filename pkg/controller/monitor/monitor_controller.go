@@ -300,7 +300,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	includeV3NetworkPolicy := true
 	monitorReconcilesV3NetworkPolicyRequirements := managementClusterConnection != nil && !certificateManager.KeyPair().UseCertificateManagement()
 	if monitorReconcilesV3NetworkPolicyRequirements {
-		// Only wait and render for NetworkPolicy once all NetworkPolicy requirements are met.
+		// Only wait for and render NetworkPolicy once all NetworkPolicy requirements are met.
 		// Do not degrade if tier has not been created.
 		if utils.IsV3NetworkPolicyReconcilable(ctx, r.client, networkpolicy.TigeraComponentTierName) {
 			if !r.policyWatchesReady.IsReady() {
@@ -311,7 +311,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 			includeV3NetworkPolicy = false
 		}
 	} else {
-		// Wait and render for NetworkPolicy as usual.
+		// Wait for and render NetworkPolicy as usual.
 		if !r.policyWatchesReady.IsReady() {
 			r.status.SetDegraded("Waiting for NetworkPolicy watches to be established", "")
 			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil

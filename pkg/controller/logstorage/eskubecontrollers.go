@@ -90,7 +90,6 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 		KubeControllersGatewaySecret: kubeControllersUserSecret,
 		LogStorageExists:             true,
 		TrustedBundle:                trustedBundle,
-		IncludeV3NetworkPolicy:       true,
 	}
 	esKubeControllerComponents := kubecontrollers.NewElasticsearchKubeControllers(&kubeControllersCfg)
 

@@ -245,8 +245,7 @@ func IsV3NetworkPolicyReconcilable(ctx context.Context, cli client.Client, tierN
 
 	// If the policies to be reconciled require any license features, validate that the license is available.
 	if len(licenseFeatureNames) > 0 {
-		_, err := FetchLicenseKey(ctx, cli)
-		if err != nil {
+		if _, err := FetchLicenseKey(ctx, cli); err != nil {
 			return false
 		}
 	}

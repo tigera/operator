@@ -78,11 +78,10 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 	// Rendering packet capture resources
 	renderPacketCapture := func(i operatorv1.InstallationSpec, config authentication.KeyValidatorConfig) (resources []client.Object) {
 		cfg := &render.PacketCaptureApiConfiguration{
-			PullSecrets:                  pullSecrets,
-			Installation:                 &i,
-			KeyValidatorConfig:           config,
-			ServerCertSecret:             secret,
-			NetworkPolicyRequirementsMet: true,
+			PullSecrets:        pullSecrets,
+			Installation:       &i,
+			KeyValidatorConfig: config,
+			ServerCertSecret:   secret,
 		}
 		pc := render.PacketCaptureAPI(cfg)
 		Expect(pc.ResolveImages(nil)).To(BeNil())
@@ -101,7 +100,6 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 	expectedResources := func(useCSR, enableOIDC bool) []expectedResource {
 		resources := []expectedResource{
 			{name: render.PacketCaptureNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: render.PacketCapturePolicyName, ns: render.PacketCaptureNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: "pull-secret", ns: render.PacketCaptureNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: render.PacketCaptureServiceAccountName, ns: render.PacketCaptureNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: render.PacketCaptureClusterRoleName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
@@ -400,9 +398,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 					cfg.ManagementClusterConnection = nil
 				}
 
-				// Validate policy is rendered when tier flag is set.
-				cfg.NetworkPolicyRequirementsMet = true
-				component := render.PacketCaptureAPI(cfg)
+				component := render.PacketCaptureAPIPolicy(cfg)
 				resources, _ := component.Objects()
 
 				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
@@ -414,15 +410,6 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 					pcPolicyForManagedOCP,
 				)
 				Expect(policy).To(Equal(expectedPolicy))
-
-				// Validate policy is not rendered when tier flag is not set.
-				cfg.NetworkPolicyRequirementsMet = false
-				component = render.PacketCaptureAPI(cfg)
-				resources, _ = component.Objects()
-
-				for _, obj := range resources {
-					Expect(obj.GetObjectKind().GroupVersionKind().Kind).ToNot(Equal("NetworkPolicy"))
-				}
 			},
 			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
 			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),

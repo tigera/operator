@@ -364,7 +364,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 
 	// Verify the CalicoNodeDaemonSet overrides, if specified, is valid.
 	if ds := instance.Spec.CalicoNodeDaemonSet; ds != nil {
-		err := validation.ValidateDaemonSetOverrides(ds, render.ValidateCalicoNodeDaemonSetContainers, render.ValidateCalicoNodeDaemonSetInitContainers)
+		err := validation.ValidateDaemonSetOverrides(ds, validation.ValidateCalicoNodeDaemonSetContainers, validation.ValidateCalicoNodeDaemonSetInitContainers)
 		if err != nil {
 			return fmt.Errorf("Installation spec.CalicoNodeDaemonSet is not valid: %w", err)
 

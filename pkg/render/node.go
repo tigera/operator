@@ -69,42 +69,24 @@ var (
 	NodeTLSSecretName = "node-certs"
 
 	// calico-node DaemonSet container names. These are used for validation.
-	calicoNodeDaemonSetContainerNames     map[string]struct{}
-	calicoNodeDaemonSetInitContainerNames map[string]struct{}
-
-	ValidateCalicoNodeDaemonSetContainers     func(container corev1.Container) error
-	ValidateCalicoNodeDaemonSetInitContainers func(container corev1.Container) error
+	CalicoNodeDaemonSetContainerNames     map[string]struct{}
+	CalicoNodeDaemonSetInitContainerNames map[string]struct{}
 )
 
 func init() {
 	// This should match CalicoNodeContainer.Name validation on the CalicoNodeDaemonSet type.
-	calicoNodeDaemonSetContainerNames = map[string]struct{}{
+	CalicoNodeDaemonSetContainerNames = map[string]struct{}{
 		CalicoNodeObjectName: {},
 	}
 
 	// This should match CalicoInitNodeContainer.Name validation on the CalicoNodeDaemonSet type.
-	calicoNodeDaemonSetInitContainerNames = map[string]struct{}{
+	CalicoNodeDaemonSetInitContainerNames = map[string]struct{}{
 		"install-cni":    {},
 		"hostpath-init":  {},
 		"flexvol-driver": {},
 		"mount-bpffs":    {},
 		fmt.Sprintf("%s-%s", NodeTLSSecretName, certificatemanagement.CSRInitContainerName):             {},
 		fmt.Sprintf("%s-%s", NodePrometheusTLSServerSecret, certificatemanagement.CSRInitContainerName): {},
-	}
-
-	// TODO: revisit whether these should be here or not
-	ValidateCalicoNodeDaemonSetContainers = func(container corev1.Container) error {
-		if _, ok := calicoNodeDaemonSetContainerNames[container.Name]; !ok {
-			return fmt.Errorf("Installation spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers[%q] is not a supported container", container.Name)
-		}
-		return nil
-	}
-
-	ValidateCalicoNodeDaemonSetInitContainers = func(container corev1.Container) error {
-		if _, ok := calicoNodeDaemonSetInitContainerNames[container.Name]; !ok {
-			return fmt.Errorf("Installation spec.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers[%q] is not a supported init container", container.Name)
-		}
-		return nil
 	}
 }
 

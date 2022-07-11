@@ -1237,6 +1237,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	components = append(components, render.Node(&nodeCfg))
 
+	csiCfg := render.CSIConfiguration{
+		Installation: &instance.Spec,
+		Terminating:  terminating,
+	}
+	components = append(components, render.CSI(&csiCfg))
+
 	components = append(components,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       common.CalicoNamespace,

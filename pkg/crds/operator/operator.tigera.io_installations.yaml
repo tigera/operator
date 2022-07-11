@@ -410,6 +410,10 @@ spec:
                   If set to 'None', FlexVolume will be disabled. The default is based
                   on the kubernetesProvider.
                 type: string
+              volumePlugin:
+                description: VolumePlugin optionally specifies enablement of Calico CSI plugin. If not specified,
+                  VolumePlugin will be disabled by default. Valid values are "Enabled" or "Disabled".
+                type: string
               imagePath:
                 description: "ImagePath allows for the path part of an image to be
                   specified. If specified then the specified value will be used as
@@ -1160,6 +1164,10 @@ spec:
                       for FlexVolume. If not specified, FlexVolume will be enabled
                       by default. If set to 'None', FlexVolume will be disabled. The
                       default is based on the kubernetesProvider.
+                    type: string
+                  volumePlugin:
+                    description: VolumePlugin optionally specifies enablement of Calico CSI plugin. If not specified,
+                      VolumePlugin will be disabled by default. Valid values are "Enabled" or "Disabled".
                     type: string
                   imagePath:
                     description: "ImagePath allows for the path part of an image to

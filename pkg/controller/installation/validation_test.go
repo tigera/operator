@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019, 2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -291,6 +291,24 @@ var _ = Describe("Installation validation tests", func() {
 		err := validateCustomResource(instance)
 		Expect(err).To(HaveOccurred())
 	})
+
+	It("should not allow VolumePlugin values other than 'Enabled', 'Disabled', or \"\"", func() {
+		instance.Spec.VolumePlugin = "Yes"
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
+
+	DescribeTable("validate VolumePlugin values",
+		func(volumePluginStr string) {
+			instance.Spec.VolumePlugin = volumePluginStr
+			err := validateCustomResource(instance)
+			Expect(err).NotTo(HaveOccurred())
+		},
+
+		Entry("Enabled", "Enabled"),
+		Entry("Disabled", "Disabled"),
+		Entry("Omitted", ""),
+	)
 
 	It("should validate controlPlaneNodeSelector", func() {
 		instance.Spec.ControlPlaneNodeSelector = map[string]string{

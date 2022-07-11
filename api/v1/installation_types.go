@@ -126,6 +126,10 @@ type InstallationSpec struct {
 	// +optional
 	FlexVolumePath string `json:"flexVolumePath,omitempty"`
 
+	// VolumePlugin specifies the CSI that will be used by this installation.
+	// +optional
+	VolumePlugin string `json:"volumePlugin,omitempty"`
+
 	// NodeUpdateStrategy can be used to customize the desired update strategy, such as the MaxUnavailable
 	// field.
 	// +optional

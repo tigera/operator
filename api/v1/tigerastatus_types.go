@@ -113,7 +113,7 @@ type TigeraStatusList struct {
 	Items           []TigeraStatus `json:"items"`
 }
 
-// TigeraStatusReason represents the reason for a particular condition. A reason may be one of the below.
+// TigeraStatusReason represents the reason for a particular condition.
 type TigeraStatusReason string
 
 const (

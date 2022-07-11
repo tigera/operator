@@ -23,6 +23,10 @@ import (
 	goruntime "runtime"
 	"strings"
 
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"k8s.io/apimachinery/pkg/labels"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+
 	"github.com/cloudflare/cfssl/log"
 	"github.com/ghodss/yaml"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -177,6 +181,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	policySelector, err := labels.Parse(fmt.Sprintf("projectcalico.org/tier == %s", networkpolicy.TigeraComponentTierName))
+	if err != nil {
+		log.Error(err, "")
+		os.Exit(1)
+	}
+
 	// Because we only run this as a job that is set up by the operator, it should not be
 	// launched except by an operator that is the active operator. So we do not need to
 	// check that we're the active operator before running the AWS SG setup.
@@ -211,6 +221,18 @@ func main() {
 		ClientDisableCacheFor: []client.Object{
 			&v3.LicenseKey{},
 		},
+		// NetworkPolicy is served through the Tigera API Server, which currently restricts List and Watch
+		// operations on NetworkPolicy to a single tier only, specified via label or field selector. If no
+		// selector is specified, List and Watch return policies from the 'default' tier. The manager cache
+		// must therefore apply a selector to specify the tier that the operator currently reconciles policy
+		// within so that it can receive the expected resources for List and Watch. If the operator needs to
+		// reconcile policy within multiple tiers, the API Server should be updated to serve policy from all
+		// tiers that the user is authorized for.
+		NewCache: cache.BuilderWithOptions(cache.Options{
+			SelectorsByObject: cache.SelectorsByObject{
+				&v3.NetworkPolicy{}: {Label: policySelector},
+			},
+		}),
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")

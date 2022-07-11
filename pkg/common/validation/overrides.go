@@ -22,6 +22,7 @@ import (
 
 	"github.com/tigera/operator/pkg/common/k8svalidation"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/render"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
@@ -73,6 +74,7 @@ func ValidateDaemonSetOverrides(overrides components.DaemonSetOverrides, validat
 			return fmt.Errorf("spec.Template.Spec.Tolerations is invalid: %w", err.ToAggregate())
 		}
 	}
+
 	return nil
 }
 
@@ -85,4 +87,20 @@ func validateMetadata(metadata *operatorv1.Metadata) error {
 	errs = append(errs, k8svalidation.ValidateLabels(metadata.Labels, field.NewPath("metadata", "labels"))...)
 	errs = append(errs, k8svalidation.ValidateAnnotations(metadata.Annotations, field.NewPath("metadata", "annotations"))...)
 	return errs.ToAggregate()
+}
+
+func ValidateCalicoNodeDaemonSetContainers(container corev1.Container) error {
+	if _, ok := render.CalicoNodeDaemonSetContainerNames[container.Name]; !ok {
+		return fmt.Errorf("Installation spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers[%q] is not a supported container", container.Name)
+	}
+
+	errs := k8svalidation.ValidateResourceRequirements(&container.Resources, field.NewPath("spec", "template", "spec", "containers"))
+	return errs.ToAggregate()
+}
+
+func ValidateCalicoNodeDaemonSetInitContainers(container corev1.Container) error {
+	if _, ok := render.CalicoNodeDaemonSetInitContainerNames[container.Name]; !ok {
+		return fmt.Errorf("Installation spec.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers[%q] is not a supported init container", container.Name)
+	}
+	return nil
 }

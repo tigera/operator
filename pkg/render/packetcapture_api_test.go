@@ -17,7 +17,11 @@ package render_test
 import (
 	"fmt"
 
+	"github.com/tigera/operator/pkg/render/testutils"
+	"k8s.io/apimachinery/pkg/types"
+
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
@@ -43,6 +47,11 @@ import (
 )
 
 var _ = Describe("Rendering tests for PacketCapture API component", func() {
+	pcPolicyForUnmanaged := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/packetcapture.json")
+	pcPolicyForUnmanagedOCP := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/packetcapture_ocp.json")
+	pcPolicyForManaged := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/packetcapture_managed.json")
+	pcPolicyForManagedOCP := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/packetcapture_managed_ocp.json")
+
 	var secret certificatemanagement.KeyPairInterface
 	var cli client.Client
 	BeforeEach(func() {
@@ -69,10 +78,11 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 	// Rendering packet capture resources
 	renderPacketCapture := func(i operatorv1.InstallationSpec, config authentication.KeyValidatorConfig) (resources []client.Object) {
 		cfg := &render.PacketCaptureApiConfiguration{
-			PullSecrets:        pullSecrets,
-			Installation:       &i,
-			KeyValidatorConfig: config,
-			ServerCertSecret:   secret,
+			PullSecrets:                  pullSecrets,
+			Installation:                 &i,
+			KeyValidatorConfig:           config,
+			ServerCertSecret:             secret,
+			NetworkPolicyRequirementsMet: true,
 		}
 		pc := render.PacketCaptureAPI(cfg)
 		Expect(pc.ResolveImages(nil)).To(BeNil())
@@ -91,6 +101,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 	expectedResources := func(useCSR, enableOIDC bool) []expectedResource {
 		resources := []expectedResource{
 			{name: render.PacketCaptureNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.PacketCapturePolicyName, ns: render.PacketCaptureNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: "pull-secret", ns: render.PacketCaptureNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: render.PacketCaptureServiceAccountName, ns: render.PacketCaptureNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: render.PacketCaptureClusterRoleName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
@@ -371,4 +382,53 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 
 		checkPacketCaptureResources(resources, false, true)
 	})
+
+	Context("allow-tigera rendering", func() {
+		policyName := types.NamespacedName{Name: "allow-tigera.tigera-packetcapture", Namespace: "tigera-packetcapture"}
+
+		DescribeTable("should render allow-tigera policy",
+			func(scenario testutils.AllowTigeraScenario) {
+				cfg := &render.PacketCaptureApiConfiguration{
+					PullSecrets:      pullSecrets,
+					Installation:     &defaultInstallation,
+					ServerCertSecret: secret,
+				}
+				cfg.Openshift = scenario.Openshift
+				if scenario.ManagedCluster {
+					cfg.ManagementClusterConnection = &operatorv1.ManagementClusterConnection{}
+				} else {
+					cfg.ManagementClusterConnection = nil
+				}
+
+				// Validate policy is rendered when tier flag is set.
+				cfg.NetworkPolicyRequirementsMet = true
+				component := render.PacketCaptureAPI(cfg)
+				resources, _ := component.Objects()
+
+				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+				expectedPolicy := testutils.SelectPolicyByClusterTypeAndProvider(
+					scenario,
+					pcPolicyForUnmanaged,
+					pcPolicyForUnmanagedOCP,
+					pcPolicyForManaged,
+					pcPolicyForManagedOCP,
+				)
+				Expect(policy).To(Equal(expectedPolicy))
+
+				// Validate policy is not rendered when tier flag is not set.
+				cfg.NetworkPolicyRequirementsMet = false
+				component = render.PacketCaptureAPI(cfg)
+				resources, _ = component.Objects()
+
+				for _, obj := range resources {
+					Expect(obj.GetObjectKind().GroupVersionKind().Kind).ToNot(Equal("NetworkPolicy"))
+				}
+			},
+			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
+			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
+			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
+		)
+	})
+
 })

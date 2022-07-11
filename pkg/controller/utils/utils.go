@@ -119,8 +119,28 @@ func AddServiceWatch(c controller.Controller, name, namespace string) error {
 	})
 }
 
-func WaitToAddLicenseKeyWatch(controller controller.Controller, client kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
-	WaitToAddResourceWatch(controller, client, log, flag, &v3.LicenseKey{TypeMeta: metav1.TypeMeta{Kind: v3.KindLicenseKey}})
+func WaitToAddLicenseKeyWatch(controller controller.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
+	WaitToAddResourceWatch(controller, c, log, flag, []client.Object{&v3.LicenseKey{TypeMeta: metav1.TypeMeta{Kind: v3.KindLicenseKey}}})
+}
+
+func WaitToAddNetworkPolicyWatches(controller controller.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag, policies []types.NamespacedName) {
+	objs := []client.Object{}
+	for _, policy := range policies {
+		objs = append(objs, &v3.NetworkPolicy{
+			TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+			ObjectMeta: metav1.ObjectMeta{Name: policy.Name, Namespace: policy.Namespace},
+		})
+	}
+
+	WaitToAddResourceWatch(controller, c, log, flag, objs)
+}
+
+func WaitToAddTierWatch(tierName string, controller controller.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
+	obj := &v3.Tier{
+		TypeMeta:   metav1.TypeMeta{Kind: "Tier", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{Name: tierName},
+	}
+	WaitToAddResourceWatch(controller, c, log, flag, []client.Object{obj})
 }
 
 // AddNamespacedWatch creates a watch on the given object. If a name and namespace are provided, then it will
@@ -131,26 +151,7 @@ func AddNamespacedWatch(c controller.Controller, obj client.Object, metaMatches 
 	if objMeta.GetNamespace() == "" {
 		return fmt.Errorf("No namespace provided for namespaced watch")
 	}
-	pred := predicate.Funcs{
-		CreateFunc: func(e event.CreateEvent) bool {
-			if objMeta.GetName() != "" && e.Object.GetName() != objMeta.GetName() {
-				return false
-			}
-			return e.Object.GetNamespace() == objMeta.GetNamespace()
-		},
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			if objMeta.GetName() != "" && e.ObjectNew.GetName() != objMeta.GetName() {
-				return false
-			}
-			return e.ObjectNew.GetNamespace() == objMeta.GetNamespace()
-		},
-		DeleteFunc: func(e event.DeleteEvent) bool {
-			if objMeta.GetName() != "" && e.Object.GetName() != objMeta.GetName() {
-				return false
-			}
-			return e.Object.GetNamespace() == objMeta.GetNamespace()
-		},
-	}
+	pred := createNamespacePredicate(objMeta)
 	return c.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{}, pred)
 }
 
@@ -215,6 +216,42 @@ func IsFeatureActive(license v3.LicenseKey, featureName string) bool {
 	}
 
 	return false
+}
+
+// IsV3NetworkPolicyReconcilable :
+// v3 NetworkPolicy requires a specific state in the cluster in order to be reconcilable. Specifically, v3 NetworkPolicy
+// requires the following state at time of reconcile:
+//  * The Tigera API server to be available
+//  * The containing tier to be present
+//  * (If the policies to be reconciled require license features) A permissive license to be present
+//
+// Certain controllers play a part in manifesting this state by reconciling or satisfying the dependencies required to
+// reconcile the API server, tier, and license. Should these controllers reconcile NetworkPolicy, they should only do so
+// when the cluster has reached the state required to reconcile v3 NetworkPolicy. This prevents a chicken-and-egg
+// scenario where a controller fails to reconcile due to NetworkPolicy requirements not being met, and NetworkPolicy
+// requirements are not met because said controller is not reconciling.
+//
+// Controllers can use this method to verify that the state required to reconcile v3 NetworkPolicy has been met.
+//
+// Limitation: the availability of the Tigera API server is not verified in this method to avoid excess queries to
+// the K8S API server. Therefore, components that render both NetworkPolicy resources and resources that impact
+// API server availability should render NetworkPolicy resources after their API-server-impacting resources.
+func IsV3NetworkPolicyReconcilable(ctx context.Context, cli client.Client, tierName string, licenseFeatureNames ...string) bool {
+	// Validate tier presence by querying for the tier. Note that this does not validate Tigera API server availability
+	// as resources are cached.
+	if err := cli.Get(ctx, client.ObjectKey{Name: tierName}, &v3.Tier{}); err != nil {
+		return false
+	}
+
+	// If the policies to be reconciled require any license features, validate that the license is available.
+	if len(licenseFeatureNames) > 0 {
+		_, err := FetchLicenseKey(ctx, cli)
+		if err != nil {
+			return false
+		}
+	}
+
+	return true
 }
 
 // ValidateCertPair checks if the given secret exists in the given
@@ -425,11 +462,16 @@ func StrToElasticLicenseType(license string, logger logr.Logger) render.Elastics
 
 // WaitToAddResourceWatch will check if projectcalico.org APIs are available and if so, it will add a watch for resource
 // The completion of this operation will be signaled on a ready channel
-func WaitToAddResourceWatch(controller controller.Controller, client kubernetes.Interface, log logr.Logger, flag *ReadyFlag, obj client.Object) {
+func WaitToAddResourceWatch(controller controller.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag, objs []client.Object) {
+	// Track resources left to watch and establish their predicate functions.
+	resourcesToWatch := map[client.Object]predicate.Predicate{}
+	for _, obj := range objs {
+		resourcesToWatch[obj] = createNamespacePredicate(obj)
+	}
+
 	maxDuration := 30 * time.Second
 	duration := 1 * time.Second
 	ticker := time.NewTicker(duration)
-	log = ContextLoggerForResource(log, obj)
 	defer ticker.Stop()
 	for range ticker.C {
 		duration = duration * 2
@@ -437,14 +479,22 @@ func WaitToAddResourceWatch(controller controller.Controller, client kubernetes.
 			duration = maxDuration
 		}
 		ticker.Reset(duration)
-		if ok, err := isResourceReady(client, obj.GetObjectKind().GroupVersionKind().Kind); err != nil {
-			log.WithValues("Error", err).Info("Failed to check if resource is ready - will retry")
-		} else if !ok {
-			log.Info("Waiting for resource to be ready - will retry")
-		} else if err := controller.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{}); err != nil {
-			log.WithValues("Error", err).Info("Failed to watch resource - will retry")
-		} else {
-			log.Info("Successfully watching resource")
+		for obj := range resourcesToWatch {
+			log = ContextLoggerForResource(log, obj)
+			predicateFn := resourcesToWatch[obj]
+			if ok, err := isResourceReady(c, obj.GetObjectKind().GroupVersionKind().Kind); err != nil {
+				log.WithValues("Error", err).Info("Failed to check if resource is ready - will retry")
+			} else if !ok {
+				log.Info("Waiting for resource to be ready - will retry")
+			} else if err := controller.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{}, predicateFn); err != nil {
+				log.WithValues("Error", err).Info("Failed to watch resource - will retry")
+			} else {
+				log.Info("Successfully watching resource")
+				delete(resourcesToWatch, obj)
+			}
+		}
+
+		if len(resourcesToWatch) == 0 {
 			flag.MarkAsReady()
 			return
 		}
@@ -466,4 +516,38 @@ func isResourceReady(client kubernetes.Interface, resourceKind string) (bool, er
 		}
 	}
 	return false, nil
+}
+
+// Creates a predicate for CRUD operations that matches the object's namespace, and name if provided.
+// If neither name nor namespace is provided, all objects will be matched.
+func createNamespacePredicate(objMeta metav1.Object) predicate.Predicate {
+	return predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			if objMeta.GetName() == "" && objMeta.GetNamespace() == "" {
+				return true
+			}
+			if objMeta.GetName() != "" && e.Object.GetName() != objMeta.GetName() {
+				return false
+			}
+			return e.Object.GetNamespace() == objMeta.GetNamespace()
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			if objMeta.GetName() == "" && objMeta.GetNamespace() == "" {
+				return true
+			}
+			if objMeta.GetName() != "" && e.ObjectNew.GetName() != objMeta.GetName() {
+				return false
+			}
+			return e.ObjectNew.GetNamespace() == objMeta.GetNamespace()
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			if objMeta.GetName() == "" && objMeta.GetNamespace() == "" {
+				return true
+			}
+			if objMeta.GetName() != "" && e.Object.GetName() != objMeta.GetName() {
+				return false
+			}
+			return e.Object.GetNamespace() == objMeta.GetNamespace()
+		},
+	}
 }

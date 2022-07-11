@@ -1,0 +1,184 @@
+{
+  "apiVersion": "projectcalico.org/v3",
+  "kind": "NetworkPolicy",
+  "metadata": {
+    "name": "allow-tigera.guardian-access",
+    "namespace": "tigera-guardian"
+  },
+  "spec": {
+    "selector": "k8s-app == 'tigera-guardian'",
+    "order": 1,
+    "tier": "allow-tigera",
+    "types": [
+      "Ingress",
+      "Egress"
+    ],
+    "ingress": [
+      {
+        "action": "Allow",
+        "destination": {
+          "ports": [
+            8080
+          ]
+        },
+        "protocol": "TCP",
+        "source": {
+          "namespaceSelector": "name == 'tigera-fluentd'",
+          "selector": "k8s-app == 'fluentd-node' || k8s-app == 'fluentd-node-windows'"
+        }
+      },
+      {
+        "action": "Allow",
+        "destination": {
+          "ports": [
+            8080
+          ]
+        },
+        "protocol": "TCP",
+        "source": {
+          "namespaceSelector": "name == 'tigera-compliance'",
+          "selector": "k8s-app == 'compliance-benchmarker'"
+        }
+      },
+      {
+        "action": "Allow",
+        "destination": {
+          "ports": [
+            8080
+          ]
+        },
+        "protocol": "TCP",
+        "source": {
+          "namespaceSelector": "name == 'tigera-compliance'",
+          "selector": "k8s-app == 'compliance-reporter'"
+        }
+      },
+      {
+        "action": "Allow",
+        "destination": {
+          "ports": [
+            8080
+          ]
+        },
+        "protocol": "TCP",
+        "source": {
+          "namespaceSelector": "name == 'tigera-compliance'",
+          "selector": "k8s-app == 'compliance-snapshotter'"
+        }
+      },
+      {
+        "action": "Allow",
+        "destination": {
+          "ports": [
+            8080
+          ]
+        },
+        "protocol": "TCP",
+        "source": {
+          "namespaceSelector": "name == 'tigera-compliance'",
+          "selector": "k8s-app == 'compliance-controller'"
+        }
+      },
+      {
+        "action": "Allow",
+        "destination": {
+          "ports": [
+            8080
+          ]
+        },
+        "protocol": "TCP",
+        "source": {
+          "namespaceSelector": "name == 'tigera-intrusion-detection'",
+          "selector": "k8s-app == 'intrusion-detection-controller'"
+        }
+      },
+      {
+        "action": "Allow",
+        "destination": {
+          "ports": [
+            8080
+          ]
+        },
+        "protocol": "TCP",
+        "source": {
+          "namespaceSelector": "name == 'tigera-intrusion-detection'",
+          "selector": "job-name == 'intrusion-detection-es-job-installer'"
+        }
+      },
+      {
+        "action": "Allow",
+        "destination": {
+          "ports": [
+            8080
+          ]
+        },
+        "protocol": "TCP"
+      }
+    ],
+    "egress": [
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "destination": {
+          "namespaceSelector": "projectcalico.org/name == 'tigera-packetcapture'",
+          "selector": "k8s-app == 'tigera-packetcapture'",
+          "ports": [
+            8444
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "UDP",
+        "destination": {
+          "namespaceSelector": "projectcalico.org/name == 'kube-system'",
+          "selector": "k8s-app == 'kube-dns'",
+          "ports": [
+            53
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "destination": {
+          "namespaceSelector": "projectcalico.org/name == 'default'",
+          "selector": "(provider == 'kubernetes' && component == 'apiserver' && endpoints.projectcalico.org/serviceName == 'kubernetes')",
+          "ports": [
+            443,
+            6443,
+            12388
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "destination": {
+          "selector":"(app == 'prometheus' && prometheus == 'calico-node-prometheus') || (app.kubernetes.io/name == 'prometheus' && prometheus == 'calico-node-prometheus')",
+          "namespaceSelector": "projectcalico.org/name == 'tigera-prometheus'",
+          "ports": [
+            9095
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "source": {
+        },
+        "destination": {
+          "nets": [
+            "127.0.0.1/32"
+          ],
+          "ports": [
+            1234
+          ]
+        }
+      },
+      {
+        "action": "Pass"
+      }
+    ]
+  }
+}

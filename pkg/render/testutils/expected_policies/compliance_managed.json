@@ -1,0 +1,53 @@
+{
+  "apiVersion": "projectcalico.org/v3",
+  "kind": "NetworkPolicy",
+  "metadata": {
+    "name": "allow-tigera.compliance-access",
+    "namespace": "tigera-compliance"
+  },
+  "spec": {
+    "order": 1,
+    "tier": "allow-tigera",
+    "selector": "k8s-app == 'compliance-benchmarker' || k8s-app == 'compliance-controller' || k8s-app == 'compliance-snapshotter' || k8s-app == 'compliance-reporter'",
+    "types": [
+      "Egress"
+    ],
+    "egress": [
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "destination": {
+          "namespaceSelector": "projectcalico.org/name == 'default'",
+          "selector": "(provider == 'kubernetes' && component == 'apiserver' && endpoints.projectcalico.org/serviceName == 'kubernetes')",
+          "ports": [
+            443,
+            6443,
+            12388
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "UDP",
+        "destination": {
+          "namespaceSelector": "projectcalico.org/name == 'kube-system'",
+          "selector": "k8s-app == 'kube-dns'",
+          "ports": [
+            53
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "destination": {
+          "selector": "k8s-app == 'tigera-guardian'",
+          "namespaceSelector": "projectcalico.org/name == 'tigera-guardian'",
+          "ports": [
+            8080
+          ]
+        }
+      }
+    ]
+  }
+}

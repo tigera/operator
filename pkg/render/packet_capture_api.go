@@ -56,15 +56,14 @@ var PacketCaptureSourceEntityRule = networkpolicy.CreateSourceEntityRule(PacketC
 
 // PacketCaptureApiConfiguration contains all the config information needed to render the component.
 type PacketCaptureApiConfiguration struct {
-	PullSecrets                  []*corev1.Secret
-	Openshift                    bool
-	Installation                 *operatorv1.InstallationSpec
-	KeyValidatorConfig           authentication.KeyValidatorConfig
-	ServerCertSecret             certificatemanagement.KeyPairInterface
-	TrustedBundle                certificatemanagement.TrustedBundle
-	ClusterDomain                string
-	ManagementClusterConnection  *operatorv1.ManagementClusterConnection
-	NetworkPolicyRequirementsMet bool
+	PullSecrets                 []*corev1.Secret
+	Openshift                   bool
+	Installation                *operatorv1.InstallationSpec
+	KeyValidatorConfig          authentication.KeyValidatorConfig
+	ServerCertSecret            certificatemanagement.KeyPairInterface
+	TrustedBundle               certificatemanagement.TrustedBundle
+	ClusterDomain               string
+	ManagementClusterConnection *operatorv1.ManagementClusterConnection
 }
 
 type packetCaptureApiComponent struct {
@@ -76,6 +75,10 @@ func PacketCaptureAPI(cfg *PacketCaptureApiConfiguration) Component {
 	return &packetCaptureApiComponent{
 		cfg: cfg,
 	}
+}
+
+func PacketCaptureAPIPolicy(cfg *PacketCaptureApiConfiguration) Component {
+	return NewPassthrough(allowTigeraPolicy(cfg))
 }
 
 func (pc *packetCaptureApiComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -101,9 +104,6 @@ func (pc *packetCaptureApiComponent) Objects() ([]client.Object, []client.Object
 		// - securityContext.capabilities.drop=["ALL"]
 		// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
 		CreateNamespace(PacketCaptureNamespace, pc.cfg.Installation.KubernetesProvider, PSSBaseline),
-	}
-	if pc.cfg.NetworkPolicyRequirementsMet {
-		objs = append(objs, pc.allowTigeraPolicy())
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PacketCaptureNamespace, pc.cfg.PullSecrets...)...)...)
 
@@ -317,8 +317,8 @@ func (pc *packetCaptureApiComponent) annotations() map[string]string {
 	return annotations
 }
 
-func (pc *packetCaptureApiComponent) allowTigeraPolicy() *v3.NetworkPolicy {
-	managedCluster := pc.cfg.ManagementClusterConnection != nil
+func allowTigeraPolicy(cfg *PacketCaptureApiConfiguration) *v3.NetworkPolicy {
+	managedCluster := cfg.ManagementClusterConnection != nil
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,
@@ -326,7 +326,7 @@ func (pc *packetCaptureApiComponent) allowTigeraPolicy() *v3.NetworkPolicy {
 			Destination: networkpolicy.KubeAPIServerEntityRule,
 		},
 	}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, pc.cfg.Openshift)
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.Openshift)
 	if !managedCluster {
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,

@@ -917,8 +917,6 @@ var _ = Describe("Testing core-controller installation", func() {
 		var r ReconcileInstallation
 		var scheme *runtime.Scheme
 		var mockStatus *status.MockStatus
-		var typhaAutoscaler *typhaAutoscaler
-		var windowsUpgrader windows.CalicoWindowsUpgrader
 
 		var cr *operator.Installation
 
@@ -994,9 +992,6 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			syncPeriodOption := windows.CalicoWindowsUpgraderSyncPeriod(2 * time.Second)
 
-			typhaAutoscaler = newTyphaAutoscaler(cs, nodeIndexInformer, test.NewTyphaListWatch(cs), mockStatus)
-			windowsUpgrader = windows.NewCalicoWindowsUpgrader(cs, c, nodeIndexInformer, mockStatus, syncPeriodOption)
-
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
 				config:                nil, // there is no fake for config
@@ -1004,8 +999,8 @@ var _ = Describe("Testing core-controller installation", func() {
 				scheme:                scheme,
 				autoDetectedProvider:  operator.ProviderNone,
 				status:                mockStatus,
-				typhaAutoscaler:       typhaAutoscaler,
-				calicoWindowsUpgrader: windowsUpgrader,
+				typhaAutoscaler:       newTyphaAutoscaler(cs, nodeIndexInformer, test.NewTyphaListWatch(cs), mockStatus),
+				calicoWindowsUpgrader: windows.NewCalicoWindowsUpgrader(cs, c, nodeIndexInformer, mockStatus, syncPeriodOption),
 				namespaceMigration:    &fakeNamespaceMigration{},
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,

@@ -364,6 +364,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		components = append(components, tunnelSecretPassthrough)
 	}
 
+	var pcPolicy render.Component
 	if variant == operatorv1.TigeraSecureEnterprise {
 		packetCaptureCertSecret, err := certificateManager.GetOrCreateKeyPair(
 			r.client,
@@ -390,16 +391,16 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}
 
 		packetCaptureApiCfg := &render.PacketCaptureApiConfiguration{
-			PullSecrets:                  pullSecrets,
-			Openshift:                    r.provider == operatorv1.ProviderOpenShift,
-			Installation:                 network,
-			KeyValidatorConfig:           keyValidatorConfig,
-			ServerCertSecret:             packetCaptureCertSecret,
-			ClusterDomain:                r.clusterDomain,
-			ManagementClusterConnection:  managementClusterConnection,
-			NetworkPolicyRequirementsMet: includeV3NetworkPolicy,
+			PullSecrets:                 pullSecrets,
+			Openshift:                   r.provider == operatorv1.ProviderOpenShift,
+			Installation:                network,
+			KeyValidatorConfig:          keyValidatorConfig,
+			ServerCertSecret:            packetCaptureCertSecret,
+			ClusterDomain:               r.clusterDomain,
+			ManagementClusterConnection: managementClusterConnection,
 		}
 		pc := render.PacketCaptureAPI(packetCaptureApiCfg)
+		pcPolicy = render.PacketCaptureAPIPolicy(packetCaptureApiCfg)
 		components = append(components, pc,
 			rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 				Namespace:       render.PacketCaptureNamespace,
@@ -412,13 +413,16 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		certificateManager.AddToStatusManager(r.status, render.PacketCaptureNamespace)
 	}
 
+	// v3 NetworkPolicy will fail to reconcile if the API server deployment is unhealthy. In case the API Server
+	// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the apiserver controller
+	// would resolve it, we render the network policies of components last to prevent a chicken-and-egg scenario.
+	//
+	// We take this precaution as utils.IsV3NetworkPolicyReconcilable is not sensitive to API server availability.
 	if includeV3NetworkPolicy {
-		// v3 NetworkPolicy will fail to reconcile if the API server deployment is unhealthy. In case the API Server
-		// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources would resolve it, render
-		// NetworkPolicy as the last resource to prevent a chicken-and-egg scenario.
-		//
-		// We take this precaution as utils.IsV3NetworkPolicyReconcilable is not sensitive to API server availability.
 		components = append(components, render.APIServerPolicy(&apiServerCfg))
+		if pcPolicy != nil {
+			components = append(components, pcPolicy)
+		}
 	}
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, components...); err != nil {

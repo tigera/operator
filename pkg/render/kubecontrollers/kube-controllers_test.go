@@ -219,7 +219,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		instance.Variant = operatorv1.TigeraSecureEnterprise
 		cfg.ManagerInternalSecret = internalManagerTLSSecret
 		cfg.MetricsPort = 9094
-		cfg.IncludeV3NetworkPolicy = true
 
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -278,7 +277,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cfg.ManagerInternalSecret = internalManagerTLSSecret
 		cfg.MetricsPort = 9094
 		cfg.EnabledESOIDCWorkaround = true
-		cfg.IncludeV3NetworkPolicy = true
 
 		component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -339,7 +337,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cfg.ManagementCluster = &operatorv1.ManagementCluster{}
 		cfg.ManagerInternalSecret = internalManagerTLSSecret
 		cfg.MetricsPort = 9094
-		cfg.IncludeV3NetworkPolicy = true
 
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -399,7 +396,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cfg.ManagerInternalSecret = internalManagerTLSSecret
 		cfg.MetricsPort = 9094
 		cfg.EnabledESOIDCWorkaround = true
-		cfg.IncludeV3NetworkPolicy = true
 
 		component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -695,23 +691,12 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				cfg.ManagerInternalSecret = internalManagerTLSSecret
 				cfg.EnabledESOIDCWorkaround = true
 
-				// Validate policy is rendered when tier flag is set.
-				cfg.IncludeV3NetworkPolicy = true
 				component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
 				resources, _ := component.Objects()
 
 				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
 				expectedPolicy := getExpectedPolicy(scenario)
 				Expect(policy).To(Equal(expectedPolicy))
-
-				// Validate policy is not rendered when tier flag is not set.
-				cfg.IncludeV3NetworkPolicy = false
-				component = kubecontrollers.NewElasticsearchKubeControllers(&cfg)
-				resources, _ = component.Objects()
-
-				for _, obj := range resources {
-					Expect(obj.GetObjectKind().GroupVersionKind().Kind).ToNot(Equal("NetworkPolicy"))
-				}
 			},
 			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
 			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),

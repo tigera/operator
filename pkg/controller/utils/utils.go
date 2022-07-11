@@ -245,8 +245,7 @@ func IsV3NetworkPolicyReconcilable(ctx context.Context, cli client.Client, tierN
 
 	// If the policies to be reconciled require any license features, validate that the license is available.
 	if len(licenseFeatureNames) > 0 {
-		_, err := FetchLicenseKey(ctx, cli)
-		if err != nil {
+		if _, err := FetchLicenseKey(ctx, cli); err != nil {
 			return false
 		}
 	}
@@ -460,13 +459,21 @@ func StrToElasticLicenseType(license string, logger logr.Logger) render.Elastics
 	return render.ElasticsearchLicenseTypeUnknown
 }
 
+type resourceWatchContext struct {
+	predicate predicate.Predicate
+	logger    logr.Logger
+}
+
 // WaitToAddResourceWatch will check if projectcalico.org APIs are available and if so, it will add a watch for resource
 // The completion of this operation will be signaled on a ready channel
 func WaitToAddResourceWatch(controller controller.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag, objs []client.Object) {
-	// Track resources left to watch and establish their predicate functions.
-	resourcesToWatch := map[client.Object]predicate.Predicate{}
+	// Track resources left to watch and establish their watch context.
+	resourcesToWatch := map[client.Object]resourceWatchContext{}
 	for _, obj := range objs {
-		resourcesToWatch[obj] = createNamespacePredicate(obj)
+		resourcesToWatch[obj] = resourceWatchContext{
+			predicate: createNamespacePredicate(obj),
+			logger:    ContextLoggerForResource(log, obj),
+		}
 	}
 
 	maxDuration := 30 * time.Second
@@ -480,16 +487,16 @@ func WaitToAddResourceWatch(controller controller.Controller, c kubernetes.Inter
 		}
 		ticker.Reset(duration)
 		for obj := range resourcesToWatch {
-			log = ContextLoggerForResource(log, obj)
-			predicateFn := resourcesToWatch[obj]
+			objLog := resourcesToWatch[obj].logger
+			predicateFn := resourcesToWatch[obj].predicate
 			if ok, err := isResourceReady(c, obj.GetObjectKind().GroupVersionKind().Kind); err != nil {
-				log.WithValues("Error", err).Info("Failed to check if resource is ready - will retry")
+				objLog.WithValues("Error", err).Info("Failed to check if resource is ready - will retry")
 			} else if !ok {
-				log.Info("Waiting for resource to be ready - will retry")
+				objLog.Info("Waiting for resource to be ready - will retry")
 			} else if err := controller.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{}, predicateFn); err != nil {
-				log.WithValues("Error", err).Info("Failed to watch resource - will retry")
+				objLog.WithValues("Error", err).Info("Failed to watch resource - will retry")
 			} else {
-				log.Info("Successfully watching resource")
+				objLog.Info("Successfully watching resource")
 				delete(resourcesToWatch, obj)
 			}
 		}

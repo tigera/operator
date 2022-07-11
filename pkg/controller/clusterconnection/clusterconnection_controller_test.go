@@ -80,7 +80,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ReadyToMonitor")
 
-		r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone, notReady)
+		r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone, ready)
 		dpl = &appsv1.Deployment{
 			TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 			ObjectMeta: metav1.ObjectMeta{

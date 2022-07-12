@@ -92,6 +92,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, policyWatchesReady, []types.NamespacedName{
 		{Name: render.IntrusionDetectionControllerPolicyName, Namespace: render.IntrusionDetectionNamespace},
 		{Name: render.IntrusionDetectionInstallerPolicyName, Namespace: render.IntrusionDetectionNamespace},
+		{Name: render.ADAPIPolicyName, Namespace: render.IntrusionDetectionNamespace},
+		{Name: render.ADDetectorPolicyName, Namespace: render.IntrusionDetectionNamespace},
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.IntrusionDetectionNamespace},
 		{Name: dpi.DeepPacketInspectionPolicyName, Namespace: dpi.DeepPacketInspectionNamespace},
 	})

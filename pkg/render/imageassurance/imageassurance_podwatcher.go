@@ -163,6 +163,7 @@ func (c *component) podWatcherRoleBinding() *rbacv1.RoleBinding {
 func (c *component) podWatcherDeployment() *appsv1.Deployment {
 	annots := c.config.TrustedCertBundle.HashAnnotations()
 	annots[rcimageassurance.ImageAssuranceCertHashAnnotation] = rmeta.AnnotationHash(c.config.tlsHash)
+	annots[rcimageassurance.ImageAssuranceAPITokenHashAnnontation] = rmeta.AnnotationHash(c.config.PodWatcherAPIAccessToken)
 
 	env := []corev1.EnvVar{
 		rcimageassurance.EnvOrganizationID(),

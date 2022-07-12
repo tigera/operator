@@ -127,6 +127,10 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("ImageAssurance-controller failed to watch ServiceAccount %s: %v", imageassurance.ScannerAPIAccessServiceAccountName, err)
 	}
 
+	if err = utils.AddServiceAccountWatch(c, imageassurance.PodWatcherAPIAccessServiceAccountName); err != nil {
+		return fmt.Errorf("ImageAssurance-controller failed to watch ServiceAccount %s: %v", imageassurance.PodWatcherAPIAccessServiceAccountName, err)
+	}
+
 	if err = utils.AddJobWatch(c, imageassurance.ResourceNameImageAssuranceDBMigrator, imageassurance.NameSpaceImageAssurance); err != nil {
 		return fmt.Errorf("ImageAssurance-controller failed to watch Job %s: %v", imageassurance.ResourceNameImageAssuranceDBMigrator, err)
 	}
@@ -636,6 +640,12 @@ func componentsUp(client client.Client) (bool, error) {
 		Namespace: imageassurance.NameSpaceImageAssurance,
 	}
 
+	podWatcherDeployment := &appsv1.Deployment{}
+	podWatcherName := types.NamespacedName{
+		Name:      imageassurance.ResourceNameImageAssurancePodWatcher,
+		Namespace: imageassurance.NameSpaceImageAssurance,
+	}
+
 	if err := client.Get(context.Background(), apiName, apiDeployment); err != nil {
 		if !errors.IsNotFound(err) {
 			return false, err
@@ -653,6 +663,14 @@ func componentsUp(client client.Client) (bool, error) {
 	}
 
 	if err := client.Get(context.Background(), cawName, cawDeployment); err != nil {
+		if !errors.IsNotFound(err) {
+			return false, err
+		}
+	} else {
+		return true, nil
+	}
+
+	if err := client.Get(context.Background(), podWatcherName, podWatcherDeployment); err != nil {
 		if !errors.IsNotFound(err) {
 			return false, err
 		}

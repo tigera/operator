@@ -173,6 +173,7 @@ func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
 			c.apiDeployment(),
 			c.scannerDeployment(),
 			c.cawDeployment(),
+			c.podWatcherDeployment(),
 		}
 	}
 

@@ -64,6 +64,16 @@
             5353
           ]
         }
+      },
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "destination": {
+          "services": {
+            "name": "kubernetes",
+            "namespace": "default"
+          }
+        }
       }
     ]
   }

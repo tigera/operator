@@ -133,6 +133,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret, render.ElasticsearchManagerUserSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureCertSecret,
 			render.ManagerInternalTLSSecretName, render.PrometheusTLSSecretName, certificatemanagement.CASecretName,
+			render.VoltronServerSecretName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("manager-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
@@ -416,7 +417,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	var tunnelSecret certificatemanagement.KeyPairInterface
+	var tunnelSecret, tunnelServerSecret certificatemanagement.KeyPairInterface
 	var internalTrafficSecret certificatemanagement.KeyPairInterface
 	if managementCluster != nil {
 		// We expect that the secret that holds the certificates for tunnel certificate generation
@@ -427,6 +428,13 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			return reconcile.Result{}, err
 		} else if err != nil {
 			r.status.SetDegraded(fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.VoltronTunnelSecretName, common.OperatorNamespace()), err.Error())
+			return reconcile.Result{}, nil
+		}
+
+		// optional voltron server secret
+		tunnelServerSecret, err = certificateManager.GetKeyPair(r.client, render.VoltronServerSecretName, common.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded(fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.VoltronServerSecretName, common.OperatorNamespace()), err.Error())
 			return reconcile.Result{}, nil
 		}
 
@@ -481,6 +489,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		Installation:            installation,
 		ManagementCluster:       managementCluster,
 		TunnelSecret:            tunnelSecret,
+		TunnelServerSecret:      tunnelServerSecret,
 		InternalTrafficSecret:   internalTrafficSecret,
 		ClusterDomain:           r.clusterDomain,
 		ESLicenseType:           elasticLicenseType,

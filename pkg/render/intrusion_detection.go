@@ -76,9 +76,12 @@ const (
 
 var adAPIReplicas int32 = 1
 
-var IntrusionDetectionSourceEntityRule = networkpolicy.CreateSourceEntityRule(IntrusionDetectionNamespace, IntrusionDetectionControllerName)
+var IntrusionDetectionSourceEntityRule = v3.EntityRule{
+	NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", IntrusionDetectionNamespace),
+	Selector:          fmt.Sprintf("k8s-app == '%s'", IntrusionDetectionControllerName),
+}
 var IntrusionDetectionInstallerSourceEntityRule = v3.EntityRule{
-	NamespaceSelector: fmt.Sprintf("name == '%s'", IntrusionDetectionNamespace),
+	NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", IntrusionDetectionNamespace),
 	Selector:          fmt.Sprintf("job-name == '%s'", IntrusionDetectionInstallerJobName),
 }
 

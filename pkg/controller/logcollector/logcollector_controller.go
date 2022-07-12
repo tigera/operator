@@ -558,6 +558,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			ClusterDomain:   r.clusterDomain,
 			OSType:          rmeta.OSTypeWindows,
 			TrustedBundle:   trustedBundle,
+			ManagedCluster:  managedCluster,
 			UsePSP:          r.usePSP,
 		}
 		comp = render.Fluentd(fluentdCfg)

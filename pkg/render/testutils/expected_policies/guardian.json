@@ -88,7 +88,7 @@
         },
         "protocol": "TCP",
         "source": {
-          "namespaceSelector": "name == 'tigera-intrusion-detection'",
+          "namespaceSelector": "projectcalico.org/name == 'tigera-intrusion-detection'",
           "selector": "k8s-app == 'intrusion-detection-controller'"
         }
       },
@@ -101,7 +101,7 @@
         },
         "protocol": "TCP",
         "source": {
-          "namespaceSelector": "name == 'tigera-intrusion-detection'",
+          "namespaceSelector": "projectcalico.org/name == 'tigera-intrusion-detection'",
           "selector": "job-name == 'intrusion-detection-es-job-installer'"
         }
       },

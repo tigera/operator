@@ -57,6 +57,13 @@ const (
 	QueryserverServiceName = "tigera-api"
 )
 
+var TigeraAPIServerEntityRule = v3.EntityRule{
+	Services: &v3.ServiceMatch{
+		Namespace: QueryserverNamespace,
+		Name:      QueryserverServiceName,
+	},
+}
+
 // The following functions are helpers for determining resource names based on
 // the configured product variant.
 func ProjectCalicoApiServerTLSSecretName(v operatorv1.ProductVariant) string {

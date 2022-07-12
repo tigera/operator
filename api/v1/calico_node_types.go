@@ -66,7 +66,7 @@ type CalicoNodeDaemonSetPodSpec struct {
 	// If specified, this overrides any affinity that may be set on the calico-node DaemonSet.
 	// If omitted, the calico-node DaemonSet will use its default value for affinity.
 	// +optional
-	Affinity *v1.Affinity `json:"affinity,omitempty"`
+	Affinity *v1.Affinity `json:"affinity"`
 
 	// NodeSelector is the calico-node pod's scheduling constraints.
 	// If specified, this overrides any nodeSelector that may be set on the calico-node DaemonSet.
@@ -78,7 +78,7 @@ type CalicoNodeDaemonSetPodSpec struct {
 	// If specified, this overrides any tolerations that may be set on the calico-node DaemonSet.
 	// If omitted, the calico-node DaemonSet will use its default value for tolerations.
 	// +optional
-	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
+	Tolerations []v1.Toleration `json:"tolerations"`
 }
 
 // CalicoNodeDaemonSetPodTemplateSpec is the calico-node DaemonSet's PodTemplateSpec

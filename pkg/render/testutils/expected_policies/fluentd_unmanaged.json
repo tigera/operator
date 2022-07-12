@@ -1,0 +1,62 @@
+{
+  "apiVersion": "projectcalico.org/v3",
+  "kind": "NetworkPolicy",
+  "metadata": {
+    "name": "allow-tigera.allow-fluentd-node",
+    "namespace": "tigera-fluentd"
+  },
+  "spec": {
+    "tier": "allow-tigera",
+    "order": 1,
+    "selector": "k8s-app == 'fluentd-node' || k8s-app == 'fluentd-node-windows'",
+    "serviceAccountSelector": "",
+    "types": [
+      "Ingress",
+      "Egress"
+    ],
+    "ingress": [
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "source": {
+          "selector": "(app == 'prometheus' && prometheus == 'calico-node-prometheus') || (app.kubernetes.io/name == 'prometheus' && prometheus == 'calico-node-prometheus')",
+          "namespaceSelector": "name == 'tigera-prometheus'"
+        },
+        "destination": {
+          "ports": [
+            "9081"
+          ]
+        }
+      }
+    ],
+    "egress": [
+      {
+        "action": "Deny",
+        "protocol": "TCP",
+        "source": {
+        },
+        "destination": {
+          "selector": "k8s-app == 'tigera-secure-es-gateway'",
+          "namespaceSelector": "projectcalico.org/name == 'tigera-elasticsearch'",
+          "notPorts": [
+            5554
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "UDP",
+        "destination": {
+          "namespaceSelector": "projectcalico.org/name == 'kube-system'",
+          "selector": "k8s-app == 'kube-dns'",
+          "ports": [
+            53
+          ]
+        }
+      },
+      {
+        "action": "Allow"
+      }
+    ]
+  }
+}

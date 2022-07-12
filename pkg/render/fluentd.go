@@ -18,6 +18,9 @@ import (
 	"fmt"
 	"strconv"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -47,7 +50,9 @@ const (
 	S3KeySecretName                          = "key-secret"
 	FluentdPrometheusTLSSecretName           = "tigera-fluentd-prometheus-tls"
 	FluentdMetricsService                    = "fluentd-metrics"
-	FluentdMetricsPort                       = "fluentd-metrics-port"
+	FluentdMetricsPortName                   = "fluentd-metrics-port"
+	FluentdMetricsPort                       = 9081
+	FluentdPolicyName                        = networkpolicy.TigeraComponentPolicyPrefix + "allow-fluentd-node"
 	filterHashAnnotation                     = "hash.operator.tigera.io/fluentd-filters"
 	s3CredentialHashAnnotation               = "hash.operator.tigera.io/s3-credentials"
 	splunkCredentialHashAnnotation           = "hash.operator.tigera.io/splunk-credentials"
@@ -86,6 +91,13 @@ const (
 	PacketCaptureAPIRole        = "packetcapture-api-role"
 	PacketCaptureAPIRoleBinding = "packetcapture-api-role-binding"
 )
+
+var FluentdSourceEntityRule = v3.EntityRule{
+	NamespaceSelector: fmt.Sprintf("name == '%s'", LogCollectorNamespace),
+	Selector:          networkpolicy.KubernetesAppSelector(FluentdNodeName, fluentdNodeWindowsName),
+}
+
+var EKSLogForwarderEntityRule = networkpolicy.CreateSourceEntityRule(LogCollectorNamespace, eksLogForwarderName)
 
 type FluentdFilters struct {
 	Flow string
@@ -141,6 +153,7 @@ type FluentdConfiguration struct {
 	OSType           rmeta.OSType
 	MetricsServerTLS certificatemanagement.KeyPairInterface
 	TrustedBundle    certificatemanagement.TrustedBundle
+	ManagedCluster   bool
 
 	// Whether or not the cluster supports pod security policies.
 	UsePSP bool
@@ -225,6 +238,7 @@ func (c *fluentdComponent) path(path string) string {
 func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	var objs, toDelete []client.Object
 	objs = append(objs, CreateNamespace(LogCollectorNamespace, c.cfg.Installation.KubernetesProvider, PSSPrivileged))
+	objs = append(objs, c.allowTigeraPolicy())
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.cfg.PullSecrets...)...)...)
 	objs = append(objs, c.metricsService())
 
@@ -540,7 +554,7 @@ func (c *fluentdComponent) container() corev1.Container {
 		ReadinessProbe:  c.readiness(),
 		Ports: []corev1.ContainerPort{{
 			Name:          "metrics-port",
-			ContainerPort: 9081,
+			ContainerPort: FluentdMetricsPort,
 		}},
 	}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchLogCollectorUserSecret, c.cfg.ClusterDomain, c.cfg.OSType)
 }
@@ -558,9 +572,9 @@ func (c *fluentdComponent) metricsService() *corev1.Service {
 			Type:     corev1.ServiceTypeClusterIP,
 			Ports: []corev1.ServicePort{
 				{
-					Name:       FluentdMetricsPort,
-					Port:       int32(9081),
-					TargetPort: intstr.FromInt(9081),
+					Name:       FluentdMetricsPortName,
+					Port:       int32(FluentdMetricsPort),
+					TargetPort: intstr.FromInt(FluentdMetricsPort),
 					Protocol:   corev1.ProtocolTCP,
 				},
 			},
@@ -1053,6 +1067,63 @@ func (c *fluentdComponent) eksLogForwarderClusterRole() *rbacv1.ClusterRole {
 				Verbs:         []string{"use"},
 				ResourceNames: []string{eksLogForwarderName},
 			},
+		},
+	}
+}
+
+func (c *fluentdComponent) allowTigeraPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{}
+	if c.cfg.ManagedCluster {
+		egressRules = append(egressRules, v3.Rule{
+			Action:   v3.Deny,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source:   v3.EntityRule{},
+			Destination: v3.EntityRule{
+				NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", GuardianNamespace),
+				Selector:          networkpolicy.KubernetesAppSelector(GuardianServiceName),
+				NotPorts:          networkpolicy.Ports(8080),
+			},
+		})
+	} else {
+		egressRules = append(egressRules, v3.Rule{
+			Action:   v3.Deny,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source:   v3.EntityRule{},
+			Destination: v3.EntityRule{
+				NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", ElasticsearchNamespace),
+				Selector:          networkpolicy.KubernetesAppSelector("tigera-secure-es-gateway"),
+				NotPorts:          networkpolicy.Ports(5554),
+			},
+		})
+		egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift)
+	}
+	egressRules = append(egressRules, v3.Rule{
+		Action: v3.Allow,
+	})
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      FluentdPolicyName,
+			Namespace: LogCollectorNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:                  &networkpolicy.HighPrecedenceOrder,
+			Tier:                   networkpolicy.TigeraComponentTierName,
+			Selector:               networkpolicy.KubernetesAppSelector(FluentdNodeName, fluentdNodeWindowsName),
+			ServiceAccountSelector: "",
+			Types:                  []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Ingress: []v3.Rule{
+				{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Source:   networkpolicy.PrometheusSourceEntityRule,
+					Destination: v3.EntityRule{
+						Ports: networkpolicy.Ports(FluentdMetricsPort),
+					},
+				},
+			},
+			Egress: egressRules,
 		},
 	}
 }

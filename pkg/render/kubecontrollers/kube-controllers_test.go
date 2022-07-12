@@ -563,6 +563,159 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(groupPrefix).To(Equal("gOIDC:"))
 	})
 
+	Context("With calico-kube-controllers overrides", func() {
+		var rr1 = corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":     resource.MustParse("2"),
+				"memory":  resource.MustParse("300Mi"),
+				"storage": resource.MustParse("20Gi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":     resource.MustParse("1"),
+				"memory":  resource.MustParse("150Mi"),
+				"storage": resource.MustParse("10Gi"),
+			},
+		}
+		var rr2 = corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("250m"),
+				corev1.ResourceMemory: resource.MustParse("64Mi"),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("500m"),
+				corev1.ResourceMemory: resource.MustParse("500Mi"),
+			},
+		}
+
+		It("should handle calicoKubeControllersDeployment overrides", func() {
+			var minReadySeconds int32 = 20
+
+			affinity := &corev1.Affinity{
+				NodeAffinity: &corev1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+						NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+							MatchExpressions: []corev1.NodeSelectorRequirement{{
+								Key:      "custom-affinity-key",
+								Operator: corev1.NodeSelectorOpExists,
+							}},
+						}},
+					},
+				},
+			}
+			toleration := corev1.Toleration{
+				Key:      "foo",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "bar",
+			}
+
+			overrides := &operatorv1.CalicoKubeControllersDeployment{
+				Metadata: &operatorv1.Metadata{
+					Labels:      map[string]string{"top-level": "label1"},
+					Annotations: map[string]string{"top-level": "annot1"},
+				},
+				Spec: &operatorv1.CalicoKubeControllersDeploymentSpec{
+					MinReadySeconds: &minReadySeconds,
+					Template: &operatorv1.CalicoKubeControllersDeploymentPodTemplateSpec{
+						Metadata: &operatorv1.Metadata{
+							Labels:      map[string]string{"template-level": "label2"},
+							Annotations: map[string]string{"template-level": "annot2"},
+						},
+						Spec: &operatorv1.CalicoKubeControllersDeploymentPodSpec{
+							Containers: []operatorv1.CalicoKubeControllersContainer{
+								{
+									Name:      "calico-kube-controllers",
+									Resources: &rr1,
+								},
+							},
+							NodeSelector: map[string]string{
+								"custom-node-selector": "value",
+							},
+							Affinity:    affinity,
+							Tolerations: []corev1.Toleration{toleration},
+						},
+					},
+				},
+			}
+			instance.CalicoKubeControllersDeployment = overrides
+
+			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			depResource := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment")
+			Expect(depResource).ToNot(BeNil())
+			d := depResource.(*appsv1.Deployment)
+
+			Expect(d.Labels).To(HaveLen(1))
+			Expect(d.Labels["top-level"]).To(Equal("label1"))
+			Expect(d.Annotations).To(HaveLen(1))
+			Expect(d.Annotations["top-level"]).To(Equal("annot1"))
+
+			Expect(d.Spec.MinReadySeconds).To(Equal(minReadySeconds))
+
+			// At runtime, the operator will also add some standard labels to the
+			// deployment such as "k8s-app=calico-node". But the calico-kube-controllers deployment object
+			// produced by the render will have no labels so we expect just the one
+			// provided.
+			Expect(d.Spec.Template.Labels).To(HaveLen(1))
+			Expect(d.Spec.Template.Labels["template-level"]).To(Equal("label2"))
+
+			// With the default instance we expect 3 template-level annotations
+			// - 1 added by the operator by default because TrustedBundle was set on kubecontrollerconfiguration.
+			// - 1 added by the calicoNodeDaemonSet override
+			Expect(d.Spec.Template.Annotations).To(HaveLen(2))
+			Expect(d.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/tigera-ca-private"))
+			Expect(d.Spec.Template.Annotations["template-level"]).To(Equal("annot2"))
+
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-kube-controllers"))
+			Expect(d.Spec.Template.Spec.Containers[0].Resources).To(Equal(rr1))
+
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("custom-node-selector", "value"))
+
+			Expect(d.Spec.Template.Spec.Tolerations).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.Tolerations[0]).To(Equal(toleration))
+		})
+
+		It("should override ComponentResources", func() {
+			instance.ComponentResources = []operatorv1.ComponentResource{
+				{
+					ComponentName:        operatorv1.ComponentNameKubeControllers,
+					ResourceRequirements: &rr1,
+				},
+			}
+
+			overrides := &operatorv1.CalicoKubeControllersDeployment{
+				Spec: &operatorv1.CalicoKubeControllersDeploymentSpec{
+					Template: &operatorv1.CalicoKubeControllersDeploymentPodTemplateSpec{
+						Spec: &operatorv1.CalicoKubeControllersDeploymentPodSpec{
+							Containers: []operatorv1.CalicoKubeControllersContainer{
+								{
+									Name:      "calico-kube-controllers",
+									Resources: &rr2,
+								},
+							},
+						},
+					},
+				},
+			}
+			instance.CalicoKubeControllersDeployment = overrides
+
+			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			depResource := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment")
+			Expect(depResource).ToNot(BeNil())
+			d := depResource.(*appsv1.Deployment)
+
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-kube-controllers"))
+			Expect(d.Spec.Template.Spec.Containers[0].Resources).To(Equal(rr2))
+		})
+	})
+
 	When("enableESOIDCWorkaround is true", func() {
 		It("should set the ENABLE_ELASTICSEARCH_OIDC_WORKAROUND env variable to true", func() {
 			instance.Variant = operatorv1.TigeraSecureEnterprise

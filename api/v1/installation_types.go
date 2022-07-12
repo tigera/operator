@@ -155,6 +155,14 @@ type InstallationSpec struct {
 	// that the provided configuration will work in your cluster. An invalid
 	// configuration may may cause networking disruption or even catastrophic failure!
 	CalicoNodeDaemonSet *CalicoNodeDaemonSet `json:"calicoNodeDaemonSet,omitempty"`
+
+	// CalicoKubeControllersDeployment configures the calico-kube-controllers Deployment. If used in
+	// conjunction with the deprecated ComponentResources, then these overrides take precedence.
+	// WARNING: Please note that this configuration overrides the operator's
+	// default calico-kube-controllers Deployment configuration. The operator cannot validate
+	// that the provided configuration will work in your cluster. An invalid
+	// configuration may may cause networking disruption or even catastrophic failure!
+	CalicoKubeControllersDeployment *CalicoKubeControllersDeployment `json:"calicoKubeControllersDeployment,omitempty"`
 }
 
 // TyphaAffinity allows configuration of node affinity characteristics for Typha pods.

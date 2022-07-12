@@ -20,31 +20,31 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// DaemonSetOverrides represents a type that contains the data needed to override a component DaemonSet resource.
-type DaemonSetOverrides interface {
-	// GetMetadata returns metadata used to override the DaemonSet's metadata.
+// ReplicatedPodResourceOverrides represents a type that contains the data needed to override a component DaemonSet or Deployment resource.
+type ReplicatedPodResourceOverrides interface {
+	// GetMetadata returns metadata used to override the DaemonSet/Deployment's metadata.
 	GetMetadata() *opv1.Metadata
 
-	// GetMinReadySeconds returns the value used to override a DaemonSet's minReadySeconds.
+	// GetMinReadySeconds returns the value used to override a DaemonSet/Deployment's minReadySeconds.
 	GetMinReadySeconds() *int32
 
-	// GetPodTemplateMetadata returns metadata used to override a DaemonSet pod template's metadata.
+	// GetPodTemplateMetadata returns metadata used to override a DaemonSet/Deployment pod template's metadata.
 	GetPodTemplateMetadata() *opv1.Metadata
 
-	// GetInitContainers returns the containers used to override a DaemonSet's init containers.
+	// GetInitContainers returns the containers used to override a DaemonSet/Deployment's init containers.
 	// Only containers with fields specified (other than its name) should be returned.
 	GetInitContainers() []corev1.Container
 
-	// GetContainers returns the containers used to override a DaemonSet's containers.
+	// GetContainers returns the containers used to override a DaemonSet/Deployment's containers.
 	// Only containers with fields specified (other than its name) should be returned.
 	GetContainers() []corev1.Container
 
-	// GetAffinity returns the value used to override a DaemonSet's affinity.
+	// GetAffinity returns the value used to override a DaemonSet/Deployment's affinity.
 	GetAffinity() *corev1.Affinity
 
-	// GetNodeSelector returns the value used to override a DaemonSet's nodeSelector.
+	// GetNodeSelector returns the value used to override a DaemonSet/Deployment's nodeSelector.
 	GetNodeSelector() map[string]string
 
-	// GetTolerations returns the value used to override a DaemonSet's tolerations.
+	// GetTolerations returns the value used to override a DaemonSet/Deployment's tolerations.
 	GetTolerations() []corev1.Toleration
 }

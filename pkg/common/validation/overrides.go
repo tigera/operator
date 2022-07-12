@@ -22,14 +22,20 @@ import (
 
 	"github.com/tigera/operator/pkg/common/k8svalidation"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/render"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-// ValidateDaemonSetOverrides validates the given DaemonSetOverrides.
-// validateContainerFn and validateInitContainerFn are used to validate the
-// containers retrieved from the DaemonSetOverrides instance.
-func ValidateDaemonSetOverrides(overrides components.DaemonSetOverrides, validateContainerFn func(container corev1.Container) error, validateInitContainerFn func(container corev1.Container) error) error {
+// ValidateContainer is a function that validates the given container.
+type ValidateContainer func(container corev1.Container) error
+
+// NoContainersDefined is a container validation function that is used when no container is expected.
+var NoContainersDefined ValidateContainer = func(container corev1.Container) error {
+	return fmt.Errorf("container %q is invalid. No containers are expected", container.Name)
+}
+
+// ValidateReplicatedPodResourceOverrides validates the given replicated pod resource overrides.
+// validateContainerFn and validateInitContainerFn are used to validate the container overrides.
+func ValidateReplicatedPodResourceOverrides(overrides components.ReplicatedPodResourceOverrides, validateContainerFn ValidateContainer, validateInitContainerFn ValidateContainer) error {
 	if md := overrides.GetMetadata(); md != nil {
 		if err := validateMetadata(md); err != nil {
 			return fmt.Errorf("metadata is invalid: %w", err)
@@ -87,20 +93,4 @@ func validateMetadata(metadata *operatorv1.Metadata) error {
 	errs = append(errs, k8svalidation.ValidateLabels(metadata.Labels, field.NewPath("metadata", "labels"))...)
 	errs = append(errs, k8svalidation.ValidateAnnotations(metadata.Annotations, field.NewPath("metadata", "annotations"))...)
 	return errs.ToAggregate()
-}
-
-func ValidateCalicoNodeDaemonSetContainers(container corev1.Container) error {
-	if _, ok := render.CalicoNodeDaemonSetContainerNames[container.Name]; !ok {
-		return fmt.Errorf("Installation spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers[%q] is not a supported container", container.Name)
-	}
-
-	errs := k8svalidation.ValidateResourceRequirements(&container.Resources, field.NewPath("spec", "template", "spec", "containers"))
-	return errs.ToAggregate()
-}
-
-func ValidateCalicoNodeDaemonSetInitContainers(container corev1.Container) error {
-	if _, ok := render.CalicoNodeDaemonSetInitContainerNames[container.Name]; !ok {
-		return fmt.Errorf("Installation spec.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers[%q] is not a supported init container", container.Name)
-	}
-	return nil
 }

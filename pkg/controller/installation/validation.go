@@ -22,6 +22,8 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common/validation"
+	node "github.com/tigera/operator/pkg/common/validation/calico-node"
+	kubecontrollers "github.com/tigera/operator/pkg/common/validation/kube-controllers"
 	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
 )
@@ -364,13 +366,21 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 
 	// Verify the CalicoNodeDaemonSet overrides, if specified, is valid.
 	if ds := instance.Spec.CalicoNodeDaemonSet; ds != nil {
-		err := validation.ValidateDaemonSetOverrides(ds, validation.ValidateCalicoNodeDaemonSetContainers, validation.ValidateCalicoNodeDaemonSetInitContainers)
+		err := validation.ValidateReplicatedPodResourceOverrides(ds, node.ValidateCalicoNodeDaemonSetContainer, node.ValidateCalicoNodeDaemonSetInitContainer)
 		if err != nil {
 			return fmt.Errorf("Installation spec.CalicoNodeDaemonSet is not valid: %w", err)
 
 		}
 	}
 
+	// Verify the CalicoKubeControllersDeployment overrides, if specified, is valid.
+	if ds := instance.Spec.CalicoKubeControllersDeployment; ds != nil {
+		err := validation.ValidateReplicatedPodResourceOverrides(ds, kubecontrollers.ValidateCalicoKubeControllersDeploymentContainers, validation.NoContainersDefined)
+		if err != nil {
+			return fmt.Errorf("Installation spec.CalicoKubeControllersDeployment is not valid: %w", err)
+
+		}
+	}
 	return nil
 }
 

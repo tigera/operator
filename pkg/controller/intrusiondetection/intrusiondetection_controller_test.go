@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tigera/operator/pkg/apis"
+
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -34,7 +36,6 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
@@ -88,12 +89,13 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		// Create an object we can use throughout the test to do the compliance reconcile loops.
 		// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 		r = ReconcileIntrusionDetection{
-			client:          c,
-			scheme:          scheme,
-			provider:        operatorv1.ProviderNone,
-			status:          mockStatus,
-			licenseAPIReady: &utils.ReadyFlag{},
-			dpiAPIReady:     &utils.ReadyFlag{},
+			client:             c,
+			scheme:             scheme,
+			provider:           operatorv1.ProviderNone,
+			status:             mockStatus,
+			licenseAPIReady:    &utils.ReadyFlag{},
+			dpiAPIReady:        &utils.ReadyFlag{},
+			policyWatchesReady: &utils.ReadyFlag{},
 		}
 
 		// We start off with a 'standard' installation, with nothing special
@@ -121,6 +123,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 			Status:     operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady},
 		})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &v3.LicenseKey{
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
 			Status:     v3.LicenseKeyStatus{Features: []string{common.ThreatDefenseFeature}}})).NotTo(HaveOccurred())
@@ -151,9 +154,10 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		// Apply the intrusiondetection CR to the fake cluster.
 		Expect(c.Create(ctx, &operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
 
-		// mark that the watch for license key and dpi was successful
+		// mark that the watches were successful
 		r.licenseAPIReady.MarkAsReady()
 		r.dpiAPIReady.MarkAsReady()
+		r.policyWatchesReady.MarkAsReady()
 	})
 
 	Context("image reconciliation", func() {
@@ -413,6 +417,48 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				},
 			}
 			Expect(test.GetResource(c, &j)).To(BeNil())
+		})
+	})
+
+	Context("allow-tigera reconciliation", func() {
+		var readyFlag *utils.ReadyFlag
+
+		BeforeEach(func() {
+			mockStatus = &status.MockStatus{}
+			mockStatus.On("OnCRFound").Return()
+
+			readyFlag = &utils.ReadyFlag{}
+			readyFlag.MarkAsReady()
+			r = ReconcileIntrusionDetection{
+				client:             c,
+				scheme:             scheme,
+				provider:           operatorv1.ProviderNone,
+				status:             mockStatus,
+				licenseAPIReady:    readyFlag,
+				dpiAPIReady:        readyFlag,
+				policyWatchesReady: readyFlag,
+			}
+		})
+
+		It("should wait if API server is unavailable", func() {
+			utils.DeleteAPIServerAndExpectWait(ctx, c, &r, mockStatus)
+		})
+
+		It("should wait if allow-tigera tier is unavailable", func() {
+			utils.DeleteAllowTigeraTierAndExpectWait(ctx, c, &r, mockStatus)
+		})
+
+		It("should wait if policy watches are not ready", func() {
+			r = ReconcileIntrusionDetection{
+				client:             c,
+				scheme:             scheme,
+				provider:           operatorv1.ProviderNone,
+				status:             mockStatus,
+				licenseAPIReady:    readyFlag,
+				dpiAPIReady:        readyFlag,
+				policyWatchesReady: &utils.ReadyFlag{},
+			}
+			utils.ExpectWaitForPolicyWatches(ctx, &r, mockStatus)
 		})
 	})
 

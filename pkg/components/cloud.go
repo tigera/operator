@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ func cloudRegistry(c component, registry, version string) (string, string) {
 		switch c {
 		case ComponentEsProxy, ComponentIntrusionDetectionController, ComponentTigeraKubeControllers:
 			registry = CloudRegistry
-		case ComponentImageAssuranceApi, ComponentImageAssuranceScanner, ComponentImageAssuranceDBMigrator, ComponentImageAssuranceCAW:
+		case ComponentImageAssuranceApi, ComponentImageAssuranceScanner, ComponentImageAssuranceDBMigrator, ComponentImageAssuranceCAW, ComponentImageAssurancePodWatcher:
 			registry = ImageAssuranceRegistry
 		case ComponentSasha:
 			registry = RuntimeSecurityRegistry

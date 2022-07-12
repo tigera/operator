@@ -127,6 +127,10 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("ImageAssurance-controller failed to watch ServiceAccount %s: %v", imageassurance.ScannerAPIAccessServiceAccountName, err)
 	}
 
+	if err = utils.AddServiceAccountWatch(c, imageassurance.PodWatcherAPIAccessServiceAccountName); err != nil {
+		return fmt.Errorf("ImageAssurance-controller failed to watch ServiceAccount %s: %v", imageassurance.PodWatcherAPIAccessServiceAccountName, err)
+	}
+
 	if err = utils.AddJobWatch(c, imageassurance.ResourceNameImageAssuranceDBMigrator, imageassurance.NameSpaceImageAssurance); err != nil {
 		return fmt.Errorf("ImageAssurance-controller failed to watch Job %s: %v", imageassurance.ResourceNameImageAssuranceDBMigrator, err)
 	}
@@ -270,7 +274,7 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
-	scannerAPIToken, err := getScannerAPIAccessToken(r.client)
+	scannerAPIToken, err := getAPIAccessToken(r.client, imageassurance.ScannerAPIAccessServiceAccountName)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
 		r.status.SetDegraded("Error in retrieving scanner API access token", err.Error())
@@ -280,6 +284,19 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 	if scannerAPIToken == nil {
 		reqLogger.Info("Waiting for scanner api access service account secret to be available")
 		r.status.SetDegraded("Waiting for scanner api access service account secret to be available", "")
+		return reconcile.Result{}, nil
+	}
+
+	podWatcherAPIToken, err := getAPIAccessToken(r.client, imageassurance.PodWatcherAPIAccessServiceAccountName)
+	if err != nil {
+		reqLogger.Error(err, err.Error())
+		r.status.SetDegraded("Error in retrieving pod watcher API access token", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	if podWatcherAPIToken == nil {
+		reqLogger.Info("Waiting for pod watcher api access service account secret to be available")
+		r.status.SetDegraded("Waiting for pod watcher api access service account secret to be available", "")
 		return reconcile.Result{}, nil
 	}
 
@@ -361,6 +378,7 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		TenantEncryptionKeySecret: tenantEncryptionKeySecret,
 		TrustedCertBundle:         trustedBundle,
 		ScannerAPIAccessToken:     scannerAPIToken,
+		PodWatcherAPIAccessToken:  podWatcherAPIToken,
 	}
 
 	components := []render.Component{
@@ -628,6 +646,12 @@ func componentsUp(client client.Client) (bool, error) {
 		Namespace: imageassurance.NameSpaceImageAssurance,
 	}
 
+	podWatcherDeployment := &appsv1.Deployment{}
+	podWatcherName := types.NamespacedName{
+		Name:      imageassurance.ResourceNameImageAssurancePodWatcher,
+		Namespace: imageassurance.NameSpaceImageAssurance,
+	}
+
 	if err := client.Get(context.Background(), apiName, apiDeployment); err != nil {
 		if !errors.IsNotFound(err) {
 			return false, err
@@ -645,6 +669,14 @@ func componentsUp(client client.Client) (bool, error) {
 	}
 
 	if err := client.Get(context.Background(), cawName, cawDeployment); err != nil {
+		if !errors.IsNotFound(err) {
+			return false, err
+		}
+	} else {
+		return true, nil
+	}
+
+	if err := client.Get(context.Background(), podWatcherName, podWatcherDeployment); err != nil {
 		if !errors.IsNotFound(err) {
 			return false, err
 		}
@@ -706,11 +738,11 @@ func getTenantEncryptionKeySecret(client client.Client) (*corev1.Secret, error) 
 	return cs, nil
 }
 
-// getScannerAPIAccessToken returns the image assurance service account secret token created by kube-controllers.
-func getScannerAPIAccessToken(client client.Client) ([]byte, error) {
+// getAPIAccessToken returns the image assurance service account secret token created by kube-controllers.
+func getAPIAccessToken(client client.Client, serviceAccountName string) ([]byte, error) {
 	sa := &corev1.ServiceAccount{}
 	if err := client.Get(context.Background(), types.NamespacedName{
-		Name:      imageassurance.ScannerAPIAccessServiceAccountName,
+		Name:      serviceAccountName,
 		Namespace: common.OperatorNamespace(),
 	}, sa); err != nil {
 		return nil, err

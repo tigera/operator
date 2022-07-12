@@ -707,6 +707,11 @@ func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: TigeraAPIServerEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
 			Source:      v3.EntityRule{},
 			Destination: networkpolicy.ESGatewayEntityRule,
 		},
@@ -728,7 +733,7 @@ func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerEntityRule,
+			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
 		},
 	}
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.Openshift)

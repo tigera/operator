@@ -45,7 +45,7 @@
         "protocol": "TCP",
         "source": {
           "selector": "job-name == 'intrusion-detection-es-job-installer'",
-          "namespaceSelector": "name == 'tigera-intrusion-detection'"
+          "namespaceSelector": "projectcalico.org/name == 'tigera-intrusion-detection'"
         },
         "destination": {
           "ports": [
@@ -154,7 +154,7 @@
         "protocol": "TCP",
         "source": {
           "selector": "k8s-app == 'intrusion-detection-controller'",
-          "namespaceSelector": "name == 'tigera-intrusion-detection'"
+          "namespaceSelector": "projectcalico.org/name == 'tigera-intrusion-detection'"
         }
       },
       {
@@ -244,13 +244,10 @@
         "action": "Allow",
         "protocol": "TCP",
         "destination": {
-          "namespaceSelector": "projectcalico.org/name == 'default'",
-          "selector": "(provider == 'kubernetes' && component == 'apiserver' && endpoints.projectcalico.org/serviceName == 'kubernetes')",
-          "ports": [
-            443,
-            6443,
-            12388
-          ]
+          "services": {
+            "name": "kubernetes",
+            "namespace": "default"
+          }
         }
       },
       {

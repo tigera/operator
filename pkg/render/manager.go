@@ -19,6 +19,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+
 	ocsv1 "github.com/openshift/api/security/v1"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -49,6 +51,7 @@ const (
 	managerPort                  = 9443
 	managerTargetPort            = 9443
 	ManagerServiceName           = "tigera-manager"
+	ManagerDeploymentName        = "tigera-manager"
 	ManagerNamespace             = "tigera-manager"
 	ManagerServiceIP             = "localhost"
 	ManagerServiceAccount        = "tigera-manager"
@@ -56,6 +59,7 @@ const (
 	ManagerClusterRoleBinding    = "tigera-manager-binding"
 	ManagerTLSSecretName         = "manager-tls"
 	ManagerInternalTLSSecretName = "internal-manager-tls"
+	ManagerPolicyName            = networkpolicy.TigeraComponentPolicyPrefix + "manager-access"
 
 	ManagerClusterSettings            = "cluster-settings"
 	ManagerUserSettings               = "user-settings"
@@ -77,6 +81,9 @@ const (
 	defaultVoltronPort       = "9443"
 	defaultTunnelVoltronPort = "9449"
 )
+
+var ManagerEntityRule = networkpolicy.CreateEntityRule(ManagerNamespace, ManagerDeploymentName, managerPort)
+var ManagerSourceEntityRule = networkpolicy.CreateSourceEntityRule(ManagerNamespace, ManagerDeploymentName)
 
 func Manager(cfg *ManagerConfiguration) (Component, error) {
 	var tlsSecrets []*corev1.Secret
@@ -169,6 +176,8 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 		// - securityContext.capabilities.drop=["ALL"]
 		// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
 		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSBaseline),
+		c.managerAllowTigeraNetworkPolicy(),
+		networkpolicy.AllowTigeraDefaultDeny(ManagerNamespace),
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ManagerNamespace, c.cfg.PullSecrets...)...)...)
 
@@ -215,7 +224,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        "tigera-manager",
+			Name:        ManagerDeploymentName,
 			Namespace:   ManagerNamespace,
 			Annotations: c.tlsAnnotations,
 		},
@@ -241,7 +250,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-manager",
+			Name:      ManagerDeploymentName,
 			Namespace: ManagerNamespace,
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -489,7 +498,7 @@ func (c *managerComponent) managerService() *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-manager",
+			Name:      ManagerServiceName,
 			Namespace: ManagerNamespace,
 		},
 		Spec: corev1.ServiceSpec{
@@ -501,7 +510,7 @@ func (c *managerComponent) managerService() *corev1.Service {
 				},
 			},
 			Selector: map[string]string{
-				"k8s-app": "tigera-manager",
+				"k8s-app": ManagerDeploymentName,
 			},
 		},
 	}
@@ -690,6 +699,100 @@ func (c *managerComponent) managerPodSecurityPolicy() *policyv1beta1.PodSecurity
 	psp := podsecuritypolicy.NewBasePolicy()
 	psp.GetObjectMeta().SetName("tigera-manager")
 	return psp
+}
+
+// Allow users to access Calico Enterprise Manager.
+func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      v3.EntityRule{},
+			Destination: networkpolicy.ESGatewayEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: ComplianceServerEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: DexEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: PacketCaptureEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
+		},
+	}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.Openshift)
+	egressRules = append(egressRules, v3.Rule{
+		Action:      v3.Allow,
+		Protocol:    &networkpolicy.TCPProtocol,
+		Destination: networkpolicy.PrometheusEntityRule,
+	})
+
+	ingressRules := []v3.Rule{
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source: v3.EntityRule{
+				// This policy allows access to Calico Enterprise Manager from anywhere
+				Nets: []string{"0.0.0.0/0"},
+			},
+			Destination: v3.EntityRule{
+				// By default, Calico Enterprise Manager is accessed over https
+				Ports: networkpolicy.Ports(managerTargetPort),
+			},
+		},
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source: v3.EntityRule{
+				// This policy allows access to Calico Enterprise Manager from anywhere
+				Nets: []string{"::/0"},
+			},
+			Destination: v3.EntityRule{
+				// By default, Calico Enterprise Manager is accessed over https
+				Ports: networkpolicy.Ports(managerTargetPort),
+			},
+		},
+	}
+
+	voltronTunnelPort, err := strconv.ParseUint(defaultTunnelVoltronPort, 10, 16)
+	if err == nil {
+		ingressRules = append(ingressRules, v3.Rule{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source:   v3.EntityRule{},
+			Destination: v3.EntityRule{
+				// This policy is used for multi-cluster management to establish a tunnel from another cluster.
+				Ports: networkpolicy.Ports(uint16(voltronTunnelPort)),
+			},
+		})
+	}
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ManagerPolicyName,
+			Namespace: ManagerNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(ManagerDeploymentName),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Ingress:  ingressRules,
+			Egress:   egressRules,
+		},
+	}
 }
 
 // managerClusterWideSettingsGroup returns a UISettingsGroup with the description "cluster-wide settings"

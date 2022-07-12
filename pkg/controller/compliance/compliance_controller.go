@@ -19,6 +19,12 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/apimachinery/pkg/types"
+
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -53,8 +59,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 	licenseAPIReady := &utils.ReadyFlag{}
+	policyWatchesReady := &utils.ReadyFlag{}
+
 	// create the reconciler
-	reconciler := newReconciler(mgr, opts, licenseAPIReady)
+	reconciler := newReconciler(mgr, opts, licenseAPIReady, policyWatchesReady)
 
 	// Create a new controller
 	controller, err := controller.New("compliance-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
@@ -70,19 +78,26 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
 
+	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, policyWatchesReady, []types.NamespacedName{
+		{Name: render.ComplianceAccessPolicyName, Namespace: render.ComplianceNamespace},
+		{Name: render.ComplianceServerPolicyName, Namespace: render.ComplianceNamespace},
+		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.ComplianceNamespace},
+	})
+
 	return add(mgr, controller)
 }
 
 // newReconciler returns a new *reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag, policyWatchesReady *utils.ReadyFlag) reconcile.Reconciler {
 	r := &ReconcileCompliance{
-		client:          mgr.GetClient(),
-		scheme:          mgr.GetScheme(),
-		provider:        opts.DetectedProvider,
-		status:          status.New(mgr.GetClient(), "compliance", opts.KubernetesVersion),
-		clusterDomain:   opts.ClusterDomain,
-		licenseAPIReady: licenseAPIReady,
-		usePSP:          opts.UsePSP,
+		client:             mgr.GetClient(),
+		scheme:             mgr.GetScheme(),
+		provider:           opts.DetectedProvider,
+		status:             status.New(mgr.GetClient(), "compliance", opts.KubernetesVersion),
+		clusterDomain:      opts.ClusterDomain,
+		licenseAPIReady:    licenseAPIReady,
+		policyWatchesReady: policyWatchesReady,
+		usePSP:             opts.UsePSP,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -155,13 +170,14 @@ var _ reconcile.Reconciler = &ReconcileCompliance{}
 type ReconcileCompliance struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client          client.Client
-	scheme          *runtime.Scheme
-	provider        operatorv1.Provider
-	status          status.StatusManager
-	clusterDomain   string
-	licenseAPIReady *utils.ReadyFlag
-	usePSP          bool
+	client             client.Client
+	scheme             *runtime.Scheme
+	provider           operatorv1.Provider
+	status             status.StatusManager
+	clusterDomain      string
+	licenseAPIReady    *utils.ReadyFlag
+	policyWatchesReady *utils.ReadyFlag
+	usePSP             bool
 }
 
 func GetCompliance(ctx context.Context, cli client.Client) (*operatorv1.Compliance, error) {
@@ -202,6 +218,23 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	if !utils.IsAPIServerReady(r.client, reqLogger) {
 		r.status.SetDegraded("Waiting for Tigera API server to be ready", "")
 		return reconcile.Result{}, err
+	}
+
+	if !r.policyWatchesReady.IsReady() {
+		r.status.SetDegraded("Waiting for NetworkPolicy watches to be established", "")
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
+	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded("Waiting for Tigera component policy tier to be created", err.Error())
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		} else {
+			log.Error(err, "Error querying Tigera component policy tier")
+			r.status.SetDegraded("Error querying Tigera component policy tier", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	if !r.licenseAPIReady.IsReady() {

@@ -148,6 +148,13 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		inst.CalicoNodeDaemonSet = mergeCalicoNodeDaemonSet(inst.CalicoNodeDaemonSet, override.CalicoNodeDaemonSet)
 	}
 
+	switch compareFields(inst.CalicoKubeControllersDeployment, override.CalicoKubeControllersDeployment) {
+	case BOnlySet:
+		inst.CalicoKubeControllersDeployment = override.CalicoKubeControllersDeployment.DeepCopy()
+	case Different:
+		inst.CalicoKubeControllersDeployment = mergeCalicoKubeControllersDeployment(inst.CalicoKubeControllersDeployment, override.CalicoKubeControllersDeployment)
+	}
+
 	return inst
 }
 
@@ -325,6 +332,92 @@ func mergeCalicoNodeDaemonSet(cfg, override *operatorv1.CalicoNodeDaemonSet) *op
 		return out
 	}
 	mergeSpec := func(cfg, override *operatorv1.CalicoNodeDaemonSetSpec) *operatorv1.CalicoNodeDaemonSetSpec {
+		out := cfg.DeepCopy()
+
+		switch compareFields(out.MinReadySeconds, override.MinReadySeconds) {
+		case BOnlySet, Different:
+			out.MinReadySeconds = override.MinReadySeconds
+		}
+
+		switch compareFields(out.Template, override.Template) {
+		case BOnlySet:
+			out.Template = override.Template.DeepCopy()
+		case Different:
+			out.Template = mergeTemplateSpec(out.Template, override.Template)
+		}
+
+		return out
+	}
+
+	switch compareFields(out.Spec, override.Spec) {
+	case BOnlySet:
+		out.Spec = override.Spec.DeepCopy()
+	case Different:
+		out.Spec = mergeSpec(out.Spec, override.Spec)
+	}
+
+	return out
+}
+
+func mergeCalicoKubeControllersDeployment(cfg, override *operatorv1.CalicoKubeControllersDeployment) *operatorv1.CalicoKubeControllersDeployment {
+	out := cfg.DeepCopy()
+
+	switch compareFields(out.Metadata, override.Metadata) {
+	case BOnlySet:
+		out.Metadata = override.Metadata.DeepCopy()
+	case Different:
+		out.Metadata = mergeMetadata(out.Metadata, override.Metadata)
+	}
+
+	mergePodSpec := func(cfg, override *operatorv1.CalicoKubeControllersDeploymentPodSpec) *operatorv1.CalicoKubeControllersDeploymentPodSpec {
+		out := cfg.DeepCopy()
+
+		switch compareFields(out.Containers, override.Containers) {
+		case BOnlySet, Different:
+			out.Containers = make([]operatorv1.CalicoKubeControllersContainer, len(override.Containers))
+			copy(out.Containers, override.Containers)
+		}
+
+		switch compareFields(out.Affinity, override.Affinity) {
+		case BOnlySet, Different:
+			out.Affinity = override.Affinity
+		}
+
+		switch compareFields(out.NodeSelector, override.NodeSelector) {
+		case BOnlySet, Different:
+			out.NodeSelector = make(map[string]string, len(override.NodeSelector))
+			for key, val := range override.NodeSelector {
+				out.NodeSelector[key] = val
+			}
+		}
+
+		switch compareFields(out.Tolerations, override.Tolerations) {
+		case BOnlySet, Different:
+			out.Tolerations = make([]v1.Toleration, len(override.Tolerations))
+			copy(out.Tolerations, override.Tolerations)
+		}
+		return out
+	}
+	mergeTemplateSpec := func(cfg, override *operatorv1.CalicoKubeControllersDeploymentPodTemplateSpec) *operatorv1.CalicoKubeControllersDeploymentPodTemplateSpec {
+		out := cfg.DeepCopy()
+
+		switch compareFields(out.Metadata, override.Metadata) {
+		case BOnlySet:
+			out.Metadata = override.Metadata.DeepCopy()
+		case Different:
+			out.Metadata = mergeMetadata(out.Metadata, override.Metadata)
+		}
+
+		switch compareFields(out.Spec, override.Spec) {
+		case BOnlySet:
+			out.Spec = override.Spec.DeepCopy()
+		case Different:
+			out.Spec = mergePodSpec(out.Spec, override.Spec)
+		}
+
+		return out
+	}
+	mergeSpec := func(cfg, override *operatorv1.CalicoKubeControllersDeploymentSpec) *operatorv1.CalicoKubeControllersDeploymentSpec {
 		out := cfg.DeepCopy()
 
 		switch compareFields(out.MinReadySeconds, override.MinReadySeconds) {

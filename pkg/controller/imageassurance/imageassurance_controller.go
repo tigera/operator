@@ -274,7 +274,7 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
-	scannerAPIToken, err := getScannerAPIAccessToken(r.client)
+	scannerAPIToken, err := getAPIAccessToken(r.client, imageassurance.ScannerAPIAccessServiceAccountName)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
 		r.status.SetDegraded("Error in retrieving scanner API access token", err.Error())
@@ -287,17 +287,23 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, nil
 	}
 
+	podWatcherAPIToken, err := getAPIAccessToken(r.client, imageassurance.PodWatcherAPIAccessServiceAccountName)
+	if err != nil {
+		reqLogger.Error(err, err.Error())
+		r.status.SetDegraded("Error in retrieving pod watcher API access token", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	if podWatcherAPIToken == nil {
+		reqLogger.Info("Waiting for pod watcher api access service account secret to be available")
+		r.status.SetDegraded("Waiting for pod watcher api access service account secret to be available", "")
+		return reconcile.Result{}, nil
+	}
+
 	tenantEncryptionKeySecret, err := getTenantEncryptionKeySecret(r.client)
 	if err != nil {
 		reqLogger.Error(err, "Error retrieving tenant key")
 		r.status.SetDegraded("Error retrieving tenant key", err.Error())
-		return reconcile.Result{}, err
-	}
-
-	podWatcherAPIToken, err := getPodWatcherAPIAccessToken(r.client)
-	if err != nil {
-		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Error in retrieving pod watcher API access token", err.Error())
 		return reconcile.Result{}, err
 	}
 
@@ -732,11 +738,11 @@ func getTenantEncryptionKeySecret(client client.Client) (*corev1.Secret, error) 
 	return cs, nil
 }
 
-// getScannerAPIAccessToken returns the image assurance service account secret token created by kube-controllers.
-func getScannerAPIAccessToken(client client.Client) ([]byte, error) {
+// getAPIAccessToken returns the image assurance service account secret token created by kube-controllers.
+func getAPIAccessToken(client client.Client, serviceAccountName string) ([]byte, error) {
 	sa := &corev1.ServiceAccount{}
 	if err := client.Get(context.Background(), types.NamespacedName{
-		Name:      imageassurance.ScannerAPIAccessServiceAccountName,
+		Name:      serviceAccountName,
 		Namespace: common.OperatorNamespace(),
 	}, sa); err != nil {
 		return nil, err
@@ -744,32 +750,6 @@ func getScannerAPIAccessToken(client client.Client) ([]byte, error) {
 
 	if len(sa.Secrets) == 0 {
 		return nil, nil
-	}
-
-	saSecret := &corev1.Secret{}
-	if err := client.Get(context.Background(), types.NamespacedName{
-		Name:      sa.Secrets[0].Name,
-		Namespace: common.OperatorNamespace(),
-	}, saSecret); err != nil {
-		return nil, err
-	}
-
-	return saSecret.Data["token"], nil
-}
-
-// getPodWatcherAPIAccessToken returns the image assurance service account secret token created by kube-controllers.
-func getPodWatcherAPIAccessToken(client client.Client) ([]byte, error) {
-	sa := &corev1.ServiceAccount{}
-	if err := client.Get(context.Background(), types.NamespacedName{
-		Name:      imageassurance.PodWatcherAPIAccessServiceAccountName,
-		Namespace: common.OperatorNamespace(),
-	}, sa); err != nil {
-		return nil, err
-	}
-
-	if len(sa.Secrets) == 0 {
-
-		return nil, fmt.Errorf("waiting for service account '%s' secrets to become available", imageassurance.PodWatcherAPIAccessServiceAccountName)
 	}
 
 	saSecret := &corev1.Secret{}

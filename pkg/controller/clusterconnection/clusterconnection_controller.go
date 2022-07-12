@@ -17,6 +17,7 @@ package clusterconnection
 import (
 	"context"
 	"fmt"
+	"k8s.io/client-go/kubernetes"
 	"net"
 	"time"
 
@@ -67,6 +68,17 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err != nil {
 		return fmt.Errorf("failed to create %s: %w", controllerName, err)
 	}
+
+	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		log.Error(err, "Failed to establish a connection to k8s")
+		return err
+	}
+
+	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, policyWatchesReady, []types.NamespacedName{
+		{Name: render.GuardianPolicyName, Namespace: render.GuardianNamespace},
+		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.GuardianNamespace},
+	})
 
 	return add(mgr, controller)
 }

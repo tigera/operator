@@ -5,7 +5,7 @@ components:
     version: v3.14.1
   cnx-manager:
     image: tigera/cnx-manager
-    version: v3.14.1
+    version: v3.14.2-0
   voltron:
     image: tigera/voltron
     version: v3.14.1
@@ -17,7 +17,7 @@ components:
     version: v3.14.1
   cnx-kube-controllers:
     image: tigera/kube-controllers
-    version: v3.14.1
+    version: v3.14.2-0
   typha:
     image: tigera/typha
     version: v3.14.1
@@ -135,19 +135,19 @@ components:
     version: v3.14.1
   image-assurance-api:
     image: tigera/image-assurance-api
-    version: v0.10.0
+    version: v0.10.1
   image-assurance-scanner:
     image: tigera/image-assurance-scanner
-    version: v0.10.0
+    version: v0.10.1
   image-assurance-db-migrator:
     image: tigera/image-assurance-db-migrator
-    version: v0.10.0
+    version: v0.10.1
   image-assurance-caw:
     image: tigera/image-assurance-caw
-    version: v0.10.0
+    version: v0.10.1
   image-assurance-pod-watcher:
     image: tigera/image-assurance-pod-watcher
-    version: v0.10.0
+    version: v0.10.1
   sasha:
     image: tigera/sasha
     version: v0.9.0-amd64

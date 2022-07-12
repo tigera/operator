@@ -162,8 +162,13 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 			},
 			rbacv1.PolicyRule{
 				APIGroups: []string{"imageassurance.tigera.io"},
-				Resources: []string{"registries", "images"},
+				Resources: []string{"registries"},
 				Verbs:     []string{"get", "list", "update"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"imageassurance.tigera.io"},
+				Resources: []string{"images"},
+				Verbs:     []string{"get", "list", "update", "create"},
 			},
 			rbacv1.PolicyRule{
 				APIGroups: []string{"imageassurance.tigera.io"},

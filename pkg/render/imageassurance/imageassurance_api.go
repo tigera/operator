@@ -57,11 +57,6 @@ func (c *component) apiClusterRole() *rbacv1.ClusterRole {
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"managedclusters"},
-				Verbs:     []string{"get", "list", "watch"},
-			},
-			{
 				APIGroups: []string{"authentication.k8s.io"},
 				Resources: []string{"tokenreviews"},
 				Verbs:     []string{"create"},

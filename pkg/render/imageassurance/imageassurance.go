@@ -4,6 +4,7 @@ package imageassurance
 
 import (
 	"fmt"
+	"github.com/tigera/operator/pkg/render/common/clusterrole"
 	"strings"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -247,8 +248,11 @@ func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
 	objs = append(objs,
 		c.podWatcherServiceAccount(),
 		c.podWatcherRole(),
-		c.podWatcherClusterRole(),
+	)
+	objs = append(objs, clusterrole.ToRuntimeObjects(c.podWatcherClusterRoles()...)...)
+	objs = append(objs,
 		c.podWatcherRoleBinding(),
+		c.podWatcherClusterRoleBinding(),
 		c.podWatcherAPIAccessTokenSecret(),
 		c.podWatcherDeployment(),
 	)

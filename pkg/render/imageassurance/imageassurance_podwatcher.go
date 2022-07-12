@@ -57,81 +57,97 @@ func (c *component) podWatcherRole() *rbacv1.Role {
 	}
 }
 
-func (c *component) podWatcherClusterRole() *rbacv1.ClusterRole {
-	return &rbacv1.ClusterRole{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      PodWatcherClusterRoleName,
-			Namespace: NameSpaceImageAssurance,
+func (c *component) podWatcherClusterRoles() []*rbacv1.ClusterRole {
+	return []*rbacv1.ClusterRole{
+		{
+			TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      PodWatcherClusterRoleName,
+				Namespace: NameSpaceImageAssurance,
+			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{
+						"imageassurance.tigera.io",
+					},
+					Resources: []string{
+						"organizations",
+					},
+					Verbs: []string{
+						"get",
+					},
+					ResourceNames: []string{
+						c.config.ConfigurationConfigMap.Data[rcimageassurance.ConfigurationConfigMapOrgIDKey],
+					},
+				},
+				{
+					APIGroups: []string{
+						"imageassurance.tigera.io",
+					},
+					Resources: []string{
+						"registries",
+					},
+					Verbs: []string{
+						"list", "get",
+					},
+				},
+				{
+					APIGroups: []string{
+						"imageassurance.tigera.io",
+					},
+					Resources: []string{
+						"repositories",
+					},
+					Verbs: []string{
+						"get",
+					},
+				},
+				{
+					APIGroups: []string{
+						"imageassurance.tigera.io",
+					},
+					Resources: []string{
+						"images",
+					},
+					Verbs: []string{
+						"get", "create",
+					},
+				},
+				{
+					APIGroups: []string{
+						"imageassurance.tigera.io",
+					},
+					Resources: []string{
+						"pods",
+					},
+					Verbs: []string{
+						"create",
+					},
+				},
+				{
+					APIGroups: []string{
+						"imageassurance.tigera.io",
+					},
+					Resources: []string{
+						"events",
+					},
+					Verbs: []string{
+						"create",
+					},
+				},
+			},
 		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{
-					"imageassurance.tigera.io",
-				},
-				Resources: []string{
-					"organizations",
-				},
-				Verbs: []string{
-					"get",
-				},
-				ResourceNames: []string{
-					c.config.ConfigurationConfigMap.Data[rcimageassurance.ConfigurationConfigMapOrgIDKey],
-				},
+		{
+			TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      ResourceNameImageAssurancePodWatcher,
+				Namespace: NameSpaceImageAssurance,
 			},
-			{
-				APIGroups: []string{
-					"imageassurance.tigera.io",
-				},
-				Resources: []string{
-					"registries",
-				},
-				Verbs: []string{
-					"list", "get", "update",
-				},
-			},
-			{
-				APIGroups: []string{
-					"imageassurance.tigera.io",
-				},
-				Resources: []string{
-					"repositories",
-				},
-				Verbs: []string{
-					"get",
-				},
-			},
-			{
-				APIGroups: []string{
-					"imageassurance.tigera.io",
-				},
-				Resources: []string{
-					"images",
-				},
-				Verbs: []string{
-					"get", "update",
-				},
-			},
-			{
-				APIGroups: []string{
-					"imageassurance.tigera.io",
-				},
-				Resources: []string{
-					"pods",
-				},
-				Verbs: []string{
-					"create",
-				},
-			},
-			{
-				APIGroups: []string{
-					"imageassurance.tigera.io",
-				},
-				Resources: []string{
-					"events", "vulnerabilities",
-				},
-				Verbs: []string{
-					"create",
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{"projectcalico.org"},
+					Resources: []string{"managedclusters"},
+					Verbs:     []string{"get", "list", "watch"},
 				},
 			},
 		},
@@ -148,6 +164,28 @@ func (c *component) podWatcherRoleBinding() *rbacv1.RoleBinding {
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: rbacv1.GroupName,
 			Kind:     "Role",
+			Name:     ResourceNameImageAssurancePodWatcher,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      rbacv1.ServiceAccountKind,
+				Name:      ResourceNameImageAssurancePodWatcher,
+				Namespace: NameSpaceImageAssurance,
+			},
+		},
+	}
+}
+
+func (c *component) podWatcherClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ResourceNameImageAssurancePodWatcher,
+			Namespace: NameSpaceImageAssurance,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: rbacv1.GroupName,
+			Kind:     "ClusterRole",
 			Name:     ResourceNameImageAssurancePodWatcher,
 		},
 		Subjects: []rbacv1.Subject{

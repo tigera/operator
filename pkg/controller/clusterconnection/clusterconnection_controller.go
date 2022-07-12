@@ -95,6 +95,11 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, render.GuardianSecretName, err)
 	}
 
+	// Watch for optional voltron server secret
+	if err = utils.AddSecretsWatch(c, render.VoltronServerSecretName, common.OperatorNamespace()); err != nil {
+		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, render.VoltronServerSecretName, err)
+	}
+
 	// Watch for changes to the secrets associated with the PacketCapture APIs.
 	if err = utils.AddSecretsWatch(c, render.PacketCaptureCertSecret, common.OperatorNamespace()); err != nil {
 		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, render.PacketCaptureCertSecret, err)
@@ -197,6 +202,12 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return result, err
 	}
 
+	// check if public CA is used for voltron
+	var usePublicCA bool
+	if err := r.Client.Get(ctx, types.NamespacedName{Name: render.VoltronServerSecretName, Namespace: common.OperatorNamespace()}, tunnelSecret); err != nil {
+		usePublicCA = true
+	}
+
 	trustedCertBundle := certificateManager.CreateTrustedBundle()
 	for _, secretName := range []string{render.PacketCaptureCertSecret, render.PrometheusTLSSecretName} {
 		secret, err := certificateManager.GetCertificate(r.Client, secretName, common.OperatorNamespace())
@@ -219,6 +230,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		Openshift:         r.Provider == operatorv1.ProviderOpenShift,
 		Installation:      instl,
 		TunnelSecret:      tunnelSecret,
+		UsePublicCA:       usePublicCA,
 		TrustedCertBundle: trustedCertBundle,
 	}
 	component := render.Guardian(guardianCfg)

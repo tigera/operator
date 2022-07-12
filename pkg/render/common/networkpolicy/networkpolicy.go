@@ -71,11 +71,11 @@ func AppendDNSEgressRules(egressRules []v3.Rule, openShift bool) []v3.Rule {
 }
 
 // CreateEntityRule creates an entity rule that matches traffic using label selectors based on namespace, deployment name, and port.
-func CreateEntityRule(namespace string, deploymentName string, port uint16) v3.EntityRule {
+func CreateEntityRule(namespace string, deploymentName string, ports ...uint16) v3.EntityRule {
 	return v3.EntityRule{
 		NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", namespace),
 		Selector:          fmt.Sprintf("k8s-app == '%s'", deploymentName),
-		Ports:             Ports(port),
+		Ports:             Ports(ports...),
 	}
 }
 

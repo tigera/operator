@@ -67,6 +67,14 @@ You can create a local k3d cluster with the Makefile:
 
 	make cluster-create
 
+Export the kubeconfig:
+
+	export KUBECONFIG=./kubeconfig.yaml
+
+Create the tigera-operator namespace:
+
+	kubectl create ns tigera-operator
+
 Then, run the operator against the local cluster:
 
 	# enable-leader-election is necessary since you'll be running the operator outside of a cluster
@@ -79,12 +87,12 @@ To launch Calico, install the default custom resource:
 To tear down the cluster:
 
 	make cluster-destroy
-	
+
 #### Running a custom image in your existing Calico (Enterprise) cluster
 
-These steps assume that you already have installed the operator in a Calico (Enterprise) cluster after following either 
-docs.projectcalico.org or docs.tigera.io. To verify, run `kubectl get deployment -n tigera-operator tigera-operator`. 
-You should see an existing deployment. 
+These steps assume that you already have installed the operator in a Calico (Enterprise) cluster after following either
+docs.projectcalico.org or docs.tigera.io. To verify, run `kubectl get deployment -n tigera-operator tigera-operator`.
+You should see an existing deployment.
 The steps also assume that you have setup your docker such that you can push to a registry.
 
 These are the steps:
@@ -108,8 +116,8 @@ These are the steps:
 
 #### Set breakpoints in Goland IDE and run the code against your existing Calico (Enterprise) cluster
 
-These steps assume that you already have installed the operator in a Calico (Enterprise) cluster after following either 
-https://docs.projectcalico.org or https://docs.tigera.io. To verify, run `kubectl get deployment -n tigera-operator tigera-operator`. 
+These steps assume that you already have installed the operator in a Calico (Enterprise) cluster after following either
+https://docs.projectcalico.org or https://docs.tigera.io. To verify, run `kubectl get deployment -n tigera-operator tigera-operator`.
 You should see an existing deployment. Install [kubefwd](kubefwd.com).
 
 1. Scale down the operator, so it does not interfere with your own:
@@ -121,7 +129,7 @@ kubectl scale deploy -n tigera-operator tigera-operator --replicas=0
 kubefwd svc -n calico-system -n tigera-compliance -n tigera-kibana -n tigera-manager -n tigera-dex -n tigera-elasticsearch -n tigera-prometheus -c $KUBECONFIG
 ```
 3. Open a code file in your editor and set a breakpoint.
-4. Create a debug configuration by right-clicking main.go and select `modify run configuration`. 
+4. Create a debug configuration by right-clicking main.go and select `modify run configuration`.
    1. Under Run kind, select `Package`
    2. Under Environment, add `KUBECONFIG=/path/to/config`
    3. In Program arguments, add `--enable-leader-election=false`
@@ -177,7 +185,7 @@ Adding the following as an annotation to any resource will prevent the operator 
   unsupported.operator.tigera.io/ignore: "true"
   ```
 
-#### Example update to calico-node DaemonSet 
+#### Example update to calico-node DaemonSet
 
 Notice that the annotation is added in the top level metadata (not in the spec.template.metadata).
 (note the below is not a valid manifest but just an example)

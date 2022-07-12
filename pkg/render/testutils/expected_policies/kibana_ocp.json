@@ -109,13 +109,10 @@
         "action": "Allow",
         "protocol": "TCP",
         "destination": {
-          "namespaceSelector": "projectcalico.org/name == 'default'",
-          "selector": "(provider == 'kubernetes' && component == 'apiserver' && endpoints.projectcalico.org/serviceName == 'kubernetes')",
-          "ports": [
-            443,
-            6443,
-            12388
-          ]
+          "services": {
+            "name": "kubernetes",
+            "namespace": "default"
+          }
         }
       },
       {

@@ -27,62 +27,118 @@ import (
 
 var log = logf.Log.WithName("components")
 
+// replicatedPodResource contains the overridable data for a Deployment or DaemonSet.
+type replicatedPodResource struct {
+	labels          map[string]string
+	annotations     map[string]string
+	minReadySeconds *int32
+	podTemplateSpec *corev1.PodTemplateSpec
+}
+
+// applyReplicatedPodResourceOverrides takes the given replicated pod resource data and applies the overrides.
+func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides components.ReplicatedPodResourceOverrides) *replicatedPodResource {
+	if metadata := overrides.GetMetadata(); metadata != nil {
+		if len(metadata.Labels) > 0 {
+			if r.labels == nil {
+				r.labels = make(map[string]string)
+			}
+			common.MergeMaps(metadata.Labels, r.labels)
+		}
+		if len(metadata.Annotations) > 0 {
+			if r.annotations == nil {
+				r.annotations = make(map[string]string)
+			}
+			common.MergeMaps(metadata.Annotations, r.annotations)
+		}
+	}
+	if minReadySeconds := overrides.GetMinReadySeconds(); minReadySeconds != nil {
+		r.minReadySeconds = minReadySeconds
+	}
+	if podTemplateMetadata := overrides.GetPodTemplateMetadata(); podTemplateMetadata != nil {
+		if len(podTemplateMetadata.Labels) > 0 {
+			if r.podTemplateSpec.Labels == nil {
+				r.podTemplateSpec.Labels = make(map[string]string)
+			}
+			common.MergeMaps(podTemplateMetadata.Labels, r.podTemplateSpec.Labels)
+		}
+		if len(podTemplateMetadata.Annotations) > 0 {
+			if r.podTemplateSpec.Annotations == nil {
+				r.podTemplateSpec.Annotations = make(map[string]string)
+			}
+			common.MergeMaps(podTemplateMetadata.Annotations, r.podTemplateSpec.Annotations)
+		}
+	}
+	if initContainers := overrides.GetInitContainers(); initContainers != nil {
+		mergeContainers(r.podTemplateSpec.Spec.InitContainers, initContainers)
+	}
+	if containers := overrides.GetContainers(); containers != nil {
+		mergeContainers(r.podTemplateSpec.Spec.Containers, containers)
+	}
+	if affinity := overrides.GetAffinity(); affinity != nil {
+		r.podTemplateSpec.Spec.Affinity = affinity
+	}
+	if nodeSelector := overrides.GetNodeSelector(); nodeSelector != nil {
+		r.podTemplateSpec.Spec.NodeSelector = nodeSelector
+	}
+	if tolerations := overrides.GetTolerations(); tolerations != nil {
+		r.podTemplateSpec.Spec.Tolerations = tolerations
+	}
+
+	return r
+}
+
 // ApplyDaemonSetOverrides applies the overrides to the given DaemonSet.
 // Note: overrides must not be nil pointer.
-func ApplyDaemonSetOverrides(ds *appsv1.DaemonSet, overrides components.DaemonSetOverrides) *appsv1.DaemonSet {
+func ApplyDaemonSetOverrides(ds *appsv1.DaemonSet, overrides components.ReplicatedPodResourceOverrides) *appsv1.DaemonSet {
 	// Catch if caller passes in an explicit nil.
 	if overrides == nil {
 		return ds
 	}
 
-	if metadata := overrides.GetMetadata(); metadata != nil {
-		if len(metadata.Labels) > 0 {
-			if ds.Labels == nil {
-				ds.SetLabels(make(map[string]string))
-			}
-			common.MergeMaps(metadata.Labels, ds.Labels)
-		}
-		if len(metadata.Annotations) > 0 {
-			if ds.GetAnnotations() == nil {
-				ds.SetAnnotations(make(map[string]string))
-			}
-			common.MergeMaps(metadata.Annotations, ds.GetAnnotations())
-		}
+	// Pull out the data we'll override from the DaemonSet.
+	r := &replicatedPodResource{
+		labels:          ds.Labels,
+		annotations:     ds.Annotations,
+		minReadySeconds: &ds.Spec.MinReadySeconds,
+		podTemplateSpec: &ds.Spec.Template,
 	}
-	if minReadySeconds := overrides.GetMinReadySeconds(); minReadySeconds != nil {
-		ds.Spec.MinReadySeconds = *minReadySeconds
-	}
-	if podTemplateMetadata := overrides.GetPodTemplateMetadata(); podTemplateMetadata != nil {
-		if len(podTemplateMetadata.Labels) > 0 {
-			if ds.Spec.Template.GetLabels() == nil {
-				ds.Spec.Template.SetLabels(make(map[string]string))
-			}
-			common.MergeMaps(podTemplateMetadata.Labels, ds.Spec.Template.GetLabels())
-		}
-		if len(podTemplateMetadata.Annotations) > 0 {
-			if ds.Spec.Template.GetAnnotations() == nil {
-				ds.Spec.Template.SetAnnotations(make(map[string]string))
-			}
-			common.MergeMaps(podTemplateMetadata.Annotations, ds.Spec.Template.GetAnnotations())
-		}
-	}
-	if initContainers := overrides.GetInitContainers(); initContainers != nil {
-		mergeContainers(ds.Spec.Template.Spec.InitContainers, initContainers)
-	}
-	if containers := overrides.GetContainers(); containers != nil {
-		mergeContainers(ds.Spec.Template.Spec.Containers, containers)
-	}
-	if affinity := overrides.GetAffinity(); affinity != nil {
-		ds.Spec.Template.Spec.Affinity = affinity
-	}
-	if nodeSelector := overrides.GetNodeSelector(); nodeSelector != nil {
-		ds.Spec.Template.Spec.NodeSelector = nodeSelector
-	}
-	if tolerations := overrides.GetTolerations(); tolerations != nil {
-		ds.Spec.Template.Spec.Tolerations = tolerations
-	}
+	// Apply the overrides.
+	applyReplicatedPodResourceOverrides(r, overrides)
+
+	// Set the possibly new fields back onto the DaemonSet.
+	ds.Labels = r.labels
+	ds.Annotations = r.annotations
+	ds.Spec.MinReadySeconds = *r.minReadySeconds
+	ds.Spec.Template = *r.podTemplateSpec
 
 	return ds
+}
+
+// ApplyDeploymentOverrides applies the overrides to the given Deployment.
+// Note: overrides must not be nil pointer.
+func ApplyDeploymentOverrides(d *appsv1.Deployment, overrides components.ReplicatedPodResourceOverrides) *appsv1.Deployment {
+	// Catch if caller passes in an explicit nil.
+	if overrides == nil {
+		return d
+	}
+
+	// Pull out the data we'll override from the DaemonSet.
+	r := &replicatedPodResource{
+		labels:          d.Labels,
+		annotations:     d.Annotations,
+		minReadySeconds: &d.Spec.MinReadySeconds,
+		podTemplateSpec: &d.Spec.Template,
+	}
+	// Apply the overrides.
+	applyReplicatedPodResourceOverrides(r, overrides)
+
+	// Set the possibly new fields back onto the DaemonSet.
+	d.Labels = r.labels
+	d.Annotations = r.annotations
+	d.Spec.MinReadySeconds = *r.minReadySeconds
+	d.Spec.Template = *r.podTemplateSpec
+
+	return d
 }
 
 // mergeContainers copies the ResourceRequirements from the provided containers

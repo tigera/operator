@@ -24,6 +24,7 @@ import (
 	"github.com/tigera/operator/pkg/common/validation"
 	node "github.com/tigera/operator/pkg/common/validation/calico-node"
 	kubecontrollers "github.com/tigera/operator/pkg/common/validation/kube-controllers"
+	typha "github.com/tigera/operator/pkg/common/validation/typha"
 	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
 )
@@ -378,6 +379,15 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		err := validation.ValidateReplicatedPodResourceOverrides(ds, kubecontrollers.ValidateCalicoKubeControllersDeploymentContainers, validation.NoContainersDefined)
 		if err != nil {
 			return fmt.Errorf("Installation spec.CalicoKubeControllersDeployment is not valid: %w", err)
+
+		}
+	}
+
+	// Verify the TyphaDeployment overrides, if specified, is valid.
+	if ds := instance.Spec.TyphaDeployment; ds != nil {
+		err := validation.ValidateReplicatedPodResourceOverrides(ds, typha.ValidateTyphaDeploymentContainer, typha.ValidateTyphaDeploymentInitContainer)
+		if err != nil {
+			return fmt.Errorf("Installation spec.TyphaDeployment is not valid: %w", err)
 
 		}
 	}

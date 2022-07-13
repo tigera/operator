@@ -602,6 +602,7 @@ var _ = Describe("Installation merge tests", func() {
 			[]opv1.ComponentResource{_typhaComp},
 			[]opv1.ComponentResource{_typhaComp}),
 	)
+
 	var metadataTests = []TableEntry{
 		Entry("Both unset", nil, nil, nil),
 		Entry("Main only set (labels only)", &opv1.Metadata{Labels: map[string]string{"a": "1"}}, nil, &opv1.Metadata{Labels: map[string]string{"a": "1"}}),
@@ -629,10 +630,37 @@ var _ = Describe("Installation merge tests", func() {
 		Entry("Both set not equal (annots differ)", &opv1.Metadata{Labels: map[string]string{"a": "1"}, Annotations: map[string]string{"b": "1"}}, &opv1.Metadata{Labels: map[string]string{"a": "1"}, Annotations: map[string]string{"c": "2"}},
 			&opv1.Metadata{Labels: map[string]string{"a": "1"}, Annotations: map[string]string{"c": "2"}}),
 	}
+
 	Context("test CalicoNodeDaemonSet merge", func() {
+		var m opv1.InstallationSpec
+		var s opv1.InstallationSpec
+
+		BeforeEach(func() {
+			m = opv1.InstallationSpec{
+				CalicoNodeDaemonSet: &opv1.CalicoNodeDaemonSet{
+					Spec: &opv1.CalicoNodeDaemonSetSpec{
+						Template: &opv1.CalicoNodeDaemonSetPodTemplateSpec{
+							Spec: &opv1.CalicoNodeDaemonSetPodSpec{},
+						},
+					},
+				},
+			}
+			s = opv1.InstallationSpec{
+				CalicoNodeDaemonSet: &opv1.CalicoNodeDaemonSet{
+					Spec: &opv1.CalicoNodeDaemonSetSpec{
+						Template: &opv1.CalicoNodeDaemonSetPodTemplateSpec{
+							Spec: &opv1.CalicoNodeDaemonSetPodSpec{},
+						},
+					},
+				},
+			}
+
+		})
+
 		DescribeTable("merge metadata", func(main, second, expect *opv1.Metadata) {
-			m := opv1.InstallationSpec{}
-			s := opv1.InstallationSpec{}
+			// start with empty installation spec
+			m = opv1.InstallationSpec{}
+			s = opv1.InstallationSpec{}
 			if main != nil {
 				m.CalicoNodeDaemonSet = &opv1.CalicoNodeDaemonSet{Metadata: main}
 			}
@@ -648,17 +676,11 @@ var _ = Describe("Installation merge tests", func() {
 		}, metadataTests...)
 
 		DescribeTable("merge minReadySeconds", func(main, second, expect *int32) {
-			m := opv1.InstallationSpec{}
-			s := opv1.InstallationSpec{}
-			if main != nil {
-				m.CalicoNodeDaemonSet = &opv1.CalicoNodeDaemonSet{Spec: &opv1.CalicoNodeDaemonSetSpec{MinReadySeconds: main}}
-			}
-			if second != nil {
-				s.CalicoNodeDaemonSet = &opv1.CalicoNodeDaemonSet{Spec: &opv1.CalicoNodeDaemonSetSpec{MinReadySeconds: second}}
-			}
+			m.CalicoNodeDaemonSet.Spec.MinReadySeconds = main
+			s.CalicoNodeDaemonSet.Spec.MinReadySeconds = second
 			inst := OverrideInstallationSpec(m, s)
 			if expect == nil {
-				Expect(inst.CalicoNodeDaemonSet).To(BeNil())
+				Expect(inst.CalicoNodeDaemonSet.Spec.MinReadySeconds).To(BeNil())
 			} else {
 				Expect(*inst.CalicoNodeDaemonSet.Spec.MinReadySeconds).To(Equal(*expect))
 			}
@@ -670,17 +692,11 @@ var _ = Describe("Installation merge tests", func() {
 			Entry("Both set not equal", intPtr(23), intPtr(42), intPtr(42)),
 		)
 		DescribeTable("merge pod template metadata", func(main, second, expect *opv1.Metadata) {
-			m := opv1.InstallationSpec{}
-			s := opv1.InstallationSpec{}
-			if main != nil {
-				m.CalicoNodeDaemonSet = &opv1.CalicoNodeDaemonSet{Spec: &opv1.CalicoNodeDaemonSetSpec{Template: &opv1.CalicoNodeDaemonSetPodTemplateSpec{Metadata: main}}}
-			}
-			if second != nil {
-				s.CalicoNodeDaemonSet = &opv1.CalicoNodeDaemonSet{Spec: &opv1.CalicoNodeDaemonSetSpec{Template: &opv1.CalicoNodeDaemonSetPodTemplateSpec{Metadata: second}}}
-			}
+			m.CalicoNodeDaemonSet.Spec.Template.Metadata = main
+			s.CalicoNodeDaemonSet.Spec.Template.Metadata = second
 			inst := OverrideInstallationSpec(m, s)
 			if expect == nil {
-				Expect(inst.CalicoNodeDaemonSet).To(BeNil())
+				Expect(inst.CalicoNodeDaemonSet.Spec.Template.Metadata).To(BeNil())
 			} else {
 				Expect(*inst.CalicoNodeDaemonSet.Spec.Template.Metadata).To(Equal(*expect))
 			}
@@ -699,19 +715,11 @@ var _ = Describe("Installation merge tests", func() {
 		_calicoNodeInit2 := opv1.CalicoNodeInitContainer{Name: "init2", Resources: _resources2}
 
 		DescribeTable("merge initContainers", func(main, second, expect []opv1.CalicoNodeInitContainer) {
-			m := opv1.InstallationSpec{}
-			s := opv1.InstallationSpec{}
-			if main != nil {
-				m.CalicoNodeDaemonSet = &opv1.CalicoNodeDaemonSet{
-					Spec: &opv1.CalicoNodeDaemonSetSpec{Template: &opv1.CalicoNodeDaemonSetPodTemplateSpec{Spec: &opv1.CalicoNodeDaemonSetPodSpec{InitContainers: main}}}}
-			}
-			if second != nil {
-				s.CalicoNodeDaemonSet = &opv1.CalicoNodeDaemonSet{
-					Spec: &opv1.CalicoNodeDaemonSetSpec{Template: &opv1.CalicoNodeDaemonSetPodTemplateSpec{Spec: &opv1.CalicoNodeDaemonSetPodSpec{InitContainers: second}}}}
-			}
+			m.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers = main
+			s.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers = second
 			inst := OverrideInstallationSpec(m, s)
 			if expect == nil {
-				Expect(inst.CalicoNodeDaemonSet).To(BeNil())
+				Expect(inst.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers).To(BeNil())
 			} else {
 				Expect(inst.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers).To(Equal(expect))
 			}
@@ -728,20 +736,13 @@ var _ = Describe("Installation merge tests", func() {
 		_calicoNode1a := opv1.CalicoNodeContainer{Name: "node1", Resources: _resources1}
 		_calicoNode1b := opv1.CalicoNodeContainer{Name: "node1", Resources: _resources2}
 		_calicoNode2 := opv1.CalicoNodeContainer{Name: "node2", Resources: _resources2}
+
 		DescribeTable("merge containers", func(main, second, expect []opv1.CalicoNodeContainer) {
-			m := opv1.InstallationSpec{}
-			s := opv1.InstallationSpec{}
-			if main != nil {
-				m.CalicoNodeDaemonSet = &opv1.CalicoNodeDaemonSet{
-					Spec: &opv1.CalicoNodeDaemonSetSpec{Template: &opv1.CalicoNodeDaemonSetPodTemplateSpec{Spec: &opv1.CalicoNodeDaemonSetPodSpec{Containers: main}}}}
-			}
-			if second != nil {
-				s.CalicoNodeDaemonSet = &opv1.CalicoNodeDaemonSet{
-					Spec: &opv1.CalicoNodeDaemonSetSpec{Template: &opv1.CalicoNodeDaemonSetPodTemplateSpec{Spec: &opv1.CalicoNodeDaemonSetPodSpec{Containers: second}}}}
-			}
+			m.CalicoNodeDaemonSet.Spec.Template.Spec.Containers = main
+			s.CalicoNodeDaemonSet.Spec.Template.Spec.Containers = second
 			inst := OverrideInstallationSpec(m, s)
 			if expect == nil {
-				Expect(inst.CalicoNodeDaemonSet).To(BeNil())
+				Expect(inst.CalicoNodeDaemonSet.Spec.Template.Spec.Containers).To(BeNil())
 			} else {
 				Expect(inst.CalicoNodeDaemonSet.Spec.Template.Spec.Containers).To(Equal(expect))
 			}
@@ -779,21 +780,14 @@ var _ = Describe("Installation merge tests", func() {
 				},
 			},
 		}
+		_affEmpty := &v1.Affinity{}
 
 		DescribeTable("merge affinity", func(main, second, expect *v1.Affinity) {
-			m := opv1.InstallationSpec{}
-			s := opv1.InstallationSpec{}
-			if main != nil {
-				m.CalicoNodeDaemonSet = &opv1.CalicoNodeDaemonSet{Spec: &opv1.CalicoNodeDaemonSetSpec{
-					Template: &opv1.CalicoNodeDaemonSetPodTemplateSpec{Spec: &opv1.CalicoNodeDaemonSetPodSpec{Affinity: main}}}}
-			}
-			if second != nil {
-				s.CalicoNodeDaemonSet = &opv1.CalicoNodeDaemonSet{Spec: &opv1.CalicoNodeDaemonSetSpec{
-					Template: &opv1.CalicoNodeDaemonSetPodTemplateSpec{Spec: &opv1.CalicoNodeDaemonSetPodSpec{Affinity: second}}}}
-			}
+			m.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity = main
+			s.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity = second
 			inst := OverrideInstallationSpec(m, s)
 			if expect == nil {
-				Expect(inst.CalicoNodeDaemonSet).To(BeNil())
+				Expect(inst.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity).To(BeNil())
 			} else {
 				Expect(*inst.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity).To(Equal(*expect))
 			}
@@ -803,22 +797,15 @@ var _ = Describe("Installation merge tests", func() {
 			Entry("Second only set", nil, _aff1, _aff1),
 			Entry("Both set equal", _aff1, _aff1, _aff1),
 			Entry("Both set not equal", _aff1, _aff2, _aff2),
+			Entry("Both set not equal, override empty", _aff1, _affEmpty, _affEmpty),
 		)
 
 		DescribeTable("merge nodeSelector", func(main, second, expect map[string]string) {
-			m := opv1.InstallationSpec{}
-			s := opv1.InstallationSpec{}
-			if main != nil {
-				m.CalicoNodeDaemonSet = &opv1.CalicoNodeDaemonSet{Spec: &opv1.CalicoNodeDaemonSetSpec{
-					Template: &opv1.CalicoNodeDaemonSetPodTemplateSpec{Spec: &opv1.CalicoNodeDaemonSetPodSpec{NodeSelector: main}}}}
-			}
-			if second != nil {
-				s.CalicoNodeDaemonSet = &opv1.CalicoNodeDaemonSet{Spec: &opv1.CalicoNodeDaemonSetSpec{
-					Template: &opv1.CalicoNodeDaemonSetPodTemplateSpec{Spec: &opv1.CalicoNodeDaemonSetPodSpec{NodeSelector: second}}}}
-			}
+			m.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector = main
+			s.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector = second
 			inst := OverrideInstallationSpec(m, s)
 			if expect == nil {
-				Expect(inst.CalicoNodeDaemonSet).To(BeNil())
+				Expect(inst.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector).To(BeNil())
 			} else {
 				Expect(inst.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector).To(Equal(expect))
 			}
@@ -828,6 +815,7 @@ var _ = Describe("Installation merge tests", func() {
 			Entry("Second only set", nil, map[string]string{"a1": "1"}, map[string]string{"a1": "1"}),
 			Entry("Both set equal", map[string]string{"a1": "1"}, map[string]string{"a1": "1"}, map[string]string{"a1": "1"}),
 			Entry("Both set not equal", map[string]string{"a1": "1"}, map[string]string{"a1": "2", "b1": "3"}, map[string]string{"a1": "2", "b1": "3"}),
+			Entry("Both set not equal, override empty", map[string]string{"a1": "1"}, map[string]string{}, map[string]string{}),
 		)
 
 		_toleration1 := v1.Toleration{
@@ -842,19 +830,11 @@ var _ = Describe("Installation merge tests", func() {
 		}
 
 		DescribeTable("merge tolerations", func(main, second, expect []v1.Toleration) {
-			m := opv1.InstallationSpec{}
-			s := opv1.InstallationSpec{}
-			if main != nil {
-				m.CalicoNodeDaemonSet = &opv1.CalicoNodeDaemonSet{Spec: &opv1.CalicoNodeDaemonSetSpec{
-					Template: &opv1.CalicoNodeDaemonSetPodTemplateSpec{Spec: &opv1.CalicoNodeDaemonSetPodSpec{Tolerations: main}}}}
-			}
-			if second != nil {
-				s.CalicoNodeDaemonSet = &opv1.CalicoNodeDaemonSet{Spec: &opv1.CalicoNodeDaemonSetSpec{
-					Template: &opv1.CalicoNodeDaemonSetPodTemplateSpec{Spec: &opv1.CalicoNodeDaemonSetPodSpec{Tolerations: second}}}}
-			}
+			m.CalicoNodeDaemonSet.Spec.Template.Spec.Tolerations = main
+			s.CalicoNodeDaemonSet.Spec.Template.Spec.Tolerations = second
 			inst := OverrideInstallationSpec(m, s)
 			if expect == nil {
-				Expect(inst.CalicoNodeDaemonSet).To(BeNil())
+				Expect(inst.CalicoNodeDaemonSet.Spec.Template.Spec.Tolerations).To(BeNil())
 			} else {
 				Expect(inst.CalicoNodeDaemonSet.Spec.Template.Spec.Tolerations).To(Equal(expect))
 			}
@@ -864,11 +844,13 @@ var _ = Describe("Installation merge tests", func() {
 			Entry("Second only set", nil, []v1.Toleration{_toleration1}, []v1.Toleration{_toleration1}),
 			Entry("Both set equal", []v1.Toleration{_toleration1}, []v1.Toleration{_toleration1}, []v1.Toleration{_toleration1}),
 			Entry("Both set not equal", []v1.Toleration{_toleration1}, []v1.Toleration{_toleration2}, []v1.Toleration{_toleration2}),
+			Entry("Both set not equal, override empty", []v1.Toleration{_toleration1}, []v1.Toleration{}, []v1.Toleration{}),
 		)
 
 		DescribeTable("merge multiple CalicoDaemonSet fields", func(main, second, expect *opv1.CalicoNodeDaemonSet) {
-			m := opv1.InstallationSpec{}
-			s := opv1.InstallationSpec{}
+			// start with empty spec
+			m = opv1.InstallationSpec{}
+			s = opv1.InstallationSpec{}
 			if main != nil {
 				m.CalicoNodeDaemonSet = main
 			}
@@ -943,287 +925,9 @@ var _ = Describe("Installation merge tests", func() {
 				},
 			))
 	})
+
 	Context("test CalicoKubeControllersDeployment merge", func() {
-		DescribeTable("merge metadata", func(main, second, expect *opv1.Metadata) {
-			m := opv1.InstallationSpec{}
-			s := opv1.InstallationSpec{}
-			if main != nil {
-				m.CalicoKubeControllersDeployment = &opv1.CalicoKubeControllersDeployment{Metadata: main}
-			}
-			if second != nil {
-				s.CalicoKubeControllersDeployment = &opv1.CalicoKubeControllersDeployment{Metadata: second}
-			}
-			inst := OverrideInstallationSpec(m, s)
-			if expect == nil {
-				Expect(inst.CalicoKubeControllersDeployment).To(BeNil())
-			} else {
-				Expect(*inst.CalicoKubeControllersDeployment.Metadata).To(Equal(*expect))
-			}
-		}, metadataTests...)
-
-		DescribeTable("merge minReadySeconds", func(main, second, expect *int32) {
-			m := opv1.InstallationSpec{}
-			s := opv1.InstallationSpec{}
-			if main != nil {
-				m.CalicoKubeControllersDeployment = &opv1.CalicoKubeControllersDeployment{Spec: &opv1.CalicoKubeControllersDeploymentSpec{MinReadySeconds: main}}
-			}
-			if second != nil {
-				s.CalicoKubeControllersDeployment = &opv1.CalicoKubeControllersDeployment{Spec: &opv1.CalicoKubeControllersDeploymentSpec{MinReadySeconds: second}}
-			}
-			inst := OverrideInstallationSpec(m, s)
-			if expect == nil {
-				Expect(inst.CalicoKubeControllersDeployment).To(BeNil())
-			} else {
-				Expect(*inst.CalicoKubeControllersDeployment.Spec.MinReadySeconds).To(Equal(*expect))
-			}
-		},
-			Entry("Both unset", nil, nil, nil),
-			Entry("Main only set", intPtr(23), nil, intPtr(23)),
-			Entry("Second only set", nil, intPtr(23), intPtr(23)),
-			Entry("Both set equal", intPtr(23), intPtr(23), intPtr(23)),
-			Entry("Both set not equal", intPtr(23), intPtr(42), intPtr(42)),
-		)
-		DescribeTable("merge pod template metadata", func(main, second, expect *opv1.Metadata) {
-			m := opv1.InstallationSpec{}
-			s := opv1.InstallationSpec{}
-			if main != nil {
-				m.CalicoKubeControllersDeployment = &opv1.CalicoKubeControllersDeployment{Spec: &opv1.CalicoKubeControllersDeploymentSpec{Template: &opv1.CalicoKubeControllersDeploymentPodTemplateSpec{Metadata: main}}}
-			}
-			if second != nil {
-				s.CalicoKubeControllersDeployment = &opv1.CalicoKubeControllersDeployment{Spec: &opv1.CalicoKubeControllersDeploymentSpec{Template: &opv1.CalicoKubeControllersDeploymentPodTemplateSpec{Metadata: second}}}
-			}
-			inst := OverrideInstallationSpec(m, s)
-			if expect == nil {
-				Expect(inst.CalicoKubeControllersDeployment).To(BeNil())
-			} else {
-				Expect(*inst.CalicoKubeControllersDeployment.Spec.Template.Metadata).To(Equal(*expect))
-			}
-		}, metadataTests...)
-
-		_resources1 := &v1.ResourceRequirements{
-			Requests: v1.ResourceList{v1.ResourceCPU: resource.MustParse("500m")},
-			Limits:   v1.ResourceList{v1.ResourceCPU: resource.MustParse("500m")},
-		}
-		_resources2 := &v1.ResourceRequirements{
-			Requests: v1.ResourceList{v1.ResourceCPU: resource.MustParse("1000m"), v1.ResourceMemory: resource.MustParse("500Mi")},
-			Limits:   v1.ResourceList{v1.ResourceCPU: resource.MustParse("1000m"), v1.ResourceMemory: resource.MustParse("1000Mi")},
-		}
-
-		_kubecontrollers1 := opv1.CalicoKubeControllersContainer{Name: "kubecontrollers1", Resources: _resources1}
-		_kubecontrollers2 := opv1.CalicoKubeControllersContainer{Name: "kubecontrollers2", Resources: _resources2}
-
-		DescribeTable("merge containers", func(main, second, expect []opv1.CalicoKubeControllersContainer) {
-			m := opv1.InstallationSpec{}
-			s := opv1.InstallationSpec{}
-			if main != nil {
-				m.CalicoKubeControllersDeployment = &opv1.CalicoKubeControllersDeployment{
-					Spec: &opv1.CalicoKubeControllersDeploymentSpec{Template: &opv1.CalicoKubeControllersDeploymentPodTemplateSpec{Spec: &opv1.CalicoKubeControllersDeploymentPodSpec{Containers: main}}}}
-			}
-			if second != nil {
-				s.CalicoKubeControllersDeployment = &opv1.CalicoKubeControllersDeployment{
-					Spec: &opv1.CalicoKubeControllersDeploymentSpec{Template: &opv1.CalicoKubeControllersDeploymentPodTemplateSpec{Spec: &opv1.CalicoKubeControllersDeploymentPodSpec{Containers: second}}}}
-			}
-			inst := OverrideInstallationSpec(m, s)
-			if expect == nil {
-				Expect(inst.CalicoKubeControllersDeployment).To(BeNil())
-			} else {
-				Expect(inst.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers).To(Equal(expect))
-			}
-		},
-			Entry("Both unset", nil, nil, nil),
-			Entry("Main only set", []opv1.CalicoKubeControllersContainer{_kubecontrollers1}, nil, []opv1.CalicoKubeControllersContainer{_kubecontrollers1}),
-			Entry("Second only set", nil, []opv1.CalicoKubeControllersContainer{_kubecontrollers2}, []opv1.CalicoKubeControllersContainer{_kubecontrollers2}),
-			Entry("Both set equal", []opv1.CalicoKubeControllersContainer{_kubecontrollers1}, []opv1.CalicoKubeControllersContainer{_kubecontrollers1},
-				[]opv1.CalicoKubeControllersContainer{_kubecontrollers1}),
-			Entry("Both set not equal", []opv1.CalicoKubeControllersContainer{_kubecontrollers1}, []opv1.CalicoKubeControllersContainer{_kubecontrollers2},
-				[]opv1.CalicoKubeControllersContainer{_kubecontrollers2}),
-		)
-
-		_aff1 := &v1.Affinity{
-			NodeAffinity: &v1.NodeAffinity{
-				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-					NodeSelectorTerms: []v1.NodeSelectorTerm{{
-						MatchExpressions: []v1.NodeSelectorRequirement{{
-							Key:      "custom-affinity-key",
-							Operator: v1.NodeSelectorOpExists,
-						}},
-					}},
-				},
-			},
-		}
-		_aff2 := &v1.Affinity{
-			NodeAffinity: &v1.NodeAffinity{
-				RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-					NodeSelectorTerms: []v1.NodeSelectorTerm{{
-						MatchExpressions: []v1.NodeSelectorRequirement{{
-							Key:      "custom-affinity-key2",
-							Operator: v1.NodeSelectorOpExists,
-						}},
-					}},
-				},
-			},
-		}
-
-		DescribeTable("merge affinity", func(main, second, expect *v1.Affinity) {
-			m := opv1.InstallationSpec{}
-			s := opv1.InstallationSpec{}
-			if main != nil {
-				m.CalicoKubeControllersDeployment = &opv1.CalicoKubeControllersDeployment{Spec: &opv1.CalicoKubeControllersDeploymentSpec{
-					Template: &opv1.CalicoKubeControllersDeploymentPodTemplateSpec{Spec: &opv1.CalicoKubeControllersDeploymentPodSpec{Affinity: main}}}}
-			}
-			if second != nil {
-				s.CalicoKubeControllersDeployment = &opv1.CalicoKubeControllersDeployment{Spec: &opv1.CalicoKubeControllersDeploymentSpec{
-					Template: &opv1.CalicoKubeControllersDeploymentPodTemplateSpec{Spec: &opv1.CalicoKubeControllersDeploymentPodSpec{Affinity: second}}}}
-			}
-			inst := OverrideInstallationSpec(m, s)
-			if expect == nil {
-				Expect(inst.CalicoKubeControllersDeployment).To(BeNil())
-			} else {
-				Expect(*inst.CalicoKubeControllersDeployment.Spec.Template.Spec.Affinity).To(Equal(*expect))
-			}
-		},
-			Entry("Both unset", nil, nil, nil),
-			Entry("Main only set", _aff1, nil, _aff1),
-			Entry("Second only set", nil, _aff1, _aff1),
-			Entry("Both set equal", _aff1, _aff1, _aff1),
-			Entry("Both set not equal", _aff1, _aff2, _aff2),
-		)
-
-		DescribeTable("merge nodeSelector", func(main, second, expect map[string]string) {
-			m := opv1.InstallationSpec{}
-			s := opv1.InstallationSpec{}
-			if main != nil {
-				m.CalicoKubeControllersDeployment = &opv1.CalicoKubeControllersDeployment{Spec: &opv1.CalicoKubeControllersDeploymentSpec{
-					Template: &opv1.CalicoKubeControllersDeploymentPodTemplateSpec{Spec: &opv1.CalicoKubeControllersDeploymentPodSpec{NodeSelector: main}}}}
-			}
-			if second != nil {
-				s.CalicoKubeControllersDeployment = &opv1.CalicoKubeControllersDeployment{Spec: &opv1.CalicoKubeControllersDeploymentSpec{
-					Template: &opv1.CalicoKubeControllersDeploymentPodTemplateSpec{Spec: &opv1.CalicoKubeControllersDeploymentPodSpec{NodeSelector: second}}}}
-			}
-			inst := OverrideInstallationSpec(m, s)
-			if expect == nil {
-				Expect(inst.CalicoKubeControllersDeployment).To(BeNil())
-			} else {
-				Expect(inst.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector).To(Equal(expect))
-			}
-		},
-			Entry("Both unset", nil, nil, nil),
-			Entry("Main only set", map[string]string{"a1": "1"}, nil, map[string]string{"a1": "1"}),
-			Entry("Second only set", nil, map[string]string{"a1": "1"}, map[string]string{"a1": "1"}),
-			Entry("Both set equal", map[string]string{"a1": "1"}, map[string]string{"a1": "1"}, map[string]string{"a1": "1"}),
-			Entry("Both set not equal", map[string]string{"a1": "1"}, map[string]string{"a1": "2", "b1": "3"}, map[string]string{"a1": "2", "b1": "3"}),
-		)
-
-		_toleration1 := v1.Toleration{
-			Key:      "foo",
-			Operator: v1.TolerationOpEqual,
-			Value:    "bar",
-		}
-		_toleration2 := v1.Toleration{
-			Key:      "bar",
-			Operator: v1.TolerationOpEqual,
-			Value:    "baz",
-		}
-
-		DescribeTable("merge tolerations", func(main, second, expect []v1.Toleration) {
-			m := opv1.InstallationSpec{}
-			s := opv1.InstallationSpec{}
-			if main != nil {
-				m.CalicoKubeControllersDeployment = &opv1.CalicoKubeControllersDeployment{Spec: &opv1.CalicoKubeControllersDeploymentSpec{
-					Template: &opv1.CalicoKubeControllersDeploymentPodTemplateSpec{Spec: &opv1.CalicoKubeControllersDeploymentPodSpec{Tolerations: main}}}}
-			}
-			if second != nil {
-				s.CalicoKubeControllersDeployment = &opv1.CalicoKubeControllersDeployment{Spec: &opv1.CalicoKubeControllersDeploymentSpec{
-					Template: &opv1.CalicoKubeControllersDeploymentPodTemplateSpec{Spec: &opv1.CalicoKubeControllersDeploymentPodSpec{Tolerations: second}}}}
-			}
-			inst := OverrideInstallationSpec(m, s)
-			if expect == nil {
-				Expect(inst.CalicoKubeControllersDeployment).To(BeNil())
-			} else {
-				Expect(inst.CalicoKubeControllersDeployment.Spec.Template.Spec.Tolerations).To(Equal(expect))
-			}
-		},
-			Entry("Both unset", nil, nil, nil),
-			Entry("Main only set", []v1.Toleration{_toleration1}, nil, []v1.Toleration{_toleration1}),
-			Entry("Second only set", nil, []v1.Toleration{_toleration1}, []v1.Toleration{_toleration1}),
-			Entry("Both set equal", []v1.Toleration{_toleration1}, []v1.Toleration{_toleration1}, []v1.Toleration{_toleration1}),
-			Entry("Both set not equal", []v1.Toleration{_toleration1}, []v1.Toleration{_toleration2}, []v1.Toleration{_toleration2}),
-		)
-
-		DescribeTable("merge multiple CalicoDaemonSet fields", func(main, second, expect *opv1.CalicoKubeControllersDeployment) {
-			m := opv1.InstallationSpec{}
-			s := opv1.InstallationSpec{}
-			if main != nil {
-				m.CalicoKubeControllersDeployment = main
-			}
-			if second != nil {
-				s.CalicoKubeControllersDeployment = second
-			}
-			inst := OverrideInstallationSpec(m, s)
-			if expect == nil {
-				Expect(inst.CalicoKubeControllersDeployment).To(BeNil())
-			} else {
-				Expect(*inst.CalicoKubeControllersDeployment).To(Equal(*expect))
-			}
-		},
-			Entry("Both unset", nil, nil, nil),
-			Entry("Different fields in the two are merged, some overridden",
-				&opv1.CalicoKubeControllersDeployment{
-					Metadata: &opv1.Metadata{
-						Labels: map[string]string{"l": "1"},
-					},
-					Spec: &opv1.CalicoKubeControllersDeploymentSpec{
-						MinReadySeconds: intPtr(5),
-						Template: &opv1.CalicoKubeControllersDeploymentPodTemplateSpec{
-							Spec: &opv1.CalicoKubeControllersDeploymentPodSpec{
-								Containers:   []opv1.CalicoKubeControllersContainer{_kubecontrollers1},
-								NodeSelector: map[string]string{"selector": "test"},
-								Tolerations:  []v1.Toleration{_toleration1},
-							},
-						},
-					},
-				},
-				&opv1.CalicoKubeControllersDeployment{
-					Metadata: &opv1.Metadata{
-						Labels:      map[string]string{"overridden": "1"},
-						Annotations: map[string]string{"a": "1"},
-					},
-					Spec: &opv1.CalicoKubeControllersDeploymentSpec{
-						Template: &opv1.CalicoKubeControllersDeploymentPodTemplateSpec{
-							Metadata: &opv1.Metadata{
-								Labels:      map[string]string{"pod-label": "1"},
-								Annotations: map[string]string{"pod-annot": "1"},
-							},
-							Spec: &opv1.CalicoKubeControllersDeploymentPodSpec{
-								Affinity:     _aff1,
-								NodeSelector: map[string]string{"overridden": "selector"},
-								Tolerations:  []v1.Toleration{},
-							},
-						},
-					},
-				},
-				&opv1.CalicoKubeControllersDeployment{
-					Metadata: &opv1.Metadata{
-						Labels:      map[string]string{"overridden": "1"},
-						Annotations: map[string]string{"a": "1"},
-					},
-					Spec: &opv1.CalicoKubeControllersDeploymentSpec{
-						MinReadySeconds: intPtr(5),
-						Template: &opv1.CalicoKubeControllersDeploymentPodTemplateSpec{
-							Metadata: &opv1.Metadata{
-								Labels:      map[string]string{"pod-label": "1"},
-								Annotations: map[string]string{"pod-annot": "1"},
-							},
-							Spec: &opv1.CalicoKubeControllersDeploymentPodSpec{
-								Containers:   []opv1.CalicoKubeControllersContainer{_kubecontrollers1},
-								Affinity:     _aff1,
-								NodeSelector: map[string]string{"overridden": "selector"},
-								Tolerations:  []v1.Toleration{},
-							},
-						},
-					},
-				},
-			))
+		// TODO
 	})
 
 	Context("all fields handled", func() {

@@ -299,16 +299,12 @@ func mergeCalicoNodeDaemonSet(cfg, override *operatorv1.CalicoNodeDaemonSet) *op
 
 		switch compareFields(out.NodeSelector, override.NodeSelector) {
 		case BOnlySet, Different:
-			out.NodeSelector = make(map[string]string, len(override.NodeSelector))
-			for key, val := range override.NodeSelector {
-				out.NodeSelector[key] = val
-			}
+			out.NodeSelector = override.NodeSelector
 		}
 
 		switch compareFields(out.Tolerations, override.Tolerations) {
 		case BOnlySet, Different:
-			out.Tolerations = make([]v1.Toleration, len(override.Tolerations))
-			copy(out.Tolerations, override.Tolerations)
+			out.Tolerations = override.Tolerations
 		}
 		return out
 	}
@@ -372,6 +368,7 @@ func mergeCalicoKubeControllersDeployment(cfg, override *operatorv1.CalicoKubeCo
 	mergePodSpec := func(cfg, override *operatorv1.CalicoKubeControllersDeploymentPodSpec) *operatorv1.CalicoKubeControllersDeploymentPodSpec {
 		out := cfg.DeepCopy()
 
+		// CalicoKubeControllersDeployment doesn't have init containers.
 		switch compareFields(out.Containers, override.Containers) {
 		case BOnlySet, Different:
 			out.Containers = make([]operatorv1.CalicoKubeControllersContainer, len(override.Containers))
@@ -385,16 +382,12 @@ func mergeCalicoKubeControllersDeployment(cfg, override *operatorv1.CalicoKubeCo
 
 		switch compareFields(out.NodeSelector, override.NodeSelector) {
 		case BOnlySet, Different:
-			out.NodeSelector = make(map[string]string, len(override.NodeSelector))
-			for key, val := range override.NodeSelector {
-				out.NodeSelector[key] = val
-			}
+			out.NodeSelector = override.NodeSelector
 		}
 
 		switch compareFields(out.Tolerations, override.Tolerations) {
 		case BOnlySet, Different:
-			out.Tolerations = make([]v1.Toleration, len(override.Tolerations))
-			copy(out.Tolerations, override.Tolerations)
+			out.Tolerations = override.Tolerations
 		}
 		return out
 	}

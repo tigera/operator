@@ -46,7 +46,7 @@ type CalicoKubeControllersDeploymentPodSpec struct {
 	// If specified, this overrides any affinity that may be set on the calico-kube-controllers Deployment.
 	// If omitted, the calico-kube-controllers Deployment will use its default value for affinity.
 	// +optional
-	Affinity *v1.Affinity `json:"affinity,omitempty"`
+	Affinity *v1.Affinity `json:"affinity"`
 
 	// NodeSelector is the calico-kube-controllers pod's scheduling constraints.
 	// If specified, this overrides any nodeSelector that may be set on the calico-kube-controllers Deployment.
@@ -58,7 +58,7 @@ type CalicoKubeControllersDeploymentPodSpec struct {
 	// If specified, this overrides any tolerations that may be set on the calico-kube-controllers Deployment.
 	// If omitted, the calico-kube-controllers Deployment will use its default value for tolerations.
 	// +optional
-	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
+	Tolerations []v1.Toleration `json:"tolerations"`
 }
 
 // CalicoKubeControllersDeploymentPodTemplateSpec is the calico-kube-controllers Deployment's PodTemplateSpec

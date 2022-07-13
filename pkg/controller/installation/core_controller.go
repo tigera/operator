@@ -27,6 +27,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+
 	apps "k8s.io/api/apps/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -129,7 +131,29 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err != nil {
 		return fmt.Errorf("failed to create Core Reconciler: %w", err)
 	}
-	return add(mgr, ri)
+
+	c, err := controller.New("tigera-installation-controller", mgr, controller.Options{Reconciler: ri})
+	if err != nil {
+		return fmt.Errorf("Failed to create tigera-installation-controller: %w", err)
+	}
+
+	// Established deferred watches against the v3 API that should succeed after the Enterprise API Server becomes available.
+	if opts.EnterpriseCRDExists {
+		k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
+		if err != nil {
+			log.Error(err, "Failed to establish a connection to k8s")
+			return err
+		}
+
+		// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
+		go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, ri.tierWatchReady)
+
+		go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, ri.policyWatchesReady, []types.NamespacedName{
+			{Name: kubecontrollers.KubeControllerNetworkPolicyName, Namespace: common.CalicoNamespace}},
+		)
+	}
+
+	return add(c, ri)
 }
 
 // newReconciler returns a new reconcile.Reconciler
@@ -175,6 +199,8 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		clusterDomain:         opts.ClusterDomain,
 		manageCRDs:            opts.ManageCRDs,
 		usePSP:                opts.UsePSP,
+		tierWatchReady:        &utils.ReadyFlag{},
+		policyWatchesReady:    &utils.ReadyFlag{},
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
@@ -182,18 +208,10 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 	return r, nil
 }
 
-// add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r *ReconcileInstallation) error {
-	// Create a new controller
-	c, err := controller.New("tigera-installation-controller", mgr, controller.Options{Reconciler: r})
-	if err != nil {
-		return fmt.Errorf("Failed to create tigera-installation-controller: %w", err)
-	}
-
-	r.controller = c
-
+// add adds watches for resources that are available at startup
+func add(c controller.Controller, r *ReconcileInstallation) error {
 	// Watch for changes to primary resource Installation
-	err = c.Watch(&source.Kind{Type: &operator.Installation{}}, &handler.EnqueueRequestForObject{})
+	err := c.Watch(&source.Kind{Type: &operator.Installation{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %w", err)
 	}
@@ -359,7 +377,6 @@ type ReconcileInstallation struct {
 	config                *rest.Config
 	client                client.Client
 	scheme                *runtime.Scheme
-	controller            controller.Controller
 	watches               map[runtime.Object]struct{}
 	autoDetectedProvider  operator.Provider
 	status                status.StatusManager
@@ -372,6 +389,8 @@ type ReconcileInstallation struct {
 	clusterDomain         string
 	manageCRDs            bool
 	usePSP                bool
+	tierWatchReady        *utils.ReadyFlag
+	policyWatchesReady    *utils.ReadyFlag
 }
 
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
@@ -951,6 +970,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	var managementCluster *operator.ManagementCluster
 	var managementClusterConnection *operator.ManagementClusterConnection
 	var logCollector *operator.LogCollector
+	includeV3NetworkPolicy := false
 	if r.enterpriseCRDsExist {
 		logCollector, err = utils.GetLogCollector(ctx, r.client)
 		if logCollector != nil {
@@ -978,6 +998,27 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			err = fmt.Errorf("having both a managementCluster and a managementClusterConnection is not supported")
 			r.SetDegraded(operator.ResourceValidationError, "", err, reqLogger)
 			return reconcile.Result{}, err
+		}
+
+		// Successful reconciliation of non-NetworkPolicy resources in the core controller ensures that NetworkPolicy
+		// is reconcilable (by enabling the availability of the API server and the creation of containing Tier). Therefore,
+		// to prevent a chicken-and-egg scenario, we only reconcile non-NetworkPolicy resources once we can confirm that
+		// all requirements to reconcile NetworkPolicy have been met.
+		//
+		// utils.IsV3NetworkPolicyReconcilable does not verify API server availability, so we take extra precaution
+		// when rendering components below.
+		if utils.IsV3NetworkPolicyReconcilable(ctx, r.client, networkpolicy.TigeraComponentTierName) {
+			includeV3NetworkPolicy = true
+
+			if !r.tierWatchReady.IsReady() {
+				r.status.SetDegraded("Waiting for Tier watch to be established", "")
+				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			}
+
+			if !r.policyWatchesReady.IsReady() {
+				r.status.SetDegraded("Waiting for NetworkPolicy watches to be established", "")
+				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			}
 		}
 	}
 
@@ -1271,6 +1312,15 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		Terminating:  terminating,
 	}
 	components = append(components, render.Windows(&windowsCfg))
+
+	// v3 NetworkPolicy will fail to reconcile if the API server deployment is unhealthy. In case the API Server
+	// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the core controller
+	// would resolve it, we render the network policies of components last to prevent a chicken-and-egg scenario.
+	//
+	// We take this precaution as utils.IsV3NetworkPolicyReconcilable is not sensitive to API server availability.
+	if includeV3NetworkPolicy {
+		components = append(components, kubecontrollers.NewCalicoKubeControllersPolicy(&kubeControllersCfg))
+	}
 
 	imageSet, err := imageset.GetImageSet(ctx, r.client, instance.Spec.Variant)
 	if err != nil {

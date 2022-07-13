@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,6 +20,9 @@ import (
 	"fmt"
 	"reflect"
 	"time"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -60,10 +63,12 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 
-	var prometheusReady = &utils.ReadyFlag{}
+	prometheusReady := &utils.ReadyFlag{}
+	tierWatchReady := &utils.ReadyFlag{}
+	policyWatchesReady := &utils.ReadyFlag{}
 
 	// Create the reconciler
-	reconciler := newReconciler(mgr, opts, prometheusReady)
+	reconciler := newReconciler(mgr, opts, prometheusReady, tierWatchReady, policyWatchesReady)
 
 	// Create a new controller
 	controller, err := controller.New("monitor-controller", mgr, controller.Options{Reconciler: reconciler})
@@ -77,19 +82,35 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
+	policyNames := []types.NamespacedName{
+		{Name: monitor.PrometheusPolicyName, Namespace: common.TigeraPrometheusNamespace},
+		{Name: monitor.PrometheusAPIPolicyName, Namespace: common.TigeraPrometheusNamespace},
+		{Name: monitor.PrometheusOperatorPolicyName, Namespace: common.TigeraPrometheusNamespace},
+		{Name: monitor.AlertManagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
+		{Name: monitor.MeshAlertManagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
+		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: common.TigeraPrometheusNamespace},
+	}
+
+	// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
+
+	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, policyWatchesReady, policyNames)
+
 	go waitToAddPrometheusWatch(controller, k8sClient, log, prometheusReady)
 
 	return add(mgr, controller)
 }
 
-func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag, policyWatchesReady *utils.ReadyFlag) reconcile.Reconciler {
 	r := &ReconcileMonitor{
-		client:          mgr.GetClient(),
-		scheme:          mgr.GetScheme(),
-		provider:        opts.DetectedProvider,
-		status:          status.New(mgr.GetClient(), "monitor", opts.KubernetesVersion),
-		prometheusReady: prometheusReady,
-		clusterDomain:   opts.ClusterDomain,
+		client:             mgr.GetClient(),
+		scheme:             mgr.GetScheme(),
+		provider:           opts.DetectedProvider,
+		status:             status.New(mgr.GetClient(), "monitor", opts.KubernetesVersion),
+		prometheusReady:    prometheusReady,
+		tierWatchReady:     tierWatchReady,
+		policyWatchesReady: policyWatchesReady,
+		clusterDomain:      opts.ClusterDomain,
 	}
 
 	r.status.AddStatefulSets([]types.NamespacedName{
@@ -117,6 +138,12 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("monitor-controller failed to watch ImageSet: %w", err)
 	}
 
+	// ManagementClusterConnection (in addition to Installation/Network) is used as input to determine whether network policy should be reconciled.
+	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("monitor-controller failed to watch ManagementClusterConnection resource: %w", err)
+	}
+
 	for _, secret := range []string{
 		monitor.PrometheusTLSSecretName,
 		render.FluentdPrometheusTLSSecretName,
@@ -141,12 +168,14 @@ func add(mgr manager.Manager, c controller.Controller) error {
 var _ reconcile.Reconciler = &ReconcileMonitor{}
 
 type ReconcileMonitor struct {
-	client          client.Client
-	scheme          *runtime.Scheme
-	provider        operatorv1.Provider
-	status          status.StatusManager
-	prometheusReady *utils.ReadyFlag
-	clusterDomain   string
+	client             client.Client
+	scheme             *runtime.Scheme
+	provider           operatorv1.Provider
+	status             status.StatusManager
+	prometheusReady    *utils.ReadyFlag
+	tierWatchReady     *utils.ReadyFlag
+	policyWatchesReady *utils.ReadyFlag
+	clusterDomain      string
 }
 
 func (r *ReconcileMonitor) getMonitor(ctx context.Context) (*operatorv1.Monitor, error) {
@@ -265,6 +294,64 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
+	if err != nil {
+		log.Error(err, "Error reading ManagementClusterConnection")
+		r.status.SetDegraded("Error reading ManagementClusterConnection", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	// In managed clusters with certificate management disabled, successful reconciliation of non-NetworkPolicy resources
+	// in the monitor controller ensures that NetworkPolicy is reconcilable (by enabling* the creation of containing Tier
+	// and License). Therefore, to prevent a chicken-and-egg scenario, we only reconcile non-NetworkPolicy resources once
+	// we can confirm that all requirements to reconcile NetworkPolicy have been met.
+	//
+	// * In managed clusters with certificate management disabled, the License can only be pushed once Guardian is deployed,
+	//   which depends on the Prometheus TLS secret created by monitor. As always, the Tier can only be created once the
+	//   License is available.
+	includeV3NetworkPolicy := true
+	monitorReconcilesV3NetworkPolicyRequirements := managementClusterConnection != nil && !certificateManager.KeyPair().UseCertificateManagement()
+	if monitorReconcilesV3NetworkPolicyRequirements {
+		// Only wait for and render NetworkPolicy once all NetworkPolicy requirements are met.
+		// Do not degrade if tier has not been created.
+		if utils.IsV3NetworkPolicyReconcilable(ctx, r.client, networkpolicy.TigeraComponentTierName) {
+			if !r.tierWatchReady.IsReady() {
+				r.status.SetDegraded("Waiting for Tier watch to be established", "")
+				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			}
+
+			if !r.policyWatchesReady.IsReady() {
+				r.status.SetDegraded("Waiting for NetworkPolicy watches to be established", "")
+				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			}
+		} else {
+			includeV3NetworkPolicy = false
+		}
+	} else {
+		// Wait for and render NetworkPolicy as usual.
+		if !r.tierWatchReady.IsReady() {
+			r.status.SetDegraded("Waiting for Tier watch to be established", "")
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+
+		if !r.policyWatchesReady.IsReady() {
+			r.status.SetDegraded("Waiting for NetworkPolicy watches to be established", "")
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+
+		// Ensure the allow-tigera tier exists, before rendering any network policies within it.
+		if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+			if errors.IsNotFound(err) {
+				r.status.SetDegraded("Waiting for Tigera component policy tier to be created", err.Error())
+				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			} else {
+				log.Error(err, "Error querying Tigera component policy tier")
+				r.status.SetDegraded("Error querying Tigera component policy tier", err.Error())
+				return reconcile.Result{}, err
+			}
+		}
+	}
+
 	// Create a component handler to manage the rendered component.
 	hdler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -283,6 +370,8 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		ClientTLSSecret:          clientTLSSecret,
 		ClusterDomain:            r.clusterDomain,
 		TrustedCertBundle:        trustedBundle,
+		Openshift:                r.provider == operatorv1.ProviderOpenShift,
+		IncludeV3NetworkPolicy:   includeV3NetworkPolicy,
 	}
 
 	// Render prometheus component

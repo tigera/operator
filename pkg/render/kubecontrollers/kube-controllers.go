@@ -212,7 +212,6 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 		c.controllersServiceAccount(),
 		c.controllersRole(),
 		c.controllersRoleBinding(),
-		c.controllersDeployment(),
 	}
 	objectsToDelete := []client.Object{}
 	if c.cfg.KubeControllersGatewaySecret != nil {
@@ -223,6 +222,9 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 	if c.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift && c.cfg.UsePSP {
 		objectsToCreate = append(objectsToCreate, c.controllersPodSecurityPolicy())
 	}
+
+	// Create deployment after all other resources it depends on have been created
+	objectsToCreate = append(objectsToCreate, c.controllersDeployment())
 
 	if c.cfg.MetricsPort != 0 {
 		objectsToCreate = append(objectsToCreate, c.prometheusService())

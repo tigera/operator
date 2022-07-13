@@ -151,10 +151,7 @@ var _ = Describe("tier controller tests", func() {
 			tierWatchReady:     &utils.ReadyFlag{},
 			policyWatchesReady: readyFlag,
 		}
-		mockStatus.On("SetDegraded", "Waiting for Tier watch to be established", "").Return()
-		_, err := r.Reconcile(ctx, reconcile.Request{})
-		Expect(err).ShouldNot(HaveOccurred())
-		mockStatus.AssertExpectations(GinkgoT())
+		utils.ExpectWaitForTierWatch(ctx, &r, mockStatus)
 	})
 
 	It("should require license", func() {

@@ -396,6 +396,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,
 				migrationChecked:      true,
+				tierWatchReady:        ready,
 				policyWatchesReady:    ready,
 			}
 
@@ -766,6 +767,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				enterpriseCRDsExist:   true,
 				migrationChecked:      true,
 				clusterDomain:         dns.DefaultClusterDomain,
+				tierWatchReady:        ready,
 				policyWatchesReady:    ready,
 			}
 			r.typhaAutoscaler.start(ctx)
@@ -1005,6 +1007,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,
 				migrationChecked:      true,
+				tierWatchReady:        ready,
 				policyWatchesReady:    ready,
 			}
 
@@ -1540,6 +1543,21 @@ var _ = Describe("Testing core-controller installation", func() {
 			r.status = mockStatus
 
 			utils.ExpectWaitForPolicyWatches(ctx, &r, mockStatus)
+
+			policies := v3.NetworkPolicyList{}
+			Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
+			Expect(policies.Items).To(HaveLen(0))
+		})
+
+		It("should degrade and wait if tier is ready but tier watch is not ready", func() {
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			r.tierWatchReady = notReady
+			mockStatus = &status.MockStatus{}
+			mockStatus.On("OnCRFound").Return()
+			mockStatus.On("SetMetaData", mock.Anything).Return()
+			r.status = mockStatus
+
+			utils.ExpectWaitForTierWatch(ctx, &r, mockStatus)
 
 			policies := v3.NetworkPolicyList{}
 			Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())

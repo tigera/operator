@@ -64,10 +64,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	prometheusReady := &utils.ReadyFlag{}
+	tierWatchReady := &utils.ReadyFlag{}
 	policyWatchesReady := &utils.ReadyFlag{}
 
 	// Create the reconciler
-	reconciler := newReconciler(mgr, opts, prometheusReady, policyWatchesReady)
+	reconciler := newReconciler(mgr, opts, prometheusReady, tierWatchReady, policyWatchesReady)
 
 	// Create a new controller
 	controller, err := controller.New("monitor-controller", mgr, controller.Options{Reconciler: reconciler})
@@ -90,6 +91,9 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: common.TigeraPrometheusNamespace},
 	}
 
+	// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
+
 	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, policyWatchesReady, policyNames)
 
 	go waitToAddPrometheusWatch(controller, k8sClient, log, prometheusReady)
@@ -97,13 +101,14 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	return add(mgr, controller)
 }
 
-func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady *utils.ReadyFlag, policyWatchesReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag, policyWatchesReady *utils.ReadyFlag) reconcile.Reconciler {
 	r := &ReconcileMonitor{
 		client:             mgr.GetClient(),
 		scheme:             mgr.GetScheme(),
 		provider:           opts.DetectedProvider,
 		status:             status.New(mgr.GetClient(), "monitor", opts.KubernetesVersion),
 		prometheusReady:    prometheusReady,
+		tierWatchReady:     tierWatchReady,
 		policyWatchesReady: policyWatchesReady,
 		clusterDomain:      opts.ClusterDomain,
 	}
@@ -131,6 +136,12 @@ func add(mgr manager.Manager, c controller.Controller) error {
 
 	if err = imageset.AddImageSetWatch(c); err != nil {
 		return fmt.Errorf("monitor-controller failed to watch ImageSet: %w", err)
+	}
+
+	// ManagementClusterConnection (in addition to Installation/Network) is used as input to determine whether network policy should be reconciled.
+	err = c.Watch(&source.Kind{Type: &operatorv1.ManagementClusterConnection{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("monitor-controller failed to watch ManagementClusterConnection resource: %w", err)
 	}
 
 	for _, secret := range []string{
@@ -162,6 +173,7 @@ type ReconcileMonitor struct {
 	provider           operatorv1.Provider
 	status             status.StatusManager
 	prometheusReady    *utils.ReadyFlag
+	tierWatchReady     *utils.ReadyFlag
 	policyWatchesReady *utils.ReadyFlag
 	clusterDomain      string
 }
@@ -303,6 +315,11 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		// Only wait for and render NetworkPolicy once all NetworkPolicy requirements are met.
 		// Do not degrade if tier has not been created.
 		if utils.IsV3NetworkPolicyReconcilable(ctx, r.client, networkpolicy.TigeraComponentTierName) {
+			if !r.tierWatchReady.IsReady() {
+				r.status.SetDegraded("Waiting for Tier watch to be established", "")
+				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			}
+
 			if !r.policyWatchesReady.IsReady() {
 				r.status.SetDegraded("Waiting for NetworkPolicy watches to be established", "")
 				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
@@ -312,6 +329,11 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	} else {
 		// Wait for and render NetworkPolicy as usual.
+		if !r.tierWatchReady.IsReady() {
+			r.status.SetDegraded("Waiting for Tier watch to be established", "")
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+
 		if !r.policyWatchesReady.IsReady() {
 			r.status.SetDegraded("Waiting for NetworkPolicy watches to be established", "")
 			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil

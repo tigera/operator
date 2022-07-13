@@ -145,6 +145,9 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 			return err
 		}
 
+		// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
+		go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, ri.tierWatchReady)
+
 		go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, ri.policyWatchesReady, []types.NamespacedName{
 			{Name: kubecontrollers.KubeControllerNetworkPolicyName, Namespace: common.CalicoNamespace}},
 		)
@@ -196,6 +199,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		clusterDomain:         opts.ClusterDomain,
 		manageCRDs:            opts.ManageCRDs,
 		usePSP:                opts.UsePSP,
+		tierWatchReady:        &utils.ReadyFlag{},
 		policyWatchesReady:    &utils.ReadyFlag{},
 	}
 	r.status.Run(opts.ShutdownContext)
@@ -385,6 +389,7 @@ type ReconcileInstallation struct {
 	clusterDomain         string
 	manageCRDs            bool
 	usePSP                bool
+	tierWatchReady        *utils.ReadyFlag
 	policyWatchesReady    *utils.ReadyFlag
 }
 
@@ -1004,6 +1009,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		// when rendering components below.
 		if utils.IsV3NetworkPolicyReconcilable(ctx, r.client, networkpolicy.TigeraComponentTierName) {
 			includeV3NetworkPolicy = true
+
+			if !r.tierWatchReady.IsReady() {
+				r.status.SetDegraded("Waiting for Tier watch to be established", "")
+				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			}
+
 			if !r.policyWatchesReady.IsReady() {
 				r.status.SetDegraded("Waiting for NetworkPolicy watches to be established", "")
 				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil

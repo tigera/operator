@@ -30,10 +30,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-func NewReconcilerWithShims(cli client.Client, schema *runtime.Scheme, status status.StatusManager, provider operatorv1.Provider, policyWatchReady *utils.ReadyFlag) reconcile.Reconciler {
+func NewReconcilerWithShims(
+	cli client.Client,
+	schema *runtime.Scheme,
+	status status.StatusManager,
+	provider operatorv1.Provider,
+	licenseWatchReady *utils.ReadyFlag,
+	tierWatchReady *utils.ReadyFlag,
+	policyWatchReady *utils.ReadyFlag,
+) reconcile.Reconciler {
 	opts := options.AddOptions{
 		ShutdownContext: context.Background(),
 	}
 
-	return newReconciler(cli, schema, status, provider, policyWatchReady, opts)
+	return newReconciler(cli, schema, status, provider, licenseWatchReady, tierWatchReady, policyWatchReady, opts)
 }

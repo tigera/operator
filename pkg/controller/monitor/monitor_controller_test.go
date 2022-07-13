@@ -84,6 +84,7 @@ var _ = Describe("Monitor controller tests", func() {
 			provider:           operatorv1.ProviderNone,
 			status:             mockStatus,
 			prometheusReady:    ready,
+			tierWatchReady:     ready,
 			policyWatchesReady: ready,
 		}
 
@@ -191,6 +192,20 @@ var _ = Describe("Monitor controller tests", func() {
 				Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
 				Expect(policies.Items).To(HaveLen(0))
 			})
+
+			It("should degrade and wait if tier is ready but tier watch is not ready", func() {
+				r.tierWatchReady = notReady
+				mockStatus = &status.MockStatus{}
+				mockStatus.On("OnCRFound").Return()
+				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
+				r.status = mockStatus
+
+				utils.ExpectWaitForTierWatch(ctx, &r, mockStatus)
+
+				policies := v3.NetworkPolicyList{}
+				Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
+				Expect(policies.Items).To(HaveLen(0))
+			})
 		})
 
 		Context("Monitor controller does not reconcile NetworkPolicy requirements", func() {
@@ -225,6 +240,15 @@ var _ = Describe("Monitor controller tests", func() {
 				r.status = mockStatus
 				r.policyWatchesReady = notReady
 				utils.ExpectWaitForPolicyWatches(ctx, &r, mockStatus)
+			})
+
+			It("should degrade and wait if tier is ready but tier watch is not ready", func() {
+				mockStatus = &status.MockStatus{}
+				mockStatus.On("OnCRFound").Return()
+				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
+				r.status = mockStatus
+				r.tierWatchReady = notReady
+				utils.ExpectWaitForTierWatch(ctx, &r, mockStatus)
 			})
 		})
 	})

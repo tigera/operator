@@ -67,6 +67,9 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 			return err
 		}
 
+		// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
+		go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, r.tierWatchReady)
+
 		go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, r.policyWatchesReady, []types.NamespacedName{
 			{Name: render.APIServerPolicyName, Namespace: rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise)},
 			{Name: render.PacketCapturePolicyName, Namespace: render.PacketCaptureNamespace},
@@ -87,6 +90,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileAPISe
 		status:              status.New(mgr.GetClient(), "apiserver", opts.KubernetesVersion),
 		clusterDomain:       opts.ClusterDomain,
 		usePSP:              opts.UsePSP,
+		tierWatchReady:      &utils.ReadyFlag{},
 		policyWatchesReady:  &utils.ReadyFlag{},
 	}
 	r.status.Run(opts.ShutdownContext)
@@ -177,6 +181,7 @@ type ReconcileAPIServer struct {
 	status              status.StatusManager
 	clusterDomain       string
 	usePSP              bool
+	tierWatchReady      *utils.ReadyFlag
 	policyWatchesReady  *utils.ReadyFlag
 }
 
@@ -310,6 +315,12 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		// when rendering components below.
 		if utils.IsV3NetworkPolicyReconcilable(ctx, r.client, networkpolicy.TigeraComponentTierName) {
 			includeV3NetworkPolicy = true
+
+			if !r.tierWatchReady.IsReady() {
+				r.status.SetDegraded("Waiting for Tier watch to be established", "")
+				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			}
+
 			if !r.policyWatchesReady.IsReady() {
 				r.status.SetDegraded("Waiting for NetworkPolicy watches to be established", "")
 				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil

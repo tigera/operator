@@ -60,8 +60,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	statusManager := status.New(mgr.GetClient(), "management-cluster-connection", opts.KubernetesVersion)
 
 	// Create the reconciler
+	licenseWatchReady := &utils.ReadyFlag{}
 	policyWatchesReady := &utils.ReadyFlag{}
-	reconciler := newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider, policyWatchesReady, opts)
+	tierWatchReady := &utils.ReadyFlag{}
+	reconciler := newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider, licenseWatchReady, tierWatchReady, policyWatchesReady, opts)
 
 	// Create a new controller
 	controller, err := controller.New(controllerName, mgr, controller.Options{Reconciler: reconciler})
@@ -75,6 +77,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
+	// Watch for changes to License and Tier, as their status is used as input to determine whether network policy should be reconciled by this controller.
+	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseWatchReady)
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
+
 	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, policyWatchesReady, []types.NamespacedName{
 		{Name: render.GuardianPolicyName, Namespace: render.GuardianNamespace},
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.GuardianNamespace},
@@ -84,13 +90,24 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, p operatorv1.Provider, policyWatchesReady *utils.ReadyFlag, opts options.AddOptions) *ReconcileConnection {
+func newReconciler(
+	cli client.Client,
+	schema *runtime.Scheme,
+	statusMgr status.StatusManager,
+	p operatorv1.Provider,
+	licenseWatchReady *utils.ReadyFlag,
+	tierWatchReady *utils.ReadyFlag,
+	policyWatchesReady *utils.ReadyFlag,
+	opts options.AddOptions,
+) *ReconcileConnection {
 	c := &ReconcileConnection{
 		Client:             cli,
 		Scheme:             schema,
 		Provider:           p,
 		status:             statusMgr,
 		clusterDomain:      opts.ClusterDomain,
+		licenseWatchReady:  licenseWatchReady,
+		tierWatchReady:     tierWatchReady,
 		policyWatchesReady: policyWatchesReady,
 	}
 	c.status.Run(opts.ShutdownContext)
@@ -150,6 +167,8 @@ type ReconcileConnection struct {
 	Provider           operatorv1.Provider
 	status             status.StatusManager
 	clusterDomain      string
+	licenseWatchReady  *utils.ReadyFlag
+	tierWatchReady     *utils.ReadyFlag
 	policyWatchesReady *utils.ReadyFlag
 }
 
@@ -268,6 +287,16 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 				r.status.SetDegraded("Feature is not active", "License does not support feature: egress-access-control")
 				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 			}
+		}
+
+		if !r.licenseWatchReady.IsReady() {
+			r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+
+		if !r.tierWatchReady.IsReady() {
+			r.status.SetDegraded("Waiting for Tier watch to be established", "")
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 		}
 
 		if !r.policyWatchesReady.IsReady() {

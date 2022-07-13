@@ -206,7 +206,7 @@ func (c *component) podWatcherDeployment() *appsv1.Deployment {
 	env := []corev1.EnvVar{
 		rcimageassurance.EnvOrganizationID(),
 		{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
-		{Name: "IMAGE_ASSURANCE_CA_BUNDLE_PATH", Value: rcimageassurance.CABundlePath},
+		{Name: "IMAGE_ASSURANCE_API_CA", Value: rcimageassurance.CABundlePath},
 		{Name: "IMAGE_ASSURANCE_API_SERVICE_URL", Value: rcimageassurance.APIEndpoint},
 		{Name: "IMAGE_ASSURANCE_API_TOKEN", ValueFrom: &corev1.EnvVarSource{
 			SecretKeyRef: &corev1.SecretKeySelector{
@@ -214,7 +214,7 @@ func (c *component) podWatcherDeployment() *appsv1.Deployment {
 				Key:                  "token",
 			},
 		}},
-		{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: c.config.TrustedCertBundle.MountPath()},
+		{Name: "IMAGE_ASSURANCE_MULTI_CLUSTER_FORWARDING_CA", Value: c.config.TrustedCertBundle.MountPath()},
 	}
 
 	terminationGracePeriod := int64(30)

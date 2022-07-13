@@ -561,10 +561,10 @@ var _ = Describe("Image Assurance Render", func() {
 		podWatcherExpectedENV := []corev1.EnvVar{
 			{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
 			rcimageassurance.EnvOrganizationID(),
-			{Name: "IMAGE_ASSURANCE_CA_BUNDLE_PATH", Value: "/certs/bast/tls.crt"},
+			{Name: "IMAGE_ASSURANCE_API_CA", Value: "/certs/bast/tls.crt"},
 			{Name: "IMAGE_ASSURANCE_API_SERVICE_URL", Value: "https://tigera-image-assurance-api.tigera-image-assurance.svc:9443"},
 			{Name: "IMAGE_ASSURANCE_API_TOKEN", Value: ""},
-			{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: certificatemanagement.TrustedCertBundleMountPath},
+			{Name: "IMAGE_ASSURANCE_MULTI_CLUSTER_FORWARDING_CA", Value: certificatemanagement.TrustedCertBundleMountPath},
 		}
 
 		Expect(len(podWatcherExpectedENV)).To(Equal(len(podWatcherEnv)))

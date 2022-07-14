@@ -385,7 +385,7 @@ func mergeCalicoKubeControllersDeployment(cfg, override *operatorv1.CalicoKubeCo
 		// CalicoKubeControllersDeployment doesn't have init containers.
 		switch compareFields(out.Containers, override.Containers) {
 		case BOnlySet, Different:
-			out.Containers = make([]operatorv1.CalicoKubeControllersContainer, len(override.Containers))
+			out.Containers = make([]operatorv1.CalicoKubeControllersDeploymentContainer, len(override.Containers))
 			copy(out.Containers, override.Containers)
 		}
 

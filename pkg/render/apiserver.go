@@ -32,7 +32,9 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/ptr"
+	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -51,15 +53,40 @@ const (
 	QueryServerPort        = 8080
 	QueryserverNamespace   = "tigera-system"
 	QueryserverServiceName = "tigera-api"
+
+	TigeraAPIServerContainerName            = "tigera-apiserver"
+	CalicoAPIServerContainerName            = "calico-apiserver"
+	TigeraAPIServerQueryServerContainerName = "tigera-queryserver"
+
+	calicoAPIServerTLSSecretName = "calico-apiserver-certs"
+	tigeraAPIServerTLSSecretName = "tigera-apiserver-certs"
+)
+
+var (
+	// API server Deployment container names used for validation.
+	// These should match APIServerDeploymentContainer.Name validation on the APIServerDeployment type.
+	APIServerDeploymentContainerNames = map[string]struct{}{
+		TigeraAPIServerContainerName:            {},
+		CalicoAPIServerContainerName:            {},
+		TigeraAPIServerQueryServerContainerName: {},
+	}
+
+	// API server Deployment init container names used for validation.
+	// These should match APIServerDeploymentInitContainer.Name validation on the APIServerDeployment type.
+	APIServerDeploymentInitContainerNames = map[string]struct{}{
+		// These names are generated in certificatemanagement.CreateCSRInitContainer
+		fmt.Sprintf("%s-%s", calicoAPIServerTLSSecretName, certificatemanagement.CSRInitContainerName): {},
+		fmt.Sprintf("%s-%s", tigeraAPIServerTLSSecretName, certificatemanagement.CSRInitContainerName): {},
+	}
 )
 
 // The following functions are helpers for determining resource names based on
 // the configured product variant.
 func ProjectCalicoApiServerTLSSecretName(v operatorv1.ProductVariant) string {
 	if v == operatorv1.Calico {
-		return "calico-apiserver-certs"
+		return calicoAPIServerTLSSecretName
 	}
-	return "tigera-apiserver-certs"
+	return tigeraAPIServerTLSSecretName
 }
 
 func ProjectCalicoApiServerServiceName(v operatorv1.ProductVariant) string {
@@ -86,6 +113,7 @@ func APIServer(cfg *APIServerConfiguration) (Component, error) {
 type APIServerConfiguration struct {
 	K8SServiceEndpoint          k8sapi.ServiceEndpoint
 	Installation                *operatorv1.InstallationSpec
+	APIServer                   *operatorv1.APIServerSpec
 	ForceHostNetwork            bool
 	ManagementCluster           *operatorv1.ManagementCluster
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
@@ -786,6 +814,10 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 		d.Spec.Template.Spec.Containers = append(d.Spec.Template.Spec.Containers, c.queryServerContainer())
 	}
 
+	if overrides := c.cfg.APIServer.APIServerDeployment; overrides != nil {
+		rcomp.ApplyDeploymentOverrides(d, overrides)
+	}
+
 	return d
 }
 
@@ -835,9 +867,9 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	var name string
 	switch c.cfg.Installation.Variant {
 	case operatorv1.TigeraSecureEnterprise:
-		name = "tigera-apiserver"
+		name = TigeraAPIServerContainerName
 	case operatorv1.Calico:
-		name = "calico-apiserver"
+		name = CalicoAPIServerContainerName
 	}
 
 	apiServer := corev1.Container{
@@ -929,7 +961,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 	}
 
 	container := corev1.Container{
-		Name:  "tigera-queryserver",
+		Name:  TigeraAPIServerQueryServerContainerName,
 		Image: c.queryServerImage,
 		Env:   env,
 		LivenessProbe: &corev1.Probe{

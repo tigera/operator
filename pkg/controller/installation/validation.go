@@ -23,6 +23,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common/validation"
 	node "github.com/tigera/operator/pkg/common/validation/calico-node"
+	windowsupgrade "github.com/tigera/operator/pkg/common/validation/calico-windows-upgrade"
 	kubecontrollers "github.com/tigera/operator/pkg/common/validation/kube-controllers"
 	typha "github.com/tigera/operator/pkg/common/validation/typha"
 	"github.com/tigera/operator/pkg/render"
@@ -389,6 +390,13 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		if err != nil {
 			return fmt.Errorf("Installation spec.TyphaDeployment is not valid: %w", err)
 
+		}
+	}
+	// Verify the CalicoWindowsUpgradeDaemonSet overrides, if specified, is valid.
+	if ds := instance.Spec.CalicoWindowsUpgradeDaemonSet; ds != nil {
+		err := validation.ValidateReplicatedPodResourceOverrides(ds, windowsupgrade.ValidateCalicoWindowsUpgradeDaemonSetContainer, validation.NoContainersDefined)
+		if err != nil {
+			return fmt.Errorf("Installation spec.CalicoWindowsUpgradeDaemonSet is not valid: %w", err)
 		}
 	}
 	return nil

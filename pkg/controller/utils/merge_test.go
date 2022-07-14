@@ -929,6 +929,12 @@ var _ = Describe("Installation merge tests", func() {
 	Context("test CalicoKubeControllersDeployment merge", func() {
 		// TODO
 	})
+	Context("test TyphaDeployment merge", func() {
+		// TODO
+	})
+	Context("test CalicoWindowsUpgradeDaemonSet merge", func() {
+		// TODO
+	})
 
 	Context("all fields handled", func() {
 		var defaulted opv1.InstallationSpec

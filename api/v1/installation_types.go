@@ -171,6 +171,13 @@ type InstallationSpec struct {
 	// that the provided configuration will work in your cluster. An invalid
 	// configuration may may cause networking disruption or even catastrophic failure!
 	TyphaDeployment *TyphaDeployment `json:"typhaDeployment,omitempty"`
+
+	// CalicoWindowsUpgradeDaemonSet configures the calico-windows-upgrade DaemonSet.
+	// WARNING: Please note that this configuration overrides the operator's
+	// default calico-windows-upgrade DaemonSet configuration. The operator cannot validate
+	// that the provided configuration will work in your cluster. An invalid
+	// configuration may may cause networking disruption or even catastrophic failure!
+	CalicoWindowsUpgradeDaemonSet *CalicoWindowsUpgradeDaemonSet `json:"calicoWindowsUpgradeDaemonSet,omitempty"`
 }
 
 // Deprecated. Please use TyphaDeployment instead.

@@ -151,7 +151,7 @@ func (c *component) sashaCronJob() *batchv1.CronJob {
 								relasticsearch.ContainerDecorate(corev1.Container{
 									Name:    ResourceNameSashaJob,
 									Image:   c.config.sashaImage,
-									Command: []string{"python3", "-m", "sasha.main"},
+									Command: []string{"./calico-sasha"},
 									Env:     envVars,
 									Resources: corev1.ResourceRequirements{
 										Limits: corev1.ResourceList{

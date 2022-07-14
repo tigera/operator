@@ -62,6 +62,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	apiServerPolicyForOCP := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/apiserver_ocp.json")
 	var (
 		instance           *operatorv1.InstallationSpec
+		apiserver          *operatorv1.APIServerSpec
 		managementCluster  = &operatorv1.ManagementCluster{Spec: operatorv1.ManagementClusterSpec{Address: "example.com:1234"}}
 		replicas           int32
 		cfg                *render.APIServerConfiguration
@@ -77,6 +78,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			Registry:             "testregistry.com/",
 			Variant:              operatorv1.TigeraSecureEnterprise,
 		}
+		apiserver = &operatorv1.APIServerSpec{}
 		dnsNames = dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(instance.Variant), rmeta.APIServerNamespace(instance.Variant), clusterDomain)
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
@@ -90,9 +92,11 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(err).NotTo(HaveOccurred())
 		tunnelKeyPair = certificatemanagement.NewKeyPair(tunnelSecret, []string{""}, "")
 		replicas = 2
+
 		cfg = &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sapi.ServiceEndpoint{},
 			Installation:       instance,
+			APIServer:          apiserver,
 			Openshift:          openshift,
 			TLSKeyPair:         kp,
 		}
@@ -1195,6 +1199,7 @@ var (
 
 var _ = Describe("API server rendering tests (Calico)", func() {
 	var instance *operatorv1.InstallationSpec
+	var apiserver *operatorv1.APIServerSpec
 	var replicas int32
 	var cfg *render.APIServerConfiguration
 	var certificateManager certificatemanager.CertificateManager
@@ -1206,6 +1211,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			Registry:             "testregistry.com/",
 			Variant:              operatorv1.Calico,
 		}
+		apiserver = &operatorv1.APIServerSpec{}
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli = fake.NewClientBuilder().WithScheme(scheme).Build()
@@ -1219,6 +1225,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		cfg = &render.APIServerConfiguration{
 			K8SServiceEndpoint: k8sapi.ServiceEndpoint{},
 			Installation:       instance,
+			APIServer:          apiserver,
 			Openshift:          openshift,
 			TLSKeyPair:         kp,
 		}

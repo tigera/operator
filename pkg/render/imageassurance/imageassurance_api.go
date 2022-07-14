@@ -16,7 +16,7 @@ import (
 
 const (
 	apiRequestCPU    = "0.25"
-	apiRequestMemory = "100Mi"
+	apiRequestMemory = "50Mi"
 	apiLimitCPU      = "0.75"
 	apiLimitMemory   = "300Mi"
 

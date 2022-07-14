@@ -44,6 +44,10 @@ import (
 
 var log = logf.Log.WithName("controller_image_assurance")
 
+// service accounts, cluster role bindings created by kube-controller for image assurance
+var kubeControllerIAServiceAccounts = []string{imageassurance.ScannerAPIAccessServiceAccountName, imageassurance.PodWatcherAPIAccessServiceAccountName}
+var kubeControllerIAClusterRoleBindings = []string{imageassurance.ScannerClusterRoleBindingName, imageassurance.PodWatcherClusterRoleBindingName}
+
 // Add creates a new ImageAssurance Controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
@@ -125,15 +129,15 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("ImageAssurance-controller failed to watch Secret %s: %v", imageassurance.PGUserSecretName, err)
 	}
 
-	// watch for service accounts created in operator namespace by kubecontrollers for image assurance in operator namespace.
-	for _, sa := range []string{imageassurance.ScannerAPIAccessServiceAccountName, imageassurance.PodWatcherAPIAccessServiceAccountName} {
+	// watch for service accounts created in operator namespace by kube-controllers for image assurance.
+	for _, sa := range kubeControllerIAServiceAccounts {
 		if err = utils.AddServiceAccountWatch(c, sa, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("ImageAssurance-controller failed to watch ServiceAccount %s: %v", sa, err)
 		}
 	}
 
-	// watch for cluster role bindings created by kubecontrollers for image assurance.
-	for _, crb := range []string{imageassurance.ScannerClusterRoleBindingName, imageassurance.PodWatcherClusterRoleBindingName} {
+	// watch for cluster role bindings created by kube-controllers for image assurance.
+	for _, crb := range kubeControllerIAClusterRoleBindings {
 		if err = utils.AddClusterRoleBindingWatch(c, crb); err != nil {
 			return fmt.Errorf("ImageAssurance-controller failed to watch ClusterRoleBinding %s: %v", crb, err)
 		}

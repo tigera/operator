@@ -710,11 +710,11 @@ var _ = Describe("Installation merge tests", func() {
 			Requests: v1.ResourceList{v1.ResourceCPU: resource.MustParse("1000m"), v1.ResourceMemory: resource.MustParse("500Mi")},
 			Limits:   v1.ResourceList{v1.ResourceCPU: resource.MustParse("1000m"), v1.ResourceMemory: resource.MustParse("1000Mi")},
 		}
-		_calicoNodeInit1a := opv1.CalicoNodeInitContainer{Name: "init1", Resources: _resources1}
-		_calicoNodeInit1b := opv1.CalicoNodeInitContainer{Name: "init1", Resources: _resources2}
-		_calicoNodeInit2 := opv1.CalicoNodeInitContainer{Name: "init2", Resources: _resources2}
+		_calicoNodeInit1a := opv1.CalicoNodeDaemonSetInitContainer{Name: "init1", Resources: _resources1}
+		_calicoNodeInit1b := opv1.CalicoNodeDaemonSetInitContainer{Name: "init1", Resources: _resources2}
+		_calicoNodeInit2 := opv1.CalicoNodeDaemonSetInitContainer{Name: "init2", Resources: _resources2}
 
-		DescribeTable("merge initContainers", func(main, second, expect []opv1.CalicoNodeInitContainer) {
+		DescribeTable("merge initContainers", func(main, second, expect []opv1.CalicoNodeDaemonSetInitContainer) {
 			m.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers = main
 			s.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers = second
 			inst := OverrideInstallationSpec(m, s)
@@ -725,19 +725,19 @@ var _ = Describe("Installation merge tests", func() {
 			}
 		},
 			Entry("Both unset", nil, nil, nil),
-			Entry("Main only set", []opv1.CalicoNodeInitContainer{_calicoNodeInit1a, _calicoNodeInit2}, nil, []opv1.CalicoNodeInitContainer{_calicoNodeInit1a, _calicoNodeInit2}),
-			Entry("Second only set", nil, []opv1.CalicoNodeInitContainer{_calicoNodeInit1a, _calicoNodeInit2}, []opv1.CalicoNodeInitContainer{_calicoNodeInit1a, _calicoNodeInit2}),
-			Entry("Both set equal", []opv1.CalicoNodeInitContainer{_calicoNodeInit1a, _calicoNodeInit2}, []opv1.CalicoNodeInitContainer{_calicoNodeInit1a, _calicoNodeInit2},
-				[]opv1.CalicoNodeInitContainer{_calicoNodeInit1a, _calicoNodeInit2}),
-			Entry("Both set not equal", []opv1.CalicoNodeInitContainer{_calicoNodeInit1a, _calicoNodeInit2}, []opv1.CalicoNodeInitContainer{_calicoNodeInit1b, _calicoNodeInit2},
-				[]opv1.CalicoNodeInitContainer{_calicoNodeInit1b, _calicoNodeInit2}),
+			Entry("Main only set", []opv1.CalicoNodeDaemonSetInitContainer{_calicoNodeInit1a, _calicoNodeInit2}, nil, []opv1.CalicoNodeDaemonSetInitContainer{_calicoNodeInit1a, _calicoNodeInit2}),
+			Entry("Second only set", nil, []opv1.CalicoNodeDaemonSetInitContainer{_calicoNodeInit1a, _calicoNodeInit2}, []opv1.CalicoNodeDaemonSetInitContainer{_calicoNodeInit1a, _calicoNodeInit2}),
+			Entry("Both set equal", []opv1.CalicoNodeDaemonSetInitContainer{_calicoNodeInit1a, _calicoNodeInit2}, []opv1.CalicoNodeDaemonSetInitContainer{_calicoNodeInit1a, _calicoNodeInit2},
+				[]opv1.CalicoNodeDaemonSetInitContainer{_calicoNodeInit1a, _calicoNodeInit2}),
+			Entry("Both set not equal", []opv1.CalicoNodeDaemonSetInitContainer{_calicoNodeInit1a, _calicoNodeInit2}, []opv1.CalicoNodeDaemonSetInitContainer{_calicoNodeInit1b, _calicoNodeInit2},
+				[]opv1.CalicoNodeDaemonSetInitContainer{_calicoNodeInit1b, _calicoNodeInit2}),
 		)
 
-		_calicoNode1a := opv1.CalicoNodeContainer{Name: "node1", Resources: _resources1}
-		_calicoNode1b := opv1.CalicoNodeContainer{Name: "node1", Resources: _resources2}
-		_calicoNode2 := opv1.CalicoNodeContainer{Name: "node2", Resources: _resources2}
+		_calicoNode1a := opv1.CalicoNodeDaemonSetContainer{Name: "node1", Resources: _resources1}
+		_calicoNode1b := opv1.CalicoNodeDaemonSetContainer{Name: "node1", Resources: _resources2}
+		_calicoNode2 := opv1.CalicoNodeDaemonSetContainer{Name: "node2", Resources: _resources2}
 
-		DescribeTable("merge containers", func(main, second, expect []opv1.CalicoNodeContainer) {
+		DescribeTable("merge containers", func(main, second, expect []opv1.CalicoNodeDaemonSetContainer) {
 			m.CalicoNodeDaemonSet.Spec.Template.Spec.Containers = main
 			s.CalicoNodeDaemonSet.Spec.Template.Spec.Containers = second
 			inst := OverrideInstallationSpec(m, s)
@@ -748,12 +748,12 @@ var _ = Describe("Installation merge tests", func() {
 			}
 		},
 			Entry("Both unset", nil, nil, nil),
-			Entry("Main only set", []opv1.CalicoNodeContainer{_calicoNode1a, _calicoNode1b}, nil, []opv1.CalicoNodeContainer{_calicoNode1a, _calicoNode1b}),
-			Entry("Second only set", nil, []opv1.CalicoNodeContainer{_calicoNode1a, _calicoNode1b}, []opv1.CalicoNodeContainer{_calicoNode1a, _calicoNode1b}),
-			Entry("Both set equal", []opv1.CalicoNodeContainer{_calicoNode1a, _calicoNode1b}, []opv1.CalicoNodeContainer{_calicoNode1a, _calicoNode1b},
-				[]opv1.CalicoNodeContainer{_calicoNode1a, _calicoNode1b}),
-			Entry("Both set not equal", []opv1.CalicoNodeContainer{_calicoNode1a, _calicoNode2}, []opv1.CalicoNodeContainer{_calicoNode1b, _calicoNode2},
-				[]opv1.CalicoNodeContainer{_calicoNode1b, _calicoNode2}),
+			Entry("Main only set", []opv1.CalicoNodeDaemonSetContainer{_calicoNode1a, _calicoNode1b}, nil, []opv1.CalicoNodeDaemonSetContainer{_calicoNode1a, _calicoNode1b}),
+			Entry("Second only set", nil, []opv1.CalicoNodeDaemonSetContainer{_calicoNode1a, _calicoNode1b}, []opv1.CalicoNodeDaemonSetContainer{_calicoNode1a, _calicoNode1b}),
+			Entry("Both set equal", []opv1.CalicoNodeDaemonSetContainer{_calicoNode1a, _calicoNode1b}, []opv1.CalicoNodeDaemonSetContainer{_calicoNode1a, _calicoNode1b},
+				[]opv1.CalicoNodeDaemonSetContainer{_calicoNode1a, _calicoNode1b}),
+			Entry("Both set not equal", []opv1.CalicoNodeDaemonSetContainer{_calicoNode1a, _calicoNode2}, []opv1.CalicoNodeDaemonSetContainer{_calicoNode1b, _calicoNode2},
+				[]opv1.CalicoNodeDaemonSetContainer{_calicoNode1b, _calicoNode2}),
 		)
 
 		_aff1 := &v1.Affinity{
@@ -874,7 +874,7 @@ var _ = Describe("Installation merge tests", func() {
 						MinReadySeconds: intPtr(5),
 						Template: &opv1.CalicoNodeDaemonSetPodTemplateSpec{
 							Spec: &opv1.CalicoNodeDaemonSetPodSpec{
-								Containers:   []opv1.CalicoNodeContainer{_calicoNode1a},
+								Containers:   []opv1.CalicoNodeDaemonSetContainer{_calicoNode1a},
 								NodeSelector: map[string]string{"selector": "test"},
 								Tolerations:  []v1.Toleration{_toleration1},
 							},
@@ -893,7 +893,7 @@ var _ = Describe("Installation merge tests", func() {
 								Annotations: map[string]string{"pod-annot": "1"},
 							},
 							Spec: &opv1.CalicoNodeDaemonSetPodSpec{
-								InitContainers: []opv1.CalicoNodeInitContainer{_calicoNodeInit1a},
+								InitContainers: []opv1.CalicoNodeDaemonSetInitContainer{_calicoNodeInit1a},
 								Affinity:       _aff1,
 								NodeSelector:   map[string]string{"overridden": "selector"},
 								Tolerations:    []v1.Toleration{},
@@ -914,8 +914,8 @@ var _ = Describe("Installation merge tests", func() {
 								Annotations: map[string]string{"pod-annot": "1"},
 							},
 							Spec: &opv1.CalicoNodeDaemonSetPodSpec{
-								Containers:     []opv1.CalicoNodeContainer{_calicoNode1a},
-								InitContainers: []opv1.CalicoNodeInitContainer{_calicoNodeInit1a},
+								Containers:     []opv1.CalicoNodeDaemonSetContainer{_calicoNode1a},
+								InitContainers: []opv1.CalicoNodeDaemonSetInitContainer{_calicoNodeInit1a},
 								Affinity:       _aff1,
 								NodeSelector:   map[string]string{"overridden": "selector"},
 								Tolerations:    []v1.Toleration{},

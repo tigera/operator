@@ -2567,7 +2567,7 @@ spec:
                                   DaemonSet containers. If omitted, the calico-node
                                   DaemonSet will use its default values for its containers.
                                 items:
-                                  description: CalicoNodeContainer is a calico-node
+                                  description: CalicoNodeDaemonSetContainer is a calico-node
                                     DaemonSet container.
                                   properties:
                                     name:
@@ -2624,8 +2624,8 @@ spec:
                                   If omitted, the calico-node DaemonSet will use its
                                   default values for its init containers.
                                 items:
-                                  description: CalicoNodeInitContainer is a calico-node
-                                    DaemonSet init container.
+                                  description: CalicoNodeDaemonSetInitContainer is
+                                    a calico-node DaemonSet init container.
                                   properties:
                                     name:
                                       description: Name is an enum which identifies
@@ -8577,8 +8577,8 @@ spec:
                                       If omitted, the calico-node DaemonSet will use
                                       its default values for its containers.
                                     items:
-                                      description: CalicoNodeContainer is a calico-node
-                                        DaemonSet container.
+                                      description: CalicoNodeDaemonSetContainer is
+                                        a calico-node DaemonSet container.
                                       properties:
                                         name:
                                           description: Name is an enum which identifies
@@ -8637,8 +8637,8 @@ spec:
                                       If omitted, the calico-node DaemonSet will use
                                       its default values for its init containers.
                                     items:
-                                      description: CalicoNodeInitContainer is a calico-node
-                                        DaemonSet init container.
+                                      description: CalicoNodeDaemonSetInitContainer
+                                        is a calico-node DaemonSet init container.
                                       properties:
                                         name:
                                           description: Name is an enum which identifies

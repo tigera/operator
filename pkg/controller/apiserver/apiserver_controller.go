@@ -21,6 +21,8 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/common/validation"
+	apiserver "github.com/tigera/operator/pkg/common/validation/apiserver"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -182,6 +184,12 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
+	// Validate APIServer resource.
+	if err := validateAPIServerResource(instance); err != nil {
+		r.status.SetDegraded("APIServer is invalid", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	// Query for the installation object.
 	variant, network, err := utils.GetInstallation(context.Background(), r.client)
 	if err != nil {
@@ -295,6 +303,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	apiServerCfg := render.APIServerConfiguration{
 		K8SServiceEndpoint:          k8sapi.Endpoint,
 		Installation:                network,
+		APIServer:                   &instance.Spec,
 		ForceHostNetwork:            false,
 		ManagementCluster:           managementCluster,
 		ManagementClusterConnection: managementClusterConnection,
@@ -400,4 +409,16 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
+}
+
+func validateAPIServerResource(instance *operatorv1.APIServer) error {
+	// Verify the APIServerDeployment overrides, if specified, is valid.
+	if d := instance.Spec.APIServerDeployment; d != nil {
+		err := validation.ValidateReplicatedPodResourceOverrides(d, apiserver.ValidateAPIServerDeploymentContainer, apiserver.ValidateAPIServerDeploymentInitContainer)
+		if err != nil {
+			return fmt.Errorf("APIServer spec.APIServerDeployment is not valid: %w", err)
+		}
+	}
+	return nil
+
 }

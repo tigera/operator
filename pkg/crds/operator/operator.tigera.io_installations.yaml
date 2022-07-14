@@ -1163,8 +1163,8 @@ spec:
                                   omitted, the calico-kube-controllers Deployment
                                   will use its default values for its containers.
                                 items:
-                                  description: CalicoKubeControllersContainer is a
-                                    calico-kube-controllers Deployment container.
+                                  description: CalicoKubeControllersDeploymentContainer
+                                    is a calico-kube-controllers Deployment container.
                                   properties:
                                     name:
                                       description: Name is an enum which identifies
@@ -7070,7 +7070,7 @@ spec:
                                       Deployment will use its default values for its
                                       containers.
                                     items:
-                                      description: CalicoKubeControllersContainer
+                                      description: CalicoKubeControllersDeploymentContainer
                                         is a calico-kube-controllers Deployment container.
                                       properties:
                                         name:

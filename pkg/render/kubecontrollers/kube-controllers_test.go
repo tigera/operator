@@ -608,7 +608,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 							Annotations: map[string]string{"template-level": "annot2"},
 						},
 						Spec: &operatorv1.CalicoKubeControllersDeploymentPodSpec{
-							Containers: []operatorv1.CalicoKubeControllersContainer{
+							Containers: []operatorv1.CalicoKubeControllersDeploymentContainer{
 								{
 									Name:      "calico-kube-controllers",
 									Resources: &rr1,
@@ -677,7 +677,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				Spec: &operatorv1.CalicoKubeControllersDeploymentSpec{
 					Template: &operatorv1.CalicoKubeControllersDeploymentPodTemplateSpec{
 						Spec: &operatorv1.CalicoKubeControllersDeploymentPodSpec{
-							Containers: []operatorv1.CalicoKubeControllersContainer{
+							Containers: []operatorv1.CalicoKubeControllersDeploymentContainer{
 								{
 									Name:      "calico-kube-controllers",
 									Resources: &rr2,

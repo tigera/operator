@@ -20,8 +20,8 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-// CalicoKubeControllersContainer is a calico-kube-controllers Deployment container.
-type CalicoKubeControllersContainer struct {
+// CalicoKubeControllersDeploymentContainer is a calico-kube-controllers Deployment container.
+type CalicoKubeControllersDeploymentContainer struct {
 	// Name is an enum which identifies the calico-kube-controllers Deployment container by name.
 	// +kubebuilder:validation:Enum=calico-kube-controllers
 	Name string `json:"name"`
@@ -40,7 +40,7 @@ type CalicoKubeControllersDeploymentPodSpec struct {
 	// If specified, this overrides the specified calico-kube-controllers Deployment containers.
 	// If omitted, the calico-kube-controllers Deployment will use its default values for its containers.
 	// +optional
-	Containers []CalicoKubeControllersContainer `json:"containers,omitempty"`
+	Containers []CalicoKubeControllersDeploymentContainer `json:"containers,omitempty"`
 
 	// Affinity is a group of affinity scheduling rules for the calico-kube-controllers pods.
 	// If specified, this overrides any affinity that may be set on the calico-kube-controllers Deployment.

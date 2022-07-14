@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -73,10 +74,18 @@ func GetImageAssuranceConfigurationConfigMap(client client.Client) (*corev1.Conf
 	return cm, nil
 }
 
-func AddServiceAccountWatch(c controller.Controller, name string) error {
+func AddServiceAccountWatch(c controller.Controller, name string, namespace string) error {
 	serviceAccount := &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "V1"},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+	}
+	return AddNamespacedWatch(c, serviceAccount)
+}
+
+func AddClusterRoleBindingWatch(c controller.Controller, name string) error {
+	crb := &rbacv1.ClusterRoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 	}
-	return AddClusterResourceWatch(c, serviceAccount)
+	return AddClusterResourceWatch(c, crb)
 }

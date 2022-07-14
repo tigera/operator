@@ -4,8 +4,9 @@ package imageassurance
 
 import (
 	"fmt"
-	"github.com/tigera/operator/pkg/render/common/clusterrole"
 	"strings"
+
+	"github.com/tigera/operator/pkg/render/common/clusterrole"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
@@ -42,10 +43,12 @@ const (
 	APICertSecretName = "tigera-image-assurance-api-cert-pair"
 
 	ScannerClusterRoleName             = "tigera-image-assurance-scanner-api-access"
+	ScannerClusterRoleBindingName      = "tigera-image-assurance-scanner-api-access"
 	ScannerAPIAccessServiceAccountName = "tigera-image-assurance-scanner-api-access"
 	ScannerAPIAccessSecretName         = "scanner-image-assurance-api-token"
 
 	PodWatcherClusterRoleName             = "tigera-image-assurance-pod-watcher-api-access"
+	PodWatcherClusterRoleBindingName      = "tigera-image-assurance-pod-watcher-api-access"
 	PodWatcherAPIAccessServiceAccountName = "tigera-image-assurance-pod-watcher-api-access"
 	PodWatcherAPIAccessSecretName         = "pod-watcher-image-assurance-api-token"
 

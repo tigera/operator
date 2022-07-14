@@ -880,6 +880,203 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(deploy.Spec.Template.Spec.Affinity).NotTo(BeNil())
 		Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("tigera-apiserver", "tigera-system")))
 	})
+
+	Context("With APIServer Deployment overrides", func() {
+		var rr1 = corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":     resource.MustParse("2"),
+				"memory":  resource.MustParse("300Mi"),
+				"storage": resource.MustParse("20Gi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":     resource.MustParse("1"),
+				"memory":  resource.MustParse("150Mi"),
+				"storage": resource.MustParse("10Gi"),
+			},
+		}
+
+		var rr2 = corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("250m"),
+				corev1.ResourceMemory: resource.MustParse("64Mi"),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("500m"),
+				corev1.ResourceMemory: resource.MustParse("500Mi"),
+			},
+		}
+
+		It("should handle APIServerDeployment overrides", func() {
+			var minReadySeconds int32 = 20
+
+			affinity := &corev1.Affinity{
+				NodeAffinity: &corev1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+						NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+							MatchExpressions: []corev1.NodeSelectorRequirement{{
+								Key:      "custom-affinity-key",
+								Operator: corev1.NodeSelectorOpExists,
+							}},
+						}},
+					},
+				},
+			}
+			toleration := corev1.Toleration{
+				Key:      "foo",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "bar",
+			}
+
+			cfg.APIServer.APIServerDeployment = &operatorv1.APIServerDeployment{
+				Metadata: &operatorv1.Metadata{
+					Labels:      map[string]string{"top-level": "label1"},
+					Annotations: map[string]string{"top-level": "annot1"},
+				},
+				Spec: &operatorv1.APIServerDeploymentSpec{
+					MinReadySeconds: &minReadySeconds,
+					Template: &operatorv1.APIServerDeploymentPodTemplateSpec{
+						Metadata: &operatorv1.Metadata{
+							Labels:      map[string]string{"template-level": "label2"},
+							Annotations: map[string]string{"template-level": "annot2"},
+						},
+						Spec: &operatorv1.APIServerDeploymentPodSpec{
+							Containers: []operatorv1.APIServerDeploymentContainer{
+								{
+									Name:      "tigera-apiserver",
+									Resources: &rr1,
+								},
+								{
+									Name:      "tigera-queryserver",
+									Resources: &rr2,
+								},
+							},
+							InitContainers: []operatorv1.APIServerDeploymentInitContainer{
+								{
+									Name:      "tigera-apiserver-certs-key-cert-provisioner",
+									Resources: &rr2,
+								},
+							},
+							NodeSelector: map[string]string{
+								"custom-node-selector": "value",
+							},
+							Affinity:    affinity,
+							Tolerations: []corev1.Toleration{toleration},
+						},
+					},
+				},
+			}
+			// Enable certificate management.
+			cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c", CACert: cfg.TLSKeyPair.GetCertificatePEM()}
+			certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Create and add the TLS keypair so the initContainer is rendered.
+			dnsNames := dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(instance.Variant), rmeta.APIServerNamespace(instance.Variant), clusterDomain)
+			kp, err := certificateManager.GetOrCreateKeyPair(cli, render.ProjectCalicoApiServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
+			Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+			cfg.TLSKeyPair = kp
+
+			component, err := render.APIServer(cfg)
+			Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+			resources, _ := component.Objects()
+
+			d, ok := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue())
+
+			// API server has apiserver: true label
+			Expect(d.Labels).To(HaveLen(2))
+			Expect(d.Labels["apiserver"]).To(Equal("true"))
+			Expect(d.Labels["top-level"]).To(Equal("label1"))
+			Expect(d.Annotations).To(HaveLen(1))
+			Expect(d.Annotations["top-level"]).To(Equal("annot1"))
+
+			Expect(d.Spec.MinReadySeconds).To(Equal(minReadySeconds))
+
+			// At runtime, the operator will also add some standard labels to the
+			// deployment such as "k8s-app=calico-apiserver". But the APIServer
+			// deployment object produced by the render will have no labels so we expect just the one
+			// provided.
+			Expect(d.Spec.Template.Labels).To(HaveLen(2))
+			Expect(d.Spec.Template.Labels["apiserver"]).To(Equal("true"))
+			Expect(d.Spec.Template.Labels["template-level"]).To(Equal("label2"))
+
+			// With the default instance we expect 2 template-level annotations
+			// - 1 added by the operator by default
+			// - 1 added by the calicoNodeDaemonSet override
+			Expect(d.Spec.Template.Annotations).To(HaveLen(2))
+			Expect(d.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/tigera-apiserver-certs"))
+			Expect(d.Spec.Template.Annotations["template-level"]).To(Equal("annot2"))
+
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(2))
+			Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-apiserver"))
+			Expect(d.Spec.Template.Spec.Containers[0].Resources).To(Equal(rr1))
+			Expect(d.Spec.Template.Spec.Containers[1].Name).To(Equal("tigera-queryserver"))
+			Expect(d.Spec.Template.Spec.Containers[1].Resources).To(Equal(rr2))
+
+			Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.InitContainers[0].Name).To(Equal("tigera-apiserver-certs-key-cert-provisioner"))
+			Expect(d.Spec.Template.Spec.InitContainers[0].Resources).To(Equal(rr2))
+
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("custom-node-selector", "value"))
+
+			Expect(d.Spec.Template.Spec.Tolerations).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.Tolerations[0]).To(Equal(toleration))
+		})
+
+		It("should override a ControlPlaneNodeSelector when specified", func() {
+			cfg.Installation.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
+
+			cfg.APIServer.APIServerDeployment = &operatorv1.APIServerDeployment{
+				Spec: &operatorv1.APIServerDeploymentSpec{
+					Template: &operatorv1.APIServerDeploymentPodTemplateSpec{
+						Spec: &operatorv1.APIServerDeploymentPodSpec{
+							NodeSelector: map[string]string{
+								"custom-node-selector": "value",
+							},
+						},
+					},
+				},
+			}
+			component, err := render.APIServer(cfg)
+			Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+			d, ok := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue())
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("custom-node-selector", "value"))
+		})
+
+		It("should override ControlPlaneTolerations when specified", func() {
+			cfg.Installation.ControlPlaneTolerations = []corev1.Toleration{rmeta.TolerateMaster}
+
+			tol := corev1.Toleration{
+				Key:      "foo",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "bar",
+				Effect:   corev1.TaintEffectNoExecute,
+			}
+
+			cfg.APIServer.APIServerDeployment = &operatorv1.APIServerDeployment{
+				Spec: &operatorv1.APIServerDeploymentSpec{
+					Template: &operatorv1.APIServerDeploymentPodTemplateSpec{
+						Spec: &operatorv1.APIServerDeploymentPodSpec{
+							Tolerations: []corev1.Toleration{tol},
+						},
+					},
+				},
+			}
+			component, err := render.APIServer(cfg)
+			Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+			d, ok := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue())
+			Expect(d.Spec.Template.Spec.Tolerations).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(tol))
+		})
+	})
 })
 
 func verifyAPIService(service *apiregv1.APIService, enterprise bool, clusterDomain string) {

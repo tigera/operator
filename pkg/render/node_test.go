@@ -3034,7 +3034,7 @@ var _ = Describe("Node rendering tests", func() {
 				Value:    "bar",
 			}
 
-			overrides := &operatorv1.CalicoNodeDaemonSet{
+			defaultInstance.CalicoNodeDaemonSet = &operatorv1.CalicoNodeDaemonSet{
 				Metadata: &operatorv1.Metadata{
 					Labels:      map[string]string{"top-level": "label1"},
 					Annotations: map[string]string{"top-level": "annot1"},
@@ -3062,7 +3062,6 @@ var _ = Describe("Node rendering tests", func() {
 					},
 				},
 			}
-			defaultInstance.CalicoNodeDaemonSet = overrides
 
 			component := render.Node(&cfg)
 			resources, _ := component.Objects()
@@ -3111,7 +3110,7 @@ var _ = Describe("Node rendering tests", func() {
 				},
 			}
 
-			overrides := &operatorv1.CalicoNodeDaemonSet{
+			defaultInstance.CalicoNodeDaemonSet = &operatorv1.CalicoNodeDaemonSet{
 				Spec: &operatorv1.CalicoNodeDaemonSetSpec{
 					Template: &operatorv1.CalicoNodeDaemonSetPodTemplateSpec{
 						Spec: &operatorv1.CalicoNodeDaemonSetPodSpec{
@@ -3125,7 +3124,6 @@ var _ = Describe("Node rendering tests", func() {
 					},
 				},
 			}
-			defaultInstance.CalicoNodeDaemonSet = overrides
 
 			component := render.Node(&cfg)
 			resources, _ := component.Objects()

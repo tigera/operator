@@ -376,7 +376,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 
 	// Verify the CalicoKubeControllersDeployment overrides, if specified, is valid.
 	if ds := instance.Spec.CalicoKubeControllersDeployment; ds != nil {
-		err := validation.ValidateReplicatedPodResourceOverrides(ds, kubecontrollers.ValidateCalicoKubeControllersDeploymentContainers, validation.NoContainersDefined)
+		err := validation.ValidateReplicatedPodResourceOverrides(ds, kubecontrollers.ValidateCalicoKubeControllersDeploymentContainer, validation.NoContainersDefined)
 		if err != nil {
 			return fmt.Errorf("Installation spec.CalicoKubeControllersDeployment is not valid: %w", err)
 

@@ -68,27 +68,24 @@ var (
 
 	NodeTLSSecretName = "node-certs"
 
-	// calico-node DaemonSet container names. These are used for validation.
-	CalicoNodeDaemonSetContainerNames     map[string]struct{}
-	CalicoNodeDaemonSetInitContainerNames map[string]struct{}
-)
-
-func init() {
-	// This should match CalicoNodeContainer.Name validation on the CalicoNodeDaemonSet type.
+	// calico-node DaemonSet container names used for validation.
+	// These should match CalicoNodeContainer.Name validation on the CalicoNodeDaemonSet type.
 	CalicoNodeDaemonSetContainerNames = map[string]struct{}{
 		CalicoNodeObjectName: {},
 	}
 
-	// This should match CalicoInitNodeContainer.Name validation on the CalicoNodeDaemonSet type.
+	// calico-node DaemonSet init container names used for validation.
+	// These should match CalicoInitNodeContainer.Name validation on the CalicoNodeDaemonSet type.
 	CalicoNodeDaemonSetInitContainerNames = map[string]struct{}{
 		"install-cni":    {},
 		"hostpath-init":  {},
 		"flexvol-driver": {},
 		"mount-bpffs":    {},
+		// These names are generated in certificatemanagement.CreateCSRInitContainer
 		fmt.Sprintf("%s-%s", NodeTLSSecretName, certificatemanagement.CSRInitContainerName):             {},
 		fmt.Sprintf("%s-%s", NodePrometheusTLSServerSecret, certificatemanagement.CSRInitContainerName): {},
 	}
-}
+)
 
 // TyphaNodeTLS holds configuration for Node and Typha to establish TLS.
 type TyphaNodeTLS struct {

@@ -296,13 +296,13 @@ func mergeCalicoNodeDaemonSet(cfg, override *operatorv1.CalicoNodeDaemonSet) *op
 
 		switch compareFields(out.InitContainers, override.InitContainers) {
 		case BOnlySet, Different:
-			out.InitContainers = make([]operatorv1.CalicoNodeInitContainer, len(override.InitContainers))
+			out.InitContainers = make([]operatorv1.CalicoNodeDaemonSetInitContainer, len(override.InitContainers))
 			copy(out.InitContainers, override.InitContainers)
 		}
 
 		switch compareFields(out.Containers, override.Containers) {
 		case BOnlySet, Different:
-			out.Containers = make([]operatorv1.CalicoNodeContainer, len(override.Containers))
+			out.Containers = make([]operatorv1.CalicoNodeDaemonSetContainer, len(override.Containers))
 			copy(out.Containers, override.Containers)
 		}
 

@@ -20,8 +20,8 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-// CalicoNodeContainer is a calico-node DaemonSet container.
-type CalicoNodeContainer struct {
+// CalicoNodeDaemonSetContainer is a calico-node DaemonSet container.
+type CalicoNodeDaemonSetContainer struct {
 	// Name is an enum which identifies the calico-node DaemonSet container by name.
 	// +kubebuilder:validation:Enum=calico-node
 	Name string `json:"name"`
@@ -34,8 +34,8 @@ type CalicoNodeContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-// CalicoNodeInitContainer is a calico-node DaemonSet init container.
-type CalicoNodeInitContainer struct {
+// CalicoNodeDaemonSetInitContainer is a calico-node DaemonSet init container.
+type CalicoNodeDaemonSetInitContainer struct {
 	// Name is an enum which identifies the calico-node DaemonSet init container by name.
 	// +kubebuilder:validation:Enum=install-cni;hostpath-init;flexvol-driver;mount-bpffs;node-certs-key-cert-provisioner;calico-node-prometheus-server-tls-key-cert-provisioner
 	Name string `json:"name"`
@@ -54,13 +54,13 @@ type CalicoNodeDaemonSetPodSpec struct {
 	// If specified, this overrides the specified calico-node DaemonSet init containers.
 	// If omitted, the calico-node DaemonSet will use its default values for its init containers.
 	// +optional
-	InitContainers []CalicoNodeInitContainer `json:"initContainers,omitempty"`
+	InitContainers []CalicoNodeDaemonSetInitContainer `json:"initContainers,omitempty"`
 
 	// Containers is a list of calico-node containers.
 	// If specified, this overrides the specified calico-node DaemonSet containers.
 	// If omitted, the calico-node DaemonSet will use its default values for its containers.
 	// +optional
-	Containers []CalicoNodeContainer `json:"containers,omitempty"`
+	Containers []CalicoNodeDaemonSetContainer `json:"containers,omitempty"`
 
 	// Affinity is a group of affinity scheduling rules for the calico-node pods.
 	// If specified, this overrides any affinity that may be set on the calico-node DaemonSet.

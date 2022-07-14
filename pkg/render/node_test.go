@@ -3047,7 +3047,7 @@ var _ = Describe("Node rendering tests", func() {
 							Annotations: map[string]string{"template-level": "annot2"},
 						},
 						Spec: &operatorv1.CalicoNodeDaemonSetPodSpec{
-							Containers: []operatorv1.CalicoNodeContainer{
+							Containers: []operatorv1.CalicoNodeDaemonSetContainer{
 								{
 									Name:      "calico-node",
 									Resources: &rr1,
@@ -3115,7 +3115,7 @@ var _ = Describe("Node rendering tests", func() {
 				Spec: &operatorv1.CalicoNodeDaemonSetSpec{
 					Template: &operatorv1.CalicoNodeDaemonSetPodTemplateSpec{
 						Spec: &operatorv1.CalicoNodeDaemonSetPodSpec{
-							Containers: []operatorv1.CalicoNodeContainer{
+							Containers: []operatorv1.CalicoNodeDaemonSetContainer{
 								{
 									Name:      "calico-node",
 									Resources: &rr2,

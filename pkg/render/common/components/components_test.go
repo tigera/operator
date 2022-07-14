@@ -388,7 +388,7 @@ var _ = Describe("Common components render tests", func() {
 					Spec: &v1.CalicoNodeDaemonSetSpec{
 						Template: &v1.CalicoNodeDaemonSetPodTemplateSpec{
 							Spec: &v1.CalicoNodeDaemonSetPodSpec{
-								InitContainers: []v1.CalicoNodeInitContainer{
+								InitContainers: []v1.CalicoNodeDaemonSetInitContainer{
 									{
 										Name:      "not-zero1",
 										Resources: &resources1,
@@ -424,7 +424,7 @@ var _ = Describe("Common components render tests", func() {
 					Spec: &v1.CalicoNodeDaemonSetSpec{
 						Template: &v1.CalicoNodeDaemonSetPodTemplateSpec{
 							Spec: &v1.CalicoNodeDaemonSetPodSpec{
-								InitContainers: []v1.CalicoNodeInitContainer{},
+								InitContainers: []v1.CalicoNodeDaemonSetInitContainer{},
 							},
 						},
 					},
@@ -443,7 +443,7 @@ var _ = Describe("Common components render tests", func() {
 					Spec: &v1.CalicoNodeDaemonSetSpec{
 						Template: &v1.CalicoNodeDaemonSetPodTemplateSpec{
 							Spec: &v1.CalicoNodeDaemonSetPodSpec{
-								Containers: []v1.CalicoNodeContainer{
+								Containers: []v1.CalicoNodeDaemonSetContainer{
 									// Invalid container. Should be caught by CRD validation.
 									{
 										Name:      "does-not-exist",
@@ -473,7 +473,7 @@ var _ = Describe("Common components render tests", func() {
 					Spec: &v1.CalicoNodeDaemonSetSpec{
 						Template: &v1.CalicoNodeDaemonSetPodTemplateSpec{
 							Spec: &v1.CalicoNodeDaemonSetPodSpec{
-								Containers: []v1.CalicoNodeContainer{},
+								Containers: []v1.CalicoNodeDaemonSetContainer{},
 							},
 						},
 					},

@@ -39,5 +39,7 @@ func ValidateCalicoNodeDaemonSetInitContainer(container corev1.Container) error 
 	if _, ok := render.CalicoNodeDaemonSetInitContainerNames[container.Name]; !ok {
 		return fmt.Errorf("Installation spec.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers[%q] is not a supported init container", container.Name)
 	}
-	return nil
+
+	errs := k8svalidation.ValidateResourceRequirements(&container.Resources, field.NewPath("spec", "template", "spec", "initContainers"))
+	return errs.ToAggregate()
 }

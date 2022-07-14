@@ -181,6 +181,12 @@ var _ = Describe("Image Assurance Controller", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.PodWatcherAPIAccessServiceAccountName, Namespace: common.OperatorNamespace()},
 			Secrets:    []corev1.ObjectReference{{Name: "sa-secret"}},
 		})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &rbacv1.ClusterRoleBinding{
+			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.PodWatcherClusterRoleBindingName},
+		})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &rbacv1.ClusterRoleBinding{
+			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.ScannerClusterRoleBindingName},
+		})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "sa-secret",

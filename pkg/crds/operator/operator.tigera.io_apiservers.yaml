@@ -37,14 +37,10 @@ spec:
             description: Specification of the desired state for the Tigera API server.
             properties:
               apiServerDeployment:
-                description: 'APIServerDeployment configures the calico-apiserver
-                  (or tigera-apiserver in Enterprise) Deployment. If used in conjunction
+                description: APIServerDeployment configures the calico-apiserver (or
+                  tigera-apiserver in Enterprise) Deployment. If used in conjunction
                   with ControlPlaneNodeSelector or ControlPlaneTolerations, then these
-                  overrides take precedence. WARNING: Please note that this configuration
-                  overrides the operator''s default calico-apiserver/tigera-apiserver
-                  Deployment configuration. The operator cannot validate that the
-                  provided configuration will work in your cluster. An invalid configuration
-                  may may cause networking disruption or even catastrophic failure!'
+                  overrides take precedence.
                 properties:
                   metadata:
                     description: Metadata is a subset of a Kubernetes object's metadata
@@ -112,11 +108,14 @@ spec:
                             description: Spec is the API server Deployment's PodSpec.
                             properties:
                               affinity:
-                                description: Affinity is a group of affinity scheduling
+                                description: 'Affinity is a group of affinity scheduling
                                   rules for the API server pods. If specified, this
                                   overrides any affinity that may be set on the API
                                   server Deployment. If omitted, the API server Deployment
-                                  will use its default value for affinity.
+                                  will use its default value for affinity. WARNING:
+                                  Please note that this field will override the operator''s
+                                  default calico-apiserver/tigera-apiserver Deployment
+                                  affinity.'
                                 properties:
                                   nodeAffinity:
                                     description: Describes node affinity scheduling
@@ -1269,18 +1268,23 @@ spec:
                               nodeSelector:
                                 additionalProperties:
                                   type: string
-                                description: NodeSelector is the API server pod's
+                                description: 'NodeSelector is the API server pod''s
                                   scheduling constraints. If specified, this overrides
                                   any nodeSelector that may be set on the API serverDeployment.
                                   If omitted, the API server Deployment will use its
-                                  default value for nodeSelector.
+                                  default value for nodeSelector. WARNING: Please
+                                  note that this field will override the operator''s
+                                  default calico-apiserver/tigera-apiserver Deployment
+                                  nodeSelector.'
                                 type: object
                               tolerations:
-                                description: Tolerations is the API server pod's tolerations.
-                                  If specified, this overrides any tolerations that
-                                  may be set on the API server Deployment. If omitted,
-                                  the API server Deployment will use its default value
-                                  for tolerations.
+                                description: 'Tolerations is the API server pod''s
+                                  tolerations. If specified, this overrides any tolerations
+                                  that may be set on the API server Deployment. If
+                                  omitted, the API server Deployment will use its
+                                  default value for tolerations. WARNING: Please note
+                                  that this field will override the operator''s default
+                                  calico-apiserver/tigera-apiserver Deployment tolerations.'
                                 items:
                                   description: The pod this Toleration is attached
                                     to tolerates any taint that matches the triple

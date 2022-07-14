@@ -40,13 +40,9 @@ spec:
               Enterprise installation.
             properties:
               calicoKubeControllersDeployment:
-                description: 'CalicoKubeControllersDeployment configures the calico-kube-controllers
+                description: CalicoKubeControllersDeployment configures the calico-kube-controllers
                   Deployment. If used in conjunction with the deprecated ComponentResources,
-                  then these overrides take precedence. WARNING: Please note that
-                  this configuration overrides the operator''s default calico-kube-controllers
-                  Deployment configuration. The operator cannot validate that the
-                  provided configuration will work in your cluster. An invalid configuration
-                  may may cause networking disruption or even catastrophic failure!'
+                  then these overrides take precedence.
                 properties:
                   metadata:
                     description: Metadata is a subset of a Kubernetes object's metadata
@@ -116,12 +112,14 @@ spec:
                               PodSpec.
                             properties:
                               affinity:
-                                description: Affinity is a group of affinity scheduling
+                                description: 'Affinity is a group of affinity scheduling
                                   rules for the calico-kube-controllers pods. If specified,
                                   this overrides any affinity that may be set on the
                                   calico-kube-controllers Deployment. If omitted,
                                   the calico-kube-controllers Deployment will use
-                                  its default value for affinity.
+                                  its default value for affinity. WARNING: Please
+                                  note that this field will override the operator''s
+                                  default calico-kube-controllers Deployment affinity.'
                                 properties:
                                   nodeAffinity:
                                     description: Describes node affinity scheduling
@@ -1218,19 +1216,24 @@ spec:
                               nodeSelector:
                                 additionalProperties:
                                   type: string
-                                description: NodeSelector is the calico-kube-controllers
-                                  pod's scheduling constraints. If specified, this
+                                description: 'NodeSelector is the calico-kube-controllers
+                                  pod''s scheduling constraints. If specified, this
                                   overrides any nodeSelector that may be set on the
                                   calico-kube-controllers Deployment. If omitted,
                                   the calico-kube-controllers Deployment will use
-                                  its default value for nodeSelector.
+                                  its default value for nodeSelector. WARNING: Please
+                                  note that this field will override the operator''s
+                                  default calico-kube-controllers Deployment nodeSelector.'
                                 type: object
                               tolerations:
-                                description: Tolerations is the calico-kube-controllers
-                                  pod's tolerations. If specified, this overrides
+                                description: 'Tolerations is the calico-kube-controllers
+                                  pod''s tolerations. If specified, this overrides
                                   any tolerations that may be set on the calico-kube-controllers
                                   Deployment. If omitted, the calico-kube-controllers
                                   Deployment will use its default value for tolerations.
+                                  WARNING: Please note that this field will override
+                                  the operator''s default calico-kube-controllers
+                                  Deployment tolerations.'
                                 items:
                                   description: The pod this Toleration is attached
                                     to tolerates any taint that matches the triple
@@ -1448,13 +1451,9 @@ spec:
                     type: object
                 type: object
               calicoNodeDaemonSet:
-                description: 'CalicoNodeDaemonSet configures the calico-node DaemonSet.
+                description: CalicoNodeDaemonSet configures the calico-node DaemonSet.
                   If used in conjunction with the deprecated ComponentResources, then
-                  these overrides take precedence. WARNING: Please note that this
-                  configuration overrides the operator''s default calico-node DaemonSet
-                  configuration. The operator cannot validate that the provided configuration
-                  will work in your cluster. An invalid configuration may may cause
-                  networking disruption or even catastrophic failure!'
+                  these overrides take precedence.
                 properties:
                   metadata:
                     description: Metadata is a subset of a Kubernetes object's metadata
@@ -1522,11 +1521,13 @@ spec:
                             description: Spec is the calico-node DaemonSet's PodSpec.
                             properties:
                               affinity:
-                                description: Affinity is a group of affinity scheduling
+                                description: 'Affinity is a group of affinity scheduling
                                   rules for the calico-node pods. If specified, this
                                   overrides any affinity that may be set on the calico-node
                                   DaemonSet. If omitted, the calico-node DaemonSet
-                                  will use its default value for affinity.
+                                  will use its default value for affinity. WARNING:
+                                  Please note that this field will override the operator''s
+                                  default calico-node DaemonSet affinity.'
                                 properties:
                                   nodeAffinity:
                                     description: Describes node affinity scheduling
@@ -2683,18 +2684,22 @@ spec:
                               nodeSelector:
                                 additionalProperties:
                                   type: string
-                                description: NodeSelector is the calico-node pod's
+                                description: 'NodeSelector is the calico-node pod''s
                                   scheduling constraints. If specified, this overrides
                                   any nodeSelector that may be set on the calico-node
                                   DaemonSet. If omitted, the calico-node DaemonSet
-                                  will use its default value for nodeSelector.
+                                  will use its default value for nodeSelector. WARNING:
+                                  Please note that this field will override the operator''s
+                                  default calico-node DaemonSet nodeSelector.'
                                 type: object
                               tolerations:
-                                description: Tolerations is the calico-node pod's
+                                description: 'Tolerations is the calico-node pod''s
                                   tolerations. If specified, this overrides any tolerations
                                   that may be set on the calico-node DaemonSet. If
                                   omitted, the calico-node DaemonSet will use its
-                                  default value for tolerations.
+                                  default value for tolerations. WARNING: Please note
+                                  that this field will override the operator''s default
+                                  calico-node DaemonSet tolerations.'
                                 items:
                                   description: The pod this Toleration is attached
                                     to tolerates any taint that matches the triple
@@ -2745,12 +2750,8 @@ spec:
                     type: object
                 type: object
               calicoWindowsUpgradeDaemonSet:
-                description: 'CalicoWindowsUpgradeDaemonSet configures the calico-windows-upgrade
-                  DaemonSet. WARNING: Please note that this configuration overrides
-                  the operator''s default calico-windows-upgrade DaemonSet configuration.
-                  The operator cannot validate that the provided configuration will
-                  work in your cluster. An invalid configuration may may cause networking
-                  disruption or even catastrophic failure!'
+                description: CalicoWindowsUpgradeDaemonSet configures the calico-windows-upgrade
+                  DaemonSet.
                 properties:
                   metadata:
                     description: Metadata is a subset of a Kubernetes object's metadata
@@ -2820,12 +2821,14 @@ spec:
                               PodSpec.
                             properties:
                               affinity:
-                                description: Affinity is a group of affinity scheduling
+                                description: 'Affinity is a group of affinity scheduling
                                   rules for the calico-windows-upgrade pods. If specified,
                                   this overrides any affinity that may be set on the
                                   calico-windows-upgrade DaemonSet. If omitted, the
                                   calico-windows-upgrade DaemonSet will use its default
-                                  value for affinity.
+                                  value for affinity. WARNING: Please note that this
+                                  field will override the operator''s default calico-windows-upgrade
+                                  DaemonSet affinity.'
                                 properties:
                                   nodeAffinity:
                                     description: Describes node affinity scheduling
@@ -3920,19 +3923,24 @@ spec:
                               nodeSelector:
                                 additionalProperties:
                                   type: string
-                                description: NodeSelector is the calico-windows-upgrade
-                                  pod's scheduling constraints. If specified, this
+                                description: 'NodeSelector is the calico-windows-upgrade
+                                  pod''s scheduling constraints. If specified, this
                                   overrides any nodeSelector that may be set on the
                                   calico-windows-upgrade DaemonSet. If omitted, the
                                   calico-windows-upgrade DaemonSet will use its default
-                                  value for nodeSelector.
+                                  value for nodeSelector. WARNING: Please note that
+                                  this field will override the operator''s default
+                                  calico-windows-upgrade DaemonSet nodeSelector.'
                                 type: object
                               tolerations:
-                                description: Tolerations is the calico-windows-upgrade
-                                  pod's tolerations. If specified, this overrides
+                                description: 'Tolerations is the calico-windows-upgrade
+                                  pod''s tolerations. If specified, this overrides
                                   any tolerations that may be set on the calico-windows-upgrade
                                   DaemonSet. If omitted, the calico-windows-upgrade
                                   DaemonSet will use its default value for tolerations.
+                                  WARNING: Please note that this field will override
+                                  the operator''s default calico-windows-upgrade DaemonSet
+                                  tolerations.'
                                 items:
                                   description: The pod this Toleration is attached
                                     to tolerates any taint that matches the triple
@@ -4540,13 +4548,9 @@ spec:
                     type: object
                 type: object
               typhaDeployment:
-                description: 'TyphaDeployment configures the typha Deployment. If
-                  used in conjunction with the deprecated ComponentResources or TyphaAffinity,
-                  then these overrides take precedence. WARNING: Please note that
-                  this configuration overrides the operator''s default typha Deployment
-                  configuration. The operator cannot validate that the provided configuration
-                  will work in your cluster. An invalid configuration may may cause
-                  networking disruption or even catastrophic failure!'
+                description: TyphaDeployment configures the typha Deployment. If used
+                  in conjunction with the deprecated ComponentResources or TyphaAffinity,
+                  then these overrides take precedence.
                 properties:
                   metadata:
                     description: Metadata is a subset of a Kubernetes object's metadata
@@ -4613,13 +4617,15 @@ spec:
                             description: Spec is the typha Deployment's PodSpec.
                             properties:
                               affinity:
-                                description: Affinity is a group of affinity scheduling
+                                description: 'Affinity is a group of affinity scheduling
                                   rules for the typha pods. If specified, this overrides
                                   any affinity that may be set on the typha Deployment.
                                   If omitted, the typha Deployment will use its default
                                   value for affinity. If used in conjunction with
                                   the deprecated TyphaAffinity, then this value takes
-                                  precedence.
+                                  precedence. WARNING: Please note that this field
+                                  will override the operator''s default calico-typha
+                                  Deployment affinity.'
                                 properties:
                                   nodeAffinity:
                                     description: Describes node affinity scheduling
@@ -5770,18 +5776,22 @@ spec:
                               nodeSelector:
                                 additionalProperties:
                                   type: string
-                                description: NodeSelector is the typha pod's scheduling
+                                description: 'NodeSelector is the typha pod''s scheduling
                                   constraints. If specified, this overrides any nodeSelector
                                   that may be set on the typha Deployment. If omitted,
                                   the typha Deployment will use its default value
-                                  for nodeSelector.
+                                  for nodeSelector. WARNING: Please note that this
+                                  field will override the operator''s default calico-typha
+                                  Deployment nodeSelector.'
                                 type: object
                               tolerations:
-                                description: Tolerations is the typha pod's tolerations.
+                                description: 'Tolerations is the typha pod''s tolerations.
                                   If specified, this overrides any tolerations that
                                   may be set on the typha Deployment. If omitted,
                                   the typha Deployment will use its default value
-                                  for tolerations.
+                                  for tolerations. WARNING: Please note that this
+                                  field will override the operator''s default calico-typha
+                                  Deployment tolerations.'
                                 items:
                                   description: The pod this Toleration is attached
                                     to tolerates any taint that matches the triple
@@ -5853,14 +5863,9 @@ spec:
                   resources.
                 properties:
                   calicoKubeControllersDeployment:
-                    description: 'CalicoKubeControllersDeployment configures the calico-kube-controllers
+                    description: CalicoKubeControllersDeployment configures the calico-kube-controllers
                       Deployment. If used in conjunction with the deprecated ComponentResources,
-                      then these overrides take precedence. WARNING: Please note that
-                      this configuration overrides the operator''s default calico-kube-controllers
-                      Deployment configuration. The operator cannot validate that
-                      the provided configuration will work in your cluster. An invalid
-                      configuration may may cause networking disruption or even catastrophic
-                      failure!'
+                      then these overrides take precedence.
                     properties:
                       metadata:
                         description: Metadata is a subset of a Kubernetes object's
@@ -5932,12 +5937,15 @@ spec:
                                   PodSpec.
                                 properties:
                                   affinity:
-                                    description: Affinity is a group of affinity scheduling
-                                      rules for the calico-kube-controllers pods.
-                                      If specified, this overrides any affinity that
-                                      may be set on the calico-kube-controllers Deployment.
-                                      If omitted, the calico-kube-controllers Deployment
-                                      will use its default value for affinity.
+                                    description: 'Affinity is a group of affinity
+                                      scheduling rules for the calico-kube-controllers
+                                      pods. If specified, this overrides any affinity
+                                      that may be set on the calico-kube-controllers
+                                      Deployment. If omitted, the calico-kube-controllers
+                                      Deployment will use its default value for affinity.
+                                      WARNING: Please note that this field will override
+                                      the operator''s default calico-kube-controllers
+                                      Deployment affinity.'
                                     properties:
                                       nodeAffinity:
                                         description: Describes node affinity scheduling
@@ -7126,19 +7134,25 @@ spec:
                                   nodeSelector:
                                     additionalProperties:
                                       type: string
-                                    description: NodeSelector is the calico-kube-controllers
-                                      pod's scheduling constraints. If specified,
+                                    description: 'NodeSelector is the calico-kube-controllers
+                                      pod''s scheduling constraints. If specified,
                                       this overrides any nodeSelector that may be
                                       set on the calico-kube-controllers Deployment.
                                       If omitted, the calico-kube-controllers Deployment
                                       will use its default value for nodeSelector.
+                                      WARNING: Please note that this field will override
+                                      the operator''s default calico-kube-controllers
+                                      Deployment nodeSelector.'
                                     type: object
                                   tolerations:
-                                    description: Tolerations is the calico-kube-controllers
-                                      pod's tolerations. If specified, this overrides
+                                    description: 'Tolerations is the calico-kube-controllers
+                                      pod''s tolerations. If specified, this overrides
                                       any tolerations that may be set on the calico-kube-controllers
                                       Deployment. If omitted, the calico-kube-controllers
                                       Deployment will use its default value for tolerations.
+                                      WARNING: Please note that this field will override
+                                      the operator''s default calico-kube-controllers
+                                      Deployment tolerations.'
                                     items:
                                       description: The pod this Toleration is attached
                                         to tolerates any taint that matches the triple
@@ -7362,14 +7376,9 @@ spec:
                         type: object
                     type: object
                   calicoNodeDaemonSet:
-                    description: 'CalicoNodeDaemonSet configures the calico-node DaemonSet.
+                    description: CalicoNodeDaemonSet configures the calico-node DaemonSet.
                       If used in conjunction with the deprecated ComponentResources,
-                      then these overrides take precedence. WARNING: Please note that
-                      this configuration overrides the operator''s default calico-node
-                      DaemonSet configuration. The operator cannot validate that the
-                      provided configuration will work in your cluster. An invalid
-                      configuration may may cause networking disruption or even catastrophic
-                      failure!'
+                      then these overrides take precedence.
                     properties:
                       metadata:
                         description: Metadata is a subset of a Kubernetes object's
@@ -7440,12 +7449,14 @@ spec:
                                 description: Spec is the calico-node DaemonSet's PodSpec.
                                 properties:
                                   affinity:
-                                    description: Affinity is a group of affinity scheduling
-                                      rules for the calico-node pods. If specified,
-                                      this overrides any affinity that may be set
-                                      on the calico-node DaemonSet. If omitted, the
-                                      calico-node DaemonSet will use its default value
-                                      for affinity.
+                                    description: 'Affinity is a group of affinity
+                                      scheduling rules for the calico-node pods. If
+                                      specified, this overrides any affinity that
+                                      may be set on the calico-node DaemonSet. If
+                                      omitted, the calico-node DaemonSet will use
+                                      its default value for affinity. WARNING: Please
+                                      note that this field will override the operator''s
+                                      default calico-node DaemonSet affinity.'
                                     properties:
                                       nodeAffinity:
                                         description: Describes node affinity scheduling
@@ -8698,18 +8709,24 @@ spec:
                                   nodeSelector:
                                     additionalProperties:
                                       type: string
-                                    description: NodeSelector is the calico-node pod's
-                                      scheduling constraints. If specified, this overrides
-                                      any nodeSelector that may be set on the calico-node
-                                      DaemonSet. If omitted, the calico-node DaemonSet
-                                      will use its default value for nodeSelector.
+                                    description: 'NodeSelector is the calico-node
+                                      pod''s scheduling constraints. If specified,
+                                      this overrides any nodeSelector that may be
+                                      set on the calico-node DaemonSet. If omitted,
+                                      the calico-node DaemonSet will use its default
+                                      value for nodeSelector. WARNING: Please note
+                                      that this field will override the operator''s
+                                      default calico-node DaemonSet nodeSelector.'
                                     type: object
                                   tolerations:
-                                    description: Tolerations is the calico-node pod's
+                                    description: 'Tolerations is the calico-node pod''s
                                       tolerations. If specified, this overrides any
                                       tolerations that may be set on the calico-node
                                       DaemonSet. If omitted, the calico-node DaemonSet
                                       will use its default value for tolerations.
+                                      WARNING: Please note that this field will override
+                                      the operator''s default calico-node DaemonSet
+                                      tolerations.'
                                     items:
                                       description: The pod this Toleration is attached
                                         to tolerates any taint that matches the triple
@@ -8762,12 +8779,8 @@ spec:
                         type: object
                     type: object
                   calicoWindowsUpgradeDaemonSet:
-                    description: 'CalicoWindowsUpgradeDaemonSet configures the calico-windows-upgrade
-                      DaemonSet. WARNING: Please note that this configuration overrides
-                      the operator''s default calico-windows-upgrade DaemonSet configuration.
-                      The operator cannot validate that the provided configuration
-                      will work in your cluster. An invalid configuration may may
-                      cause networking disruption or even catastrophic failure!'
+                    description: CalicoWindowsUpgradeDaemonSet configures the calico-windows-upgrade
+                      DaemonSet.
                     properties:
                       metadata:
                         description: Metadata is a subset of a Kubernetes object's
@@ -8839,12 +8852,15 @@ spec:
                                   PodSpec.
                                 properties:
                                   affinity:
-                                    description: Affinity is a group of affinity scheduling
-                                      rules for the calico-windows-upgrade pods. If
-                                      specified, this overrides any affinity that
-                                      may be set on the calico-windows-upgrade DaemonSet.
-                                      If omitted, the calico-windows-upgrade DaemonSet
-                                      will use its default value for affinity.
+                                    description: 'Affinity is a group of affinity
+                                      scheduling rules for the calico-windows-upgrade
+                                      pods. If specified, this overrides any affinity
+                                      that may be set on the calico-windows-upgrade
+                                      DaemonSet. If omitted, the calico-windows-upgrade
+                                      DaemonSet will use its default value for affinity.
+                                      WARNING: Please note that this field will override
+                                      the operator''s default calico-windows-upgrade
+                                      DaemonSet affinity.'
                                     properties:
                                       nodeAffinity:
                                         description: Describes node affinity scheduling
@@ -10030,19 +10046,25 @@ spec:
                                   nodeSelector:
                                     additionalProperties:
                                       type: string
-                                    description: NodeSelector is the calico-windows-upgrade
-                                      pod's scheduling constraints. If specified,
+                                    description: 'NodeSelector is the calico-windows-upgrade
+                                      pod''s scheduling constraints. If specified,
                                       this overrides any nodeSelector that may be
                                       set on the calico-windows-upgrade DaemonSet.
                                       If omitted, the calico-windows-upgrade DaemonSet
                                       will use its default value for nodeSelector.
+                                      WARNING: Please note that this field will override
+                                      the operator''s default calico-windows-upgrade
+                                      DaemonSet nodeSelector.'
                                     type: object
                                   tolerations:
-                                    description: Tolerations is the calico-windows-upgrade
-                                      pod's tolerations. If specified, this overrides
+                                    description: 'Tolerations is the calico-windows-upgrade
+                                      pod''s tolerations. If specified, this overrides
                                       any tolerations that may be set on the calico-windows-upgrade
                                       DaemonSet. If omitted, the calico-windows-upgrade
                                       DaemonSet will use its default value for tolerations.
+                                      WARNING: Please note that this field will override
+                                      the operator''s default calico-windows-upgrade
+                                      DaemonSet tolerations.'
                                     items:
                                       description: The pod this Toleration is attached
                                         to tolerates any taint that matches the triple
@@ -10669,14 +10691,9 @@ spec:
                         type: object
                     type: object
                   typhaDeployment:
-                    description: 'TyphaDeployment configures the typha Deployment.
+                    description: TyphaDeployment configures the typha Deployment.
                       If used in conjunction with the deprecated ComponentResources
-                      or TyphaAffinity, then these overrides take precedence. WARNING:
-                      Please note that this configuration overrides the operator''s
-                      default typha Deployment configuration. The operator cannot
-                      validate that the provided configuration will work in your cluster.
-                      An invalid configuration may may cause networking disruption
-                      or even catastrophic failure!'
+                      or TyphaAffinity, then these overrides take precedence.
                     properties:
                       metadata:
                         description: Metadata is a subset of a Kubernetes object's
@@ -10746,13 +10763,15 @@ spec:
                                 description: Spec is the typha Deployment's PodSpec.
                                 properties:
                                   affinity:
-                                    description: Affinity is a group of affinity scheduling
-                                      rules for the typha pods. If specified, this
-                                      overrides any affinity that may be set on the
-                                      typha Deployment. If omitted, the typha Deployment
-                                      will use its default value for affinity. If
-                                      used in conjunction with the deprecated TyphaAffinity,
-                                      then this value takes precedence.
+                                    description: 'Affinity is a group of affinity
+                                      scheduling rules for the typha pods. If specified,
+                                      this overrides any affinity that may be set
+                                      on the typha Deployment. If omitted, the typha
+                                      Deployment will use its default value for affinity.
+                                      If used in conjunction with the deprecated TyphaAffinity,
+                                      then this value takes precedence. WARNING: Please
+                                      note that this field will override the operator''s
+                                      default calico-typha Deployment affinity.'
                                     properties:
                                       nodeAffinity:
                                         description: Describes node affinity scheduling
@@ -11999,18 +12018,23 @@ spec:
                                   nodeSelector:
                                     additionalProperties:
                                       type: string
-                                    description: NodeSelector is the typha pod's scheduling
-                                      constraints. If specified, this overrides any
-                                      nodeSelector that may be set on the typha Deployment.
-                                      If omitted, the typha Deployment will use its
-                                      default value for nodeSelector.
+                                    description: 'NodeSelector is the typha pod''s
+                                      scheduling constraints. If specified, this overrides
+                                      any nodeSelector that may be set on the typha
+                                      Deployment. If omitted, the typha Deployment
+                                      will use its default value for nodeSelector.
+                                      WARNING: Please note that this field will override
+                                      the operator''s default calico-typha Deployment
+                                      nodeSelector.'
                                     type: object
                                   tolerations:
-                                    description: Tolerations is the typha pod's tolerations.
-                                      If specified, this overrides any tolerations
-                                      that may be set on the typha Deployment. If
-                                      omitted, the typha Deployment will use its default
-                                      value for tolerations.
+                                    description: 'Tolerations is the typha pod''s
+                                      tolerations. If specified, this overrides any
+                                      tolerations that may be set on the typha Deployment.
+                                      If omitted, the typha Deployment will use its
+                                      default value for tolerations. WARNING: Please
+                                      note that this field will override the operator''s
+                                      default calico-typha Deployment tolerations.'
                                     items:
                                       description: The pod this Toleration is attached
                                         to tolerates any taint that matches the triple

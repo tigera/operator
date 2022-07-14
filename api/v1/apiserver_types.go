@@ -28,10 +28,6 @@ type APIServerSpec struct {
 	// APIServerDeployment configures the calico-apiserver (or tigera-apiserver in Enterprise) Deployment. If
 	// used in conjunction with ControlPlaneNodeSelector or ControlPlaneTolerations, then these overrides
 	// take precedence.
-	// WARNING: Please note that this configuration overrides the operator's
-	// default calico-apiserver/tigera-apiserver Deployment configuration. The operator cannot validate
-	// that the provided configuration will work in your cluster. An invalid
-	// configuration may may cause networking disruption or even catastrophic failure!
 	APIServerDeployment *APIServerDeployment `json:"apiServerDeployment,omitempty"`
 }
 
@@ -116,18 +112,21 @@ type APIServerDeploymentPodSpec struct {
 	// Affinity is a group of affinity scheduling rules for the API server pods.
 	// If specified, this overrides any affinity that may be set on the API server Deployment.
 	// If omitted, the API server Deployment will use its default value for affinity.
+	// WARNING: Please note that this field will override the operator's default calico-apiserver/tigera-apiserver Deployment affinity.
 	// +optional
 	Affinity *v1.Affinity `json:"affinity,omitempty"`
 
 	// NodeSelector is the API server pod's scheduling constraints.
 	// If specified, this overrides any nodeSelector that may be set on the API serverDeployment.
 	// If omitted, the API server Deployment will use its default value for nodeSelector.
+	// WARNING: Please note that this field will override the operator's default calico-apiserver/tigera-apiserver Deployment nodeSelector.
 	// +optional
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 
 	// Tolerations is the API server pod's tolerations.
 	// If specified, this overrides any tolerations that may be set on the API server Deployment.
 	// If omitted, the API server Deployment will use its default value for tolerations.
+	// WARNING: Please note that this field will override the operator's default calico-apiserver/tigera-apiserver Deployment tolerations.
 	// +optional
 	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
 }

@@ -150,33 +150,17 @@ type InstallationSpec struct {
 
 	// CalicoNodeDaemonSet configures the calico-node DaemonSet. If used in
 	// conjunction with the deprecated ComponentResources, then these overrides take precedence.
-	// WARNING: Please note that this configuration overrides the operator's
-	// default calico-node DaemonSet configuration. The operator cannot validate
-	// that the provided configuration will work in your cluster. An invalid
-	// configuration may may cause networking disruption or even catastrophic failure!
 	CalicoNodeDaemonSet *CalicoNodeDaemonSet `json:"calicoNodeDaemonSet,omitempty"`
 
 	// CalicoKubeControllersDeployment configures the calico-kube-controllers Deployment. If used in
 	// conjunction with the deprecated ComponentResources, then these overrides take precedence.
-	// WARNING: Please note that this configuration overrides the operator's
-	// default calico-kube-controllers Deployment configuration. The operator cannot validate
-	// that the provided configuration will work in your cluster. An invalid
-	// configuration may may cause networking disruption or even catastrophic failure!
 	CalicoKubeControllersDeployment *CalicoKubeControllersDeployment `json:"calicoKubeControllersDeployment,omitempty"`
 
 	// TyphaDeployment configures the typha Deployment. If used in conjunction with the deprecated
 	// ComponentResources or TyphaAffinity, then these overrides take precedence.
-	// WARNING: Please note that this configuration overrides the operator's
-	// default typha Deployment configuration. The operator cannot validate
-	// that the provided configuration will work in your cluster. An invalid
-	// configuration may may cause networking disruption or even catastrophic failure!
 	TyphaDeployment *TyphaDeployment `json:"typhaDeployment,omitempty"`
 
 	// CalicoWindowsUpgradeDaemonSet configures the calico-windows-upgrade DaemonSet.
-	// WARNING: Please note that this configuration overrides the operator's
-	// default calico-windows-upgrade DaemonSet configuration. The operator cannot validate
-	// that the provided configuration will work in your cluster. An invalid
-	// configuration may may cause networking disruption or even catastrophic failure!
 	CalicoWindowsUpgradeDaemonSet *CalicoWindowsUpgradeDaemonSet `json:"calicoWindowsUpgradeDaemonSet,omitempty"`
 }
 

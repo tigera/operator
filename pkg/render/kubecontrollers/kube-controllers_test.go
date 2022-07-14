@@ -608,7 +608,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				Value:    "bar",
 			}
 
-			overrides := &operatorv1.CalicoKubeControllersDeployment{
+			instance.CalicoKubeControllersDeployment = &operatorv1.CalicoKubeControllersDeployment{
 				Metadata: &operatorv1.Metadata{
 					Labels:      map[string]string{"top-level": "label1"},
 					Annotations: map[string]string{"top-level": "annot1"},
@@ -636,7 +636,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 					},
 				},
 			}
-			instance.CalicoKubeControllersDeployment = overrides
 
 			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 			Expect(component.ResolveImages(nil)).To(BeNil())
@@ -654,7 +653,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Expect(d.Spec.MinReadySeconds).To(Equal(minReadySeconds))
 
 			// At runtime, the operator will also add some standard labels to the
-			// deployment such as "k8s-app=calico-node". But the calico-kube-controllers deployment object
+			// deployment such as "k8s-app=calico-kube-controllers". But the calico-kube-controllers deployment object
 			// produced by the render will have no labels so we expect just the one
 			// provided.
 			Expect(d.Spec.Template.Labels).To(HaveLen(1))
@@ -686,7 +685,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				},
 			}
 
-			overrides := &operatorv1.CalicoKubeControllersDeployment{
+			instance.CalicoKubeControllersDeployment = &operatorv1.CalicoKubeControllersDeployment{
 				Spec: &operatorv1.CalicoKubeControllersDeploymentSpec{
 					Template: &operatorv1.CalicoKubeControllersDeploymentPodTemplateSpec{
 						Spec: &operatorv1.CalicoKubeControllersDeploymentPodSpec{
@@ -700,7 +699,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 					},
 				},
 			}
-			instance.CalicoKubeControllersDeployment = overrides
 
 			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 			Expect(component.ResolveImages(nil)).To(BeNil())
@@ -713,6 +711,63 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
 			Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-kube-controllers"))
 			Expect(d.Spec.Template.Spec.Containers[0].Resources).To(Equal(rr2))
+		})
+
+		It("should override ControlPlaneNodeSelector when specified", func() {
+			cfg.Installation.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
+
+			instance.CalicoKubeControllersDeployment = &operatorv1.CalicoKubeControllersDeployment{
+				Spec: &operatorv1.CalicoKubeControllersDeploymentSpec{
+					Template: &operatorv1.CalicoKubeControllersDeploymentPodTemplateSpec{
+						Spec: &operatorv1.CalicoKubeControllersDeploymentPodSpec{
+							NodeSelector: map[string]string{
+								"custom-node-selector": "value",
+							},
+						},
+					},
+				},
+			}
+			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			depResource := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment")
+			Expect(depResource).ToNot(BeNil())
+			d := depResource.(*appsv1.Deployment)
+
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("custom-node-selector", "value"))
+		})
+
+		It("should override ControlPlaneTolerations when specified", func() {
+			cfg.Installation.ControlPlaneTolerations = []corev1.Toleration{rmeta.TolerateMaster}
+
+			tol := corev1.Toleration{
+				Key:      "foo",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "bar",
+				Effect:   corev1.TaintEffectNoExecute,
+			}
+
+			instance.CalicoKubeControllersDeployment = &operatorv1.CalicoKubeControllersDeployment{
+				Spec: &operatorv1.CalicoKubeControllersDeploymentSpec{
+					Template: &operatorv1.CalicoKubeControllersDeploymentPodTemplateSpec{
+						Spec: &operatorv1.CalicoKubeControllersDeploymentPodSpec{
+							Tolerations: []corev1.Toleration{tol},
+						},
+					},
+				},
+			}
+			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			depResource := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment")
+			Expect(depResource).ToNot(BeNil())
+			d := depResource.(*appsv1.Deployment)
+
+			Expect(d.Spec.Template.Spec.Tolerations).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(tol))
 		})
 	})
 

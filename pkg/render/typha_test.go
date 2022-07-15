@@ -34,6 +34,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 )
 
@@ -422,5 +423,218 @@ var _ = Describe("Typha rendering tests", func() {
 		// Assert we set annotations properly.
 		Expect(d.Spec.Template.Annotations["prometheus.io/scrape"]).To(Equal("true"))
 		Expect(d.Spec.Template.Annotations["prometheus.io/port"]).To(Equal("1234"))
+	})
+
+	Context("With typha deployment overrides", func() {
+		var rr1 = corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":     resource.MustParse("2"),
+				"memory":  resource.MustParse("300Mi"),
+				"storage": resource.MustParse("20Gi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":     resource.MustParse("1"),
+				"memory":  resource.MustParse("150Mi"),
+				"storage": resource.MustParse("10Gi"),
+			},
+		}
+		var rr2 = corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("250m"),
+				corev1.ResourceMemory: resource.MustParse("64Mi"),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("500m"),
+				corev1.ResourceMemory: resource.MustParse("500Mi"),
+			},
+		}
+
+		It("should handle typhaDeployment overrides", func() {
+			var minReadySeconds int32 = 20
+
+			affinity := &corev1.Affinity{
+				NodeAffinity: &corev1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+						NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+							MatchExpressions: []corev1.NodeSelectorRequirement{{
+								Key:      "custom-affinity-key",
+								Operator: corev1.NodeSelectorOpExists,
+							}},
+						}},
+					},
+				},
+			}
+			toleration := corev1.Toleration{
+				Key:      "foo",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "bar",
+			}
+
+			installation.TyphaDeployment = &operatorv1.TyphaDeployment{
+				Metadata: &operatorv1.Metadata{
+					Labels:      map[string]string{"top-level": "label1"},
+					Annotations: map[string]string{"top-level": "annot1"},
+				},
+				Spec: &operatorv1.TyphaDeploymentSpec{
+					MinReadySeconds: &minReadySeconds,
+					Template: &operatorv1.TyphaDeploymentPodTemplateSpec{
+						Metadata: &operatorv1.Metadata{
+							Labels:      map[string]string{"template-level": "label2"},
+							Annotations: map[string]string{"template-level": "annot2"},
+						},
+						Spec: &operatorv1.TyphaDeploymentPodSpec{
+							Containers: []operatorv1.TyphaDeploymentContainer{
+								{
+									Name:      "calico-typha",
+									Resources: &rr1,
+								},
+							},
+							NodeSelector: map[string]string{
+								"custom-node-selector": "value",
+							},
+							Affinity:    affinity,
+							Tolerations: []corev1.Toleration{toleration},
+						},
+					},
+				},
+			}
+
+			component := render.Typha(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			dResource := rtest.GetResource(resources, "calico-typha", "calico-system", "apps", "v1", "Deployment")
+			Expect(dResource).ToNot(BeNil())
+
+			d := dResource.(*appsv1.Deployment)
+
+			Expect(d.Labels).To(HaveLen(1))
+			Expect(d.Labels["top-level"]).To(Equal("label1"))
+			Expect(d.Annotations).To(HaveLen(1))
+			Expect(d.Annotations["top-level"]).To(Equal("annot1"))
+
+			Expect(d.Spec.MinReadySeconds).To(Equal(minReadySeconds))
+
+			// At runtime, the operator will also add some standard labels to the
+			// deployment such as "k8s-app=calico-typha". But the deployment object
+			// produced by the render will have no labels so we expect just the one
+			// provided.
+			Expect(d.Spec.Template.Labels).To(HaveLen(1))
+			Expect(d.Spec.Template.Labels["template-level"]).To(Equal("label2"))
+
+			// With the default instance we expect 3 template-level annotations
+			// - 2 added by the default typha render
+			// - 1 added by the calicoNodeDaemonSet override
+			Expect(d.Spec.Template.Annotations).To(HaveLen(3))
+			Expect(d.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/tigera-ca-private"))
+			Expect(d.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/typha-certs"))
+			Expect(d.Spec.Template.Annotations["template-level"]).To(Equal("annot2"))
+
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-typha"))
+			Expect(d.Spec.Template.Spec.Containers[0].Resources).To(Equal(rr1))
+
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("custom-node-selector", "value"))
+
+			Expect(d.Spec.Template.Spec.Tolerations).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.Tolerations[0]).To(Equal(toleration))
+		})
+
+		It("should override ComponentResources", func() {
+			installation.ComponentResources = []operatorv1.ComponentResource{
+				{
+					ComponentName:        operatorv1.ComponentNameTypha,
+					ResourceRequirements: &rr1,
+				},
+			}
+
+			installation.TyphaDeployment = &operatorv1.TyphaDeployment{
+				Spec: &operatorv1.TyphaDeploymentSpec{
+					Template: &operatorv1.TyphaDeploymentPodTemplateSpec{
+						Spec: &operatorv1.TyphaDeploymentPodSpec{
+							Containers: []operatorv1.TyphaDeploymentContainer{
+								{
+									Name:      "calico-typha",
+									Resources: &rr2,
+								},
+							},
+						},
+					},
+				},
+			}
+
+			component := render.Typha(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			dResource := rtest.GetResource(resources, "calico-typha", "calico-system", "apps", "v1", "Deployment")
+			Expect(dResource).ToNot(BeNil())
+
+			d := dResource.(*appsv1.Deployment)
+
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-typha"))
+			Expect(d.Spec.Template.Spec.Containers[0].Resources).To(Equal(rr2))
+		})
+
+		It("should override ControlPlaneNodeSelector when specified", func() {
+			cfg.Installation.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
+
+			installation.TyphaDeployment = &operatorv1.TyphaDeployment{
+				Spec: &operatorv1.TyphaDeploymentSpec{
+					Template: &operatorv1.TyphaDeploymentPodTemplateSpec{
+						Spec: &operatorv1.TyphaDeploymentPodSpec{
+							NodeSelector: map[string]string{
+								"custom-node-selector": "value",
+							},
+						},
+					},
+				},
+			}
+			component := render.Typha(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			dResource := rtest.GetResource(resources, "calico-typha", "calico-system", "apps", "v1", "Deployment")
+			Expect(dResource).ToNot(BeNil())
+
+			d := dResource.(*appsv1.Deployment)
+
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("custom-node-selector", "value"))
+		})
+
+		It("should override ControlPlaneTolerations when specified", func() {
+			cfg.Installation.ControlPlaneTolerations = []corev1.Toleration{rmeta.TolerateMaster}
+
+			tol := corev1.Toleration{
+				Key:      "foo",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "bar",
+				Effect:   corev1.TaintEffectNoExecute,
+			}
+
+			installation.TyphaDeployment = &operatorv1.TyphaDeployment{
+				Spec: &operatorv1.TyphaDeploymentSpec{
+					Template: &operatorv1.TyphaDeploymentPodTemplateSpec{
+						Spec: &operatorv1.TyphaDeploymentPodSpec{
+							Tolerations: []corev1.Toleration{tol},
+						},
+					},
+				},
+			}
+			component := render.Typha(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			dResource := rtest.GetResource(resources, "calico-typha", "calico-system", "apps", "v1", "Deployment")
+			Expect(dResource).ToNot(BeNil())
+
+			d := dResource.(*appsv1.Deployment)
+
+			Expect(d.Spec.Template.Spec.Tolerations).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(tol))
+		})
 	})
 })

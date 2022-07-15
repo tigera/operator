@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -649,5 +649,31 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(fillDefaults(instance)).NotTo(HaveOccurred())
 		err := validateCustomResource(instance)
 		Expect(err).NotTo(HaveOccurred())
+	})
+
+	Describe("validate CalicoNodeDaemonSet", func() {
+		It("should return nil when it is empty", func() {
+			instance.Spec.CalicoNodeDaemonSet = &operator.CalicoNodeDaemonSet{}
+			err := validateCustomResource(instance)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		// TODO: add more tests
+		It("should return an error if it is invalid", func() {
+			instance.Spec.CalicoNodeDaemonSet = &operator.CalicoNodeDaemonSet{
+				Metadata: &operator.Metadata{
+					Labels: map[string]string{
+						"NoUppercaseOrSpecialCharsLike=Equals":    "b",
+						"WowNoUppercaseOrSpecialCharsLike=Equals": "b",
+					},
+					Annotations: map[string]string{
+						"AnnotNoUppercaseOrSpecialCharsLike=Equals": "bar",
+					},
+				},
+			}
+
+			err := validateCustomResource(instance)
+			Expect(err).To(HaveOccurred())
+		})
 	})
 })

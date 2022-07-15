@@ -94,6 +94,13 @@ func Manager(cfg *ManagerConfiguration) (Component, error) {
 	if cfg.ManagementCluster != nil {
 		tlsAnnotations[cfg.InternalTrafficSecret.HashAnnotationKey()] = cfg.InternalTrafficSecret.HashAnnotationValue()
 		tlsAnnotations[cfg.TunnelSecret.HashAnnotationKey()] = cfg.InternalTrafficSecret.HashAnnotationValue()
+
+		if cfg.TunnelServerSecret != nil {
+			tlsAnnotations[cfg.TunnelServerSecret.HashAnnotationKey()] = cfg.TunnelServerSecret.HashAnnotationValue()
+
+			// TODO: does this work / is this necessary?
+			tlsSecrets = append(tlsSecrets, cfg.TunnelSecret.Secret(ManagerNamespace))
+		}
 	}
 	return &managerComponent{
 		cfg:            cfg,
@@ -201,6 +208,10 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, configmap.ToRuntimeObjects(c.cfg.KeyValidatorConfig.RequiredConfigMaps(ManagerNamespace)...)...)
 	}
 
+	if c.cfg.TunnelServerSecret != nil {
+		objs = append(objs, c.cfg.TunnelServerSecret.Secret(ManagerNamespace))
+	}
+
 	return objs, nil
 }
 
@@ -281,6 +292,9 @@ func (c *managerComponent) managerVolumes() []corev1.Volume {
 	}
 	if c.cfg.KeyValidatorConfig != nil {
 		v = append(v, c.cfg.KeyValidatorConfig.RequiredVolumes()...)
+	}
+	if c.cfg.TunnelServerSecret != nil {
+		v = append(v, c.cfg.TunnelServerSecret.Volume())
 	}
 
 	return v
@@ -457,6 +471,10 @@ func (c *managerComponent) volumeMountsForProxyManager() []corev1.VolumeMount {
 	if c.cfg.ManagementCluster != nil {
 		mounts = append(mounts, c.cfg.InternalTrafficSecret.VolumeMount(c.SupportedOSType()))
 		mounts = append(mounts, c.cfg.TunnelSecret.VolumeMount(c.SupportedOSType()))
+	}
+
+	if c.cfg.TunnelServerSecret != nil {
+		mounts = append(mounts, c.cfg.TunnelServerSecret.VolumeMount())
 	}
 
 	return mounts

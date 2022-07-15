@@ -44,9 +44,9 @@ import (
 
 var log = logf.Log.WithName("controller_image_assurance")
 
-// service accounts, cluster role bindings created by kube-controller for image assurance
-var kubeControllerIAServiceAccounts = []string{imageassurance.ScannerAPIAccessServiceAccountName, imageassurance.PodWatcherAPIAccessServiceAccountName}
-var kubeControllerIAClusterRoleBindings = []string{imageassurance.ScannerClusterRoleBindingName, imageassurance.PodWatcherClusterRoleBindingName}
+// service accounts, cluster role bindings created by kube-controller for image assurance components for API access
+var apiTokenServiceAccounts = []string{imageassurance.ScannerAPIAccessServiceAccountName, imageassurance.PodWatcherAPIAccessServiceAccountName}
+var apiTokenClusterRoleBindings = []string{imageassurance.ScannerClusterRoleBindingName, imageassurance.PodWatcherClusterRoleBindingName}
 
 // Add creates a new ImageAssurance Controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
@@ -130,14 +130,14 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	// watch for service accounts created in operator namespace by kube-controllers for image assurance.
-	for _, sa := range kubeControllerIAServiceAccounts {
+	for _, sa := range apiTokenServiceAccounts {
 		if err = utils.AddServiceAccountWatch(c, sa, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("ImageAssurance-controller failed to watch ServiceAccount %s: %v", sa, err)
 		}
 	}
 
 	// watch for cluster role bindings created by kube-controllers for image assurance.
-	for _, crb := range kubeControllerIAClusterRoleBindings {
+	for _, crb := range apiTokenClusterRoleBindings {
 		if err = utils.AddClusterRoleBindingWatch(c, crb); err != nil {
 			return fmt.Errorf("ImageAssurance-controller failed to watch ClusterRoleBinding %s: %v", crb, err)
 		}
@@ -753,6 +753,9 @@ func getTenantEncryptionKeySecret(client client.Client) (*corev1.Secret, error) 
 }
 
 // getAPIAccessToken returns the image assurance service account secret token created by kube-controllers.
+// It takes in service account name and cluster role binding name. Service account name is used to validate the existence
+// of the service account and return the token if present. crbName is used to check the ClusterRoleBinding associated
+// with the access token has been created, if it is not present then an error will be returned.
 func getAPIAccessToken(c client.Client, serviceAccountName string, crbName string) ([]byte, error) {
 	sa := &corev1.ServiceAccount{}
 	if err := c.Get(context.Background(), types.NamespacedName{

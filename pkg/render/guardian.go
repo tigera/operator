@@ -17,8 +17,6 @@
 package render
 
 import (
-	"strconv"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -61,7 +59,6 @@ type GuardianConfiguration struct {
 	Installation      *operatorv1.InstallationSpec
 	TunnelSecret      *corev1.Secret
 	TrustedCertBundle certificatemanagement.TrustedBundle
-	UsePublicCA       bool
 }
 
 type GuardianComponent struct {
@@ -249,7 +246,6 @@ func (c *GuardianComponent) container() []corev1.Container {
 				{Name: "GUARDIAN_VOLTRON_URL", Value: c.cfg.URL},
 				{Name: "GUARDIAN_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 				{Name: "GUARDIAN_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
-				{Name: "GUARDIAN_USE_PUBLIC_CA", Value: strconv.FormatBool(c.cfg.UsePublicCA)},
 			},
 			VolumeMounts: c.volumeMounts(),
 			LivenessProbe: &corev1.Probe{

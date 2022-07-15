@@ -202,17 +202,6 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return result, err
 	}
 
-	// check if public CA is used for voltron
-	var usePublicCA bool
-	if err := r.Client.Get(ctx, types.NamespacedName{Name: render.VoltronServerSecretName, Namespace: common.OperatorNamespace()}, tunnelSecret); err != nil {
-		if k8serrors.IsNotFound(err) {
-			usePublicCA = true
-		} else {
-			r.status.SetDegraded("Error retrieving secrets from guardian namespace", err.Error())
-			return result, err
-		}
-	}
-
 	trustedCertBundle := certificateManager.CreateTrustedBundle()
 	for _, secretName := range []string{render.PacketCaptureCertSecret, render.PrometheusTLSSecretName} {
 		secret, err := certificateManager.GetCertificate(r.Client, secretName, common.OperatorNamespace())
@@ -235,7 +224,6 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		Openshift:         r.Provider == operatorv1.ProviderOpenShift,
 		Installation:      instl,
 		TunnelSecret:      tunnelSecret,
-		UsePublicCA:       usePublicCA,
 		TrustedCertBundle: trustedCertBundle,
 	}
 	component := render.Guardian(guardianCfg)

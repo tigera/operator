@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+
 	ocsv1 "github.com/openshift/api/security/v1"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -41,12 +43,16 @@ import (
 )
 
 const (
-	ComplianceNamespace       = "tigera-compliance"
-	ComplianceServiceName     = "compliance"
-	ComplianceServerName      = "compliance-server"
-	ComplianceControllerName  = "compliance-controller"
-	ComplianceSnapshotterName = "compliance-snapshotter"
-	ComplianceServerSAName    = "tigera-compliance-server"
+	ComplianceNamespace        = "tigera-compliance"
+	ComplianceServiceName      = "compliance"
+	ComplianceServerName       = "compliance-server"
+	ComplianceControllerName   = "compliance-controller"
+	ComplianceSnapshotterName  = "compliance-snapshotter"
+	ComplianceReporterName     = "compliance-reporter"
+	ComplianceBenchmarkerName  = "compliance-benchmarker"
+	ComplianceServerSAName     = "tigera-compliance-server"
+	ComplianceAccessPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "compliance-access"
+	ComplianceServerPolicyName = networkpolicy.TigeraComponentPolicyPrefix + ComplianceServerName
 )
 
 const (
@@ -59,6 +65,13 @@ const (
 
 	ComplianceServerCertSecret = "tigera-compliance-server-tls"
 )
+
+var ComplianceServerEntityRule = networkpolicy.CreateEntityRule(ComplianceNamespace, ComplianceServerName, complianceServerPort)
+var ComplianceServerSourceEntityRule = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceServerName)
+var ComplianceBenchmarkerSourceEntityRule = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceBenchmarkerName)
+var ComplianceControllerSourceEntityRule = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceControllerName)
+var ComplianceSnapshotterSourceEntityRule = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceSnapshotterName)
+var ComplianceReporterSourceEntityRule = networkpolicy.CreateSourceEntityRule(ComplianceNamespace, ComplianceReporterName)
 
 func Compliance(cfg *ComplianceConfiguration) (Component, error) {
 	return &complianceComponent{
@@ -137,10 +150,12 @@ func (c *complianceComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
-	complianceObjs := append(
-		[]client.Object{CreateNamespace(ComplianceNamespace, c.cfg.Installation.KubernetesProvider, PSSPrivileged)},
-		secret.ToRuntimeObjects(secret.CopyToNamespace(ComplianceNamespace, c.cfg.PullSecrets...)...)...,
-	)
+	complianceObjs := []client.Object{
+		CreateNamespace(ComplianceNamespace, c.cfg.Installation.KubernetesProvider, PSSPrivileged),
+		c.complianceAccessAllowTigeraNetworkPolicy(),
+		networkpolicy.AllowTigeraDefaultDeny(ComplianceNamespace),
+	}
+	complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(ComplianceNamespace, c.cfg.PullSecrets...)...)...)
 	complianceObjs = append(complianceObjs,
 		c.complianceControllerServiceAccount(),
 		c.complianceControllerRole(),
@@ -184,6 +199,7 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 	// Compliance server is only for Standalone or Management clusters
 	if c.cfg.ManagementClusterConnection == nil {
 		complianceObjs = append(complianceObjs,
+			c.complianceServerAllowTigeraNetworkPolicy(),
 			c.complianceServerClusterRole(),
 			c.complianceServerService(),
 			c.complianceServerDeployment(),
@@ -493,7 +509,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 			Name:      "tigera.io.report",
 			Namespace: ComplianceNamespace,
 			Labels: map[string]string{
-				"k8s-app": "compliance-reporter",
+				"k8s-app": ComplianceReporterName,
 			},
 		},
 		Template: corev1.PodTemplateSpec{
@@ -501,7 +517,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 				Name:      "tigera.io.report",
 				Namespace: ComplianceNamespace,
 				Labels: map[string]string{
-					"k8s-app": "compliance-reporter",
+					"k8s-app": ComplianceReporterName,
 				},
 			},
 			Spec: corev1.PodSpec{
@@ -997,7 +1013,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "compliance-benchmarker",
+			Name:      ComplianceBenchmarkerName,
 			Namespace: ComplianceNamespace,
 		},
 		Spec: corev1.PodSpec{
@@ -1008,7 +1024,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorateIndexCreator(
 					relasticsearch.ContainerDecorate(corev1.Container{
-						Name:          "compliance-benchmarker",
+						Name:          ComplianceBenchmarkerName,
 						Image:         c.benchmarkerImage,
 						Env:           envVars,
 						VolumeMounts:  volMounts,
@@ -1023,7 +1039,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 	return &appsv1.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "compliance-benchmarker",
+			Name:      ComplianceBenchmarkerName,
 			Namespace: ComplianceNamespace,
 		},
 
@@ -1360,6 +1376,108 @@ func (c *complianceComponent) getCISDownloadReportTemplates() []v3.ReportTemplat
 {{- $c := $c.AddColumn "medNodeCount"        "{{ .CISBenchmarkSummary.MedCount }}" }}
 {{- $c := $c.AddColumn "lowNodeCount"        "{{ .CISBenchmarkSummary.LowCount }}" }}
 {{- $c.Render . }}`,
+		},
+	}
+}
+
+// Allow internal communication from compliance-benchmarker, compliance-controller, compliance-snapshotter, compliance-reporter
+// to apiserver, coredns and elasticsearch.
+func (c *complianceComponent) complianceAccessAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
+		},
+	}
+
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.Openshift)
+
+	if c.cfg.ManagementClusterConnection == nil {
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.ESGatewayEntityRule,
+		})
+	} else {
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: GuardianEntityRule,
+		})
+	}
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ComplianceAccessPolicyName,
+			Namespace: ComplianceNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(ComplianceBenchmarkerName, ComplianceControllerName, ComplianceSnapshotterName, ComplianceReporterName),
+			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
+			Egress:   egressRules,
+		},
+	}
+}
+
+// Allow internal communication to compliance-server from Manager.
+func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.ESGatewayEntityRule,
+		},
+	}
+
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.Openshift)
+
+	egressRules = append(egressRules, []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: DexEntityRule,
+		},
+		// compliance-server does RBAC checks for managed cluster compliance reports via guardian.
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: ManagerEntityRule,
+		},
+	}...)
+
+	ingressRules := []v3.Rule{
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source:   ManagerSourceEntityRule,
+			Destination: v3.EntityRule{
+				Ports: networkpolicy.Ports(complianceServerPort),
+			},
+		},
+	}
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ComplianceServerPolicyName,
+			Namespace: ComplianceNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(ComplianceServerName),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Ingress:  ingressRules,
+			Egress:   egressRules,
 		},
 	}
 }

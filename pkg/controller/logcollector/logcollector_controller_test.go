@@ -52,97 +52,102 @@ var _ = Describe("LogCollector controller tests", func() {
 	var scheme *runtime.Scheme
 	var mockStatus *status.MockStatus
 
-	Context("image reconciliation", func() {
-		BeforeEach(func() {
-			// The schema contains all objects that should be known to the fake client when the test runs.
-			scheme = runtime.NewScheme()
-			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
-			Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-			Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-			Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-			Expect(operatorv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+	BeforeEach(func() {
+		// The schema contains all objects that should be known to the fake client when the test runs.
+		scheme = runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(operatorv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
-			// Create a client that will have a crud interface of k8s objects.
-			c = fake.NewClientBuilder().WithScheme(scheme).Build()
-			ctx = context.Background()
+		// Create a client that will have a crud interface of k8s objects.
+		c = fake.NewClientBuilder().WithScheme(scheme).Build()
+		ctx = context.Background()
 
-			// Create an object we can use throughout the test to do the compliance reconcile loops.
-			mockStatus = &status.MockStatus{}
-			mockStatus.On("AddDaemonsets", mock.Anything).Return()
-			mockStatus.On("AddDeployments", mock.Anything).Return()
-			mockStatus.On("AddStatefulSets", mock.Anything).Return()
-			mockStatus.On("AddCronJobs", mock.Anything)
-			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
-			mockStatus.On("AddCertificateSigningRequests", mock.Anything).Return()
-			mockStatus.On("IsAvailable").Return(true)
-			mockStatus.On("OnCRFound").Return()
-			mockStatus.On("ClearDegraded")
-			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
-			mockStatus.On("ReadyToMonitor")
+		// Create an object we can use throughout the test to do the compliance reconcile loops.
+		mockStatus = &status.MockStatus{}
+		mockStatus.On("AddDaemonsets", mock.Anything).Return()
+		mockStatus.On("AddDeployments", mock.Anything).Return()
+		mockStatus.On("AddStatefulSets", mock.Anything).Return()
+		mockStatus.On("AddCronJobs", mock.Anything)
+		mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
+		mockStatus.On("AddCertificateSigningRequests", mock.Anything).Return()
+		mockStatus.On("IsAvailable").Return(true)
+		mockStatus.On("OnCRFound").Return()
+		mockStatus.On("ClearDegraded")
+		mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+		mockStatus.On("ReadyToMonitor")
 
-			// Create an object we can use throughout the test to do the compliance reconcile loops.
-			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
-			r = ReconcileLogCollector{
-				client:          c,
-				scheme:          scheme,
-				provider:        operatorv1.ProviderNone,
-				status:          mockStatus,
-				licenseAPIReady: &utils.ReadyFlag{},
-			}
+		// Create an object we can use throughout the test to do the compliance reconcile loops.
+		// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
+		r = ReconcileLogCollector{
+			client:             c,
+			scheme:             scheme,
+			provider:           operatorv1.ProviderNone,
+			status:             mockStatus,
+			licenseAPIReady:    &utils.ReadyFlag{},
+			policyWatchesReady: &utils.ReadyFlag{},
+		}
 
-			// We start off with a 'standard' installation, with nothing special
-			Expect(c.Create(
-				ctx,
-				&operatorv1.Installation{
-					ObjectMeta: metav1.ObjectMeta{Name: "default"},
-					Spec: operatorv1.InstallationSpec{
-						Variant:  operatorv1.TigeraSecureEnterprise,
-						Registry: "some.registry.org/",
+		// We start off with a 'standard' installation, with nothing special
+		Expect(c.Create(
+			ctx,
+			&operatorv1.Installation{
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+				Spec: operatorv1.InstallationSpec{
+					Variant:  operatorv1.TigeraSecureEnterprise,
+					Registry: "some.registry.org/",
+				},
+				Status: operatorv1.InstallationStatus{
+					Variant: operatorv1.TigeraSecureEnterprise,
+					Computed: &operatorv1.InstallationSpec{
+						Registry: "my-reg",
+						// The test is provider agnostic.
+						KubernetesProvider: operatorv1.ProviderNone,
 					},
-					Status: operatorv1.InstallationStatus{
-						Variant: operatorv1.TigeraSecureEnterprise,
-						Computed: &operatorv1.InstallationSpec{
-							Registry: "my-reg",
-							// The test is provider agnostic.
-							KubernetesProvider: operatorv1.ProviderNone,
-						},
-					},
-				})).NotTo(HaveOccurred())
-
-			// Create resources LogCollector depends on
-			Expect(c.Create(ctx, &operatorv1.APIServer{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-				Status:     operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady},
+				},
 			})).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &v3.LicenseKey{
-				ObjectMeta: metav1.ObjectMeta{Name: "default"}})).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
-			certificateManager, err := certificatemanager.Create(c, nil, "")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
-			kibanaTLS, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, kibanaTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.ElasticsearchLogCollectorUserSecret,
-					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.ElasticsearchEksLogForwarderUserSecret,
-					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{render.PrometheusTLSSecretName})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
-			// Apply the logcollector CR to the fake cluster.
-			Expect(c.Create(ctx, &operatorv1.LogCollector{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
+		// Create resources LogCollector depends on
+		Expect(c.Create(ctx, &operatorv1.APIServer{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+			Status:     operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady},
+		})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &v3.Tier{
+			ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
+		})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &v3.LicenseKey{
+			ObjectMeta: metav1.ObjectMeta{Name: "default"}})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
+		certificateManager, err := certificatemanager.Create(c, nil, "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
+		kibanaTLS, err := certificateManager.GetOrCreateKeyPair(c, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{relasticsearch.PublicCertSecret})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, kibanaTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      render.ElasticsearchLogCollectorUserSecret,
+				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      render.ElasticsearchEksLogForwarderUserSecret,
+				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
+		prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{render.PrometheusTLSSecretName})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
-			// mark that the watch for license key was successful
-			r.licenseAPIReady.MarkAsReady()
-		})
+		// Apply the logcollector CR to the fake cluster.
+		Expect(c.Create(ctx, &operatorv1.LogCollector{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
 
+		// mark that the watches were successful
+		r.licenseAPIReady.MarkAsReady()
+		r.policyWatchesReady.MarkAsReady()
+	})
+
+	Context("image reconciliation", func() {
 		It("should use builtin images", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -529,6 +534,47 @@ var _ = Describe("LogCollector controller tests", func() {
 			})
 		})
 	})
+
+	Context("allow-tigera reconciliation", func() {
+		var readyFlag *utils.ReadyFlag
+
+		BeforeEach(func() {
+			mockStatus = &status.MockStatus{}
+			mockStatus.On("OnCRFound").Return()
+
+			readyFlag = &utils.ReadyFlag{}
+			readyFlag.MarkAsReady()
+			r = ReconcileLogCollector{
+				client:             c,
+				scheme:             scheme,
+				provider:           operatorv1.ProviderNone,
+				status:             mockStatus,
+				licenseAPIReady:    readyFlag,
+				policyWatchesReady: readyFlag,
+			}
+		})
+
+		It("should wait if API server is unavailable", func() {
+			utils.DeleteAPIServerAndExpectWait(ctx, c, &r, mockStatus)
+		})
+
+		It("should wait if allow-tigera tier is unavailable", func() {
+			utils.DeleteAllowTigeraTierAndExpectWait(ctx, c, &r, mockStatus)
+		})
+
+		It("should wait if policy watches are not ready", func() {
+			r = ReconcileLogCollector{
+				client:             c,
+				scheme:             scheme,
+				provider:           operatorv1.ProviderNone,
+				status:             mockStatus,
+				licenseAPIReady:    readyFlag,
+				policyWatchesReady: &utils.ReadyFlag{},
+			}
+			utils.ExpectWaitForPolicyWatches(ctx, &r, mockStatus)
+		})
+	})
+
 	Context("should test fillDefaults for logCollector", func() {
 		It("should set default values for CollectProcessPath, syslog types", func() {
 			logCollector := operatorv1.LogCollector{Spec: operatorv1.LogCollectorSpec{AdditionalStores: &operatorv1.AdditionalLogStoreSpec{

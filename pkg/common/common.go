@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,4 +29,8 @@ const (
 	ThreatDefenseFeature = "threat-defense"
 	// ExportLogsFeature to 3rd party systems feature name
 	ExportLogsFeature = "export-logs"
+	// TiersFeature enables creation/update of Tiers
+	TiersFeature = "tiers"
+	// EgressAccessControl enables creation/update of NetworkPolicy with Domains
+	EgressAccessControlFeature = "egress-access-control"
 )

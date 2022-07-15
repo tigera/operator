@@ -27,13 +27,6 @@ import (
 var _ = Describe("Test overrides validation", func() {
 	var overrides *opv1.CalicoNodeDaemonSet
 
-	validRr := corev1.ResourceRequirements{
-		Limits: corev1.ResourceList{
-			"cpu":     resource.MustParse("2"),
-			"memory":  resource.MustParse("300Mi"),
-			"storage": resource.MustParse("20Gi"),
-		},
-	}
 	invalidRr := corev1.ResourceRequirements{
 		Limits: corev1.ResourceList{
 			"cats": resource.MustParse("2"),
@@ -84,18 +77,6 @@ var _ = Describe("Test overrides validation", func() {
 	})
 
 	It("should return an error if containers are invalid", func() {
-		// Valid resources but invalid container name.
-		overrides.Spec.Template.Spec.Containers = []opv1.CalicoNodeDaemonSetContainer{
-			{
-				Name:      "invalid-container-name",
-				Resources: &validRr,
-			},
-		}
-
-		err := ValidateReplicatedPodResourceOverrides(overrides, node.ValidateCalicoNodeDaemonSetContainer, node.ValidateCalicoNodeDaemonSetInitContainer)
-		Expect(err).NotTo(BeNil())
-		Expect(err.Error()).Should(HavePrefix("spec.Template.Spec.Containers[\"invalid-container-name\"] is invalid: Installation spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers[\"invalid-container-name\"] is not a supported container"))
-
 		// Valid container name but invalid resources.
 		overrides.Spec.Template.Spec.Containers = []opv1.CalicoNodeDaemonSetContainer{
 			{
@@ -104,24 +85,12 @@ var _ = Describe("Test overrides validation", func() {
 			},
 		}
 
-		err = ValidateReplicatedPodResourceOverrides(overrides, node.ValidateCalicoNodeDaemonSetContainer, node.ValidateCalicoNodeDaemonSetInitContainer)
+		err := ValidateReplicatedPodResourceOverrides(overrides, node.ValidateCalicoNodeDaemonSetContainer, node.ValidateCalicoNodeDaemonSetInitContainer)
 		Expect(err).NotTo(BeNil())
 		Expect(err.Error()).Should(HavePrefix("spec.Template.Spec.Containers[\"calico-node\"] is invalid: [spec.template.spec.containers.limits[cats]: Invalid value: \"cats\""))
 	})
 
 	It("should return an error if init containers are invalid", func() {
-		// Valid resources but invalid container name.
-		overrides.Spec.Template.Spec.InitContainers = []opv1.CalicoNodeDaemonSetInitContainer{
-			{
-				Name:      "invalid-container-name",
-				Resources: &validRr,
-			},
-		}
-
-		err := ValidateReplicatedPodResourceOverrides(overrides, node.ValidateCalicoNodeDaemonSetContainer, node.ValidateCalicoNodeDaemonSetInitContainer)
-		Expect(err).NotTo(BeNil())
-		Expect(err.Error()).Should(HavePrefix("spec.Template.Spec.InitContainers[\"invalid-container-name\"] is invalid: Installation spec.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers[\"invalid-container-name\"] is not a supported init container"))
-
 		// Valid container name but invalid resources.
 		overrides.Spec.Template.Spec.InitContainers = []opv1.CalicoNodeDaemonSetInitContainer{
 			{
@@ -130,7 +99,7 @@ var _ = Describe("Test overrides validation", func() {
 			},
 		}
 
-		err = ValidateReplicatedPodResourceOverrides(overrides, node.ValidateCalicoNodeDaemonSetContainer, node.ValidateCalicoNodeDaemonSetInitContainer)
+		err := ValidateReplicatedPodResourceOverrides(overrides, node.ValidateCalicoNodeDaemonSetContainer, node.ValidateCalicoNodeDaemonSetInitContainer)
 		Expect(err).NotTo(BeNil())
 		Expect(err.Error()).Should(HavePrefix("spec.Template.Spec.InitContainers[\"install-cni\"] is invalid: [spec.template.spec.initContainers.limits[cats]: Invalid value: \"cats\""))
 	})

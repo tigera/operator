@@ -15,31 +15,20 @@
 package validation
 
 import (
-	"fmt"
-
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/tigera/operator/pkg/common/k8svalidation"
-	"github.com/tigera/operator/pkg/render"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
 // ValidateAPIServerDeploymentContainer validates the given container is a valid API server Deployment container.
 func ValidateAPIServerDeploymentContainer(container corev1.Container) error {
-	if _, ok := render.APIServerDeploymentContainerNames[container.Name]; !ok {
-		return fmt.Errorf("APIServer spec.APIServerDeployment.Spec.Template.Spec.Containers[%q] is not a supported container", container.Name)
-	}
-
 	errs := k8svalidation.ValidateResourceRequirements(&container.Resources, field.NewPath("spec", "template", "spec", "containers"))
 	return errs.ToAggregate()
 }
 
 // ValidateAPIServerDeploymentInitContainer validates the given container is a valid API server Deployment init container.
 func ValidateAPIServerDeploymentInitContainer(container corev1.Container) error {
-	if _, ok := render.APIServerDeploymentInitContainerNames[container.Name]; !ok {
-		return fmt.Errorf("APIServer spec.APIServerDeployment.Spec.Template.Spec.InitContainers[%q] is not a supported container", container.Name)
-	}
-
 	errs := k8svalidation.ValidateResourceRequirements(&container.Resources, field.NewPath("spec", "template", "spec", "initContainers"))
 	return errs.ToAggregate()
 }

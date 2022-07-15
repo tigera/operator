@@ -15,21 +15,14 @@
 package validation
 
 import (
-	"fmt"
-
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/tigera/operator/pkg/common/k8svalidation"
-	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
 // ValidateCalicoKubeControllersDeploymentContainer validates the given container is a valid calico-kube-controllers Deployment container.
 func ValidateCalicoKubeControllersDeploymentContainer(container corev1.Container) error {
-	if container.Name != kubecontrollers.KubeController {
-		return fmt.Errorf("Installation spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers[%q] is not a supported container", container.Name)
-	}
-
 	errs := k8svalidation.ValidateResourceRequirements(&container.Resources, field.NewPath("spec", "template", "spec", "containers"))
 	return errs.ToAggregate()
 }

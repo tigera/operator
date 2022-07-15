@@ -82,7 +82,6 @@ var (
 	APIServerDeploymentInitContainerNames = map[string]struct{}{
 		// These names are generated in certificatemanagement.CreateCSRInitContainer
 		fmt.Sprintf("%s-%s", calicoAPIServerTLSSecretName, certificatemanagement.CSRInitContainerName): {},
-		fmt.Sprintf("%s-%s", tigeraAPIServerTLSSecretName, certificatemanagement.CSRInitContainerName): {},
 	}
 )
 
@@ -827,7 +826,10 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 
 	var initContainers []corev1.Container
 	if c.cfg.TLSKeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.TLSKeyPair.InitContainer(rmeta.APIServerNamespace(c.cfg.Installation.Variant)))
+		// Use the same CSR init container name for both OSS and Enterprise.
+		initContainer := c.cfg.TLSKeyPair.InitContainer(rmeta.APIServerNamespace(c.cfg.Installation.Variant))
+		initContainer.Name = fmt.Sprintf("%s-%s", calicoAPIServerTLSSecretName, certificatemanagement.CSRInitContainerName)
+		initContainers = append(initContainers, initContainer)
 	}
 
 	annotations := map[string]string{

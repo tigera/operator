@@ -857,7 +857,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		deploy, ok := dep.(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
 		Expect(deploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
-		Expect(deploy.Spec.Template.Spec.InitContainers[0].Name).To(Equal("tigera-apiserver-certs-key-cert-provisioner"))
+		Expect(deploy.Spec.Template.Spec.InitContainers[0].Name).To(Equal("calico-apiserver-certs-key-cert-provisioner"))
 		rtest.ExpectEnv(deploy.Spec.Template.Spec.InitContainers[0].Env, "SIGNER", "a.b/c")
 	})
 
@@ -983,7 +983,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 							},
 							InitContainers: []operatorv1.APIServerDeploymentInitContainer{
 								{
-									Name:      "tigera-apiserver-certs-key-cert-provisioner",
+									Name:      "calico-apiserver-certs-key-cert-provisioner",
 									Resources: &rr2,
 								},
 							},
@@ -1045,7 +1045,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			Expect(d.Spec.Template.Spec.Containers[1].Resources).To(Equal(rr2))
 
 			Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
-			Expect(d.Spec.Template.Spec.InitContainers[0].Name).To(Equal("tigera-apiserver-certs-key-cert-provisioner"))
+			Expect(d.Spec.Template.Spec.InitContainers[0].Name).To(Equal("calico-apiserver-certs-key-cert-provisioner"))
 			Expect(d.Spec.Template.Spec.InitContainers[0].Resources).To(Equal(rr2))
 
 			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveLen(1))

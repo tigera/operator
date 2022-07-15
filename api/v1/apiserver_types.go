@@ -85,7 +85,7 @@ type APIServerDeploymentContainer struct {
 // APIServerDeploymentInitContainer is an API server Deployment init container.
 type APIServerDeploymentInitContainer struct {
 	// Name is an enum which identifies the API server Deployment init container by name.
-	// +kubebuilder:validation:Enum=calico-apiserver-certs-key-cert-provisioner;tigera-apiserver-certs-key-cert-provisioner
+	// +kubebuilder:validation:Enum=calico-apiserver-certs-key-cert-provisioner
 	Name string `json:"name"`
 
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.

@@ -126,6 +126,11 @@ type InstallationSpec struct {
 	// +optional
 	FlexVolumePath string `json:"flexVolumePath,omitempty"`
 
+	// VolumePlugin optionally specifies enablement of Calico CSI plugin. If not specified,
+	// VolumePlugin will be disabled by default. Valid values are "Enabled" or "Disabled".
+	// +optional
+	VolumePlugin string `json:"volumePlugin,omitempty"`
+
 	// NodeUpdateStrategy can be used to customize the desired update strategy, such as the MaxUnavailable
 	// field.
 	// +optional

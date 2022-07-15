@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2020, 2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -313,6 +313,11 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 	if instance.Spec.FlexVolumePath != "None" && !path.IsAbs(instance.Spec.FlexVolumePath) {
 		return fmt.Errorf("Installation spec.FlexVolumePath '%s' is not an absolute path",
 			instance.Spec.FlexVolumePath)
+	}
+
+	// Verify that the volumePlugin value is valid - either "Enabled" or "Disabled"
+	if instance.Spec.VolumePlugin != "Enabled" && instance.Spec.VolumePlugin != "Disabled" && instance.Spec.VolumePlugin != "" {
+		return fmt.Errorf("Installation spec.VolumePlugin must be one of 'Enabled' or 'Disabled'")
 	}
 
 	// We only support RollingUpdate for the node daemonset strategy.

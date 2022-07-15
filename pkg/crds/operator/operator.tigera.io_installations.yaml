@@ -772,6 +772,11 @@ spec:
                 - Calico
                 - TigeraSecureEnterprise
                 type: string
+              volumePlugin:
+                description: VolumePlugin optionally specifies enablement of Calico
+                  CSI plugin. If not specified, VolumePlugin will be disabled by default.
+                  Valid values are "Enabled" or "Disabled".
+                type: string
             type: object
           status:
             description: Most recently observed state for the Calico or Calico Enterprise
@@ -1533,6 +1538,11 @@ spec:
                     enum:
                     - Calico
                     - TigeraSecureEnterprise
+                    type: string
+                  volumePlugin:
+                    description: VolumePlugin optionally specifies enablement of Calico
+                      CSI plugin. If not specified, VolumePlugin will be disabled
+                      by default. Valid values are "Enabled" or "Disabled".
                     type: string
                 type: object
               conditions:

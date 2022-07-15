@@ -59,6 +59,7 @@ import (
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/test"
+	storagev1 "k8s.io/api/storage/v1"
 )
 
 var mismatchedError = fmt.Errorf("Installation spec.kubernetesProvider 'DockerEnterprise' does not match auto-detected value 'OpenShift'")
@@ -326,6 +327,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(schedv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(operator.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 			// Create a client that will have a crud interface of k8s objects.
 			c = fake.NewClientBuilder().WithScheme(scheme).Build()
@@ -519,6 +521,8 @@ var _ = Describe("Testing core-controller installation", func() {
 						{Image: "calico/pod2daemon-flexvol", Digest: "sha256:calicoflexvolhash"},
 						{Image: "tigera/key-cert-provisioner", Digest: "sha256:calicocsrinithash"},
 						{Image: "tigera/calico-windows-upgrade", Digest: "sha256:calicowindowshash"},
+						{Image: "calico/csi", Digest: "sha256:calicocsihash"},
+						{Image: "csi-node-driver-registrar", Digest: "sha256:csinodedriverregistrarhash"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -690,6 +694,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(schedv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(operator.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 			// Create a client that will have a crud interface of k8s objects.
 			c = fake.NewClientBuilder().WithScheme(scheme).Build()
@@ -916,6 +921,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(schedv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(operator.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 			// Create a client that will have a crud interface of k8s objects.
 			c = fake.NewClientBuilder().WithScheme(scheme).Build()

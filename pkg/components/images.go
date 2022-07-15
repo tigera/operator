@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020, 2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,8 +15,9 @@ package components
 
 // Default registries for Calico and Tigera.
 const (
-	CalicoRegistry = "docker.io/"
-	TigeraRegistry = "gcr.io/unique-caldron-775/cnx/"
+	CalicoRegistry     = "docker.io/"
+	TigeraRegistry     = "gcr.io/unique-caldron-775/cnx/"
+	SigStorageRegistry = "k8s.gcr.io/sig-storage/"
 	// For production InitRegistry should match TigeraRegistry.
 	// For the master branch and other testing scenarios we switch TigeraRegistry to
 	// point to a testing repo but the init image will be pushed to quay, so having

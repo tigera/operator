@@ -17,3 +17,8 @@ components:
     version: master
   calico/windows-upgrade:
     version: master
+  calico/csi:
+    version: master
+  csi-node-driver-registrar:
+    # "master" tag does not exist for this image in the k8s.gcr.io/sig-storage registry
+    version: v2.5.0

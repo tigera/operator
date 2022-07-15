@@ -1163,7 +1163,6 @@ spec:
                                         the API server Deployment container by name.
                                       enum:
                                       - calico-apiserver
-                                      - tigera-apiserver
                                       - tigera-queryserver
                                       type: string
                                     resources:

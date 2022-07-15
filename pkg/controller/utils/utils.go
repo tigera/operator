@@ -151,7 +151,7 @@ func AddNamespacedWatch(c controller.Controller, obj client.Object, metaMatches 
 	if objMeta.GetNamespace() == "" {
 		return fmt.Errorf("No namespace provided for namespaced watch")
 	}
-	pred := createNamespacePredicate(objMeta)
+	pred := createPredicateForObject(objMeta)
 	return c.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{}, pred)
 }
 
@@ -471,7 +471,7 @@ func WaitToAddResourceWatch(controller controller.Controller, c kubernetes.Inter
 	resourcesToWatch := map[client.Object]resourceWatchContext{}
 	for _, obj := range objs {
 		resourcesToWatch[obj] = resourceWatchContext{
-			predicate: createNamespacePredicate(obj),
+			predicate: createPredicateForObject(obj),
 			logger:    ContextLoggerForResource(log, obj),
 		}
 	}
@@ -527,7 +527,7 @@ func isResourceReady(client kubernetes.Interface, resourceKind string) (bool, er
 
 // Creates a predicate for CRUD operations that matches the object's namespace, and name if provided.
 // If neither name nor namespace is provided, all objects will be matched.
-func createNamespacePredicate(objMeta metav1.Object) predicate.Predicate {
+func createPredicateForObject(objMeta metav1.Object) predicate.Predicate {
 	return predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
 			if objMeta.GetName() == "" && objMeta.GetNamespace() == "" {

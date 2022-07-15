@@ -233,11 +233,11 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
 	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 		if errors.IsNotFound(err) {
-			r.status.SetDegraded("Waiting for Tigera component policy tier to be created", err.Error())
+			r.status.SetDegraded("Waiting for allow-tigera tier to be created", err.Error())
 			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 		} else {
-			log.Error(err, "Error querying Tigera component policy tier")
-			r.status.SetDegraded("Error querying Tigera component policy tier", err.Error())
+			log.Error(err, "Error querying allow-tigera tier")
+			r.status.SetDegraded("Error querying allow-tigera tier", err.Error())
 			return reconcile.Result{}, err
 		}
 	}

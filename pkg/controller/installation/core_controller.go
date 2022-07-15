@@ -1002,8 +1002,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 		// Successful reconciliation of non-NetworkPolicy resources in the core controller ensures that NetworkPolicy
 		// is reconcilable (by enabling the availability of the API server and the creation of containing Tier). Therefore,
-		// to prevent a chicken-and-egg scenario, we only reconcile non-NetworkPolicy resources once we can confirm that
-		// all requirements to reconcile NetworkPolicy have been met.
+		// to prevent a chicken-and-egg scenario, we only reconcile NetworkPolicy resources once we can confirm that all
+		// requirements to reconcile NetworkPolicy have been met.
 		//
 		// utils.IsV3NetworkPolicyReconcilable does not verify API server availability, so we take extra precaution
 		// when rendering components below.

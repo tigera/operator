@@ -17,9 +17,10 @@ package clusterconnection
 import (
 	"context"
 	"fmt"
-	"k8s.io/client-go/kubernetes"
 	"net"
 	"time"
+
+	"k8s.io/client-go/kubernetes"
 
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 
@@ -255,7 +256,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	// In managed clusters, successful reconciliation of non-NetworkPolicy resources in the clusterconnection controller
 	// ensures that NetworkPolicy is reconcilable (by enabling* the creation of containing Tier and License). Therefore,
-	// to prevent a chicken-and-egg scenario, we only reconcile non-NetworkPolicy resources once we can confirm that all
+	// to prevent a chicken-and-egg scenario, we only reconcile NetworkPolicy resources once we can confirm that all
 	// requirements to reconcile NetworkPolicy have been met.
 	//
 	// * In managed clusters, the License can only be pushed once Guardian has been deployed, and (as always) the Tier
@@ -267,6 +268,13 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		egressAccessControlFeatureRequired = true
 		networkPolicyIsReconcilable = utils.IsV3NetworkPolicyReconcilable(ctx, r.Client, networkpolicy.TigeraComponentTierName, common.EgressAccessControlFeature)
 	} else {
+		if err != nil {
+			log.Error(err, fmt.Sprintf(
+				"Failed to parse ManagementClusterAddr. Assuming %s does not require license feature %s",
+				render.GuardianPolicyName,
+				common.EgressAccessControlFeature,
+			))
+		}
 		egressAccessControlFeatureRequired = false
 		networkPolicyIsReconcilable = utils.IsV3NetworkPolicyReconcilable(ctx, r.Client, networkpolicy.TigeraComponentTierName)
 	}

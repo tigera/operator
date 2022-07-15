@@ -303,8 +303,8 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 
 	// In managed clusters with certificate management disabled, successful reconciliation of non-NetworkPolicy resources
 	// in the monitor controller ensures that NetworkPolicy is reconcilable (by enabling* the creation of containing Tier
-	// and License). Therefore, to prevent a chicken-and-egg scenario, we only reconcile non-NetworkPolicy resources once
-	// we can confirm that all requirements to reconcile NetworkPolicy have been met.
+	// and License). Therefore, to prevent a chicken-and-egg scenario, we only reconcile NetworkPolicy resources once we
+	// can confirm that all requirements to reconcile NetworkPolicy have been met.
 	//
 	// * In managed clusters with certificate management disabled, the License can only be pushed once Guardian is deployed,
 	//   which depends on the Prometheus TLS secret created by monitor. As always, the Tier can only be created once the
@@ -342,11 +342,11 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		// Ensure the allow-tigera tier exists, before rendering any network policies within it.
 		if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 			if errors.IsNotFound(err) {
-				r.status.SetDegraded("Waiting for Tigera component policy tier to be created", err.Error())
+				r.status.SetDegraded("Waiting for allow-tigera tier to be created", err.Error())
 				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 			} else {
-				log.Error(err, "Error querying Tigera component policy tier")
-				r.status.SetDegraded("Error querying Tigera component policy tier", err.Error())
+				log.Error(err, "Error querying allow-tigera tier")
+				r.status.SetDegraded("Error querying allow-tigera tier", err.Error())
 				return reconcile.Result{}, err
 			}
 		}

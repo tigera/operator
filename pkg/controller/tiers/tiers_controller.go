@@ -136,7 +136,7 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
-	// Ensure that a license is present so this controller can establish/manage tiers and domain-based policy.
+	// Ensure a license is present that enables this controller to create/manage tiers.
 	license, err := utils.FetchLicenseKey(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -146,7 +146,6 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 		r.status.SetDegraded("Error querying license", err.Error())
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
-
 	if !utils.IsFeatureActive(license, common.TiersFeature) {
 		r.status.SetDegraded("Feature is not active", "License does not support feature: tiers")
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil

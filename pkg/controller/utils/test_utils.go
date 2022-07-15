@@ -48,7 +48,7 @@ func DeleteAllowTigeraTierAndExpectWait(ctx context.Context, c client.Client, r 
 	err := c.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})
 	Expect(err).ShouldNot(HaveOccurred())
 
-	mockStatus.On("SetDegraded", "Waiting for Tigera component policy tier to be created", "tiers.projectcalico.org \"allow-tigera\" not found").Return()
+	mockStatus.On("SetDegraded", "Waiting for allow-tigera tier to be created", "tiers.projectcalico.org \"allow-tigera\" not found").Return()
 
 	_, err = r.Reconcile(ctx, reconcile.Request{})
 	Expect(err).ShouldNot(HaveOccurred())

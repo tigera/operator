@@ -89,10 +89,10 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides com
 
 // ApplyDaemonSetOverrides applies the overrides to the given DaemonSet.
 // Note: overrides must not be nil pointer.
-func ApplyDaemonSetOverrides(ds *appsv1.DaemonSet, overrides components.ReplicatedPodResourceOverrides) *appsv1.DaemonSet {
+func ApplyDaemonSetOverrides(ds *appsv1.DaemonSet, overrides components.ReplicatedPodResourceOverrides) {
 	// Catch if caller passes in an explicit nil.
 	if overrides == nil {
-		return ds
+		return
 	}
 
 	// Pull out the data we'll override from the DaemonSet.
@@ -110,16 +110,14 @@ func ApplyDaemonSetOverrides(ds *appsv1.DaemonSet, overrides components.Replicat
 	ds.Annotations = r.annotations
 	ds.Spec.MinReadySeconds = *r.minReadySeconds
 	ds.Spec.Template = *r.podTemplateSpec
-
-	return ds
 }
 
 // ApplyDeploymentOverrides applies the overrides to the given Deployment.
 // Note: overrides must not be nil pointer.
-func ApplyDeploymentOverrides(d *appsv1.Deployment, overrides components.ReplicatedPodResourceOverrides) *appsv1.Deployment {
+func ApplyDeploymentOverrides(d *appsv1.Deployment, overrides components.ReplicatedPodResourceOverrides) {
 	// Catch if caller passes in an explicit nil.
 	if overrides == nil {
-		return d
+		return
 	}
 
 	// Pull out the data we'll override from the DaemonSet.
@@ -137,8 +135,6 @@ func ApplyDeploymentOverrides(d *appsv1.Deployment, overrides components.Replica
 	d.Annotations = r.annotations
 	d.Spec.MinReadySeconds = *r.minReadySeconds
 	d.Spec.Template = *r.podTemplateSpec
-
-	return d
 }
 
 // mergeContainers copies the ResourceRequirements from the provided containers

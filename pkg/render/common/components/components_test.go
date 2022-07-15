@@ -96,8 +96,8 @@ var _ = Describe("Common components render tests", func() {
 		func(original func() appsv1.DaemonSet, override func() *v1.CalicoNodeDaemonSet, expectations func(set appsv1.DaemonSet)) {
 			orig := original()
 			template := override()
-			result := ApplyDaemonSetOverrides(&orig, template)
-			expectations(*result)
+			ApplyDaemonSetOverrides(&orig, template)
+			expectations(orig)
 		},
 		Entry("empty",
 			defaultedDaemonSet,

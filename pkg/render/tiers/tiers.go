@@ -42,10 +42,7 @@ var DNSIngressNamespaceSelector = createDNSIngressNamespaceSelector(
 	render.ManagerNamespace,
 	common.TigeraPrometheusNamespace,
 	"tigera-skraper",
-	render.ECKOperatorNamespace,
-	render.PacketCaptureNamespace,
 	rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise),
-	common.CalicoNamespace,
 )
 
 var defaultTierOrder = 100.0

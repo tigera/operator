@@ -58,8 +58,11 @@ const (
 	QueryserverNamespace   = "tigera-system"
 	QueryserverServiceName = "tigera-api"
 
-	TigeraAPIServerContainerName            = "tigera-apiserver"
-	CalicoAPIServerContainerName            = "calico-apiserver"
+	TigeraAPIServerResourceName = "tigera-apiserver"
+	CalicoAPIServerResourceName = "calico-apiserver"
+
+	// Use the same API server container name for both OSS and Enterprise.
+	APIServerContainerName                  = "calico-apiserver"
 	TigeraAPIServerQueryServerContainerName = "tigera-queryserver"
 
 	calicoAPIServerTLSSecretName = "calico-apiserver-certs"
@@ -70,8 +73,7 @@ var (
 	// API server Deployment container names used for validation.
 	// These should match APIServerDeploymentContainer.Name validation on the APIServerDeployment type.
 	APIServerDeploymentContainerNames = map[string]struct{}{
-		TigeraAPIServerContainerName:            {},
-		CalicoAPIServerContainerName:            {},
+		APIServerContainerName:                  {},
 		TigeraAPIServerQueryServerContainerName: {},
 	}
 
@@ -936,16 +938,8 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
 	}
 
-	var name string
-	switch c.cfg.Installation.Variant {
-	case operatorv1.TigeraSecureEnterprise:
-		name = TigeraAPIServerContainerName
-	case operatorv1.Calico:
-		name = CalicoAPIServerContainerName
-	}
-
 	apiServer := corev1.Container{
-		Name:  name,
+		Name:  APIServerContainerName,
 		Image: c.apiServerImage,
 		Args:  c.startUpArgs(),
 		Env:   env,

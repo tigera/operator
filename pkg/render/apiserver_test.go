@@ -205,7 +205,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		Expect(d.Spec.Template.Spec.ImagePullSecrets).To(BeEmpty())
 		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(2))
-		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-apiserver"))
+		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-apiserver"))
 		Expect(d.Spec.Template.Spec.Containers[0].Image).To(Equal(
 			fmt.Sprintf("testregistry.com/%s:%s", components.ComponentAPIServer.Image, components.ComponentAPIServer.Version),
 		))
@@ -973,7 +973,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 						Spec: &operatorv1.APIServerDeploymentPodSpec{
 							Containers: []operatorv1.APIServerDeploymentContainer{
 								{
-									Name:      "tigera-apiserver",
+									Name:      "calico-apiserver",
 									Resources: &rr1,
 								},
 								{
@@ -1039,7 +1039,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			Expect(d.Spec.Template.Annotations["template-level"]).To(Equal("annot2"))
 
 			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(2))
-			Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-apiserver"))
+			Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-apiserver"))
 			Expect(d.Spec.Template.Spec.Containers[0].Resources).To(Equal(rr1))
 			Expect(d.Spec.Template.Spec.Containers[1].Name).To(Equal("tigera-queryserver"))
 			Expect(d.Spec.Template.Spec.Containers[1].Resources).To(Equal(rr2))

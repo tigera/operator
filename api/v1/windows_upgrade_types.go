@@ -44,21 +44,21 @@ type CalicoWindowsUpgradeDaemonSetPodSpec struct {
 	// Affinity is a group of affinity scheduling rules for the calico-windows-upgrade pods.
 	// If specified, this overrides any affinity that may be set on the calico-windows-upgrade DaemonSet.
 	// If omitted, the calico-windows-upgrade DaemonSet will use its default value for affinity.
-	// WARNING: Please note that this field will override the operator's default calico-windows-upgrade DaemonSet affinity.
+	// WARNING: Please note that this field will override the default calico-windows-upgrade DaemonSet affinity.
 	// +optional
 	Affinity *v1.Affinity `json:"affinity,omitempty"`
 
 	// NodeSelector is the calico-windows-upgrade pod's scheduling constraints.
 	// If specified, this overrides any nodeSelector that may be set on the calico-windows-upgrade DaemonSet.
 	// If omitted, the calico-windows-upgrade DaemonSet will use its default value for nodeSelector.
-	// WARNING: Please note that this field will override the operator's default calico-windows-upgrade DaemonSet nodeSelector.
+	// WARNING: Please note that this field will override the default calico-windows-upgrade DaemonSet nodeSelector.
 	// +optional
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 
 	// Tolerations is the calico-windows-upgrade pod's tolerations.
 	// If specified, this overrides any tolerations that may be set on the calico-windows-upgrade DaemonSet.
 	// If omitted, the calico-windows-upgrade DaemonSet will use its default value for tolerations.
-	// WARNING: Please note that this field will override the operator's default calico-windows-upgrade DaemonSet tolerations.
+	// WARNING: Please note that this field will override the default calico-windows-upgrade DaemonSet tolerations.
 	// +optional
 	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
 }

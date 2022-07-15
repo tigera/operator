@@ -118,8 +118,8 @@ spec:
                                   calico-kube-controllers Deployment. If omitted,
                                   the calico-kube-controllers Deployment will use
                                   its default value for affinity. WARNING: Please
-                                  note that this field will override the operator''s
-                                  default calico-kube-controllers Deployment affinity.'
+                                  note that this field will override the default calico-kube-controllers
+                                  Deployment affinity.'
                                 properties:
                                   nodeAffinity:
                                     description: Describes node affinity scheduling
@@ -1222,8 +1222,8 @@ spec:
                                   calico-kube-controllers Deployment. If omitted,
                                   the calico-kube-controllers Deployment will use
                                   its default value for nodeSelector. WARNING: Please
-                                  note that this field will override the operator''s
-                                  default calico-kube-controllers Deployment nodeSelector.'
+                                  note that this field will override the default calico-kube-controllers
+                                  Deployment nodeSelector.'
                                 type: object
                               tolerations:
                                 description: 'Tolerations is the calico-kube-controllers
@@ -1232,8 +1232,7 @@ spec:
                                   Deployment. If omitted, the calico-kube-controllers
                                   Deployment will use its default value for tolerations.
                                   WARNING: Please note that this field will override
-                                  the operator''s default calico-kube-controllers
-                                  Deployment tolerations.'
+                                  the default calico-kube-controllers Deployment tolerations.'
                                 items:
                                   description: The pod this Toleration is attached
                                     to tolerates any taint that matches the triple
@@ -1526,8 +1525,8 @@ spec:
                                   overrides any affinity that may be set on the calico-node
                                   DaemonSet. If omitted, the calico-node DaemonSet
                                   will use its default value for affinity. WARNING:
-                                  Please note that this field will override the operator''s
-                                  default calico-node DaemonSet affinity.'
+                                  Please note that this field will override the default
+                                  calico-node DaemonSet affinity.'
                                 properties:
                                   nodeAffinity:
                                     description: Describes node affinity scheduling
@@ -2689,8 +2688,8 @@ spec:
                                   any nodeSelector that may be set on the calico-node
                                   DaemonSet. If omitted, the calico-node DaemonSet
                                   will use its default value for nodeSelector. WARNING:
-                                  Please note that this field will override the operator''s
-                                  default calico-node DaemonSet nodeSelector.'
+                                  Please note that this field will override the default
+                                  calico-node DaemonSet nodeSelector.'
                                 type: object
                               tolerations:
                                 description: 'Tolerations is the calico-node pod''s
@@ -2698,8 +2697,8 @@ spec:
                                   that may be set on the calico-node DaemonSet. If
                                   omitted, the calico-node DaemonSet will use its
                                   default value for tolerations. WARNING: Please note
-                                  that this field will override the operator''s default
-                                  calico-node DaemonSet tolerations.'
+                                  that this field will override the default calico-node
+                                  DaemonSet tolerations.'
                                 items:
                                   description: The pod this Toleration is attached
                                     to tolerates any taint that matches the triple
@@ -2827,7 +2826,7 @@ spec:
                                   calico-windows-upgrade DaemonSet. If omitted, the
                                   calico-windows-upgrade DaemonSet will use its default
                                   value for affinity. WARNING: Please note that this
-                                  field will override the operator''s default calico-windows-upgrade
+                                  field will override the default calico-windows-upgrade
                                   DaemonSet affinity.'
                                 properties:
                                   nodeAffinity:
@@ -3929,8 +3928,8 @@ spec:
                                   calico-windows-upgrade DaemonSet. If omitted, the
                                   calico-windows-upgrade DaemonSet will use its default
                                   value for nodeSelector. WARNING: Please note that
-                                  this field will override the operator''s default
-                                  calico-windows-upgrade DaemonSet nodeSelector.'
+                                  this field will override the default calico-windows-upgrade
+                                  DaemonSet nodeSelector.'
                                 type: object
                               tolerations:
                                 description: 'Tolerations is the calico-windows-upgrade
@@ -3939,8 +3938,7 @@ spec:
                                   DaemonSet. If omitted, the calico-windows-upgrade
                                   DaemonSet will use its default value for tolerations.
                                   WARNING: Please note that this field will override
-                                  the operator''s default calico-windows-upgrade DaemonSet
-                                  tolerations.'
+                                  the default calico-windows-upgrade DaemonSet tolerations.'
                                 items:
                                   description: The pod this Toleration is attached
                                     to tolerates any taint that matches the triple
@@ -4624,8 +4622,8 @@ spec:
                                   value for affinity. If used in conjunction with
                                   the deprecated TyphaAffinity, then this value takes
                                   precedence. WARNING: Please note that this field
-                                  will override the operator''s default calico-typha
-                                  Deployment affinity.'
+                                  will override the default calico-typha Deployment
+                                  affinity.'
                                 properties:
                                   nodeAffinity:
                                     description: Describes node affinity scheduling
@@ -5781,8 +5779,8 @@ spec:
                                   that may be set on the typha Deployment. If omitted,
                                   the typha Deployment will use its default value
                                   for nodeSelector. WARNING: Please note that this
-                                  field will override the operator''s default calico-typha
-                                  Deployment nodeSelector.'
+                                  field will override the default calico-typha Deployment
+                                  nodeSelector.'
                                 type: object
                               tolerations:
                                 description: 'Tolerations is the typha pod''s tolerations.
@@ -5790,8 +5788,8 @@ spec:
                                   may be set on the typha Deployment. If omitted,
                                   the typha Deployment will use its default value
                                   for tolerations. WARNING: Please note that this
-                                  field will override the operator''s default calico-typha
-                                  Deployment tolerations.'
+                                  field will override the default calico-typha Deployment
+                                  tolerations.'
                                 items:
                                   description: The pod this Toleration is attached
                                     to tolerates any taint that matches the triple
@@ -5944,8 +5942,8 @@ spec:
                                       Deployment. If omitted, the calico-kube-controllers
                                       Deployment will use its default value for affinity.
                                       WARNING: Please note that this field will override
-                                      the operator''s default calico-kube-controllers
-                                      Deployment affinity.'
+                                      the default calico-kube-controllers Deployment
+                                      affinity.'
                                     properties:
                                       nodeAffinity:
                                         description: Describes node affinity scheduling
@@ -7141,8 +7139,8 @@ spec:
                                       If omitted, the calico-kube-controllers Deployment
                                       will use its default value for nodeSelector.
                                       WARNING: Please note that this field will override
-                                      the operator''s default calico-kube-controllers
-                                      Deployment nodeSelector.'
+                                      the default calico-kube-controllers Deployment
+                                      nodeSelector.'
                                     type: object
                                   tolerations:
                                     description: 'Tolerations is the calico-kube-controllers
@@ -7151,8 +7149,8 @@ spec:
                                       Deployment. If omitted, the calico-kube-controllers
                                       Deployment will use its default value for tolerations.
                                       WARNING: Please note that this field will override
-                                      the operator''s default calico-kube-controllers
-                                      Deployment tolerations.'
+                                      the default calico-kube-controllers Deployment
+                                      tolerations.'
                                     items:
                                       description: The pod this Toleration is attached
                                         to tolerates any taint that matches the triple
@@ -7455,8 +7453,8 @@ spec:
                                       may be set on the calico-node DaemonSet. If
                                       omitted, the calico-node DaemonSet will use
                                       its default value for affinity. WARNING: Please
-                                      note that this field will override the operator''s
-                                      default calico-node DaemonSet affinity.'
+                                      note that this field will override the default
+                                      calico-node DaemonSet affinity.'
                                     properties:
                                       nodeAffinity:
                                         description: Describes node affinity scheduling
@@ -8715,8 +8713,8 @@ spec:
                                       set on the calico-node DaemonSet. If omitted,
                                       the calico-node DaemonSet will use its default
                                       value for nodeSelector. WARNING: Please note
-                                      that this field will override the operator''s
-                                      default calico-node DaemonSet nodeSelector.'
+                                      that this field will override the default calico-node
+                                      DaemonSet nodeSelector.'
                                     type: object
                                   tolerations:
                                     description: 'Tolerations is the calico-node pod''s
@@ -8725,8 +8723,7 @@ spec:
                                       DaemonSet. If omitted, the calico-node DaemonSet
                                       will use its default value for tolerations.
                                       WARNING: Please note that this field will override
-                                      the operator''s default calico-node DaemonSet
-                                      tolerations.'
+                                      the default calico-node DaemonSet tolerations.'
                                     items:
                                       description: The pod this Toleration is attached
                                         to tolerates any taint that matches the triple
@@ -8859,8 +8856,8 @@ spec:
                                       DaemonSet. If omitted, the calico-windows-upgrade
                                       DaemonSet will use its default value for affinity.
                                       WARNING: Please note that this field will override
-                                      the operator''s default calico-windows-upgrade
-                                      DaemonSet affinity.'
+                                      the default calico-windows-upgrade DaemonSet
+                                      affinity.'
                                     properties:
                                       nodeAffinity:
                                         description: Describes node affinity scheduling
@@ -10053,8 +10050,8 @@ spec:
                                       If omitted, the calico-windows-upgrade DaemonSet
                                       will use its default value for nodeSelector.
                                       WARNING: Please note that this field will override
-                                      the operator''s default calico-windows-upgrade
-                                      DaemonSet nodeSelector.'
+                                      the default calico-windows-upgrade DaemonSet
+                                      nodeSelector.'
                                     type: object
                                   tolerations:
                                     description: 'Tolerations is the calico-windows-upgrade
@@ -10063,8 +10060,8 @@ spec:
                                       DaemonSet. If omitted, the calico-windows-upgrade
                                       DaemonSet will use its default value for tolerations.
                                       WARNING: Please note that this field will override
-                                      the operator''s default calico-windows-upgrade
-                                      DaemonSet tolerations.'
+                                      the default calico-windows-upgrade DaemonSet
+                                      tolerations.'
                                     items:
                                       description: The pod this Toleration is attached
                                         to tolerates any taint that matches the triple
@@ -10770,8 +10767,8 @@ spec:
                                       Deployment will use its default value for affinity.
                                       If used in conjunction with the deprecated TyphaAffinity,
                                       then this value takes precedence. WARNING: Please
-                                      note that this field will override the operator''s
-                                      default calico-typha Deployment affinity.'
+                                      note that this field will override the default
+                                      calico-typha Deployment affinity.'
                                     properties:
                                       nodeAffinity:
                                         description: Describes node affinity scheduling
@@ -12024,8 +12021,7 @@ spec:
                                       Deployment. If omitted, the typha Deployment
                                       will use its default value for nodeSelector.
                                       WARNING: Please note that this field will override
-                                      the operator''s default calico-typha Deployment
-                                      nodeSelector.'
+                                      the default calico-typha Deployment nodeSelector.'
                                     type: object
                                   tolerations:
                                     description: 'Tolerations is the typha pod''s
@@ -12033,8 +12029,8 @@ spec:
                                       tolerations that may be set on the typha Deployment.
                                       If omitted, the typha Deployment will use its
                                       default value for tolerations. WARNING: Please
-                                      note that this field will override the operator''s
-                                      default calico-typha Deployment tolerations.'
+                                      note that this field will override the default
+                                      calico-typha Deployment tolerations.'
                                     items:
                                       description: The pod this Toleration is attached
                                         to tolerates any taint that matches the triple

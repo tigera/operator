@@ -15,9 +15,9 @@ import (
 
 const (
 	podWatcherRequestCPU    = "250m"
-	podWatcherRequestMemory = "4Gi"
+	podWatcherRequestMemory = "50Mi"
 	podWatcherLimitCPU      = "1"
-	podWatcherLimitMemory   = "4Gi"
+	podWatcherLimitMemory   = "300Mi"
 )
 
 func (c *component) podWatcherServiceAccount() *corev1.ServiceAccount {

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"time"
 
+	rbacv1 "k8s.io/api/rbac/v1"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
@@ -41,6 +43,10 @@ import (
 )
 
 var log = logf.Log.WithName("controller_image_assurance")
+
+// service accounts, cluster role bindings created by kube-controller for image assurance components for API access
+var apiTokenServiceAccounts = []string{imageassurance.ScannerAPIAccessServiceAccountName, imageassurance.PodWatcherAPIAccessServiceAccountName}
+var apiTokenClusterRoleBindings = []string{imageassurance.ScannerClusterRoleBindingName, imageassurance.PodWatcherClusterRoleBindingName}
 
 // Add creates a new ImageAssurance Controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
@@ -123,12 +129,18 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("ImageAssurance-controller failed to watch Secret %s: %v", imageassurance.PGUserSecretName, err)
 	}
 
-	if err = utils.AddServiceAccountWatch(c, imageassurance.ScannerAPIAccessServiceAccountName); err != nil {
-		return fmt.Errorf("ImageAssurance-controller failed to watch ServiceAccount %s: %v", imageassurance.ScannerAPIAccessServiceAccountName, err)
+	// watch for service accounts created in operator namespace by kube-controllers for image assurance.
+	for _, sa := range apiTokenServiceAccounts {
+		if err = utils.AddServiceAccountWatch(c, sa, common.OperatorNamespace()); err != nil {
+			return fmt.Errorf("ImageAssurance-controller failed to watch ServiceAccount %s: %v", sa, err)
+		}
 	}
 
-	if err = utils.AddServiceAccountWatch(c, imageassurance.PodWatcherAPIAccessServiceAccountName); err != nil {
-		return fmt.Errorf("ImageAssurance-controller failed to watch ServiceAccount %s: %v", imageassurance.PodWatcherAPIAccessServiceAccountName, err)
+	// watch for cluster role bindings created by kube-controllers for image assurance.
+	for _, crb := range apiTokenClusterRoleBindings {
+		if err = utils.AddClusterRoleBindingWatch(c, crb); err != nil {
+			return fmt.Errorf("ImageAssurance-controller failed to watch ClusterRoleBinding %s: %v", crb, err)
+		}
 	}
 
 	if err = utils.AddJobWatch(c, imageassurance.ResourceNameImageAssuranceDBMigrator, imageassurance.NameSpaceImageAssurance); err != nil {
@@ -274,7 +286,8 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
-	scannerAPIToken, err := getAPIAccessToken(r.client, imageassurance.ScannerAPIAccessServiceAccountName)
+	scannerAPIToken, err := getAPIAccessToken(r.client, imageassurance.ScannerAPIAccessServiceAccountName,
+		imageassurance.ScannerClusterRoleBindingName)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
 		r.status.SetDegraded("Error in retrieving scanner API access token", err.Error())
@@ -287,7 +300,8 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, nil
 	}
 
-	podWatcherAPIToken, err := getAPIAccessToken(r.client, imageassurance.PodWatcherAPIAccessServiceAccountName)
+	podWatcherAPIToken, err := getAPIAccessToken(r.client, imageassurance.PodWatcherAPIAccessServiceAccountName,
+		imageassurance.PodWatcherClusterRoleBindingName)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
 		r.status.SetDegraded("Error in retrieving pod watcher API access token", err.Error())
@@ -739,12 +753,21 @@ func getTenantEncryptionKeySecret(client client.Client) (*corev1.Secret, error) 
 }
 
 // getAPIAccessToken returns the image assurance service account secret token created by kube-controllers.
-func getAPIAccessToken(client client.Client, serviceAccountName string) ([]byte, error) {
+// It takes in service account name and cluster role binding name. Service account name is used to validate the existence
+// of the service account and return the token if present. crbName is used to check the ClusterRoleBinding associated
+// with the access token has been created, if it is not present then an error will be returned.
+func getAPIAccessToken(c client.Client, serviceAccountName string, crbName string) ([]byte, error) {
 	sa := &corev1.ServiceAccount{}
-	if err := client.Get(context.Background(), types.NamespacedName{
+	if err := c.Get(context.Background(), types.NamespacedName{
 		Name:      serviceAccountName,
 		Namespace: common.OperatorNamespace(),
 	}, sa); err != nil {
+		return nil, err
+	}
+
+	// ensure that cluster role binding exists for the service account.
+	crb := &rbacv1.ClusterRoleBinding{}
+	if err := c.Get(context.Background(), client.ObjectKey{Name: crbName}, crb); err != nil {
 		return nil, err
 	}
 
@@ -753,7 +776,7 @@ func getAPIAccessToken(client client.Client, serviceAccountName string) ([]byte,
 	}
 
 	saSecret := &corev1.Secret{}
-	if err := client.Get(context.Background(), types.NamespacedName{
+	if err := c.Get(context.Background(), types.NamespacedName{
 		Name:      sa.Secrets[0].Name,
 		Namespace: common.OperatorNamespace(),
 	}, saSecret); err != nil {

@@ -113,9 +113,8 @@ spec:
                                   overrides any affinity that may be set on the API
                                   server Deployment. If omitted, the API server Deployment
                                   will use its default value for affinity. WARNING:
-                                  Please note that this field will override the operator''s
-                                  default calico-apiserver/tigera-apiserver Deployment
-                                  affinity.'
+                                  Please note that this field will override the default
+                                  API server Deployment affinity.'
                                 properties:
                                   nodeAffinity:
                                     description: Describes node affinity scheduling
@@ -1273,9 +1272,8 @@ spec:
                                   any nodeSelector that may be set on the API serverDeployment.
                                   If omitted, the API server Deployment will use its
                                   default value for nodeSelector. WARNING: Please
-                                  note that this field will override the operator''s
-                                  default calico-apiserver/tigera-apiserver Deployment
-                                  nodeSelector.'
+                                  note that this field will override the default API
+                                  server Deployment nodeSelector.'
                                 type: object
                               tolerations:
                                 description: 'Tolerations is the API server pod''s
@@ -1283,8 +1281,8 @@ spec:
                                   that may be set on the API server Deployment. If
                                   omitted, the API server Deployment will use its
                                   default value for tolerations. WARNING: Please note
-                                  that this field will override the operator''s default
-                                  calico-apiserver/tigera-apiserver Deployment tolerations.'
+                                  that this field will override the default API server
+                                  Deployment tolerations.'
                                 items:
                                   description: The pod this Toleration is attached
                                     to tolerates any taint that matches the triple

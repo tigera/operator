@@ -112,21 +112,21 @@ type APIServerDeploymentPodSpec struct {
 	// Affinity is a group of affinity scheduling rules for the API server pods.
 	// If specified, this overrides any affinity that may be set on the API server Deployment.
 	// If omitted, the API server Deployment will use its default value for affinity.
-	// WARNING: Please note that this field will override the operator's default calico-apiserver/tigera-apiserver Deployment affinity.
+	// WARNING: Please note that this field will override the default API server Deployment affinity.
 	// +optional
 	Affinity *v1.Affinity `json:"affinity,omitempty"`
 
 	// NodeSelector is the API server pod's scheduling constraints.
 	// If specified, this overrides any nodeSelector that may be set on the API serverDeployment.
 	// If omitted, the API server Deployment will use its default value for nodeSelector.
-	// WARNING: Please note that this field will override the operator's default calico-apiserver/tigera-apiserver Deployment nodeSelector.
+	// WARNING: Please note that this field will override the default API server Deployment nodeSelector.
 	// +optional
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 
 	// Tolerations is the API server pod's tolerations.
 	// If specified, this overrides any tolerations that may be set on the API server Deployment.
 	// If omitted, the API server Deployment will use its default value for tolerations.
-	// WARNING: Please note that this field will override the operator's default calico-apiserver/tigera-apiserver Deployment tolerations.
+	// WARNING: Please note that this field will override the default API server Deployment tolerations.
 	// +optional
 	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
 }

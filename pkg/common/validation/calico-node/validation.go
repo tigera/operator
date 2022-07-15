@@ -15,31 +15,20 @@
 package validation
 
 import (
-	"fmt"
-
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/tigera/operator/pkg/common/k8svalidation"
-	"github.com/tigera/operator/pkg/render"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
 // ValidateCalicoNodeDaemonSetContainer validates the given container is a valid calico-node DaemonSet container.
 func ValidateCalicoNodeDaemonSetContainer(container corev1.Container) error {
-	if _, ok := render.CalicoNodeDaemonSetContainerNames[container.Name]; !ok {
-		return fmt.Errorf("Installation spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers[%q] is not a supported container", container.Name)
-	}
-
 	errs := k8svalidation.ValidateResourceRequirements(&container.Resources, field.NewPath("spec", "template", "spec", "containers"))
 	return errs.ToAggregate()
 }
 
 // ValidateCalicoNodeDaemonSetInitContainer validates the given container is a valid calico-node DaemonSet init container.
 func ValidateCalicoNodeDaemonSetInitContainer(container corev1.Container) error {
-	if _, ok := render.CalicoNodeDaemonSetInitContainerNames[container.Name]; !ok {
-		return fmt.Errorf("Installation spec.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers[%q] is not a supported init container", container.Name)
-	}
-
 	errs := k8svalidation.ValidateResourceRequirements(&container.Resources, field.NewPath("spec", "template", "spec", "initContainers"))
 	return errs.ToAggregate()
 }

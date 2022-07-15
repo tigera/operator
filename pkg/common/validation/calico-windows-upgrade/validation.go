@@ -15,21 +15,14 @@
 package validation
 
 import (
-	"fmt"
-
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/common/k8svalidation"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
 // ValidateCalicoWindowsUpgradeDaemonSetContainer validates the given container is a valid calico-windows-upgrade DaemonSet container.
 func ValidateCalicoWindowsUpgradeDaemonSetContainer(container corev1.Container) error {
-	if container.Name != common.CalicoWindowsUpgradeResourceName {
-		return fmt.Errorf("Installation spec.CalicoWindowsUpgradeDaemonSet.Spec.Template.Spec.Containers[%q] is not a supported container", container.Name)
-	}
-
 	errs := k8svalidation.ValidateResourceRequirements(&container.Resources, field.NewPath("spec", "template", "spec", "containers"))
 	return errs.ToAggregate()
 }

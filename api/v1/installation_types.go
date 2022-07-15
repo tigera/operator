@@ -126,7 +126,8 @@ type InstallationSpec struct {
 	// +optional
 	FlexVolumePath string `json:"flexVolumePath,omitempty"`
 
-	// VolumePlugin specifies the CSI that will be used by this installation.
+	// VolumePlugin optionally specifies enablement of Calico CSI plugin. If not specified,
+	// VolumePlugin will be disabled by default. Valid values are "Enabled" or "Disabled".
 	// +optional
 	VolumePlugin string `json:"volumePlugin,omitempty"`
 

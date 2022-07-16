@@ -2007,6 +2007,8 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ns["projectcalico.org/operator-node-migration"]).To(Equal("migrated"))
 	})
 
+	trueValue := true
+	falseValue := false
 	DescribeTable("test IP Pool configuration",
 		func(pool operatorv1.IPPool, expect map[string]string) {
 			// Provider does not matter for IPPool configuration
@@ -2029,6 +2031,8 @@ var _ = Describe("Node rendering tests", func() {
 				"CALICO_IPV4POOL_VXLAN",
 				"CALICO_IPV4POOL_NAT_OUTGOING",
 				"CALICO_IPV4POOL_NODE_SELECTOR",
+				"CALICO_IPV4POOL_DISABLE_BGP_EXPORT",
+				"CALICO_IPV6POOL_DISABLE_BGP_EXPORT",
 			} {
 				v, ok := expect[envVar]
 				if ok {
@@ -2158,18 +2162,60 @@ var _ = Describe("Node rendering tests", func() {
 				"CALICO_IPV4POOL_IPIP":          "Always",
 				"CALICO_IPV4POOL_NODE_SELECTOR": "has(thiskey)",
 			}),
-		Entry("Pool with all fields set",
+		Entry("Pool with v4 disable BGP export set to true",
 			operatorv1.IPPool{
-				CIDR:          "172.16.0.0/24",
-				Encapsulation: operatorv1.EncapsulationIPIP,
-				NATOutgoing:   "Disabled",
-				NodeSelector:  "has(thiskey)",
+				CIDR:             "172.16.0.0/24",
+				DisableBGPExport: &trueValue,
 			},
 			map[string]string{
-				"CALICO_IPV4POOL_CIDR":          "172.16.0.0/24",
-				"CALICO_IPV4POOL_IPIP":          "Always",
-				"CALICO_IPV4POOL_NAT_OUTGOING":  "false",
-				"CALICO_IPV4POOL_NODE_SELECTOR": "has(thiskey)",
+				"CALICO_IPV4POOL_CIDR":               "172.16.0.0/24",
+				"CALICO_IPV4POOL_IPIP":               "Always",
+				"CALICO_IPV4POOL_DISABLE_BGP_EXPORT": "true",
+			}),
+		Entry("Pool with v4 disable BGP export set to false",
+			operatorv1.IPPool{
+				CIDR:             "172.16.0.0/24",
+				DisableBGPExport: &falseValue,
+			},
+			map[string]string{
+				"CALICO_IPV4POOL_CIDR":               "172.16.0.0/24",
+				"CALICO_IPV4POOL_IPIP":               "Always",
+				"CALICO_IPV4POOL_DISABLE_BGP_EXPORT": "false",
+			}),
+		Entry("Pool with v6 disable BGP export set to true",
+			operatorv1.IPPool{
+				CIDR:             "fc00::/48",
+				DisableBGPExport: &trueValue,
+			},
+			map[string]string{
+				"CALICO_IPV6POOL_CIDR":               "fc00::/48",
+				"CALICO_IPV6POOL_IPIP":               "Always",
+				"CALICO_IPV6POOL_DISABLE_BGP_EXPORT": "true",
+			}),
+		Entry("Pool with v6 disable BGP export set to false",
+			operatorv1.IPPool{
+				CIDR:             "fc00::/48",
+				DisableBGPExport: &falseValue,
+			},
+			map[string]string{
+				"CALICO_IPV6POOL_CIDR":               "fc00::/48",
+				"CALICO_IPV6POOL_IPIP":               "Always",
+				"CALICO_IPV6POOL_DISABLE_BGP_EXPORT": "false",
+			}),
+		Entry("Pool with all fields set",
+			operatorv1.IPPool{
+				CIDR:             "172.16.0.0/24",
+				Encapsulation:    operatorv1.EncapsulationIPIP,
+				NATOutgoing:      "Disabled",
+				NodeSelector:     "has(thiskey)",
+				DisableBGPExport: &trueValue,
+			},
+			map[string]string{
+				"CALICO_IPV4POOL_CIDR":               "172.16.0.0/24",
+				"CALICO_IPV4POOL_IPIP":               "Always",
+				"CALICO_IPV4POOL_NAT_OUTGOING":       "false",
+				"CALICO_IPV4POOL_NODE_SELECTOR":      "has(thiskey)",
+				"CALICO_IPV4POOL_DISABLE_BGP_EXPORT": "true",
 			}),
 	)
 

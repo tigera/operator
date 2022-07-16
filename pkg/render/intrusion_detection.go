@@ -1472,6 +1472,39 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 		privileged = true
 	}
 
+	envVars := []corev1.EnvVar{
+		{
+			Name: "MODEL_STORAGE_API_HOST",
+			// static index 2 refres to - <svc_name>.<ns>.svc format
+			Value: dns.GetServiceDNSNames(ADAPIObjectName, IntrusionDetectionNamespace, c.cfg.ClusterDomain)[2],
+		},
+		{
+			Name:  "MODEL_STORAGE_API_PORT",
+			Value: strconv.Itoa(adAPIPort),
+		},
+		{
+			Name:  "MODEL_STORAGE_CLIENT_CERT",
+			Value: c.cfg.ADAPIServerCertSecret.VolumeMountCertificateFilePath(),
+		},
+		{
+			Name:      "MODEL_STORAGE_API_TOKEN",
+			ValueFrom: secret.GetEnvVarSource(adDetectorServiceAccountName, "token", false),
+		},
+	}
+
+	container := corev1.Container{
+		Name:  "adjobs",
+		Image: c.adDetectorsImage,
+		SecurityContext: &corev1.SecurityContext{
+			Privileged: &privileged,
+		},
+		Env: envVars,
+		VolumeMounts: []corev1.VolumeMount{
+			c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType()),
+			c.cfg.ADAPIServerCertSecret.VolumeMount(c.SupportedOSType()),
+		},
+	}
+
 	return corev1.PodTemplate{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PodTemplate",
@@ -1491,17 +1524,7 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 			},
 			Spec: corev1.PodSpec{
 				Volumes: []corev1.Volume{
-					{
-						Name: "es-certs",
-						VolumeSource: corev1.VolumeSource{
-							Secret: &corev1.SecretVolumeSource{
-								SecretName: relasticsearch.PublicCertSecret,
-								Items: []corev1.KeyToPath{
-									{Key: "tls.crt", Path: "es-ca.pem"},
-								},
-							},
-						},
-					},
+					c.cfg.TrustedCertBundle.Volume(),
 					c.cfg.ADAPIServerCertSecret.Volume(),
 				},
 				DNSPolicy:          corev1.DNSClusterFirst,
@@ -1510,61 +1533,7 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 				ServiceAccountName: adDetectorServiceAccountName,
 				Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster),
 				Containers: []corev1.Container{
-					{
-						Name:  "adjobs",
-						Image: c.adDetectorsImage,
-						SecurityContext: &corev1.SecurityContext{
-							Privileged: &privileged,
-						},
-						Env: []corev1.EnvVar{
-							{
-								Name: "ES_HOST",
-								// static index 2 refres to - <svc_name>.<ns>.svc format
-								Value: dns.GetServiceDNSNames(ESGatewayServiceName, ElasticsearchNamespace, c.cfg.ClusterDomain)[2],
-							},
-							{
-								Name:  "ES_PORT",
-								Value: strconv.Itoa(ElasticsearchDefaultPort),
-							},
-							{
-								Name:  "ES_CA_CERT",
-								Value: "/certs/es-ca.pem",
-							},
-							{
-								Name:      "ES_USERNAME",
-								ValueFrom: secret.GetEnvVarSource(ElasticsearchADJobUserSecret, "username", false),
-							},
-							{
-								Name:      "ES_PASSWORD",
-								ValueFrom: secret.GetEnvVarSource(ElasticsearchADJobUserSecret, "password", false),
-							},
-							{
-								Name: "MODEL_STORAGE_API_HOST",
-								// static index 2 refres to - <svc_name>.<ns>.svc format
-								Value: dns.GetServiceDNSNames(ADAPIObjectName, IntrusionDetectionNamespace, c.cfg.ClusterDomain)[2],
-							},
-							{
-								Name:  "MODEL_STORAGE_API_PORT",
-								Value: strconv.Itoa(adAPIPort),
-							},
-							{
-								Name:  "MODEL_STORAGE_CLIENT_CERT",
-								Value: c.cfg.ADAPIServerCertSecret.VolumeMountCertificateFilePath(),
-							},
-							{
-								Name:      "MODEL_STORAGE_API_TOKEN",
-								ValueFrom: secret.GetEnvVarSource(adDetectorServiceAccountName, "token", false),
-							},
-						},
-						VolumeMounts: []corev1.VolumeMount{
-							{
-								Name:      "es-certs",
-								MountPath: "/certs/es-ca.pem",
-								SubPath:   "es-ca.pem",
-							},
-							c.cfg.ADAPIServerCertSecret.VolumeMount(c.SupportedOSType()),
-						},
-					},
+					relasticsearch.ContainerDecorate(container, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchADJobUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()),
 				},
 			},
 		},

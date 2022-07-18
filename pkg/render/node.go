@@ -1278,6 +1278,9 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 			if v4pool.NodeSelector != "" {
 				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_NODE_SELECTOR", Value: v4pool.NodeSelector})
 			}
+			if v4pool.DisableBGPExport != nil {
+				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_DISABLE_BGP_EXPORT", Value: fmt.Sprintf("%v", *v4pool.DisableBGPExport)})
+			}
 		}
 
 		// Configure IPv6 pool.
@@ -1303,6 +1306,9 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 			}
 			if v6pool.NodeSelector != "" {
 				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_NODE_SELECTOR", Value: v6pool.NodeSelector})
+			}
+			if v6pool.DisableBGPExport != nil {
+				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_DISABLE_BGP_EXPORT", Value: fmt.Sprintf("%v", *v6pool.DisableBGPExport)})
 			}
 		}
 	}

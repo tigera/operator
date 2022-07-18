@@ -94,6 +94,7 @@ blocks:
             - make format-check validate-gen-versions fmt test-crds
             - make dirty-check
             - make vet
+            - make static-checks
 
   - name: 'UT'
     dependencies: [ "Build amd64" ]

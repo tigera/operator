@@ -42,9 +42,8 @@ import (
 
 var log = logf.Log.WithName("controller_image_assurance")
 
-// service accounts, cluster role bindings created by kube-controller for image assurance components for API access
+// service accounts created by kube-controller for image assurance components for API access
 var apiTokenServiceAccounts = []string{imageassurance.ScannerAPIAccessServiceAccountName, imageassurance.PodWatcherAPIAccessServiceAccountName}
-var apiTokenClusterRoleBindings = []string{imageassurance.ScannerClusterRoleBindingName, imageassurance.PodWatcherClusterRoleBindingName}
 
 // Add creates a new ImageAssurance Controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
@@ -131,13 +130,6 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	for _, sa := range apiTokenServiceAccounts {
 		if err = utils.AddServiceAccountWatch(c, sa, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("ImageAssurance-controller failed to watch ServiceAccount %s: %v", sa, err)
-		}
-	}
-
-	// watch for cluster role bindings created by kube-controllers for image assurance.
-	for _, crb := range apiTokenClusterRoleBindings {
-		if err = utils.AddClusterRoleBindingWatch(c, crb); err != nil {
-			return fmt.Errorf("ImageAssurance-controller failed to watch ClusterRoleBinding %s: %v", crb, err)
 		}
 	}
 

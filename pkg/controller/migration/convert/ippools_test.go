@@ -246,6 +246,9 @@ var _ = Describe("Convert network tests", func() {
 			Entry("v4 and v6 pool but no assigning v4", `"assign_ipv4": "false", "assign_ipv6": "true"`, "1.168.4.0/24", "ff00:0001::/24"),
 			Entry("v4 and v6 pool but no assigning v6", `"assign_ipv4": "true", "assign_ipv6": "false"`, "1.168.4.0/24", "ff00:0001::/24"),
 		)
+
+		trueValue := true
+		falseValue := false
 		DescribeTable("test convert pool flags", func(success bool, crdPool crdv1.IPPool, opPool operatorv1.IPPool) {
 			p, err := convertPool(crdPool)
 			if success {
@@ -394,6 +397,34 @@ var _ = Describe("Convert network tests", func() {
 				BlockSize:    27,
 				NodeSelector: "nodeselectorstring",
 			}}, operatorv1.IPPool{}),
+			Entry("ipv4, vxlan encap, nat, disableBGPExport", true, crdv1.IPPool{Spec: crdv1.IPPoolSpec{
+				CIDR:             "1.168.4.0/24",
+				VXLANMode:        crdv1.VXLANModeAlways,
+				IPIPMode:         crdv1.IPIPModeNever,
+				NATOutgoing:      true,
+				Disabled:         false,
+				DisableBGPExport: true,
+			}}, operatorv1.IPPool{
+				CIDR:             "1.168.4.0/24",
+				Encapsulation:    operatorv1.EncapsulationVXLAN,
+				NATOutgoing:      operatorv1.NATOutgoingEnabled,
+				NodeSelector:     "",
+				DisableBGPExport: &trueValue,
+			}),
+			Entry("ipv4, vxlan encap, nat, disableBGPExport false", true, crdv1.IPPool{Spec: crdv1.IPPoolSpec{
+				CIDR:             "1.168.4.0/24",
+				VXLANMode:        crdv1.VXLANModeAlways,
+				IPIPMode:         crdv1.IPIPModeNever,
+				NATOutgoing:      true,
+				Disabled:         false,
+				DisableBGPExport: false,
+			}}, operatorv1.IPPool{
+				CIDR:             "1.168.4.0/24",
+				Encapsulation:    operatorv1.EncapsulationVXLAN,
+				NATOutgoing:      operatorv1.NATOutgoingEnabled,
+				NodeSelector:     "",
+				DisableBGPExport: &falseValue,
+			}),
 		)
 	})
 

@@ -206,12 +206,6 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, nil
 	}
 
-	// Ensure the API Server is ready, before rendering any objects that utilize the V3 API.
-	if !utils.IsAPIServerReady(r.client, reqLogger) {
-		r.status.SetDegraded("Waiting for Tigera API server to be ready", "")
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-	}
-
 	if !r.policyWatchesReady.IsReady() {
 		r.status.SetDegraded("Waiting for NetworkPolicy watches to be established", "")
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil

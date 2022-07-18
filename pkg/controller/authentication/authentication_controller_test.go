@@ -266,10 +266,6 @@ var _ = Describe("authentication controller tests", func() {
 			}
 		})
 
-		It("should wait if API server is unavailable", func() {
-			utils.DeleteAPIServerAndExpectWait(ctx, cli, r, mockStatus)
-		})
-
 		It("should wait if allow-tigera tier is unavailable", func() {
 			utils.DeleteAllowTigeraTierAndExpectWait(ctx, cli, r, mockStatus)
 		})

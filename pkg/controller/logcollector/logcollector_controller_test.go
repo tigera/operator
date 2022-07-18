@@ -554,10 +554,6 @@ var _ = Describe("LogCollector controller tests", func() {
 			}
 		})
 
-		It("should wait if API server is unavailable", func() {
-			utils.DeleteAPIServerAndExpectWait(ctx, c, &r, mockStatus)
-		})
-
 		It("should wait if allow-tigera tier is unavailable", func() {
 			utils.DeleteAllowTigeraTierAndExpectWait(ctx, c, &r, mockStatus)
 		})

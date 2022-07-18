@@ -261,10 +261,7 @@ func convertPool(src crdv1.IPPool) (operatorv1.IPPool, error) {
 	}
 
 	p.NodeSelector = src.Spec.NodeSelector
-
-	if src.Spec.DisableBGPExport {
-		p.DisableBGPExport = &src.Spec.DisableBGPExport
-	}
+	p.DisableBGPExport = &src.Spec.DisableBGPExport
 
 	return p, nil
 }

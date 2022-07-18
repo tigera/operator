@@ -493,6 +493,7 @@ type IPPool struct {
 	// DisableBGPExport specifies whether routes from this IP pool's CIDR are exported over BGP
 	// Default: false
 	// +optional
+	// +kubebuilder:default:=false
 	DisableBGPExport *bool `json:"disableBGPExport,omitempty"`
 }
 

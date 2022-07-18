@@ -1,3 +1,17 @@
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package convert
 
 import (
@@ -122,6 +136,7 @@ func handleIPPools(c *components, install *operatorv1.Installation) error {
 	c.node.ignoreEnv("calico-node", "CALICO_IPV4POOL_VXLAN")
 	c.node.ignoreEnv("calico-node", "CALICO_IPV4POOL_NAT_OUTGOING")
 	c.node.ignoreEnv("calico-node", "CALICO_IPV4POOL_NODE_SELECTOR")
+	c.node.ignoreEnv("calico-node", "CALICO_IPV4POOL_DISABLE_BGP_EXPORT")
 	// V6
 	c.node.ignoreEnv("calico-node", "CALICO_IPV6POOL_CIDR")
 	c.node.ignoreEnv("calico-node", "CALICO_IPV6POOL_BLOCK_SIZE")
@@ -129,6 +144,7 @@ func handleIPPools(c *components, install *operatorv1.Installation) error {
 	c.node.ignoreEnv("calico-node", "CALICO_IPV6POOL_VXLAN")
 	c.node.ignoreEnv("calico-node", "CALICO_IPV6POOL_NAT_OUTGOING")
 	c.node.ignoreEnv("calico-node", "CALICO_IPV6POOL_NODE_SELECTOR")
+	c.node.ignoreEnv("calico-node", "CALICO_IPV6POOL_DISABLE_BGP_EXPORT")
 
 	return nil
 }
@@ -245,6 +261,10 @@ func convertPool(src crdv1.IPPool) (operatorv1.IPPool, error) {
 	}
 
 	p.NodeSelector = src.Spec.NodeSelector
+
+	if src.Spec.DisableBGPExport {
+		p.DisableBGPExport = &src.Spec.DisableBGPExport
+	}
 
 	return p, nil
 }

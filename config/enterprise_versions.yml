@@ -135,19 +135,19 @@ components:
     version: v3.14.1
   image-assurance-api:
     image: tigera/image-assurance-api
-    version: v0.10.1
+    version: v0.10.2
   image-assurance-scanner:
     image: tigera/image-assurance-scanner
-    version: v0.10.1
+    version: v0.10.2
   image-assurance-db-migrator:
     image: tigera/image-assurance-db-migrator
-    version: v0.10.1
+    version: v0.10.2
   image-assurance-caw:
     image: tigera/image-assurance-caw
-    version: v0.10.1
+    version: v0.10.2
   image-assurance-pod-watcher:
     image: tigera/image-assurance-pod-watcher
-    version: v0.10.1
+    version: v0.10.2
   sasha:
     image: tigera/sasha
     version: v0.9.0-amd64

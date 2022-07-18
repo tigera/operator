@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"time"
 
-	rbacv1 "k8s.io/api/rbac/v1"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
@@ -147,10 +145,11 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("ImageAssurance-controller failed to watch Job %s: %v", imageassurance.ResourceNameImageAssuranceDBMigrator, err)
 	}
 
-	if err = utils.AddClusterRoleWatch(c, imageassurance.AdmissionControllerAPIClusterRoleName); err != nil {
-		return fmt.Errorf("ImageAssurance-controller failed to watch Cluster role %s: %v", imageassurance.ResourceNameImageAssuranceDBMigrator, err)
+	for _, role := range []string{imageassurance.PodWatcherClusterRoleName, imageassurance.ScannerClusterRoleName, imageassurance.AdmissionControllerAPIClusterRoleName} {
+		if err = utils.AddClusterRoleWatch(c, role); err != nil {
+			return fmt.Errorf("ImageAssurance-controller failed to watch Cluster role %s: %v", role, err)
+		}
 	}
-
 	// Watch for changes to authentication
 	err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
@@ -286,8 +285,7 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
-	scannerAPIToken, err := getAPIAccessToken(r.client, imageassurance.ScannerAPIAccessServiceAccountName,
-		imageassurance.ScannerClusterRoleBindingName)
+	scannerAPIToken, err := getAPIAccessToken(r.client, imageassurance.ScannerAPIAccessServiceAccountName)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
 		r.status.SetDegraded("Error in retrieving scanner API access token", err.Error())
@@ -300,8 +298,7 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, nil
 	}
 
-	podWatcherAPIToken, err := getAPIAccessToken(r.client, imageassurance.PodWatcherAPIAccessServiceAccountName,
-		imageassurance.PodWatcherClusterRoleBindingName)
+	podWatcherAPIToken, err := getAPIAccessToken(r.client, imageassurance.PodWatcherAPIAccessServiceAccountName)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
 		r.status.SetDegraded("Error in retrieving pod watcher API access token", err.Error())
@@ -753,21 +750,13 @@ func getTenantEncryptionKeySecret(client client.Client) (*corev1.Secret, error) 
 }
 
 // getAPIAccessToken returns the image assurance service account secret token created by kube-controllers.
-// It takes in service account name and cluster role binding name. Service account name is used to validate the existence
-// of the service account and return the token if present. crbName is used to check the ClusterRoleBinding associated
-// with the access token has been created, if it is not present then an error will be returned.
-func getAPIAccessToken(c client.Client, serviceAccountName string, crbName string) ([]byte, error) {
+// It takes in service account name and uses it to validate the existence of the service account and return the token if present.
+func getAPIAccessToken(c client.Client, serviceAccountName string) ([]byte, error) {
 	sa := &corev1.ServiceAccount{}
 	if err := c.Get(context.Background(), types.NamespacedName{
 		Name:      serviceAccountName,
 		Namespace: common.OperatorNamespace(),
 	}, sa); err != nil {
-		return nil, err
-	}
-
-	// ensure that cluster role binding exists for the service account.
-	crb := &rbacv1.ClusterRoleBinding{}
-	if err := c.Get(context.Background(), client.ObjectKey{Name: crbName}, crb); err != nil {
 		return nil, err
 	}
 

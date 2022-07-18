@@ -1,0 +1,93 @@
+{
+  "apiVersion": "projectcalico.org/v3",
+  "kind": "NetworkPolicy",
+  "metadata": {
+    "name": "allow-tigera.cnx-apiserver-access",
+    "namespace": "tigera-system"
+  },
+  "spec": {
+    "order": 1,
+    "tier": "allow-tigera",
+    "selector": "k8s-app == 'tigera-apiserver'",
+    "types": [
+      "Ingress",
+      "Egress"
+    ],
+    "ingress": [
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "source": {
+          "nets": [
+            "0.0.0.0/0"
+          ]
+        },
+        "destination": {
+          "ports": [
+            443,
+            5443,
+            8080,
+            10443
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "source": {
+          "nets": [
+            "::/0"
+          ]
+        },
+        "destination": {
+          "ports": [
+            443,
+            5443,
+            8080,
+            10443
+          ]
+        }
+      }
+    ],
+    "egress": [
+      {
+        "action": "Allow",
+        "protocol": "UDP",
+        "destination": {
+          "namespaceSelector": "projectcalico.org/name == 'openshift-dns'",
+          "selector": "dns.operator.openshift.io/daemonset-dns == 'default'",
+          "ports": [
+            5353
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "destination": {
+          "namespaceSelector": "projectcalico.org/name == 'openshift-dns'",
+          "selector": "dns.operator.openshift.io/daemonset-dns == 'default'",
+          "ports": [
+            5353
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "destination": {
+          "namespaceSelector": "projectcalico.org/name == 'default'",
+          "selector": "(provider == 'kubernetes' && component == 'apiserver' && endpoints.projectcalico.org/serviceName == 'kubernetes')",
+          "ports": [
+            443,
+            6443,
+            12388
+          ]
+        }
+      },
+      {
+        "action": "Pass"
+      }
+    ]
+  }
+}

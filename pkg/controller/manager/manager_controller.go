@@ -19,6 +19,12 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/apimachinery/pkg/types"
+
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -58,9 +64,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	licenseAPIReady := &utils.ReadyFlag{}
+	policyWatchesReady := &utils.ReadyFlag{}
 
 	// create the reconciler
-	reconciler := newReconciler(mgr, opts, licenseAPIReady)
+	reconciler := newReconciler(mgr, opts, licenseAPIReady, policyWatchesReady)
 
 	// Create a new controller
 	controller, err := controller.New("cmanager-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
@@ -76,19 +83,25 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseAPIReady)
 
+	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, policyWatchesReady, []types.NamespacedName{
+		{Name: render.ManagerPolicyName, Namespace: render.ManagerNamespace},
+		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.ManagerNamespace},
+	})
+
 	return add(mgr, controller)
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag, policyWatchesReady *utils.ReadyFlag) reconcile.Reconciler {
 	c := &ReconcileManager{
-		client:          mgr.GetClient(),
-		scheme:          mgr.GetScheme(),
-		provider:        opts.DetectedProvider,
-		status:          status.New(mgr.GetClient(), "manager", opts.KubernetesVersion),
-		clusterDomain:   opts.ClusterDomain,
-		licenseAPIReady: licenseAPIReady,
-		usePSP:          opts.UsePSP,
+		client:             mgr.GetClient(),
+		scheme:             mgr.GetScheme(),
+		provider:           opts.DetectedProvider,
+		status:             status.New(mgr.GetClient(), "manager", opts.KubernetesVersion),
+		clusterDomain:      opts.ClusterDomain,
+		licenseAPIReady:    licenseAPIReady,
+		policyWatchesReady: policyWatchesReady,
+		usePSP:             opts.UsePSP,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
@@ -178,13 +191,14 @@ var _ reconcile.Reconciler = &ReconcileManager{}
 type ReconcileManager struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client          client.Client
-	scheme          *runtime.Scheme
-	provider        operatorv1.Provider
-	status          status.StatusManager
-	clusterDomain   string
-	licenseAPIReady *utils.ReadyFlag
-	usePSP          bool
+	client             client.Client
+	scheme             *runtime.Scheme
+	provider           operatorv1.Provider
+	status             status.StatusManager
+	clusterDomain      string
+	licenseAPIReady    *utils.ReadyFlag
+	policyWatchesReady *utils.ReadyFlag
+	usePSP             bool
 }
 
 // GetManager returns the default manager instance with defaults populated.
@@ -227,6 +241,23 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	if !utils.IsAPIServerReady(r.client, reqLogger) {
 		r.status.SetDegraded("Waiting for Tigera API server to be ready", "")
 		return reconcile.Result{}, nil
+	}
+
+	if !r.policyWatchesReady.IsReady() {
+		r.status.SetDegraded("Waiting for NetworkPolicy watches to be established", "")
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
+	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded("Waiting for allow-tigera tier to be created", err.Error())
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		} else {
+			log.Error(err, "Error querying allow-tigera tier")
+			r.status.SetDegraded("Error querying allow-tigera tier", err.Error())
+			return reconcile.Result{}, err
+		}
 	}
 
 	if !r.licenseAPIReady.IsReady() {

@@ -74,14 +74,6 @@ type IPPoolSpec struct {
 	// Allows IPPool to allocate for a specific node by label selector.
 	NodeSelector string `json:"nodeSelector,omitempty" validate:"omitempty,selector"`
 
-	// Deprecated: this field is only used for APIv1 backwards compatibility.
-	// Setting this field is not allowed, this field is for internal use only.
-	IPIP *IPIPConfiguration `json:"ipip,omitempty" validate:"omitempty,mustBeNil"`
-
-	// Deprecated: this field is only used for APIv1 backwards compatibility.
-	// Setting this field is not allowed, this field is for internal use only.
-	NATOutgoingV1 bool `json:"nat-outgoing,omitempty" validate:"omitempty,mustBeFalse"`
-
 	// AllowedUse controls what the IP pool will be used for.  If not specified or empty, defaults to
 	// ["Tunnel", "Workload"] for back-compatibility
 	AllowedUses []IPPoolAllowedUse `json:"allowedUses,omitempty" validate:"omitempty"`
@@ -109,31 +101,6 @@ const (
 	IPIPModeAlways      IPIPMode = "Always"
 	IPIPModeCrossSubnet IPIPMode = "CrossSubnet"
 )
-
-// The following definitions are only used for APIv1 backwards compatibility.
-// They are for internal use only.
-type EncapMode string
-
-const (
-	Undefined   EncapMode = ""
-	Always      EncapMode = "always"
-	CrossSubnet EncapMode = "cross-subnet"
-)
-
-const DefaultMode = Always
-
-type IPIPConfiguration struct {
-	// When enabled is true, ipip tunneling will be used to deliver packets to
-	// destinations within this pool.
-	Enabled bool `json:"enabled,omitempty"`
-
-	// The IPIP mode.  This can be one of "always" or "cross-subnet".  A mode
-	// of "always" will also use IPIP tunneling for routing to destination IP
-	// addresses within this pool.  A mode of "cross-subnet" will only use IPIP
-	// tunneling when the destination node is on a different subnet to the
-	// originating node.  The default value (if not specified) is "always".
-	Mode EncapMode `json:"mode,omitempty" validate:"ipIpMode"`
-}
 
 // NewIPPool creates a new (zeroed) IPPool struct with the TypeMetadata initialised to the current
 // version.

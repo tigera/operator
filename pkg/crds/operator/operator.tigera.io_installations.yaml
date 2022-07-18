@@ -83,6 +83,7 @@ spec:
                             Pool in classless inter-domain routing format.
                           type: string
                         disableBGPExport:
+                          default: false
                           description: 'DisableBGPExport specifies whether routes
                             from this IP pool''s CIDR are exported over BGP Default:
                             false'
@@ -831,6 +832,7 @@ spec:
                                 IP Pool in classless inter-domain routing format.
                               type: string
                             disableBGPExport:
+                              default: false
                               description: 'DisableBGPExport specifies whether routes
                                 from this IP pool''s CIDR are exported over BGP Default:
                                 false'

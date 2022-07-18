@@ -248,7 +248,7 @@ var _ = Describe("Convert network tests", func() {
 		)
 
 		trueValue := true
-		//falseValue := false
+		falseValue := false
 		DescribeTable("test convert pool flags", func(success bool, crdPool crdv1.IPPool, opPool operatorv1.IPPool) {
 			p, err := convertPool(crdPool)
 			if success {
@@ -410,6 +410,20 @@ var _ = Describe("Convert network tests", func() {
 				NATOutgoing:      operatorv1.NATOutgoingEnabled,
 				NodeSelector:     "",
 				DisableBGPExport: &trueValue,
+			}),
+			Entry("ipv4, vxlan encap, nat, disableBGPExport false", true, crdv1.IPPool{Spec: crdv1.IPPoolSpec{
+				CIDR:             "1.168.4.0/24",
+				VXLANMode:        crdv1.VXLANModeAlways,
+				IPIPMode:         crdv1.IPIPModeNever,
+				NATOutgoing:      true,
+				Disabled:         false,
+				DisableBGPExport: false,
+			}}, operatorv1.IPPool{
+				CIDR:             "1.168.4.0/24",
+				Encapsulation:    operatorv1.EncapsulationVXLAN,
+				NATOutgoing:      operatorv1.NATOutgoingEnabled,
+				NodeSelector:     "",
+				DisableBGPExport: &falseValue,
 			}),
 		)
 	})

@@ -82,6 +82,12 @@ spec:
                           description: CIDR contains the address range for the IP
                             Pool in classless inter-domain routing format.
                           type: string
+                        disableBGPExport:
+                          default: false
+                          description: 'DisableBGPExport specifies whether routes
+                            from this IP pool''s CIDR are exported over BGP Default:
+                            false'
+                          type: boolean
                         encapsulation:
                           description: 'Encapsulation specifies the encapsulation
                             type that will be used with the IP Pool. Default: IPIP'
@@ -825,6 +831,12 @@ spec:
                               description: CIDR contains the address range for the
                                 IP Pool in classless inter-domain routing format.
                               type: string
+                            disableBGPExport:
+                              default: false
+                              description: 'DisableBGPExport specifies whether routes
+                                from this IP pool''s CIDR are exported over BGP Default:
+                                false'
+                              type: boolean
                             encapsulation:
                               description: 'Encapsulation specifies the encapsulation
                                 type that will be used with the IP Pool. Default:

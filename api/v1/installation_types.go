@@ -489,6 +489,12 @@ type IPPool struct {
 	// Default: 26 (IPv4), 122 (IPv6)
 	// +optional
 	BlockSize *int32 `json:"blockSize,omitempty"`
+
+	// DisableBGPExport specifies whether routes from this IP pool's CIDR are exported over BGP
+	// Default: false
+	// +optional
+	// +kubebuilder:default:=false
+	DisableBGPExport *bool `json:"disableBGPExport,omitempty"`
 }
 
 // CNIPluginType describes the type of CNI plugin used.

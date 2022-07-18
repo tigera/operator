@@ -23,26 +23,15 @@ const (
 	KindIPPoolList = "IPPoolList"
 )
 
-// +genclient:nonNamespaced
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// IPPoolList contains a list of IPPool resources.
-type IPPoolList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
-
-	Items []IPPool `json:"items" protobuf:"bytes,2,rep,name=items"`
-}
-
-// +genclient
-// +genclient:nonNamespaced
-// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
-
+// IPPool contains information about an IPPool resource.
 type IPPool struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty" protobuf:"bytes,1,opt,name=metadata"`
-
-	Spec IPPoolSpec `json:"spec,omitempty" protobuf:"bytes,2,opt,name=spec"`
+	metav1.TypeMeta `json:",inline"`
+	// Standard object's metadata.
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+	// Specification of the IPPool.
+	Spec IPPoolSpec `json:"spec,omitempty"`
 }
 
 // IPPoolSpec contains the specification for an IPPool resource.
@@ -51,11 +40,11 @@ type IPPoolSpec struct {
 	CIDR string `json:"cidr" validate:"net"`
 
 	// Contains configuration for VXLAN tunneling for this pool. If not specified,
-	// then this is defaulted to "Never" (i.e. VXLAN tunneling is disabled).
+	// then this is defaulted to "Never" (i.e. VXLAN tunelling is disabled).
 	VXLANMode VXLANMode `json:"vxlanMode,omitempty" validate:"omitempty,vxlanMode"`
 
 	// Contains configuration for IPIP tunneling for this pool. If not specified,
-	// then this is defaulted to "Never" (i.e. IPIP tunneling is disabled).
+	// then this is defaulted to "Never" (i.e. IPIP tunelling is disabled).
 	IPIPMode IPIPMode `json:"ipipMode,omitempty" validate:"omitempty,ipIpMode"`
 
 	// When nat-outgoing is true, packets sent from Calico networked containers in
@@ -68,31 +57,12 @@ type IPPoolSpec struct {
 	// Disable exporting routes from this IP Pool's CIDR over BGP. [Default: false]
 	DisableBGPExport bool `json:"disableBGPExport,omitempty" validate:"omitempty"`
 
-	// The block size to use for IP address assignments from this pool. Defaults to 26 for IPv4 and 122 for IPv6.
+	// The block size to use for IP address assignments from this pool. Defaults to 26 for IPv4 and 112 for IPv6.
 	BlockSize int `json:"blockSize,omitempty"`
 
 	// Allows IPPool to allocate for a specific node by label selector.
 	NodeSelector string `json:"nodeSelector,omitempty" validate:"omitempty,selector"`
-
-	// Deprecated: this field is only used for APIv1 backwards compatibility.
-	// Setting this field is not allowed, this field is for internal use only.
-	IPIP *IPIPConfiguration `json:"ipip,omitempty" validate:"omitempty,mustBeNil"`
-
-	// Deprecated: this field is only used for APIv1 backwards compatibility.
-	// Setting this field is not allowed, this field is for internal use only.
-	NATOutgoingV1 bool `json:"nat-outgoing,omitempty" validate:"omitempty,mustBeFalse"`
-
-	// AllowedUse controls what the IP pool will be used for.  If not specified or empty, defaults to
-	// ["Tunnel", "Workload"] for back-compatibility
-	AllowedUses []IPPoolAllowedUse `json:"allowedUses,omitempty" validate:"omitempty"`
 }
-
-type IPPoolAllowedUse string
-
-const (
-	IPPoolAllowedUseWorkload IPPoolAllowedUse = "Workload"
-	IPPoolAllowedUseTunnel   IPPoolAllowedUse = "Tunnel"
-)
 
 type VXLANMode string
 
@@ -110,29 +80,13 @@ const (
 	IPIPModeCrossSubnet IPIPMode = "CrossSubnet"
 )
 
-// The following definitions are only used for APIv1 backwards compatibility.
-// They are for internal use only.
-type EncapMode string
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-const (
-	Undefined   EncapMode = ""
-	Always      EncapMode = "always"
-	CrossSubnet EncapMode = "cross-subnet"
-)
-
-const DefaultMode = Always
-
-type IPIPConfiguration struct {
-	// When enabled is true, ipip tunneling will be used to deliver packets to
-	// destinations within this pool.
-	Enabled bool `json:"enabled,omitempty"`
-
-	// The IPIP mode.  This can be one of "always" or "cross-subnet".  A mode
-	// of "always" will also use IPIP tunneling for routing to destination IP
-	// addresses within this pool.  A mode of "cross-subnet" will only use IPIP
-	// tunneling when the destination node is on a different subnet to the
-	// originating node.  The default value (if not specified) is "always".
-	Mode EncapMode `json:"mode,omitempty" validate:"ipIpMode"`
+// IPPoolList contains a list of IPPool resources.
+type IPPoolList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata"`
+	Items           []IPPool `json:"items"`
 }
 
 // NewIPPool creates a new (zeroed) IPPool struct with the TypeMetadata initialised to the current
@@ -141,6 +95,17 @@ func NewIPPool() *IPPool {
 	return &IPPool{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       KindIPPool,
+			APIVersion: "crd.projectcalico.org/v1",
+		},
+	}
+}
+
+// NewIPPoolList creates a new (zeroed) IPPoolList struct with the TypeMetadata initialised to the current
+// version.
+func NewIPPoolList() *IPPoolList {
+	return &IPPoolList{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       KindIPPoolList,
 			APIVersion: "crd.projectcalico.org/v1",
 		},
 	}

@@ -316,25 +316,40 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	ch := utils.NewComponentHandler(log, r.Client, r.Scheme, managementClusterConnection)
 	guardianCfg := &render.GuardianConfiguration{
-		URL:                  managementClusterConnection.Spec.ManagementClusterAddr,
-		PullSecrets:          pullSecrets,
-		Openshift:            r.Provider == operatorv1.ProviderOpenShift,
-		Installation:         instl,
-		TunnelSecret:         tunnelSecret,
-		TrustedCertBundle:    trustedCertBundle,
-		IncludeNetworkPolicy: includeV3NetworkPolicy,
+		URL:               managementClusterConnection.Spec.ManagementClusterAddr,
+		PullSecrets:       pullSecrets,
+		Openshift:         r.Provider == operatorv1.ProviderOpenShift,
+		Installation:      instl,
+		TunnelSecret:      tunnelSecret,
+		TrustedCertBundle: trustedCertBundle,
 	}
-	component := render.Guardian(guardianCfg)
 
-	if err = imageset.ApplyImageSet(ctx, r.Client, variant, component); err != nil {
+	components := []render.Component{render.Guardian(guardianCfg)}
+
+	// v3 NetworkPolicy will fail to reconcile if the Tier is not created, which can only occur once a License is created.
+	// In managed clusters, the clusterconnection controller is a dependency for the License to be created. In case the
+	// License is unavailable and reconciliation of non-NetworkPolicy resources in the clusterconnection controller
+	// would resolve it, we render network policies last to prevent a chicken-and-egg scenario.
+	if includeV3NetworkPolicy {
+		policyComponent, err := render.GuardianPolicy(guardianCfg)
+		if err != nil {
+			log.Error(err, "Failed to create NetworkPolicy component for Guardian, policy will be omitted")
+		} else {
+			components = append(components, policyComponent)
+		}
+	}
+
+	if err = imageset.ApplyImageSet(ctx, r.Client, variant, components...); err != nil {
 		log.Error(err, "Error with images from ImageSet")
 		r.status.SetDegraded("Error with images from ImageSet", err.Error())
 		return reconcile.Result{}, err
 	}
 
-	if err := ch.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
-		r.status.SetDegraded("Error creating / updating resource", err.Error())
-		return result, err
+	for _, component := range components {
+		if err := ch.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+			r.status.SetDegraded("Error creating / updating resource", err.Error())
+			return result, err
+		}
 	}
 
 	r.status.ClearDegraded()

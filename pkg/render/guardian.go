@@ -61,15 +61,26 @@ func Guardian(cfg *GuardianConfiguration) Component {
 	}
 }
 
+func GuardianPolicy(cfg *GuardianConfiguration) (Component, error) {
+	guardianAccessPolicy, err := guardianAllowTigeraPolicy(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewPassthrough(
+		guardianAccessPolicy,
+		networkpolicy.AllowTigeraDefaultDeny(GuardianNamespace),
+	), nil
+}
+
 // GuardianConfiguration contains all the config information needed to render the component.
 type GuardianConfiguration struct {
-	URL                  string
-	PullSecrets          []*corev1.Secret
-	Openshift            bool
-	Installation         *operatorv1.InstallationSpec
-	TunnelSecret         *corev1.Secret
-	TrustedCertBundle    certificatemanagement.TrustedBundle
-	IncludeNetworkPolicy bool
+	URL               string
+	PullSecrets       []*corev1.Secret
+	Openshift         bool
+	Installation      *operatorv1.InstallationSpec
+	TunnelSecret      *corev1.Secret
+	TrustedCertBundle certificatemanagement.TrustedBundle
 }
 
 type GuardianComponent struct {
@@ -93,16 +104,6 @@ func (c *GuardianComponent) SupportedOSType() rmeta.OSType {
 func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
 		CreateNamespace(GuardianNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted),
-	}
-
-	if c.cfg.IncludeNetworkPolicy {
-		guardianAccessPolicy, err := c.guardianAllowTigeraPolicy()
-		if err == nil {
-			objs = append(objs,
-				guardianAccessPolicy,
-				networkpolicy.AllowTigeraDefaultDeny(GuardianNamespace),
-			)
-		}
 	}
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(GuardianNamespace, c.cfg.PullSecrets...)...)...)
@@ -315,7 +316,7 @@ func (c *GuardianComponent) annotations() map[string]string {
 	return annotations
 }
 
-func (c *GuardianComponent) guardianAllowTigeraPolicy() (*v3.NetworkPolicy, error) {
+func guardianAllowTigeraPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, error) {
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,
@@ -323,7 +324,7 @@ func (c *GuardianComponent) guardianAllowTigeraPolicy() (*v3.NetworkPolicy, erro
 			Destination: PacketCaptureEntityRule,
 		},
 	}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.Openshift)
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.Openshift)
 	egressRules = append(egressRules, []v3.Rule{
 		{
 			Action:      v3.Allow,
@@ -338,7 +339,7 @@ func (c *GuardianComponent) guardianAllowTigeraPolicy() (*v3.NetworkPolicy, erro
 	}...)
 
 	// Assumes address has the form "host:port", required by net.Dial for TCP.
-	host, port, err := net.SplitHostPort(c.cfg.URL)
+	host, port, err := net.SplitHostPort(cfg.URL)
 	if err != nil {
 		return nil, err
 	}

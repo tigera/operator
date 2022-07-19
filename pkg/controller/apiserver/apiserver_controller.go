@@ -19,6 +19,9 @@ import (
 	"fmt"
 	"time"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"k8s.io/apimachinery/pkg/api/meta"
+
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -306,21 +309,25 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			}
 		}
 
-		// Successful reconciliation of non-NetworkPolicy resources in the apiserver controller ensures that NetworkPolicy
-		// is reconcilable (by creating the API server and enabling the creation of containing Tier). Therefore, to prevent
-		// a chicken-and-egg scenario, we only reconcile NetworkPolicy resources once we can confirm that all requirements
-		// to reconcile NetworkPolicy have been met.
-		//
-		// utils.IsV3NetworkPolicyReconcilable does not verify API server availability, so we take extra precaution
-		// when rendering components below.
-		if utils.IsV3NetworkPolicyReconcilable(ctx, r.client, networkpolicy.TigeraComponentTierName) {
+		// Ensure the allow-tigera tier exists, before rendering any network policies within it.
+		if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+			// The creation of the Tier depends on this controller to reconcile it's non-NetworkPolicy resources so that
+			// the API Server becomes available. Therefore, if we fail to query the Tier, we exclude NetworkPolicy from
+			// reconciliation and tolerate errors arising from the Tier not being created or the API server not being available.
+			if !errors.IsNotFound(err) && !meta.IsNoMatchError(err) {
+				log.Error(err, "Error querying allow-tigera tier")
+				r.status.SetDegraded("Error querying allow-tigera tier", err.Error())
+				return reconcile.Result{}, err
+			}
+		} else {
 			includeV3NetworkPolicy = true
 
+			// Use tier availability as a signal that we can validate watches, since this controller is a dependency for
+			// the API Server to become available and watches will not become available until the API Server is available.
 			if !r.tierWatchReady.IsReady() {
 				r.status.SetDegraded("Waiting for Tier watch to be established", "")
 				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 			}
-
 			if !r.policyWatchesReady.IsReady() {
 				r.status.SetDegraded("Waiting for NetworkPolicy watches to be established", "")
 				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
@@ -427,8 +434,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	// v3 NetworkPolicy will fail to reconcile if the API server deployment is unhealthy. In case the API Server
 	// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the apiserver controller
 	// would resolve it, we render the network policies of components last to prevent a chicken-and-egg scenario.
-	//
-	// We take this precaution as utils.IsV3NetworkPolicyReconcilable is not sensitive to API server availability.
 	if includeV3NetworkPolicy {
 		components = append(components, render.APIServerPolicy(&apiServerCfg))
 		if pcPolicy != nil {

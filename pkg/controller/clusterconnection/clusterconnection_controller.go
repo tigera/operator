@@ -20,6 +20,8 @@ import (
 	"net"
 	"time"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -254,65 +256,62 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		trustedCertBundle.AddCertificates(secret)
 	}
 
-	// In managed clusters, successful reconciliation of non-NetworkPolicy resources in the clusterconnection controller
-	// ensures that NetworkPolicy is reconcilable (by enabling* the creation of containing Tier and License). Therefore,
-	// to prevent a chicken-and-egg scenario, we only reconcile NetworkPolicy resources once we can confirm that all
-	// requirements to reconcile NetworkPolicy have been met.
-	//
-	// * In managed clusters, the License can only be pushed once Guardian has been deployed, and (as always) the Tier
-	//   can only be created once the License is available.
-	includeNetworkPolicy := true
-	var egressAccessControlFeatureRequired bool
-	var networkPolicyIsReconcilable bool
-	if clusterAddrHasDomain, err := managementClusterAddrHasDomain(managementClusterConnection); err == nil && clusterAddrHasDomain {
-		egressAccessControlFeatureRequired = true
-		networkPolicyIsReconcilable = utils.IsV3NetworkPolicyReconcilable(ctx, r.Client, networkpolicy.TigeraComponentTierName, common.EgressAccessControlFeature)
+	if !r.tierWatchReady.IsReady() {
+		r.status.SetDegraded("Waiting for Tier watch to be established", "")
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	if !r.policyWatchesReady.IsReady() {
+		r.status.SetDegraded("Waiting for NetworkPolicy watches to be established", "")
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	if !r.licenseWatchReady.IsReady() {
+		r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
+	includeV3NetworkPolicy := false
+	egressAccessControlFeatureRequired := false
+	if err := r.Client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+		// The creation of the Tier depends on this controller to reconcile it's non-NetworkPolicy resources so that the
+		// License becomes available. Therefore, if we fail to query the Tier, we exclude NetworkPolicy from reconciliation
+		// and tolerate errors arising from the Tier not being created.
+		if !k8serrors.IsNotFound(err) {
+			log.Error(err, "Error querying allow-tigera tier")
+			r.status.SetDegraded("Error querying allow-tigera tier", err.Error())
+			return reconcile.Result{}, err
+		}
 	} else {
-		if err != nil {
+		includeV3NetworkPolicy = true
+
+		if clusterAddrHasDomain, err := managementClusterAddrHasDomain(managementClusterConnection); err == nil && clusterAddrHasDomain {
+			egressAccessControlFeatureRequired = true
+		} else if err != nil {
 			log.Error(err, fmt.Sprintf(
 				"Failed to parse ManagementClusterAddr. Assuming %s does not require license feature %s",
 				render.GuardianPolicyName,
 				common.EgressAccessControlFeature,
 			))
 		}
-		egressAccessControlFeatureRequired = false
-		networkPolicyIsReconcilable = utils.IsV3NetworkPolicyReconcilable(ctx, r.Client, networkpolicy.TigeraComponentTierName)
 	}
 
-	if networkPolicyIsReconcilable {
-		if egressAccessControlFeatureRequired {
-			license, err := utils.FetchLicenseKey(ctx, r.Client)
-			if err != nil {
-				if k8serrors.IsNotFound(err) {
-					r.status.SetDegraded("License not found", err.Error())
-					return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-				}
-				r.status.SetDegraded("Error querying license", err.Error())
+	if egressAccessControlFeatureRequired {
+		license, err := utils.FetchLicenseKey(ctx, r.Client)
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				r.status.SetDegraded("License not found", err.Error())
 				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 			}
-
-			if !utils.IsFeatureActive(license, common.EgressAccessControlFeature) {
-				r.status.SetDegraded("Feature is not active", "License does not support feature: egress-access-control")
-				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-			}
-		}
-
-		if !r.licenseWatchReady.IsReady() {
-			r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
+			r.status.SetDegraded("Error querying license", err.Error())
 			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 		}
 
-		if !r.tierWatchReady.IsReady() {
-			r.status.SetDegraded("Waiting for Tier watch to be established", "")
+		if !utils.IsFeatureActive(license, common.EgressAccessControlFeature) {
+			r.status.SetDegraded("Feature is not active", "License does not support feature: egress-access-control")
 			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 		}
-
-		if !r.policyWatchesReady.IsReady() {
-			r.status.SetDegraded("Waiting for NetworkPolicy watches to be established", "")
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-		}
-	} else {
-		includeNetworkPolicy = false
 	}
 
 	ch := utils.NewComponentHandler(log, r.Client, r.Scheme, managementClusterConnection)
@@ -323,7 +322,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		Installation:         instl,
 		TunnelSecret:         tunnelSecret,
 		TrustedCertBundle:    trustedCertBundle,
-		IncludeNetworkPolicy: includeNetworkPolicy,
+		IncludeNetworkPolicy: includeV3NetworkPolicy,
 	}
 	component := render.Guardian(guardianCfg)
 

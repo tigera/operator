@@ -218,41 +218,6 @@ func IsFeatureActive(license v3.LicenseKey, featureName string) bool {
 	return false
 }
 
-// IsV3NetworkPolicyReconcilable :
-// v3 NetworkPolicy requires a specific state in the cluster in order to be reconcilable. Specifically, v3 NetworkPolicy
-// requires the following state at time of reconcile:
-//  * The Tigera API server to be available
-//  * The containing tier to be present
-//  * (If the policies to be reconciled require license features) A permissive license to be present
-//
-// Certain controllers play a part in manifesting this state by reconciling or satisfying the dependencies required to
-// reconcile the API server, tier, and license. Should these controllers reconcile NetworkPolicy, they should only do so
-// when the cluster has reached the state required to reconcile v3 NetworkPolicy. This prevents a chicken-and-egg
-// scenario where a controller fails to reconcile due to NetworkPolicy requirements not being met, and NetworkPolicy
-// requirements are not met because said controller is not reconciling.
-//
-// Controllers can use this method to verify that the state required to reconcile v3 NetworkPolicy has been met.
-//
-// Limitation: the availability of the Tigera API server is not verified in this method to avoid excess queries to
-// the K8S API server. Therefore, components that render both NetworkPolicy resources and resources that impact
-// API server availability should render NetworkPolicy resources after their API-server-impacting resources.
-func IsV3NetworkPolicyReconcilable(ctx context.Context, cli client.Client, tierName string, licenseFeatureNames ...string) bool {
-	// Validate tier presence by querying for the tier. Note that this does not validate Tigera API server availability
-	// as resources are cached.
-	if err := cli.Get(ctx, client.ObjectKey{Name: tierName}, &v3.Tier{}); err != nil {
-		return false
-	}
-
-	// If the policies to be reconciled require any license features, validate that the license is available.
-	if len(licenseFeatureNames) > 0 {
-		if _, err := FetchLicenseKey(ctx, cli); err != nil {
-			return false
-		}
-	}
-
-	return true
-}
-
 // ValidateCertPair checks if the given secret exists in the given
 // namespace and if so that it contains key and cert fields. If an
 // empty string is passed for the keyName argument it is skipped.

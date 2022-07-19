@@ -1509,7 +1509,7 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 		},
 		{
 			Name:      "MODEL_STORAGE_API_TOKEN",
-			ValueFrom: secret.GetEnvVarSource(adDetectorServiceAccountName, "token", false),
+			ValueFrom: secret.GetEnvVarSource(adDetectorName, "token", false),
 		},
 	}
 

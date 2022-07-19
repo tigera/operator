@@ -70,11 +70,11 @@ type TyphaDeploymentPodSpec struct {
 	// +optional
 	Affinity *v1.Affinity `json:"affinity,omitempty"`
 
-	// NodeSelector is the typha pod's scheduling constraints.
-	// If specified, this overrides any nodeSelector that may be set on the typha Deployment.
-	// If omitted, the typha Deployment will use its default value for nodeSelector.
-	// WARNING: Please note that this field will override the default calico-typha Deployment nodeSelector.
-	// +optional
+	// NodeSelector is the calico-typha pod's scheduling constraints.
+	// If specified, each of the key/value pairs are added to the calico-typha Deployment nodeSelector provided
+	// the key does not already exist in the object's nodeSelector.
+	// If omitted, the calico-typha Deployment will use its default value for nodeSelector.
+	// WARNING: Please note that this field will modify the default calico-typha Deployment nodeSelector.
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 
 	// Tolerations is the typha pod's tolerations.

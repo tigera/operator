@@ -81,6 +81,7 @@ var _ = Describe("Common components render tests", func() {
 			},
 		}
 		nodeSelector = map[string]string{
+			"not-zero":        "an override of a default nodeSelector key",
 			"custom-selector": "value",
 		}
 		tolerations = []corev1.Toleration{
@@ -519,7 +520,6 @@ var _ = Describe("Common components render tests", func() {
 			},
 			func(result appsv1.DaemonSet) {
 				expected := defaultedDaemonSet()
-				expected.Spec.Template.Spec.NodeSelector = map[string]string{}
 				Expect(result.Spec.Template.Spec.NodeSelector).To(Equal(expected.Spec.Template.Spec.NodeSelector))
 				Expect(result).To(Equal(expected))
 			}),
@@ -542,7 +542,12 @@ var _ = Describe("Common components render tests", func() {
 			func(result appsv1.DaemonSet) {
 				expected := defaultedDaemonSet()
 				expected.Spec.Template.Spec.Affinity = &affinity
-				expected.Spec.Template.Spec.NodeSelector = nodeSelector
+				// only keys that don't already exist in the nodeSelector are added
+				for k, v := range nodeSelector {
+					if _, ok := expected.Spec.Template.Spec.NodeSelector[k]; !ok {
+						expected.Spec.Template.Spec.NodeSelector[k] = v
+					}
+				}
 				expected.Spec.Template.Spec.Tolerations = tolerations
 				Expect(result.Spec.Template.Spec.Affinity).To(Equal(expected.Spec.Template.Spec.Affinity))
 				Expect(result.Spec.Template.Spec.NodeSelector).To(Equal(expected.Spec.Template.Spec.NodeSelector))

@@ -26,7 +26,7 @@ type Metadata struct {
 
 	// Annotations is a map of arbitrary non-identifying metadata. Each of these
 	// key/value pairs are added to the object's annotations provided the key does not
-	// already exist in the object's labels.
+	// already exist in the object's annotations.
 	// +optional
 	Annotations map[string]string `json:"annotations,omitempty"`
 }

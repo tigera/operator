@@ -28,14 +28,16 @@ var _ = Describe("CSI rendering tests", func() {
 	var cfg render.CSIConfiguration
 
 	BeforeEach(func() {
-		defaultInstance = &operatorv1.InstallationSpec{}
+		defaultInstance = &operatorv1.InstallationSpec{
+			VolumePlugin: &operatorv1.VolumePluginSpec{},
+		}
 		cfg = render.CSIConfiguration{
 			Installation: defaultInstance,
 		}
 	})
 
 	It("should render properly when VolumePlugin is enabled", func() {
-		defaultInstance.VolumePlugin = "Enabled"
+		defaultInstance.VolumePlugin.Enable = true
 		expectedCreateObjs := []struct {
 			name    string
 			ns      string
@@ -59,7 +61,7 @@ var _ = Describe("CSI rendering tests", func() {
 	})
 
 	It("should render properly when VolumePlugin is disabled", func() {
-		defaultInstance.VolumePlugin = "Disabled"
+		defaultInstance.VolumePlugin.Enable = false
 		expectedDelObjs := []struct {
 			name    string
 			ns      string

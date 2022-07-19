@@ -45,7 +45,7 @@ func GetReference(c component, registry, imagePath, imagePrefix string, is *oper
 
 			registry = CalicoRegistry
 		case ComponentCalicoCSIRegistrar:
-			registry = SigStorageRegistry
+			registry = K8sGcrRegistry
 		case ComponentOperatorInit:
 			registry = InitRegistry
 		case ComponentCSRInitContainer:

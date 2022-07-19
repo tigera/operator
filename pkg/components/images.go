@@ -15,9 +15,8 @@ package components
 
 // Default registries for Calico and Tigera.
 const (
-	CalicoRegistry     = "docker.io/"
-	TigeraRegistry     = "gcr.io/unique-caldron-775/cnx/"
-	SigStorageRegistry = "k8s.gcr.io/sig-storage/"
+	CalicoRegistry = "docker.io/"
+	TigeraRegistry = "gcr.io/unique-caldron-775/cnx/"
 	// For production InitRegistry should match TigeraRegistry.
 	// For the master branch and other testing scenarios we switch TigeraRegistry to
 	// point to a testing repo but the init image will be pushed to quay, so having
@@ -26,5 +25,5 @@ const (
 	ECKRegistry     = "quay.io/"
 	InitRegistry    = "quay.io/"
 	CSRInitRegistry = "quay.io/"
-	K8sGcrRegistry  = "gcr.io/"
+	K8sGcrRegistry  = "k8s.gcr.io/"
 )

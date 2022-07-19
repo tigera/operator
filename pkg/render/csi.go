@@ -138,7 +138,7 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 			},
 			corev1.VolumeMount{
 				Name:             "kubelet-dir",
-				MountPath:        "/var/lib/kubelet",
+				MountPath:        c.cfg.Installation.VolumePlugin.KubeletDir,
 				MountPropagation: &mountPropagation,
 			},
 		},
@@ -164,7 +164,7 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 			},
 			corev1.EnvVar{
 				Name:  "DRIVER_REG_SOCK_PATH",
-				Value: "/var/lib/kubelet/plugins/csi.tigera.io/csi.sock",
+				Value: "/csi/csi.sock",
 			},
 			corev1.EnvVar{
 				Name: "KUBE_NODE_NAME",
@@ -217,7 +217,7 @@ func (c *csiComponent) csiVolumes() []corev1.Volume {
 			Name: "kubelet-dir",
 			VolumeSource: corev1.VolumeSource{
 				HostPath: &corev1.HostPathVolumeSource{
-					Path: "/var/lib/kubelet",
+					Path: c.cfg.Installation.VolumePlugin.KubeletDir,
 					Type: &hostPathTypeDir,
 				},
 			},
@@ -226,7 +226,7 @@ func (c *csiComponent) csiVolumes() []corev1.Volume {
 			Name: "socket-dir",
 			VolumeSource: corev1.VolumeSource{
 				HostPath: &corev1.HostPathVolumeSource{
-					Path: "/var/lib/kubelet/plugins/csi.tigera.io/",
+					Path: c.cfg.Installation.VolumePlugin.SockDir,
 					Type: &hostPathTypeDirOrCreate,
 				},
 			},
@@ -235,7 +235,7 @@ func (c *csiComponent) csiVolumes() []corev1.Volume {
 			Name: "registration-dir",
 			VolumeSource: corev1.VolumeSource{
 				HostPath: &corev1.HostPathVolumeSource{
-					Path: "/var/lib/kubelet/plugins_registry/",
+					Path: c.cfg.Installation.VolumePlugin.RegistrationDir,
 					Type: &hostPathTypeDir,
 				},
 			},
@@ -316,7 +316,7 @@ func (c *csiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 	objs = append(objs, c.csiDriver())
 	objs = append(objs, c.csiDaemonset())
 
-	if c.cfg.Terminating || c.cfg.Installation.VolumePlugin != "Enabled" {
+	if c.cfg.Terminating || !c.cfg.Installation.VolumePlugin.Enable {
 		objsToDelete = objs
 	} else {
 		objsToCreate = objs

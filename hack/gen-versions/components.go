@@ -32,7 +32,7 @@ var defaultImages = map[string]string{
 	"flannel":                    "coreos/flannel",
 	"flexvol":                    "calico/pod2daemon-flexvol",
 	"calico/csi":                 "calico/csi",
-	"csi-node-driver-registrar":  "csi-node-driver-registrar",
+	"csi-node-driver-registrar":  "sig-storage/csi-node-driver-registrar",
 	"typha":                      "calico/typha",
 	"eck-elasticsearch":          "unused/image",
 	"eck-elasticsearch-operator": "unused/image",

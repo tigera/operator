@@ -26,10 +26,10 @@ require (
 	golang.org/x/crypto v0.0.0-20210506145944-38f3c27a63bf
 	gopkg.in/inf.v0 v0.9.1
 	gopkg.in/yaml.v2 v2.4.0
-	k8s.io/api v0.22.3
+	k8s.io/api v0.23.2
 	k8s.io/apiextensions-apiserver v0.22.3
-	k8s.io/apimachinery v0.22.3
-	k8s.io/client-go v0.21.8
+	k8s.io/apimachinery v0.23.2
+	k8s.io/client-go v0.23.2
 	k8s.io/kube-aggregator v0.21.7
 	sigs.k8s.io/controller-runtime v0.9.7
 	sigs.k8s.io/kind v0.11.1 // Do not remove, not used by code but used by build

@@ -1344,9 +1344,13 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 	mtu := getMTU(c.cfg.Installation)
 	if mtu != nil {
 		vxlanMtu := strconv.Itoa(int(*mtu))
+		vxlanMtuV6 := strconv.Itoa(int(*mtu))
 		wireguardMtu := strconv.Itoa(int(*mtu))
+		wireguardMtuV6 := strconv.Itoa(int(*mtu))
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_VXLANMTU", Value: vxlanMtu})
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_VXLANMTUV6", Value: vxlanMtuV6})
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_WIREGUARDMTU", Value: wireguardMtu})
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_WIREGUARDMTUV6", Value: wireguardMtuV6})
 	}
 
 	// If host-local IPAM is in use, we need to configure calico/node to use the Kubernetes pod CIDR.

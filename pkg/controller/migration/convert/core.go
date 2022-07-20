@@ -21,6 +21,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -52,30 +55,53 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 		}
 	}
 
-	// node resource limits
-	node := getContainer(c.node.Spec.Template.Spec, "calico-node")
-	if len(node.Resources.Limits) > 0 || len(node.Resources.Requests) > 0 {
-		if err = addResources(install, operatorv1.ComponentNameNode, &node.Resources); err != nil {
-			return err
-		}
-	}
+	// Convert any deprecated ComponentResources to the new component override fields.
+	convertComponentResources(install)
 
-	// kube-controllers
-	if c.kubeControllers != nil {
-		kubeControllers := getContainer(c.kubeControllers.Spec.Template.Spec, containerKubeControllers)
-		if kubeControllers != nil && (len(kubeControllers.Resources.Limits) > 0 || len(kubeControllers.Resources.Requests) > 0) {
-			if err = addResources(install, operatorv1.ComponentNameKubeControllers, &kubeControllers.Resources); err != nil {
+	// node container resources
+	for _, container := range c.node.Spec.Template.Spec.Containers {
+		if len(container.Resources.Limits) > 0 || len(container.Resources.Requests) > 0 {
+			if err = addContainerResources(install, "calico-node", container.Name, &container.Resources); err != nil {
 				return err
 			}
 		}
 	}
 
-	if c.typha != nil {
-		// typha resource limits. typha is optional so check for nil first
-		typha := getContainer(c.typha.Spec.Template.Spec, "calico-typha")
-		if typha != nil && (len(typha.Resources.Limits) > 0 || len(typha.Resources.Requests) > 0) {
-			if err = addResources(install, operatorv1.ComponentNameTypha, &typha.Resources); err != nil {
+	// node init container resources
+	for _, initContainer := range c.node.Spec.Template.Spec.InitContainers {
+		if len(initContainer.Resources.Limits) > 0 || len(initContainer.Resources.Requests) > 0 {
+			if err = addInitContainerResources(install, "calico-node", initContainer.Name, &initContainer.Resources); err != nil {
 				return err
+			}
+		}
+	}
+
+	// kube-controllers container resources
+	if c.kubeControllers != nil {
+		for _, container := range c.kubeControllers.Spec.Template.Spec.Containers {
+			if len(container.Resources.Limits) > 0 || len(container.Resources.Requests) > 0 {
+				if err = addContainerResources(install, "calico-kube-controllers", container.Name, &container.Resources); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	// Note: kube-controllers doesn't have init containers.
+
+	// typha container resources. typha is optional so check for nil first
+	if c.typha != nil {
+		for _, container := range c.typha.Spec.Template.Spec.Containers {
+			if len(container.Resources.Limits) > 0 || len(container.Resources.Requests) > 0 {
+				if err = addContainerResources(install, "calico-typha", container.Name, &container.Resources); err != nil {
+					return err
+				}
+			}
+		}
+		for _, initContainer := range c.typha.Spec.Template.Spec.InitContainers {
+			if len(initContainer.Resources.Limits) > 0 || len(initContainer.Resources.Requests) > 0 {
+				if err = addInitContainerResources(install, "calico-typha", initContainer.Name, &initContainer.Resources); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -211,38 +237,213 @@ func checkNodeHostPathVolume(spec corev1.PodSpec, name, path string) error {
 	return nil
 }
 
-// addResources adds the rescReq resource for the specified component if none was previously set. If installation
-// already had a resource for compName then they are compared and if they are different then an error is returned.
-// If the Resource is added to installation or the existing one matches then nil is returned.
-func addResources(install *operatorv1.Installation, compName operatorv1.ComponentName, rescReq *corev1.ResourceRequirements) error {
-	if install.Spec.ComponentResources == nil {
-		install.Spec.ComponentResources = []operatorv1.ComponentResource{}
-	}
-
-	var existingRR *corev1.ResourceRequirements
-	// See if there is already a ComponentResource with the name
-	for _, x := range install.Spec.ComponentResources {
-		if x.ComponentName == compName {
-			existingRR = x.ResourceRequirements
-			break
+// getContainerResourceOverride gets the container resources override from the Installation for the given component's container.
+// Note: calico-windows-upgrade is not available in a manifest install so is not handled here.
+func getContainerResourceOverride(install *operatorv1.Installation, componentName, containerName string) (*corev1.ResourceRequirements, bool) {
+	switch componentName {
+	case "calico-node":
+		// Check if the component overrides is set for this component and find the container override if it exists.
+		if install.Spec.CalicoNodeDaemonSet != nil {
+			cs := install.Spec.CalicoNodeDaemonSet.GetContainers()
+			for _, c := range cs {
+				if c.Name == containerName {
+					return &c.Resources, true
+				}
+			}
+		}
+	case "calico-typha":
+		if install.Spec.TyphaDeployment != nil {
+			cs := install.Spec.TyphaDeployment.GetContainers()
+			for _, c := range cs {
+				if c.Name == containerName {
+					return &c.Resources, true
+				}
+			}
+		}
+	case "calico-kube-controllers":
+		if install.Spec.CalicoKubeControllersDeployment != nil {
+			cs := install.Spec.CalicoKubeControllersDeployment.GetContainers()
+			for _, c := range cs {
+				if c.Name == containerName {
+					return &c.Resources, true
+				}
+			}
 		}
 	}
-	if existingRR == nil {
-		install.Spec.ComponentResources = append(install.Spec.ComponentResources, operatorv1.ComponentResource{
-			ComponentName:        compName,
-			ResourceRequirements: rescReq.DeepCopy(),
-		})
-		return nil
+
+	return nil, false
+}
+
+// getInitContainerResourceOverride gets the init container resources override from the Installation for the given component's init container.
+// Note: calico-kube-controllers does not have init containers so is not handled here.
+// Note: calico-windows-upgrade is not available in a manifest install so is not handled here.
+func getInitContainerResourceOverride(install *operatorv1.Installation, componentName, initContainerName string) (*corev1.ResourceRequirements, bool) {
+	switch componentName {
+	case "calico-node":
+		// Check if the component overrides is set for this component and find the init container override if it exists.
+		if install.Spec.CalicoNodeDaemonSet != nil {
+			cs := install.Spec.CalicoNodeDaemonSet.GetInitContainers()
+			for _, c := range cs {
+				if c.Name == initContainerName {
+					return &c.Resources, true
+				}
+			}
+		}
+
+	case "calico-typha":
+		if install.Spec.TyphaDeployment != nil {
+			cs := install.Spec.TyphaDeployment.GetInitContainers()
+			for _, c := range cs {
+				if c.Name == initContainerName {
+					return &c.Resources, true
+				}
+			}
+		}
 	}
-	if reflect.DeepEqual(existingRR, rescReq) {
+
+	return nil, false
+}
+
+// convertComponentResources takes an installation and converts any deprecated ComponentResources in it to the new
+// component resource override fields. The ComponentResources field will be nil after the conversion.
+func convertComponentResources(install *operatorv1.Installation) {
+	// For each ComponentResource we find, create a component resource override container for it if it doesn't already exist
+	// After processing all ComponentResources, we can remove them.
+	for _, compRes := range install.Spec.ComponentResources {
+		switch compRes.ComponentName {
+		case operatorv1.ComponentNameNode:
+			// Ensure the override field is non nil
+			ensureEmptyCalicoNodeDaemonSetContainers(install)
+
+			// If the container already exists, do nothing since this container override takes precedence.
+			var found bool
+			for _, c := range install.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers {
+				if c.Name == render.CalicoNodeObjectName {
+					found = true
+				}
+			}
+
+			// If the container is not already specified, create the override container entry for it.
+			if !found {
+				container := operatorv1.CalicoNodeDaemonSetContainer{
+					Name:      render.CalicoNodeObjectName,
+					Resources: compRes.ResourceRequirements,
+				}
+				install.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers = append(install.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers, container)
+			}
+		case operatorv1.ComponentNameTypha:
+			// Ensure the override field is non nil
+			ensureEmptyTyphaDeploymentContainers(install)
+
+			// If the container already exists, do nothing since this container override takes precedence.
+			var found bool
+			for _, c := range install.Spec.TyphaDeployment.Spec.Template.Spec.Containers {
+				if c.Name == render.TyphaContainerName {
+					found = true
+				}
+			}
+
+			// If the container is not already specified, create the override container entry for it.
+			if !found {
+				container := operatorv1.TyphaDeploymentContainer{
+					Name:      render.TyphaContainerName,
+					Resources: compRes.ResourceRequirements,
+				}
+				install.Spec.TyphaDeployment.Spec.Template.Spec.Containers = append(install.Spec.TyphaDeployment.Spec.Template.Spec.Containers, container)
+			}
+		case operatorv1.ComponentNameKubeControllers:
+			// Ensure the override field is non nil
+			ensureEmptyCalicoKubeControllersDeploymentContainers(install)
+
+			// If the container already exists, do nothing since this container override takes precedence.
+			var found bool
+			for _, c := range install.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers {
+				if c.Name == kubecontrollers.KubeController {
+					found = true
+				}
+			}
+
+			// If the container is not already specified, create the override container entry for it.
+			if !found {
+				container := operatorv1.CalicoKubeControllersDeploymentContainer{
+					Name:      kubecontrollers.KubeController,
+					Resources: compRes.ResourceRequirements,
+				}
+				install.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers = append(install.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers, container)
+			}
+		}
+	}
+
+	// Lastly, clear out the ComponentResources slice.
+	install.Spec.ComponentResources = nil
+}
+
+// addContainerResources adds the resources for the specified component container if none was previously set. If the Installation
+// already had a resource for the component container then they are compared and if they are different then an error is returned.
+// If the component container resource is added to the Installation or the existing one matches then nil is returned.
+func addContainerResources(install *operatorv1.Installation, componentName, containerName string, resources *corev1.ResourceRequirements) error {
+	// If resources already exist for this component container, verify that they equal the container's existing resources.
+	if existingResources, found := getContainerResourceOverride(install, componentName, containerName); found {
+		if !reflect.DeepEqual(existingResources, resources) {
+			return ErrIncompatibleCluster{
+				err:       fmt.Sprintf("Resources for the component container %q did not match between Installation and migration source", containerName),
+				component: componentName,
+				fix:       "remove the component's container resources from your Installation resource, or remove them from the currently installed component",
+			}
+		}
 		return nil
 	}
 
-	return ErrIncompatibleCluster{
-		err:       "ResourcesRequirements for component did not match between Installation and migration source",
-		component: string(compName),
-		fix:       "remove the resource requirements / limits from your Installation resource, or remove them from the currently installed component",
+	// Create a container override using the resources and append it to the component resource override containers' field.
+	// Note: calico-windows-upgrade is not available in a manifest install so is not handled here.
+	switch componentName {
+	case render.CalicoNodeObjectName:
+		container := operatorv1.CalicoNodeDaemonSetContainer{Name: containerName, Resources: resources}
+		ensureEmptyCalicoNodeDaemonSetContainers(install)
+		install.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers = append(install.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers, container)
+	case kubecontrollers.KubeController:
+		container := operatorv1.CalicoKubeControllersDeploymentContainer{Name: containerName, Resources: resources}
+		ensureEmptyCalicoKubeControllersDeploymentContainers(install)
+		install.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers = append(install.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers, container)
+	case render.TyphaContainerName:
+		container := operatorv1.TyphaDeploymentContainer{Name: containerName, Resources: resources}
+		ensureEmptyTyphaDeploymentContainers(install)
+		install.Spec.TyphaDeployment.Spec.Template.Spec.Containers = append(install.Spec.TyphaDeployment.Spec.Template.Spec.Containers, container)
 	}
+
+	return nil
+}
+
+// addInitContainerResources adds the resources for the specified component init container if none was previously set. If the Installation
+// already had a resource for the component init container then they are compared and if they are different then an error is returned.
+// If the component init container resource is added to the Installation or the existing one matches then nil is returned.
+func addInitContainerResources(install *operatorv1.Installation, componentName, initContainerName string, resources *corev1.ResourceRequirements) error {
+	// If resources already exist for this component init container, verify that they equal the container's existing resources.
+	if existingResources, found := getInitContainerResourceOverride(install, componentName, initContainerName); found {
+		if !reflect.DeepEqual(existingResources, resources) {
+			return ErrIncompatibleCluster{
+				err:       fmt.Sprintf("Resources for the component init container %q did not match between Installation and migration source", initContainerName),
+				component: componentName,
+				fix:       "remove the component's init container resources from your Installation resource, or remove them from the currently installed component",
+			}
+		}
+		return nil
+	}
+
+	// Create an init container override using the resources and append it to the component resource override init containers' field.
+	// Note: calico-kube-controllers does not have init containers, and calico-windows-upgrade is not available in manifest installs.
+	switch componentName {
+	case render.CalicoNodeObjectName:
+		container := operatorv1.CalicoNodeDaemonSetInitContainer{Name: initContainerName, Resources: resources}
+		ensureEmptyCalicoNodeDaemonSetInitContainers(install)
+		install.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers = append(install.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers, container)
+	case render.TyphaContainerName:
+		container := operatorv1.TyphaDeploymentInitContainer{Name: initContainerName, Resources: resources}
+		ensureEmptyTyphaDeploymentInitContainers(install)
+		install.Spec.TyphaDeployment.Spec.Template.Spec.InitContainers = append(install.Spec.TyphaDeployment.Spec.Template.Spec.InitContainers, container)
+	}
+
+	return nil
 }
 
 // handleAnnotations is a migration handler that ensures the components only have expected annotations.

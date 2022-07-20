@@ -35,7 +35,6 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/ptr"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rkibana "github.com/tigera/operator/pkg/render/common/kibana"
@@ -61,19 +60,21 @@ const (
 	IntrusionDetectionControllerPolicyName = networkpolicy.TigeraComponentPolicyPrefix + IntrusionDetectionControllerName
 	IntrusionDetectionInstallerPolicyName  = networkpolicy.TigeraComponentPolicyPrefix + "intrusion-detection-elastic"
 
-	ADJobPodTemplateBaseName     = "tigera.io.detectors"
-	adDetectorPrefixName         = "tigera.io.detector."
-	adDetectorName               = "anomaly-detectors"
-	ADDetectorPolicyName         = networkpolicy.TigeraComponentPolicyPrefix + adDetectorName
-	adDetectionJobsDefaultPeriod = 15 * time.Minute
-	ADResourceGroup              = "detectors.tigera.io"
-	ADDetectorsModelResourceName = "models"
+	ADJobPodTemplateBaseName      = "tigera.io.detectors"
+	adDetectorPrefixName          = "tigera.io.detector."
+	adDetectorName                = "anomaly-detectors"
+	ADDetectorPolicyName          = networkpolicy.TigeraComponentPolicyPrefix + adDetectorName
+	adDetectionJobsDefaultPeriod  = 15 * time.Minute
+	ADResourceGroup               = "detectors.tigera.io"
+	ADDetectorsModelResourceName  = "models"
+	ADLogTypeMetaDataResourceName = "metadata"
 
-	ADAPIObjectName     = "anomaly-detection-api"
-	ADAPIObjectPortName = "anomaly-detection-api-https"
-	ADAPITLSSecretName  = "anomaly-detection-api-tls"
-	ADAPIPolicyName     = networkpolicy.TigeraComponentPolicyPrefix + ADAPIObjectName
-	adAPIPort           = 8080
+	ADAPIObjectName          = "anomaly-detection-api"
+	ADAPIObjectPortName      = "anomaly-detection-api-https"
+	ADAPITLSSecretName       = "anomaly-detection-api-tls"
+	ADAPIExpectedServiceName = "anomaly-detection-api.tigera-intrusion-detection.svc"
+	ADAPIPolicyName          = networkpolicy.TigeraComponentPolicyPrefix + ADAPIObjectName
+	adAPIPort                = 8080
 )
 
 var adAPIReplicas int32 = 1
@@ -1432,7 +1433,7 @@ func (c *intrusionDetectionComponent) adDetectorAccessRole() *rbacv1.Role {
 					ADResourceGroup,
 				},
 				Resources: []string{
-					ADDetectorsModelResourceName,
+					ADDetectorsModelResourceName, ADLogTypeMetaDataResourceName,
 				},
 				Verbs: []string{
 					"get",
@@ -1479,6 +1480,38 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 		privileged = true
 	}
 
+	envVars := []corev1.EnvVar{
+		{
+			Name:  "MODEL_STORAGE_API_HOST",
+			Value: ADAPIExpectedServiceName,
+		},
+		{
+			Name:  "MODEL_STORAGE_API_PORT",
+			Value: strconv.Itoa(adAPIPort),
+		},
+		{
+			Name:  "MODEL_STORAGE_CLIENT_CERT",
+			Value: c.cfg.ADAPIServerCertSecret.VolumeMountCertificateFilePath(),
+		},
+		{
+			Name:      "MODEL_STORAGE_API_TOKEN",
+			ValueFrom: secret.GetEnvVarSource(adDetectorName, "token", false),
+		},
+	}
+
+	container := corev1.Container{
+		Name:  "adjobs",
+		Image: c.adDetectorsImage,
+		SecurityContext: &corev1.SecurityContext{
+			Privileged: &privileged,
+		},
+		Env: envVars,
+		VolumeMounts: []corev1.VolumeMount{
+			c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType()),
+			c.cfg.ADAPIServerCertSecret.VolumeMount(c.SupportedOSType()),
+		},
+	}
+
 	return corev1.PodTemplate{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "PodTemplate",
@@ -1498,17 +1531,7 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 			},
 			Spec: corev1.PodSpec{
 				Volumes: []corev1.Volume{
-					{
-						Name: "es-certs",
-						VolumeSource: corev1.VolumeSource{
-							Secret: &corev1.SecretVolumeSource{
-								SecretName: relasticsearch.PublicCertSecret,
-								Items: []corev1.KeyToPath{
-									{Key: "tls.crt", Path: "es-ca.pem"},
-								},
-							},
-						},
-					},
+					c.cfg.TrustedCertBundle.Volume(),
 					c.cfg.ADAPIServerCertSecret.Volume(),
 				},
 				DNSPolicy:          corev1.DNSClusterFirst,
@@ -1517,61 +1540,7 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 				ServiceAccountName: adDetectorName,
 				Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster),
 				Containers: []corev1.Container{
-					{
-						Name:  "adjobs",
-						Image: c.adDetectorsImage,
-						SecurityContext: &corev1.SecurityContext{
-							Privileged: &privileged,
-						},
-						Env: []corev1.EnvVar{
-							{
-								Name: "ELASTIC_HOST",
-								// static index 2 refres to - <svc_name>.<ns>.svc format
-								Value: dns.GetServiceDNSNames(ESGatewayServiceName, ElasticsearchNamespace, c.cfg.ClusterDomain)[2],
-							},
-							{
-								Name:  "ELASTIC_PORT",
-								Value: strconv.Itoa(ElasticsearchDefaultPort),
-							},
-							{
-								Name:      "ELASTIC_USER",
-								ValueFrom: secret.GetEnvVarSource(ElasticsearchADJobUserSecret, "username", false),
-							},
-							{
-								Name:      "ELASTIC_PASSWORD",
-								ValueFrom: secret.GetEnvVarSource(ElasticsearchADJobUserSecret, "password", false),
-							},
-							{
-								Name: "MODEL_STORAGE_API_HOST",
-								// static index 2 refres to - <svc_name>.<ns>.svc format
-								Value: dns.GetServiceDNSNames(ADAPIObjectName, IntrusionDetectionNamespace, c.cfg.ClusterDomain)[2],
-							},
-							{
-								Name:  "MODEL_STORAGE_API_PORT",
-								Value: strconv.Itoa(adAPIPort),
-							},
-							{
-								Name:  "MODEL_STORAGE_CLIENT_CERT",
-								Value: c.cfg.ADAPIServerCertSecret.VolumeMountCertificateFilePath(),
-							},
-							{
-								Name:      "MODEL_STORAGE_API_TOKEN",
-								ValueFrom: secret.GetEnvVarSource(adDetectorName, "token", false),
-							},
-							{
-								Name:  "ES_CA_CERT",
-								Value: "/certs/es-ca.pem",
-							},
-						},
-						VolumeMounts: []corev1.VolumeMount{
-							{
-								Name:      "es-certs",
-								MountPath: "/certs/es-ca.pem",
-								SubPath:   "es-ca.pem",
-							},
-							c.cfg.ADAPIServerCertSecret.VolumeMount(c.SupportedOSType()),
-						},
-					},
+					relasticsearch.ContainerDecorate(container, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchADJobUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()),
 				},
 			},
 		},

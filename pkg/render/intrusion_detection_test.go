@@ -227,27 +227,14 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(detectorsSecret.GetObjectMeta().GetAnnotations()[corev1.ServiceAccountNameKey]).To(Equal("anomaly-detectors"))
 
 		detectorsRole := rtest.GetResource(resources, "anomaly-detectors", render.IntrusionDetectionNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
-		Expect(len(detectorsRole.Rules)).To(Equal(2))
+		Expect(len(detectorsRole.Rules)).To(Equal(1))
 		Expect(detectorsRole.Rules).To(ContainElements(
 			rbacv1.PolicyRule{
 				APIGroups: []string{
 					render.ADResourceGroup,
 				},
 				Resources: []string{
-					render.ADDetectorsModelResourceName,
-				},
-				Verbs: []string{
-					"get",
-					"create",
-					"update",
-				},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{
-					render.ADResourceGroup,
-				},
-				Resources: []string{
-					render.ADLogTypeMetaDataResourceName,
+					render.ADDetectorsModelResourceName, render.ADLogTypeMetaDataResourceName,
 				},
 				Verbs: []string{
 					"get",

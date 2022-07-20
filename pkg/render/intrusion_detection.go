@@ -1433,20 +1433,7 @@ func (c *intrusionDetectionComponent) adDetectorAccessRole() *rbacv1.Role {
 					ADResourceGroup,
 				},
 				Resources: []string{
-					ADDetectorsModelResourceName,
-				},
-				Verbs: []string{
-					"get",
-					"create",
-					"update",
-				},
-			},
-			{
-				APIGroups: []string{
-					ADResourceGroup,
-				},
-				Resources: []string{
-					ADLogTypeMetaDataResourceName,
+					ADDetectorsModelResourceName, ADLogTypeMetaDataResourceName,
 				},
 				Verbs: []string{
 					"get",

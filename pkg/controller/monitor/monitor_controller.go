@@ -64,9 +64,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	prometheusReady := &utils.ReadyFlag{}
+	tierWatchReady := &utils.ReadyFlag{}
 
 	// Create the reconciler
-	reconciler := newReconciler(mgr, opts, prometheusReady)
+	reconciler := newReconciler(mgr, opts, prometheusReady, tierWatchReady)
 
 	// Create a new controller
 	controller, err := controller.New("monitor-controller", mgr, controller.Options{Reconciler: reconciler})
@@ -90,7 +91,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log)
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
 
 	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, policyNames)
 
@@ -99,13 +100,14 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	return add(mgr, controller)
 }
 
-func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag) reconcile.Reconciler {
 	r := &ReconcileMonitor{
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
 		provider:        opts.DetectedProvider,
 		status:          status.New(mgr.GetClient(), "monitor", opts.KubernetesVersion),
 		prometheusReady: prometheusReady,
+		tierWatchReady:  tierWatchReady,
 		clusterDomain:   opts.ClusterDomain,
 	}
 
@@ -169,6 +171,7 @@ type ReconcileMonitor struct {
 	provider        operatorv1.Provider
 	status          status.StatusManager
 	prometheusReady *utils.ReadyFlag
+	tierWatchReady  *utils.ReadyFlag
 	clusterDomain   string
 }
 
@@ -286,6 +289,12 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		log.Error(err, "Failed to process the authentication CR.")
 		r.status.SetDegraded("Failed to process the authentication CR.", err.Error())
 		return reconcile.Result{}, err
+	}
+
+	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
+	if !r.tierWatchReady.IsReady() {
+		r.status.SetDegraded("Waiting for Tier watch to be established", "")
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	// Ensure the allow-tigera tier exists, before rendering any network policies within it.

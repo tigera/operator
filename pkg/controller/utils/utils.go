@@ -137,15 +137,14 @@ func WaitToAddNetworkPolicyWatches(controller controller.Controller, c kubernete
 	WaitToAddResourceWatch(controller, c, log, nil, objs)
 }
 
-func WaitToAddTierWatch(tierName string, controller controller.Controller, c kubernetes.Interface, log logr.Logger) {
+func WaitToAddTierWatch(tierName string, controller controller.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
 	obj := &v3.Tier{
 		TypeMeta:   metav1.TypeMeta{Kind: "Tier", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{Name: tierName},
 	}
 
-	// The success of a Tier watch is not a dependency for resources to be installed or function correctly.
-	// Therefore, no ready flag is accepted or created for the watch.
-	WaitToAddResourceWatch(controller, c, log, nil, []client.Object{obj})
+	// The success of a Tier watch can be used as a signal that Tier queries will be resolved using the cache.
+	WaitToAddResourceWatch(controller, c, log, flag, []client.Object{obj})
 }
 
 // AddNamespacedWatch creates a watch on the given object. If a name and namespace are provided, then it will

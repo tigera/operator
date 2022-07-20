@@ -113,6 +113,7 @@ var _ = Describe("Manager controller tests", func() {
 				status:          mockStatus,
 				clusterDomain:   clusterDomain,
 				licenseAPIReady: &utils.ReadyFlag{},
+				tierWatchReady:  &utils.ReadyFlag{},
 			}
 
 			Expect(c.Create(ctx, &operatorv1.APIServer{
@@ -195,6 +196,7 @@ var _ = Describe("Manager controller tests", func() {
 
 			// Mark that watches were successful.
 			r.licenseAPIReady.MarkAsReady()
+			r.tierWatchReady.MarkAsReady()
 		})
 
 		It("should reconcile if user supplied a manager TLS cert", func() {
@@ -315,6 +317,7 @@ var _ = Describe("Manager controller tests", func() {
 				provider:        operatorv1.ProviderNone,
 				status:          mockStatus,
 				licenseAPIReady: &utils.ReadyFlag{},
+				tierWatchReady:  &utils.ReadyFlag{},
 			}
 
 			Expect(c.Create(ctx, &operatorv1.APIServer{
@@ -396,6 +399,7 @@ var _ = Describe("Manager controller tests", func() {
 
 			// Mark that watches were successful.
 			r.licenseAPIReady.MarkAsReady()
+			r.tierWatchReady.MarkAsReady()
 		})
 
 		Context("image reconciliation", func() {
@@ -477,11 +481,32 @@ var _ = Describe("Manager controller tests", func() {
 			})
 		})
 
-		It("should wait if allow-tigera tier is unavailable", func() {
-			mockStatus = &status.MockStatus{}
-			mockStatus.On("OnCRFound").Return()
-			r.status = mockStatus
-			utils.DeleteAllowTigeraTierAndExpectWait(ctx, c, &r, mockStatus)
+		Context("allow-tigera reconciliation", func() {
+			var readyFlag *utils.ReadyFlag
+			BeforeEach(func() {
+				mockStatus = &status.MockStatus{}
+				mockStatus.On("OnCRFound").Return()
+
+				readyFlag = &utils.ReadyFlag{}
+				readyFlag.MarkAsReady()
+				r = ReconcileManager{
+					client:          c,
+					scheme:          scheme,
+					provider:        operatorv1.ProviderNone,
+					status:          mockStatus,
+					licenseAPIReady: readyFlag,
+					tierWatchReady:  readyFlag,
+				}
+			})
+
+			It("should wait if allow-tigera tier is unavailable", func() {
+				utils.DeleteAllowTigeraTierAndExpectWait(ctx, c, &r, mockStatus)
+			})
+
+			It("should wait if tier watch is not ready", func() {
+				r.tierWatchReady = &utils.ReadyFlag{}
+				utils.ExpectWaitForTierWatch(ctx, &r, mockStatus)
+			})
 		})
 	})
 })

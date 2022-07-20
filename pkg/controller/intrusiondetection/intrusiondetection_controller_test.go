@@ -95,6 +95,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			status:          mockStatus,
 			licenseAPIReady: &utils.ReadyFlag{},
 			dpiAPIReady:     &utils.ReadyFlag{},
+			tierWatchReady:  &utils.ReadyFlag{},
 		}
 
 		// We start off with a 'standard' installation, with nothing special
@@ -153,9 +154,10 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		// Apply the intrusiondetection CR to the fake cluster.
 		Expect(c.Create(ctx, &operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
 
-		// Mark that watches were successful.
+		// mark that the watches were successful
 		r.licenseAPIReady.MarkAsReady()
 		r.dpiAPIReady.MarkAsReady()
+		r.tierWatchReady.MarkAsReady()
 	})
 
 	Context("image reconciliation", func() {
@@ -418,12 +420,34 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		})
 	})
 
-	It("should wait if allow-tigera tier is unavailable", func() {
-		mockStatus = &status.MockStatus{}
-		mockStatus.On("OnCRFound").Return()
-		r.status = mockStatus
+	Context("allow-tigera reconciliation", func() {
+		var readyFlag *utils.ReadyFlag
 
-		utils.DeleteAllowTigeraTierAndExpectWait(ctx, c, &r, mockStatus)
+		BeforeEach(func() {
+			mockStatus = &status.MockStatus{}
+			mockStatus.On("OnCRFound").Return()
+
+			readyFlag = &utils.ReadyFlag{}
+			readyFlag.MarkAsReady()
+			r = ReconcileIntrusionDetection{
+				client:          c,
+				scheme:          scheme,
+				provider:        operatorv1.ProviderNone,
+				status:          mockStatus,
+				licenseAPIReady: readyFlag,
+				dpiAPIReady:     readyFlag,
+				tierWatchReady:  readyFlag,
+			}
+		})
+
+		It("should wait if allow-tigera tier is unavailable", func() {
+			utils.DeleteAllowTigeraTierAndExpectWait(ctx, c, &r, mockStatus)
+		})
+
+		It("should wait if tier watch is not ready", func() {
+			r.tierWatchReady = &utils.ReadyFlag{}
+			utils.ExpectWaitForTierWatch(ctx, &r, mockStatus)
+		})
 	})
 
 	Context("secret availability", func() {

@@ -63,7 +63,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	statusManager := status.New(mgr.GetClient(), "management-cluster-connection", opts.KubernetesVersion)
 
 	// Create the reconciler
-	reconciler := newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider, opts)
+	tierWatchReady := &utils.ReadyFlag{}
+	reconciler := newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider, tierWatchReady, opts)
 
 	// Create a new controller
 	controller, err := controller.New(controllerName, mgr, controller.Options{Reconciler: reconciler})
@@ -79,7 +80,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	// Watch for changes to License and Tier, as their status is used as input to determine whether network policy should be reconciled by this controller.
 	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, nil)
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log)
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
 
 	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, []types.NamespacedName{
 		{Name: render.GuardianPolicyName, Namespace: render.GuardianNamespace},
@@ -95,14 +96,16 @@ func newReconciler(
 	schema *runtime.Scheme,
 	statusMgr status.StatusManager,
 	p operatorv1.Provider,
+	tierWatchReady *utils.ReadyFlag,
 	opts options.AddOptions,
 ) *ReconcileConnection {
 	c := &ReconcileConnection{
-		Client:        cli,
-		Scheme:        schema,
-		Provider:      p,
-		status:        statusMgr,
-		clusterDomain: opts.ClusterDomain,
+		Client:         cli,
+		Scheme:         schema,
+		Provider:       p,
+		status:         statusMgr,
+		clusterDomain:  opts.ClusterDomain,
+		tierWatchReady: tierWatchReady,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
@@ -156,11 +159,12 @@ var _ reconcile.Reconciler = &ReconcileConnection{}
 
 // ReconcileConnection reconciles a ManagementClusterConnection object
 type ReconcileConnection struct {
-	Client        client.Client
-	Scheme        *runtime.Scheme
-	Provider      operatorv1.Provider
-	status        status.StatusManager
-	clusterDomain string
+	Client         client.Client
+	Scheme         *runtime.Scheme
+	Provider       operatorv1.Provider
+	status         status.StatusManager
+	clusterDomain  string
+	tierWatchReady *utils.ReadyFlag
 }
 
 // Reconcile reads that state of the cluster for a ManagementClusterConnection object and makes changes based on the
@@ -242,6 +246,12 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 		trustedCertBundle.AddCertificates(secret)
+	}
+
+	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
+	if !r.tierWatchReady.IsReady() {
+		r.status.SetDegraded("Waiting for Tier watch to be established", "")
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	// Ensure the allow-tigera tier exists, before rendering any network policies within it.

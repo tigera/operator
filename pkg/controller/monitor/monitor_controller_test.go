@@ -80,6 +80,7 @@ var _ = Describe("Monitor controller tests", func() {
 			provider:        operatorv1.ProviderNone,
 			status:          mockStatus,
 			prometheusReady: &utils.ReadyFlag{},
+			tierWatchReady:  &utils.ReadyFlag{},
 		}
 
 		// We start off with a 'standard' installation, with nothing special
@@ -108,6 +109,7 @@ var _ = Describe("Monitor controller tests", func() {
 
 		// Mark that watches were successful.
 		r.prometheusReady.MarkAsReady()
+		r.tierWatchReady.MarkAsReady()
 	})
 
 	Context("controller reconciliation", func() {
@@ -161,6 +163,20 @@ var _ = Describe("Monitor controller tests", func() {
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
+
+			policies := v3.NetworkPolicyList{}
+			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
+			Expect(policies.Items).To(HaveLen(0))
+		})
+
+		It("should degrade and wait if tier is ready but tier watch is not ready", func() {
+			r.tierWatchReady = &utils.ReadyFlag{}
+			mockStatus = &status.MockStatus{}
+			mockStatus.On("OnCRFound").Return()
+			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
+			r.status = mockStatus
+
+			utils.ExpectWaitForTierWatch(ctx, &r, mockStatus)
 
 			policies := v3.NetworkPolicyList{}
 			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())

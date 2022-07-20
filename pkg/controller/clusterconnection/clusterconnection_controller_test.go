@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/tigera/operator/pkg/controller/utils"
+
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
@@ -53,6 +55,10 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 	var dpl *appsv1.Deployment
 	var mockStatus *status.MockStatus
 
+	notReady := &utils.ReadyFlag{}
+	ready := &utils.ReadyFlag{}
+	ready.MarkAsReady()
+
 	BeforeEach(func() {
 		// Create a Kubernetes client.
 		scheme = runtime.NewScheme()
@@ -75,7 +81,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ReadyToMonitor")
 
-		r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone)
+		r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone, ready)
 		dpl = &appsv1.Deployment{
 			TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 			ObjectMeta: metav1.ObjectMeta{
@@ -147,7 +153,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 
 	Context("image reconciliation", func() {
 		It("should use builtin images", func() {
-			r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone)
+			r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone, ready)
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -177,7 +183,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				},
 			})).ToNot(HaveOccurred())
 
-			r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone)
+			r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone, ready)
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -213,11 +219,11 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 			}
 			Expect(c.Create(ctx, licenseKey)).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
-			r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone)
+			r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone, ready)
 		})
 
 		Context("IP-based management cluster address", func() {
-			It("should render allow-tigera policy when tier is ready", func() {
+			It("should render allow-tigera policy when tier and watch are ready", func() {
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -233,6 +239,19 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				Expect(c.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
+
+				policies := v3.NetworkPolicyList{}
+				Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
+				Expect(policies.Items).To(HaveLen(0))
+			})
+
+			It("should degrade and wait when tier is ready, but tier watch is not ready", func() {
+				mockStatus = &status.MockStatus{}
+				mockStatus.On("Run").Return()
+				mockStatus.On("OnCRFound").Return()
+
+				r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone, notReady)
+				utils.ExpectWaitForTierWatch(ctx, r, mockStatus)
 
 				policies := v3.NetworkPolicyList{}
 				Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
@@ -267,10 +286,23 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				mockStatus.On("OnCRFound").Return()
 				mockStatus.On("SetDegraded", "Feature is not active", "License does not support feature: egress-access-control").Return()
 
-				r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone)
+				r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone, ready)
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 				mockStatus.AssertExpectations(GinkgoT())
+			})
+
+			It("should degrade and wait when tier and license are ready, but tier watch is not ready", func() {
+				mockStatus = &status.MockStatus{}
+				mockStatus.On("Run").Return()
+				mockStatus.On("OnCRFound").Return()
+
+				r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone, notReady)
+				utils.ExpectWaitForTierWatch(ctx, r, mockStatus)
+
+				policies := v3.NetworkPolicyList{}
+				Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
+				Expect(policies.Items).To(HaveLen(0))
 			})
 
 			It("should omit allow-tigera policy when tier is ready but license is not ready", func() {

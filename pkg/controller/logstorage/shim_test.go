@@ -33,7 +33,8 @@ func NewReconcilerWithShims(
 	status status.StatusManager,
 	provider operatorv1.Provider,
 	esCliCreator utils.ElasticsearchClientCreator,
-	clusterDomain string) (*ReconcileLogStorage, error) {
+	clusterDomain string,
+	tierWatchReady *utils.ReadyFlag) (*ReconcileLogStorage, error) {
 
 	opts := options.AddOptions{
 		DetectedProvider: provider,
@@ -41,5 +42,5 @@ func NewReconcilerWithShims(
 		ShutdownContext:  context.TODO(),
 	}
 
-	return newReconciler(cli, schema, status, opts, esCliCreator)
+	return newReconciler(cli, schema, status, opts, esCliCreator, tierWatchReady)
 }

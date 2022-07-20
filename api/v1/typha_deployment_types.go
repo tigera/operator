@@ -37,7 +37,7 @@ type TyphaDeploymentContainer struct {
 // TyphaDeploymentInitContainer is a typha Deployment init container.
 type TyphaDeploymentInitContainer struct {
 	// Name is an enum which identifies the typha Deployment init container by name.
-	// +kubebuilder:validation:Enum=calico-typha
+	// +kubebuilder:validation:Enum=typha-certs-key-cert-provisioner
 	Name string `json:"name"`
 
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.

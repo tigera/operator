@@ -66,6 +66,14 @@ var _ = Describe("core handler", func() {
 				v1.ResourceMemory: resource.MustParse("50Mi"),
 			},
 		}
+		var rqs3 = v1.ResourceRequirements{
+			Limits: v1.ResourceList{
+				v1.ResourceStorage: resource.MustParse("10G"),
+			},
+			Requests: v1.ResourceList{
+				v1.ResourceStorage: resource.MustParse("10G"),
+			},
+		}
 
 		It("should migrate resources from calico-node if they are set", func() {
 			comps.node.Spec.Template.Spec.Containers[0].Resources = rqs1
@@ -155,6 +163,192 @@ var _ = Describe("core handler", func() {
 				Name:      "calico-node",
 				Resources: &rqs1,
 			}))
+		})
+
+		It("should use the new CalicoNodeDaemonSet field over the deprecated ComponentResource", func() {
+			// Set the new component resource override for the calico-node container.
+			ensureEmptyCalicoNodeDaemonSetContainers(i)
+			ensureEmptyCalicoNodeDaemonSetInitContainers(i)
+			i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers = []operatorv1.CalicoNodeDaemonSetContainer{
+				{
+					Name:      "calico-node",
+					Resources: &rqs1,
+				},
+			}
+			i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers = []operatorv1.CalicoNodeDaemonSetInitContainer{
+				{
+					Name:      "install-cni",
+					Resources: &rqs3,
+				},
+			}
+
+			// Set the deprecated ComponentResources for calico-node.
+			i.Spec.ComponentResources = append(i.Spec.ComponentResources, operatorv1.ComponentResource{
+				ComponentName:        operatorv1.ComponentNameNode,
+				ResourceRequirements: &rqs2,
+			})
+
+			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+			Expect(i.Spec.ComponentResources).To(HaveLen(0))
+			Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers).To(ConsistOf(operatorv1.CalicoNodeDaemonSetContainer{
+				Name:      "calico-node",
+				Resources: &rqs1,
+			}))
+			Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers).To(ConsistOf(operatorv1.CalicoNodeDaemonSetInitContainer{
+				Name:      "install-cni",
+				Resources: &rqs3,
+			}))
+		})
+
+		It("should use the new CalicoKubeControllersDeployment field over the deprecated ComponentResource", func() {
+			// Set the new component resource override.
+			ensureEmptyCalicoKubeControllersDeploymentContainers(i)
+			i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers = []operatorv1.CalicoKubeControllersDeploymentContainer{
+				{
+					Name:      "calico-kube-controllers",
+					Resources: &rqs1,
+				},
+			}
+
+			// Set the deprecated ComponentResources for calico-node.
+			i.Spec.ComponentResources = append(i.Spec.ComponentResources, operatorv1.ComponentResource{
+				ComponentName:        operatorv1.ComponentNameKubeControllers,
+				ResourceRequirements: &rqs2,
+			})
+
+			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+			Expect(i.Spec.ComponentResources).To(HaveLen(0))
+			Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers).To(ConsistOf(operatorv1.CalicoKubeControllersDeploymentContainer{
+				Name:      "calico-kube-controllers",
+				Resources: &rqs1,
+			}))
+		})
+
+		It("should use the new TyphaDeployment field over the deprecated ComponentResource", func() {
+			// Set the new component resource override.
+			ensureEmptyTyphaDeploymentContainers(i)
+			ensureEmptyTyphaDeploymentInitContainers(i)
+			i.Spec.TyphaDeployment.Spec.Template.Spec.Containers = []operatorv1.TyphaDeploymentContainer{
+				{
+					Name:      "calico-typha",
+					Resources: &rqs1,
+				},
+			}
+			i.Spec.TyphaDeployment.Spec.Template.Spec.InitContainers = []operatorv1.TyphaDeploymentInitContainer{
+				{
+					Name:      "typha-certs-key-cert-provisioner",
+					Resources: &rqs2,
+				},
+			}
+
+			// Set the deprecated ComponentResources for calico-node.
+			i.Spec.ComponentResources = append(i.Spec.ComponentResources, operatorv1.ComponentResource{
+				ComponentName:        operatorv1.ComponentNameTypha,
+				ResourceRequirements: &rqs3,
+			})
+
+			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+			Expect(i.Spec.ComponentResources).To(HaveLen(0))
+			Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.InitContainers).To(ConsistOf(operatorv1.TyphaDeploymentInitContainer{
+				Name:      "typha-certs-key-cert-provisioner",
+				Resources: &rqs2,
+			}))
+			Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.Containers).To(ConsistOf(operatorv1.TyphaDeploymentContainer{
+				Name:      "calico-typha",
+				Resources: &rqs1,
+			}))
+		})
+
+		It("should return an error if the calico-node container resources do not match the deprecated ComponentResource", func() {
+			comps.node.Spec.Template.Spec.Containers[0].Resources = rqs1
+
+			i.Spec.ComponentResources = append(i.Spec.ComponentResources, operatorv1.ComponentResource{
+				ComponentName:        operatorv1.ComponentNameNode,
+				ResourceRequirements: &rqs2,
+			})
+
+			err := handleCore(&comps, i)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(HavePrefix("Resources for the component container \"calico-node\" did not match between Installation and migration source."))
+		})
+
+		It("should return an error if the calico-node container resources do not match those in CalicoNodeDaemonSetContainer", func() {
+			comps.node.Spec.Template.Spec.Containers[0].Resources = rqs1
+
+			ensureEmptyCalicoNodeDaemonSetContainers(i)
+			i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers = []operatorv1.CalicoNodeDaemonSetContainer{
+				{
+					Name:      "calico-node",
+					Resources: &rqs2,
+				},
+			}
+
+			err := handleCore(&comps, i)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(HavePrefix("Resources for the component container \"calico-node\" did not match between Installation and migration source."))
+		})
+
+		It("should return an error if the calico-kube-controllers container resources do not match the deprecated ComponentResource", func() {
+			comps.kubeControllers.Spec.Template.Spec.Containers[0].Resources = rqs1
+
+			i.Spec.ComponentResources = append(i.Spec.ComponentResources, operatorv1.ComponentResource{
+				ComponentName:        operatorv1.ComponentNameKubeControllers,
+				ResourceRequirements: &rqs2,
+			})
+
+			err := handleCore(&comps, i)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(HavePrefix("Resources for the component container \"calico-kube-controllers\" did not match between Installation and migration source."))
+		})
+
+		It("should return an error if the calico-kube-controllers container resources do not match those in CalicoKubeControllersDeploymentContainer", func() {
+			comps.kubeControllers.Spec.Template.Spec.Containers[0].Resources = rqs1
+
+			ensureEmptyCalicoKubeControllersDeploymentContainers(i)
+			i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers = []operatorv1.CalicoKubeControllersDeploymentContainer{
+				{
+					Name:      "calico-kube-controllers",
+					Resources: &rqs2,
+				},
+			}
+
+			err := handleCore(&comps, i)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(HavePrefix("Resources for the component container \"calico-kube-controllers\" did not match between Installation and migration source."))
+		})
+
+		It("should return an error if the calico-typha container resources do not match the deprecated ComponentResource", func() {
+			comps.typha.Spec.Template.Spec.Containers[0].Resources = rqs1
+
+			i.Spec.ComponentResources = append(i.Spec.ComponentResources, operatorv1.ComponentResource{
+				ComponentName:        operatorv1.ComponentNameTypha,
+				ResourceRequirements: &rqs2,
+			})
+
+			err := handleCore(&comps, i)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(HavePrefix("Resources for the component container \"calico-typha\" did not match between Installation and migration source."))
+		})
+
+		It("should return an error if the calico-typha container resources do not match those in TyphaDeploymentContainer", func() {
+			comps.typha.Spec.Template.Spec.Containers[0].Resources = rqs1
+
+			ensureEmptyTyphaDeploymentContainers(i)
+			i.Spec.TyphaDeployment.Spec.Template.Spec.Containers = []operatorv1.TyphaDeploymentContainer{
+				{
+					Name:      "calico-typha",
+					Resources: &rqs2,
+				},
+			}
+
+			err := handleCore(&comps, i)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(HavePrefix("Resources for the component container \"calico-typha\" did not match between Installation and migration source."))
 		})
 	})
 

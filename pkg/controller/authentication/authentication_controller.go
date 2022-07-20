@@ -82,7 +82,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("%s failed to establish a connection to k8s: %w", controllerName, err)
 	}
 
-	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, reconciler.policyWatchesReady, []types.NamespacedName{
+	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
 		{Name: render.DexPolicyName, Namespace: render.DexNamespace},
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.DexNamespace},
 	})
@@ -93,12 +93,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileAuthentication {
 	r := &ReconcileAuthentication{
-		client:             mgr.GetClient(),
-		scheme:             mgr.GetScheme(),
-		provider:           opts.DetectedProvider,
-		status:             status.New(mgr.GetClient(), "authentication", opts.KubernetesVersion),
-		clusterDomain:      opts.ClusterDomain,
-		policyWatchesReady: &utils.ReadyFlag{},
+		client:        mgr.GetClient(),
+		scheme:        mgr.GetScheme(),
+		provider:      opts.DetectedProvider,
+		status:        status.New(mgr.GetClient(), "authentication", opts.KubernetesVersion),
+		clusterDomain: opts.ClusterDomain,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -143,12 +142,11 @@ var _ reconcile.Reconciler = &ReconcileAuthentication{}
 
 // ReconcileAuthentication reconciles an Authentication object
 type ReconcileAuthentication struct {
-	client             client.Client
-	scheme             *runtime.Scheme
-	provider           oprv1.Provider
-	status             status.StatusManager
-	clusterDomain      string
-	policyWatchesReady *utils.ReadyFlag
+	client        client.Client
+	scheme        *runtime.Scheme
+	provider      oprv1.Provider
+	status        status.StatusManager
+	clusterDomain string
 }
 
 // Reconciles the cluster state with the Authentication object that is found in the cluster.
@@ -204,17 +202,6 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		log.Error(err, fmt.Sprintf("Waiting for network to be %s", oprv1.TigeraSecureEnterprise))
 		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", oprv1.TigeraSecureEnterprise), "")
 		return reconcile.Result{}, nil
-	}
-
-	// Ensure the API Server is ready, before rendering any objects that utilize the V3 API.
-	if !utils.IsAPIServerReady(r.client, reqLogger) {
-		r.status.SetDegraded("Waiting for Tigera API server to be ready", "")
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-	}
-
-	if !r.policyWatchesReady.IsReady() {
-		r.status.SetDegraded("Waiting for NetworkPolicy watches to be established", "")
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	// Make sure the tigera-dex namespace exists, before rendering any objects there.

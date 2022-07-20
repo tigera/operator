@@ -116,7 +116,10 @@ var _ = Describe("tier controller tests", func() {
 	})
 
 	It("waits for API server to be available before reconciling", func() {
+		err := c.Delete(ctx, &operatorv1.APIServer{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})
+		Expect(err).ShouldNot(HaveOccurred())
 		mockStatus = &status.MockStatus{}
+		mockStatus.On("SetDegraded", "Waiting for Tigera API server to be ready", "").Return()
 		r = ReconcileTiers{
 			client:             c,
 			scheme:             scheme,
@@ -125,33 +128,11 @@ var _ = Describe("tier controller tests", func() {
 			tierWatchReady:     readyFlag,
 			policyWatchesReady: readyFlag,
 		}
-		utils.DeleteAPIServerAndExpectWait(ctx, c, &r, mockStatus)
-	})
 
-	It("should wait if policy watches are not ready", func() {
-		mockStatus = &status.MockStatus{}
-		r = ReconcileTiers{
-			client:             c,
-			scheme:             scheme,
-			provider:           operatorv1.ProviderNone,
-			status:             mockStatus,
-			tierWatchReady:     readyFlag,
-			policyWatchesReady: &utils.ReadyFlag{},
-		}
-		utils.ExpectWaitForPolicyWatches(ctx, &r, mockStatus)
-	})
+		_, err = r.Reconcile(ctx, reconcile.Request{})
 
-	It("should wait if tier watch is not ready", func() {
-		mockStatus = &status.MockStatus{}
-		r = ReconcileTiers{
-			client:             c,
-			scheme:             scheme,
-			provider:           operatorv1.ProviderNone,
-			status:             mockStatus,
-			tierWatchReady:     &utils.ReadyFlag{},
-			policyWatchesReady: readyFlag,
-		}
-		utils.ExpectWaitForTierWatch(ctx, &r, mockStatus)
+		Expect(err).ShouldNot(HaveOccurred())
+		mockStatus.AssertExpectations(GinkgoT())
 	})
 
 	It("should require license", func() {

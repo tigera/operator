@@ -18,8 +18,121 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 )
 
+func ensureEmptyCalicoNodeDaemonSetMetadata(install *operatorv1.Installation) {
+	if install.Spec.CalicoNodeDaemonSet == nil {
+		install.Spec.CalicoNodeDaemonSet = &operatorv1.CalicoNodeDaemonSet{
+			Metadata: &operatorv1.Metadata{},
+		}
+	}
+	if install.Spec.CalicoNodeDaemonSet.Metadata == nil {
+		install.Spec.CalicoNodeDaemonSet.Metadata = &operatorv1.Metadata{}
+	}
+}
+
+func ensureEmptyCalicoNodeDaemonSetPodTemplateMetadata(install *operatorv1.Installation) {
+	if install.Spec.CalicoNodeDaemonSet == nil {
+		install.Spec.CalicoNodeDaemonSet = &operatorv1.CalicoNodeDaemonSet{
+			Spec: &operatorv1.CalicoNodeDaemonSetSpec{
+				Template: &operatorv1.CalicoNodeDaemonSetPodTemplateSpec{
+					Metadata: &operatorv1.Metadata{},
+				},
+			},
+		}
+	}
+	if install.Spec.CalicoNodeDaemonSet.Spec == nil {
+		install.Spec.CalicoNodeDaemonSet.Spec = &operatorv1.CalicoNodeDaemonSetSpec{
+			Template: &operatorv1.CalicoNodeDaemonSetPodTemplateSpec{
+				Metadata: &operatorv1.Metadata{},
+			},
+		}
+	}
+	if install.Spec.CalicoNodeDaemonSet.Spec.Template == nil {
+		install.Spec.CalicoNodeDaemonSet.Spec.Template = &operatorv1.CalicoNodeDaemonSetPodTemplateSpec{
+			Metadata: &operatorv1.Metadata{},
+		}
+	}
+	if install.Spec.CalicoNodeDaemonSet.Spec.Template.Metadata == nil {
+		install.Spec.CalicoNodeDaemonSet.Spec.Template.Metadata = &operatorv1.Metadata{}
+	}
+}
+
+func ensureEmptyCalicoKubeControllersDeploymentMetadata(install *operatorv1.Installation) {
+	if install.Spec.CalicoKubeControllersDeployment == nil {
+		install.Spec.CalicoKubeControllersDeployment = &operatorv1.CalicoKubeControllersDeployment{
+			Metadata: &operatorv1.Metadata{},
+		}
+	}
+	if install.Spec.CalicoKubeControllersDeployment.Metadata == nil {
+		install.Spec.CalicoKubeControllersDeployment.Metadata = &operatorv1.Metadata{}
+	}
+}
+
+func ensureEmptyCalicoKubeControllersDeploymentPodTemplateMetadata(install *operatorv1.Installation) {
+	if install.Spec.CalicoKubeControllersDeployment == nil {
+		install.Spec.CalicoKubeControllersDeployment = &operatorv1.CalicoKubeControllersDeployment{
+			Spec: &operatorv1.CalicoKubeControllersDeploymentSpec{
+				Template: &operatorv1.CalicoKubeControllersDeploymentPodTemplateSpec{
+					Metadata: &operatorv1.Metadata{},
+				},
+			},
+		}
+	}
+	if install.Spec.CalicoKubeControllersDeployment.Spec == nil {
+		install.Spec.CalicoKubeControllersDeployment.Spec = &operatorv1.CalicoKubeControllersDeploymentSpec{
+			Template: &operatorv1.CalicoKubeControllersDeploymentPodTemplateSpec{
+				Metadata: &operatorv1.Metadata{},
+			},
+		}
+	}
+	if install.Spec.CalicoKubeControllersDeployment.Spec.Template == nil {
+		install.Spec.CalicoKubeControllersDeployment.Spec.Template = &operatorv1.CalicoKubeControllersDeploymentPodTemplateSpec{
+			Metadata: &operatorv1.Metadata{},
+		}
+	}
+	if install.Spec.CalicoKubeControllersDeployment.Spec.Template.Metadata == nil {
+		install.Spec.CalicoKubeControllersDeployment.Spec.Template.Metadata = &operatorv1.Metadata{}
+	}
+}
+
+func ensureEmptyTyphaDeploymentMetadata(install *operatorv1.Installation) {
+	if install.Spec.TyphaDeployment == nil {
+		install.Spec.TyphaDeployment = &operatorv1.TyphaDeployment{
+			Metadata: &operatorv1.Metadata{},
+		}
+	}
+	if install.Spec.TyphaDeployment.Metadata == nil {
+		install.Spec.TyphaDeployment.Metadata = &operatorv1.Metadata{}
+	}
+}
+
+func ensureEmptyTyphaDeploymentPodTemplateMetadata(install *operatorv1.Installation) {
+	if install.Spec.TyphaDeployment == nil {
+		install.Spec.TyphaDeployment = &operatorv1.TyphaDeployment{
+			Spec: &operatorv1.TyphaDeploymentSpec{
+				Template: &operatorv1.TyphaDeploymentPodTemplateSpec{
+					Metadata: &operatorv1.Metadata{},
+				},
+			},
+		}
+	}
+	if install.Spec.TyphaDeployment.Spec == nil {
+		install.Spec.TyphaDeployment.Spec = &operatorv1.TyphaDeploymentSpec{
+			Template: &operatorv1.TyphaDeploymentPodTemplateSpec{
+				Metadata: &operatorv1.Metadata{},
+			},
+		}
+	}
+	if install.Spec.TyphaDeployment.Spec.Template == nil {
+		install.Spec.TyphaDeployment.Spec.Template = &operatorv1.TyphaDeploymentPodTemplateSpec{
+			Metadata: &operatorv1.Metadata{},
+		}
+	}
+	if install.Spec.TyphaDeployment.Spec.Template.Metadata == nil {
+		install.Spec.TyphaDeployment.Spec.Template.Metadata = &operatorv1.Metadata{}
+	}
+}
+
 func ensureEmptyCalicoNodeDaemonSetContainers(install *operatorv1.Installation) {
-	// Ensure the override field is non nil
 	if install.Spec.CalicoNodeDaemonSet == nil {
 		install.Spec.CalicoNodeDaemonSet = &operatorv1.CalicoNodeDaemonSet{
 			Spec: &operatorv1.CalicoNodeDaemonSetSpec{
@@ -63,7 +176,6 @@ func ensureEmptyCalicoNodeDaemonSetContainers(install *operatorv1.Installation) 
 }
 
 func ensureEmptyCalicoNodeDaemonSetInitContainers(install *operatorv1.Installation) {
-	// Ensure the override field is non nil
 	if install.Spec.CalicoNodeDaemonSet == nil {
 		install.Spec.CalicoNodeDaemonSet = &operatorv1.CalicoNodeDaemonSet{
 			Spec: &operatorv1.CalicoNodeDaemonSetSpec{
@@ -107,7 +219,6 @@ func ensureEmptyCalicoNodeDaemonSetInitContainers(install *operatorv1.Installati
 }
 
 func ensureEmptyTyphaDeploymentContainers(install *operatorv1.Installation) {
-	// Ensure the override field is non nil
 	if install.Spec.TyphaDeployment == nil {
 		install.Spec.TyphaDeployment = &operatorv1.TyphaDeployment{
 			Spec: &operatorv1.TyphaDeploymentSpec{
@@ -194,7 +305,6 @@ func ensureEmptyTyphaDeploymentInitContainers(install *operatorv1.Installation) 
 }
 
 func ensureEmptyCalicoKubeControllersDeploymentContainers(install *operatorv1.Installation) {
-	// Ensure the override field is non nil
 	if install.Spec.CalicoKubeControllersDeployment == nil {
 		install.Spec.CalicoKubeControllersDeployment = &operatorv1.CalicoKubeControllersDeployment{
 			Spec: &operatorv1.CalicoKubeControllersDeploymentSpec{

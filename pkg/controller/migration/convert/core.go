@@ -446,49 +446,243 @@ func addInitContainerResources(install *operatorv1.Installation, componentName, 
 	return nil
 }
 
-// handleAnnotations is a migration handler that ensures the components only have expected annotations.
-// since Operator does not support setting custom annotations on components, these annotations
-// would otherwise be dropped.
-func handleAnnotations(c *components, _ *operatorv1.Installation) error {
-	if a := removeExpectedAnnotations(c.node.Annotations, map[string]string{}, toBeIgnoredAnnotationKeyRegExps); len(a) != 0 {
-		return ErrIncompatibleAnnotation(a, ComponentCalicoNode)
+// handleAnnotations is a migration handler that ensures the components' annotations are migrated to the install.
+func handleAnnotations(c *components, install *operatorv1.Installation) error {
+	// Remove the expected k8s annotations and copy the remaining annotations to the override field.
+	annots := removeKubernetesAnnotations(c.node.Annotations, map[string]string{}, toBeIgnoredAnnotationKeyRegExps)
+
+	if len(annots) == 0 {
+		// Check if the component has no annotations but the install does.
+		if install.Spec.CalicoNodeDaemonSet != nil {
+			md := install.Spec.CalicoNodeDaemonSet.GetMetadata()
+			if md != nil && len(md.Annotations) > 0 {
+				return ErrAnnotationsOnlyOnInstall(ComponentCalicoNode)
+			}
+		}
+	} else {
+		ensureEmptyCalicoNodeDaemonSetMetadata(install)
+		if install.Spec.CalicoNodeDaemonSet.Metadata.Annotations == nil {
+			install.Spec.CalicoNodeDaemonSet.Metadata.Annotations = make(map[string]string)
+		}
+		// Verify that any annotations on the install exist on the component.
+		for k, v := range install.Spec.CalicoNodeDaemonSet.Metadata.Annotations {
+			if x, ok := annots[k]; !ok || x != v {
+				return ErrIncompatibleAnnotation(k, ComponentCalicoNode)
+			}
+		}
+
+		for k, v := range annots {
+			// If a key already exists in the component's annotations in the install but values differ, return an error.
+			if x, ok := install.Spec.CalicoNodeDaemonSet.Metadata.Annotations[k]; ok && x != v {
+				return ErrIncompatibleAnnotation(k, ComponentCalicoNode)
+			}
+			install.Spec.CalicoNodeDaemonSet.Metadata.Annotations[k] = v
+		}
+	}
+	// Handle the pod template spec annotations
+	// Note that we don't handle "cluster-autoscaler.kubernetes.io/daemonset-pod" as that is set by some orchestrators.
+	annots = removeKubernetesAnnotations(c.node.Spec.Template.Annotations, map[string]string{}, toBeIgnoredAnnotationKeyRegExps)
+
+	if len(annots) == 0 {
+		// Check if the component has no annotations but the install does.
+		if install.Spec.CalicoNodeDaemonSet != nil &&
+			install.Spec.CalicoNodeDaemonSet.Spec != nil &&
+			install.Spec.CalicoNodeDaemonSet.Spec.Template != nil &&
+			install.Spec.CalicoNodeDaemonSet.Spec.Template.Metadata != nil {
+			if len(install.Spec.CalicoNodeDaemonSet.Spec.Template.Metadata.Annotations) > 0 {
+				return ErrAnnotationsOnlyOnInstall(ComponentCalicoNode)
+			}
+		}
+	} else {
+		ensureEmptyCalicoNodeDaemonSetPodTemplateMetadata(install)
+		if install.Spec.CalicoNodeDaemonSet.Spec.Template.Metadata.Annotations == nil {
+			install.Spec.CalicoNodeDaemonSet.Spec.Template.Metadata.Annotations = make(map[string]string)
+		}
+
+		// Verify that any annotations on the install exist on the component.
+		for k, v := range install.Spec.CalicoNodeDaemonSet.Spec.Template.Metadata.Annotations {
+			if x, ok := annots[k]; !ok || x != v {
+				return ErrIncompatibleAnnotation(k, ComponentCalicoNode+" podTemplateSpec")
+			}
+		}
+		for k, v := range annots {
+			// If a key already exists in the component's annotations in the install but values differ, return an error.
+			if x, ok := install.Spec.CalicoNodeDaemonSet.Spec.Template.Metadata.Annotations[k]; ok && x != v {
+				return ErrIncompatibleAnnotation(k, ComponentCalicoNode+" podTemplateSpec")
+			}
+			install.Spec.CalicoNodeDaemonSet.Spec.Template.Metadata.Annotations[k] = v
+		}
 	}
 
-	// the following cluster-autoscaler annotation is used to indicate a particular CRD should be handled
-	// the same as a daemonset by the cluster-autoscaler. This is not necessary on calico-node since it is
-	// not a CRD, but a core daemonset, however some orchestrators explicitly denote it anyways. As such,
-	// we ignore it.
-	if a := removeExpectedAnnotations(c.node.Spec.Template.Annotations, map[string]string{
-		"cluster-autoscaler.kubernetes.io/daemonset-pod": "true",
-	}, toBeIgnoredAnnotationKeyRegExps); len(a) != 0 {
-		return ErrIncompatibleAnnotation(a, ComponentCalicoNode+" podTemplateSpec")
+	// Check if the component has no annotations but the install does.
+	checkKubeControllersAnnotsInstallOnly := func() error {
+		if install.Spec.CalicoKubeControllersDeployment != nil {
+			md := install.Spec.CalicoKubeControllersDeployment.GetMetadata()
+			if md != nil && len(md.Annotations) > 0 {
+				return ErrAnnotationsOnlyOnInstall(ComponentKubeControllers)
+			}
+		}
+		return nil
+	}
+	checkKubeControllersPodTemplateAnnotsInstallOnly := func() error {
+		if install.Spec.CalicoKubeControllersDeployment != nil &&
+			install.Spec.CalicoKubeControllersDeployment.Spec != nil &&
+			install.Spec.CalicoKubeControllersDeployment.Spec.Template != nil &&
+			install.Spec.CalicoKubeControllersDeployment.Spec.Template.Metadata != nil {
+			if len(install.Spec.CalicoKubeControllersDeployment.Spec.Template.Metadata.Annotations) > 0 {
+				return ErrAnnotationsOnlyOnInstall(ComponentKubeControllers)
+			}
+		}
+		return nil
 	}
 
-	if c.kubeControllers != nil {
-		if a := removeExpectedAnnotations(c.kubeControllers.Annotations, map[string]string{}, toBeIgnoredAnnotationKeyRegExps); len(a) != 0 {
-			return ErrIncompatibleAnnotation(a, ComponentKubeControllers)
+	if c.kubeControllers == nil {
+		if err := checkKubeControllersAnnotsInstallOnly(); err != nil {
+			return err
 		}
-		if a := removeExpectedAnnotations(c.kubeControllers.Spec.Template.Annotations, map[string]string{}, toBeIgnoredAnnotationKeyRegExps); len(a) != 0 {
-			return ErrIncompatibleAnnotation(a, ComponentKubeControllers+" podTemplateSpec")
+		if err := checkKubeControllersPodTemplateAnnotsInstallOnly(); err != nil {
+			return err
+		}
+	} else {
+		annots = removeKubernetesAnnotations(c.kubeControllers.Annotations, map[string]string{}, toBeIgnoredAnnotationKeyRegExps)
+		if len(annots) == 0 {
+			if err := checkKubeControllersAnnotsInstallOnly(); err != nil {
+				return err
+			}
+		} else {
+			ensureEmptyCalicoKubeControllersDeploymentMetadata(install)
+			if install.Spec.CalicoKubeControllersDeployment.Metadata.Annotations == nil {
+				install.Spec.CalicoKubeControllersDeployment.Metadata.Annotations = make(map[string]string)
+			}
+
+			// Verify that any annotations on the install exist on the component.
+			for k, v := range install.Spec.CalicoKubeControllersDeployment.Metadata.Annotations {
+				if x, ok := annots[k]; !ok || x != v {
+					return ErrIncompatibleAnnotation(k, ComponentKubeControllers)
+				}
+			}
+			for k, v := range annots {
+				// If a key already exists in the component's annotations in the install, then return an error.
+				if x, ok := install.Spec.CalicoKubeControllersDeployment.Metadata.Annotations[k]; ok && x != v {
+					return ErrIncompatibleAnnotation(k, ComponentKubeControllers)
+				}
+				install.Spec.CalicoKubeControllersDeployment.Metadata.Annotations[k] = v
+			}
+		}
+		// Handle the pod template spec annotations
+		// Note that we don't handle "cluster-autoscaler.kubernetes.io/daemonset-pod" as that is set by some orchestrators.
+		annots = removeKubernetesAnnotations(c.kubeControllers.Spec.Template.Annotations, map[string]string{}, toBeIgnoredAnnotationKeyRegExps)
+		if len(annots) == 0 {
+			if err := checkKubeControllersPodTemplateAnnotsInstallOnly(); err != nil {
+				return err
+			}
+		} else {
+			ensureEmptyCalicoKubeControllersDeploymentPodTemplateMetadata(install)
+			if install.Spec.CalicoKubeControllersDeployment.Spec.Template.Metadata.Annotations == nil {
+				install.Spec.CalicoKubeControllersDeployment.Spec.Template.Metadata.Annotations = make(map[string]string)
+			}
+			// Verify that any annotations on the install exist on the component.
+			for k, v := range install.Spec.CalicoKubeControllersDeployment.Spec.Template.Metadata.Annotations {
+				if x, ok := annots[k]; !ok || x != v {
+					return ErrIncompatibleAnnotation(k, ComponentKubeControllers+" podTemplateSpec")
+				}
+			}
+			for k, v := range annots {
+				// If a key already exists in the component's annotations in the install, then return an error.
+				if x, ok := install.Spec.CalicoKubeControllersDeployment.Spec.Template.Metadata.Annotations[k]; ok && x != v {
+					return ErrIncompatibleAnnotation(k, ComponentKubeControllers+" podTemplateSpec")
+				}
+				install.Spec.CalicoKubeControllersDeployment.Spec.Template.Metadata.Annotations[k] = v
+			}
 		}
 	}
 
-	if c.typha != nil {
-		if a := removeExpectedAnnotations(c.typha.Annotations, map[string]string{}, toBeIgnoredAnnotationKeyRegExps); len(a) != 0 {
-			return ErrIncompatibleAnnotation(a, ComponentTypha)
+	checkTyphaAnnotsInstallOnly := func() error {
+		if install.Spec.TyphaDeployment != nil {
+			md := install.Spec.TyphaDeployment.GetMetadata()
+			if md != nil && len(md.Annotations) > 0 {
+				return ErrAnnotationsOnlyOnInstall(ComponentTypha)
+			}
 		}
-		if a := removeExpectedAnnotations(c.typha.Spec.Template.Annotations, map[string]string{
-			"cluster-autoscaler.kubernetes.io/safe-to-evict": "true",
-		}, toBeIgnoredAnnotationKeyRegExps); len(a) != 0 {
-			return ErrIncompatibleAnnotation(a, ComponentTypha+" podTemplateSpec")
+		return nil
+	}
+	checkTyphaPodTemplateAnnotsInstallOnly := func() error {
+		if install.Spec.TyphaDeployment != nil &&
+			install.Spec.TyphaDeployment.Spec != nil &&
+			install.Spec.TyphaDeployment.Spec.Template != nil &&
+			install.Spec.TyphaDeployment.Spec.Template.Metadata != nil {
+			if len(install.Spec.TyphaDeployment.Spec.Template.Metadata.Annotations) > 0 {
+				return ErrAnnotationsOnlyOnInstall(ComponentTypha)
+			}
+		}
+		return nil
+	}
+	if c.typha == nil {
+		if err := checkTyphaAnnotsInstallOnly(); err != nil {
+			return err
+		}
+		if err := checkTyphaPodTemplateAnnotsInstallOnly(); err != nil {
+			return err
+		}
+	} else {
+		annots = removeKubernetesAnnotations(c.typha.Annotations, map[string]string{}, toBeIgnoredAnnotationKeyRegExps)
+		if len(annots) == 0 {
+			if err := checkTyphaAnnotsInstallOnly(); err != nil {
+				return err
+			}
+		} else {
+			ensureEmptyTyphaDeploymentMetadata(install)
+			if install.Spec.TyphaDeployment.Metadata.Annotations == nil {
+				install.Spec.TyphaDeployment.Metadata.Annotations = make(map[string]string)
+			}
+
+			// Verify that any annotations on the install exist on the component.
+			for k, v := range install.Spec.TyphaDeployment.Metadata.Annotations {
+				if x, ok := annots[k]; !ok || x != v {
+					return ErrIncompatibleAnnotation(k, ComponentTypha)
+				}
+			}
+			for k, v := range annots {
+				// If a key already exists in the component's annotations in the install, then return an error.
+				if x, ok := install.Spec.TyphaDeployment.Metadata.Annotations[k]; ok && x != v {
+					return ErrIncompatibleAnnotation(k, ComponentTypha)
+				}
+				install.Spec.TyphaDeployment.Metadata.Annotations[k] = v
+			}
+		}
+		// Handle the pod template spec annotations
+		annots = removeKubernetesAnnotations(c.typha.Spec.Template.Annotations, map[string]string{}, toBeIgnoredAnnotationKeyRegExps)
+		if len(annots) == 0 {
+			if err := checkTyphaPodTemplateAnnotsInstallOnly(); err != nil {
+				return err
+			}
+		} else {
+			ensureEmptyTyphaDeploymentPodTemplateMetadata(install)
+			if install.Spec.TyphaDeployment.Spec.Template.Metadata.Annotations == nil {
+				install.Spec.TyphaDeployment.Spec.Template.Metadata.Annotations = make(map[string]string)
+			}
+			// Verify that any annotations on the install exist on the component.
+			for k, v := range install.Spec.TyphaDeployment.Spec.Template.Metadata.Annotations {
+				if x, ok := annots[k]; !ok || x != v {
+					return ErrIncompatibleAnnotation(k, ComponentTypha+" podTemplateSpec")
+				}
+			}
+			for k, v := range annots {
+				// If a key already exists in the component's annotations in the install, then return an error.
+				if x, ok := install.Spec.TyphaDeployment.Spec.Template.Metadata.Annotations[k]; ok && x != v {
+					return ErrIncompatibleAnnotation(k, ComponentTypha+" podTemplateSpec")
+				}
+				install.Spec.TyphaDeployment.Spec.Template.Metadata.Annotations[k] = v
+			}
 		}
 	}
+
 	return nil
 }
 
-// removeExpectedAnnotations returns the given annotations with common k8s-native annotations removed.
+// removeKubernetesAnnotations returns the given annotations with common k8s-native annotations removed.
 // this function also accepts a second argument of additional annotations to remove.
-func removeExpectedAnnotations(existing, ignoreWithValue map[string]string, toBeIgnoredAnnotationKeyRegExps []*regexp.Regexp) map[string]string {
+func removeKubernetesAnnotations(existing, ignoreWithValue map[string]string, toBeIgnoredAnnotationKeyRegExps []*regexp.Regexp) map[string]string {
 	a := existing
 
 	for key, val := range existing {

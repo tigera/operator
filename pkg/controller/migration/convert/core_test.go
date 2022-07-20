@@ -15,8 +15,6 @@
 package convert
 
 import (
-	"time"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -726,55 +724,298 @@ var _ = Describe("core handler", func() {
 	})
 
 	Context("annotations", func() {
-		ExpectAnnotations := func(updateAnnotations func(map[string]string)) {
+		Context("calico-node", func() {
 			It("should not error for no annotations", func() {
 				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
 			})
-			It("should error for unexpected annotations", func() {
-				updateAnnotations(map[string]string{"foo": "bar"})
+			It("should not error for nil annotations", func() {
+				comps.node.Annotations = nil
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
+			})
+			It("should add annotations to the installation", func() {
+				comps.node.Annotations = map[string]string{"foo": "bar"}
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.CalicoNodeDaemonSet.Metadata.Annotations).To(HaveLen(1))
+				Expect(i.Spec.CalicoNodeDaemonSet.Metadata.Annotations).To(HaveKeyWithValue("foo", "bar"))
+			})
+			It("should remove annotations added by kubernetes", func() {
+				comps.node.Annotations = map[string]string{
+					"deprecated.daemonset.template.generation": "42",
+					"foo":                        "bar",
+					"kubectl.kubernetes.io/test": "something",
+				}
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.CalicoNodeDaemonSet.Metadata.Annotations).To(HaveLen(1))
+				Expect(i.Spec.CalicoNodeDaemonSet.Metadata.Annotations).To(HaveKeyWithValue("foo", "bar"))
+			})
+			It("should not error if the same annotation is in the resource and the installation", func() {
+				comps.node.Annotations = map[string]string{
+					"foo": "bar",
+				}
+				ensureEmptyCalicoNodeDaemonSetMetadata(i)
+				i.Spec.CalicoNodeDaemonSet.Metadata.Annotations = map[string]string{"foo": "bar"}
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.CalicoNodeDaemonSet.Metadata.Annotations).To(HaveLen(1))
+				Expect(i.Spec.CalicoNodeDaemonSet.Metadata.Annotations).To(HaveKeyWithValue("foo", "bar"))
+			})
+			It("should error if the annotation key exists in the resource and the installation but values differ", func() {
+				comps.node.Annotations = map[string]string{
+					"foo": "bar",
+				}
+				ensureEmptyCalicoNodeDaemonSetMetadata(i)
+				i.Spec.CalicoNodeDaemonSet.Metadata.Annotations = map[string]string{"foo": "baz"}
 				Expect(handleAnnotations(&comps, i)).To(HaveOccurred())
 			})
-			It("should not error for acceptable annotations", func() {
-				updateAnnotations(map[string]string{
-					"kubectl.kubernetes.io/last-applied-configuration": "{}",
-					"kubectl.kubernetes.io/restartedAt":                time.Now().String(),
-					"kubectl.kubernetes.io/whatever":                   "whatever",
-				})
-				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
-			})
-			It("should not panic for nil annotations", func() {
-				updateAnnotations(nil)
-				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
-			})
-		}
-		Context("calico-node", func() {
-			ExpectAnnotations(func(annotations map[string]string) {
-				comps.node.Annotations = annotations
-			})
-			ExpectAnnotations(func(annotations map[string]string) {
-				comps.node.Spec.Template.Annotations = annotations
+			It("should error if the annotation exists in the installation but not the resource", func() {
+				comps.node.Annotations = map[string]string{}
+				ensureEmptyCalicoNodeDaemonSetMetadata(i)
+				i.Spec.CalicoNodeDaemonSet.Metadata.Annotations = map[string]string{"foo": "baz"}
+				Expect(handleAnnotations(&comps, i)).To(HaveOccurred())
 			})
 		})
-		Context("kube-controllers", func() {
-			ExpectAnnotations(func(annotations map[string]string) {
-				comps.kubeControllers.Annotations = annotations
+		Context("calico-node pod template spec", func() {
+			It("should not error for no annotations", func() {
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
 			})
-			ExpectAnnotations(func(annotations map[string]string) {
-				comps.kubeControllers.Spec.Template.Annotations = annotations
+			It("should not error for nil annotations", func() {
+				comps.node.Spec.Template.Annotations = nil
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
 			})
-		})
-		Context("typha", func() {
-			ExpectAnnotations(func(annotations map[string]string) {
-				comps.typha.Annotations = annotations
+			It("should add annotations to the installation", func() {
+				comps.node.Spec.Template.Annotations = map[string]string{"foo": "bar"}
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Metadata.Annotations).To(HaveLen(1))
+				Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Metadata.Annotations).To(HaveKeyWithValue("foo", "bar"))
 			})
-			ExpectAnnotations(func(annotations map[string]string) {
-				comps.typha.Spec.Template.Annotations = annotations
-			})
-			It("should not error if typha's safe-to-evict annotation is set", func() {
-				comps.typha.Spec.Template.Annotations = map[string]string{
-					"cluster-autoscaler.kubernetes.io/safe-to-evict": "true",
+			It("should remove annotations added by kubernetes", func() {
+				comps.node.Spec.Template.Annotations = map[string]string{
+					"deprecated.daemonset.template.generation": "42",
+					"foo":                        "bar",
+					"kubectl.kubernetes.io/test": "something",
 				}
-				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Metadata.Annotations).To(HaveLen(1))
+				Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Metadata.Annotations).To(HaveKeyWithValue("foo", "bar"))
+			})
+			It("should not error if the same annotation is in the resource and the installation", func() {
+				comps.node.Spec.Template.Annotations = map[string]string{
+					"foo": "bar",
+				}
+				ensureEmptyCalicoNodeDaemonSetPodTemplateMetadata(i)
+				i.Spec.CalicoNodeDaemonSet.Spec.Template.Metadata.Annotations = map[string]string{"foo": "bar"}
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Metadata.Annotations).To(HaveLen(1))
+				Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Metadata.Annotations).To(HaveKeyWithValue("foo", "bar"))
+			})
+			It("should error if the annotation key exists in the resource and the installation but values differ", func() {
+				comps.node.Spec.Template.Annotations = map[string]string{
+					"foo": "bar",
+				}
+				ensureEmptyCalicoNodeDaemonSetPodTemplateMetadata(i)
+				i.Spec.CalicoNodeDaemonSet.Spec.Template.Metadata.Annotations = map[string]string{"foo": "baz"}
+				Expect(handleAnnotations(&comps, i)).To(HaveOccurred())
+			})
+			It("should error if the annotation exists in the installation but not the resource", func() {
+				comps.node.Spec.Template.Annotations = map[string]string{}
+				ensureEmptyCalicoNodeDaemonSetPodTemplateMetadata(i)
+				i.Spec.CalicoNodeDaemonSet.Spec.Template.Metadata.Annotations = map[string]string{"foo": "baz"}
+				Expect(handleAnnotations(&comps, i)).To(HaveOccurred())
+			})
+		})
+		Context("calico-kube-controllers", func() {
+			It("should not error for no annotations", func() {
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
+			})
+			It("should not error for nil annotations", func() {
+				comps.kubeControllers.Annotations = nil
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
+			})
+			It("should add annotations to the installation", func() {
+				comps.kubeControllers.Annotations = map[string]string{"foo": "bar"}
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.CalicoKubeControllersDeployment.Metadata.Annotations).To(HaveLen(1))
+				Expect(i.Spec.CalicoKubeControllersDeployment.Metadata.Annotations).To(HaveKeyWithValue("foo", "bar"))
+			})
+			It("should remove annotations added by kubernetes", func() {
+				comps.kubeControllers.Annotations = map[string]string{
+					"kubectl.kubernetes.io/whatever": "whatever",
+					"foo":                            "bar",
+					"kubectl.kubernetes.io/test":     "something",
+				}
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.CalicoKubeControllersDeployment.Metadata.Annotations).To(HaveLen(1))
+				Expect(i.Spec.CalicoKubeControllersDeployment.Metadata.Annotations).To(HaveKeyWithValue("foo", "bar"))
+			})
+			It("should not error if the same annotation is in the resource and the installation", func() {
+				comps.kubeControllers.Annotations = map[string]string{
+					"foo": "bar",
+				}
+				ensureEmptyCalicoKubeControllersDeploymentMetadata(i)
+				i.Spec.CalicoKubeControllersDeployment.Metadata.Annotations = map[string]string{"foo": "bar"}
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.CalicoKubeControllersDeployment.Metadata.Annotations).To(HaveLen(1))
+				Expect(i.Spec.CalicoKubeControllersDeployment.Metadata.Annotations).To(HaveKeyWithValue("foo", "bar"))
+			})
+			It("should error if the annotation key exists in the resource and the installation but values differ", func() {
+				comps.kubeControllers.Annotations = map[string]string{
+					"foo": "bar",
+				}
+				ensureEmptyCalicoKubeControllersDeploymentMetadata(i)
+				i.Spec.CalicoKubeControllersDeployment.Metadata.Annotations = map[string]string{"foo": "baz"}
+				Expect(handleAnnotations(&comps, i)).To(HaveOccurred())
+			})
+			It("should error if the annotation exists in the installation but not the resource", func() {
+				comps.kubeControllers.Annotations = map[string]string{}
+				ensureEmptyCalicoKubeControllersDeploymentMetadata(i)
+				i.Spec.CalicoKubeControllersDeployment.Metadata.Annotations = map[string]string{"foo": "baz"}
+				Expect(handleAnnotations(&comps, i)).To(HaveOccurred())
+			})
+		})
+		Context("calico-kube-controllers pod template spec", func() {
+			It("should not error for no annotations", func() {
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
+			})
+			It("should not error for nil annotations", func() {
+				comps.kubeControllers.Spec.Template.Annotations = nil
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
+			})
+			It("should add annotations to the installation", func() {
+				comps.kubeControllers.Spec.Template.Annotations = map[string]string{"foo": "bar"}
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Metadata.Annotations).To(HaveLen(1))
+				Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Metadata.Annotations).To(HaveKeyWithValue("foo", "bar"))
+			})
+			It("should remove annotations added by kubernetes", func() {
+				comps.kubeControllers.Spec.Template.Annotations = map[string]string{
+					"deprecated.daemonset.template.generation": "42",
+					"foo":                        "bar",
+					"kubectl.kubernetes.io/test": "something",
+				}
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Metadata.Annotations).To(HaveLen(1))
+				Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Metadata.Annotations).To(HaveKeyWithValue("foo", "bar"))
+			})
+			It("should not error if the same annotation is in the resource and the installation", func() {
+				comps.kubeControllers.Spec.Template.Annotations = map[string]string{
+					"foo": "bar",
+				}
+				ensureEmptyCalicoKubeControllersDeploymentPodTemplateMetadata(i)
+				i.Spec.CalicoKubeControllersDeployment.Spec.Template.Metadata.Annotations = map[string]string{"foo": "bar"}
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Metadata.Annotations).To(HaveLen(1))
+				Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Metadata.Annotations).To(HaveKeyWithValue("foo", "bar"))
+			})
+			It("should error if the annotation key exists in the resource and the installation but values differ", func() {
+				comps.kubeControllers.Spec.Template.Annotations = map[string]string{
+					"foo": "bar",
+				}
+				ensureEmptyCalicoKubeControllersDeploymentPodTemplateMetadata(i)
+				i.Spec.CalicoKubeControllersDeployment.Spec.Template.Metadata.Annotations = map[string]string{"foo": "baz"}
+				Expect(handleAnnotations(&comps, i)).To(HaveOccurred())
+			})
+			It("should error if the annotation exists in the installation but not the resource", func() {
+				comps.kubeControllers.Spec.Template.Annotations = map[string]string{}
+				ensureEmptyCalicoKubeControllersDeploymentPodTemplateMetadata(i)
+				i.Spec.CalicoKubeControllersDeployment.Spec.Template.Metadata.Annotations = map[string]string{"foo": "baz"}
+				Expect(handleAnnotations(&comps, i)).To(HaveOccurred())
+			})
+		})
+		Context("calico-typha", func() {
+			It("should not error for no annotations", func() {
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
+			})
+			It("should not error for nil annotations", func() {
+				comps.typha.Annotations = nil
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
+			})
+			It("should add annotations to the installation", func() {
+				comps.typha.Annotations = map[string]string{"foo": "bar"}
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.TyphaDeployment.Metadata.Annotations).To(HaveLen(1))
+				Expect(i.Spec.TyphaDeployment.Metadata.Annotations).To(HaveKeyWithValue("foo", "bar"))
+			})
+			It("should remove annotations added by kubernetes", func() {
+				comps.typha.Annotations = map[string]string{
+					"kubectl.kubernetes.io/whatever": "whatever",
+					"foo":                            "bar",
+					"kubectl.kubernetes.io/test":     "something",
+				}
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.TyphaDeployment.Metadata.Annotations).To(HaveLen(1))
+				Expect(i.Spec.TyphaDeployment.Metadata.Annotations).To(HaveKeyWithValue("foo", "bar"))
+			})
+			It("should not error if the same annotation is in the resource and the installation", func() {
+				comps.typha.Annotations = map[string]string{
+					"foo": "bar",
+				}
+				ensureEmptyTyphaDeploymentMetadata(i)
+				i.Spec.TyphaDeployment.Metadata.Annotations = map[string]string{"foo": "bar"}
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.TyphaDeployment.Metadata.Annotations).To(HaveLen(1))
+				Expect(i.Spec.TyphaDeployment.Metadata.Annotations).To(HaveKeyWithValue("foo", "bar"))
+			})
+			It("should error if the annotation key exists in the resource and the installation but values differ", func() {
+				comps.typha.Annotations = map[string]string{
+					"foo": "bar",
+				}
+				ensureEmptyTyphaDeploymentMetadata(i)
+				i.Spec.TyphaDeployment.Metadata.Annotations = map[string]string{"foo": "baz"}
+				Expect(handleAnnotations(&comps, i)).To(HaveOccurred())
+			})
+			It("should error if the annotation exists in the installation but not the resource", func() {
+				comps.typha.Annotations = map[string]string{}
+				ensureEmptyTyphaDeploymentMetadata(i)
+				i.Spec.TyphaDeployment.Metadata.Annotations = map[string]string{"foo": "baz"}
+				Expect(handleAnnotations(&comps, i)).To(HaveOccurred())
+			})
+		})
+		Context("calico-typha pod template spec", func() {
+			It("should not error for no annotations", func() {
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
+			})
+			It("should not error for nil annotations", func() {
+				comps.typha.Spec.Template.Annotations = nil
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
+			})
+			It("should add annotations to the installation", func() {
+				comps.typha.Spec.Template.Annotations = map[string]string{"foo": "bar"}
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.TyphaDeployment.Spec.Template.Metadata.Annotations).To(HaveLen(1))
+				Expect(i.Spec.TyphaDeployment.Spec.Template.Metadata.Annotations).To(HaveKeyWithValue("foo", "bar"))
+			})
+			It("should remove annotations added by kubernetes", func() {
+				comps.typha.Spec.Template.Annotations = map[string]string{
+					"kubectl.kubernetes.io/test2": "something2",
+					"foo":                         "bar",
+					"kubectl.kubernetes.io/test":  "something",
+				}
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.TyphaDeployment.Spec.Template.Metadata.Annotations).To(HaveLen(1))
+				Expect(i.Spec.TyphaDeployment.Spec.Template.Metadata.Annotations).To(HaveKeyWithValue("foo", "bar"))
+			})
+			It("should not error if the same annotation is in the resource and the installation", func() {
+				comps.typha.Spec.Template.Annotations = map[string]string{
+					"foo": "bar",
+				}
+				ensureEmptyTyphaDeploymentPodTemplateMetadata(i)
+				i.Spec.TyphaDeployment.Spec.Template.Metadata.Annotations = map[string]string{"foo": "bar"}
+				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.TyphaDeployment.Spec.Template.Metadata.Annotations).To(HaveLen(1))
+				Expect(i.Spec.TyphaDeployment.Spec.Template.Metadata.Annotations).To(HaveKeyWithValue("foo", "bar"))
+			})
+			It("should error if the annotation key exists in the resource and the installation but values differ", func() {
+				comps.typha.Spec.Template.Annotations = map[string]string{
+					"foo": "bar",
+				}
+				ensureEmptyTyphaDeploymentPodTemplateMetadata(i)
+				i.Spec.TyphaDeployment.Spec.Template.Metadata.Annotations = map[string]string{"foo": "baz"}
+				Expect(handleAnnotations(&comps, i)).To(HaveOccurred())
+			})
+			It("should error if the annotation exists in the installation but not the resource", func() {
+				comps.typha.Spec.Template.Annotations = map[string]string{}
+				ensureEmptyTyphaDeploymentPodTemplateMetadata(i)
+				i.Spec.TyphaDeployment.Spec.Template.Metadata.Annotations = map[string]string{"foo": "baz"}
+				Expect(handleAnnotations(&comps, i)).To(HaveOccurred())
 			})
 		})
 	})

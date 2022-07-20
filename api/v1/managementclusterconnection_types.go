@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2012,2015-2022 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,6 +26,12 @@ type ManagementClusterConnectionSpec struct {
 	// should be able to access this address. This field is used by managed clusters only.
 	// +optional
 	ManagementClusterAddr string `json:"managementClusterAddr,omitempty"`
+
+	// UsePublicCA configures guardian to use installed CA certs in combination with the managementClusterAddr to verify
+	// voltron's identity instead of using the management cluster's cert which is normally included in the resource bundle
+	// produced by the apiserver.
+	// +optional
+	UsePublicCA bool `json:"usePublicCA,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -432,10 +432,12 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 
 		// optional voltron server secret
-		tunnelServerSecret, err = certificateManager.GetKeyPair(r.client, render.VoltronServerSecretName, common.OperatorNamespace())
-		if err != nil {
-			r.status.SetDegraded(fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.VoltronServerSecretName, common.OperatorNamespace()), err.Error())
-			return reconcile.Result{}, nil
+		if managementCluster.Spec.UsePublicCA {
+			tunnelServerSecret, err = certificateManager.GetKeyPair(r.client, render.VoltronServerSecretName, common.OperatorNamespace())
+			if err != nil {
+				r.status.SetDegraded(fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.VoltronServerSecretName, common.OperatorNamespace()), err.Error())
+				return reconcile.Result{}, nil
+			}
 		}
 
 		// We expect that the secret that holds the certificates for internal communication within the management

@@ -43,6 +43,12 @@ spec:
                   cluster. Ex.: "10.128.0.10:30449". A managed cluster should be able
                   to access this address. This field is used by managed clusters only.'
                 type: string
+              usePublicCA:
+                description: UsePublicCA configures guardian to use installed CA certs
+                  in combination with the managementClusterAddr to verify voltron's
+                  identity instead of using the management cluster's cert which is
+                  normally included in the resource bundle produced by the apiserver.
+                type: boolean
             type: object
         type: object
     served: true

@@ -1,3 +1,17 @@
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package convert
 
 import "fmt"
@@ -36,10 +50,17 @@ func ErrMissingHostPathVolume(component, volume, hostPath string) ErrIncompatibl
 	}
 }
 
-func ErrIncompatibleAnnotation(annotations map[string]string, component string) error {
+func ErrIncompatibleAnnotation(annotKey, component string) error {
 	return ErrIncompatibleCluster{
-		err:       fmt.Sprintf("unexpected annotation '%v'", annotations),
+		err:       fmt.Sprintf("annotation %q differs in the Installation and the migration source", annotKey),
 		component: component,
-		fix:       "remove the annotation from the component",
+		fix:       "remove the annotation from the Installation resource, or remove it from the component",
+	}
+}
+func ErrAnnotationsOnlyOnInstall(component string) error {
+	return ErrIncompatibleCluster{
+		err:       "annotations were found in the Installation but not the migration source",
+		component: component,
+		fix:       "remove the annotations from the Installation resource, or add them to the component",
 	}
 }

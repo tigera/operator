@@ -1,3 +1,17 @@
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package convert
 
 import (
@@ -32,7 +46,7 @@ var _ = Describe("core handler", func() {
 			Expect(i.Spec.ComponentResources).To(BeEmpty())
 		})
 
-		var rqs = v1.ResourceRequirements{
+		var rqs1 = v1.ResourceRequirements{
 			Limits: v1.ResourceList{
 				v1.ResourceCPU:    resource.MustParse("500m"),
 				v1.ResourceMemory: resource.MustParse("500Mi"),
@@ -42,68 +56,105 @@ var _ = Describe("core handler", func() {
 				v1.ResourceMemory: resource.MustParse("64Mi"),
 			},
 		}
+		var rqs2 = v1.ResourceRequirements{
+			Limits: v1.ResourceList{
+				v1.ResourceCPU:    resource.MustParse("120m"),
+				v1.ResourceMemory: resource.MustParse("100Mi"),
+			},
+			Requests: v1.ResourceList{
+				v1.ResourceCPU:    resource.MustParse("60m"),
+				v1.ResourceMemory: resource.MustParse("50Mi"),
+			},
+		}
 
 		It("should migrate resources from calico-node if they are set", func() {
-			comps.node.Spec.Template.Spec.Containers[0].Resources = rqs
+			comps.node.Spec.Template.Spec.Containers[0].Resources = rqs1
+			comps.node.Spec.Template.Spec.InitContainers[0].Resources = rqs2
 			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
-			Expect(i.Spec.ComponentResources).To(ConsistOf(operatorv1.ComponentResource{
-				ComponentName:        operatorv1.ComponentNameNode,
-				ResourceRequirements: &rqs,
+
+			Expect(i.Spec.ComponentResources).To(HaveLen(0))
+			Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers).To(ConsistOf(operatorv1.CalicoNodeDaemonSetContainer{
+				Name:      "calico-node",
+				Resources: &rqs1,
+			}))
+			Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers).To(ConsistOf(operatorv1.CalicoNodeDaemonSetInitContainer{
+				Name:      "install-cni",
+				Resources: &rqs2,
 			}))
 		})
 
 		It("should migrate resources from kube-controllers if they are set", func() {
-			comps.kubeControllers.Spec.Template.Spec.Containers[0].Resources = rqs
+			comps.kubeControllers.Spec.Template.Spec.Containers[0].Resources = rqs1
 			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
-			Expect(i.Spec.ComponentResources).To(ConsistOf(operatorv1.ComponentResource{
-				ComponentName:        operatorv1.ComponentNameKubeControllers,
-				ResourceRequirements: &rqs,
+			Expect(i.Spec.ComponentResources).To(HaveLen(0))
+			Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers).To(ConsistOf(operatorv1.CalicoKubeControllersDeploymentContainer{
+				Name:      "calico-kube-controllers",
+				Resources: &rqs1,
 			}))
 		})
 
 		It("should migrate resources from typha if they are set", func() {
-			comps.typha.Spec.Template.Spec.Containers[0].Resources = rqs
+			comps.typha.Spec.Template.Spec.Containers[0].Resources = rqs1
+			comps.typha.Spec.Template.Spec.InitContainers[0].Resources = rqs2
 			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
-			Expect(i.Spec.ComponentResources).To(ConsistOf(operatorv1.ComponentResource{
-				ComponentName:        operatorv1.ComponentNameTypha,
-				ResourceRequirements: &rqs,
+			Expect(i.Spec.ComponentResources).To(HaveLen(0))
+			Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.Containers).To(ConsistOf(operatorv1.TyphaDeploymentContainer{
+				Name:      "calico-typha",
+				Resources: &rqs1,
+			}))
+			Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.InitContainers).To(ConsistOf(operatorv1.TyphaDeploymentInitContainer{
+				Name:      "typha-certs-key-cert-provisioner",
+				Resources: &rqs2,
 			}))
 		})
+
 		It("should migrate resources from all 3 components", func() {
-			rqs = v1.ResourceRequirements{
-				Limits: v1.ResourceList{
-					v1.ResourceCPU: resource.MustParse("500m"),
-				},
-			}
-			expectedCompRsrc := []operatorv1.ComponentResource{operatorv1.ComponentResource{
-				ComponentName:        operatorv1.ComponentNameNode,
-				ResourceRequirements: rqs.DeepCopy(),
-			}}
-			comps.node.Spec.Template.Spec.Containers[0].Resources = *rqs.DeepCopy()
-			rqs.Limits[v1.ResourceCPU] = resource.MustParse("400m")
-			expectedCompRsrc = append(expectedCompRsrc, operatorv1.ComponentResource{
-				ComponentName:        operatorv1.ComponentNameKubeControllers,
-				ResourceRequirements: rqs.DeepCopy(),
-			})
-			comps.kubeControllers.Spec.Template.Spec.Containers[0].Resources = *rqs.DeepCopy()
-			rqs.Limits[v1.ResourceCPU] = resource.MustParse("300m")
-			expectedCompRsrc = append(expectedCompRsrc, operatorv1.ComponentResource{
-				ComponentName:        operatorv1.ComponentNameTypha,
-				ResourceRequirements: rqs.DeepCopy(),
-			})
-			comps.typha.Spec.Template.Spec.Containers[0].Resources = *rqs.DeepCopy()
+			comps.node.Spec.Template.Spec.Containers[0].Resources = rqs1
+			comps.node.Spec.Template.Spec.InitContainers[0].Resources = rqs2
+
+			comps.kubeControllers.Spec.Template.Spec.Containers[0].Resources = rqs1
+
+			comps.typha.Spec.Template.Spec.Containers[0].Resources = rqs1
+			comps.typha.Spec.Template.Spec.InitContainers[0].Resources = rqs2
+
 			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
-			Expect(i.Spec.ComponentResources).To(ConsistOf(expectedCompRsrc))
+
+			Expect(i.Spec.ComponentResources).To(HaveLen(0))
+			Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers).To(ConsistOf(operatorv1.CalicoNodeDaemonSetContainer{
+				Name:      "calico-node",
+				Resources: &rqs1,
+			}))
+			Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers).To(ConsistOf(operatorv1.CalicoNodeDaemonSetInitContainer{
+				Name:      "install-cni",
+				Resources: &rqs2,
+			}))
+			Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers).To(ConsistOf(operatorv1.CalicoKubeControllersDeploymentContainer{
+				Name:      "calico-kube-controllers",
+				Resources: &rqs1,
+			}))
+			Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.Containers).To(ConsistOf(operatorv1.TyphaDeploymentContainer{
+				Name:      "calico-typha",
+				Resources: &rqs1,
+			}))
+			Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.InitContainers).To(ConsistOf(operatorv1.TyphaDeploymentInitContainer{
+				Name:      "typha-certs-key-cert-provisioner",
+				Resources: &rqs2,
+			}))
 		})
 
 		It("should not add a duplicate resources when already set", func() {
-			comps.node.Spec.Template.Spec.Containers[0].Resources = rqs
+			comps.node.Spec.Template.Spec.Containers[0].Resources = rqs1
 			i.Spec.ComponentResources = append(i.Spec.ComponentResources, operatorv1.ComponentResource{
 				ComponentName:        operatorv1.ComponentNameNode,
-				ResourceRequirements: &rqs,
+				ResourceRequirements: &rqs1,
 			})
 			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
-			Expect(i.Spec.ComponentResources).To(HaveLen(1))
+			Expect(i.Spec.ComponentResources).To(HaveLen(0))
+			Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers).To(ConsistOf(operatorv1.CalicoNodeDaemonSetContainer{
+				Name:      "calico-node",
+				Resources: &rqs1,
+			}))
 		})
 	})
 

@@ -50,10 +50,6 @@ var _ = Describe("Monitor controller tests", func() {
 	var scheme *runtime.Scheme
 	var installation *operatorv1.Installation
 
-	notReady := &utils.ReadyFlag{}
-	ready := &utils.ReadyFlag{}
-	ready.MarkAsReady()
-
 	BeforeEach(func() {
 		// The schema contains all objects that should be known to the fake client when the test runs.
 		scheme = runtime.NewScheme()
@@ -79,13 +75,11 @@ var _ = Describe("Monitor controller tests", func() {
 
 		// Create an object we can use throughout the test to do the monitor reconcile loops.
 		r = ReconcileMonitor{
-			client:             cli,
-			scheme:             scheme,
-			provider:           operatorv1.ProviderNone,
-			status:             mockStatus,
-			prometheusReady:    ready,
-			tierWatchReady:     ready,
-			policyWatchesReady: ready,
+			client:          cli,
+			scheme:          scheme,
+			provider:        operatorv1.ProviderNone,
+			status:          mockStatus,
+			prometheusReady: &utils.ReadyFlag{},
 		}
 
 		// We start off with a 'standard' installation, with nothing special
@@ -111,6 +105,9 @@ var _ = Describe("Monitor controller tests", func() {
 		})).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, render.CreateCertificateConfigMap("test", render.TyphaCAConfigMapName, common.OperatorNamespace()))).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+
+		// Mark that watches were successful.
+		r.prometheusReady.MarkAsReady()
 	})
 
 	Context("controller reconciliation", func() {
@@ -164,34 +161,6 @@ var _ = Describe("Monitor controller tests", func() {
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
-
-			policies := v3.NetworkPolicyList{}
-			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
-			Expect(policies.Items).To(HaveLen(0))
-		})
-
-		It("should degrade and wait if tier is ready but policy watch is not ready", func() {
-			r.policyWatchesReady = notReady
-			mockStatus = &status.MockStatus{}
-			mockStatus.On("OnCRFound").Return()
-			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
-			r.status = mockStatus
-
-			utils.ExpectWaitForPolicyWatches(ctx, &r, mockStatus)
-
-			policies := v3.NetworkPolicyList{}
-			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
-			Expect(policies.Items).To(HaveLen(0))
-		})
-
-		It("should degrade and wait if tier is ready but tier watch is not ready", func() {
-			r.tierWatchReady = notReady
-			mockStatus = &status.MockStatus{}
-			mockStatus.On("OnCRFound").Return()
-			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
-			r.status = mockStatus
-
-			utils.ExpectWaitForTierWatch(ctx, &r, mockStatus)
 
 			policies := v3.NetworkPolicyList{}
 			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())

@@ -20,8 +20,6 @@ package clusterconnection
 import (
 	"context"
 
-	"github.com/tigera/operator/pkg/controller/utils"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -35,13 +33,10 @@ func NewReconcilerWithShims(
 	schema *runtime.Scheme,
 	status status.StatusManager,
 	provider operatorv1.Provider,
-	licenseWatchReady *utils.ReadyFlag,
-	tierWatchReady *utils.ReadyFlag,
-	policyWatchReady *utils.ReadyFlag,
 ) reconcile.Reconciler {
 	opts := options.AddOptions{
 		ShutdownContext: context.Background(),
 	}
 
-	return newReconciler(cli, schema, status, provider, licenseWatchReady, tierWatchReady, policyWatchReady, opts)
+	return newReconciler(cli, schema, status, provider, opts)
 }

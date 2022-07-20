@@ -135,32 +135,6 @@ var _ = Describe("tier controller tests", func() {
 		mockStatus.AssertExpectations(GinkgoT())
 	})
 
-	It("should wait if policy watches are not ready", func() {
-		mockStatus = &status.MockStatus{}
-		r = ReconcileTiers{
-			client:             c,
-			scheme:             scheme,
-			provider:           operatorv1.ProviderNone,
-			status:             mockStatus,
-			tierWatchReady:     readyFlag,
-			policyWatchesReady: &utils.ReadyFlag{},
-		}
-		utils.ExpectWaitForPolicyWatches(ctx, &r, mockStatus)
-	})
-
-	It("should wait if tier watch is not ready", func() {
-		mockStatus = &status.MockStatus{}
-		r = ReconcileTiers{
-			client:             c,
-			scheme:             scheme,
-			provider:           operatorv1.ProviderNone,
-			status:             mockStatus,
-			tierWatchReady:     &utils.ReadyFlag{},
-			policyWatchesReady: readyFlag,
-		}
-		utils.ExpectWaitForTierWatch(ctx, &r, mockStatus)
-	})
-
 	It("should require license", func() {
 		Expect(c.Delete(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}})).ToNot(HaveOccurred())
 		mockStatus = &status.MockStatus{}

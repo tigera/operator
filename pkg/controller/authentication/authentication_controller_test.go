@@ -140,7 +140,7 @@ var _ = Describe("authentication controller tests", func() {
 			Expect(cli.Create(ctx, auth)).ToNot(HaveOccurred())
 
 			// Reconcile
-			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag}
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, ""}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 			authentication, err := utils.GetAuthentication(ctx, cli)
@@ -174,11 +174,10 @@ var _ = Describe("authentication controller tests", func() {
 		It("should use builtin images", func() {
 
 			r := ReconcileAuthentication{
-				client:             cli,
-				scheme:             scheme,
-				provider:           operatorv1.ProviderNone,
-				status:             mockStatus,
-				policyWatchesReady: readyFlag,
+				client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -210,11 +209,10 @@ var _ = Describe("authentication controller tests", func() {
 			})).ToNot(HaveOccurred())
 
 			r := ReconcileAuthentication{
-				client:             cli,
-				scheme:             scheme,
-				provider:           operatorv1.ProviderNone,
-				status:             mockStatus,
-				policyWatchesReady: readyFlag,
+				client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -237,49 +235,32 @@ var _ = Describe("authentication controller tests", func() {
 		})
 	})
 
-	Context("allow-tigera reconciliation", func() {
-		var r reconcile.Reconciler
-		BeforeEach(func() {
-			Expect(cli.Create(ctx, idpSecret)).ToNot(HaveOccurred())
-			Expect(cli.Create(ctx, &operatorv1.Authentication{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-				Spec: operatorv1.AuthenticationSpec{
-					ManagerDomain: "https://example.com",
-					OIDC: &operatorv1.AuthenticationOIDC{
-						IssuerURL:      "https://example.com",
-						UsernameClaim:  "email",
-						GroupsClaim:    "group",
-						GroupsPrefix:   "g",
-						UsernamePrefix: "u",
-					},
+	It("should wait if allow-tigera tier is unavailable", func() {
+		Expect(cli.Create(ctx, idpSecret)).ToNot(HaveOccurred())
+		Expect(cli.Create(ctx, &operatorv1.Authentication{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+			Spec: operatorv1.AuthenticationSpec{
+				ManagerDomain: "https://example.com",
+				OIDC: &operatorv1.AuthenticationOIDC{
+					IssuerURL:      "https://example.com",
+					UsernameClaim:  "email",
+					GroupsClaim:    "group",
+					GroupsPrefix:   "g",
+					UsernamePrefix: "u",
 				},
-			})).ToNot(HaveOccurred())
+			},
+		})).ToNot(HaveOccurred())
 
-			mockStatus = &status.MockStatus{}
-			mockStatus.On("OnCRFound").Return()
-			r = &ReconcileAuthentication{
-				client:             cli,
-				scheme:             scheme,
-				provider:           operatorv1.ProviderNone,
-				status:             mockStatus,
-				policyWatchesReady: readyFlag,
-			}
-		})
+		mockStatus = &status.MockStatus{}
+		mockStatus.On("OnCRFound").Return()
+		r := &ReconcileAuthentication{
+			client:   cli,
+			scheme:   scheme,
+			provider: operatorv1.ProviderNone,
+			status:   mockStatus,
+		}
 
-		It("should wait if allow-tigera tier is unavailable", func() {
-			utils.DeleteAllowTigeraTierAndExpectWait(ctx, cli, r, mockStatus)
-		})
-
-		It("should wait if policy watches are not ready", func() {
-			r = &ReconcileAuthentication{
-				client:             cli,
-				scheme:             scheme,
-				provider:           operatorv1.ProviderNone,
-				status:             mockStatus,
-				policyWatchesReady: &utils.ReadyFlag{},
-			}
-			utils.ExpectWaitForPolicyWatches(ctx, r, mockStatus)
-		})
+		utils.DeleteAllowTigeraTierAndExpectWait(ctx, cli, r, mockStatus)
 	})
 
 	const (
@@ -302,7 +283,7 @@ var _ = Describe("authentication controller tests", func() {
 		}
 		Expect(cli.Create(ctx, idpSecret)).ToNot(HaveOccurred())
 		Expect(cli.Create(ctx, auth)).ToNot(HaveOccurred())
-		r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag}
+		r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, ""}
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		if expectReconcilePass {
 			Expect(err).ToNot(HaveOccurred())

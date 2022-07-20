@@ -89,13 +89,12 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		// Create an object we can use throughout the test to do the compliance reconcile loops.
 		// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 		r = ReconcileIntrusionDetection{
-			client:             c,
-			scheme:             scheme,
-			provider:           operatorv1.ProviderNone,
-			status:             mockStatus,
-			licenseAPIReady:    &utils.ReadyFlag{},
-			dpiAPIReady:        &utils.ReadyFlag{},
-			policyWatchesReady: &utils.ReadyFlag{},
+			client:          c,
+			scheme:          scheme,
+			provider:        operatorv1.ProviderNone,
+			status:          mockStatus,
+			licenseAPIReady: &utils.ReadyFlag{},
+			dpiAPIReady:     &utils.ReadyFlag{},
 		}
 
 		// We start off with a 'standard' installation, with nothing special
@@ -154,10 +153,9 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		// Apply the intrusiondetection CR to the fake cluster.
 		Expect(c.Create(ctx, &operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
 
-		// mark that the watches were successful
+		// Mark that watches were successful.
 		r.licenseAPIReady.MarkAsReady()
 		r.dpiAPIReady.MarkAsReady()
-		r.policyWatchesReady.MarkAsReady()
 	})
 
 	Context("image reconciliation", func() {
@@ -420,42 +418,12 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		})
 	})
 
-	Context("allow-tigera reconciliation", func() {
-		var readyFlag *utils.ReadyFlag
+	It("should wait if allow-tigera tier is unavailable", func() {
+		mockStatus = &status.MockStatus{}
+		mockStatus.On("OnCRFound").Return()
+		r.status = mockStatus
 
-		BeforeEach(func() {
-			mockStatus = &status.MockStatus{}
-			mockStatus.On("OnCRFound").Return()
-
-			readyFlag = &utils.ReadyFlag{}
-			readyFlag.MarkAsReady()
-			r = ReconcileIntrusionDetection{
-				client:             c,
-				scheme:             scheme,
-				provider:           operatorv1.ProviderNone,
-				status:             mockStatus,
-				licenseAPIReady:    readyFlag,
-				dpiAPIReady:        readyFlag,
-				policyWatchesReady: readyFlag,
-			}
-		})
-
-		It("should wait if allow-tigera tier is unavailable", func() {
-			utils.DeleteAllowTigeraTierAndExpectWait(ctx, c, &r, mockStatus)
-		})
-
-		It("should wait if policy watches are not ready", func() {
-			r = ReconcileIntrusionDetection{
-				client:             c,
-				scheme:             scheme,
-				provider:           operatorv1.ProviderNone,
-				status:             mockStatus,
-				licenseAPIReady:    readyFlag,
-				dpiAPIReady:        readyFlag,
-				policyWatchesReady: &utils.ReadyFlag{},
-			}
-			utils.ExpectWaitForPolicyWatches(ctx, &r, mockStatus)
-		})
+		utils.DeleteAllowTigeraTierAndExpectWait(ctx, c, &r, mockStatus)
 	})
 
 	Context("secret availability", func() {

@@ -149,9 +149,9 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		}
 
 		// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
-		go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, ri.tierWatchReady)
+		go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log)
 
-		go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, ri.policyWatchesReady, []types.NamespacedName{
+		go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
 			{Name: kubecontrollers.KubeControllerNetworkPolicyName, Namespace: common.CalicoNamespace}},
 		)
 	}
@@ -202,8 +202,6 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		clusterDomain:         opts.ClusterDomain,
 		manageCRDs:            opts.ManageCRDs,
 		usePSP:                opts.UsePSP,
-		tierWatchReady:        &utils.ReadyFlag{},
-		policyWatchesReady:    &utils.ReadyFlag{},
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
@@ -392,8 +390,6 @@ type ReconcileInstallation struct {
 	clusterDomain         string
 	manageCRDs            bool
 	usePSP                bool
-	tierWatchReady        *utils.ReadyFlag
-	policyWatchesReady    *utils.ReadyFlag
 }
 
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
@@ -1015,17 +1011,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			}
 		} else {
 			includeV3NetworkPolicy = true
-
-			// Use tier availability as a signal that we can validate watches, since this controller is a dependency for
-			// the API Server to become available and watches will not become available until the API Server is available.
-			if !r.tierWatchReady.IsReady() {
-				r.status.SetDegraded("Waiting for Tier watch to be established", "")
-				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-			}
-			if !r.policyWatchesReady.IsReady() {
-				r.status.SetDegraded("Waiting for NetworkPolicy watches to be established", "")
-				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-			}
 		}
 	}
 

@@ -75,7 +75,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Create the reconciler
-	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage", opts.KubernetesVersion), opts, utils.NewElasticClient, &utils.ReadyFlag{})
+	r, err := newReconciler(mgr.GetClient(), mgr.GetScheme(), status.New(mgr.GetClient(), "log-storage", opts.KubernetesVersion), opts, utils.NewElasticClient)
 	if err != nil {
 		return err
 	}
@@ -91,7 +91,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("log-storage-controller failed to establish a connection to k8s: %w", err)
 	}
 
-	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, r.policyWatchesReady, []types.NamespacedName{
+	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
 		{Name: render.ElasticsearchPolicyName, Namespace: render.ElasticsearchNamespace},
 		{Name: render.EsCuratorPolicyName, Namespace: render.ElasticsearchNamespace},
 		{Name: render.KibanaPolicyName, Namespace: render.KibanaNamespace},
@@ -108,16 +108,15 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, opts options.AddOptions, esCliCreator utils.ElasticsearchClientCreator, policyWatchesReady *utils.ReadyFlag) (*ReconcileLogStorage, error) {
+func newReconciler(cli client.Client, schema *runtime.Scheme, statusMgr status.StatusManager, opts options.AddOptions, esCliCreator utils.ElasticsearchClientCreator) (*ReconcileLogStorage, error) {
 	c := &ReconcileLogStorage{
-		client:             cli,
-		scheme:             schema,
-		status:             statusMgr,
-		provider:           opts.DetectedProvider,
-		esCliCreator:       esCliCreator,
-		clusterDomain:      opts.ClusterDomain,
-		policyWatchesReady: policyWatchesReady,
-		usePSP:             opts.UsePSP,
+		client:        cli,
+		scheme:        schema,
+		status:        statusMgr,
+		provider:      opts.DetectedProvider,
+		esCliCreator:  esCliCreator,
+		clusterDomain: opts.ClusterDomain,
+		usePSP:        opts.UsePSP,
 	}
 
 	c.status.Run(opts.ShutdownContext)
@@ -225,14 +224,13 @@ var _ reconcile.Reconciler = &ReconcileLogStorage{}
 type ReconcileLogStorage struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client             client.Client
-	scheme             *runtime.Scheme
-	status             status.StatusManager
-	provider           operatorv1.Provider
-	esCliCreator       utils.ElasticsearchClientCreator
-	clusterDomain      string
-	policyWatchesReady *utils.ReadyFlag
-	usePSP             bool
+	client        client.Client
+	scheme        *runtime.Scheme
+	status        status.StatusManager
+	provider      operatorv1.Provider
+	esCliCreator  utils.ElasticsearchClientCreator
+	clusterDomain string
+	usePSP        bool
 }
 
 // fillDefaults populates the default values onto an LogStorage object.
@@ -377,11 +375,6 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		}
 		r.status.SetDegraded("An error occurred while querying Installation", err.Error())
 		return reconcile.Result{}, err
-	}
-
-	if !r.policyWatchesReady.IsReady() {
-		r.status.SetDegraded("Waiting for NetworkPolicy watches to be established", "")
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	// Ensure the allow-tigera tier exists, before rendering any network policies within it.

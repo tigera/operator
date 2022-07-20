@@ -123,7 +123,7 @@ func WaitToAddLicenseKeyWatch(controller controller.Controller, c kubernetes.Int
 	WaitToAddResourceWatch(controller, c, log, flag, []client.Object{&v3.LicenseKey{TypeMeta: metav1.TypeMeta{Kind: v3.KindLicenseKey}}})
 }
 
-func WaitToAddNetworkPolicyWatches(controller controller.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag, policies []types.NamespacedName) {
+func WaitToAddNetworkPolicyWatches(controller controller.Controller, c kubernetes.Interface, log logr.Logger, policies []types.NamespacedName) {
 	objs := []client.Object{}
 	for _, policy := range policies {
 		objs = append(objs, &v3.NetworkPolicy{
@@ -132,15 +132,20 @@ func WaitToAddNetworkPolicyWatches(controller controller.Controller, c kubernete
 		})
 	}
 
-	WaitToAddResourceWatch(controller, c, log, flag, objs)
+	// The success of a NetworkPolicy watch is not a dependency for resources to be installed or function correctly.
+	// Therefore, no ready flag is accepted or created for the watch.
+	WaitToAddResourceWatch(controller, c, log, nil, objs)
 }
 
-func WaitToAddTierWatch(tierName string, controller controller.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
+func WaitToAddTierWatch(tierName string, controller controller.Controller, c kubernetes.Interface, log logr.Logger) {
 	obj := &v3.Tier{
 		TypeMeta:   metav1.TypeMeta{Kind: "Tier", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{Name: tierName},
 	}
-	WaitToAddResourceWatch(controller, c, log, flag, []client.Object{obj})
+
+	// The success of a Tier watch is not a dependency for resources to be installed or function correctly.
+	// Therefore, no ready flag is accepted or created for the watch.
+	WaitToAddResourceWatch(controller, c, log, nil, []client.Object{obj})
 }
 
 // AddNamespacedWatch creates a watch on the given object. If a name and namespace are provided, then it will
@@ -467,7 +472,9 @@ func WaitToAddResourceWatch(controller controller.Controller, c kubernetes.Inter
 		}
 
 		if len(resourcesToWatch) == 0 {
-			flag.MarkAsReady()
+			if flag != nil {
+				flag.MarkAsReady()
+			}
 			return
 		}
 	}

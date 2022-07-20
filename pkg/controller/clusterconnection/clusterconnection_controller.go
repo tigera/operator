@@ -63,10 +63,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	statusManager := status.New(mgr.GetClient(), "management-cluster-connection", opts.KubernetesVersion)
 
 	// Create the reconciler
-	licenseWatchReady := &utils.ReadyFlag{}
-	policyWatchesReady := &utils.ReadyFlag{}
-	tierWatchReady := &utils.ReadyFlag{}
-	reconciler := newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider, licenseWatchReady, tierWatchReady, policyWatchesReady, opts)
+	reconciler := newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider, opts)
 
 	// Create a new controller
 	controller, err := controller.New(controllerName, mgr, controller.Options{Reconciler: reconciler})
@@ -81,10 +78,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Watch for changes to License and Tier, as their status is used as input to determine whether network policy should be reconciled by this controller.
-	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseWatchReady)
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
+	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, nil)
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log)
 
-	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, policyWatchesReady, []types.NamespacedName{
+	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, []types.NamespacedName{
 		{Name: render.GuardianPolicyName, Namespace: render.GuardianNamespace},
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.GuardianNamespace},
 	})
@@ -98,20 +95,14 @@ func newReconciler(
 	schema *runtime.Scheme,
 	statusMgr status.StatusManager,
 	p operatorv1.Provider,
-	licenseWatchReady *utils.ReadyFlag,
-	tierWatchReady *utils.ReadyFlag,
-	policyWatchesReady *utils.ReadyFlag,
 	opts options.AddOptions,
 ) *ReconcileConnection {
 	c := &ReconcileConnection{
-		Client:             cli,
-		Scheme:             schema,
-		Provider:           p,
-		status:             statusMgr,
-		clusterDomain:      opts.ClusterDomain,
-		licenseWatchReady:  licenseWatchReady,
-		tierWatchReady:     tierWatchReady,
-		policyWatchesReady: policyWatchesReady,
+		Client:        cli,
+		Scheme:        schema,
+		Provider:      p,
+		status:        statusMgr,
+		clusterDomain: opts.ClusterDomain,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
@@ -165,14 +156,11 @@ var _ reconcile.Reconciler = &ReconcileConnection{}
 
 // ReconcileConnection reconciles a ManagementClusterConnection object
 type ReconcileConnection struct {
-	Client             client.Client
-	Scheme             *runtime.Scheme
-	Provider           operatorv1.Provider
-	status             status.StatusManager
-	clusterDomain      string
-	licenseWatchReady  *utils.ReadyFlag
-	tierWatchReady     *utils.ReadyFlag
-	policyWatchesReady *utils.ReadyFlag
+	Client        client.Client
+	Scheme        *runtime.Scheme
+	Provider      operatorv1.Provider
+	status        status.StatusManager
+	clusterDomain string
 }
 
 // Reconcile reads that state of the cluster for a ManagementClusterConnection object and makes changes based on the
@@ -254,21 +242,6 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 		trustedCertBundle.AddCertificates(secret)
-	}
-
-	if !r.tierWatchReady.IsReady() {
-		r.status.SetDegraded("Waiting for Tier watch to be established", "")
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-	}
-
-	if !r.policyWatchesReady.IsReady() {
-		r.status.SetDegraded("Waiting for NetworkPolicy watches to be established", "")
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-	}
-
-	if !r.licenseWatchReady.IsReady() {
-		r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	// Ensure the allow-tigera tier exists, before rendering any network policies within it.

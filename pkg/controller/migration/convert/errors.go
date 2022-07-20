@@ -57,10 +57,27 @@ func ErrIncompatibleAnnotation(annotKey, component string) error {
 		fix:       "remove the annotation from the Installation resource, or remove it from the component",
 	}
 }
+
 func ErrAnnotationsOnlyOnInstall(component string) error {
 	return ErrIncompatibleCluster{
 		err:       "annotations were found in the Installation but not the migration source",
 		component: component,
 		fix:       "remove the annotations from the Installation resource, or add them to the component",
+	}
+}
+
+func ErrIncompatibleLabel(labelKey, component string) error {
+	return ErrIncompatibleCluster{
+		err:       fmt.Sprintf("label %q differs in the Installation and the migration source", labelKey),
+		component: component,
+		fix:       "remove the label from the Installation resource, or remove it from the component",
+	}
+}
+
+func ErrLabelsOnlyOnInstall(component string) error {
+	return ErrIncompatibleCluster{
+		err:       "labels were found in the Installation but not the migration source",
+		component: component,
+		fix:       "remove the labels from the Installation resource, or add them to the component",
 	}
 }

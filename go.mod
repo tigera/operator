@@ -13,7 +13,7 @@ require (
 	github.com/hashicorp/go-version v1.2.1
 	github.com/olivere/elastic/v7 v7.0.6
 	github.com/onsi/ginkgo v1.16.4
-	github.com/onsi/gomega v1.19.0
+	github.com/onsi/gomega v1.20.0
 	github.com/openshift/api v0.0.0-20200923080607-2a18526802e3
 	github.com/openshift/library-go v0.0.0-20200924151131-575c4875cdbe
 	github.com/pkg/errors v0.9.1

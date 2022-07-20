@@ -70,11 +70,12 @@ const (
 	ADDetectorsModelResourceName  = "models"
 	ADLogTypeMetaDataResourceName = "metadata"
 
-	ADAPIObjectName     = "anomaly-detection-api"
-	ADAPIObjectPortName = "anomaly-detection-api-https"
-	ADAPITLSSecretName  = "anomaly-detection-api-tls"
-	ADAPIPolicyName     = networkpolicy.TigeraComponentPolicyPrefix + ADAPIObjectName
-	adAPIPort           = 8080
+	ADAPIObjectName          = "anomaly-detection-api"
+	ADAPIObjectPortName      = "anomaly-detection-api-https"
+	ADAPITLSSecretName       = "anomaly-detection-api-tls"
+	ADAPIExpectedServiceName = "anomaly-detection-api.tigera-intrusion-detection.svc"
+	ADAPIPolicyName          = networkpolicy.TigeraComponentPolicyPrefix + ADAPIObjectName
+	adAPIPort                = 8080
 )
 
 var adAPIReplicas int32 = 1

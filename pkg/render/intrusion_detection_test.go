@@ -398,7 +398,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			{"ELASTIC_CA", certificatemanagement.TrustedCertBundleMountPath, "", ""},
 			{"ELASTIC_USERNAME", "", render.ElasticsearchADJobUserSecret, "username"},
 			{"ELASTIC_PASSWORD", "", render.ElasticsearchADJobUserSecret, "password"},
-			{"MODEL_STORAGE_API_HOST", dns.GetServiceDNSNames(render.ADAPIObjectName, render.IntrusionDetectionNamespace, cfg.ClusterDomain)[2], "", ""},
+			{"MODEL_STORAGE_API_HOST", render.ADAPIExpectedServiceName, "", ""},
 			{"MODEL_STORAGE_API_PORT", strconv.Itoa(8080), "", ""},
 			{"MODEL_STORAGE_CLIENT_CERT", cfg.ADAPIServerCertSecret.VolumeMountCertificateFilePath(), "", ""},
 			{"MODEL_STORAGE_API_TOKEN", "", "anomaly-detectors", "token"},

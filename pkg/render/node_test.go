@@ -614,6 +614,7 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "FELIX_IPINIPMTU", Value: "1450"},
 			{Name: "FELIX_VXLANMTU", Value: "1450"},
 			{Name: "FELIX_WIREGUARDMTU", Value: "1450"},
+			{Name: "FELIX_WIREGUARDMTUV6", Value: "1450"},
 		}
 		for _, e := range expectedNodeEnv {
 			Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ContainElement(e))

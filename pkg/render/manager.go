@@ -483,7 +483,7 @@ func (c *managerComponent) volumeMountsForProxyManager() []corev1.VolumeMount {
 	}
 
 	if c.cfg.TunnelServerSecret != nil {
-		mounts = append(mounts, c.cfg.TunnelServerSecret.VolumeMount())
+		mounts = append(mounts, c.cfg.TunnelServerSecret.VolumeMount(c.SupportedOSType()))
 	}
 
 	return mounts

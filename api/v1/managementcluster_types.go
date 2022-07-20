@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2012,2015-2022 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,6 +27,18 @@ type ManagementClusterSpec struct {
 	// Valid examples are: "0.0.0.0:31000", "example.com:32000", "[::1]:32500"
 	// +optional
 	Address string `json:"address,omitempty"`
+
+	// UsePublicCA configures the product to serve the voltron tunnel using a publicly signed CA certificate instead
+	// of using the same cert bundle which guardian client certs are signed with.
+	//
+	// Use of this flag requires uploading a ca bundle.
+	//
+	// Once enabled, all managed clusters will disconnect as they will no longer be able to verify Voltron's identity.
+	// The apiserver will no longer include the management cluster cert in the resource bundle produced when
+	// a new managed cluster resource is created. To reconnect existing managed clusters, generate a new cert bundle
+	// which will not include the management cluster's cert, which will indicate to guardian it should use it's
+	// installed certificates (in combination with the management cluster's hostname) to verify voltron's identity.
+	UsePublicCA bool `json:"usePublicCA,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -39,15 +39,11 @@ type replicatedPodResource struct {
 func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides components.ReplicatedPodResourceOverrides) *replicatedPodResource {
 	if metadata := overrides.GetMetadata(); metadata != nil {
 		if len(metadata.Labels) > 0 {
-			if r.labels == nil {
-				r.labels = make(map[string]string)
-			}
+			r.labels = common.MapExistsOrInitialize(r.labels)
 			common.MergeMaps(metadata.Labels, r.labels)
 		}
 		if len(metadata.Annotations) > 0 {
-			if r.annotations == nil {
-				r.annotations = make(map[string]string)
-			}
+			r.annotations = common.MapExistsOrInitialize(r.annotations)
 			common.MergeMaps(metadata.Annotations, r.annotations)
 		}
 	}
@@ -56,15 +52,11 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides com
 	}
 	if podTemplateMetadata := overrides.GetPodTemplateMetadata(); podTemplateMetadata != nil {
 		if len(podTemplateMetadata.Labels) > 0 {
-			if r.podTemplateSpec.Labels == nil {
-				r.podTemplateSpec.Labels = make(map[string]string)
-			}
+			r.podTemplateSpec.Labels = common.MapExistsOrInitialize(r.podTemplateSpec.Labels)
 			common.MergeMaps(podTemplateMetadata.Labels, r.podTemplateSpec.Labels)
 		}
 		if len(podTemplateMetadata.Annotations) > 0 {
-			if r.podTemplateSpec.Annotations == nil {
-				r.podTemplateSpec.Annotations = make(map[string]string)
-			}
+			r.podTemplateSpec.Annotations = common.MapExistsOrInitialize(r.podTemplateSpec.Annotations)
 			common.MergeMaps(podTemplateMetadata.Annotations, r.podTemplateSpec.Annotations)
 		}
 	}
@@ -78,6 +70,7 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides com
 		r.podTemplateSpec.Spec.Affinity = affinity
 	}
 	if nodeSelector := overrides.GetNodeSelector(); nodeSelector != nil {
+		r.podTemplateSpec.Spec.NodeSelector = common.MapExistsOrInitialize(r.podTemplateSpec.Spec.NodeSelector)
 		common.MergeMaps(nodeSelector, r.podTemplateSpec.Spec.NodeSelector)
 	}
 	if tolerations := overrides.GetTolerations(); tolerations != nil {

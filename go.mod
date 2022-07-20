@@ -9,7 +9,7 @@ require (
 	github.com/elastic/cloud-on-k8s v0.0.0-20210914143041-4f367c381636
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-ldap/ldap v3.0.3+incompatible
-	github.com/go-logr/logr v0.4.0
+	github.com/go-logr/logr v1.2.0
 	github.com/hashicorp/go-version v1.2.1
 	github.com/olivere/elastic/v7 v7.0.6
 	github.com/onsi/ginkgo v1.16.4
@@ -18,20 +18,20 @@ require (
 	github.com/openshift/library-go v0.0.0-20200924151131-575c4875cdbe
 	github.com/pkg/errors v0.9.1
 	github.com/projectcalico/api v0.0.0-20220129171754-5c0717447274
-	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.52.1
+	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.57.0
 	github.com/r3labs/diff/v2 v2.8.0
 	github.com/stretchr/testify v1.7.0
 	github.com/tigera/api v0.0.0-20220325204048-b3e0b35ba256
 	go.uber.org/zap v1.19.0
-	golang.org/x/crypto v0.0.0-20210506145944-38f3c27a63bf
+	golang.org/x/crypto v0.0.0-20220622213112-05595931fe9d
 	gopkg.in/inf.v0 v0.9.1
 	gopkg.in/yaml.v2 v2.4.0
-	k8s.io/api v0.22.3
-	k8s.io/apiextensions-apiserver v0.22.3
-	k8s.io/apimachinery v0.22.3
+	k8s.io/api v0.23.5
+	k8s.io/apiextensions-apiserver v0.23.5
+	k8s.io/apimachinery v0.23.5
 	k8s.io/client-go v0.21.8
 	k8s.io/kube-aggregator v0.21.7
-	sigs.k8s.io/controller-runtime v0.9.7
+	sigs.k8s.io/controller-runtime v0.11.2
 	sigs.k8s.io/kind v0.11.1 // Do not remove, not used by code but used by build
 )
 

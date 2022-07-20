@@ -35,7 +35,6 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/ptr"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rkibana "github.com/tigera/operator/pkg/render/common/kibana"
@@ -1483,9 +1482,8 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 
 	envVars := []corev1.EnvVar{
 		{
-			Name: "MODEL_STORAGE_API_HOST",
-			// static index 2 refres to - <svc_name>.<ns>.svc format
-			Value: dns.GetServiceDNSNames(ADAPIObjectName, IntrusionDetectionNamespace, c.cfg.ClusterDomain)[2],
+			Name:  "MODEL_STORAGE_API_HOST",
+			Value: ADAPIExpectedServiceName,
 		},
 		{
 			Name:  "MODEL_STORAGE_API_PORT",

@@ -735,7 +735,9 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Expect(depResource).ToNot(BeNil())
 			d := depResource.(*appsv1.Deployment)
 
-			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
+			// nodeSelectors are merged
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveLen(2))
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("nodeName", "control01"))
 			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("custom-node-selector", "value"))
 		})
 

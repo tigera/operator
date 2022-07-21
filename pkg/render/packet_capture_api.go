@@ -235,7 +235,7 @@ func (pc *packetCaptureApiComponent) deployment() client.Object {
 				Spec: corev1.PodSpec{
 					NodeSelector:       pc.cfg.Installation.ControlPlaneNodeSelector,
 					ServiceAccountName: PacketCaptureServiceAccountName,
-					Tolerations:        append(pc.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster, rmeta.TolerateCriticalAddonsOnly),
+					Tolerations:        append(pc.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...),
 					ImagePullSecrets:   secret.GetReferenceList(pc.cfg.PullSecrets),
 					InitContainers:     pc.initContainers(),
 					Containers:         []corev1.Container{pc.container()},

@@ -44,8 +44,8 @@ spec:
                   that will connect both clusters. Valid examples are: "0.0.0.0:31000",
                   "example.com:32000", "[::1]:32500"'
                 type: string
-              usePublicCA:
-                description: "UsePublicCA configures the product to serve the voltron
+              tunnelCertType:
+                description: "TunnelCertType configures the product to serve the voltron
                   tunnel using a publicly signed CA certificate instead of using the
                   same cert bundle which guardian client certs are signed with. \n
                   Use of this flag requires uploading a ca bundle. \n Once enabled,
@@ -56,8 +56,9 @@ spec:
                   managed clusters, generate a new cert bundle which will not include
                   the management cluster's cert, which will indicate to guardian it
                   should use it's installed certificates (in combination with the
-                  management cluster's hostname) to verify voltron's identity."
-                type: boolean
+                  management cluster's hostname) to verify voltron's identity. Default:
+                  SelfSigned"
+                type: string
             type: object
         type: object
     served: true

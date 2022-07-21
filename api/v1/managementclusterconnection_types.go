@@ -27,11 +27,11 @@ type ManagementClusterConnectionSpec struct {
 	// +optional
 	ManagementClusterAddr string `json:"managementClusterAddr,omitempty"`
 
-	// UsePublicCA configures guardian to use installed CA certs in combination with the managementClusterAddr to verify
+	// TunnelCertType configures guardian to use installed CA certs in combination with the managementClusterAddr to verify
 	// voltron's identity instead of using the management cluster's cert which is normally included in the resource bundle
 	// produced by the apiserver.
 	// +optional
-	UsePublicCA bool `json:"usePublicCA,omitempty"`
+	TunnelCertType TunnelCertType `json:"tunnelCertType,omitempty"`
 }
 
 // +kubebuilder:object:root=true

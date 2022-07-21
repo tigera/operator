@@ -432,7 +432,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 
 		// optional voltron server secret
-		if managementCluster.Spec.UsePublicCA {
+		if managementCluster.Spec.TunnelCertType == operatorv1.TunnelCertCASigned {
 			tunnelServerSecret, err = certificateManager.GetKeyPair(r.client, render.VoltronServerSecretName, common.OperatorNamespace())
 			if err != nil {
 				r.status.SetDegraded(fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.VoltronServerSecretName, common.OperatorNamespace()), err.Error())

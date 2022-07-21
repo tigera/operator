@@ -28,7 +28,7 @@ type ManagementClusterSpec struct {
 	// +optional
 	Address string `json:"address,omitempty"`
 
-	// UsePublicCA configures the product to serve the voltron tunnel using a publicly signed CA certificate instead
+	// TunnelCertType configures the product to serve the voltron tunnel using a publicly signed CA certificate instead
 	// of using the same cert bundle which guardian client certs are signed with.
 	//
 	// Use of this flag requires uploading a ca bundle.
@@ -38,8 +38,17 @@ type ManagementClusterSpec struct {
 	// a new managed cluster resource is created. To reconnect existing managed clusters, generate a new cert bundle
 	// which will not include the management cluster's cert, which will indicate to guardian it should use it's
 	// installed certificates (in combination with the management cluster's hostname) to verify voltron's identity.
-	UsePublicCA bool `json:"usePublicCA,omitempty"`
+	// Default: SelfSigned
+	// +optional
+	TunnelCertType TunnelCertType `json:"tunnelCertType,omitempty"`
 }
+
+type TunnelCertType string
+
+const (
+	TunnelCertSelfSigned TunnelCertType = "SelfSigned"
+	TunnelCertCASigned   TunnelCertType = "CASigned"
+)
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status

@@ -71,7 +71,7 @@ type GuardianConfiguration struct {
 	TunnelSecret         *corev1.Secret
 	TrustedCertBundle    certificatemanagement.TrustedBundle
 	IncludeNetworkPolicy bool
-	UsePublicCA          bool
+	TunnelCertType       operatorv1.TunnelCertType
 }
 
 type GuardianComponent struct {
@@ -270,7 +270,7 @@ func (c *GuardianComponent) container() []corev1.Container {
 				{Name: "GUARDIAN_VOLTRON_URL", Value: c.cfg.URL},
 				{Name: "GUARDIAN_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 				{Name: "GUARDIAN_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
-				{Name: "GUARDIAN_USE_PUBLIC_CA", Value: strconv.FormatBool(c.cfg.UsePublicCA)},
+				{Name: "GUARDIAN_USE_PUBLIC_CA", Value: strconv.FormatBool(c.cfg.TunnelCertType == operatorv1.TunnelCertCASigned)},
 			},
 			VolumeMounts: c.volumeMounts(),
 			LivenessProbe: &corev1.Probe{

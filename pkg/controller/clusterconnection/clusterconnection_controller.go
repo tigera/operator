@@ -245,7 +245,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	// check if public CA is used for voltron
-	if managementClusterConnection.Spec.UsePublicCA {
+	if managementClusterConnection.Spec.TunnelCertType == operatorv1.TunnelCertCASigned {
 		if err := r.Client.Get(ctx, types.NamespacedName{Name: render.VoltronServerSecretName, Namespace: common.OperatorNamespace()}, tunnelSecret); err != nil {
 			r.status.SetDegraded("Error retrieving secrets from guardian namespace", err.Error())
 			return result, err
@@ -336,7 +336,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		Installation:         instl,
 		TunnelSecret:         tunnelSecret,
 		TrustedCertBundle:    trustedCertBundle,
-		UsePublicCA:          managementClusterConnection.Spec.UsePublicCA,
+		TunnelCertType:       managementClusterConnection.Spec.TunnelCertType,
 		IncludeNetworkPolicy: includeNetworkPolicy,
 	}
 	component := render.Guardian(guardianCfg)

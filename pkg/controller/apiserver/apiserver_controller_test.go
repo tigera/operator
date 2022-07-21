@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tigera/operator/pkg/controller/utils"
+
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	netv1 "k8s.io/api/networking/v1"
 
@@ -62,6 +64,10 @@ var _ = Describe("apiserver controller tests", func() {
 		apiSecret             *corev1.Secret
 		packetCaptureSecret   *corev1.Secret
 	)
+
+	notReady := &utils.ReadyFlag{}
+	ready := &utils.ReadyFlag{}
+	ready.MarkAsReady()
 
 	BeforeEach(func() {
 		// Set up the scheme
@@ -130,6 +136,7 @@ var _ = Describe("apiserver controller tests", func() {
 				enterpriseCRDsExist: true,
 				amazonCRDExists:     false,
 				status:              mockStatus,
+				tierWatchReady:      ready,
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -216,6 +223,7 @@ var _ = Describe("apiserver controller tests", func() {
 				provider:            operatorv1.ProviderNone,
 				enterpriseCRDsExist: true,
 				status:              mockStatus,
+				tierWatchReady:      ready,
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -296,6 +304,7 @@ var _ = Describe("apiserver controller tests", func() {
 				enterpriseCRDsExist: true,
 				status:              mockStatus,
 				clusterDomain:       dns.DefaultClusterDomain,
+				tierWatchReady:      ready,
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -320,6 +329,7 @@ var _ = Describe("apiserver controller tests", func() {
 				provider:            operatorv1.ProviderNone,
 				enterpriseCRDsExist: true,
 				status:              mockStatus,
+				tierWatchReady:      ready,
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -332,7 +342,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
 		})
 
-		It("should render allow-tigera policy when tier is ready", func() {
+		It("should render allow-tigera policy when tier and tier watch are ready", func() {
 			Expect(cli.Create(ctx, installation)).To(BeNil())
 
 			r := ReconcileAPIServer{
@@ -341,6 +351,7 @@ var _ = Describe("apiserver controller tests", func() {
 				provider:            operatorv1.ProviderNone,
 				enterpriseCRDsExist: true,
 				status:              mockStatus,
+				tierWatchReady:      ready,
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -362,6 +373,26 @@ var _ = Describe("apiserver controller tests", func() {
 				provider:            operatorv1.ProviderNone,
 				enterpriseCRDsExist: true,
 				status:              mockStatus,
+				tierWatchReady:      ready,
+			}
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+
+			Expect(err).ShouldNot(HaveOccurred())
+			policies := v3.NetworkPolicyList{}
+			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
+			Expect(policies.Items).To(HaveLen(0))
+		})
+
+		It("should omit allow-tigera policy and not degrade when tier watch is not ready", func() {
+			Expect(cli.Create(ctx, installation)).To(BeNil())
+
+			r := ReconcileAPIServer{
+				client:              cli,
+				scheme:              scheme,
+				provider:            operatorv1.ProviderNone,
+				enterpriseCRDsExist: true,
+				status:              mockStatus,
+				tierWatchReady:      notReady,
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 

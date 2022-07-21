@@ -149,7 +149,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		}
 
 		// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
-		go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, nil)
+		go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, ri.tierWatchReady)
 
 		go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
 			{Name: kubecontrollers.KubeControllerNetworkPolicyName, Namespace: common.CalicoNamespace}},
@@ -202,6 +202,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		clusterDomain:         opts.ClusterDomain,
 		manageCRDs:            opts.ManageCRDs,
 		usePSP:                opts.UsePSP,
+		tierWatchReady:        &utils.ReadyFlag{},
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
@@ -390,6 +391,7 @@ type ReconcileInstallation struct {
 	clusterDomain         string
 	manageCRDs            bool
 	usePSP                bool
+	tierWatchReady        *utils.ReadyFlag
 }
 
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
@@ -1000,17 +1002,21 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 
 		// Ensure the allow-tigera tier exists, before rendering any network policies within it.
-		if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
-			// The creation of the Tier depends on this controller to reconcile it's non-NetworkPolicy resources so that
-			// the API Server becomes available. Therefore, if we fail to query the Tier, we exclude NetworkPolicy from
-			// reconciliation and tolerate errors arising from the Tier not being created or the API server not being available.
-			if !apierrors.IsNotFound(err) && !meta.IsNoMatchError(err) {
-				log.Error(err, "Error querying allow-tigera tier")
-				r.status.SetDegraded("Error querying allow-tigera tier", err.Error())
-				return reconcile.Result{}, err
+		//
+		// The creation of the Tier depends on this controller to reconcile it's non-NetworkPolicy resources so that
+		// the API Server becomes available. Therefore, if we fail to query the Tier, we exclude NetworkPolicy from
+		// reconciliation and tolerate errors arising from the Tier not being created or the API server not being available.
+		// We also exclude NetworkPolicy and do not degrade when the Tier watch is not ready, as this means the API server is not available.
+		if r.tierWatchReady.IsReady() {
+			if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+				if !apierrors.IsNotFound(err) && !meta.IsNoMatchError(err) {
+					log.Error(err, "Error querying allow-tigera tier")
+					r.status.SetDegraded("Error querying allow-tigera tier", err.Error())
+					return reconcile.Result{}, err
+				}
+			} else {
+				includeV3NetworkPolicy = true
 			}
-		} else {
-			includeV3NetworkPolicy = true
 		}
 	}
 

@@ -312,6 +312,10 @@ var _ = Describe("Testing core-controller installation", func() {
 			}),
 	)
 
+	notReady := &utils.ReadyFlag{}
+	ready := &utils.ReadyFlag{}
+	ready.MarkAsReady()
+
 	Context("image reconciliation tests", func() {
 		var c client.Client
 		var cs *kfake.Clientset
@@ -392,6 +396,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,
 				migrationChecked:      true,
+				tierWatchReady:        ready,
 			}
 
 			r.typhaAutoscaler.start(ctx)
@@ -761,6 +766,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				enterpriseCRDsExist:   true,
 				migrationChecked:      true,
 				clusterDomain:         dns.DefaultClusterDomain,
+				tierWatchReady:        ready,
 			}
 			r.typhaAutoscaler.start(ctx)
 			r.calicoWindowsUpgrader.Start(ctx)
@@ -999,6 +1005,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,
 				migrationChecked:      true,
+				tierWatchReady:        ready,
 			}
 
 			r.typhaAutoscaler.start(ctx)
@@ -1485,7 +1492,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(cr.Status.Conditions[2].ObservedGeneration).To(Equal(int64(2)))
 		})
 
-		It("should render allow-tigera policy when tier is ready", func() {
+		It("should render allow-tigera policy when tier and tier watch are ready", func() {
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -1500,6 +1507,18 @@ var _ = Describe("Testing core-controller installation", func() {
 		It("should omit allow-tigera policy and not degrade when tier is not ready", func() {
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			Expect(c.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			policies := v3.NetworkPolicyList{}
+			Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
+			Expect(policies.Items).To(HaveLen(0))
+		})
+
+		It("should omit allow-tigera policy and not degrade when tier watch is not ready", func() {
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			r.tierWatchReady = notReady
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())

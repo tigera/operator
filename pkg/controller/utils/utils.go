@@ -17,6 +17,7 @@ package utils
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -28,6 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -557,4 +559,16 @@ func createPredicateForObject(objMeta metav1.Object) predicate.Predicate {
 			return e.Object.GetNamespace() == objMeta.GetNamespace()
 		},
 	}
+}
+
+// ValidateResourceNameIsQualified returns a compiled list of errors which states which rule the name
+// did not respect. Returns nil if it's a valid name.
+func ValidateResourceNameIsQualified(name string) error {
+	errors := validation.IsDNS1123Subdomain(name)
+
+	if len(errors) > 0 {
+		return fmt.Errorf("%s is not a qualified resource name with errors: %s", name, strings.Join(errors[:], ", "))
+	}
+
+	return nil
 }

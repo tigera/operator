@@ -1,10 +1,23 @@
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package convert
 
 import (
-	"time"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/tigera/operator/pkg/controller/migration/convert/helpers"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -32,7 +45,7 @@ var _ = Describe("core handler", func() {
 			Expect(i.Spec.ComponentResources).To(BeEmpty())
 		})
 
-		var rqs = v1.ResourceRequirements{
+		var rqs1 = v1.ResourceRequirements{
 			Limits: v1.ResourceList{
 				v1.ResourceCPU:    resource.MustParse("500m"),
 				v1.ResourceMemory: resource.MustParse("500Mi"),
@@ -42,68 +55,299 @@ var _ = Describe("core handler", func() {
 				v1.ResourceMemory: resource.MustParse("64Mi"),
 			},
 		}
+		var rqs2 = v1.ResourceRequirements{
+			Limits: v1.ResourceList{
+				v1.ResourceCPU:    resource.MustParse("120m"),
+				v1.ResourceMemory: resource.MustParse("100Mi"),
+			},
+			Requests: v1.ResourceList{
+				v1.ResourceCPU:    resource.MustParse("60m"),
+				v1.ResourceMemory: resource.MustParse("50Mi"),
+			},
+		}
+		var rqs3 = v1.ResourceRequirements{
+			Limits: v1.ResourceList{
+				v1.ResourceStorage: resource.MustParse("10G"),
+			},
+			Requests: v1.ResourceList{
+				v1.ResourceStorage: resource.MustParse("10G"),
+			},
+		}
 
 		It("should migrate resources from calico-node if they are set", func() {
-			comps.node.Spec.Template.Spec.Containers[0].Resources = rqs
+			comps.node.Spec.Template.Spec.Containers[0].Resources = rqs1
+			comps.node.Spec.Template.Spec.InitContainers[0].Resources = rqs2
 			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
-			Expect(i.Spec.ComponentResources).To(ConsistOf(operatorv1.ComponentResource{
-				ComponentName:        operatorv1.ComponentNameNode,
-				ResourceRequirements: &rqs,
+
+			Expect(i.Spec.ComponentResources).To(HaveLen(0))
+			Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers).To(ConsistOf(operatorv1.CalicoNodeDaemonSetContainer{
+				Name:      "calico-node",
+				Resources: &rqs1,
+			}))
+			Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers).To(ConsistOf(operatorv1.CalicoNodeDaemonSetInitContainer{
+				Name:      "install-cni",
+				Resources: &rqs2,
 			}))
 		})
 
 		It("should migrate resources from kube-controllers if they are set", func() {
-			comps.kubeControllers.Spec.Template.Spec.Containers[0].Resources = rqs
+			comps.kubeControllers.Spec.Template.Spec.Containers[0].Resources = rqs1
 			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
-			Expect(i.Spec.ComponentResources).To(ConsistOf(operatorv1.ComponentResource{
-				ComponentName:        operatorv1.ComponentNameKubeControllers,
-				ResourceRequirements: &rqs,
+			Expect(i.Spec.ComponentResources).To(HaveLen(0))
+			Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers).To(ConsistOf(operatorv1.CalicoKubeControllersDeploymentContainer{
+				Name:      "calico-kube-controllers",
+				Resources: &rqs1,
 			}))
 		})
 
 		It("should migrate resources from typha if they are set", func() {
-			comps.typha.Spec.Template.Spec.Containers[0].Resources = rqs
+			comps.typha.Spec.Template.Spec.Containers[0].Resources = rqs1
+			comps.typha.Spec.Template.Spec.InitContainers[0].Resources = rqs2
 			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
-			Expect(i.Spec.ComponentResources).To(ConsistOf(operatorv1.ComponentResource{
-				ComponentName:        operatorv1.ComponentNameTypha,
-				ResourceRequirements: &rqs,
+			Expect(i.Spec.ComponentResources).To(HaveLen(0))
+			Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.Containers).To(ConsistOf(operatorv1.TyphaDeploymentContainer{
+				Name:      "calico-typha",
+				Resources: &rqs1,
+			}))
+			Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.InitContainers).To(ConsistOf(operatorv1.TyphaDeploymentInitContainer{
+				Name:      "typha-certs-key-cert-provisioner",
+				Resources: &rqs2,
 			}))
 		})
+
 		It("should migrate resources from all 3 components", func() {
-			rqs = v1.ResourceRequirements{
-				Limits: v1.ResourceList{
-					v1.ResourceCPU: resource.MustParse("500m"),
-				},
-			}
-			expectedCompRsrc := []operatorv1.ComponentResource{operatorv1.ComponentResource{
-				ComponentName:        operatorv1.ComponentNameNode,
-				ResourceRequirements: rqs.DeepCopy(),
-			}}
-			comps.node.Spec.Template.Spec.Containers[0].Resources = *rqs.DeepCopy()
-			rqs.Limits[v1.ResourceCPU] = resource.MustParse("400m")
-			expectedCompRsrc = append(expectedCompRsrc, operatorv1.ComponentResource{
-				ComponentName:        operatorv1.ComponentNameKubeControllers,
-				ResourceRequirements: rqs.DeepCopy(),
-			})
-			comps.kubeControllers.Spec.Template.Spec.Containers[0].Resources = *rqs.DeepCopy()
-			rqs.Limits[v1.ResourceCPU] = resource.MustParse("300m")
-			expectedCompRsrc = append(expectedCompRsrc, operatorv1.ComponentResource{
-				ComponentName:        operatorv1.ComponentNameTypha,
-				ResourceRequirements: rqs.DeepCopy(),
-			})
-			comps.typha.Spec.Template.Spec.Containers[0].Resources = *rqs.DeepCopy()
+			comps.node.Spec.Template.Spec.Containers[0].Resources = rqs1
+			comps.node.Spec.Template.Spec.InitContainers[0].Resources = rqs2
+
+			comps.kubeControllers.Spec.Template.Spec.Containers[0].Resources = rqs1
+
+			comps.typha.Spec.Template.Spec.Containers[0].Resources = rqs1
+			comps.typha.Spec.Template.Spec.InitContainers[0].Resources = rqs2
+
 			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
-			Expect(i.Spec.ComponentResources).To(ConsistOf(expectedCompRsrc))
+
+			Expect(i.Spec.ComponentResources).To(HaveLen(0))
+			Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers).To(ConsistOf(operatorv1.CalicoNodeDaemonSetContainer{
+				Name:      "calico-node",
+				Resources: &rqs1,
+			}))
+			Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers).To(ConsistOf(operatorv1.CalicoNodeDaemonSetInitContainer{
+				Name:      "install-cni",
+				Resources: &rqs2,
+			}))
+			Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers).To(ConsistOf(operatorv1.CalicoKubeControllersDeploymentContainer{
+				Name:      "calico-kube-controllers",
+				Resources: &rqs1,
+			}))
+			Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.Containers).To(ConsistOf(operatorv1.TyphaDeploymentContainer{
+				Name:      "calico-typha",
+				Resources: &rqs1,
+			}))
+			Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.InitContainers).To(ConsistOf(operatorv1.TyphaDeploymentInitContainer{
+				Name:      "typha-certs-key-cert-provisioner",
+				Resources: &rqs2,
+			}))
 		})
 
 		It("should not add a duplicate resources when already set", func() {
-			comps.node.Spec.Template.Spec.Containers[0].Resources = rqs
+			comps.node.Spec.Template.Spec.Containers[0].Resources = rqs1
 			i.Spec.ComponentResources = append(i.Spec.ComponentResources, operatorv1.ComponentResource{
 				ComponentName:        operatorv1.ComponentNameNode,
-				ResourceRequirements: &rqs,
+				ResourceRequirements: &rqs1,
 			})
 			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
-			Expect(i.Spec.ComponentResources).To(HaveLen(1))
+			Expect(i.Spec.ComponentResources).To(HaveLen(0))
+			Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers).To(ConsistOf(operatorv1.CalicoNodeDaemonSetContainer{
+				Name:      "calico-node",
+				Resources: &rqs1,
+			}))
+		})
+
+		It("should use the new CalicoNodeDaemonSet field over the deprecated ComponentResource", func() {
+			// Set the new component resource override for the calico-node container.
+			helpers.EnsureCalicoNodeContainersNotNil(i)
+			helpers.EnsureCalicoNodeInitContainersNotNil(i)
+			i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers = []operatorv1.CalicoNodeDaemonSetContainer{
+				{
+					Name:      "calico-node",
+					Resources: &rqs1,
+				},
+			}
+			i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers = []operatorv1.CalicoNodeDaemonSetInitContainer{
+				{
+					Name:      "install-cni",
+					Resources: &rqs3,
+				},
+			}
+
+			// Set the deprecated ComponentResources for calico-node.
+			i.Spec.ComponentResources = append(i.Spec.ComponentResources, operatorv1.ComponentResource{
+				ComponentName:        operatorv1.ComponentNameNode,
+				ResourceRequirements: &rqs2,
+			})
+
+			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+			Expect(i.Spec.ComponentResources).To(HaveLen(0))
+			Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers).To(ConsistOf(operatorv1.CalicoNodeDaemonSetContainer{
+				Name:      "calico-node",
+				Resources: &rqs1,
+			}))
+			Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers).To(ConsistOf(operatorv1.CalicoNodeDaemonSetInitContainer{
+				Name:      "install-cni",
+				Resources: &rqs3,
+			}))
+		})
+
+		It("should use the new CalicoKubeControllersDeployment field over the deprecated ComponentResource", func() {
+			// Set the new component resource override.
+			helpers.EnsureKubeControllersContainersNotNil(i)
+			i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers = []operatorv1.CalicoKubeControllersDeploymentContainer{
+				{
+					Name:      "calico-kube-controllers",
+					Resources: &rqs1,
+				},
+			}
+
+			// Set the deprecated ComponentResources for calico-node.
+			i.Spec.ComponentResources = append(i.Spec.ComponentResources, operatorv1.ComponentResource{
+				ComponentName:        operatorv1.ComponentNameKubeControllers,
+				ResourceRequirements: &rqs2,
+			})
+
+			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+			Expect(i.Spec.ComponentResources).To(HaveLen(0))
+			Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers).To(ConsistOf(operatorv1.CalicoKubeControllersDeploymentContainer{
+				Name:      "calico-kube-controllers",
+				Resources: &rqs1,
+			}))
+		})
+
+		It("should use the new TyphaDeployment field over the deprecated ComponentResource", func() {
+			// Set the new component resource override.
+			helpers.EnsureTyphaContainersNotNil(i)
+			helpers.EnsureTyphaInitContainersNotNil(i)
+			i.Spec.TyphaDeployment.Spec.Template.Spec.Containers = []operatorv1.TyphaDeploymentContainer{
+				{
+					Name:      "calico-typha",
+					Resources: &rqs1,
+				},
+			}
+			i.Spec.TyphaDeployment.Spec.Template.Spec.InitContainers = []operatorv1.TyphaDeploymentInitContainer{
+				{
+					Name:      "typha-certs-key-cert-provisioner",
+					Resources: &rqs2,
+				},
+			}
+
+			// Set the deprecated ComponentResources for calico-node.
+			i.Spec.ComponentResources = append(i.Spec.ComponentResources, operatorv1.ComponentResource{
+				ComponentName:        operatorv1.ComponentNameTypha,
+				ResourceRequirements: &rqs3,
+			})
+
+			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+			Expect(i.Spec.ComponentResources).To(HaveLen(0))
+			Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.InitContainers).To(ConsistOf(operatorv1.TyphaDeploymentInitContainer{
+				Name:      "typha-certs-key-cert-provisioner",
+				Resources: &rqs2,
+			}))
+			Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.Containers).To(ConsistOf(operatorv1.TyphaDeploymentContainer{
+				Name:      "calico-typha",
+				Resources: &rqs1,
+			}))
+		})
+
+		It("should return an error if the calico-node container resources do not match the deprecated ComponentResource", func() {
+			comps.node.Spec.Template.Spec.Containers[0].Resources = rqs1
+
+			i.Spec.ComponentResources = append(i.Spec.ComponentResources, operatorv1.ComponentResource{
+				ComponentName:        operatorv1.ComponentNameNode,
+				ResourceRequirements: &rqs2,
+			})
+
+			err := handleCore(&comps, i)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(HavePrefix("Resources for the component container \"calico-node\" did not match between Installation and migration source."))
+		})
+
+		It("should return an error if the calico-node container resources do not match those in CalicoNodeDaemonSetContainer", func() {
+			comps.node.Spec.Template.Spec.Containers[0].Resources = rqs1
+
+			helpers.EnsureCalicoNodeContainersNotNil(i)
+			i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers = []operatorv1.CalicoNodeDaemonSetContainer{
+				{
+					Name:      "calico-node",
+					Resources: &rqs2,
+				},
+			}
+
+			err := handleCore(&comps, i)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(HavePrefix("Resources for the component container \"calico-node\" did not match between Installation and migration source."))
+		})
+
+		It("should return an error if the calico-kube-controllers container resources do not match the deprecated ComponentResource", func() {
+			comps.kubeControllers.Spec.Template.Spec.Containers[0].Resources = rqs1
+
+			i.Spec.ComponentResources = append(i.Spec.ComponentResources, operatorv1.ComponentResource{
+				ComponentName:        operatorv1.ComponentNameKubeControllers,
+				ResourceRequirements: &rqs2,
+			})
+
+			err := handleCore(&comps, i)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(HavePrefix("Resources for the component container \"calico-kube-controllers\" did not match between Installation and migration source."))
+		})
+
+		It("should return an error if the calico-kube-controllers container resources do not match those in CalicoKubeControllersDeploymentContainer", func() {
+			comps.kubeControllers.Spec.Template.Spec.Containers[0].Resources = rqs1
+
+			helpers.EnsureKubeControllersContainersNotNil(i)
+			i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers = []operatorv1.CalicoKubeControllersDeploymentContainer{
+				{
+					Name:      "calico-kube-controllers",
+					Resources: &rqs2,
+				},
+			}
+
+			err := handleCore(&comps, i)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(HavePrefix("Resources for the component container \"calico-kube-controllers\" did not match between Installation and migration source."))
+		})
+
+		It("should return an error if the calico-typha container resources do not match the deprecated ComponentResource", func() {
+			comps.typha.Spec.Template.Spec.Containers[0].Resources = rqs1
+
+			i.Spec.ComponentResources = append(i.Spec.ComponentResources, operatorv1.ComponentResource{
+				ComponentName:        operatorv1.ComponentNameTypha,
+				ResourceRequirements: &rqs2,
+			})
+
+			err := handleCore(&comps, i)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(HavePrefix("Resources for the component container \"calico-typha\" did not match between Installation and migration source."))
+		})
+
+		It("should return an error if the calico-typha container resources do not match those in TyphaDeploymentContainer", func() {
+			comps.typha.Spec.Template.Spec.Containers[0].Resources = rqs1
+
+			helpers.EnsureTyphaContainersNotNil(i)
+			i.Spec.TyphaDeployment.Spec.Template.Spec.Containers = []operatorv1.TyphaDeploymentContainer{
+				{
+					Name:      "calico-typha",
+					Resources: &rqs2,
+				},
+			}
+
+			err := handleCore(&comps, i)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(HavePrefix("Resources for the component container \"calico-typha\" did not match between Installation and migration source."))
 		})
 	})
 
@@ -476,60 +720,6 @@ var _ = Describe("core handler", func() {
 				TestTolerations(comps.typha.Spec.Template.Spec.Tolerations, func(t []v1.Toleration) {
 					comps.typha.Spec.Template.Spec.Tolerations = t
 				})
-			})
-		})
-	})
-
-	Context("annotations", func() {
-		ExpectAnnotations := func(updateAnnotations func(map[string]string)) {
-			It("should not error for no annotations", func() {
-				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
-			})
-			It("should error for unexpected annotations", func() {
-				updateAnnotations(map[string]string{"foo": "bar"})
-				Expect(handleAnnotations(&comps, i)).To(HaveOccurred())
-			})
-			It("should not error for acceptable annotations", func() {
-				updateAnnotations(map[string]string{
-					"kubectl.kubernetes.io/last-applied-configuration": "{}",
-					"kubectl.kubernetes.io/restartedAt":                time.Now().String(),
-					"kubectl.kubernetes.io/whatever":                   "whatever",
-				})
-				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
-			})
-			It("should not panic for nil annotations", func() {
-				updateAnnotations(nil)
-				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
-			})
-		}
-		Context("calico-node", func() {
-			ExpectAnnotations(func(annotations map[string]string) {
-				comps.node.Annotations = annotations
-			})
-			ExpectAnnotations(func(annotations map[string]string) {
-				comps.node.Spec.Template.Annotations = annotations
-			})
-		})
-		Context("kube-controllers", func() {
-			ExpectAnnotations(func(annotations map[string]string) {
-				comps.kubeControllers.Annotations = annotations
-			})
-			ExpectAnnotations(func(annotations map[string]string) {
-				comps.kubeControllers.Spec.Template.Annotations = annotations
-			})
-		})
-		Context("typha", func() {
-			ExpectAnnotations(func(annotations map[string]string) {
-				comps.typha.Annotations = annotations
-			})
-			ExpectAnnotations(func(annotations map[string]string) {
-				comps.typha.Spec.Template.Annotations = annotations
-			})
-			It("should not error if typha's safe-to-evict annotation is set", func() {
-				comps.typha.Spec.Template.Annotations = map[string]string{
-					"cluster-autoscaler.kubernetes.io/safe-to-evict": "true",
-				}
-				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
 			})
 		})
 	})

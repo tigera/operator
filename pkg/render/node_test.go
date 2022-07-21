@@ -3034,6 +3034,153 @@ var _ = Describe("Node rendering tests", func() {
 		}))
 		rtest.ExpectEnv(deploy.Spec.Template.Spec.Containers[0].Env, "CALICO_EARLY_NETWORKING", render.BGPLayoutPath)
 	})
+
+	Context("With calico-node DaemonSet overrides", func() {
+		var rr1 = corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":     resource.MustParse("2"),
+				"memory":  resource.MustParse("300Mi"),
+				"storage": resource.MustParse("20Gi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":     resource.MustParse("1"),
+				"memory":  resource.MustParse("150Mi"),
+				"storage": resource.MustParse("10Gi"),
+			},
+		}
+		var rr2 = corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("250m"),
+				corev1.ResourceMemory: resource.MustParse("64Mi"),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("500m"),
+				corev1.ResourceMemory: resource.MustParse("500Mi"),
+			},
+		}
+
+		It("should handle calicoNodeDaemonSet overrides", func() {
+			var minReadySeconds int32 = 20
+
+			affinity := &corev1.Affinity{
+				NodeAffinity: &corev1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+						NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+							MatchExpressions: []corev1.NodeSelectorRequirement{{
+								Key:      "custom-affinity-key",
+								Operator: corev1.NodeSelectorOpExists,
+							}},
+						}},
+					},
+				},
+			}
+			toleration := corev1.Toleration{
+				Key:      "foo",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "bar",
+			}
+
+			defaultInstance.CalicoNodeDaemonSet = &operatorv1.CalicoNodeDaemonSet{
+				Metadata: &operatorv1.Metadata{
+					Labels:      map[string]string{"top-level": "label1"},
+					Annotations: map[string]string{"top-level": "annot1"},
+				},
+				Spec: &operatorv1.CalicoNodeDaemonSetSpec{
+					MinReadySeconds: &minReadySeconds,
+					Template: &operatorv1.CalicoNodeDaemonSetPodTemplateSpec{
+						Metadata: &operatorv1.Metadata{
+							Labels:      map[string]string{"template-level": "label2"},
+							Annotations: map[string]string{"template-level": "annot2"},
+						},
+						Spec: &operatorv1.CalicoNodeDaemonSetPodSpec{
+							Containers: []operatorv1.CalicoNodeDaemonSetContainer{
+								{
+									Name:      "calico-node",
+									Resources: &rr1,
+								},
+							},
+							NodeSelector: map[string]string{
+								"custom-node-selector": "value",
+							},
+							Affinity:    affinity,
+							Tolerations: []corev1.Toleration{toleration},
+						},
+					},
+				},
+			}
+
+			component := render.Node(&cfg)
+			resources, _ := component.Objects()
+			dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			Expect(dsResource).ToNot(BeNil())
+
+			ds := dsResource.(*appsv1.DaemonSet)
+
+			Expect(ds.Labels).To(HaveLen(1))
+			Expect(ds.Labels["top-level"]).To(Equal("label1"))
+			Expect(ds.Annotations).To(HaveLen(1))
+			Expect(ds.Annotations["top-level"]).To(Equal("annot1"))
+
+			Expect(ds.Spec.MinReadySeconds).To(Equal(minReadySeconds))
+
+			// At runtime, the operator will also add some standard labels to the
+			// daemonset such as "k8s-app=calico-node". But the calico-node daemonset object
+			// produced by the render will have no labels so we expect just the one
+			// provided.
+			Expect(ds.Spec.Template.Labels).To(HaveLen(1))
+			Expect(ds.Spec.Template.Labels["template-level"]).To(Equal("label2"))
+
+			// With the default instance we expect 3 template-level annotations
+			// - 2 added by the operator by default
+			// - 1 added by the calicoNodeDaemonSet override
+			Expect(ds.Spec.Template.Annotations).To(HaveLen(3))
+			Expect(ds.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/tigera-ca-private"))
+			Expect(ds.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/cni-config"))
+			Expect(ds.Spec.Template.Annotations["template-level"]).To(Equal("annot2"))
+
+			Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(ds.Spec.Template.Spec.Containers[0].Resources).To(Equal(rr1))
+
+			Expect(ds.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
+			Expect(ds.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("custom-node-selector", "value"))
+
+			Expect(ds.Spec.Template.Spec.Tolerations).To(HaveLen(1))
+			Expect(ds.Spec.Template.Spec.Tolerations[0]).To(Equal(toleration))
+		})
+
+		It("should override ComponentResources", func() {
+			defaultInstance.ComponentResources = []operatorv1.ComponentResource{
+				{
+					ComponentName:        operatorv1.ComponentNameNode,
+					ResourceRequirements: &rr1,
+				},
+			}
+
+			defaultInstance.CalicoNodeDaemonSet = &operatorv1.CalicoNodeDaemonSet{
+				Spec: &operatorv1.CalicoNodeDaemonSetSpec{
+					Template: &operatorv1.CalicoNodeDaemonSetPodTemplateSpec{
+						Spec: &operatorv1.CalicoNodeDaemonSetPodSpec{
+							Containers: []operatorv1.CalicoNodeDaemonSetContainer{
+								{
+									Name:      "calico-node",
+									Resources: &rr2,
+								},
+							},
+						},
+					},
+				},
+			}
+
+			component := render.Node(&cfg)
+			resources, _ := component.Objects()
+			dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			Expect(dsResource).ToNot(BeNil())
+
+			ds := dsResource.(*appsv1.DaemonSet)
+			Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(ds.Spec.Template.Spec.Containers[0].Resources).To(Equal(rr2))
+		})
+	})
 })
 
 // verifyProbesAndLifecycle asserts the expected node liveness and readiness probe plus pod lifecycle settings.

@@ -42,10 +42,16 @@ const (
 )
 
 var (
-	// TolerateMaster allows pod to be scheduled on master nodes
-	TolerateMaster = corev1.Toleration{
-		Key:    "node-role.kubernetes.io/master",
-		Effect: corev1.TaintEffectNoSchedule,
+	// TolerateControlPlane allows pod to be scheduled on master nodes
+	TolerateControlPlane = []corev1.Toleration{
+		{
+			Key:    "node-role.kubernetes.io/master",
+			Effect: corev1.TaintEffectNoSchedule,
+		},
+		{
+			Key:    "node-role.kubernetes.io/control-plane",
+			Effect: corev1.TaintEffectNoSchedule,
+		},
 	}
 
 	// TolerateCriticalAddonsOnly allows pods to be rescheduled while the node is in "critical add-ons only" mode.
@@ -53,6 +59,8 @@ var (
 		Key:      "CriticalAddonsOnly",
 		Operator: corev1.TolerationOpExists,
 	}
+
+	TolerateCriticalAddonsAndControlPlane = append(TolerateControlPlane, TolerateCriticalAddonsOnly)
 
 	// TolerateAll returns tolerations to tolerate all taints. When used, it is not necessary
 	// to include the user's custom tolerations because we already tolerate everything.

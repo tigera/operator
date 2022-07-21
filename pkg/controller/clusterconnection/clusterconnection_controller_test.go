@@ -33,6 +33,7 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	. "github.com/onsi/ginkgo"
@@ -40,6 +41,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -201,6 +203,30 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentGuardian.Image,
 					"sha256:guardianhash")))
+		})
+	})
+
+	FContext("public CA", func() {
+		BeforeEach(func() {
+			cfg.Spec.TunnelCertType = operatorv1.TunnelCertCASigned
+			Expect(c.Update(ctx, cfg)).NotTo(HaveOccurred())
+		})
+
+		It("should error if tigera-voltron-server-tls secret is not available", func() {
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).Should(HaveOccurred())
+		})
+
+		It("should succeed if tigera-voltron-server-tls secret is available", func() {
+			Expect(c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-voltron-server-tls", Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			var secret corev1.Secret
+			Expect(c.Get(ctx, types.NamespacedName{
+				Name:      "tigera-voltron-server-tls",
+				Namespace: "tigera-guardian",
+			}, &secret)).ToNot(HaveOccurred())
 		})
 	})
 

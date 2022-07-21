@@ -503,7 +503,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 		d := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(tol, rmeta.TolerateMaster))
+		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(append(rmeta.TolerateMaster, tol)))
 	})
 
 	It("should include a ClusterRole and ClusterRoleBindings for reading webhook configuration", func() {
@@ -1405,7 +1405,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 		d := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(tol, rmeta.TolerateMaster))
+		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(append(rmeta.TolerateMaster, tol)))
 	})
 
 	It("should set KUBERNETES_SERVICE_... variables if host networked", func() {

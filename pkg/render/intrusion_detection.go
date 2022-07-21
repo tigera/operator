@@ -1515,7 +1515,7 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 				ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 				RestartPolicy:      corev1.RestartPolicyOnFailure,
 				ServiceAccountName: adDetectorName,
-				Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster),
+				Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster...),
 				Containers: []corev1.Container{
 					{
 						Name:  "adjobs",

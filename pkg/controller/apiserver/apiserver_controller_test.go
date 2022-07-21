@@ -150,7 +150,7 @@ var _ = Describe("apiserver controller tests", func() {
 			}
 			Expect(test.GetResource(cli, &d)).To(BeNil())
 			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(2))
-			apiserver := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-apiserver")
+			apiserver := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-apiserver")
 			Expect(apiserver).ToNot(BeNil())
 			Expect(apiserver.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
@@ -163,7 +163,7 @@ var _ = Describe("apiserver controller tests", func() {
 					components.ComponentQueryServer.Image,
 					components.ComponentQueryServer.Version)))
 			Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
-			csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, "tigera-apiserver-certs-key-cert-provisioner")
+			csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, "calico-apiserver-certs-key-cert-provisioner")
 			Expect(csrinit).ToNot(BeNil())
 			Expect(csrinit.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
@@ -238,7 +238,7 @@ var _ = Describe("apiserver controller tests", func() {
 			}
 			Expect(test.GetResource(cli, &d)).To(BeNil())
 			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(2))
-			apiserver := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-apiserver")
+			apiserver := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-apiserver")
 			Expect(apiserver).ToNot(BeNil())
 			Expect(apiserver.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
@@ -250,7 +250,7 @@ var _ = Describe("apiserver controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentQueryServer.Image,
 					"sha256:queryserverhash")))
-			csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, "tigera-apiserver-certs-key-cert-provisioner")
+			csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, "calico-apiserver-certs-key-cert-provisioner")
 			Expect(csrinit).ToNot(BeNil())
 			Expect(csrinit.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",

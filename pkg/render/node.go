@@ -27,6 +27,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/ptr"
+	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
@@ -66,6 +67,24 @@ var (
 	nodeBGPReporterPort int32 = 9900
 
 	NodeTLSSecretName = "node-certs"
+
+	// calico-node DaemonSet container names used for validation.
+	// These should match CalicoNodeContainer.Name validation on the CalicoNodeDaemonSet type.
+	CalicoNodeDaemonSetContainerNames = map[string]struct{}{
+		CalicoNodeObjectName: {},
+	}
+
+	// calico-node DaemonSet init container names used for validation.
+	// These should match CalicoInitNodeContainer.Name validation on the CalicoNodeDaemonSet type.
+	CalicoNodeDaemonSetInitContainerNames = map[string]struct{}{
+		"install-cni":    {},
+		"hostpath-init":  {},
+		"flexvol-driver": {},
+		"mount-bpffs":    {},
+		// These names are generated in certificatemanagement.CreateCSRInitContainer
+		fmt.Sprintf("%s-%s", NodeTLSSecretName, certificatemanagement.CSRInitContainerName):             {},
+		fmt.Sprintf("%s-%s", NodePrometheusTLSServerSecret, certificatemanagement.CSRInitContainerName): {},
+	}
 )
 
 // TyphaNodeTLS holds configuration for Node and Typha to establish TLS.
@@ -792,6 +811,10 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 	setNodeCriticalPod(&(ds.Spec.Template))
 	if c.cfg.MigrateNamespaces {
 		migration.LimitDaemonSetToMigratedNodes(&ds)
+	}
+
+	if overrides := c.cfg.Installation.CalicoNodeDaemonSet; overrides != nil {
+		rcomp.ApplyDaemonSetOverrides(&ds, overrides)
 	}
 	return &ds
 }

@@ -1,0 +1,222 @@
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+/*
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package v1
+
+import (
+	v1 "k8s.io/api/core/v1"
+)
+
+// TyphaDeploymentContainer is a typha Deployment container.
+type TyphaDeploymentContainer struct {
+	// Name is an enum which identifies the typha Deployment container by name.
+	// +kubebuilder:validation:Enum=calico-typha
+	Name string `json:"name"`
+
+	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
+	// If specified, this overrides the named typha Deployment container's resources.
+	// If omitted, the typha Deployment will use its default value for this container's resources.
+	// If used in conjunction with the deprecated ComponentResources, then this value takes precedence.
+	// +optional
+	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+// TyphaDeploymentInitContainer is a typha Deployment init container.
+type TyphaDeploymentInitContainer struct {
+	// Name is an enum which identifies the typha Deployment init container by name.
+	// +kubebuilder:validation:Enum=typha-certs-key-cert-provisioner
+	Name string `json:"name"`
+
+	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
+	// If specified, this overrides the named typha Deployment init container's resources.
+	// If omitted, the typha Deployment will use its default value for this init container's resources.
+	// If used in conjunction with the deprecated ComponentResources, then this value takes precedence.
+	// +optional
+	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+// TyphaDeploymentDeploymentPodSpec is the typha Deployment's PodSpec.
+type TyphaDeploymentPodSpec struct {
+	// InitContainers is a list of typha init containers.
+	// If specified, this overrides the specified typha Deployment init containers.
+	// If omitted, the typha Deployment will use its default values for its init containers.
+	// +optional
+	InitContainers []TyphaDeploymentInitContainer `json:"initContainers,omitempty"`
+
+	// Containers is a list of typha containers.
+	// If specified, this overrides the specified typha Deployment containers.
+	// If omitted, the typha Deployment will use its default values for its containers.
+	// +optional
+	Containers []TyphaDeploymentContainer `json:"containers,omitempty"`
+
+	// Affinity is a group of affinity scheduling rules for the typha pods.
+	// If specified, this overrides any affinity that may be set on the typha Deployment.
+	// If omitted, the typha Deployment will use its default value for affinity.
+	// If used in conjunction with the deprecated TyphaAffinity, then this value takes precedence.
+	// WARNING: Please note that this field will override the default calico-typha Deployment affinity.
+	// +optional
+	Affinity *v1.Affinity `json:"affinity,omitempty"`
+
+	// NodeSelector is the calico-typha pod's scheduling constraints.
+	// If specified, each of the key/value pairs are added to the calico-typha Deployment nodeSelector provided
+	// the key does not already exist in the object's nodeSelector.
+	// If omitted, the calico-typha Deployment will use its default value for nodeSelector.
+	// WARNING: Please note that this field will modify the default calico-typha Deployment nodeSelector.
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
+	// Tolerations is the typha pod's tolerations.
+	// If specified, this overrides any tolerations that may be set on the typha Deployment.
+	// If omitted, the typha Deployment will use its default value for tolerations.
+	// WARNING: Please note that this field will override the default calico-typha Deployment tolerations.
+	// +optional
+	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
+}
+
+// TyphaDeploymentPodTemplateSpec is the typha Deployment's PodTemplateSpec
+type TyphaDeploymentPodTemplateSpec struct {
+	// Metadata is a subset of a Kubernetes object's metadata that is added to
+	// the pod's metadata.
+	// +optional
+	Metadata *Metadata `json:"metadata,omitempty"`
+
+	// Spec is the typha Deployment's PodSpec.
+	// +optional
+	Spec *TyphaDeploymentPodSpec `json:"spec,omitempty"`
+}
+
+// TyphaDeployment is the configuration for the typha Deployment.
+type TyphaDeployment struct {
+	// Metadata is a subset of a Kubernetes object's metadata that is added to the Deployment.
+	// +optional
+	Metadata *Metadata `json:"metadata,omitempty"`
+
+	// Spec is the specification of the typha Deployment.
+	// +optional
+	Spec *TyphaDeploymentSpec `json:"spec,omitempty"`
+}
+
+// TyphaDeploymentSpec defines configuration for the typha Deployment.
+type TyphaDeploymentSpec struct {
+	// MinReadySeconds is the minimum number of seconds for which a newly created Deployment pod should
+	// be ready without any of its container crashing, for it to be considered available.
+	// If specified, this overrides any minReadySeconds value that may be set on the typha Deployment.
+	// If omitted, the typha Deployment will use its default value for minReadySeconds.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=2147483647
+	MinReadySeconds *int32 `json:"minReadySeconds,omitempty"`
+
+	// Template describes the typha Deployment pod that will be created.
+	// +optional
+	Template *TyphaDeploymentPodTemplateSpec `json:"template,omitempty"`
+}
+
+func (c *TyphaDeployment) GetMetadata() *Metadata {
+	return c.Metadata
+}
+
+func (c *TyphaDeployment) GetMinReadySeconds() *int32 {
+	if c.Spec != nil {
+		return c.Spec.MinReadySeconds
+	}
+	return nil
+}
+
+func (c *TyphaDeployment) GetPodTemplateMetadata() *Metadata {
+	if c.Spec != nil {
+		if c.Spec.Template != nil {
+			return c.Spec.Template.Metadata
+		}
+	}
+	return nil
+}
+
+func (c *TyphaDeployment) GetInitContainers() []v1.Container {
+	if c.Spec != nil {
+		if c.Spec.Template != nil {
+			if c.Spec.Template.Spec != nil {
+				if c.Spec.Template.Spec.InitContainers != nil {
+					cs := make([]v1.Container, len(c.Spec.Template.Spec.InitContainers))
+					for i, v := range c.Spec.Template.Spec.InitContainers {
+						// Only copy and return the init container if it has resources set.
+						if v.Resources == nil {
+							continue
+						}
+						c := v1.Container{Name: v.Name, Resources: *v.Resources}
+						cs[i] = c
+					}
+					return cs
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (c *TyphaDeployment) GetContainers() []v1.Container {
+	if c.Spec != nil {
+		if c.Spec.Template != nil {
+			if c.Spec.Template.Spec != nil {
+				if c.Spec.Template.Spec.Containers != nil {
+					cs := make([]v1.Container, len(c.Spec.Template.Spec.Containers))
+					for i, v := range c.Spec.Template.Spec.Containers {
+						// Only copy and return the container if it has resources set.
+						if v.Resources == nil {
+							continue
+						}
+						c := v1.Container{Name: v.Name, Resources: *v.Resources}
+						cs[i] = c
+					}
+					return cs
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (c *TyphaDeployment) GetAffinity() *v1.Affinity {
+	if c.Spec != nil {
+		if c.Spec.Template != nil {
+			if c.Spec.Template.Spec != nil {
+				return c.Spec.Template.Spec.Affinity
+			}
+		}
+	}
+	return nil
+}
+
+func (c *TyphaDeployment) GetNodeSelector() map[string]string {
+	if c.Spec != nil {
+		if c.Spec.Template != nil {
+			if c.Spec.Template.Spec != nil {
+				return c.Spec.Template.Spec.NodeSelector
+			}
+		}
+	}
+	return nil
+}
+
+func (c *TyphaDeployment) GetTolerations() []v1.Toleration {
+	if c.Spec != nil {
+		if c.Spec.Template != nil {
+			if c.Spec.Template.Spec != nil {
+				return c.Spec.Template.Spec.Tolerations
+			}
+		}
+	}
+	return nil
+}

@@ -68,7 +68,7 @@ func init() {
 	SchemeBuilder.Register(&APIServer{}, &APIServerList{})
 }
 
-// APIServerDeploymentContainer is an API server deployment container.
+// APIServerDeploymentContainer is an API server Deployment container.
 type APIServerDeploymentContainer struct {
 	// Name is an enum which identifies the API server Deployment container by name.
 	// +kubebuilder:validation:Enum=calico-apiserver;tigera-queryserver
@@ -118,6 +118,9 @@ type APIServerDeploymentPodSpec struct {
 
 	// NodeSelector is the API server pod's scheduling constraints.
 	// If specified, each of the key/value pairs are added to the API server Deployment nodeSelector provided
+	// the key does not already exist in the object's nodeSelector.
+	// If used in conjunction with ControlPlaneNodeSelector, that nodeSelector is set on the API server Deployment
+	// and each of this field's key/value pairs are added to the API server Deployment nodeSelector provided
 	// the key does not already exist in the object's nodeSelector.
 	// If omitted, the API server Deployment will use its default value for nodeSelector.
 	// WARNING: Please note that this field will modify the default API server Deployment nodeSelector.

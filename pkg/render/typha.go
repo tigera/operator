@@ -31,6 +31,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
+	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 )
@@ -42,6 +43,10 @@ const (
 	TyphaServiceAccountName       = "calico-typha"
 	AppLabelName                  = "k8s-app"
 	TyphaPort               int32 = 5473
+
+	// typha Deployment container names used for validation.
+	// These should match TyphaDeploymentContainer.Name validation on the TyphaDeployment type.
+	TyphaContainerName = "calico-typha"
 )
 
 var (
@@ -404,6 +409,10 @@ func (c *typhaComponent) typhaDeployment() *appsv1.Deployment {
 	if c.cfg.MigrateNamespaces {
 		migration.SetTyphaAntiAffinity(&d)
 	}
+
+	if overrides := c.cfg.Installation.TyphaDeployment; overrides != nil {
+		rcomp.ApplyDeploymentOverrides(&d, overrides)
+	}
 	return &d
 }
 
@@ -438,7 +447,7 @@ func (c *typhaComponent) typhaContainer() corev1.Container {
 	lp, rp := c.livenessReadinessProbes()
 
 	return corev1.Container{
-		Name:           "calico-typha",
+		Name:           TyphaContainerName,
 		Image:          c.typhaImage,
 		Resources:      c.typhaResources(),
 		Env:            c.typhaEnvVars(),

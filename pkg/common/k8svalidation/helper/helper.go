@@ -153,25 +153,3 @@ var integerResources = sets.NewString(
 func IsIntegerResourceName(str string) bool {
 	return integerResources.Has(str) || IsExtendedResourceName(core.ResourceName(str))
 }
-
-var standardFinalizers = sets.NewString(
-	string(core.FinalizerKubernetes),
-	metav1.FinalizerOrphanDependents,
-	metav1.FinalizerDeleteDependents,
-)
-
-func toResourceNames(resources core.ResourceList) []core.ResourceName {
-	result := []core.ResourceName{}
-	for resourceName := range resources {
-		result = append(result, resourceName)
-	}
-	return result
-}
-
-func toSet(resourceNames []core.ResourceName) sets.String {
-	result := sets.NewString()
-	for _, resourceName := range resourceNames {
-		result.Insert(string(resourceName))
-	}
-	return result
-}

@@ -58,31 +58,12 @@ const (
 	QueryserverNamespace   = "tigera-system"
 	QueryserverServiceName = "tigera-api"
 
-	TigeraAPIServerResourceName = "tigera-apiserver"
-	CalicoAPIServerResourceName = "calico-apiserver"
-
 	// Use the same API server container name for both OSS and Enterprise.
 	APIServerContainerName                  = "calico-apiserver"
 	TigeraAPIServerQueryServerContainerName = "tigera-queryserver"
 
 	calicoAPIServerTLSSecretName = "calico-apiserver-certs"
 	tigeraAPIServerTLSSecretName = "tigera-apiserver-certs"
-)
-
-var (
-	// API server Deployment container names used for validation.
-	// These should match APIServerDeploymentContainer.Name validation on the APIServerDeployment type.
-	APIServerDeploymentContainerNames = map[string]struct{}{
-		APIServerContainerName:                  {},
-		TigeraAPIServerQueryServerContainerName: {},
-	}
-
-	// API server Deployment init container names used for validation.
-	// These should match APIServerDeploymentInitContainer.Name validation on the APIServerDeployment type.
-	APIServerDeploymentInitContainerNames = map[string]struct{}{
-		// These names are generated in certificatemanagement.CreateCSRInitContainer
-		fmt.Sprintf("%s-%s", calicoAPIServerTLSSecretName, certificatemanagement.CSRInitContainerName): {},
-	}
 )
 
 var TigeraAPIServerEntityRule = v3.EntityRule{

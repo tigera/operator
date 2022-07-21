@@ -34,7 +34,6 @@ import (
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
@@ -45,8 +44,6 @@ const (
 	AppLabelName                  = "k8s-app"
 	TyphaPort               int32 = 5473
 
-	// typha Deployment container names used for validation.
-	// These should match TyphaDeploymentContainer.Name validation on the TyphaDeployment type.
 	TyphaContainerName = "calico-typha"
 )
 
@@ -54,11 +51,6 @@ var (
 	TyphaTLSSecretName   = "typha-certs"
 	TyphaCAConfigMapName = "typha-ca"
 	TyphaCABundleName    = "caBundle"
-
-	// typha Deployment init container names used for validation.
-	// These should match TyphaDeploymentInitContainer.Name validation on the TyphaDeployment type.
-	// This name is generated in certificatemanagement.CreateCSRInitContainer
-	TyphaInitContainerName = fmt.Sprintf("%s-%s", TyphaTLSSecretName, certificatemanagement.CSRInitContainerName)
 )
 
 // TyphaConfiguration is the public API used to provide information to the render code to

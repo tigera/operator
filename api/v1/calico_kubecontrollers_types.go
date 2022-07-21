@@ -52,6 +52,9 @@ type CalicoKubeControllersDeploymentPodSpec struct {
 	// NodeSelector is the calico-kube-controllers pod's scheduling constraints.
 	// If specified, each of the key/value pairs are added to the calico-kube-controllers Deployment nodeSelector provided
 	// the key does not already exist in the object's nodeSelector.
+	// If used in conjunction with ControlPlaneNodeSelector, that nodeSelector is set on the calico-kube-controllers Deployment
+	// and each of this field's key/value pairs are added to the calico-kube-controllers Deployment nodeSelector provided
+	// the key does not already exist in the object's nodeSelector.
 	// If omitted, the calico-kube-controllers Deployment will use its default value for nodeSelector.
 	// WARNING: Please note that this field will modify the default calico-kube-controllers Deployment nodeSelector.
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`

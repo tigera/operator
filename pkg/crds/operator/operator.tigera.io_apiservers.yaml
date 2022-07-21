@@ -1156,7 +1156,7 @@ spec:
                                   Deployment will use its default values for its containers.
                                 items:
                                   description: APIServerDeploymentContainer is an
-                                    API server deployment container.
+                                    API server Deployment container.
                                   properties:
                                     name:
                                       description: Name is an enum which identifies
@@ -1269,10 +1269,16 @@ spec:
                                   scheduling constraints. If specified, each of the
                                   key/value pairs are added to the API server Deployment
                                   nodeSelector provided the key does not already exist
-                                  in the object''s nodeSelector. If omitted, the API
-                                  server Deployment will use its default value for
-                                  nodeSelector. WARNING: Please note that this field
-                                  will modify the default API server Deployment nodeSelector.'
+                                  in the object''s nodeSelector. If used in conjunction
+                                  with ControlPlaneNodeSelector, that nodeSelector
+                                  is set on the API server Deployment and each of
+                                  this field''s key/value pairs are added to the API
+                                  server Deployment nodeSelector provided the key
+                                  does not already exist in the object''s nodeSelector.
+                                  If omitted, the API server Deployment will use its
+                                  default value for nodeSelector. WARNING: Please
+                                  note that this field will modify the default API
+                                  server Deployment nodeSelector.'
                                 type: object
                               tolerations:
                                 description: 'Tolerations is the API server pod''s

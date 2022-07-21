@@ -167,6 +167,16 @@ func ExpectVolumeMount(vms []v1.VolumeMount, name, path string) {
 	Expect(false).To(BeTrue(), fmt.Sprintf("Missing expected volume mount %s", name))
 }
 
+func ExpectVolume(volumes []v1.Volume, name string, expectedVolume v1.Volume) {
+	for _, v := range volumes {
+		if v.Name == name {
+			Expect(v).To(Equal(expectedVolume))
+			return
+		}
+	}
+	Expect([]v1.Volume{}).ToNot(BeEmpty(), "missing expected volume named '%s'", name)
+}
+
 // CreateCertSecret creates a secret that is not signed by the certificate manager, making it useful for testing legacy
 // operator secrets or secrets that are brought to the cluster by the customer.
 func CreateCertSecret(name, namespace string, dnsNames ...string) *corev1.Secret {

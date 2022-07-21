@@ -53,10 +53,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 
-	tierWatchReady := &utils.ReadyFlag{}
-	policyWatchesReady := &utils.ReadyFlag{}
-
-	reconciler := newReconciler(mgr, opts, tierWatchReady, policyWatchesReady)
+	reconciler := newReconciler(mgr, opts)
 
 	c, err := controller.New("tiers-controller", mgr, controller.Options{Reconciler: reconciler})
 	if err != nil {
@@ -69,9 +66,9 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, tierWatchReady)
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, nil)
 
-	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, policyWatchesReady, []types.NamespacedName{
+	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
 		{Name: tiers.ClusterDNSPolicyName, Namespace: "openshift-dns"},
 		{Name: tiers.ClusterDNSPolicyName, Namespace: "kube-system"},
 	})
@@ -80,14 +77,12 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opts options.AddOptions, tierWatchReady *utils.ReadyFlag, policyWatchesReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.AddOptions) reconcile.Reconciler {
 	r := &ReconcileTiers{
-		client:             mgr.GetClient(),
-		scheme:             mgr.GetScheme(),
-		provider:           opts.DetectedProvider,
-		status:             status.New(mgr.GetClient(), "tiers", opts.KubernetesVersion),
-		tierWatchReady:     tierWatchReady,
-		policyWatchesReady: policyWatchesReady,
+		client:   mgr.GetClient(),
+		scheme:   mgr.GetScheme(),
+		provider: opts.DetectedProvider,
+		status:   status.New(mgr.GetClient(), "tiers", opts.KubernetesVersion),
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -123,16 +118,6 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 
 	if !utils.IsAPIServerReady(r.client, reqLogger) {
 		r.status.SetDegraded("Waiting for Tigera API server to be ready", "")
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-	}
-
-	if !r.tierWatchReady.IsReady() {
-		r.status.SetDegraded("Waiting for Tier watch to be established", "")
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-	}
-
-	if !r.policyWatchesReady.IsReady() {
-		r.status.SetDegraded("Waiting for NetworkPolicy watches to be established", "")
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 

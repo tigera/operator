@@ -20,7 +20,6 @@ import (
 	"time"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/operator/pkg/controller/utils"
 	netv1 "k8s.io/api/networking/v1"
 
 	. "github.com/onsi/ginkgo"
@@ -63,10 +62,6 @@ var _ = Describe("apiserver controller tests", func() {
 		apiSecret             *corev1.Secret
 		packetCaptureSecret   *corev1.Secret
 	)
-
-	notReady := &utils.ReadyFlag{}
-	ready := &utils.ReadyFlag{}
-	ready.MarkAsReady()
 
 	BeforeEach(func() {
 		// Set up the scheme
@@ -135,8 +130,6 @@ var _ = Describe("apiserver controller tests", func() {
 				enterpriseCRDsExist: true,
 				amazonCRDExists:     false,
 				status:              mockStatus,
-				tierWatchReady:      ready,
-				policyWatchesReady:  ready,
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -223,8 +216,6 @@ var _ = Describe("apiserver controller tests", func() {
 				provider:            operatorv1.ProviderNone,
 				enterpriseCRDsExist: true,
 				status:              mockStatus,
-				tierWatchReady:      ready,
-				policyWatchesReady:  ready,
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -305,8 +296,6 @@ var _ = Describe("apiserver controller tests", func() {
 				enterpriseCRDsExist: true,
 				status:              mockStatus,
 				clusterDomain:       dns.DefaultClusterDomain,
-				tierWatchReady:      ready,
-				policyWatchesReady:  ready,
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -331,8 +320,6 @@ var _ = Describe("apiserver controller tests", func() {
 				provider:            operatorv1.ProviderNone,
 				enterpriseCRDsExist: true,
 				status:              mockStatus,
-				tierWatchReady:      ready,
-				policyWatchesReady:  ready,
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -345,7 +332,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
 		})
 
-		It("should render allow-tigera policy when tier and policy watch are ready", func() {
+		It("should render allow-tigera policy when tier is ready", func() {
 			Expect(cli.Create(ctx, installation)).To(BeNil())
 
 			r := ReconcileAPIServer{
@@ -354,8 +341,6 @@ var _ = Describe("apiserver controller tests", func() {
 				provider:            operatorv1.ProviderNone,
 				enterpriseCRDsExist: true,
 				status:              mockStatus,
-				tierWatchReady:      ready,
-				policyWatchesReady:  ready,
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -377,8 +362,6 @@ var _ = Describe("apiserver controller tests", func() {
 				provider:            operatorv1.ProviderNone,
 				enterpriseCRDsExist: true,
 				status:              mockStatus,
-				tierWatchReady:      ready,
-				policyWatchesReady:  ready,
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 
@@ -401,56 +384,10 @@ var _ = Describe("apiserver controller tests", func() {
 				provider:            operatorv1.ProviderNone,
 				enterpriseCRDsExist: false,
 				status:              mockStatus,
-				tierWatchReady:      ready,
-				policyWatchesReady:  ready,
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 
 			Expect(err).ShouldNot(HaveOccurred())
-			policies := v3.NetworkPolicyList{}
-			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
-			Expect(policies.Items).To(HaveLen(0))
-		})
-
-		It("should degrade and wait if tier is ready but policy watch is not ready", func() {
-			Expect(cli.Create(ctx, installation)).To(BeNil())
-			mockStatus = &status.MockStatus{}
-			mockStatus.On("OnCRFound").Return()
-			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
-
-			r := ReconcileAPIServer{
-				client:              cli,
-				scheme:              scheme,
-				provider:            operatorv1.ProviderNone,
-				enterpriseCRDsExist: true,
-				status:              mockStatus,
-				tierWatchReady:      ready,
-				policyWatchesReady:  notReady,
-			}
-			utils.ExpectWaitForPolicyWatches(ctx, &r, mockStatus)
-
-			policies := v3.NetworkPolicyList{}
-			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
-			Expect(policies.Items).To(HaveLen(0))
-		})
-
-		It("should degrade and wait if tier is ready but tier watch is not ready", func() {
-			Expect(cli.Create(ctx, installation)).To(BeNil())
-			mockStatus = &status.MockStatus{}
-			mockStatus.On("OnCRFound").Return()
-			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
-
-			r := ReconcileAPIServer{
-				client:              cli,
-				scheme:              scheme,
-				provider:            operatorv1.ProviderNone,
-				enterpriseCRDsExist: true,
-				status:              mockStatus,
-				tierWatchReady:      notReady,
-				policyWatchesReady:  ready,
-			}
-			utils.ExpectWaitForTierWatch(ctx, &r, mockStatus)
-
 			policies := v3.NetworkPolicyList{}
 			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
 			Expect(policies.Items).To(HaveLen(0))

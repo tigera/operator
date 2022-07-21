@@ -94,7 +94,6 @@ var _ = Describe("monitor rendering tests", func() {
 			AlertmanagerConfigSecret: defaultAlertmanagerConfigSecret,
 			ClusterDomain:            "example.org",
 			TrustedCertBundle:        bundle,
-			IncludeV3NetworkPolicy:   true,
 		}
 	})
 
@@ -112,12 +111,6 @@ var _ = Describe("monitor rendering tests", func() {
 			kind    string
 		}{
 			{"tigera-prometheus", "", "", "v1", "Namespace"},
-			{"allow-tigera.calico-node-alertmanager", common.TigeraPrometheusNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
-			{"allow-tigera.calico-node-alertmanager-mesh", common.TigeraPrometheusNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
-			{"allow-tigera.prometheus", common.TigeraPrometheusNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
-			{"allow-tigera.tigera-prometheus-api", common.TigeraPrometheusNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
-			{"allow-tigera.prometheus-operator", common.TigeraPrometheusNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
-			{"allow-tigera.default-deny", common.TigeraPrometheusNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
 			{"tigera-prometheus-role", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "Role"},
 			{"tigera-prometheus-role-binding", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding"},
 			{"tigera-pull-secret", common.TigeraPrometheusNamespace, "", "", ""},
@@ -391,12 +384,6 @@ var _ = Describe("monitor rendering tests", func() {
 			kind    string
 		}{
 			{"tigera-prometheus", "", "", "v1", "Namespace"},
-			{"allow-tigera.calico-node-alertmanager", common.TigeraPrometheusNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
-			{"allow-tigera.calico-node-alertmanager-mesh", common.TigeraPrometheusNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
-			{"allow-tigera.prometheus", common.TigeraPrometheusNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
-			{"allow-tigera.tigera-prometheus-api", common.TigeraPrometheusNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
-			{"allow-tigera.prometheus-operator", common.TigeraPrometheusNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
-			{"allow-tigera.default-deny", common.TigeraPrometheusNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
 			{"tigera-prometheus-role", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "Role"},
 			{"tigera-prometheus-role-binding", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding"},
 			{"tigera-pull-secret", common.TigeraPrometheusNamespace, "", "", ""},
@@ -551,24 +538,13 @@ var _ = Describe("monitor rendering tests", func() {
 			func(scenario testutils.AllowTigeraScenario) {
 				cfg.Openshift = scenario.Openshift
 
-				// Validate policy is rendered when policy flag is set.
-				cfg.IncludeV3NetworkPolicy = true
-				component := monitor.Monitor(cfg)
+				component := monitor.MonitorPolicy(cfg)
 				resourcesToCreate, _ := component.Objects()
 
 				for _, policyName := range policyNames {
 					policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resourcesToCreate)
 					expectedPolicy := getExpectedPolicy(policyName, scenario)
 					Expect(policy).To(Equal(expectedPolicy))
-				}
-
-				// Validate policy is not rendered when policy flag is not set.
-				cfg.IncludeV3NetworkPolicy = false
-				component = monitor.Monitor(cfg)
-				resourcesToCreate, _ = component.Objects()
-
-				for _, obj := range resourcesToCreate {
-					Expect(obj.GetObjectKind().GroupVersionKind().Kind).ToNot(Equal("NetworkPolicy"))
 				}
 			},
 			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),

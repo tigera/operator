@@ -233,7 +233,7 @@ func (c *GuardianComponent) deployment() client.Object {
 				Spec: corev1.PodSpec{
 					NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 					ServiceAccountName: GuardianServiceAccountName,
-					Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster, rmeta.TolerateCriticalAddonsOnly),
+					Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndMaster...),
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					Containers:         c.container(),
 					Volumes:            c.volumes(),

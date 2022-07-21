@@ -1076,7 +1076,7 @@ func (c *apiServerComponent) tolerations() []corev1.Toleration {
 	if c.hostNetwork() {
 		return rmeta.TolerateAll
 	}
-	return append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster)
+	return append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster...)
 }
 
 // apiServerPodSecurityPolicy returns a PSP to create and a PSP to delete based on variant.

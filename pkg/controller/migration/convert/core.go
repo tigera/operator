@@ -21,6 +21,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/tigera/operator/pkg/controller/migration/convert/helpers"
+
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 
@@ -313,7 +315,7 @@ func convertComponentResources(install *operatorv1.Installation) {
 		switch compRes.ComponentName {
 		case operatorv1.ComponentNameNode:
 			// Ensure the override field is non nil
-			ensureEmptyCalicoNodeDaemonSetContainers(install)
+			helpers.EnsureCalicoNodeContainersNotNil(install)
 
 			// If the container already exists, do nothing since this container override takes precedence.
 			var found bool
@@ -333,7 +335,7 @@ func convertComponentResources(install *operatorv1.Installation) {
 			}
 		case operatorv1.ComponentNameTypha:
 			// Ensure the override field is non nil
-			ensureEmptyTyphaDeploymentContainers(install)
+			helpers.EnsureTyphaContainersNotNil(install)
 
 			// If the container already exists, do nothing since this container override takes precedence.
 			var found bool
@@ -353,7 +355,7 @@ func convertComponentResources(install *operatorv1.Installation) {
 			}
 		case operatorv1.ComponentNameKubeControllers:
 			// Ensure the override field is non nil
-			ensureEmptyCalicoKubeControllersDeploymentContainers(install)
+			helpers.EnsureKubeControllersContainersNotNil(install)
 
 			// If the container already exists, do nothing since this container override takes precedence.
 			var found bool
@@ -399,15 +401,15 @@ func addContainerResources(install *operatorv1.Installation, componentName, cont
 	switch componentName {
 	case render.CalicoNodeObjectName:
 		container := operatorv1.CalicoNodeDaemonSetContainer{Name: containerName, Resources: resources}
-		ensureEmptyCalicoNodeDaemonSetContainers(install)
+		helpers.EnsureCalicoNodeContainersNotNil(install)
 		install.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers = append(install.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers, container)
 	case kubecontrollers.KubeController:
 		container := operatorv1.CalicoKubeControllersDeploymentContainer{Name: containerName, Resources: resources}
-		ensureEmptyCalicoKubeControllersDeploymentContainers(install)
+		helpers.EnsureKubeControllersContainersNotNil(install)
 		install.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers = append(install.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers, container)
 	case render.TyphaContainerName:
 		container := operatorv1.TyphaDeploymentContainer{Name: containerName, Resources: resources}
-		ensureEmptyTyphaDeploymentContainers(install)
+		helpers.EnsureTyphaContainersNotNil(install)
 		install.Spec.TyphaDeployment.Spec.Template.Spec.Containers = append(install.Spec.TyphaDeployment.Spec.Template.Spec.Containers, container)
 	}
 
@@ -435,11 +437,11 @@ func addInitContainerResources(install *operatorv1.Installation, componentName, 
 	switch componentName {
 	case render.CalicoNodeObjectName:
 		container := operatorv1.CalicoNodeDaemonSetInitContainer{Name: initContainerName, Resources: resources}
-		ensureEmptyCalicoNodeDaemonSetInitContainers(install)
+		helpers.EnsureCalicoNodeInitContainersNotNil(install)
 		install.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers = append(install.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers, container)
 	case render.TyphaContainerName:
 		container := operatorv1.TyphaDeploymentInitContainer{Name: initContainerName, Resources: resources}
-		ensureEmptyTyphaDeploymentInitContainers(install)
+		helpers.EnsureTyphaInitContainersNotNil(install)
 		install.Spec.TyphaDeployment.Spec.Template.Spec.InitContainers = append(install.Spec.TyphaDeployment.Spec.Template.Spec.InitContainers, container)
 	}
 

@@ -17,6 +17,7 @@ package convert
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/tigera/operator/pkg/controller/migration/convert/helpers"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -165,8 +166,8 @@ var _ = Describe("core handler", func() {
 
 		It("should use the new CalicoNodeDaemonSet field over the deprecated ComponentResource", func() {
 			// Set the new component resource override for the calico-node container.
-			ensureEmptyCalicoNodeDaemonSetContainers(i)
-			ensureEmptyCalicoNodeDaemonSetInitContainers(i)
+			helpers.EnsureCalicoNodeContainersNotNil(i)
+			helpers.EnsureCalicoNodeInitContainersNotNil(i)
 			i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers = []operatorv1.CalicoNodeDaemonSetContainer{
 				{
 					Name:      "calico-node",
@@ -202,7 +203,7 @@ var _ = Describe("core handler", func() {
 
 		It("should use the new CalicoKubeControllersDeployment field over the deprecated ComponentResource", func() {
 			// Set the new component resource override.
-			ensureEmptyCalicoKubeControllersDeploymentContainers(i)
+			helpers.EnsureKubeControllersContainersNotNil(i)
 			i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers = []operatorv1.CalicoKubeControllersDeploymentContainer{
 				{
 					Name:      "calico-kube-controllers",
@@ -227,8 +228,8 @@ var _ = Describe("core handler", func() {
 
 		It("should use the new TyphaDeployment field over the deprecated ComponentResource", func() {
 			// Set the new component resource override.
-			ensureEmptyTyphaDeploymentContainers(i)
-			ensureEmptyTyphaDeploymentInitContainers(i)
+			helpers.EnsureTyphaContainersNotNil(i)
+			helpers.EnsureTyphaInitContainersNotNil(i)
 			i.Spec.TyphaDeployment.Spec.Template.Spec.Containers = []operatorv1.TyphaDeploymentContainer{
 				{
 					Name:      "calico-typha",
@@ -278,7 +279,7 @@ var _ = Describe("core handler", func() {
 		It("should return an error if the calico-node container resources do not match those in CalicoNodeDaemonSetContainer", func() {
 			comps.node.Spec.Template.Spec.Containers[0].Resources = rqs1
 
-			ensureEmptyCalicoNodeDaemonSetContainers(i)
+			helpers.EnsureCalicoNodeContainersNotNil(i)
 			i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers = []operatorv1.CalicoNodeDaemonSetContainer{
 				{
 					Name:      "calico-node",
@@ -307,7 +308,7 @@ var _ = Describe("core handler", func() {
 		It("should return an error if the calico-kube-controllers container resources do not match those in CalicoKubeControllersDeploymentContainer", func() {
 			comps.kubeControllers.Spec.Template.Spec.Containers[0].Resources = rqs1
 
-			ensureEmptyCalicoKubeControllersDeploymentContainers(i)
+			helpers.EnsureKubeControllersContainersNotNil(i)
 			i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers = []operatorv1.CalicoKubeControllersDeploymentContainer{
 				{
 					Name:      "calico-kube-controllers",
@@ -336,7 +337,7 @@ var _ = Describe("core handler", func() {
 		It("should return an error if the calico-typha container resources do not match those in TyphaDeploymentContainer", func() {
 			comps.typha.Spec.Template.Spec.Containers[0].Resources = rqs1
 
-			ensureEmptyTyphaDeploymentContainers(i)
+			helpers.EnsureTyphaContainersNotNil(i)
 			i.Spec.TyphaDeployment.Spec.Template.Spec.Containers = []operatorv1.TyphaDeploymentContainer{
 				{
 					Name:      "calico-typha",

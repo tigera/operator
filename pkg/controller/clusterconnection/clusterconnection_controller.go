@@ -20,6 +20,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/go-logr/logr"
+
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	"k8s.io/client-go/kubernetes"
@@ -256,7 +258,6 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
 	includeV3NetworkPolicy := false
-	egressAccessControlFeatureRequired := false
 	if err := r.Client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 		// The creation of the Tier depends on this controller to reconcile it's non-NetworkPolicy resources so that the
 		// License becomes available. Therefore, if we fail to query the Tier, we exclude NetworkPolicy from reconciliation
@@ -269,31 +270,24 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	} else {
 		includeV3NetworkPolicy = true
 
-		if clusterAddrHasDomain, err := managementClusterAddrHasDomain(managementClusterConnection); err == nil && clusterAddrHasDomain {
-			egressAccessControlFeatureRequired = true
-		} else if err != nil {
-			log.Error(err, fmt.Sprintf(
-				"Failed to parse ManagementClusterAddr. Assuming %s does not require license feature %s",
-				render.GuardianPolicyName,
-				common.EgressAccessControlFeature,
-			))
-		}
-	}
-
-	if egressAccessControlFeatureRequired {
-		license, err := utils.FetchLicenseKey(ctx, r.Client)
-		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				r.status.SetDegraded("License not found", err.Error())
+		// The Tier has been created, which means that this controller's reconciliation should no longer be a dependency
+		// of the License being deployed. If NetworkPolicy requires license features, it should now be safe to validate
+		// License presence and sufficiency.
+		if networkPolicyRequiresEgressAccessControl(managementClusterConnection, log) {
+			license, err := utils.FetchLicenseKey(ctx, r.Client)
+			if err != nil {
+				if k8serrors.IsNotFound(err) {
+					r.status.SetDegraded("License not found", err.Error())
+					return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+				}
+				r.status.SetDegraded("Error querying license", err.Error())
 				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 			}
-			r.status.SetDegraded("Error querying license", err.Error())
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-		}
 
-		if !utils.IsFeatureActive(license, common.EgressAccessControlFeature) {
-			r.status.SetDegraded("Feature is not active", "License does not support feature: egress-access-control")
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			if !utils.IsFeatureActive(license, common.EgressAccessControlFeature) {
+				r.status.SetDegraded("Feature is not active", "License does not support feature: egress-access-control")
+				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+			}
 		}
 	}
 
@@ -339,6 +333,21 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	// We should create the Guardian deployment.
 	return result, nil
+}
+
+func networkPolicyRequiresEgressAccessControl(connection *operatorv1.ManagementClusterConnection, log logr.Logger) bool {
+	if clusterAddrHasDomain, err := managementClusterAddrHasDomain(connection); err == nil && clusterAddrHasDomain {
+		return true
+	} else {
+		if err != nil {
+			log.Error(err, fmt.Sprintf(
+				"Failed to parse ManagementClusterAddr. Assuming %s does not require license feature %s",
+				render.GuardianPolicyName,
+				common.EgressAccessControlFeature,
+			))
+		}
+		return false
+	}
 }
 
 func managementClusterAddrHasDomain(connection *operatorv1.ManagementClusterConnection) (bool, error) {

@@ -352,14 +352,9 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// v3 NetworkPolicy will fail to reconcile if the Tier is not created, which can only occur once a License is created.
-	// In managed clusters, the monitor controller is a dependency for the License to be created. In case the
-	// License is unavailable and reconciliation of non-NetworkPolicy resources in the monitor controller
-	// would resolve it, we render network policies last to prevent a chicken-and-egg scenario.
-
-	// v3 NetworkPolicy will fail to reconcile if the Tier is not created, which can only be created once a License
-	// is in place. In managed clusters, the monitor controller is a dependency for the License to be created. In case
-	// the License becomes unavailable and reconciliation of non-NetworkPolicy resources in the monitor controller
-	// would resolve it, we render the network policies of components last to prevent a chicken-and-egg scenario.
+	// In managed clusters, the monitor controller is a dependency for the License to be created. In case the License is
+	// unavailable and reconciliation of non-NetworkPolicy resources in the monitor controller would resolve it, we
+	// render network policies last to prevent a chicken-and-egg scenario.
 	if includeV3NetworkPolicy {
 		components = append(components, monitor.MonitorPolicy(monitorCfg))
 	}

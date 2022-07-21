@@ -598,6 +598,16 @@ func (in *CalicoNetworkSpec) DeepCopyInto(out *CalicoNetworkSpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	if in.AssignIpv4 != nil {
+		in, out := &in.AssignIpv4, &out.AssignIpv4
+		*out = new(bool)
+		**out = **in
+	}
+	if in.AssignIpv6 != nil {
+		in, out := &in.AssignIpv6, &out.AssignIpv6
+		*out = new(bool)
+		**out = **in
+	}
 	if in.MTU != nil {
 		in, out := &in.MTU, &out.MTU
 		*out = new(int32)

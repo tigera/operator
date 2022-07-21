@@ -585,19 +585,27 @@ func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
 	}
 }
 
+func boolToStr(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}
+
 func (c *nodeComponent) getCalicoIPAM() string {
 	// Determine what address families to enable.
 	var assign_ipv4 string
 	var assign_ipv6 string
-	if v4pool := GetIPv4Pool(c.cfg.Installation.CalicoNetwork.IPPools); v4pool != nil {
-		assign_ipv4 = "true"
+
+	if c.cfg.Installation.CalicoNetwork.AssignIpv4 == nil {
+		assign_ipv4 = boolToStr(GetIPv4Pool(c.cfg.Installation.CalicoNetwork.IPPools) != nil)
 	} else {
-		assign_ipv4 = "false"
+		assign_ipv4 = boolToStr(*c.cfg.Installation.CalicoNetwork.AssignIpv4)
 	}
-	if v6pool := GetIPv6Pool(c.cfg.Installation.CalicoNetwork.IPPools); v6pool != nil {
-		assign_ipv6 = "true"
+	if c.cfg.Installation.CalicoNetwork.AssignIpv6 == nil {
+		assign_ipv6 = boolToStr(GetIPv6Pool(c.cfg.Installation.CalicoNetwork.IPPools) != nil)
 	} else {
-		assign_ipv6 = "false"
+		assign_ipv6 = boolToStr(*c.cfg.Installation.CalicoNetwork.AssignIpv6)
 	}
 	return fmt.Sprintf(`{ "type": "calico-ipam", "assign_ipv4" : "%s", "assign_ipv6" : "%s"}`,
 		assign_ipv4, assign_ipv6,

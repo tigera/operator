@@ -43,6 +43,16 @@ spec:
                 description: CalicoNetwork specifies networking configuration options
                   for Calico.
                 properties:
+                  assignIpv4:
+                    description: AssignIpv4 configure whether ipv4 pools are enabled
+                      or disabled If omitted, its value will be derived from the presence
+                      of ipv4 ippools in IPPools
+                    type: boolean
+                  assignIpv6:
+                    description: AssignIpv6 configure whether ipv6 pools are enabled
+                      or disabled If omitted, its value will be derived from the presence
+                      of ipv6 ippools in IPPools
+                    type: boolean
                   bgp:
                     description: BGP configures whether or not to enable Calico's
                       BGP capabilities.
@@ -791,6 +801,16 @@ spec:
                     description: CalicoNetwork specifies networking configuration
                       options for Calico.
                     properties:
+                      assignIpv4:
+                        description: AssignIpv4 configure whether ipv4 pools are enabled
+                          or disabled If omitted, its value will be derived from the
+                          presence of ipv4 ippools in IPPools
+                        type: boolean
+                      assignIpv6:
+                        description: AssignIpv6 configure whether ipv6 pools are enabled
+                          or disabled If omitted, its value will be derived from the
+                          presence of ipv6 ippools in IPPools
+                        type: boolean
                       bgp:
                         description: BGP configures whether or not to enable Calico's
                           BGP capabilities.

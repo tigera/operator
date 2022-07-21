@@ -326,6 +326,16 @@ type CalicoNetworkSpec struct {
 	// +optional
 	IPPools []IPPool `json:"ipPools,omitempty"`
 
+	// AssignIpv4 configure whether ipv4 pools are enabled or disabled
+	// If omitted, its value will be derived from the presence of ipv4 ippools in IPPools
+	// +optional
+	AssignIpv4 *bool `json:"assignIpv4,omitempty"`
+
+	// AssignIpv6 configure whether ipv6 pools are enabled or disabled
+	// If omitted, its value will be derived from the presence of ipv6 ippools in IPPools
+	// +optional
+	AssignIpv6 *bool `json:"assignIpv6,omitempty"`
+
 	// MTU specifies the maximum transmission unit to use on the pod network.
 	// If not specified, Calico will perform MTU auto-detection based on the cluster network.
 	// +optional

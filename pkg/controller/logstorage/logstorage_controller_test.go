@@ -1359,20 +1359,16 @@ var _ = Describe("LogStorage controller", func() {
 						Expect(err).ShouldNot(HaveOccurred())
 					})
 
-					It("should wait if API server is unavailable", func() {
-						utils.DeleteAPIServerAndExpectWait(ctx, cli, r, mockStatus)
-					})
-
 					It("should wait if allow-tigera tier is unavailable", func() {
 						utils.DeleteAllowTigeraTierAndExpectWait(ctx, cli, r, mockStatus)
 					})
 
-					It("should wait if policy watches are not ready", func() {
+					It("should wait if tier watch is not ready", func() {
 						var err error
 						r, err = NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, &utils.ReadyFlag{})
 						Expect(err).ShouldNot(HaveOccurred())
 
-						utils.ExpectWaitForPolicyWatches(ctx, r, mockStatus)
+						utils.ExpectWaitForTierWatch(ctx, r, mockStatus)
 					})
 				})
 			})

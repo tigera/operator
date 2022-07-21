@@ -397,7 +397,6 @@ var _ = Describe("Testing core-controller installation", func() {
 				enterpriseCRDsExist:   true,
 				migrationChecked:      true,
 				tierWatchReady:        ready,
-				policyWatchesReady:    ready,
 			}
 
 			r.typhaAutoscaler.start(ctx)
@@ -768,7 +767,6 @@ var _ = Describe("Testing core-controller installation", func() {
 				migrationChecked:      true,
 				clusterDomain:         dns.DefaultClusterDomain,
 				tierWatchReady:        ready,
-				policyWatchesReady:    ready,
 			}
 			r.typhaAutoscaler.start(ctx)
 			r.calicoWindowsUpgrader.Start(ctx)
@@ -1008,7 +1006,6 @@ var _ = Describe("Testing core-controller installation", func() {
 				enterpriseCRDsExist:   true,
 				migrationChecked:      true,
 				tierWatchReady:        ready,
-				policyWatchesReady:    ready,
 			}
 
 			r.typhaAutoscaler.start(ctx)
@@ -1495,7 +1492,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(cr.Status.Conditions[2].ObservedGeneration).To(Equal(int64(2)))
 		})
 
-		It("should render allow-tigera policy when tier and policy watch are ready", func() {
+		It("should render allow-tigera policy when tier and tier watch are ready", func() {
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -1519,12 +1516,9 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(policies.Items).To(HaveLen(0))
 		})
 
-		It("should omit allow-tigera policy and not degrade when installation is calico", func() {
-			cr.Spec.Variant = operator.Calico
-			cr.Status.Variant = operator.Calico
+		It("should omit allow-tigera policy and not degrade when tier watch is not ready", func() {
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
-			r.enterpriseCRDsExist = false
-			Expect(c.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+			r.tierWatchReady = notReady
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -1534,30 +1528,15 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(policies.Items).To(HaveLen(0))
 		})
 
-		It("should degrade and wait if tier is ready but policy watch is not ready", func() {
+		It("should omit allow-tigera policy and not degrade when installation is calico", func() {
+			cr.Spec.Variant = operator.Calico
+			cr.Status.Variant = operator.Calico
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
-			r.policyWatchesReady = notReady
-			mockStatus = &status.MockStatus{}
-			mockStatus.On("OnCRFound").Return()
-			mockStatus.On("SetMetaData", mock.Anything).Return()
-			r.status = mockStatus
+			r.enterpriseCRDsExist = false
+			Expect(c.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 
-			utils.ExpectWaitForPolicyWatches(ctx, &r, mockStatus)
-
-			policies := v3.NetworkPolicyList{}
-			Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
-			Expect(policies.Items).To(HaveLen(0))
-		})
-
-		It("should degrade and wait if tier is ready but tier watch is not ready", func() {
-			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
-			r.tierWatchReady = notReady
-			mockStatus = &status.MockStatus{}
-			mockStatus.On("OnCRFound").Return()
-			mockStatus.On("SetMetaData", mock.Anything).Return()
-			r.status = mockStatus
-
-			utils.ExpectWaitForTierWatch(ctx, &r, mockStatus)
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
 
 			policies := v3.NetworkPolicyList{}
 			Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())

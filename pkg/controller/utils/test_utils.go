@@ -20,26 +20,11 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/status"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
-
-// DeleteAPIServerAndExpectWait deletes the API server resource and expects the Reconciler issues a degraded status, waiting for
-// the API server to become available before progressing its status further. Assumes that mockStatus has any required initial status
-// progression expectations set, and that the Reconciler utilizes the mockStatus object. Assumes the API server resource has been created.
-func DeleteAPIServerAndExpectWait(ctx context.Context, c client.Client, r reconcile.Reconciler, mockStatus *status.MockStatus) {
-	err := c.Delete(ctx, &operatorv1.APIServer{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})
-	Expect(err).ShouldNot(HaveOccurred())
-
-	mockStatus.On("SetDegraded", "Waiting for Tigera API server to be ready", "").Return()
-
-	_, err = r.Reconcile(ctx, reconcile.Request{})
-	Expect(err).ShouldNot(HaveOccurred())
-	mockStatus.AssertExpectations(GinkgoT())
-}
 
 // DeleteAllowTigeraTierAndExpectWait deletes the tier resource and expects the Reconciler issues a degraded status, waiting for
 // the tier to become available before progressing its status further. Assumes that mockStatus has any required initial status
@@ -55,31 +40,11 @@ func DeleteAllowTigeraTierAndExpectWait(ctx context.Context, c client.Client, r 
 	mockStatus.AssertExpectations(GinkgoT())
 }
 
-// ExpectWaitForPolicyWatches expects the Reconciler issues a degraded status, waiting for NetworkPolicy watches to
-// be established. Assumes that mockStatus has any required initial status progression expectations set, and that
-// the Reconciler utilizes the mockStatus object.
-func ExpectWaitForPolicyWatches(ctx context.Context, r reconcile.Reconciler, mockStatus *status.MockStatus) {
-	mockStatus.On("SetDegraded", "Waiting for NetworkPolicy watches to be established", "").Return()
-	_, err := r.Reconcile(ctx, reconcile.Request{})
-	Expect(err).ShouldNot(HaveOccurred())
-	mockStatus.AssertExpectations(GinkgoT())
-}
-
 // ExpectWaitForTierWatch expects the Reconciler issues a degraded status, waiting for a Tier watch to be established.
 // Assumes that mockStatus has any required initial status progression expectations set, and that the Reconciler utilizes
 // the mockStatus object.
 func ExpectWaitForTierWatch(ctx context.Context, r reconcile.Reconciler, mockStatus *status.MockStatus) {
 	mockStatus.On("SetDegraded", "Waiting for Tier watch to be established", "").Return()
-	_, err := r.Reconcile(ctx, reconcile.Request{})
-	Expect(err).ShouldNot(HaveOccurred())
-	mockStatus.AssertExpectations(GinkgoT())
-}
-
-// ExpectWaitForLicenseWatch expects the Reconciler issues a degraded status, waiting for a License watch to be established.
-// Assumes that mockStatus has any required initial status progression expectations set, and that the Reconciler utilizes
-// the mockStatus object.
-func ExpectWaitForLicenseWatch(ctx context.Context, r reconcile.Reconciler, mockStatus *status.MockStatus) {
-	mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return()
 	_, err := r.Reconcile(ctx, reconcile.Request{})
 	Expect(err).ShouldNot(HaveOccurred())
 	mockStatus.AssertExpectations(GinkgoT())

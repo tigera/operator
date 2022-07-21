@@ -117,10 +117,10 @@ type APIServerDeploymentPodSpec struct {
 	Affinity *v1.Affinity `json:"affinity,omitempty"`
 
 	// NodeSelector is the API server pod's scheduling constraints.
-	// If specified, this overrides any nodeSelector that may be set on the API serverDeployment.
+	// If specified, each of the key/value pairs are added to the API server Deployment nodeSelector provided
+	// the key does not already exist in the object's nodeSelector.
 	// If omitted, the API server Deployment will use its default value for nodeSelector.
-	// WARNING: Please note that this field will override the default API server Deployment nodeSelector.
-	// +optional
+	// WARNING: Please note that this field will modify the default API server Deployment nodeSelector.
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 
 	// Tolerations is the API server pod's tolerations.

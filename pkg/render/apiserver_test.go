@@ -1075,7 +1075,9 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			resources, _ := component.Objects()
 			d, ok := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(ok).To(BeTrue())
-			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
+			// nodeSelectors are merged
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveLen(2))
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("nodeName", "control01"))
 			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("custom-node-selector", "value"))
 		})
 
@@ -1850,7 +1852,9 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			Expect(component.ResolveImages(nil)).To(BeNil())
 			resources, _ := component.Objects()
 			d := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment").(*appsv1.Deployment)
-			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
+			// nodeSelectors are merged
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveLen(2))
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("nodeName", "control01"))
 			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("custom-node-selector", "value"))
 		})
 

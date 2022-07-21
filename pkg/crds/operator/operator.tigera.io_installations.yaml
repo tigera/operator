@@ -54,7 +54,7 @@ spec:
                         description: Annotations is a map of arbitrary non-identifying
                           metadata. Each of these key/value pairs are added to the
                           object's annotations provided the key does not already exist
-                          in the object's labels.
+                          in the object's annotations.
                         type: object
                       labels:
                         additionalProperties:
@@ -95,7 +95,7 @@ spec:
                                 description: Annotations is a map of arbitrary non-identifying
                                   metadata. Each of these key/value pairs are added
                                   to the object's annotations provided the key does
-                                  not already exist in the object's labels.
+                                  not already exist in the object's annotations.
                                 type: object
                               labels:
                                 additionalProperties:
@@ -1217,13 +1217,14 @@ spec:
                                 additionalProperties:
                                   type: string
                                 description: 'NodeSelector is the calico-kube-controllers
-                                  pod''s scheduling constraints. If specified, this
-                                  overrides any nodeSelector that may be set on the
-                                  calico-kube-controllers Deployment. If omitted,
-                                  the calico-kube-controllers Deployment will use
-                                  its default value for nodeSelector. WARNING: Please
-                                  note that this field will override the default calico-kube-controllers
-                                  Deployment nodeSelector.'
+                                  pod''s scheduling constraints. If specified, each
+                                  of the key/value pairs are added to the calico-kube-controllers
+                                  Deployment nodeSelector provided the key does not
+                                  already exist in the object''s nodeSelector. If
+                                  omitted, the calico-kube-controllers Deployment
+                                  will use its default value for nodeSelector. WARNING:
+                                  Please note that this field will modify the default
+                                  calico-kube-controllers Deployment nodeSelector.'
                                 type: object
                               tolerations:
                                 description: 'Tolerations is the calico-kube-controllers
@@ -1464,7 +1465,7 @@ spec:
                         description: Annotations is a map of arbitrary non-identifying
                           metadata. Each of these key/value pairs are added to the
                           object's annotations provided the key does not already exist
-                          in the object's labels.
+                          in the object's annotations.
                         type: object
                       labels:
                         additionalProperties:
@@ -1504,7 +1505,7 @@ spec:
                                 description: Annotations is a map of arbitrary non-identifying
                                   metadata. Each of these key/value pairs are added
                                   to the object's annotations provided the key does
-                                  not already exist in the object's labels.
+                                  not already exist in the object's annotations.
                                 type: object
                               labels:
                                 additionalProperties:
@@ -2684,12 +2685,13 @@ spec:
                                 additionalProperties:
                                   type: string
                                 description: 'NodeSelector is the calico-node pod''s
-                                  scheduling constraints. If specified, this overrides
-                                  any nodeSelector that may be set on the calico-node
-                                  DaemonSet. If omitted, the calico-node DaemonSet
-                                  will use its default value for nodeSelector. WARNING:
-                                  Please note that this field will override the default
-                                  calico-node DaemonSet nodeSelector.'
+                                  scheduling constraints. If specified, each of the
+                                  key/value pairs are added to the calico-node DaemonSet
+                                  nodeSelector provided the key does not already exist
+                                  in the object''s nodeSelector. If omitted, the calico-node
+                                  DaemonSet will use its default value for nodeSelector.
+                                  WARNING: Please note that this field will modify
+                                  the default calico-node DaemonSet nodeSelector.'
                                 type: object
                               tolerations:
                                 description: 'Tolerations is the calico-node pod''s
@@ -2762,7 +2764,7 @@ spec:
                         description: Annotations is a map of arbitrary non-identifying
                           metadata. Each of these key/value pairs are added to the
                           object's annotations provided the key does not already exist
-                          in the object's labels.
+                          in the object's annotations.
                         type: object
                       labels:
                         additionalProperties:
@@ -2803,7 +2805,7 @@ spec:
                                 description: Annotations is a map of arbitrary non-identifying
                                   metadata. Each of these key/value pairs are added
                                   to the object's annotations provided the key does
-                                  not already exist in the object's labels.
+                                  not already exist in the object's annotations.
                                 type: object
                               labels:
                                 additionalProperties:
@@ -3923,13 +3925,14 @@ spec:
                                 additionalProperties:
                                   type: string
                                 description: 'NodeSelector is the calico-windows-upgrade
-                                  pod''s scheduling constraints. If specified, this
-                                  overrides any nodeSelector that may be set on the
-                                  calico-windows-upgrade DaemonSet. If omitted, the
-                                  calico-windows-upgrade DaemonSet will use its default
-                                  value for nodeSelector. WARNING: Please note that
-                                  this field will override the default calico-windows-upgrade
-                                  DaemonSet nodeSelector.'
+                                  pod''s scheduling constraints. If specified, each
+                                  of the key/value pairs are added to the calico-windows-upgrade
+                                  DaemonSet nodeSelector provided the key does not
+                                  already exist in the object''s nodeSelector. If
+                                  omitted, the calico-windows-upgrade DaemonSet will
+                                  use its default value for nodeSelector. WARNING:
+                                  Please note that this field will modify the default
+                                  calico-windows-upgrade DaemonSet nodeSelector.'
                                 type: object
                               tolerations:
                                 description: 'Tolerations is the calico-windows-upgrade
@@ -4560,7 +4563,7 @@ spec:
                         description: Annotations is a map of arbitrary non-identifying
                           metadata. Each of these key/value pairs are added to the
                           object's annotations provided the key does not already exist
-                          in the object's labels.
+                          in the object's annotations.
                         type: object
                       labels:
                         additionalProperties:
@@ -4599,7 +4602,7 @@ spec:
                                 description: Annotations is a map of arbitrary non-identifying
                                   metadata. Each of these key/value pairs are added
                                   to the object's annotations provided the key does
-                                  not already exist in the object's labels.
+                                  not already exist in the object's annotations.
                                 type: object
                               labels:
                                 additionalProperties:
@@ -5774,13 +5777,14 @@ spec:
                               nodeSelector:
                                 additionalProperties:
                                   type: string
-                                description: 'NodeSelector is the typha pod''s scheduling
-                                  constraints. If specified, this overrides any nodeSelector
-                                  that may be set on the typha Deployment. If omitted,
-                                  the typha Deployment will use its default value
-                                  for nodeSelector. WARNING: Please note that this
-                                  field will override the default calico-typha Deployment
-                                  nodeSelector.'
+                                description: 'NodeSelector is the calico-typha pod''s
+                                  scheduling constraints. If specified, each of the
+                                  key/value pairs are added to the calico-typha Deployment
+                                  nodeSelector provided the key does not already exist
+                                  in the object''s nodeSelector. If omitted, the calico-typha
+                                  Deployment will use its default value for nodeSelector.
+                                  WARNING: Please note that this field will modify
+                                  the default calico-typha Deployment nodeSelector.'
                                 type: object
                               tolerations:
                                 description: 'Tolerations is the typha pod''s tolerations.
@@ -5875,7 +5879,7 @@ spec:
                             description: Annotations is a map of arbitrary non-identifying
                               metadata. Each of these key/value pairs are added to
                               the object's annotations provided the key does not already
-                              exist in the object's labels.
+                              exist in the object's annotations.
                             type: object
                           labels:
                             additionalProperties:
@@ -5918,7 +5922,7 @@ spec:
                                       non-identifying metadata. Each of these key/value
                                       pairs are added to the object's annotations
                                       provided the key does not already exist in the
-                                      object's labels.
+                                      object's annotations.
                                     type: object
                                   labels:
                                     additionalProperties:
@@ -7134,11 +7138,12 @@ spec:
                                       type: string
                                     description: 'NodeSelector is the calico-kube-controllers
                                       pod''s scheduling constraints. If specified,
-                                      this overrides any nodeSelector that may be
-                                      set on the calico-kube-controllers Deployment.
-                                      If omitted, the calico-kube-controllers Deployment
-                                      will use its default value for nodeSelector.
-                                      WARNING: Please note that this field will override
+                                      each of the key/value pairs are added to the
+                                      calico-kube-controllers Deployment nodeSelector
+                                      provided the key does not already exist in the
+                                      object''s nodeSelector. If omitted, the calico-kube-controllers
+                                      Deployment will use its default value for nodeSelector.
+                                      WARNING: Please note that this field will modify
                                       the default calico-kube-controllers Deployment
                                       nodeSelector.'
                                     type: object
@@ -7388,7 +7393,7 @@ spec:
                             description: Annotations is a map of arbitrary non-identifying
                               metadata. Each of these key/value pairs are added to
                               the object's annotations provided the key does not already
-                              exist in the object's labels.
+                              exist in the object's annotations.
                             type: object
                           labels:
                             additionalProperties:
@@ -7431,7 +7436,7 @@ spec:
                                       non-identifying metadata. Each of these key/value
                                       pairs are added to the object's annotations
                                       provided the key does not already exist in the
-                                      object's labels.
+                                      object's annotations.
                                     type: object
                                   labels:
                                     additionalProperties:
@@ -8709,12 +8714,13 @@ spec:
                                       type: string
                                     description: 'NodeSelector is the calico-node
                                       pod''s scheduling constraints. If specified,
-                                      this overrides any nodeSelector that may be
-                                      set on the calico-node DaemonSet. If omitted,
-                                      the calico-node DaemonSet will use its default
-                                      value for nodeSelector. WARNING: Please note
-                                      that this field will override the default calico-node
-                                      DaemonSet nodeSelector.'
+                                      each of the key/value pairs are added to the
+                                      calico-node DaemonSet nodeSelector provided
+                                      the key does not already exist in the object''s
+                                      nodeSelector. If omitted, the calico-node DaemonSet
+                                      will use its default value for nodeSelector.
+                                      WARNING: Please note that this field will modify
+                                      the default calico-node DaemonSet nodeSelector.'
                                     type: object
                                   tolerations:
                                     description: 'Tolerations is the calico-node pod''s
@@ -8789,7 +8795,7 @@ spec:
                             description: Annotations is a map of arbitrary non-identifying
                               metadata. Each of these key/value pairs are added to
                               the object's annotations provided the key does not already
-                              exist in the object's labels.
+                              exist in the object's annotations.
                             type: object
                           labels:
                             additionalProperties:
@@ -8832,7 +8838,7 @@ spec:
                                       non-identifying metadata. Each of these key/value
                                       pairs are added to the object's annotations
                                       provided the key does not already exist in the
-                                      object's labels.
+                                      object's annotations.
                                     type: object
                                   labels:
                                     additionalProperties:
@@ -10045,11 +10051,12 @@ spec:
                                       type: string
                                     description: 'NodeSelector is the calico-windows-upgrade
                                       pod''s scheduling constraints. If specified,
-                                      this overrides any nodeSelector that may be
-                                      set on the calico-windows-upgrade DaemonSet.
-                                      If omitted, the calico-windows-upgrade DaemonSet
-                                      will use its default value for nodeSelector.
-                                      WARNING: Please note that this field will override
+                                      each of the key/value pairs are added to the
+                                      calico-windows-upgrade DaemonSet nodeSelector
+                                      provided the key does not already exist in the
+                                      object''s nodeSelector. If omitted, the calico-windows-upgrade
+                                      DaemonSet will use its default value for nodeSelector.
+                                      WARNING: Please note that this field will modify
                                       the default calico-windows-upgrade DaemonSet
                                       nodeSelector.'
                                     type: object
@@ -10702,7 +10709,7 @@ spec:
                             description: Annotations is a map of arbitrary non-identifying
                               metadata. Each of these key/value pairs are added to
                               the object's annotations provided the key does not already
-                              exist in the object's labels.
+                              exist in the object's annotations.
                             type: object
                           labels:
                             additionalProperties:
@@ -10744,7 +10751,7 @@ spec:
                                       non-identifying metadata. Each of these key/value
                                       pairs are added to the object's annotations
                                       provided the key does not already exist in the
-                                      object's labels.
+                                      object's annotations.
                                     type: object
                                   labels:
                                     additionalProperties:
@@ -12015,12 +12022,14 @@ spec:
                                   nodeSelector:
                                     additionalProperties:
                                       type: string
-                                    description: 'NodeSelector is the typha pod''s
-                                      scheduling constraints. If specified, this overrides
-                                      any nodeSelector that may be set on the typha
-                                      Deployment. If omitted, the typha Deployment
+                                    description: 'NodeSelector is the calico-typha
+                                      pod''s scheduling constraints. If specified,
+                                      each of the key/value pairs are added to the
+                                      calico-typha Deployment nodeSelector provided
+                                      the key does not already exist in the object''s
+                                      nodeSelector. If omitted, the calico-typha Deployment
                                       will use its default value for nodeSelector.
-                                      WARNING: Please note that this field will override
+                                      WARNING: Please note that this field will modify
                                       the default calico-typha Deployment nodeSelector.'
                                     type: object
                                   tolerations:

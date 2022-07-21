@@ -70,9 +70,10 @@ type CalicoNodeDaemonSetPodSpec struct {
 	Affinity *v1.Affinity `json:"affinity"`
 
 	// NodeSelector is the calico-node pod's scheduling constraints.
-	// If specified, this overrides any nodeSelector that may be set on the calico-node DaemonSet.
+	// If specified, each of the key/value pairs are added to the calico-node DaemonSet nodeSelector provided
+	// the key does not already exist in the object's nodeSelector.
 	// If omitted, the calico-node DaemonSet will use its default value for nodeSelector.
-	// WARNING: Please note that this field will override the default calico-node DaemonSet nodeSelector.
+	// WARNING: Please note that this field will modify the default calico-node DaemonSet nodeSelector.
 	// +optional
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 

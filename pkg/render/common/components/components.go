@@ -78,7 +78,7 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides com
 		r.podTemplateSpec.Spec.Affinity = affinity
 	}
 	if nodeSelector := overrides.GetNodeSelector(); nodeSelector != nil {
-		r.podTemplateSpec.Spec.NodeSelector = nodeSelector
+		common.MergeMaps(nodeSelector, r.podTemplateSpec.Spec.NodeSelector)
 	}
 	if tolerations := overrides.GetTolerations(); tolerations != nil {
 		r.podTemplateSpec.Spec.Tolerations = tolerations

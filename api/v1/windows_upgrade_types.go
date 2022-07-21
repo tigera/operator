@@ -49,9 +49,10 @@ type CalicoWindowsUpgradeDaemonSetPodSpec struct {
 	Affinity *v1.Affinity `json:"affinity,omitempty"`
 
 	// NodeSelector is the calico-windows-upgrade pod's scheduling constraints.
-	// If specified, this overrides any nodeSelector that may be set on the calico-windows-upgrade DaemonSet.
+	// If specified, each of the key/value pairs are added to the calico-windows-upgrade DaemonSet nodeSelector provided
+	// the key does not already exist in the object's nodeSelector.
 	// If omitted, the calico-windows-upgrade DaemonSet will use its default value for nodeSelector.
-	// WARNING: Please note that this field will override the default calico-windows-upgrade DaemonSet nodeSelector.
+	// WARNING: Please note that this field will modify the default calico-windows-upgrade DaemonSet nodeSelector.
 	// +optional
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 

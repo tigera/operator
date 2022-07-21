@@ -26,6 +26,7 @@ import (
 	networkpolicy "github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/testutils"
 	appsv1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -286,6 +287,87 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(2))
 		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(oidcEnvVar))
 		Expect(len(d.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(1))
+	})
+
+	Describe("public ca bundle", func() {
+		var (
+			cfg                *render.ManagerConfiguration
+			certificateManager certificatemanager.CertificateManager
+			cli                client.WithWatch
+		)
+		BeforeEach(func() {
+			scheme := runtime.NewScheme()
+			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+			cli = fake.NewClientBuilder().WithScheme(scheme).Build()
+
+			var err error
+			certificateManager, err = certificatemanager.Create(cli, installation, clusterDomain)
+			Expect(err).NotTo(HaveOccurred())
+
+			tunnelSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.VoltronTunnelSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
+			Expect(err).NotTo(HaveOccurred())
+			internalTraffic, err := certificateManager.GetOrCreateKeyPair(cli, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
+			Expect(err).NotTo(HaveOccurred())
+			managerTLS, err := certificateManager.GetOrCreateKeyPair(cli, render.ManagerTLSSecretName, common.OperatorNamespace(), []string{""})
+			Expect(err).NotTo(HaveOccurred())
+
+			cfg = &render.ManagerConfiguration{
+				TrustedCertBundle:     certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair()),
+				TLSKeyPair:            managerTLS,
+				ManagementCluster:     &operatorv1.ManagementCluster{},
+				TunnelSecret:          tunnelSecret,
+				InternalTrafficSecret: internalTraffic,
+				Installation:          installation,
+				ESClusterConfig:       &relasticsearch.ClusterConfig{},
+			}
+		})
+
+		It("should render when disabled", func() {
+			_, err := render.Manager(cfg)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		Describe("when enabled", func() {
+			var (
+				rs               []client.Object
+				tunnelServerCert certificatemanagement.KeyPairInterface
+
+				managerDeployment   *v1.Deployment
+				voltronServerSecret *corev1.Secret
+				voltronContainer    *corev1.Container
+			)
+			BeforeEach(func() {
+				var err error
+				tunnelServerCert, err = certificateManager.GetOrCreateKeyPair(cli, render.VoltronServerSecretName, common.OperatorNamespace(), []string{""})
+				Expect(err).NotTo(HaveOccurred())
+				cfg.TunnelServerSecret = tunnelServerCert
+
+				resources, err := render.Manager(cfg)
+				Expect(err).ToNot(HaveOccurred())
+				rs, _ = resources.Objects()
+
+				managerDeployment = rtest.GetResource(rs, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+				voltronServerSecret = rtest.GetResource(rs, render.VoltronServerSecretName, render.ManagerNamespace, "", "v1", "Secret").(*corev1.Secret)
+				voltronContainer = rtest.GetContainer(managerDeployment.Spec.Template.Spec.Containers, "tigera-voltron")
+			})
+
+			It("should copy secret to manager namespace", func() {
+				Expect(voltronServerSecret).ToNot(BeNil())
+			})
+
+			It("should volume mount the certs into voltron", func() {
+				rtest.ExpectVolume(managerDeployment.Spec.Template.Spec.Volumes, tunnelServerCert.Volume().Name, tunnelServerCert.Volume())
+
+				rtest.ExpectVolumeMount(voltronContainer.VolumeMounts,
+					tunnelServerCert.VolumeMount(rmeta.OSTypeLinux).Name,
+					tunnelServerCert.VolumeMount(rmeta.OSTypeLinux).MountPath,
+				)
+			})
+			It("should set the correct env vars on voltron", func() {
+				rtest.ExpectEnv(voltronContainer.Env, "VOLTRON_TUNNEL_SERVER_KEY", tunnelServerCert.VolumeMountKeyFilePath())
+				rtest.ExpectEnv(voltronContainer.Env, "VOLTRON_TUNNEL_SERVER_CERT", tunnelServerCert.VolumeMountCertificateFilePath())
+			})
+		})
 	})
 
 	It("should render multicluster settings properly", func() {

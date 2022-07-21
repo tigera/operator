@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2012,2015-2022 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,6 +26,16 @@ type ManagementClusterConnectionSpec struct {
 	// should be able to access this address. This field is used by managed clusters only.
 	// +optional
 	ManagementClusterAddr string `json:"managementClusterAddr,omitempty"`
+
+	// ServerIdentityVerificationMethod configures the way which guardian should verify voltron's identity.
+	//
+	// When set to SelfSigned, guardian will expect a cert in the certificate bundle which can be used to verify
+	// voltron's identity, and will expect voltron's cert to have a SN of 'voltron'.
+	//
+	// When set to CASigned, guardian will use its system CA certs in combination with the managementClusterAddr to verify
+	// voltron's identity.
+	// +optional
+	ServerIdentityVerificationMethod TunnelCertType `json:"tunnelCertType,omitempty"`
 }
 
 // +kubebuilder:object:root=true

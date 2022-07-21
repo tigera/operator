@@ -17,6 +17,7 @@ package convert
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/tigera/operator/pkg/controller/migration/convert/helpers"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 )
@@ -59,7 +60,7 @@ var _ = Describe("core labels and annotations handlers", func() {
 				comps.node.Annotations = map[string]string{
 					"foo": "bar",
 				}
-				ensureEmptyCalicoNodeDaemonSetMetadata(i)
+				helpers.EnsureCalicoNodeLabelsNotNil(i)
 				i.Spec.CalicoNodeDaemonSet.Metadata.Annotations = map[string]string{"foo": "bar"}
 				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
 				Expect(i.Spec.CalicoNodeDaemonSet.Metadata.Annotations).To(HaveKeyWithValue("foo", "bar"))
@@ -68,13 +69,13 @@ var _ = Describe("core labels and annotations handlers", func() {
 				comps.node.Annotations = map[string]string{
 					"foo": "bar",
 				}
-				ensureEmptyCalicoNodeDaemonSetMetadata(i)
+				helpers.EnsureCalicoNodeLabelsNotNil(i)
 				i.Spec.CalicoNodeDaemonSet.Metadata.Annotations = map[string]string{"foo": "baz"}
 				Expect(handleAnnotations(&comps, i)).To(HaveOccurred())
 			})
 			It("should error if the annotation exists in the installation but not the resource", func() {
 				comps.node.Annotations = map[string]string{}
-				ensureEmptyCalicoNodeDaemonSetMetadata(i)
+				helpers.EnsureCalicoNodeLabelsNotNil(i)
 				i.Spec.CalicoNodeDaemonSet.Metadata.Annotations = map[string]string{"foo": "baz"}
 				Expect(handleAnnotations(&comps, i)).To(HaveOccurred())
 			})
@@ -105,7 +106,7 @@ var _ = Describe("core labels and annotations handlers", func() {
 				comps.node.Spec.Template.Annotations = map[string]string{
 					"foo": "bar",
 				}
-				ensureEmptyCalicoNodeDaemonSetPodTemplateMetadata(i)
+				helpers.EnsureCalicoNodePodTemplateAnnotationsNotNil(i)
 				i.Spec.CalicoNodeDaemonSet.Spec.Template.Metadata.Annotations = map[string]string{"foo": "bar"}
 				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
 				Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Metadata.Annotations).To(HaveKeyWithValue("foo", "bar"))
@@ -114,13 +115,13 @@ var _ = Describe("core labels and annotations handlers", func() {
 				comps.node.Spec.Template.Annotations = map[string]string{
 					"foo": "bar",
 				}
-				ensureEmptyCalicoNodeDaemonSetPodTemplateMetadata(i)
+				helpers.EnsureCalicoNodePodTemplateAnnotationsNotNil(i)
 				i.Spec.CalicoNodeDaemonSet.Spec.Template.Metadata.Annotations = map[string]string{"foo": "baz"}
 				Expect(handleAnnotations(&comps, i)).To(HaveOccurred())
 			})
 			It("should error if the annotation exists in the installation but not the resource", func() {
 				comps.node.Spec.Template.Annotations = map[string]string{}
-				ensureEmptyCalicoNodeDaemonSetPodTemplateMetadata(i)
+				helpers.EnsureCalicoNodePodTemplateAnnotationsNotNil(i)
 				i.Spec.CalicoNodeDaemonSet.Spec.Template.Metadata.Annotations = map[string]string{"foo": "baz"}
 				Expect(handleAnnotations(&comps, i)).To(HaveOccurred())
 			})
@@ -151,7 +152,7 @@ var _ = Describe("core labels and annotations handlers", func() {
 				comps.kubeControllers.Annotations = map[string]string{
 					"foo": "bar",
 				}
-				ensureEmptyCalicoKubeControllersDeploymentMetadata(i)
+				helpers.EnsureKubeControllersAnnotationsNotNil(i)
 				i.Spec.CalicoKubeControllersDeployment.Metadata.Annotations = map[string]string{"foo": "bar"}
 				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
 				Expect(i.Spec.CalicoKubeControllersDeployment.Metadata.Annotations).To(HaveKeyWithValue("foo", "bar"))
@@ -160,13 +161,13 @@ var _ = Describe("core labels and annotations handlers", func() {
 				comps.kubeControllers.Annotations = map[string]string{
 					"foo": "bar",
 				}
-				ensureEmptyCalicoKubeControllersDeploymentMetadata(i)
+				helpers.EnsureKubeControllersAnnotationsNotNil(i)
 				i.Spec.CalicoKubeControllersDeployment.Metadata.Annotations = map[string]string{"foo": "baz"}
 				Expect(handleAnnotations(&comps, i)).To(HaveOccurred())
 			})
 			It("should error if the annotation exists in the installation but not the resource", func() {
 				comps.kubeControllers.Annotations = map[string]string{}
-				ensureEmptyCalicoKubeControllersDeploymentMetadata(i)
+				helpers.EnsureKubeControllersAnnotationsNotNil(i)
 				i.Spec.CalicoKubeControllersDeployment.Metadata.Annotations = map[string]string{"foo": "baz"}
 				Expect(handleAnnotations(&comps, i)).To(HaveOccurred())
 			})
@@ -197,7 +198,7 @@ var _ = Describe("core labels and annotations handlers", func() {
 				comps.kubeControllers.Spec.Template.Annotations = map[string]string{
 					"foo": "bar",
 				}
-				ensureEmptyCalicoKubeControllersDeploymentPodTemplateMetadata(i)
+				helpers.EnsureKubeControllersPodTemplateAnnotationsNotNil(i)
 				i.Spec.CalicoKubeControllersDeployment.Spec.Template.Metadata.Annotations = map[string]string{"foo": "bar"}
 				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
 				Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Metadata.Annotations).To(HaveKeyWithValue("foo", "bar"))
@@ -206,13 +207,13 @@ var _ = Describe("core labels and annotations handlers", func() {
 				comps.kubeControllers.Spec.Template.Annotations = map[string]string{
 					"foo": "bar",
 				}
-				ensureEmptyCalicoKubeControllersDeploymentPodTemplateMetadata(i)
+				helpers.EnsureKubeControllersPodTemplateAnnotationsNotNil(i)
 				i.Spec.CalicoKubeControllersDeployment.Spec.Template.Metadata.Annotations = map[string]string{"foo": "baz"}
 				Expect(handleAnnotations(&comps, i)).To(HaveOccurred())
 			})
 			It("should error if the annotation exists in the installation but not the resource", func() {
 				comps.kubeControllers.Spec.Template.Annotations = map[string]string{}
-				ensureEmptyCalicoKubeControllersDeploymentPodTemplateMetadata(i)
+				helpers.EnsureKubeControllersPodTemplateAnnotationsNotNil(i)
 				i.Spec.CalicoKubeControllersDeployment.Spec.Template.Metadata.Annotations = map[string]string{"foo": "baz"}
 				Expect(handleAnnotations(&comps, i)).To(HaveOccurred())
 			})
@@ -243,7 +244,7 @@ var _ = Describe("core labels and annotations handlers", func() {
 				comps.typha.Annotations = map[string]string{
 					"foo": "bar",
 				}
-				ensureEmptyTyphaDeploymentMetadata(i)
+				helpers.EnsureTyphaAnnotationsNotNil(i)
 				i.Spec.TyphaDeployment.Metadata.Annotations = map[string]string{"foo": "bar"}
 				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
 				Expect(i.Spec.TyphaDeployment.Metadata.Annotations).To(HaveKeyWithValue("foo", "bar"))
@@ -252,13 +253,13 @@ var _ = Describe("core labels and annotations handlers", func() {
 				comps.typha.Annotations = map[string]string{
 					"foo": "bar",
 				}
-				ensureEmptyTyphaDeploymentMetadata(i)
+				helpers.EnsureTyphaAnnotationsNotNil(i)
 				i.Spec.TyphaDeployment.Metadata.Annotations = map[string]string{"foo": "baz"}
 				Expect(handleAnnotations(&comps, i)).To(HaveOccurred())
 			})
 			It("should error if the annotation exists in the installation but not the resource", func() {
 				comps.typha.Annotations = map[string]string{}
-				ensureEmptyTyphaDeploymentMetadata(i)
+				helpers.EnsureTyphaAnnotationsNotNil(i)
 				i.Spec.TyphaDeployment.Metadata.Annotations = map[string]string{"foo": "baz"}
 				Expect(handleAnnotations(&comps, i)).To(HaveOccurred())
 			})
@@ -289,7 +290,7 @@ var _ = Describe("core labels and annotations handlers", func() {
 				comps.typha.Spec.Template.Annotations = map[string]string{
 					"foo": "bar",
 				}
-				ensureEmptyTyphaDeploymentPodTemplateMetadata(i)
+				helpers.EnsureTyphaPodTemplateAnnotationsNotNil(i)
 				i.Spec.TyphaDeployment.Spec.Template.Metadata.Annotations = map[string]string{"foo": "bar"}
 				Expect(handleAnnotations(&comps, i)).ToNot(HaveOccurred())
 				Expect(i.Spec.TyphaDeployment.Spec.Template.Metadata.Annotations).To(HaveKeyWithValue("foo", "bar"))
@@ -298,13 +299,13 @@ var _ = Describe("core labels and annotations handlers", func() {
 				comps.typha.Spec.Template.Annotations = map[string]string{
 					"foo": "bar",
 				}
-				ensureEmptyTyphaDeploymentPodTemplateMetadata(i)
+				helpers.EnsureTyphaPodTemplateAnnotationsNotNil(i)
 				i.Spec.TyphaDeployment.Spec.Template.Metadata.Annotations = map[string]string{"foo": "baz"}
 				Expect(handleAnnotations(&comps, i)).To(HaveOccurred())
 			})
 			It("should error if the annotation exists in the installation but not the resource", func() {
 				comps.typha.Spec.Template.Annotations = map[string]string{}
-				ensureEmptyTyphaDeploymentPodTemplateMetadata(i)
+				helpers.EnsureTyphaPodTemplateAnnotationsNotNil(i)
 				i.Spec.TyphaDeployment.Spec.Template.Metadata.Annotations = map[string]string{"foo": "baz"}
 				Expect(handleAnnotations(&comps, i)).To(HaveOccurred())
 			})
@@ -339,7 +340,7 @@ var _ = Describe("core labels and annotations handlers", func() {
 				comps.node.Labels = map[string]string{
 					"foo": "bar",
 				}
-				ensureEmptyCalicoNodeDaemonSetMetadata(i)
+				helpers.EnsureCalicoNodeLabelsNotNil(i)
 				i.Spec.CalicoNodeDaemonSet.Metadata.Labels = map[string]string{"foo": "bar"}
 				Expect(handleLabels(&comps, i)).ToNot(HaveOccurred())
 				Expect(i.Spec.CalicoNodeDaemonSet.Metadata.Labels).To(HaveLen(1))
@@ -349,13 +350,13 @@ var _ = Describe("core labels and annotations handlers", func() {
 				comps.node.Labels = map[string]string{
 					"foo": "bar",
 				}
-				ensureEmptyCalicoNodeDaemonSetMetadata(i)
+				helpers.EnsureCalicoNodeLabelsNotNil(i)
 				i.Spec.CalicoNodeDaemonSet.Metadata.Labels = map[string]string{"foo": "baz"}
 				Expect(handleLabels(&comps, i)).To(HaveOccurred())
 			})
 			It("should error if the label exists in the installation but not the resource", func() {
 				comps.node.Labels = map[string]string{}
-				ensureEmptyCalicoNodeDaemonSetMetadata(i)
+				helpers.EnsureCalicoNodeLabelsNotNil(i)
 				i.Spec.CalicoNodeDaemonSet.Metadata.Labels = map[string]string{"foo": "baz"}
 				Expect(handleLabels(&comps, i)).To(HaveOccurred())
 			})
@@ -387,7 +388,7 @@ var _ = Describe("core labels and annotations handlers", func() {
 				comps.node.Spec.Template.Labels = map[string]string{
 					"foo": "bar",
 				}
-				ensureEmptyCalicoNodeDaemonSetPodTemplateMetadata(i)
+				helpers.EnsureCalicoNodePodTemplateLabelsNotNil(i)
 				i.Spec.CalicoNodeDaemonSet.Spec.Template.Metadata.Labels = map[string]string{"foo": "bar"}
 				Expect(handleLabels(&comps, i)).ToNot(HaveOccurred())
 				Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Metadata.Labels).To(HaveLen(1))
@@ -397,13 +398,13 @@ var _ = Describe("core labels and annotations handlers", func() {
 				comps.node.Spec.Template.Labels = map[string]string{
 					"foo": "bar",
 				}
-				ensureEmptyCalicoNodeDaemonSetPodTemplateMetadata(i)
+				helpers.EnsureCalicoNodePodTemplateLabelsNotNil(i)
 				i.Spec.CalicoNodeDaemonSet.Spec.Template.Metadata.Labels = map[string]string{"foo": "baz"}
 				Expect(handleLabels(&comps, i)).To(HaveOccurred())
 			})
 			It("should error if the label exists in the installation but not the resource", func() {
 				comps.node.Spec.Template.Labels = map[string]string{}
-				ensureEmptyCalicoNodeDaemonSetPodTemplateMetadata(i)
+				helpers.EnsureCalicoNodePodTemplateLabelsNotNil(i)
 				i.Spec.CalicoNodeDaemonSet.Spec.Template.Metadata.Labels = map[string]string{"foo": "baz"}
 				Expect(handleLabels(&comps, i)).To(HaveOccurred())
 			})
@@ -434,7 +435,7 @@ var _ = Describe("core labels and annotations handlers", func() {
 				comps.kubeControllers.Labels = map[string]string{
 					"foo": "bar",
 				}
-				ensureEmptyCalicoKubeControllersDeploymentMetadata(i)
+				helpers.EnsureKubeControllersLabelsNotNil(i)
 				i.Spec.CalicoKubeControllersDeployment.Metadata.Labels = map[string]string{"foo": "bar"}
 				Expect(handleLabels(&comps, i)).ToNot(HaveOccurred())
 				Expect(i.Spec.CalicoKubeControllersDeployment.Metadata.Labels).To(HaveKeyWithValue("foo", "bar"))
@@ -443,13 +444,13 @@ var _ = Describe("core labels and annotations handlers", func() {
 				comps.kubeControllers.Labels = map[string]string{
 					"foo": "bar",
 				}
-				ensureEmptyCalicoKubeControllersDeploymentMetadata(i)
+				helpers.EnsureKubeControllersLabelsNotNil(i)
 				i.Spec.CalicoKubeControllersDeployment.Metadata.Labels = map[string]string{"foo": "baz"}
 				Expect(handleLabels(&comps, i)).To(HaveOccurred())
 			})
 			It("should error if the label exists in the installation but not the resource", func() {
 				comps.kubeControllers.Labels = map[string]string{}
-				ensureEmptyCalicoKubeControllersDeploymentMetadata(i)
+				helpers.EnsureKubeControllersLabelsNotNil(i)
 				i.Spec.CalicoKubeControllersDeployment.Metadata.Labels = map[string]string{"foo": "baz"}
 				Expect(handleLabels(&comps, i)).To(HaveOccurred())
 			})
@@ -480,7 +481,7 @@ var _ = Describe("core labels and annotations handlers", func() {
 				comps.kubeControllers.Spec.Template.Labels = map[string]string{
 					"foo": "bar",
 				}
-				ensureEmptyCalicoKubeControllersDeploymentPodTemplateMetadata(i)
+				helpers.EnsureKubeControllersPodTemplateLabelsNotNil(i)
 				i.Spec.CalicoKubeControllersDeployment.Spec.Template.Metadata.Labels = map[string]string{"foo": "bar"}
 				Expect(handleLabels(&comps, i)).ToNot(HaveOccurred())
 				Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Metadata.Labels).To(HaveKeyWithValue("foo", "bar"))
@@ -489,13 +490,13 @@ var _ = Describe("core labels and annotations handlers", func() {
 				comps.kubeControllers.Spec.Template.Labels = map[string]string{
 					"foo": "bar",
 				}
-				ensureEmptyCalicoKubeControllersDeploymentPodTemplateMetadata(i)
+				helpers.EnsureKubeControllersPodTemplateLabelsNotNil(i)
 				i.Spec.CalicoKubeControllersDeployment.Spec.Template.Metadata.Labels = map[string]string{"foo": "baz"}
 				Expect(handleLabels(&comps, i)).To(HaveOccurred())
 			})
 			It("should error if the label exists in the installation but not the resource", func() {
 				comps.kubeControllers.Spec.Template.Labels = map[string]string{}
-				ensureEmptyCalicoKubeControllersDeploymentPodTemplateMetadata(i)
+				helpers.EnsureKubeControllersPodTemplateLabelsNotNil(i)
 				i.Spec.CalicoKubeControllersDeployment.Spec.Template.Metadata.Labels = map[string]string{"foo": "baz"}
 				Expect(handleLabels(&comps, i)).To(HaveOccurred())
 			})
@@ -526,7 +527,7 @@ var _ = Describe("core labels and annotations handlers", func() {
 				comps.typha.Labels = map[string]string{
 					"foo": "bar",
 				}
-				ensureEmptyTyphaDeploymentMetadata(i)
+				helpers.EnsureTyphaLabelsNotNil(i)
 				i.Spec.TyphaDeployment.Metadata.Labels = map[string]string{"foo": "bar"}
 				Expect(handleLabels(&comps, i)).ToNot(HaveOccurred())
 				Expect(i.Spec.TyphaDeployment.Metadata.Labels).To(HaveKeyWithValue("foo", "bar"))
@@ -535,13 +536,13 @@ var _ = Describe("core labels and annotations handlers", func() {
 				comps.typha.Labels = map[string]string{
 					"foo": "bar",
 				}
-				ensureEmptyTyphaDeploymentMetadata(i)
+				helpers.EnsureTyphaLabelsNotNil(i)
 				i.Spec.TyphaDeployment.Metadata.Labels = map[string]string{"foo": "baz"}
 				Expect(handleLabels(&comps, i)).To(HaveOccurred())
 			})
 			It("should error if the label exists in the installation but not the resource", func() {
 				comps.typha.Labels = map[string]string{}
-				ensureEmptyTyphaDeploymentMetadata(i)
+				helpers.EnsureTyphaLabelsNotNil(i)
 				i.Spec.TyphaDeployment.Metadata.Labels = map[string]string{"foo": "baz"}
 				Expect(handleLabels(&comps, i)).To(HaveOccurred())
 			})
@@ -572,7 +573,7 @@ var _ = Describe("core labels and annotations handlers", func() {
 				comps.typha.Spec.Template.Labels = map[string]string{
 					"foo": "bar",
 				}
-				ensureEmptyTyphaDeploymentPodTemplateMetadata(i)
+				helpers.EnsureTyphaPodTemplateLabelsNotNil(i)
 				i.Spec.TyphaDeployment.Spec.Template.Metadata.Labels = map[string]string{"foo": "bar"}
 				Expect(handleLabels(&comps, i)).ToNot(HaveOccurred())
 				Expect(i.Spec.TyphaDeployment.Spec.Template.Metadata.Labels).To(HaveKeyWithValue("foo", "bar"))
@@ -581,13 +582,13 @@ var _ = Describe("core labels and annotations handlers", func() {
 				comps.typha.Spec.Template.Labels = map[string]string{
 					"foo": "bar",
 				}
-				ensureEmptyTyphaDeploymentPodTemplateMetadata(i)
+				helpers.EnsureTyphaPodTemplateLabelsNotNil(i)
 				i.Spec.TyphaDeployment.Spec.Template.Metadata.Labels = map[string]string{"foo": "baz"}
 				Expect(handleLabels(&comps, i)).To(HaveOccurred())
 			})
 			It("should error if the label exists in the installation but not the resource", func() {
 				comps.typha.Spec.Template.Labels = map[string]string{}
-				ensureEmptyTyphaDeploymentPodTemplateMetadata(i)
+				helpers.EnsureTyphaPodTemplateLabelsNotNil(i)
 				i.Spec.TyphaDeployment.Spec.Template.Metadata.Labels = map[string]string{"foo": "baz"}
 				Expect(handleLabels(&comps, i)).To(HaveOccurred())
 			})

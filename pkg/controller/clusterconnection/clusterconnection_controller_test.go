@@ -208,7 +208,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 
 	FContext("public CA", func() {
 		BeforeEach(func() {
-			cfg.Spec.TunnelCertType = operatorv1.TunnelCertCASigned
+			cfg.Spec.ServerIdentityVerificationMethod = operatorv1.TunnelCertCASigned
 			Expect(c.Update(ctx, cfg)).NotTo(HaveOccurred())
 		})
 

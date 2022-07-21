@@ -28,16 +28,16 @@ type ManagementClusterSpec struct {
 	// +optional
 	Address string `json:"address,omitempty"`
 
-	// TunnelCertType configures the product to serve the voltron tunnel using a publicly signed CA certificate instead
-	// of using the same cert bundle which guardian client certs are signed with.
+	// TunnelCertType configures the type of certificate that voltron should use to serve its tunnel.
 	//
-	// Use of this flag requires uploading a ca bundle.
+	// When set to SelfSigned, voltron will use the same self-signed cert bundle which guardian client certs are signed with.
 	//
-	// Once enabled, all managed clusters will disconnect as they will no longer be able to verify Voltron's identity.
-	// The apiserver will no longer include the management cluster cert in the resource bundle produced when
-	// a new managed cluster resource is created. To reconnect existing managed clusters, generate a new cert bundle
-	// which will not include the management cluster's cert, which will indicate to guardian it should use it's
-	// installed certificates (in combination with the management cluster's hostname) to verify voltron's identity.
+	// When set to CASigned, the operator will expect a ca bundle secret to be created and use have voltron use it to serve TLS.
+	// The apiserver will no longer include the management cluster cert in the resource bundle produced when a new managed cluster resource is created.
+	//
+	// If modified from SelfSigned to CASigned, all managed clusters will disconnect as they will no longer be able to verify Voltron's identity.
+	// To reconnect existing managed clusters, generate a new cert bundle which the tigera-apiserver will generate without including the management cluster's cert.
+	//
 	// Default: SelfSigned
 	// +optional
 	TunnelCertType TunnelCertType `json:"tunnelCertType,omitempty"`

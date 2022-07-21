@@ -90,28 +90,6 @@ func IsOvercommitAllowed(name v1.ResourceName) bool {
 		!IsHugePageResourceName(name)
 }
 
-func ingressSliceEqual(lhs, rhs []v1.LoadBalancerIngress) bool {
-	if len(lhs) != len(rhs) {
-		return false
-	}
-	for i := range lhs {
-		if !ingressEqual(&lhs[i], &rhs[i]) {
-			return false
-		}
-	}
-	return true
-}
-
-func ingressEqual(lhs, rhs *v1.LoadBalancerIngress) bool {
-	if lhs.IP != rhs.IP {
-		return false
-	}
-	if lhs.Hostname != rhs.Hostname {
-		return false
-	}
-	return true
-}
-
 func ContainsAccessMode(modes []v1.PersistentVolumeAccessMode, mode v1.PersistentVolumeAccessMode) bool {
 	for _, m := range modes {
 		if m == mode {

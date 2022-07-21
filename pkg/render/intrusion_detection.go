@@ -1320,7 +1320,7 @@ func (c *intrusionDetectionComponent) adPersistentVolume() *corev1.PersistentVol
 		Spec: corev1.PersistentVolumeSpec{
 			StorageClassName: adStorageClassName,
 			Capacity: corev1.ResourceList{
-				"storage": resource.MustParse(fmt.Sprintf("%dGi", DefaultAnomalyDetectionPVRequestSizeGi)),
+				corev1.ResourceStorage: resource.MustParse(fmt.Sprintf("%dGi", DefaultAnomalyDetectionPVRequestSizeGi)),
 			},
 			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 			PersistentVolumeSource: corev1.PersistentVolumeSource{
@@ -1346,7 +1346,7 @@ func (c *intrusionDetectionComponent) adPersistentVolumeClaim() *corev1.Persiste
 			AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 			Resources: corev1.ResourceRequirements{
 				Requests: corev1.ResourceList{
-					"storage": resource.MustParse(fmt.Sprintf("%dGi", DefaultAnomalyDetectionPVRequestSizeGi)),
+					corev1.ResourceStorage: resource.MustParse(fmt.Sprintf("%dGi", DefaultAnomalyDetectionPVRequestSizeGi)),
 				},
 			},
 		},

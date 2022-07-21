@@ -561,6 +561,8 @@ func createPredicateForObject(objMeta metav1.Object) predicate.Predicate {
 	}
 }
 
+// ValidateResourceNameIsQualified returns a compiled list of errors which states which rule the name
+// did not respect. Returns nil if it's a valid name.
 func ValidateResourceNameIsQualified(name string) error {
 	errors := validation.IsQualifiedName(name)
 

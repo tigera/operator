@@ -36,6 +36,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -223,8 +224,11 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal(adAPIKeyPair.VolumeMount(rmeta.OSTypeLinux).MountPath))
 		// emptyDir is expected as the default volume
 		Expect(adAPIDeployment.Spec.Template.Spec.Volumes).To(ContainElement(
-			corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			corev1.Volume{
+				Name: "volume-storage",
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
 			},
 		))
 
@@ -303,18 +307,21 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 
 		adAPIPV := rtest.GetResource(resources, testADStorageClassName, render.IntrusionDetectionNamespace, "", "v1", "PersistentVolume").(*corev1.PersistentVolume)
 		Expect(adAPIPV.Spec.StorageClassName).To(Equal(testADStorageClassName))
-		Expect(adAPIPV.Spec.Capacity[corev1.ResourceStorage]).To(Equal(fmt.Sprintf("%dGi", render.DefaultAnomalyDetectionPVRequestSizeGi)))
+		Expect(adAPIPV.Spec.Capacity[corev1.ResourceStorage]).To(Equal(resource.MustParse(fmt.Sprintf("%dGi", render.DefaultAnomalyDetectionPVRequestSizeGi))))
 		Expect(adAPIPV.Spec.PersistentVolumeSource.HostPath.Path).To(Equal("/storage"))
 
 		adAPIPVC := rtest.GetResource(resources, testADStorageClassName, render.IntrusionDetectionNamespace, "", "v1", "PersistentVolumeClaim").(*corev1.PersistentVolumeClaim)
-		Expect(adAPIPVC.Spec.StorageClassName).To(Equal(testADStorageClassName))
-		Expect(adAPIPVC.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(fmt.Sprintf("%dGi", render.DefaultAnomalyDetectionPVRequestSizeGi)))
+		Expect(*adAPIPVC.Spec.StorageClassName).To(Equal(testADStorageClassName))
+		Expect(adAPIPVC.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse(fmt.Sprintf("%dGi", render.DefaultAnomalyDetectionPVRequestSizeGi))))
 
 		adAPIDeployment := rtest.GetResource(resources, render.ADAPIObjectName, render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(adAPIDeployment.Spec.Template.Spec.Volumes).To(ContainElement(
-			corev1.VolumeSource{
-				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-					ClaimName: testADStorageClassName,
+			corev1.Volume{
+				Name: "volume-storage",
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: testADStorageClassName,
+					},
 				},
 			},
 		))

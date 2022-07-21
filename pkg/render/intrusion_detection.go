@@ -63,6 +63,7 @@ const (
 
 	DefaultADStorageClassName              = "tigera-anomaly-detection"
 	DefaultAnomalyDetectionPVRequestSizeGi = 10
+	adAPIStorageVolumeName                 = "volume-storage"
 	adAPIVolumePath                        = "/storage"
 	ADJobPodTemplateBaseName               = "tigera.io.detectors"
 	adDetectorPrefixName                   = "tigera.io.detector."
@@ -207,7 +208,12 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 			c.adAPIAccessRoleBinding(),
 		)
 
-		if c.cfg.IntrusionDetction.Spec.AnomalyDetectionSpec.StorageType == operatorv1.PersistentStorageType {
+		configureADStorage := c.cfg.IntrusionDetction != nil &&
+			c.cfg.IntrusionDetction.Spec.AnomalyDetectionSpec != nil &&
+			c.cfg.IntrusionDetction.Spec.AnomalyDetectionSpec.StorageType == operatorv1.PersistentStorageType
+
+		if configureADStorage {
+			// ignore all fields if it's set to using default epehrmeal storage
 			objs = append(objs,
 				c.adPersistentVolume(),
 				c.adPersistentVolumeClaim(),
@@ -216,7 +222,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 
 		objs = append(objs,
 			c.adAPIService(),
-			c.adAPIDeployment(),
+			c.adAPIDeployment(configureADStorage),
 		)
 
 		// RBAC for AD Detector Pods
@@ -1313,6 +1319,7 @@ func (c *intrusionDetectionComponent) adAPIService() *corev1.Service {
 func (c *intrusionDetectionComponent) adPersistentVolume() *corev1.PersistentVolume {
 	adStorageClassName := c.cfg.IntrusionDetction.Spec.AnomalyDetectionSpec.StorageClassName
 	adPV := corev1.PersistentVolume{
+		TypeMeta: metav1.TypeMeta{Kind: "PersistentVolume", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      adStorageClassName,
 			Namespace: IntrusionDetectionNamespace,
@@ -1337,6 +1344,7 @@ func (c *intrusionDetectionComponent) adPersistentVolume() *corev1.PersistentVol
 func (c *intrusionDetectionComponent) adPersistentVolumeClaim() *corev1.PersistentVolumeClaim {
 	adStorageClassName := c.cfg.IntrusionDetction.Spec.AnomalyDetectionSpec.StorageClassName
 	adPVC := corev1.PersistentVolumeClaim{
+		TypeMeta: metav1.TypeMeta{Kind: "PersistentVolumeClaim", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      adStorageClassName,
 			Namespace: IntrusionDetectionNamespace,
@@ -1355,15 +1363,14 @@ func (c *intrusionDetectionComponent) adPersistentVolumeClaim() *corev1.Persiste
 	return &adPVC
 }
 
-func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
-	adAPIStorageVolumeName := "volume-storage"
-	adStorageClassName := c.cfg.IntrusionDetction.Spec.AnomalyDetectionSpec.StorageClassName
+func (c *intrusionDetectionComponent) adAPIDeployment(configureADStorage bool) *appsv1.Deployment {
 
 	adModelVolumeSource := corev1.VolumeSource{
 		EmptyDir: &corev1.EmptyDirVolumeSource{},
 	}
 
-	if c.cfg.IntrusionDetction.Spec.AnomalyDetectionSpec.StorageType == operatorv1.PersistentStorageType {
+	if configureADStorage {
+		adStorageClassName := c.cfg.IntrusionDetction.Spec.AnomalyDetectionSpec.StorageClassName
 		adModelVolumeSource = corev1.VolumeSource{
 			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 				ClaimName: adStorageClassName,

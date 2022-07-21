@@ -315,12 +315,12 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	// Query for StorageClass for AD API if provided
-	if instance.Spec.AnomalyDetectionSpec.StorageType == operatorv1.PersistentStorageType {
+	if instance.Spec.AnomalyDetectionSpec != nil && instance.Spec.AnomalyDetectionSpec.StorageType == operatorv1.PersistentStorageType {
 		// validate to degrade early if the storage class name is not valid
 		if err = utils.ValidateResourceNameIsQualified(instance.Spec.AnomalyDetectionSpec.StorageClassName); err != nil {
-			errMessage := "invalid AD Storage Class name provided"
+			errMessage := "Invalid AD Storage Class name provided"
 			log.Error(err, errMessage)
-			r.status.SetDegraded("Error retrieving pull secrets", err.Error())
+			r.status.SetDegraded(errMessage, err.Error())
 			return reconcile.Result{}, err
 		}
 
@@ -331,7 +331,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 				return reconcile.Result{}, err
 			} else {
 				reqLogger.Error(err, "Failed to query for Anomaly Detection Storage Class")
-				r.status.SetDegraded("Failed to get storage class for anomaly detection", err.Error())
+				r.status.SetDegraded("Failed to query storage class for anomaly detection", err.Error())
 				return reconcile.Result{}, err
 			}
 		}

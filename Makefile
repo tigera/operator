@@ -314,9 +314,13 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 
 ## Deploy CRDs needed for UTs.  CRDs needed by ECK that we don't use are not deployed.
 ## kubectl create is used for prometheus as a workaround for https://github.com/prometheus-community/helm-charts/issues/1500
+## kubectl create is used for operator CRDS since the Installation API is large enough now that we hit the following error:
+##
+##   The CustomResourceDefinition "installations.operator.tigera.io" is invalid: metadata.annotations: Too long: must have at most 262144 bytes
+##
 deploy-crds: kubectl
 	@export KUBECONFIG=$(KUBECONFIG) && \
-		$(BINDIR)/kubectl apply -f pkg/crds/operator/ && \
+		$(BINDIR)/kubectl create -f pkg/crds/operator/ && \
 		$(BINDIR)/kubectl apply -f pkg/crds/calico/ && \
 		$(BINDIR)/kubectl apply -f pkg/crds/enterprise/ && \
 		$(BINDIR)/kubectl apply -f deploy/crds/elastic/elasticsearch-crd.yaml && \

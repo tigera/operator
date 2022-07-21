@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +21,11 @@ import (
 	"strings"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common/validation"
+	node "github.com/tigera/operator/pkg/common/validation/calico-node"
+	windowsupgrade "github.com/tigera/operator/pkg/common/validation/calico-windows-upgrade"
+	kubecontrollers "github.com/tigera/operator/pkg/common/validation/kube-controllers"
+	typha "github.com/tigera/operator/pkg/common/validation/typha"
 	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
 )
@@ -361,6 +366,39 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		}
 	}
 
+	// Verify the CalicoNodeDaemonSet overrides, if specified, is valid.
+	if ds := instance.Spec.CalicoNodeDaemonSet; ds != nil {
+		err := validation.ValidateReplicatedPodResourceOverrides(ds, node.ValidateCalicoNodeDaemonSetContainer, node.ValidateCalicoNodeDaemonSetInitContainer)
+		if err != nil {
+			return fmt.Errorf("Installation spec.CalicoNodeDaemonSet is not valid: %w", err)
+
+		}
+	}
+
+	// Verify the CalicoKubeControllersDeployment overrides, if specified, is valid.
+	if ds := instance.Spec.CalicoKubeControllersDeployment; ds != nil {
+		err := validation.ValidateReplicatedPodResourceOverrides(ds, kubecontrollers.ValidateCalicoKubeControllersDeploymentContainer, validation.NoContainersDefined)
+		if err != nil {
+			return fmt.Errorf("Installation spec.CalicoKubeControllersDeployment is not valid: %w", err)
+
+		}
+	}
+
+	// Verify the TyphaDeployment overrides, if specified, is valid.
+	if ds := instance.Spec.TyphaDeployment; ds != nil {
+		err := validation.ValidateReplicatedPodResourceOverrides(ds, typha.ValidateTyphaDeploymentContainer, typha.ValidateTyphaDeploymentInitContainer)
+		if err != nil {
+			return fmt.Errorf("Installation spec.TyphaDeployment is not valid: %w", err)
+
+		}
+	}
+	// Verify the CalicoWindowsUpgradeDaemonSet overrides, if specified, is valid.
+	if ds := instance.Spec.CalicoWindowsUpgradeDaemonSet; ds != nil {
+		err := validation.ValidateReplicatedPodResourceOverrides(ds, windowsupgrade.ValidateCalicoWindowsUpgradeDaemonSetContainer, validation.NoContainersDefined)
+		if err != nil {
+			return fmt.Errorf("Installation spec.CalicoWindowsUpgradeDaemonSet is not valid: %w", err)
+		}
+	}
 	return nil
 }
 

@@ -97,6 +97,14 @@ func EnsureTyphaInitContainersNotNil(install *operatorv1.Installation) {
 		install.Spec.TyphaDeployment.Spec.Template.Spec.InitContainers = []operatorv1.TyphaDeploymentInitContainer{}
 	}
 }
+
+func EnsureTyphaNodeSelectorNotNil(install *operatorv1.Installation) {
+	EnsureTyphaPodSpecNotNil(install)
+	if install.Spec.TyphaDeployment.Spec.Template.Spec.NodeSelector == nil {
+		install.Spec.TyphaDeployment.Spec.Template.Spec.NodeSelector = map[string]string{}
+	}
+}
+
 func EnsureTyphaPodSpecNotNil(install *operatorv1.Installation) {
 	if install.Spec.TyphaDeployment == nil {
 		install.Spec.TyphaDeployment = &operatorv1.TyphaDeployment{

@@ -16,6 +16,7 @@ package convert
 
 import (
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	"github.com/tigera/operator/pkg/controller/migration/convert/helpers"
 
@@ -352,59 +353,115 @@ var _ = Describe("core handler", func() {
 	})
 
 	Context("nodeSelector", func() {
-		TestNodeSelectors := func(f func(map[string]string)) {
-			It("should error for unexpected nodeSelectors", func() {
-				f(map[string]string{"foo": "bar"})
-				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
-			})
-			It("should not error for beta.kubernetes.io/os=linux nodeSelector", func() {
-				f(map[string]string{"beta.kubernetes.io/os": "linux"})
-				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
-			})
-			It("should not error for kubernetes.io/os=linux", func() {
-				f(map[string]string{"kubernetes.io/os": "linux"})
-				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
-			})
-			It("should error for other kubernetes.io/os nodeSelectors", func() {
-				f(map[string]string{"kubernetes.io/os": "windows"})
-				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
-			})
-			It("should still error even if a valid and invalid nodeselector are set", func() {
-				f(map[string]string{
-					"kubernetes.io/os": "linux",
-					"foo":              "bar",
-				})
-				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
-			})
-			It("should not panic for nil nodeselectors", func() {
-				f(nil)
-				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
-			})
+		aff1 := &corev1.Affinity{
+			NodeAffinity: &corev1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+					NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+						MatchExpressions: []corev1.NodeSelectorRequirement{{
+							Key:      "custom-affinity-key",
+							Operator: corev1.NodeSelectorOpExists,
+						}},
+					}},
+				},
+			},
 		}
-		Describe("calico-node", func() {
-			TestNodeSelectors(func(nodeSelectors map[string]string) {
-				comps.node.Spec.Template.Spec.NodeSelector = nodeSelectors
-			})
 
+		aff2 := aff1.DeepCopy()
+		aff2.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms[0].MatchExpressions[0].Key = "another-key"
+
+		emptyAff := &v1.Affinity{}
+
+		Describe("calico-node", func() {
+			It("should not error for no nodeSelector", func() {
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+			})
+			It("should not error for nil nodeSelector", func() {
+				comps.node.Spec.Template.Spec.NodeSelector = nil
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+			})
+			It("should add nodeSelector to the installation", func() {
+				comps.node.Spec.Template.Spec.NodeSelector = map[string]string{"foo": "bar"}
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
+				Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("foo", "bar"))
+			})
+			It("should remove linux OS nodeSelector terms", func() {
+				comps.node.Spec.Template.Spec.NodeSelector = map[string]string{
+					"beta.kubernetes.io/os": "linux",
+					"foo":                   "bar",
+					"kubernetes.io/os":      "linux",
+				}
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
+				Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("foo", "bar"))
+			})
 			It("should not error if the migration nodeSelector is set", func() {
 				comps.node.Spec.Template.Spec.NodeSelector = map[string]string{
 					"projectcalico.org/operator-node-migration": "pre-operator",
 				}
 				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+				// We don't add the migration nodeSelector to the installation.
+				Expect(i.Spec.CalicoNodeDaemonSet).To(BeNil())
 			})
-			It("should error if a nodeSelector is set alongside the migration nodeSelector", func() {
+			It("should not error if the same nodeSelector is in the resource and the installation", func() {
 				comps.node.Spec.Template.Spec.NodeSelector = map[string]string{
-					"foo": "bar",
-					"projectcalico.org/operator-node-migration": "pre-operator",
+					"foo":              "bar",
+					"kubernetes.io/os": "linux",
 				}
+				// We remove the OS nodeSelector key/value pair so they are equal
+				helpers.EnsureCalicoNodeNodeSelectorNotNil(i)
+				i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector = map[string]string{
+					"foo": "bar",
+				}
+
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
+				Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("foo", "bar"))
+			})
+			It("should error if the nodeSelector key exists in the resource and the installation but values differ", func() {
+				comps.node.Spec.Template.Spec.NodeSelector = map[string]string{"foo": "bar"}
+				helpers.EnsureCalicoNodeNodeSelectorNotNil(i)
+				i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector = map[string]string{"foo": "baz"}
 				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
 			})
-			It("should error for unexpected affinities", func() {
+			It("should error if the nodeSelector exists in the installation but not the resource", func() {
+				comps.node.Spec.Template.Spec.NodeSelector = map[string]string{}
+				helpers.EnsureCalicoNodeNodeSelectorNotNil(i)
+				i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector = map[string]string{"foo": "baz"}
+				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
+			})
+			It("should not error for empty affinity", func() {
 				comps.node.Spec.Template.Spec.Affinity = &v1.Affinity{}
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity).To(Equal(comps.node.Spec.Template.Spec.Affinity))
+			})
+			It("should not error for nil affinity", func() {
+				comps.node.Spec.Template.Spec.Affinity = nil
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.CalicoNodeDaemonSet).To(BeNil())
+			})
+			It("should not error if the same affinity is in the resource and the installation", func() {
+				comps.node.Spec.Template.Spec.Affinity = aff1
+				helpers.EnsureCalicoNodePodSpecNotNil(i)
+				i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity = aff1
+
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+				Expect(*i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity).To(Equal(*aff1))
+			})
+			It("should error if the affinity exists in the resource and the installation but values differ", func() {
+				comps.node.Spec.Template.Spec.Affinity = aff1
+				helpers.EnsureCalicoNodePodSpecNotNil(i)
+				i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity = aff2
+
+				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
+			})
+			It("should error if the affinity exists in the installation but not the resource", func() {
+				helpers.EnsureCalicoNodePodSpecNotNil(i)
+				i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity = aff1
 				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
 			})
 			It("shouldn't error for aks affinity on aks", func() {
-				comps.node.Spec.Template.Spec.Affinity = &v1.Affinity{
+				aff := &v1.Affinity{
 					NodeAffinity: &v1.NodeAffinity{
 						RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
 							NodeSelectorTerms: []v1.NodeSelectorTerm{{
@@ -417,28 +474,13 @@ var _ = Describe("core handler", func() {
 						},
 					},
 				}
+				comps.node.Spec.Template.Spec.Affinity = aff
 				i.Spec.KubernetesProvider = operatorv1.ProviderAKS
 				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+				Expect(*i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity).To(Equal(*aff))
 			})
-			It("shouldn't error for eks fargate affinity on eks ", func() {
-				comps.node.Spec.Template.Spec.Affinity = &v1.Affinity{
-					NodeAffinity: &v1.NodeAffinity{
-						RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-							NodeSelectorTerms: []v1.NodeSelectorTerm{{
-								MatchExpressions: []v1.NodeSelectorRequirement{{
-									Key:      "eks.amazonaws.com/compute-type",
-									Operator: v1.NodeSelectorOpNotIn,
-									Values:   []string{"fargate"},
-								}},
-							}},
-						},
-					},
-				}
-				i.Spec.KubernetesProvider = operatorv1.ProviderEKS
-				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
-			})
-			It("should error for other affinities on aks", func() {
-				comps.node.Spec.Template.Spec.Affinity = &v1.Affinity{
+			It("should not error for other affinities on aks", func() {
+				aff := &v1.Affinity{
 					NodeAffinity: &v1.NodeAffinity{
 						RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
 							NodeSelectorTerms: []v1.NodeSelectorTerm{{
@@ -450,114 +492,232 @@ var _ = Describe("core handler", func() {
 						},
 					},
 				}
+				comps.node.Spec.Template.Spec.Affinity = aff
 				i.Spec.KubernetesProvider = operatorv1.ProviderAKS
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+				Expect(*i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity).To(Equal(*aff))
+			})
+		})
+		Describe("typha", func() {
+			It("should not error for nil nodeSelector", func() {
+				comps.typha.Spec.Template.Spec.NodeSelector = nil
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+			})
+			It("should add nodeSelector to the installation", func() {
+				comps.typha.Spec.Template.Spec.NodeSelector = map[string]string{"foo": "bar"}
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
+				Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("foo", "bar"))
+			})
+			It("should remove linux OS nodeSelector terms", func() {
+				comps.typha.Spec.Template.Spec.NodeSelector = map[string]string{
+					"beta.kubernetes.io/os": "linux",
+					"foo":                   "bar",
+					"kubernetes.io/os":      "linux",
+				}
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
+				Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("foo", "bar"))
+			})
+			It("should not error if the same nodeSelector is in the resource and the installation", func() {
+				comps.typha.Spec.Template.Spec.NodeSelector = map[string]string{
+					"foo":              "bar",
+					"kubernetes.io/os": "linux",
+				}
+				// We remove the OS nodeSelector key/value pair so they are equal
+				helpers.EnsureTyphaNodeSelectorNotNil(i)
+				i.Spec.TyphaDeployment.Spec.Template.Spec.NodeSelector = map[string]string{
+					"foo": "bar",
+				}
+
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
+				Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("foo", "bar"))
+			})
+			It("should error if the nodeSelector key exists in the resource and the installation but values differ", func() {
+				comps.typha.Spec.Template.Spec.NodeSelector = map[string]string{"foo": "bar"}
+				helpers.EnsureTyphaNodeSelectorNotNil(i)
+				i.Spec.TyphaDeployment.Spec.Template.Spec.NodeSelector = map[string]string{"foo": "baz"}
 				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
 			})
-			It("should error for other affinities on eks", func() {
-				comps.node.Spec.Template.Spec.Affinity = &v1.Affinity{
+			It("should error if the nodeSelector exists in the installation but not the resource", func() {
+				comps.typha.Spec.Template.Spec.NodeSelector = map[string]string{}
+				helpers.EnsureTyphaNodeSelectorNotNil(i)
+				i.Spec.TyphaDeployment.Spec.Template.Spec.NodeSelector = map[string]string{"foo": "baz"}
+				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
+			})
+
+			DescribeTable("should handle affinity",
+				func(compAffinity *corev1.Affinity, installNewAffinity *corev1.Affinity, installOldAffinity *corev1.Affinity, expectedAffinity *corev1.Affinity, expectedErr bool) {
+					if compAffinity != nil {
+						comps.typha.Spec.Template.Spec.Affinity = compAffinity
+					}
+					if installOldAffinity != nil {
+						oldAff := &operatorv1.TyphaAffinity{
+							NodeAffinity: &operatorv1.NodeAffinity{
+								RequiredDuringSchedulingIgnoredDuringExecution: installOldAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution,
+							},
+						}
+						i.Spec.TyphaAffinity = oldAff
+					}
+					if installNewAffinity != nil {
+						helpers.EnsureTyphaPodSpecNotNil(i)
+						i.Spec.TyphaDeployment.Spec.Template.Spec.Affinity = installNewAffinity
+					}
+
+					err := handleNodeSelectors(&comps, i)
+					if expectedErr {
+						Expect(err).To(HaveOccurred())
+					} else {
+						Expect(err).To(BeNil())
+
+						if compAffinity != nil {
+							Expect(*i.Spec.TyphaDeployment.Spec.Template.Spec.Affinity).To(Equal(*compAffinity))
+						} else {
+							Expect(i.Spec.TyphaDeployment).To(BeNil())
+						}
+						// We always expect the old TyphaAffinity to be cleared.
+						Expect(i.Spec.TyphaAffinity).To(BeNil())
+					}
+				},
+				// empty affinity
+				Entry("no affinity", nil, nil, nil, nil, false),
+				Entry("empty affinity", emptyAff, emptyAff, nil, emptyAff, false),
+				// affinity on typha component only
+				Entry("only typha has affinity", aff1, nil, nil, aff1, false),
+				// affinity on install only
+				Entry("only install has affinity (new affinity field only)", nil, aff1, nil, nil, true),
+				Entry("only install has affinity (old affinity field only)", nil, nil, aff1, nil, true),
+				Entry("only install has affinity (both affinity fields)", nil, aff1, aff1, nil, true),
+				Entry("only install has affinity (both affinity fields differ)", nil, aff1, aff2, nil, true),
+				// same affinities
+				Entry("typha and the installation have the same affinity (new affinity field only)", aff1, aff1, nil, aff1, false),
+				Entry("typha and the installation have the same affinity (old affinity field only)", aff1, nil, aff1, aff1, false),
+				Entry("typha and the installation have the same affinity (both affinity fields equal)", aff1, aff1, aff1, aff1, false),
+				Entry("typha and the installation have the same affinity (both affinity fields differ)", aff1, aff1, aff2, aff1, false),
+				// different affinities
+				Entry("typha and the installation have different affinities (new affinity field only)", aff1, aff2, nil, nil, true),
+				Entry("typha and the installation have different affinities (old affinity field only)", aff1, nil, aff2, nil, true),
+				Entry("typha and the installation have different affinities (both affinity fields equal)", aff1, aff2, aff2, nil, true),
+				Entry("typha and the installation have different affinities (both affinity fields differ)", aff1, aff2, aff1, nil, true),
+			)
+
+			It("shouldn't error for aks affinity on aks", func() {
+				aff := &v1.Affinity{
 					NodeAffinity: &v1.NodeAffinity{
 						RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
 							NodeSelectorTerms: []v1.NodeSelectorTerm{{
 								MatchExpressions: []v1.NodeSelectorRequirement{{
-									Key:      "eks.amazonaws.com/compute-type",
+									Key:      "type",
+									Operator: v1.NodeSelectorOpNotIn,
+									Values:   []string{"virtual-kubelet"},
+								}},
+							}},
+						},
+					},
+				}
+				comps.typha.Spec.Template.Spec.Affinity = aff
+				i.Spec.KubernetesProvider = operatorv1.ProviderAKS
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+				Expect(*i.Spec.TyphaDeployment.Spec.Template.Spec.Affinity).To(Equal(*aff))
+			})
+			It("should not error for other affinities on aks", func() {
+				aff := &v1.Affinity{
+					NodeAffinity: &v1.NodeAffinity{
+						RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+							NodeSelectorTerms: []v1.NodeSelectorTerm{{
+								MatchExpressions: []v1.NodeSelectorRequirement{{
+									Key:      "type",
 									Operator: v1.NodeSelectorOpExists,
 								}},
 							}},
 						},
 					},
 				}
-				i.Spec.KubernetesProvider = operatorv1.ProviderEKS
+				comps.typha.Spec.Template.Spec.Affinity = aff
+				i.Spec.KubernetesProvider = operatorv1.ProviderAKS
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+				Expect(*i.Spec.TyphaDeployment.Spec.Template.Spec.Affinity).To(Equal(*aff))
+			})
+		})
+
+		Describe("kube-controllers", func() {
+			It("should not error for nil nodeSelector", func() {
+				comps.kubeControllers.Spec.Template.Spec.NodeSelector = nil
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+			})
+			It("should add nodeSelector to the installation", func() {
+				comps.kubeControllers.Spec.Template.Spec.NodeSelector = map[string]string{"foo": "bar"}
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
+				Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("foo", "bar"))
+			})
+			It("should remove linux OS nodeSelector terms", func() {
+				comps.kubeControllers.Spec.Template.Spec.NodeSelector = map[string]string{
+					"beta.kubernetes.io/os": "linux",
+					"foo":                   "bar",
+					"kubernetes.io/os":      "linux",
+				}
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
+				Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("foo", "bar"))
+			})
+			It("should not error if the same nodeSelector is in the resource and the installation", func() {
+				comps.kubeControllers.Spec.Template.Spec.NodeSelector = map[string]string{
+					"foo":              "bar",
+					"kubernetes.io/os": "linux",
+				}
+				// We remove the OS nodeSelector key/value pair so they are equal
+				helpers.EnsureKubeControllersNodeSelectorNotNil(i)
+				i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector = map[string]string{
+					"foo": "bar",
+				}
+
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
+				Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("foo", "bar"))
+			})
+			It("should error if the nodeSelector key exists in the resource and the installation but values differ", func() {
+				comps.kubeControllers.Spec.Template.Spec.NodeSelector = map[string]string{"foo": "bar"}
+				helpers.EnsureKubeControllersNodeSelectorNotNil(i)
+				i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector = map[string]string{"foo": "baz"}
 				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
 			})
-		})
-		Describe("typha", func() {
-			TestNodeSelectors(func(nodeSelectors map[string]string) {
-				comps.typha.Spec.Template.Spec.NodeSelector = nodeSelectors
+			It("should error if the nodeSelector exists in the installation but not the resource", func() {
+				comps.kubeControllers.Spec.Template.Spec.NodeSelector = map[string]string{}
+				helpers.EnsureKubeControllersNodeSelectorNotNil(i)
+				i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector = map[string]string{"foo": "baz"}
+				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
 			})
-
-			Context("affinities", func() {
-				It("should not error if no affinity is set", func() {
-					Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
-				})
-				It("should migrate a Preferred nodeAffinity", func() {
-					terms := []v1.PreferredSchedulingTerm{{
-						Weight: 100,
-						Preference: v1.NodeSelectorTerm{
-							MatchExpressions: []v1.NodeSelectorRequirement{{
-								Key:      "foo",
-								Operator: corev1.NodeSelectorOpIn,
-								Values:   []string{"foo", "bar"},
-							}},
-						},
-					}}
-					comps.typha.Spec.Template.Spec.Affinity = &v1.Affinity{
-						NodeAffinity: &v1.NodeAffinity{
-							PreferredDuringSchedulingIgnoredDuringExecution: terms,
-						},
-					}
-					Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
-					Expect(i.Spec.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution).To(Equal(terms))
-				})
-				It("should error for a Required nodeAffinity", func() {
-					comps.typha.Spec.Template.Spec.Affinity = &v1.Affinity{
-						NodeAffinity: &v1.NodeAffinity{
-							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-								NodeSelectorTerms: []v1.NodeSelectorTerm{{
-									MatchFields: []v1.NodeSelectorRequirement{{
-										Key: "foo",
-									}},
-								}},
-							},
-						},
-					}
-					Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
-				})
-				It("should error if podAffinity is set", func() {
-					comps.typha.Spec.Template.Spec.Affinity = &v1.Affinity{
-						PodAffinity: &v1.PodAffinity{
-							RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{{
-								LabelSelector: nil,
-							}},
-						},
-					}
-					Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
-				})
-				It("should error if podAntiAffinity is set", func() {
-					comps.typha.Spec.Template.Spec.Affinity = &v1.Affinity{
-						PodAntiAffinity: &v1.PodAntiAffinity{
-							RequiredDuringSchedulingIgnoredDuringExecution: []v1.PodAffinityTerm{{
-								LabelSelector: nil,
-							}},
-						},
-					}
-					Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
-				})
-			})
-		})
-
-		// kube-controllers has a configurable nodeSelector which should
-		// be carried forward
-		Context("kube-controllers", func() {
-			It("should carry forward custom nodeSelector on kube-controllers, but drop the os nodeselector", func() {
-				comps.kubeControllers.Spec.Template.Spec.NodeSelector = map[string]string{
-					"kubernetes.io/os": "linux",
-					"foo":              "bar",
-				}
+			It("should not error for empty affinity", func() {
+				comps.kubeControllers.Spec.Template.Spec.Affinity = &v1.Affinity{}
 				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
-				Expect(i.Spec.ControlPlaneNodeSelector).To(Equal(map[string]string{"foo": "bar"}))
+				Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Affinity).To(Equal(comps.node.Spec.Template.Spec.Affinity))
 			})
+			It("should not error for nil affinity", func() {
+				comps.kubeControllers.Spec.Template.Spec.Affinity = nil
+				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
+				Expect(i.Spec.CalicoKubeControllersDeployment).To(BeNil())
+			})
+			It("should not error if the same affinity is in the resource and the installation", func() {
+				comps.kubeControllers.Spec.Template.Spec.Affinity = aff1
+				helpers.EnsureKubeControllersPodSpecNotNil(i)
+				i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Affinity = aff1
 
-			It("should carry forward other kubernetes.io/os nodeSelectors", func() {
-				comps.kubeControllers.Spec.Template.Spec.NodeSelector = map[string]string{
-					"kubernetes.io/os": "windows",
-				}
-				// we don't expect an error to occur here, because the final validation handler should catch this.
 				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
-				Expect(i.Spec.ControlPlaneNodeSelector).To(Equal(map[string]string{"kubernetes.io/os": "windows"}))
+				Expect(*i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Affinity).To(Equal(*aff1))
 			})
-			It("should not set nodeSelector if none is set", func() {
-				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
-				Expect(i.Spec.ControlPlaneNodeSelector).To(BeNil())
+			It("should error if the affinity exists in the resource and the installation but values differ", func() {
+				comps.kubeControllers.Spec.Template.Spec.Affinity = aff1
+				helpers.EnsureKubeControllersPodSpecNotNil(i)
+				i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Affinity = aff2
+
+				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
+			})
+			It("should error if the affinity exists in the installation but not the resource", func() {
+				helpers.EnsureKubeControllersPodSpecNotNil(i)
+				i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Affinity = aff1
+				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
 			})
 		})
 	})

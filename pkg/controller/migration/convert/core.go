@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 
+	comp "github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/migration/convert/helpers"
 
 	"github.com/tigera/operator/pkg/render"
@@ -448,107 +449,163 @@ func addInitContainerResources(install *operatorv1.Installation, componentName, 
 	return nil
 }
 
-// handleNodeSelectors is a migration handler which ensures that nodeSelectors are set as expected.
-// In general, setting custom nodeSelectors and nodeAffinity for components is not supported.
-// The exception to this is the calico-node nodeSelector, which is migrated into the
-// ControlPlaneNodeSelector field.
-func handleNodeSelectors(c *components, install *operatorv1.Installation) error {
-	// check calico-node nodeSelectors
-	if c.node.Spec.Template.Spec.Affinity != nil {
-		if !(install.Spec.KubernetesProvider == operatorv1.ProviderAKS && reflect.DeepEqual(c.node.Spec.Template.Spec.Affinity, &corev1.Affinity{
-			NodeAffinity: &corev1.NodeAffinity{
-				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
-					NodeSelectorTerms: []corev1.NodeSelectorTerm{{
-						MatchExpressions: []corev1.NodeSelectorRequirement{{
-							Key:      "type",
-							Operator: corev1.NodeSelectorOpNotIn,
-							Values:   []string{"virtual-kubelet"},
-						}},
-					}},
-				},
-			},
-		})) && !(install.Spec.KubernetesProvider == operatorv1.ProviderEKS && reflect.DeepEqual(c.node.Spec.Template.Spec.Affinity, &corev1.Affinity{
-			NodeAffinity: &corev1.NodeAffinity{
-				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
-					NodeSelectorTerms: []corev1.NodeSelectorTerm{{
-						MatchExpressions: []corev1.NodeSelectorRequirement{{
-							Key:      "eks.amazonaws.com/compute-type",
-							Operator: corev1.NodeSelectorOpNotIn,
-							Values:   []string{"fargate"},
-						}},
-					}},
-				},
-			},
-		})) {
-			return ErrIncompatibleCluster{
-				err:       "node affinity not supported for calico-node daemonset",
-				component: ComponentCalicoNode,
-				fix:       "remove the affinity",
-			}
+func hasNodeSelector(override comp.ReplicatedPodResourceOverrides) bool {
+	if reflect.ValueOf(override).IsNil() {
+		return false
+	}
+	return len(override.GetNodeSelector()) > 0
+}
+
+func mergeComponentMapWithInstallation(componentName string, install, comp map[string]string, errFunc func(key string) error) error {
+	// Verify that any items on the installation exist on the component.
+	for k, v := range install {
+		if x, ok := comp[k]; !ok || x != v {
+			return errFunc(k)
 		}
 	}
+	// Copy items from the component to the install.
+	for k, v := range comp {
+		// If a key already exists in the install but values differ, return an error.
+		if x, ok := install[k]; ok && x != v {
+			return errFunc(k)
+		}
+		install[k] = v
+	}
+
+	return nil
+}
+
+// mergeNodeSelector merges the nodeSelector on the component with that on the installation.
+func mergeNodeSelector(componentName string, installNodeSelector, compNodeSelector map[string]string) error {
+	return mergeComponentMapWithInstallation(componentName, installNodeSelector, compNodeSelector, func(key string) error {
+		return ErrIncompatibleNodeSelector(key, componentName)
+	})
+}
+
+func getTyphaAffinity(install *operatorv1.Installation) *corev1.Affinity {
+	// TyphaDeployment affinity takes precedence.
+	if install.Spec.TyphaDeployment != nil && install.Spec.TyphaDeployment.GetAffinity() != nil {
+		return install.Spec.TyphaDeployment.GetAffinity()
+	}
+
+	// If TyphaAffinity is defined, convert it to a v1.Affinity and return it
+	if install.Spec.TyphaAffinity != nil && install.Spec.TyphaAffinity.NodeAffinity != nil {
+		return &corev1.Affinity{
+			NodeAffinity: &corev1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution:  install.Spec.TyphaAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution,
+				PreferredDuringSchedulingIgnoredDuringExecution: install.Spec.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
+			},
+		}
+	}
+	return nil
+}
+
+// handleNodeSelectors is a migration handler which ensures that nodeSelectors and affinities are set as expected.
+func handleNodeSelectors(c *components, install *operatorv1.Installation) error {
+	// Handle calico-node.
+	if c.node.Spec.Template.Spec.Affinity != nil {
+		if install.Spec.CalicoNodeDaemonSet == nil || install.Spec.CalicoNodeDaemonSet.GetAffinity() == nil {
+			// Affinity set on the component but not the installation so migrate it over.
+			helpers.EnsureCalicoNodePodSpecNotNil(install)
+			install.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity = c.node.Spec.Template.Spec.Affinity
+		} else {
+			// Affinity is set on the component and the installation, verify that they match.
+			if !reflect.DeepEqual(c.node.Spec.Template.Spec.Affinity, install.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity) {
+				return ErrIncompatibleAffinity(ComponentCalicoNode)
+			}
+		}
+	} else {
+		// Affinity is not set on the component, check if it's set on the installation.
+		if install.Spec.CalicoNodeDaemonSet != nil && install.Spec.CalicoNodeDaemonSet.GetAffinity() != nil {
+			return ErrIncompatibleAffinity(ComponentCalicoNode)
+		}
+	}
+
 	nodeSel := removeOSNodeSelectors(c.node.Spec.Template.Spec.NodeSelector)
 	delete(nodeSel, "projectcalico.org/operator-node-migration")
-	if len(nodeSel) > 0 {
-		// raise error unless the only nodeSelector is the  calico-node migration nodeSelector
-		return ErrIncompatibleCluster{
-			err:       fmt.Sprintf("unsupported nodeSelector for calico-node daemonset: %v", nodeSel),
-			component: ComponentCalicoNode,
-			fix:       "remove the nodeSelector",
-		}
 
+	// Merge any remaining nodeSelectors into the installation.
+	if len(nodeSel) == 0 {
+		if hasNodeSelector(install.Spec.CalicoNodeDaemonSet) {
+			return ErrNodeSelectorOnlyOnInstall(ComponentCalicoNode)
+		}
+	} else {
+		helpers.EnsureCalicoNodeNodeSelectorNotNil(install)
+		if err := mergeNodeSelector(ComponentCalicoNode, install.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector, nodeSel); err != nil {
+			return err
+		}
 	}
 
-	// check typha nodeSelectors
+	// Handle typha.
+	// We treat typha differently from the node and kube-controllers since there are two fields to determine typha affinity.
 	if c.typha != nil {
-		// we can migrate typha affinities provided they are a NodeAffinity for Preferred.
-		if aff := c.typha.Spec.Template.Spec.Affinity; aff != nil {
-			if aff.PodAffinity != nil || aff.PodAntiAffinity != nil {
-				return ErrIncompatibleCluster{
-					err:       "pod affinity and antiAffinity not supported for typha deployment",
-					component: ComponentTypha,
-					fix:       "remove the affinity",
+		installAffinity := getTyphaAffinity(install)
+		if c.typha.Spec.Template.Spec.Affinity != nil {
+			if installAffinity != nil {
+				// Affinity is set on the component and the installation, verify that they match.
+				if !reflect.DeepEqual(c.typha.Spec.Template.Spec.Affinity, installAffinity) {
+					return ErrIncompatibleAffinity(ComponentTypha)
 				}
 			}
-			if aff.NodeAffinity != nil {
-				if aff.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
-					return ErrIncompatibleCluster{
-						err:       "nodeAffinity 'RequiredDuringSchedulingIgnoredDuringExecution' not supported on Typha.",
-						component: ComponentTypha,
-						fix:       "remove the affinity",
-					}
-				}
-				install.Spec.TyphaAffinity = &operatorv1.TyphaAffinity{
-					NodeAffinity: &operatorv1.NodeAffinity{
-						PreferredDuringSchedulingIgnoredDuringExecution: aff.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
-					},
-				}
+			// Ensure that the affinity on the installation uses the new field and clears the deprecated TyphaAffinity.
+			helpers.EnsureTyphaPodSpecNotNil(install)
+			install.Spec.TyphaDeployment.Spec.Template.Spec.Affinity = c.typha.Spec.Template.Spec.Affinity
+			install.Spec.TyphaAffinity = nil
+		} else {
+			// Affinity is not set on the component, check if it's set on the installation.
+			if installAffinity != nil {
+				return ErrIncompatibleAffinity(ComponentTypha)
 			}
 		}
-		if nodeSel := removeOSNodeSelectors(c.typha.Spec.Template.Spec.NodeSelector); len(nodeSel) != 0 {
-			return ErrIncompatibleCluster{
-				err:       fmt.Sprintf("invalid nodeSelector for typha deployment: %v", nodeSel),
-				component: ComponentTypha,
-				fix:       "remove the nodeSelector",
+
+		nodeSel := removeOSNodeSelectors(c.typha.Spec.Template.Spec.NodeSelector)
+
+		// Merge any remaining nodeSelectors into the installation.
+		if len(nodeSel) == 0 {
+			if hasNodeSelector(install.Spec.TyphaDeployment) {
+				return ErrNodeSelectorOnlyOnInstall(ComponentTypha)
+			}
+		} else {
+			helpers.EnsureTyphaNodeSelectorNotNil(install)
+			if err := mergeNodeSelector(ComponentTypha, install.Spec.TyphaDeployment.Spec.Template.Spec.NodeSelector, nodeSel); err != nil {
+				return err
 			}
 		}
 	}
 
-	// check kube-controllers nodeSelectors
+	// Handle kube-controllers
 	if c.kubeControllers != nil {
+		// Handle affinity.
 		if c.kubeControllers.Spec.Template.Spec.Affinity != nil {
-			return ErrIncompatibleCluster{
-				err:       "node affinity not supported for kube-controller deployment",
-				component: ComponentKubeControllers,
-				fix:       "remove the affinity",
+			if install.Spec.CalicoKubeControllersDeployment == nil || install.Spec.CalicoKubeControllersDeployment.GetAffinity() == nil {
+				// Affinity set on the component but not the installation so migrate it over.
+				helpers.EnsureKubeControllersPodSpecNotNil(install)
+				install.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Affinity = c.node.Spec.Template.Spec.Affinity
+			} else {
+				// Affinity is set on the component and the installation, verify that they match.
+				if !reflect.DeepEqual(c.kubeControllers.Spec.Template.Spec.Affinity, install.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Affinity) {
+					return ErrIncompatibleAffinity(ComponentKubeControllers)
+				}
+			}
+		} else {
+			// Affinity is not set on the component, check if it's set on the installation.
+			if install.Spec.CalicoKubeControllersDeployment != nil && install.Spec.CalicoKubeControllersDeployment.GetAffinity() != nil {
+				return ErrIncompatibleAffinity(ComponentKubeControllers)
 			}
 		}
 
-		// kube-controllers nodeSelector is unique in that we do have an API for setting it's nodeSelectors.
-		// operator rendering code will automatically set the kubernetes.io/os=linux selector, so we just
-		// want to set the field to any other nodeSelectors set on it.
-		if sels := removeOSNodeSelectors(c.kubeControllers.Spec.Template.Spec.NodeSelector); len(sels) != 0 {
-			install.Spec.ControlPlaneNodeSelector = sels
+		nodeSel := removeOSNodeSelectors(c.kubeControllers.Spec.Template.Spec.NodeSelector)
+
+		// Merge any remaining nodeSelectors into the installation.
+		if len(nodeSel) == 0 {
+			if hasNodeSelector(install.Spec.CalicoKubeControllersDeployment) {
+				return ErrNodeSelectorOnlyOnInstall(ComponentKubeControllers)
+			}
+		} else {
+			helpers.EnsureKubeControllersNodeSelectorNotNil(install)
+			if err := mergeNodeSelector(ComponentKubeControllers, install.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector, nodeSel); err != nil {
+				return err
+			}
 		}
 	}
 

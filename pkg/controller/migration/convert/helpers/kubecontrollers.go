@@ -91,6 +91,13 @@ func EnsureKubeControllersContainersNotNil(install *operatorv1.Installation) {
 	}
 }
 
+func EnsureKubeControllersNodeSelectorNotNil(install *operatorv1.Installation) {
+	EnsureKubeControllersPodSpecNotNil(install)
+	if install.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector == nil {
+		install.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector = map[string]string{}
+	}
+}
+
 func EnsureKubeControllersPodSpecNotNil(install *operatorv1.Installation) {
 	if install.Spec.CalicoKubeControllersDeployment == nil {
 		install.Spec.CalicoKubeControllersDeployment = &operatorv1.CalicoKubeControllersDeployment{

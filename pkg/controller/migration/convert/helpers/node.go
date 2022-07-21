@@ -98,6 +98,13 @@ func EnsureCalicoNodeInitContainersNotNil(install *operatorv1.Installation) {
 	}
 }
 
+func EnsureCalicoNodeNodeSelectorNotNil(install *operatorv1.Installation) {
+	EnsureCalicoNodePodSpecNotNil(install)
+	if install.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector == nil {
+		install.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector = map[string]string{}
+	}
+}
+
 func EnsureCalicoNodePodSpecNotNil(install *operatorv1.Installation) {
 	if install.Spec.CalicoNodeDaemonSet == nil {
 		install.Spec.CalicoNodeDaemonSet = &operatorv1.CalicoNodeDaemonSet{

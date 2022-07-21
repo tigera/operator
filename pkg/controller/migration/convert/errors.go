@@ -81,3 +81,26 @@ func ErrLabelsOnlyOnInstall(component string) error {
 		fix:       "remove the labels from the Installation resource, or add them to the component",
 	}
 }
+
+func ErrIncompatibleNodeSelector(nodeSelectorKey, component string) error {
+	return ErrIncompatibleCluster{
+		err:       fmt.Sprintf("nodeSelector %q differs in the Installation and the migration source", nodeSelectorKey),
+		component: component,
+		fix:       "remove the nodeSelector from the Installation resource, or remove it from the component",
+	}
+}
+
+func ErrNodeSelectorOnlyOnInstall(component string) error {
+	return ErrIncompatibleCluster{
+		err:       "nodeSelector found in the Installation did not match the migration source",
+		component: component,
+		fix:       "remove the nodeSelector from the Installation resource, or add it to the component",
+	}
+}
+func ErrIncompatibleAffinity(component string) error {
+	return ErrIncompatibleCluster{
+		err:       "affinity differs in the Installation and the migration source",
+		component: component,
+		fix:       "remove the affinity from the Installation resource, or remove it from the component",
+	}
+}

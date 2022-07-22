@@ -722,6 +722,100 @@ var _ = Describe("core handler", func() {
 		})
 	})
 
+	Context("minReadySeconds", func() {
+		var zero int32 = 0
+		var one int32 = 1
+		var two int32 = 2
+
+		DescribeTable("calico-node", func(compMinReadySeconds *int32, installMinReadySeconds *int32, expectErr bool) {
+			if compMinReadySeconds != nil {
+				comps.node.Spec.MinReadySeconds = *compMinReadySeconds
+			}
+			if installMinReadySeconds != nil {
+				helpers.EnsureCalicoNodeSpecNotNil(i)
+				i.Spec.CalicoNodeDaemonSet.Spec.MinReadySeconds = installMinReadySeconds
+			}
+
+			err := handleCore(&comps, i)
+			if expectErr {
+				Expect(err).To(HaveOccurred())
+			} else {
+				// Only set minReadySeconds on the install if the value is not the default.
+				if compMinReadySeconds != nil && *compMinReadySeconds != 0 {
+					Expect(i.Spec.CalicoNodeDaemonSet.Spec.MinReadySeconds).ToNot(BeNil())
+					Expect(*i.Spec.CalicoNodeDaemonSet.Spec.MinReadySeconds).To(Equal(*compMinReadySeconds))
+				}
+			}
+		},
+			Entry("only component is 0", &zero, nil, false),
+			Entry("only component is non-zero", &one, nil, false),
+			Entry("only install is 0", nil, &zero, false),
+			Entry("only install is non-zero", nil, &one, true),
+			Entry("both component and install are 0", &zero, &zero, false),
+			Entry("both component and install are both non-zero and equal", &one, &one, false),
+			Entry("both component and install are both non-zero and not equal", &one, &two, true),
+			Entry("both component and install are both non-zero and not equal", &two, &one, true),
+		)
+		DescribeTable("typha", func(compMinReadySeconds *int32, installMinReadySeconds *int32, expectErr bool) {
+			if compMinReadySeconds != nil {
+				comps.typha.Spec.MinReadySeconds = *compMinReadySeconds
+			}
+			if installMinReadySeconds != nil {
+				helpers.EnsureTyphaPodSpecNotNil(i)
+				i.Spec.TyphaDeployment.Spec.MinReadySeconds = installMinReadySeconds
+			}
+
+			err := handleCore(&comps, i)
+			if expectErr {
+				Expect(err).To(HaveOccurred())
+			} else {
+				// Only set minReadySeconds on the install if the value is not the default.
+				if compMinReadySeconds != nil && *compMinReadySeconds != 0 {
+					Expect(i.Spec.TyphaDeployment.Spec.MinReadySeconds).ToNot(BeNil())
+					Expect(*i.Spec.TyphaDeployment.Spec.MinReadySeconds).To(Equal(*compMinReadySeconds))
+				}
+			}
+		},
+			Entry("only component is 0", &zero, nil, false),
+			Entry("only component is non-zero", &one, nil, false),
+			Entry("only install is 0", nil, &zero, false),
+			Entry("only install is non-zero", nil, &one, true),
+			Entry("both component and install are 0", &zero, &zero, false),
+			Entry("both component and install are both non-zero and equal", &one, &one, false),
+			Entry("both component and install are both non-zero and not equal", &one, &two, true),
+			Entry("both component and install are both non-zero and not equal", &two, &one, true),
+		)
+		DescribeTable("kubecontrollers", func(compMinReadySeconds *int32, installMinReadySeconds *int32, expectErr bool) {
+			if compMinReadySeconds != nil {
+				comps.kubeControllers.Spec.MinReadySeconds = *compMinReadySeconds
+			}
+			if installMinReadySeconds != nil {
+				helpers.EnsureKubeControllersPodSpecNotNil(i)
+				i.Spec.CalicoKubeControllersDeployment.Spec.MinReadySeconds = installMinReadySeconds
+			}
+
+			err := handleCore(&comps, i)
+			if expectErr {
+				Expect(err).To(HaveOccurred())
+			} else {
+				// Only set minReadySeconds on the install if the value is not the default.
+				if compMinReadySeconds != nil && *compMinReadySeconds != 0 {
+					Expect(i.Spec.CalicoKubeControllersDeployment.Spec.MinReadySeconds).ToNot(BeNil())
+					Expect(*i.Spec.CalicoKubeControllersDeployment.Spec.MinReadySeconds).To(Equal(*compMinReadySeconds))
+				}
+			}
+		},
+			Entry("only component is 0", &zero, nil, false),
+			Entry("only component is non-zero", &one, nil, false),
+			Entry("only install is 0", nil, &zero, false),
+			Entry("only install is non-zero", nil, &one, true),
+			Entry("both component and install are 0", &zero, &zero, false),
+			Entry("both component and install are both non-zero and equal", &one, &one, false),
+			Entry("both component and install are both non-zero and not equal", &one, &two, true),
+			Entry("both component and install are both non-zero and not equal", &two, &one, true),
+		)
+	})
+
 	Context("node update strategy", func() {
 		It("should not set updateStrategy if none is set", func() {
 			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())

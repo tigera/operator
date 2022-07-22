@@ -43,6 +43,17 @@ func EnsureCalicoNodeLabelsNotNil(install *operatorv1.Installation) {
 	}
 }
 
+func EnsureCalicoNodeSpecNotNil(install *operatorv1.Installation) {
+	if install.Spec.CalicoNodeDaemonSet == nil {
+		install.Spec.CalicoNodeDaemonSet = &operatorv1.CalicoNodeDaemonSet{
+			Spec: &operatorv1.CalicoNodeDaemonSetSpec{},
+		}
+	}
+	if install.Spec.CalicoNodeDaemonSet.Spec == nil {
+		install.Spec.CalicoNodeDaemonSet.Spec = &operatorv1.CalicoNodeDaemonSetSpec{}
+	}
+}
+
 func ensureCalicoNodePodTemplateMetadataNotNil(install *operatorv1.Installation) {
 	if install.Spec.CalicoNodeDaemonSet == nil {
 		install.Spec.CalicoNodeDaemonSet = &operatorv1.CalicoNodeDaemonSet{

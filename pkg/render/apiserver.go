@@ -983,6 +983,9 @@ func (c *apiServerComponent) startUpArgs() []string {
 		if c.cfg.ManagementCluster.Spec.Address != "" {
 			args = append(args, fmt.Sprintf("--managementClusterAddr=%s", c.cfg.ManagementCluster.Spec.Address))
 		}
+		if c.cfg.ManagementCluster.Spec.TLS.CA != "" {
+			args = append(args, fmt.Sprintf("--managementClusterCAType=%s", c.cfg.ManagementCluster.Spec.TLS.CA))
+		}
 	}
 
 	return args

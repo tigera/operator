@@ -44,6 +44,20 @@ spec:
                   that will connect both clusters. Valid examples are: "0.0.0.0:31000",
                   "example.com:32000", "[::1]:32500"'
                 type: string
+              tunnelCertType:
+                description: "TunnelCertType configures the type of certificate that
+                  voltron should use to serve its tunnel. \n When set to SelfSigned,
+                  voltron will use the same self-signed cert bundle which guardian
+                  client certs are signed with. \n When set to CASigned, the operator
+                  will expect a ca bundle secret to be created and use have voltron
+                  use it to serve TLS. The apiserver will no longer include the management
+                  cluster cert in the resource bundle produced when a new managed
+                  cluster resource is created. \n If modified from SelfSigned to CASigned,
+                  all managed clusters will disconnect as they will no longer be able
+                  to verify Voltron's identity. To reconnect existing managed clusters,
+                  generate a new cert bundle which the tigera-apiserver will generate
+                  without including the management cluster's cert. \n Default: SelfSigned"
+                type: string
             type: object
         type: object
     served: true

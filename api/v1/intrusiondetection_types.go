@@ -36,7 +36,7 @@ type IntrusionDetectionSpec struct {
 type AnomalyDetectionSpec struct {
 	// StorageType Sets the type of storage to use for storing Anomaly Detection Models. By default it will use the ephemeral
 	// emptyDir on the node AD will be deployed to.
-	// default: ephemeral
+	// default: Ephemeral
 	// +optional
 	// +kubebuilder:validation:Enum=ephemeral;Persistent
 	StorageType StorageType `json:"storageType,omitempty"`

@@ -293,12 +293,13 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	ch := utils.NewComponentHandler(log, r.Client, r.Scheme, managementClusterConnection)
 	guardianCfg := &render.GuardianConfiguration{
-		URL:               managementClusterConnection.Spec.ManagementClusterAddr,
-		PullSecrets:       pullSecrets,
-		Openshift:         r.Provider == operatorv1.ProviderOpenShift,
-		Installation:      instl,
-		TunnelSecret:      tunnelSecret,
-		TrustedCertBundle: trustedCertBundle,
+		URL:                managementClusterConnection.Spec.ManagementClusterAddr,
+		VerificationMethod: managementClusterConnection.Spec.ServerIdentityVerificationMethod,
+		PullSecrets:        pullSecrets,
+		Openshift:          r.Provider == operatorv1.ProviderOpenShift,
+		Installation:       instl,
+		TunnelSecret:       tunnelSecret,
+		TrustedCertBundle:  trustedCertBundle,
 	}
 
 	components := []render.Component{render.Guardian(guardianCfg)}

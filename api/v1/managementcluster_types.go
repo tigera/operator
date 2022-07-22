@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2012,2015-2022 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,7 +27,28 @@ type ManagementClusterSpec struct {
 	// Valid examples are: "0.0.0.0:31000", "example.com:32000", "[::1]:32500"
 	// +optional
 	Address string `json:"address,omitempty"`
+
+	// TunnelCertType configures the type of certificate that voltron should use to serve its tunnel.
+	//
+	// When set to SelfSigned, voltron will use the same self-signed cert bundle which guardian client certs are signed with.
+	//
+	// When set to CASigned, the operator will expect a ca bundle secret to be created and use have voltron use it to serve TLS.
+	// The apiserver will no longer include the management cluster cert in the resource bundle produced when a new managed cluster resource is created.
+	//
+	// If modified from SelfSigned to CASigned, all managed clusters will disconnect as they will no longer be able to verify Voltron's identity.
+	// To reconnect existing managed clusters, generate a new cert bundle which the tigera-apiserver will generate without including the management cluster's cert.
+	//
+	// Default: SelfSigned
+	// +optional
+	TunnelCertType TunnelCertType `json:"tunnelCertType,omitempty"`
 }
+
+type TunnelCertType string
+
+const (
+	TunnelCertSelfSigned TunnelCertType = "SelfSigned"
+	TunnelCertCASigned   TunnelCertType = "CASigned"
+)
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status

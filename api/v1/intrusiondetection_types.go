@@ -35,14 +35,15 @@ type IntrusionDetectionSpec struct {
 
 type AnomalyDetectionSpec struct {
 	// StorageType Sets the type of storage to use for storing Anomaly Detection Models. By default it will use the ephemeral
-	// emptyDir on the node AD will be deployed to. This field sets precedent for all AD Storage related fields and will only
-	// take into effect on Management and Standalone clusters.
-	// default: Ephemeral
+	// emptyDir on the node AD will be deployed to.
+	// default: ephemeral
+	// +optional
+	// +kubebuilder:validation:Enum=ephemeral;Persistent
 	StorageType StorageType `json:"storageType,omitempty"`
 
 	// StorageClassName will populate the PersistentVolumeClaim.StorageClassName that is used to provision disks for the
-	// Anomaly Detection API pod for model storage. The StorageClassName should only be modified when no LogStorage is currently
-	// active. We recommend choosing a storage class dedicated to Tigera LogStorage only. Otherwise, model retention
+	// Anomaly Detection API pod for model storage. The StorageClassName should only be modified when no StorageClass is currently
+	// active. We recommend choosing a storage class dedicated to AnomalyDetection only. Otherwise, model retention
 	// cannot be guaranteed during upgrades. See https://docs.tigera.io/maintenance/upgrading for up-to-date instructions.
 	// Default: tigera-anomaly-detection-storage
 	// +optional
@@ -53,11 +54,11 @@ type AnomalyDetectionSpec struct {
 type StorageType string
 
 const (
-	// Ephermeal storage type sets the ephermeal emptyDir() to be used by the component. Data created in this storage type will
+	// ephemeral storage type sets the ephemeral emptyDir() to be used by the component. Data created in this storage type will
 	// follow the Pod's lifetime and get created and deleted along with the Pod.
-	EphermealStorageType StorageType = "Ephermeal"
+	EphemeralStorageType StorageType = "Ephemeral"
 	// Persistent storage type sets the will attempt to query for the StorageClass specified by StorageClassName created for
-	// the component. It will utilize the provided StorageClass for the componenet's Volume.
+	// the component. It will utilize the provided StorageClass for the component's Volume.
 	PersistentStorageType StorageType = "Persistent"
 )
 

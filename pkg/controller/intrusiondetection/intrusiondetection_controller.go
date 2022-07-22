@@ -581,7 +581,7 @@ func (r *ReconcileIntrusionDetection) setDefaultsOnIntrusionDetection(ctx contex
 
 		if ids.Spec.AnomalyDetectionSpec == nil {
 			ids.Spec.AnomalyDetectionSpec = &operatorv1.AnomalyDetectionSpec{
-				StorageType: operatorv1.EphermealStorageType,
+				StorageType: operatorv1.EphemeralStorageType,
 			}
 		} else {
 			if ids.Spec.AnomalyDetectionSpec.StorageType == operatorv1.PersistentStorageType && len(ids.Spec.AnomalyDetectionSpec.StorageClassName) == 0 {

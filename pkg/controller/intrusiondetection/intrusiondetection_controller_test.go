@@ -624,7 +624,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Limits.Cpu()).Should(Equal(resource.MustParse(dpi.DefaultCPULimit)))
 			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Requests.Memory()).Should(Equal(resource.MustParse(dpi.DefaultMemoryRequest)))
 			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Limits.Memory()).Should(Equal(resource.MustParse(dpi.DefaultMemoryLimit)))
-			Expect(ids.Spec.AnomalyDetectionSpec.StorageType).To(Equal(operatorv1.EphermealStorageType))
+			Expect(ids.Spec.AnomalyDetectionSpec.StorageType).To(Equal(operatorv1.EphemeralStorageType))
 		})
 
 		It("should set AD storage type name with the default value if storage type is persistent and its name is not provided", func() {

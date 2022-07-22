@@ -122,6 +122,11 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 	// node update-strategy
 	install.Spec.NodeUpdateStrategy = c.node.Spec.UpdateStrategy
 
+	// minReadySeconds
+	if err := migrateMinReadySeconds(c, install); err != nil {
+		return err
+	}
+
 	// alp
 	vol := getVolume(c.node.Spec.Template.Spec, "flexvol-driver-host")
 	if vol != nil {
@@ -224,6 +229,73 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 	c.node.ignoreEnv("upgrade-ipam", "CALICO_NETWORKING_BACKEND")
 	c.node.ignoreEnv("install-cni", "SLEEP")
 
+	return nil
+}
+
+func getMinReadySeconds(override comp.ReplicatedPodResourceOverrides) *int32 {
+	if reflect.ValueOf(override).IsNil() {
+		return nil
+	}
+	return override.GetMinReadySeconds()
+}
+
+func migrateMinReadySeconds(c *components, install *operatorv1.Installation) error {
+	// Handle calico-node
+	minReadySeconds := getMinReadySeconds(install.Spec.CalicoNodeDaemonSet)
+	if c.node.Spec.MinReadySeconds > 0 {
+		if minReadySeconds == nil {
+			// minReadySeconds set on the component but not the installation so migrate it over.
+			helpers.EnsureCalicoNodeSpecNotNil(install)
+			install.Spec.CalicoNodeDaemonSet.Spec.MinReadySeconds = &c.node.Spec.MinReadySeconds
+		} else {
+			if *minReadySeconds != c.node.Spec.MinReadySeconds {
+				return ErrIncompatibleMinReadySeconds(ComponentCalicoNode)
+			}
+		}
+	} else {
+		// minReadySeconds is not set on the component, check if it's set on the installation.
+		if minReadySeconds != nil {
+			return ErrIncompatibleMinReadySeconds(ComponentCalicoNode)
+		}
+	}
+
+	// Handle typha
+	minReadySeconds = getMinReadySeconds(install.Spec.TyphaDeployment)
+	if c.typha.Spec.MinReadySeconds > 0 {
+		if minReadySeconds == nil {
+			// minReadySeconds set on the component but not the installation so migrate it over.
+			helpers.EnsureTyphaPodSpecNotNil(install)
+			install.Spec.TyphaDeployment.Spec.MinReadySeconds = &c.typha.Spec.MinReadySeconds
+		} else {
+			if *minReadySeconds != c.typha.Spec.MinReadySeconds {
+				return ErrIncompatibleMinReadySeconds(ComponentTypha)
+			}
+		}
+	} else {
+		// minReadySeconds is not set on the component, check if it's set on the installation.
+		if minReadySeconds != nil {
+			return ErrIncompatibleMinReadySeconds(ComponentTypha)
+		}
+	}
+
+	// Handle kubecontrollers
+	minReadySeconds = getMinReadySeconds(install.Spec.CalicoKubeControllersDeployment)
+	if c.kubeControllers.Spec.MinReadySeconds > 0 {
+		if minReadySeconds == nil {
+			// minReadySeconds set on the component but not the installation so migrate it over.
+			helpers.EnsureKubeControllersPodSpecNotNil(install)
+			install.Spec.CalicoKubeControllersDeployment.Spec.MinReadySeconds = &c.kubeControllers.Spec.MinReadySeconds
+		} else {
+			if *minReadySeconds != c.kubeControllers.Spec.MinReadySeconds {
+				return ErrIncompatibleMinReadySeconds(ComponentKubeControllers)
+			}
+		}
+	} else {
+		// minReadySeconds is not set on the component, check if it's set on the installation.
+		if minReadySeconds != nil {
+			return ErrIncompatibleMinReadySeconds(ComponentKubeControllers)
+		}
+	}
 	return nil
 }
 

@@ -43,6 +43,17 @@ func EnsureTyphaLabelsNotNil(install *operatorv1.Installation) {
 	}
 }
 
+func EnsureTyphaSpecNotNil(install *operatorv1.Installation) {
+	if install.Spec.TyphaDeployment == nil {
+		install.Spec.TyphaDeployment = &operatorv1.TyphaDeployment{
+			Spec: &operatorv1.TyphaDeploymentSpec{},
+		}
+	}
+	if install.Spec.TyphaDeployment.Spec == nil {
+		install.Spec.TyphaDeployment.Spec = &operatorv1.TyphaDeploymentSpec{}
+	}
+}
+
 func ensureTyphaPodTemplateMetadataNotNil(install *operatorv1.Installation) {
 	if install.Spec.TyphaDeployment == nil {
 		install.Spec.TyphaDeployment = &operatorv1.TyphaDeployment{

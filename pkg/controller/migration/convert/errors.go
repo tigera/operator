@@ -97,10 +97,19 @@ func ErrNodeSelectorOnlyOnInstall(component string) error {
 		fix:       "remove the nodeSelector from the Installation resource, or add it to the component",
 	}
 }
+
 func ErrIncompatibleAffinity(component string) error {
 	return ErrIncompatibleCluster{
 		err:       "affinity differs in the Installation and the migration source",
 		component: component,
 		fix:       "remove the affinity from the Installation resource, or remove it from the component",
+	}
+}
+
+func ErrIncompatibleMinReadySeconds(component string) error {
+	return ErrIncompatibleCluster{
+		err:       "minReadySeconds differs in the Installation and the migration source",
+		component: component,
+		fix:       "remove the minReadySeconds from the Installation resource, or remove it from the component",
 	}
 }

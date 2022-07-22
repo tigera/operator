@@ -18,6 +18,7 @@ package render
 
 import (
 	"net"
+	"strconv"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/api/pkg/lib/numorstring"
@@ -81,6 +82,8 @@ type GuardianConfiguration struct {
 	Installation      *operatorv1.InstallationSpec
 	TunnelSecret      *corev1.Secret
 	TrustedCertBundle certificatemanagement.TrustedBundle
+
+	VerificationMethod operatorv1.TunnelCertType
 }
 
 type GuardianComponent struct {
@@ -269,6 +272,7 @@ func (c *GuardianComponent) container() []corev1.Container {
 				{Name: "GUARDIAN_VOLTRON_URL", Value: c.cfg.URL},
 				{Name: "GUARDIAN_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 				{Name: "GUARDIAN_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+				{Name: "GUARDIAN_USE_PUBLIC_CA", Value: strconv.FormatBool(c.cfg.VerificationMethod == operatorv1.TunnelCertCASigned)},
 			},
 			VolumeMounts: c.volumeMounts(),
 			LivenessProbe: &corev1.Probe{

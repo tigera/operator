@@ -43,6 +43,15 @@ spec:
                   cluster. Ex.: "10.128.0.10:30449". A managed cluster should be able
                   to access this address. This field is used by managed clusters only.'
                 type: string
+              tunnelCertType:
+                description: "ServerIdentityVerificationMethod configures the way
+                  which guardian should verify voltron's identity. \n When set to
+                  SelfSigned, guardian will expect a cert in the certificate bundle
+                  which can be used to verify voltron's identity, and will expect
+                  voltron's cert to have a SN of 'voltron'. \n When set to CASigned,
+                  guardian will use its system CA certs in combination with the managementClusterAddr
+                  to verify voltron's identity."
+                type: string
             type: object
         type: object
     served: true

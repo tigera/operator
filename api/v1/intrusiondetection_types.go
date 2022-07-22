@@ -30,6 +30,7 @@ type IntrusionDetectionSpec struct {
 
 	// AnomalyDetectionSpec provides configuration for running AnomalyDetection Component within
 	// IntrusionDetection
+	// +optional
 	AnomalyDetectionSpec *AnomalyDetectionSpec `json:"anomalyDetectionSpec,omitempty"`
 }
 

@@ -421,6 +421,16 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	var tunnelSecret certificatemanagement.KeyPairInterface
 	var internalTrafficSecret certificatemanagement.KeyPairInterface
 	if managementCluster != nil {
+		preDefaultPatchFrom := client.MergeFrom(managementCluster.DeepCopy())
+		fillDefaults(managementCluster)
+
+		// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
+		// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
+		if err := r.client.Patch(ctx, managementCluster, preDefaultPatchFrom); err != nil {
+			r.status.SetDegraded(string(operatorv1.ResourceUpdateError), err.Error())
+			return reconcile.Result{}, err
+		}
+
 		// We expect that the secret that holds the certificates for tunnel certificate generation
 		// is already created by the Api Server
 		tunnelSecret, err = certificateManager.GetKeyPair(r.client, render.VoltronTunnelSecretName, common.OperatorNamespace())
@@ -535,4 +545,13 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func fillDefaults(mc *operatorv1.ManagementCluster) {
+	if mc.Spec.TLS == nil {
+		mc.Spec.TLS = &operatorv1.TLS{}
+	}
+	if mc.Spec.TLS.SecretName == "" {
+		mc.Spec.TLS.SecretName = render.VoltronTunnelSecretName
+	}
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020, 2022 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,7 +27,41 @@ type IntrusionDetectionSpec struct {
 	// Only DeepPacketInspection is supported for this spec.
 	// +optional
 	ComponentResources []IntrusionDetectionComponentResource `json:"componentResources,omitempty"`
+
+	// AnomalyDetectionSpec provides configuration for running AnomalyDetection Component within
+	// IntrusionDetection
+	// +optional
+	AnomalyDetectionSpec *AnomalyDetectionSpec `json:"anomalyDetectionSpec,omitempty"`
 }
+
+type AnomalyDetectionSpec struct {
+	// StorageType Sets the type of storage to use for storing Anomaly Detection Models. By default it will use the ephemeral
+	// emptyDir on the node AD will be deployed to.
+	// default: Ephemeral
+	// +optional
+	// +kubebuilder:validation:Enum=ephemeral;Persistent
+	StorageType StorageType `json:"storageType,omitempty"`
+
+	// StorageClassName will populate the PersistentVolumeClaim.StorageClassName that is used to provision disks for the
+	// Anomaly Detection API pod for model storage. The StorageClassName should only be modified when no StorageClass is currently
+	// active. We recommend choosing a storage class dedicated to AnomalyDetection only. Otherwise, model retention
+	// cannot be guaranteed during upgrades. See https://docs.tigera.io/maintenance/upgrading for up-to-date instructions.
+	// Default: tigera-anomaly-detection-storage
+	// +optional
+	StorageClassName string `json:"storageClassName,omitempty"`
+}
+
+// StorageType is sets the type of storage to be used for the specified component.
+type StorageType string
+
+const (
+	// ephemeral storage type sets the ephemeral emptyDir() to be used by the component. Data created in this storage type will
+	// follow the Pod's lifetime and get created and deleted along with the Pod.
+	EphemeralStorageType StorageType = "Ephemeral"
+	// Persistent storage type sets the will attempt to query for the StorageClass specified by StorageClassName created for
+	// the component. It will utilize the provided StorageClass for the component's Volume.
+	PersistentStorageType StorageType = "Persistent"
+)
 
 // IntrusionDetectionStatus defines the observed state of Tigera intrusion detection capabilities.
 type IntrusionDetectionStatus struct {

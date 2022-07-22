@@ -579,19 +579,20 @@ func (r *ReconcileIntrusionDetection) setDefaultsOnIntrusionDetection(ctx contex
 			},
 		}
 
-		if ids.Spec.AnomalyDetectionSpec == nil {
-			ids.Spec.AnomalyDetectionSpec = &operatorv1.AnomalyDetectionSpec{
-				StorageType: operatorv1.EphemeralStorageType,
-			}
-		} else {
-			if ids.Spec.AnomalyDetectionSpec.StorageType == operatorv1.PersistentStorageType && len(ids.Spec.AnomalyDetectionSpec.StorageClassName) == 0 {
-				ids.Spec.AnomalyDetectionSpec.StorageClassName = render.DefaultADStorageClassName
-			}
-		}
+	}
 
-		if err := r.client.Update(ctx, ids); err != nil {
-			return err
+	if ids.Spec.AnomalyDetectionSpec == nil {
+		ids.Spec.AnomalyDetectionSpec = &operatorv1.AnomalyDetectionSpec{
+			StorageType: operatorv1.EphemeralStorageType,
 		}
+	} else {
+		if ids.Spec.AnomalyDetectionSpec.StorageType == operatorv1.PersistentStorageType && len(ids.Spec.AnomalyDetectionSpec.StorageClassName) == 0 {
+			ids.Spec.AnomalyDetectionSpec.StorageClassName = render.DefaultADStorageClassName
+		}
+	}
+
+	if err := r.client.Update(ctx, ids); err != nil {
+		return err
 	}
 
 	return nil

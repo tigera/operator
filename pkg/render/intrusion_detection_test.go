@@ -15,7 +15,6 @@
 package render_test
 
 import (
-	"fmt"
 	"strconv"
 
 	. "github.com/onsi/ginkgo"
@@ -307,12 +306,12 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 
 		adAPIPV := rtest.GetResource(resources, testADStorageClassName, render.IntrusionDetectionNamespace, "", "v1", "PersistentVolume").(*corev1.PersistentVolume)
 		Expect(adAPIPV.Spec.StorageClassName).To(Equal(testADStorageClassName))
-		Expect(adAPIPV.Spec.Capacity[corev1.ResourceStorage]).To(Equal(resource.MustParse(fmt.Sprintf("%dGi", render.DefaultAnomalyDetectionPVRequestSizeGi))))
+		Expect(adAPIPV.Spec.Capacity[corev1.ResourceStorage]).To(Equal(resource.MustParse(render.DefaultAnomalyDetectionPVRequestSizeGi)))
 		Expect(adAPIPV.Spec.PersistentVolumeSource.HostPath.Path).To(Equal("/storage"))
 
 		adAPIPVC := rtest.GetResource(resources, testADStorageClassName, render.IntrusionDetectionNamespace, "", "v1", "PersistentVolumeClaim").(*corev1.PersistentVolumeClaim)
 		Expect(*adAPIPVC.Spec.StorageClassName).To(Equal(testADStorageClassName))
-		Expect(adAPIPVC.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse(fmt.Sprintf("%dGi", render.DefaultAnomalyDetectionPVRequestSizeGi))))
+		Expect(adAPIPVC.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse(render.DefaultAnomalyDetectionPVRequestSizeGi)))
 
 		adAPIDeployment := rtest.GetResource(resources, render.ADAPIObjectName, render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(adAPIDeployment.Spec.Template.Spec.Volumes).To(ContainElement(

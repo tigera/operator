@@ -39,7 +39,7 @@ type AnomalyDetectionSpec struct {
 	// emptyDir on the node AD will be deployed to.
 	// default: Ephemeral
 	// +optional
-	// +kubebuilder:validation:Enum=ephemeral;Persistent
+	// +kubebuilder:validation:Enum=Ephemeral;Persistent
 	StorageType StorageType `json:"storageType,omitempty"`
 
 	// StorageClassName will populate the PersistentVolumeClaim.StorageClassName that is used to provision disks for the

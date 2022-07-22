@@ -56,7 +56,7 @@ spec:
                       ephemeral emptyDir on the node AD will be deployed to. default:
                       Ephemeral'
                     enum:
-                    - ephemeral
+                    - Ephemeral
                     - Persistent
                     type: string
                 type: object

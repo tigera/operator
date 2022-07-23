@@ -62,6 +62,7 @@ const (
 	IntrusionDetectionInstallerPolicyName  = networkpolicy.TigeraComponentPolicyPrefix + "intrusion-detection-elastic"
 
 	DefaultADStorageClassName              = "tigera-anomaly-detection"
+	ADPersistentVolumeClaimName            = "tigera-anomaly-detection"
 	DefaultAnomalyDetectionPVRequestSizeGi = "10Gi"
 	adAPIStorageVolumeName                 = "volume-storage"
 	adAPIVolumePath                        = "/storage"
@@ -198,6 +199,8 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(IntrusionDetectionNamespace, c.cfg.ESSecrets...)...)...)
 	objs = append(objs, c.globalAlertTemplates()...)
 
+	var objsToDelete []client.Object
+
 	// AD Related deployment only for management/standalone cluster
 	if !c.cfg.ManagedCluster {
 		// Service + Deployment + RBAC for AD API
@@ -215,9 +218,11 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		if configureADStorage {
 			// ignore all fields if it's set to using default ephermeal storage
 			objs = append(objs,
-				c.adPersistentVolume(),
-				c.adPersistentVolumeClaim(),
+				c.adPersistentVolumeClaim(configureADStorage),
 			)
+		} else {
+			objsToDelete = append(objsToDelete,
+				c.adPersistentVolumeClaim(configureADStorage))
 		}
 
 		objs = append(objs,
@@ -254,7 +259,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		return nil, objs
 	}
 
-	return objs, nil
+	return objs, objsToDelete
 }
 
 func (c *intrusionDetectionComponent) Ready() bool {
@@ -1316,40 +1321,11 @@ func (c *intrusionDetectionComponent) adAPIService() *corev1.Service {
 	}
 }
 
-func (c *intrusionDetectionComponent) adPersistentVolume() *corev1.PersistentVolume {
-	adStorageClassName := c.cfg.IntrusionDetction.Spec.AnomalyDetectionSpec.StorageClassName
-	adPV := corev1.PersistentVolume{
-		TypeMeta: metav1.TypeMeta{Kind: "PersistentVolume", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      adStorageClassName,
-			Namespace: IntrusionDetectionNamespace,
-		},
-		Spec: corev1.PersistentVolumeSpec{
-			StorageClassName: adStorageClassName,
-			Capacity: corev1.ResourceList{
-				corev1.ResourceStorage: resource.MustParse(DefaultAnomalyDetectionPVRequestSizeGi),
-			},
-			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-			PersistentVolumeSource: corev1.PersistentVolumeSource{
-				HostPath: &corev1.HostPathVolumeSource{
-					Path: adAPIVolumePath,
-				},
-			},
-		},
-	}
-
-	return &adPV
-}
-
-func (c *intrusionDetectionComponent) adPersistentVolumeClaim() *corev1.PersistentVolumeClaim {
-	adStorageClassName := c.cfg.IntrusionDetction.Spec.AnomalyDetectionSpec.StorageClassName
-	adPVC := corev1.PersistentVolumeClaim{
-		TypeMeta: metav1.TypeMeta{Kind: "PersistentVolumeClaim", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      adStorageClassName,
-			Namespace: IntrusionDetectionNamespace,
-		},
-		Spec: corev1.PersistentVolumeClaimSpec{
+func (c *intrusionDetectionComponent) adPersistentVolumeClaim(configureADStorage bool) *corev1.PersistentVolumeClaim {
+	pvSpec := corev1.PersistentVolumeClaimSpec{}
+	if configureADStorage {
+		adStorageClassName := c.cfg.IntrusionDetction.Spec.AnomalyDetectionSpec.StorageClassName
+		pvSpec = corev1.PersistentVolumeClaimSpec{
 			StorageClassName: &adStorageClassName,
 			AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 			Resources: corev1.ResourceRequirements{
@@ -1357,7 +1333,16 @@ func (c *intrusionDetectionComponent) adPersistentVolumeClaim() *corev1.Persiste
 					corev1.ResourceStorage: resource.MustParse(DefaultAnomalyDetectionPVRequestSizeGi),
 				},
 			},
+		}
+	}
+
+	adPVC := corev1.PersistentVolumeClaim{
+		TypeMeta: metav1.TypeMeta{Kind: "PersistentVolumeClaim", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ADPersistentVolumeClaimName,
+			Namespace: IntrusionDetectionNamespace,
 		},
+		Spec: pvSpec,
 	}
 
 	return &adPVC

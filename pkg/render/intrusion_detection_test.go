@@ -288,7 +288,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		}))
 	})
 
-	It("should render a persistent volume and the persistentVolume claim if indicated that the AnomalyDetection Storage spec type is Persistent", func() {
+	It("should render a persistentVolume claim if indicated that the AnomalyDetection Storage spec type is Persistent", func() {
 		testADStorageClassName := "test-storage-class-name"
 		cfg.IntrusionDetction = &operatorv1.IntrusionDetection{
 			Spec: operatorv1.IntrusionDetectionSpec{
@@ -304,12 +304,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		component := render.IntrusionDetection(cfg)
 		resources, _ := component.Objects()
 
-		adAPIPV := rtest.GetResource(resources, testADStorageClassName, render.IntrusionDetectionNamespace, "", "v1", "PersistentVolume").(*corev1.PersistentVolume)
-		Expect(adAPIPV.Spec.StorageClassName).To(Equal(testADStorageClassName))
-		Expect(adAPIPV.Spec.Capacity[corev1.ResourceStorage]).To(Equal(resource.MustParse(render.DefaultAnomalyDetectionPVRequestSizeGi)))
-		Expect(adAPIPV.Spec.PersistentVolumeSource.HostPath.Path).To(Equal("/storage"))
-
-		adAPIPVC := rtest.GetResource(resources, testADStorageClassName, render.IntrusionDetectionNamespace, "", "v1", "PersistentVolumeClaim").(*corev1.PersistentVolumeClaim)
+		adAPIPVC := rtest.GetResource(resources, render.ADPersistentVolumeClaimName, render.IntrusionDetectionNamespace, "", "v1", "PersistentVolumeClaim").(*corev1.PersistentVolumeClaim)
 		Expect(*adAPIPVC.Spec.StorageClassName).To(Equal(testADStorageClassName))
 		Expect(adAPIPVC.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse(render.DefaultAnomalyDetectionPVRequestSizeGi)))
 

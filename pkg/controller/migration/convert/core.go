@@ -23,6 +23,7 @@ import (
 
 	comp "github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/migration/convert/helpers"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
@@ -124,6 +125,11 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 
 	// minReadySeconds
 	if err := migrateMinReadySeconds(c, install); err != nil {
+		return err
+	}
+
+	// tolerations
+	if err := migrateTolerations(c, install); err != nil {
 		return err
 	}
 
@@ -297,6 +303,149 @@ func migrateMinReadySeconds(c *components, install *operatorv1.Installation) err
 			// minReadySeconds is not set on the component, check if it's set on the installation.
 			if minReadySeconds != nil {
 				return ErrIncompatibleMinReadySeconds(ComponentKubeControllers)
+			}
+		}
+	}
+
+	return nil
+}
+
+func getTolerations(override comp.ReplicatedPodResourceOverrides) []corev1.Toleration {
+	if reflect.ValueOf(override).IsNil() {
+		return nil
+	}
+	return override.GetTolerations()
+}
+
+func areEqualTolerations(tols1 []corev1.Toleration, tols2 []corev1.Toleration) bool {
+	m1 := make(map[corev1.Toleration]int)
+	m2 := make(map[corev1.Toleration]int)
+
+	for _, t := range tols1 {
+		m1[t] += 1
+	}
+	for _, t := range tols2 {
+		m2[t] += 1
+	}
+	for key, v1 := range m1 {
+		if m2[key] != v1 {
+			return false
+		}
+	}
+	for key, v2 := range m2 {
+		if m1[key] != v2 {
+			return false
+		}
+	}
+	return true
+}
+
+// migrateTolerations takes the components and migrates their tolerations to the installation.
+func migrateTolerations(c *components, install *operatorv1.Installation) error {
+	// Handle calico-node
+	installTolerations := getTolerations(install.Spec.CalicoNodeDaemonSet)
+	compTolerations := c.node.Spec.Template.Spec.Tolerations
+
+	// A daemonset/deployment treats nil and empty tolerations the same so do that here too.
+	if len(compTolerations) == 0 {
+		// if the component has no tolerations, then the installation must specify empty, non-nil tolerations.
+		if installTolerations == nil || len(installTolerations) > 0 {
+			return ErrIncompatibleTolerations(ComponentCalicoNode)
+		}
+	} else {
+		// Check if the component tolerations are exactly the same as the default tolerations.
+		// In this case, the following are ok on the installation
+		// - all the default tolerations.
+		// - nil (i.e., not specifying any custom tolerations)
+		//
+		// If the component tolerations are not the default tolerations, ensure they equal those on the installation.
+		if areEqualTolerations(rmeta.TolerateAll, compTolerations) {
+			if installTolerations != nil && !areEqualTolerations(compTolerations, installTolerations) {
+				return ErrIncompatibleTolerations(ComponentCalicoNode)
+			}
+		} else {
+			// if the installation has nil tolerations, copy the component tolerations over.
+			// otherwise compare the tolerations.
+			if installTolerations == nil {
+				helpers.EnsureCalicoNodePodSpecNotNil(install)
+				install.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Tolerations = compTolerations
+			} else {
+				if !areEqualTolerations(compTolerations, installTolerations) {
+					return ErrIncompatibleTolerations(ComponentCalicoNode)
+				}
+			}
+		}
+	}
+
+	if c.typha != nil {
+		installTolerations = getTolerations(install.Spec.TyphaDeployment)
+		compTolerations = c.typha.Spec.Template.Spec.Tolerations
+
+		// A daemonset/deployment treats nil and empty tolerations the same so do that here too.
+		if len(compTolerations) == 0 {
+			// if the component has no tolerations, then the installation must specify empty, non-nil tolerations.
+			if installTolerations == nil || len(installTolerations) > 0 {
+				return ErrIncompatibleTolerations(ComponentTypha)
+			}
+		} else {
+			// Check if the component tolerations are exactly the same as the default tolerations.
+			// In this case, the following are ok on the installation
+			// - all the default tolerations.
+			// - nil (i.e., not specifying any custom tolerations)
+			//
+			// If the component tolerations are not the default tolerations, ensure they equal those on the installation.
+			if areEqualTolerations(rmeta.TolerateAll, compTolerations) {
+				if installTolerations != nil && !areEqualTolerations(compTolerations, installTolerations) {
+					return ErrIncompatibleTolerations(ComponentTypha)
+				}
+			} else {
+				// if the installation has nil tolerations, copy the component tolerations over.
+				// otherwise compare the tolerations.
+				if installTolerations == nil {
+					helpers.EnsureTyphaPodSpecNotNil(install)
+					install.Spec.TyphaDeployment.Spec.Template.Spec.Tolerations = compTolerations
+				} else {
+					if !areEqualTolerations(compTolerations, installTolerations) {
+						return ErrIncompatibleTolerations(ComponentTypha)
+					}
+				}
+			}
+		}
+	}
+
+	if c.kubeControllers != nil {
+		installTolerations = getTolerations(install.Spec.CalicoKubeControllersDeployment)
+		compTolerations = c.kubeControllers.Spec.Template.Spec.Tolerations
+
+		// A daemonset/deployment treats nil and empty tolerations the same so do that here too.
+		if len(compTolerations) == 0 {
+			// if the component has no tolerations, then the installation must specify empty, non-nil tolerations.
+			if installTolerations == nil || len(installTolerations) > 0 {
+				return ErrIncompatibleTolerations(ComponentKubeControllers)
+			}
+		} else {
+			// Check if the component tolerations are exactly the same as the default tolerations.
+			// In this case, the following are ok on the installation
+			// - all the default tolerations.
+			// - nil (i.e., not specifying any custom tolerations)
+			//
+			// If the component tolerations are not the default tolerations, ensure they equal those on the installation.
+			defaultTolerations := []corev1.Toleration{rmeta.TolerateMaster, rmeta.TolerateCriticalAddonsOnly}
+			if areEqualTolerations(defaultTolerations, compTolerations) {
+				if installTolerations != nil && !areEqualTolerations(compTolerations, installTolerations) {
+					return ErrIncompatibleTolerations(ComponentKubeControllers)
+				}
+			} else {
+				// if the installation has nil tolerations, copy the component tolerations over.
+				// otherwise compare the tolerations.
+				if installTolerations == nil {
+					helpers.EnsureKubeControllersPodSpecNotNil(install)
+					install.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Tolerations = compTolerations
+				} else {
+					if !areEqualTolerations(compTolerations, installTolerations) {
+						return ErrIncompatibleTolerations(ComponentKubeControllers)
+					}
+				}
 			}
 		}
 	}

@@ -19,7 +19,6 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	"github.com/tigera/operator/pkg/controller/migration/convert/helpers"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -816,6 +815,162 @@ var _ = Describe("core handler", func() {
 		)
 	})
 
+	Context("tolerations", func() {
+		var empty = []corev1.Toleration{}
+		var t1 corev1.Toleration = corev1.Toleration{
+			Key:      "foo",
+			Operator: corev1.TolerationOpEqual,
+			Value:    "bar",
+		}
+		var tolerateCriticalAddonsOnly = corev1.Toleration{
+			Key:      "CriticalAddonsOnly",
+			Operator: corev1.TolerationOpExists,
+		}
+		var tolerateNoSchedule = corev1.Toleration{
+			Effect:   corev1.TaintEffectNoSchedule,
+			Operator: corev1.TolerationOpExists,
+		}
+		var tolerateNoExecute = corev1.Toleration{
+			Effect:   corev1.TaintEffectNoExecute,
+			Operator: corev1.TolerationOpExists,
+		}
+		// default node and typha tolerations
+		var tolerateAll = []corev1.Toleration{
+			tolerateCriticalAddonsOnly,
+			tolerateNoSchedule,
+			tolerateNoExecute,
+		}
+		var tolerateMaster = corev1.Toleration{
+			Key:    "node-role.kubernetes.io/master",
+			Effect: corev1.TaintEffectNoSchedule,
+		}
+		// default kube-controllers tolerations
+		var kubeControllersTolerations = []corev1.Toleration{
+			tolerateMaster,
+			tolerateCriticalAddonsOnly,
+		}
+
+		DescribeTable("calico-node", func(compTols []corev1.Toleration, installTols []corev1.Toleration, expectedInstallTols []corev1.Toleration, isValid bool) {
+			comps.node.Spec.Template.Spec.Tolerations = compTols
+
+			if installTols != nil {
+				helpers.EnsureCalicoNodePodSpecNotNil(i)
+				i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Tolerations = installTols
+			}
+
+			err := handleCore(&comps, i)
+			if isValid {
+				if expectedInstallTols == nil {
+					Expect(i.Spec.CalicoNodeDaemonSet).To(BeNil())
+				} else {
+					Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Tolerations).To(Equal(expectedInstallTols))
+				}
+			} else {
+				Expect(err).To(HaveOccurred())
+			}
+		},
+			// empty component tolerations
+			Entry("ok if component has empty tolerations and install has empty tolerations", empty, empty, empty, true),
+			Entry("error if component has empty tolerations and install has nil tolerations", empty, nil, nil, false),
+			Entry("error if component has empty tolerations and install has tolerations", empty, []corev1.Toleration{t1}, nil, false),
+			// nil component tolerations
+			Entry("ok if component has nil tolerations and install has empty tolerations", nil, empty, empty, true),
+			Entry("error if component has nil tolerations and install has nil tolerations", nil, nil, nil, false),
+			Entry("error if component has nil tolerations and install has tolerations", nil, []corev1.Toleration{t1}, nil, false),
+			Entry("error if component has nil tolerations and install has tolerations", nil, []corev1.Toleration{t1}, nil, false),
+			// all default component tolerations
+			Entry("ok if component has all the default tolerations and install has nil tolerations", tolerateAll, nil, nil, true),
+			Entry("ok if component has all the default tolerations and install has the same tolerations", tolerateAll, tolerateAll, tolerateAll, true),
+			Entry("error if component has all default tolerations and install has empty tolerations", tolerateAll, empty, nil, false),
+			// component tolerations
+			Entry("ok if component has tolerations and install has nil tolerations", []corev1.Toleration{t1}, nil, []corev1.Toleration{t1}, true),
+			Entry("error if component has tolerations and install has empty tolerations", []corev1.Toleration{t1}, empty, nil, false),
+			Entry("error if component has tolerations and install has different tolerations", []corev1.Toleration{tolerateNoExecute, t1}, []corev1.Toleration{t1}, nil, false),
+			Entry("ok if component has tolerations and install has same tolerations", []corev1.Toleration{t1}, []corev1.Toleration{t1}, []corev1.Toleration{t1}, true),
+			Entry("ok if component has default and custom tolerations and install has the same tolerations", append(tolerateAll, t1), append(tolerateAll, t1), append(tolerateAll, t1), true),
+		)
+
+		DescribeTable("typha", func(compTols []corev1.Toleration, installTols []corev1.Toleration, expectedInstallTols []corev1.Toleration, isValid bool) {
+			comps.typha.Spec.Template.Spec.Tolerations = compTols
+
+			if installTols != nil {
+				helpers.EnsureTyphaPodSpecNotNil(i)
+				i.Spec.TyphaDeployment.Spec.Template.Spec.Tolerations = installTols
+			}
+
+			err := handleCore(&comps, i)
+			if isValid {
+				if expectedInstallTols == nil {
+					Expect(i.Spec.TyphaDeployment).To(BeNil())
+				} else {
+					Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.Tolerations).To(Equal(expectedInstallTols))
+				}
+			} else {
+				Expect(err).To(HaveOccurred())
+			}
+		},
+			// empty component tolerations
+			Entry("ok if component has empty tolerations and install has empty tolerations", empty, empty, empty, true),
+			Entry("error if component has empty tolerations and install has nil tolerations", empty, nil, nil, false),
+			Entry("error if component has empty tolerations and install has tolerations", empty, []corev1.Toleration{t1}, nil, false),
+			// nil component tolerations
+			Entry("ok if component has nil tolerations and install has empty tolerations", nil, empty, empty, true),
+			Entry("error if component has nil tolerations and install has nil tolerations", nil, nil, nil, false),
+			Entry("error if component has nil tolerations and install has tolerations", nil, []corev1.Toleration{t1}, nil, false),
+			Entry("error if component has nil tolerations and install has tolerations", nil, []corev1.Toleration{t1}, nil, false),
+			// all default component tolerations
+			Entry("ok if component has all the default tolerations and install has nil tolerations", tolerateAll, nil, nil, true),
+			Entry("ok if component has all the default tolerations and install has the same tolerations", tolerateAll, tolerateAll, tolerateAll, true),
+			Entry("error if component has all default tolerations and install has empty tolerations", tolerateAll, empty, nil, false),
+			// component tolerations
+			Entry("ok if component has tolerations and install has nil tolerations", []corev1.Toleration{t1}, nil, []corev1.Toleration{t1}, true),
+			Entry("error if component has tolerations and install has empty tolerations", []corev1.Toleration{t1}, empty, nil, false),
+			Entry("error if component has tolerations and install has different tolerations", []corev1.Toleration{tolerateNoExecute, t1}, []corev1.Toleration{t1}, nil, false),
+			Entry("ok if component has tolerations and install has same tolerations", []corev1.Toleration{t1}, []corev1.Toleration{t1}, []corev1.Toleration{t1}, true),
+			Entry("ok if component has default and custom tolerations and install has the same tolerations", append(tolerateAll, t1), append(tolerateAll, t1), append(tolerateAll, t1), true),
+		)
+		DescribeTable("kube-controllers", func(compTols []corev1.Toleration, installTols []corev1.Toleration, expectedInstallTols []corev1.Toleration, isValid bool) {
+			comps.kubeControllers.Spec.Template.Spec.Tolerations = compTols
+
+			if installTols != nil {
+				helpers.EnsureKubeControllersPodSpecNotNil(i)
+				i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Tolerations = installTols
+			}
+
+			err := handleCore(&comps, i)
+			if isValid {
+				if expectedInstallTols == nil {
+					Expect(i.Spec.CalicoKubeControllersDeployment).To(BeNil())
+				} else {
+					Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Tolerations).To(Equal(expectedInstallTols))
+				}
+			} else {
+				Expect(err).To(HaveOccurred())
+			}
+		},
+			// empty component tolerations
+			Entry("ok if component has empty tolerations and install has empty tolerations", empty, empty, empty, true),
+			Entry("error if component has empty tolerations and install has nil tolerations", empty, nil, nil, false),
+			Entry("error if component has empty tolerations and install has tolerations", empty, []corev1.Toleration{t1}, nil, false),
+			// nil component tolerations
+			Entry("ok if component has nil tolerations and install has empty tolerations", nil, empty, empty, true),
+			Entry("error if component has nil tolerations and install has nil tolerations", nil, nil, nil, false),
+			Entry("error if component has nil tolerations and install has tolerations", nil, []corev1.Toleration{t1}, nil, false),
+			Entry("error if component has nil tolerations and install has tolerations", nil, []corev1.Toleration{t1}, nil, false),
+			// all default component tolerations - kubecontrollers has different default tolerations
+			Entry("ok if component has all the default tolerations and install has nil tolerations", kubeControllersTolerations, nil, nil, true),
+			Entry("ok if component has all the default tolerations and install has the same tolerations", kubeControllersTolerations, kubeControllersTolerations, kubeControllersTolerations, true),
+			Entry("error if component has all default tolerations and install has empty tolerations", kubeControllersTolerations, empty, nil, false),
+			// component tolerations
+			Entry("ok if component has tolerations and install has nil tolerations", []corev1.Toleration{t1}, nil, []corev1.Toleration{t1}, true),
+			Entry("error if component has tolerations and install has empty tolerations", []corev1.Toleration{t1}, empty, nil, false),
+			Entry("error if component has tolerations and install has different tolerations", []corev1.Toleration{tolerateNoExecute, t1}, []corev1.Toleration{t1}, nil, false),
+			Entry("ok if component has tolerations and install has same tolerations", []corev1.Toleration{t1}, []corev1.Toleration{t1}, []corev1.Toleration{t1}, true),
+			Entry("ok if component has some default and custom tolerations and install has the same tolerations", append(tolerateAll, t1), append(tolerateAll, t1), append(tolerateAll, t1), true),
+		)
+
+	})
+
 	Context("node update strategy", func() {
 		It("should not set updateStrategy if none is set", func() {
 			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
@@ -931,49 +1086,6 @@ var _ = Describe("core handler", func() {
 		Context("on the install-cni container", func() {
 			AssertNodeName("KUBERNETES_NODE_NAME", func(envVars []v1.EnvVar) {
 				comps.node.Spec.Template.Spec.InitContainers[0].Env = envVars
-			})
-		})
-
-		Context("tolerations", func() {
-			// TestTolerations parameterizes the tests for tolerations to that they can be run
-			// on node, kubeControllers, and typha. These tests assume that the emptyComponents
-			// function initializes all components with the expected, valid tolerations (which it does).
-			// the first parameter is the existing tolerations, so that they can be adjusted.
-			// the second parameter is a function which updates the tolerations of the desired component.
-			TestTolerations := func(existingTolerations []v1.Toleration, setTolerations func([]v1.Toleration)) {
-				It("should not error if only expected tolerations are set", func() {
-					Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
-				})
-				It("should not error if no tolerations set", func() {
-					setTolerations([]v1.Toleration{})
-					Expect(handleCore(&comps, i)).NotTo(HaveOccurred())
-				})
-				It("should not error if missing just one toleration", func() {
-					setTolerations(existingTolerations[0 : len(existingTolerations)-1])
-					Expect(handleCore(&comps, i)).NotTo(HaveOccurred())
-				})
-				It("should not error if additional toleration exists", func() {
-					setTolerations(append(existingTolerations, v1.Toleration{
-						Key:    "foo",
-						Effect: "bar",
-					}))
-					Expect(handleCore(&comps, i)).NotTo(HaveOccurred())
-				})
-			}
-			Describe("calico-node", func() {
-				TestTolerations(comps.node.Spec.Template.Spec.Tolerations, func(t []v1.Toleration) {
-					comps.node.Spec.Template.Spec.Tolerations = t
-				})
-			})
-			Describe("kube-controllers", func() {
-				TestTolerations(comps.kubeControllers.Spec.Template.Spec.Tolerations, func(t []v1.Toleration) {
-					comps.kubeControllers.Spec.Template.Spec.Tolerations = t
-				})
-			})
-			Describe("typha", func() {
-				TestTolerations(comps.typha.Spec.Template.Spec.Tolerations, func(t []v1.Toleration) {
-					comps.typha.Spec.Template.Spec.Tolerations = t
-				})
 			})
 		})
 	})

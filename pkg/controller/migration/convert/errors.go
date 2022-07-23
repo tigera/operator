@@ -113,3 +113,11 @@ func ErrIncompatibleMinReadySeconds(component string) error {
 		fix:       "remove the minReadySeconds from the Installation resource, or remove it from the component",
 	}
 }
+
+func ErrIncompatibleTolerations(component string) error {
+	return ErrIncompatibleCluster{
+		err:       "tolerations differ in the Installation and the migration source",
+		component: component,
+		fix:       "remove the tolerations from the Installation resource, or remove them from the component",
+	}
+}

@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019, 2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -41,6 +41,12 @@ var _ = Describe("Installation validation tests", func() {
 					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
 				},
 				ComponentResources: []operator.ComponentResource{},
+				VolumePlugin: &operator.VolumePluginSpec{
+					Enable:          true,
+					KubeletDir:      "/var/lib/kubelet",
+					SockDir:         "/var/lib/kubelet/plugins/csi.tigera.io/",
+					RegistrationDir: "/var/lib/kubelet/plugins_registry/",
+				},
 			},
 		}
 	})
@@ -288,6 +294,24 @@ var _ = Describe("Installation validation tests", func() {
 
 	It("should not allow a relative path in FlexVolumePath", func() {
 		instance.Spec.FlexVolumePath = "foo/bar/baz"
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should not allow a relative path in VolumePluginSpec.KubeletDir", func() {
+		instance.Spec.VolumePlugin.KubeletDir = "relative/path"
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should not allow a relative path in VolumePluginSpec.SockDir", func() {
+		instance.Spec.VolumePlugin.SockDir = "relative/path"
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should not allow a relative path in VolumePluginSpec.RegistrationDir", func() {
+		instance.Spec.VolumePlugin.RegistrationDir = "relative/path"
 		err := validateCustomResource(instance)
 		Expect(err).To(HaveOccurred())
 	})

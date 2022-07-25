@@ -15,6 +15,8 @@
 package render
 
 import (
+	"path/filepath"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
@@ -166,7 +168,7 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 				Name: "DRIVER_REG_SOCK_PATH",
 				// This path cannot also reference "/csi" because /csi only exists inside of the pod, but this path
 				// is used by the kubelet on the host node to issue CSI operations
-				Value: "/var/lib/kubelet/plugins/csi.tigera.io/csi.sock",
+				Value: filepath.Join(c.cfg.Installation.VolumePlugin.SockDir, "csi.sock"),
 			},
 			corev1.EnvVar{
 				Name: "KUBE_NODE_NAME",

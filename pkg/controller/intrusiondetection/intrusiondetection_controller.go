@@ -317,7 +317,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	// Query for StorageClass for AD API if provided
-	if instance.Spec.AnomalyDetectionSpec != nil && instance.Spec.AnomalyDetectionSpec.StorageType == operatorv1.PersistentStorageType {
+	if instance.Spec.AnomalyDetectionSpec.StorageType == operatorv1.PersistentStorageType {
 		// validate to degrade early if the storage class name is not valid
 		if err = utils.ValidateResourceNameIsQualified(instance.Spec.AnomalyDetectionSpec.StorageClassName); err != nil {
 			errMessage := "Invalid AD Storage Class name provided"
@@ -583,8 +583,8 @@ func (r *ReconcileIntrusionDetection) setDefaultsOnIntrusionDetection(ctx contex
 
 	}
 
-	if ids.Spec.AnomalyDetectionSpec == nil {
-		ids.Spec.AnomalyDetectionSpec = &operatorv1.AnomalyDetectionSpec{
+	if ids.Spec.AnomalyDetectionSpec == (operatorv1.AnomalyDetectionSpec{}) {
+		ids.Spec.AnomalyDetectionSpec = operatorv1.AnomalyDetectionSpec{
 			StorageType: operatorv1.EphemeralStorageType,
 		}
 	} else {

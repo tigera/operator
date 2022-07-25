@@ -28,10 +28,10 @@ type IntrusionDetectionSpec struct {
 	// +optional
 	ComponentResources []IntrusionDetectionComponentResource `json:"componentResources,omitempty"`
 
-	// AnomalyDetectionSpec provides configuration for running AnomalyDetection Component within
+	// AnomalyDetectionSpec provides configuration for running AnomalyDetectionSpec Component within
 	// IntrusionDetection
 	// +optional
-	AnomalyDetectionSpec *AnomalyDetectionSpec `json:"anomalyDetectionSpec,omitempty"`
+	AnomalyDetectionSpec AnomalyDetectionSpec `json:"anomalyDetection,omitempty"`
 }
 
 type AnomalyDetectionSpec struct {

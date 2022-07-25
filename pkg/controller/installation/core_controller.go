@@ -702,7 +702,9 @@ func fillDefaults(instance *operator.Installation) error {
 	}
 
 	if instance.Spec.VolumePlugin == nil {
-		instance.Spec.VolumePlugin = &operator.VolumePluginSpec{}
+		instance.Spec.VolumePlugin = &operator.VolumePluginSpec{
+			Enable: false,
+		}
 	}
 
 	if len(instance.Spec.VolumePlugin.KubeletDir) == 0 {

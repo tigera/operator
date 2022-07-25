@@ -315,9 +315,8 @@ const (
 type VolumePluginSpec struct {
 	// Enable allows CSI to be turned on and off
 	// Default: false
-	// +optional
 	// +kubebuilder:validation:format: boolean
-	Enable bool `json:"enable,omitempty"`
+	Enable bool `json:"enable"`
 
 	// KubeletDir specifies the absolute path of the Kubelet root directory
 	// Default: /var/lib/kubelet

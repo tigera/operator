@@ -163,8 +163,10 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 				Value: "/csi/csi.sock",
 			},
 			corev1.EnvVar{
-				Name:  "DRIVER_REG_SOCK_PATH",
-				Value: "/csi/csi.sock",
+				Name: "DRIVER_REG_SOCK_PATH",
+				// This path cannot also reference "/csi" because /csi only exists inside of the pod, but this path
+				// is used by the kubelet on the host node to issue CSI operations
+				Value: "/var/lib/kubelet/plugins/csi.tigera.io/csi.sock",
 			},
 			corev1.EnvVar{
 				Name: "KUBE_NODE_NAME",

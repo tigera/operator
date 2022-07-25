@@ -17,7 +17,12 @@ package kubecontrollers_test
 import (
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/types"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -45,6 +50,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	var instance *operatorv1.InstallationSpec
 	var k8sServiceEp k8sapi.ServiceEndpoint
 	var cfg kubecontrollers.KubeControllersConfiguration
+	var internalManagerTLSSecret certificatemanagement.KeyPairInterface
 	esEnvs := []corev1.EnvVar{
 		{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
 		{Name: "ELASTIC_SCHEME", Value: "https"},
@@ -89,7 +95,12 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		{Name: "ES_CA_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
 		{Name: "ES_CURATOR_BACKEND_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
 	}
-	var internalManagerTLSSecret certificatemanagement.KeyPairInterface
+	expectedPolicyForUnmanaged := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/kubecontrollers.json")
+	expectedPolicyForUnmanagedOCP := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/kubecontrollers_ocp.json")
+	expectedPolicyForManaged := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/kubecontrollers_managed.json")
+	expectedPolicyForManagedOCP := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/kubecontrollers_managed_ocp.json")
+	expectedESPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/es-kubecontrollers.json")
+	expectedESPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/es-kubecontrollers_ocp.json")
 
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
@@ -250,6 +261,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			version string
 			kind    string
 		}{
+			{name: kubecontrollers.EsKubeControllerNetworkPolicyName, ns: common.CalicoNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: kubecontrollers.EsKubeControllerServiceAccount, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: kubecontrollers.EsKubeControllerRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: kubecontrollers.EsKubeControllerRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -366,6 +378,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			version string
 			kind    string
 		}{
+			{name: kubecontrollers.EsKubeControllerNetworkPolicyName, ns: common.CalicoNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: kubecontrollers.EsKubeControllerServiceAccount, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: kubecontrollers.EsKubeControllerRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: kubecontrollers.EsKubeControllerRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -550,6 +563,216 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(groupPrefix).To(Equal("gOIDC:"))
 	})
 
+	Context("With calico-kube-controllers overrides", func() {
+		var rr1 = corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":     resource.MustParse("2"),
+				"memory":  resource.MustParse("300Mi"),
+				"storage": resource.MustParse("20Gi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":     resource.MustParse("1"),
+				"memory":  resource.MustParse("150Mi"),
+				"storage": resource.MustParse("10Gi"),
+			},
+		}
+		var rr2 = corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("250m"),
+				corev1.ResourceMemory: resource.MustParse("64Mi"),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("500m"),
+				corev1.ResourceMemory: resource.MustParse("500Mi"),
+			},
+		}
+
+		It("should handle calicoKubeControllersDeployment overrides", func() {
+			var minReadySeconds int32 = 20
+
+			affinity := &corev1.Affinity{
+				NodeAffinity: &corev1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+						NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+							MatchExpressions: []corev1.NodeSelectorRequirement{{
+								Key:      "custom-affinity-key",
+								Operator: corev1.NodeSelectorOpExists,
+							}},
+						}},
+					},
+				},
+			}
+			toleration := corev1.Toleration{
+				Key:      "foo",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "bar",
+			}
+
+			instance.CalicoKubeControllersDeployment = &operatorv1.CalicoKubeControllersDeployment{
+				Metadata: &operatorv1.Metadata{
+					Labels:      map[string]string{"top-level": "label1"},
+					Annotations: map[string]string{"top-level": "annot1"},
+				},
+				Spec: &operatorv1.CalicoKubeControllersDeploymentSpec{
+					MinReadySeconds: &minReadySeconds,
+					Template: &operatorv1.CalicoKubeControllersDeploymentPodTemplateSpec{
+						Metadata: &operatorv1.Metadata{
+							Labels:      map[string]string{"template-level": "label2"},
+							Annotations: map[string]string{"template-level": "annot2"},
+						},
+						Spec: &operatorv1.CalicoKubeControllersDeploymentPodSpec{
+							Containers: []operatorv1.CalicoKubeControllersDeploymentContainer{
+								{
+									Name:      "calico-kube-controllers",
+									Resources: &rr1,
+								},
+							},
+							NodeSelector: map[string]string{
+								"custom-node-selector": "value",
+							},
+							Affinity:    affinity,
+							Tolerations: []corev1.Toleration{toleration},
+						},
+					},
+				},
+			}
+
+			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			depResource := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment")
+			Expect(depResource).ToNot(BeNil())
+			d := depResource.(*appsv1.Deployment)
+
+			Expect(d.Labels).To(HaveLen(1))
+			Expect(d.Labels["top-level"]).To(Equal("label1"))
+			Expect(d.Annotations).To(HaveLen(1))
+			Expect(d.Annotations["top-level"]).To(Equal("annot1"))
+
+			Expect(d.Spec.MinReadySeconds).To(Equal(minReadySeconds))
+
+			// At runtime, the operator will also add some standard labels to the
+			// deployment such as "k8s-app=calico-kube-controllers". But the calico-kube-controllers deployment object
+			// produced by the render will have no labels so we expect just the one
+			// provided.
+			Expect(d.Spec.Template.Labels).To(HaveLen(1))
+			Expect(d.Spec.Template.Labels["template-level"]).To(Equal("label2"))
+
+			// With the default instance we expect 3 template-level annotations
+			// - 1 added by the operator by default because TrustedBundle was set on kubecontrollerconfiguration.
+			// - 1 added by the calicoNodeDaemonSet override
+			Expect(d.Spec.Template.Annotations).To(HaveLen(2))
+			Expect(d.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/tigera-ca-private"))
+			Expect(d.Spec.Template.Annotations["template-level"]).To(Equal("annot2"))
+
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-kube-controllers"))
+			Expect(d.Spec.Template.Spec.Containers[0].Resources).To(Equal(rr1))
+
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("custom-node-selector", "value"))
+
+			Expect(d.Spec.Template.Spec.Tolerations).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.Tolerations[0]).To(Equal(toleration))
+		})
+
+		It("should override ComponentResources", func() {
+			instance.ComponentResources = []operatorv1.ComponentResource{
+				{
+					ComponentName:        operatorv1.ComponentNameKubeControllers,
+					ResourceRequirements: &rr1,
+				},
+			}
+
+			instance.CalicoKubeControllersDeployment = &operatorv1.CalicoKubeControllersDeployment{
+				Spec: &operatorv1.CalicoKubeControllersDeploymentSpec{
+					Template: &operatorv1.CalicoKubeControllersDeploymentPodTemplateSpec{
+						Spec: &operatorv1.CalicoKubeControllersDeploymentPodSpec{
+							Containers: []operatorv1.CalicoKubeControllersDeploymentContainer{
+								{
+									Name:      "calico-kube-controllers",
+									Resources: &rr2,
+								},
+							},
+						},
+					},
+				},
+			}
+
+			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			depResource := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment")
+			Expect(depResource).ToNot(BeNil())
+			d := depResource.(*appsv1.Deployment)
+
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-kube-controllers"))
+			Expect(d.Spec.Template.Spec.Containers[0].Resources).To(Equal(rr2))
+		})
+
+		It("should override ControlPlaneNodeSelector when specified", func() {
+			cfg.Installation.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
+
+			instance.CalicoKubeControllersDeployment = &operatorv1.CalicoKubeControllersDeployment{
+				Spec: &operatorv1.CalicoKubeControllersDeploymentSpec{
+					Template: &operatorv1.CalicoKubeControllersDeploymentPodTemplateSpec{
+						Spec: &operatorv1.CalicoKubeControllersDeploymentPodSpec{
+							NodeSelector: map[string]string{
+								"custom-node-selector": "value",
+							},
+						},
+					},
+				},
+			}
+			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			depResource := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment")
+			Expect(depResource).ToNot(BeNil())
+			d := depResource.(*appsv1.Deployment)
+
+			// nodeSelectors are merged
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveLen(2))
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("nodeName", "control01"))
+			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("custom-node-selector", "value"))
+		})
+
+		It("should override ControlPlaneTolerations when specified", func() {
+			cfg.Installation.ControlPlaneTolerations = []corev1.Toleration{rmeta.TolerateMaster}
+
+			tol := corev1.Toleration{
+				Key:      "foo",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "bar",
+				Effect:   corev1.TaintEffectNoExecute,
+			}
+
+			instance.CalicoKubeControllersDeployment = &operatorv1.CalicoKubeControllersDeployment{
+				Spec: &operatorv1.CalicoKubeControllersDeploymentSpec{
+					Template: &operatorv1.CalicoKubeControllersDeploymentPodTemplateSpec{
+						Spec: &operatorv1.CalicoKubeControllersDeploymentPodSpec{
+							Tolerations: []corev1.Toleration{tol},
+						},
+					},
+				},
+			}
+			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			depResource := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment")
+			Expect(depResource).ToNot(BeNil())
+			d := depResource.(*appsv1.Deployment)
+
+			Expect(d.Spec.Template.Spec.Tolerations).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(tol))
+		})
+	})
+
 	When("enableESOIDCWorkaround is true", func() {
 		It("should set the ENABLE_ELASTICSEARCH_OIDC_WORKAROUND env variable to true", func() {
 			instance.Variant = operatorv1.TigeraSecureEnterprise
@@ -609,5 +832,86 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(depResource).ToNot(BeNil())
 		deployment := depResource.(*appsv1.Deployment)
 		rtest.ExpectNoK8sServiceEpEnvVars(deployment.Spec.Template.Spec)
+	})
+
+	Context("kube-controllers allow-tigera rendering", func() {
+		policyName := types.NamespacedName{Name: "allow-tigera.kube-controller-access", Namespace: "calico-system"}
+
+		DescribeTable("should render allow-tigera policy",
+			func(scenario testutils.AllowTigeraScenario) {
+				if scenario.Openshift {
+					cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
+				} else {
+					cfg.Installation.KubernetesProvider = operatorv1.ProviderNone
+				}
+				if scenario.ManagedCluster {
+					cfg.ManagementClusterConnection = &operatorv1.ManagementClusterConnection{}
+				} else {
+					cfg.ManagementClusterConnection = nil
+				}
+				instance.Variant = operatorv1.TigeraSecureEnterprise
+				cfg.ManagerInternalSecret = internalManagerTLSSecret
+
+				component := kubecontrollers.NewCalicoKubeControllersPolicy(&cfg)
+				resources, _ := component.Objects()
+
+				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+				expectedPolicy := testutils.SelectPolicyByClusterTypeAndProvider(
+					scenario,
+					expectedPolicyForUnmanaged,
+					expectedPolicyForUnmanagedOCP,
+					expectedPolicyForManaged,
+					expectedPolicyForManagedOCP,
+				)
+				Expect(policy).To(Equal(expectedPolicy))
+			},
+			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
+			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
+			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
+		)
+	})
+
+	Context("es-kube-controllers allow-tigera rendering", func() {
+		policyName := types.NamespacedName{Name: "allow-tigera.es-kube-controller-access", Namespace: "calico-system"}
+
+		getExpectedPolicy := func(scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
+			if scenario.ManagedCluster {
+				return nil
+			}
+
+			return testutils.SelectPolicyByProvider(scenario, expectedESPolicy, expectedESPolicyForOpenshift)
+		}
+
+		DescribeTable("should render allow-tigera policy",
+			func(scenario testutils.AllowTigeraScenario) {
+				if scenario.Openshift {
+					cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
+				} else {
+					cfg.Installation.KubernetesProvider = operatorv1.ProviderNone
+				}
+				if scenario.ManagedCluster {
+					cfg.ManagementClusterConnection = &operatorv1.ManagementClusterConnection{}
+				} else {
+					cfg.ManagementClusterConnection = nil
+				}
+				instance.Variant = operatorv1.TigeraSecureEnterprise
+				cfg.LogStorageExists = true
+				cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
+				cfg.ManagerInternalSecret = internalManagerTLSSecret
+				cfg.EnabledESOIDCWorkaround = true
+
+				component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
+				resources, _ := component.Objects()
+
+				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+				expectedPolicy := getExpectedPolicy(scenario)
+				Expect(policy).To(Equal(expectedPolicy))
+			},
+			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
+			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
+			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
+		)
 	})
 })

@@ -91,6 +91,7 @@ type InstallationSpec struct {
 	// +optional
 	CalicoNetwork *CalicoNetworkSpec `json:"calicoNetwork,omitempty"`
 
+	// Deprecated. Please use Installation.Spec.TyphaDeployment instead.
 	// TyphaAffinity allows configuration of node affinity characteristics for Typha pods.
 	// +optional
 	TyphaAffinity *TyphaAffinity `json:"typhaAffinity,omitempty"`
@@ -136,6 +137,7 @@ type InstallationSpec struct {
 	// +optional
 	NodeUpdateStrategy appsv1.DaemonSetUpdateStrategy `json:"nodeUpdateStrategy,omitempty"`
 
+	// Deprecated. Please use CalicoNodeDaemonSet, TyphaDeployment, and KubeControllersDeployment.
 	// ComponentResources can be used to customize the resource requirements for each component.
 	// Node, Typha, and KubeControllers are supported for installations.
 	// +optional
@@ -150,8 +152,24 @@ type InstallationSpec struct {
 	// NonPrivileged configures Calico to be run in non-privileged containers as non-root users where possible.
 	// +optional
 	NonPrivileged *NonPrivilegedType `json:"nonPrivileged,omitempty"`
+
+	// CalicoNodeDaemonSet configures the calico-node DaemonSet. If used in
+	// conjunction with the deprecated ComponentResources, then these overrides take precedence.
+	CalicoNodeDaemonSet *CalicoNodeDaemonSet `json:"calicoNodeDaemonSet,omitempty"`
+
+	// CalicoKubeControllersDeployment configures the calico-kube-controllers Deployment. If used in
+	// conjunction with the deprecated ComponentResources, then these overrides take precedence.
+	CalicoKubeControllersDeployment *CalicoKubeControllersDeployment `json:"calicoKubeControllersDeployment,omitempty"`
+
+	// TyphaDeployment configures the typha Deployment. If used in conjunction with the deprecated
+	// ComponentResources or TyphaAffinity, then these overrides take precedence.
+	TyphaDeployment *TyphaDeployment `json:"typhaDeployment,omitempty"`
+
+	// CalicoWindowsUpgradeDaemonSet configures the calico-windows-upgrade DaemonSet.
+	CalicoWindowsUpgradeDaemonSet *CalicoWindowsUpgradeDaemonSet `json:"calicoWindowsUpgradeDaemonSet,omitempty"`
 }
 
+// Deprecated. Please use TyphaDeployment instead.
 // TyphaAffinity allows configuration of node affinity characteristics for Typha pods.
 type TyphaAffinity struct {
 	// NodeAffinity describes node affinity scheduling rules for typha.
@@ -194,11 +212,13 @@ const (
 	ComponentNameKubeControllers ComponentName = "KubeControllers"
 )
 
+// Deprecated. Please use component resource config fields in Installation.Spec instead.
 // The ComponentResource struct associates a ResourceRequirements with a component by name
 type ComponentResource struct {
 	// ComponentName is an enum which identifies the component
 	// +kubebuilder:validation:Enum=Node;Typha;KubeControllers
 	ComponentName ComponentName `json:"componentName"`
+
 	// ResourceRequirements allows customization of limits and requests for compute resources such as cpu and memory.
 	ResourceRequirements *v1.ResourceRequirements `json:"resourceRequirements"`
 }
@@ -517,6 +537,12 @@ type IPPool struct {
 	// Default: 26 (IPv4), 122 (IPv6)
 	// +optional
 	BlockSize *int32 `json:"blockSize,omitempty"`
+
+	// DisableBGPExport specifies whether routes from this IP pool's CIDR are exported over BGP.
+	// Default: false
+	// +optional
+	// +kubebuilder:default:=false
+	DisableBGPExport *bool `json:"disableBGPExport,omitempty"`
 }
 
 // CNIPluginType describes the type of CNI plugin used.

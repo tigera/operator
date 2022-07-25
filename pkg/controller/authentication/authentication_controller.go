@@ -19,6 +19,12 @@ import (
 	"fmt"
 	"time"
 
+	"k8s.io/client-go/kubernetes"
+
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	"github.com/go-ldap/ldap"
 
 	oprv1 "github.com/tigera/operator/api/v1"
@@ -61,30 +67,48 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller.
 		return nil
 	}
-	return add(mgr, newReconciler(mgr, opts))
+
+	// Create the reconciler
+	tierWatchReady := &utils.ReadyFlag{}
+	reconciler := newReconciler(mgr, opts, tierWatchReady)
+
+	// Create a new controller
+	c, err := controller.New(controllerName, mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
+	if err != nil {
+		return fmt.Errorf("failed to create %s: %w", controllerName, err)
+	}
+
+	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		return fmt.Errorf("%s failed to establish a connection to k8s: %w", controllerName, err)
+	}
+
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, tierWatchReady)
+	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
+		{Name: render.DexPolicyName, Namespace: render.DexNamespace},
+		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.DexNamespace},
+	})
+
+	return add(mgr, c)
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileAuthentication {
+func newReconciler(mgr manager.Manager, opts options.AddOptions, tierWatchReady *utils.ReadyFlag) *ReconcileAuthentication {
 	r := &ReconcileAuthentication{
-		client:        mgr.GetClient(),
-		scheme:        mgr.GetScheme(),
-		provider:      opts.DetectedProvider,
-		status:        status.New(mgr.GetClient(), "authentication", opts.KubernetesVersion),
-		clusterDomain: opts.ClusterDomain,
+		client:         mgr.GetClient(),
+		scheme:         mgr.GetScheme(),
+		provider:       opts.DetectedProvider,
+		status:         status.New(mgr.GetClient(), "authentication", opts.KubernetesVersion),
+		clusterDomain:  opts.ClusterDomain,
+		tierWatchReady: tierWatchReady,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
 }
 
-// add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r *ReconcileAuthentication) error {
-	c, err := controller.New(controllerName, mgr, controller.Options{Reconciler: r})
-	if err != nil {
-		return fmt.Errorf("failed to create %s: %w", controllerName, err)
-	}
-
-	err = c.Watch(&source.Kind{Type: &oprv1.Authentication{}}, &handler.EnqueueRequestForObject{})
+// add adds watches for resources that are available at startup
+func add(mgr manager.Manager, c controller.Controller) error {
+	err := c.Watch(&source.Kind{Type: &oprv1.Authentication{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("%s failed to watch resource: %w", controllerName, err)
 	}
@@ -121,11 +145,12 @@ var _ reconcile.Reconciler = &ReconcileAuthentication{}
 
 // ReconcileAuthentication reconciles an Authentication object
 type ReconcileAuthentication struct {
-	client        client.Client
-	scheme        *runtime.Scheme
-	provider      oprv1.Provider
-	status        status.StatusManager
-	clusterDomain string
+	client         client.Client
+	scheme         *runtime.Scheme
+	provider       oprv1.Provider
+	status         status.StatusManager
+	clusterDomain  string
+	tierWatchReady *utils.ReadyFlag
 }
 
 // Reconciles the cluster state with the Authentication object that is found in the cluster.
@@ -192,6 +217,24 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		} else {
 			log.Error(err, "Error querying tigera-dex namespace")
 			r.status.SetDegraded("Error querying tigera-dex namespace", err.Error())
+			return reconcile.Result{}, err
+		}
+	}
+
+	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
+	if !r.tierWatchReady.IsReady() {
+		r.status.SetDegraded("Waiting for Tier watch to be established", "")
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
+	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded("Waiting for allow-tigera tier to be created", err.Error())
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		} else {
+			log.Error(err, "Error querying allow-tigera tier")
+			r.status.SetDegraded("Error querying allow-tigera tier", err.Error())
 			return reconcile.Result{}, err
 		}
 	}

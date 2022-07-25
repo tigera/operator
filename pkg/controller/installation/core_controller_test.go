@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"time"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -310,6 +312,11 @@ var _ = Describe("Testing core-controller installation", func() {
 				HostPorts: &hpDisabled,
 			}),
 	)
+
+	notReady := &utils.ReadyFlag{}
+	ready := &utils.ReadyFlag{}
+	ready.MarkAsReady()
+
 	Context("image reconciliation tests", func() {
 		var c client.Client
 		var cs *kfake.Clientset
@@ -391,6 +398,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,
 				migrationChecked:      true,
+				tierWatchReady:        ready,
 			}
 
 			r.typhaAutoscaler.start(ctx)
@@ -401,6 +409,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 			// We start off with a 'standard' installation, with nothing special
 			Expect(c.Create(
 				ctx,
@@ -762,6 +771,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				enterpriseCRDsExist:   true,
 				migrationChecked:      true,
 				clusterDomain:         dns.DefaultClusterDomain,
+				tierWatchReady:        ready,
 			}
 			r.typhaAutoscaler.start(ctx)
 			r.calicoWindowsUpgrader.Start(ctx)
@@ -807,6 +817,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{render.PrometheusTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 		})
 		AfterEach(func() {
 			cancel()
@@ -902,6 +913,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(typhaSecret.GetOwnerReferences()).To(HaveLen(0))
 		})
 	})
+
 	Context("Reconcile tests", func() {
 		var c client.Client
 		var cs *kfake.Clientset
@@ -999,6 +1011,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				amazonCRDExists:       true,
 				enterpriseCRDsExist:   true,
 				migrationChecked:      true,
+				tierWatchReady:        ready,
 			}
 
 			r.typhaAutoscaler.start(ctx)
@@ -1020,6 +1033,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{render.PrometheusTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 		})
 		AfterEach(func() {
 			cancel()
@@ -1482,6 +1496,57 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(cr.Status.Conditions[2].Reason).To(Equal(string(operator.NotApplicable)))
 			Expect(cr.Status.Conditions[2].Message).To(Equal("Not Applicable"))
 			Expect(cr.Status.Conditions[2].ObservedGeneration).To(Equal(int64(2)))
+		})
+
+		It("should render allow-tigera policy when tier and tier watch are ready", func() {
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			policies := v3.NetworkPolicyList{}
+			Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
+			Expect(policies.Items).To(HaveLen(1))
+			Expect(policies.Items[0].Name).To(Equal("allow-tigera.kube-controller-access"))
+		})
+
+		It("should omit allow-tigera policy and not degrade when tier is not ready", func() {
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			Expect(c.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			policies := v3.NetworkPolicyList{}
+			Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
+			Expect(policies.Items).To(HaveLen(0))
+		})
+
+		It("should omit allow-tigera policy and not degrade when tier watch is not ready", func() {
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			r.tierWatchReady = notReady
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			policies := v3.NetworkPolicyList{}
+			Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
+			Expect(policies.Items).To(HaveLen(0))
+		})
+
+		It("should omit allow-tigera policy and not degrade when installation is calico", func() {
+			cr.Spec.Variant = operator.Calico
+			cr.Status.Variant = operator.Calico
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			r.enterpriseCRDsExist = false
+			Expect(c.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			policies := v3.NetworkPolicyList{}
+			Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
+			Expect(policies.Items).To(HaveLen(0))
 		})
 	})
 })

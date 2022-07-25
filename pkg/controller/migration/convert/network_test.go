@@ -45,6 +45,8 @@ var _ = Describe("Convert network tests", func() {
 	var v4pool *crdv1.IPPool
 	var v6pool *crdv1.IPPool
 	var scheme *runtime.Scheme
+	var falseValue bool
+
 	BeforeEach(func() {
 		scheme = kscheme.Scheme
 		err := apis.AddToScheme(scheme)
@@ -64,6 +66,7 @@ var _ = Describe("Convert network tests", func() {
 			CIDR:        "2001:db8::1/120",
 			NATOutgoing: true,
 		}
+		falseValue = false
 	})
 
 	Describe("handle alternate CNI migration", func() {
@@ -125,9 +128,10 @@ var _ = Describe("Convert network tests", func() {
 					MTU:       &_1440,
 					HostPorts: operatorv1.HostPortsTypePtr(operatorv1.HostPortsEnabled),
 					IPPools: []operatorv1.IPPool{{
-						CIDR:          "192.168.4.0/24",
-						Encapsulation: operatorv1.EncapsulationIPIP,
-						NATOutgoing:   operatorv1.NATOutgoingEnabled,
+						CIDR:             "192.168.4.0/24",
+						Encapsulation:    operatorv1.EncapsulationIPIP,
+						NATOutgoing:      operatorv1.NATOutgoingEnabled,
+						DisableBGPExport: &falseValue,
 					}},
 				},
 				FlexVolumePath: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/nodeagent~uds",

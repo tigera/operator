@@ -19,8 +19,17 @@ import (
 	"fmt"
 	"time"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"k8s.io/apimachinery/pkg/api/meta"
+
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/common/validation"
+	apiserver "github.com/tigera/operator/pkg/common/validation/apiserver"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -48,7 +57,31 @@ var log = logf.Log.WithName("controller_apiserver")
 // Add creates a new APIServer Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	return add(mgr, newReconciler(mgr, opts))
+	r := newReconciler(mgr, opts)
+
+	c, err := controller.New("apiserver-controller", mgr, controller.Options{Reconciler: r})
+	if err != nil {
+		return fmt.Errorf("Failed to create apiserver-controller: %v", err)
+	}
+
+	// Established deferred watches against the v3 API that should succeed after the Enterprise API Server becomes available.
+	if opts.EnterpriseCRDExists {
+		k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
+		if err != nil {
+			log.Error(err, "Failed to establish a connection to k8s")
+			return err
+		}
+
+		// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
+		go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, r.tierWatchReady)
+
+		go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
+			{Name: render.APIServerPolicyName, Namespace: rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise)},
+			{Name: render.PacketCapturePolicyName, Namespace: render.PacketCaptureNamespace},
+		})
+	}
+
+	return add(c, r)
 }
 
 // newReconciler returns a new reconcile.Reconciler
@@ -62,21 +95,16 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileAPISe
 		status:              status.New(mgr.GetClient(), "apiserver", opts.KubernetesVersion),
 		clusterDomain:       opts.ClusterDomain,
 		usePSP:              opts.UsePSP,
+		tierWatchReady:      &utils.ReadyFlag{},
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
 }
 
-// add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r *ReconcileAPIServer) error {
-	// Create a new controller
-	c, err := controller.New("apiserver-controller", mgr, controller.Options{Reconciler: r})
-	if err != nil {
-		return fmt.Errorf("Failed to create apiserver-controller: %v", err)
-	}
-
+// add adds watches for resources that are available at startup
+func add(c controller.Controller, r *ReconcileAPIServer) error {
 	// Watch for changes to primary resource APIServer
-	err = c.Watch(&source.Kind{Type: &operatorv1.APIServer{}}, &handler.EnqueueRequestForObject{})
+	err := c.Watch(&source.Kind{Type: &operatorv1.APIServer{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		log.V(5).Info("Failed to create APIServer watch", "err", err)
 		return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
@@ -157,6 +185,7 @@ type ReconcileAPIServer struct {
 	status              status.StatusManager
 	clusterDomain       string
 	usePSP              bool
+	tierWatchReady      *utils.ReadyFlag
 }
 
 // Reconcile reads that state of the cluster for a APIServer object and makes changes based on the state read
@@ -181,6 +210,12 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
+
+	// Validate APIServer resource.
+	if err := validateAPIServerResource(instance); err != nil {
+		r.status.SetDegraded("APIServer is invalid", err.Error())
+		return reconcile.Result{}, err
+	}
 
 	// Query for the installation object.
 	variant, network, err := utils.GetInstallation(context.Background(), r.client)
@@ -229,6 +264,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	var managementCluster *operatorv1.ManagementCluster
 	var managementClusterConnection *operatorv1.ManagementClusterConnection
 	var tunnelSecretPassthrough render.Component
+	includeV3NetworkPolicy := false
 	if variant == operatorv1.TigeraSecureEnterprise {
 		managementCluster, err = utils.GetManagementCluster(ctx, r.client)
 		if err != nil {
@@ -278,6 +314,24 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 				return reconcile.Result{}, err
 			}
 		}
+
+		// Ensure the allow-tigera tier exists, before rendering any network policies within it.
+		//
+		// The creation of the Tier depends on this controller to reconcile it's non-NetworkPolicy resources so that
+		// the API Server becomes available. Therefore, if we fail to query the Tier, we exclude NetworkPolicy from
+		// reconciliation and tolerate errors arising from the Tier not being created or the API server not being available.
+		// We also exclude NetworkPolicy and do not degrade when the Tier watch is not ready, as this means the API server is not available.
+		if r.tierWatchReady.IsReady() {
+			if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+				if !errors.IsNotFound(err) && !meta.IsNoMatchError(err) {
+					log.Error(err, "Error querying allow-tigera tier")
+					r.status.SetDegraded("Error querying allow-tigera tier", err.Error())
+					return reconcile.Result{}, err
+				}
+			} else {
+				includeV3NetworkPolicy = true
+			}
+		}
 	}
 
 	err = utils.GetK8sServiceEndPoint(r.client)
@@ -295,6 +349,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	apiServerCfg := render.APIServerConfiguration{
 		K8SServiceEndpoint:          k8sapi.Endpoint,
 		Installation:                network,
+		APIServer:                   &instance.Spec,
 		ForceHostNetwork:            false,
 		ManagementCluster:           managementCluster,
 		ManagementClusterConnection: managementClusterConnection,
@@ -327,6 +382,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		components = append(components, tunnelSecretPassthrough)
 	}
 
+	var pcPolicy render.Component
 	if variant == operatorv1.TigeraSecureEnterprise {
 		packetCaptureCertSecret, err := certificateManager.GetOrCreateKeyPair(
 			r.client,
@@ -353,14 +409,16 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}
 
 		packetCaptureApiCfg := &render.PacketCaptureApiConfiguration{
-			PullSecrets:        pullSecrets,
-			Openshift:          r.provider == operatorv1.ProviderOpenShift,
-			Installation:       network,
-			KeyValidatorConfig: keyValidatorConfig,
-			ServerCertSecret:   packetCaptureCertSecret,
-			ClusterDomain:      r.clusterDomain,
+			PullSecrets:                 pullSecrets,
+			Openshift:                   r.provider == operatorv1.ProviderOpenShift,
+			Installation:                network,
+			KeyValidatorConfig:          keyValidatorConfig,
+			ServerCertSecret:            packetCaptureCertSecret,
+			ClusterDomain:               r.clusterDomain,
+			ManagementClusterConnection: managementClusterConnection,
 		}
 		pc := render.PacketCaptureAPI(packetCaptureApiCfg)
+		pcPolicy = render.PacketCaptureAPIPolicy(packetCaptureApiCfg)
 		components = append(components, pc,
 			rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 				Namespace:       render.PacketCaptureNamespace,
@@ -371,6 +429,16 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			}),
 		)
 		certificateManager.AddToStatusManager(r.status, render.PacketCaptureNamespace)
+	}
+
+	// v3 NetworkPolicy will fail to reconcile if the API server deployment is unhealthy. In case the API Server
+	// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the apiserver controller
+	// would resolve it, we render the network policies of components last to prevent a chicken-and-egg scenario.
+	if includeV3NetworkPolicy {
+		components = append(components, render.APIServerPolicy(&apiServerCfg))
+		if pcPolicy != nil {
+			components = append(components, pcPolicy)
+		}
 	}
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, components...); err != nil {
@@ -400,4 +468,16 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
+}
+
+func validateAPIServerResource(instance *operatorv1.APIServer) error {
+	// Verify the APIServerDeployment overrides, if specified, is valid.
+	if d := instance.Spec.APIServerDeployment; d != nil {
+		err := validation.ValidateReplicatedPodResourceOverrides(d, apiserver.ValidateAPIServerDeploymentContainer, apiserver.ValidateAPIServerDeploymentInitContainer)
+		if err != nil {
+			return fmt.Errorf("APIServer spec.APIServerDeployment is not valid: %w", err)
+		}
+	}
+	return nil
+
 }

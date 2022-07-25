@@ -17,7 +17,12 @@ package monitor_test
 import (
 	"fmt"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/operator/pkg/render/testutils"
+	"k8s.io/apimachinery/pkg/types"
+
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -54,6 +59,16 @@ var _ = Describe("monitor rendering tests", func() {
 			"alertmanager.yaml": []byte("Alertmanager configuration secret"),
 		},
 	}
+	expectedAlertmanagerPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/alertmanager.json")
+	expectedAlertmanagerMeshPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/alertmanager-mesh.json")
+	expectedPrometheusPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/prometheus.json")
+	expectedPrometheusApiPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/prometheus-api.json")
+	expectedPrometheusOperatorPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/prometheus-operator.json")
+	expectedAlertmanagerPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/alertmanager_ocp.json")
+	expectedAlertmanagerMeshPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/alertmanager-mesh_ocp.json")
+	expectedPrometheusPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/prometheus_ocp.json")
+	expectedPrometheusApiPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/prometheus-api_ocp.json")
+	expectedPrometheusOperatorPolicyOpenshift := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/prometheus-operator_ocp.json")
 
 	var cfg *monitor.Config
 	var prometheusKeyPair certificatemanagement.KeyPairInterface
@@ -492,5 +507,50 @@ var _ = Describe("monitor rendering tests", func() {
 				ValueFrom: nil,
 			},
 		}))
+	})
+
+	Context("allow-tigera rendering", func() {
+		policyNames := []types.NamespacedName{
+			{Name: "allow-tigera.calico-node-alertmanager", Namespace: "tigera-prometheus"},
+			{Name: "allow-tigera.calico-node-alertmanager-mesh", Namespace: "tigera-prometheus"},
+			{Name: "allow-tigera.prometheus", Namespace: "tigera-prometheus"},
+			{Name: "allow-tigera.tigera-prometheus-api", Namespace: "tigera-prometheus"},
+			{Name: "allow-tigera.prometheus-operator", Namespace: "tigera-prometheus"},
+		}
+
+		getExpectedPolicy := func(name types.NamespacedName, scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
+			if name.Name == "allow-tigera.calico-node-alertmanager" {
+				return testutils.SelectPolicyByProvider(scenario, expectedAlertmanagerPolicy, expectedAlertmanagerPolicyForOpenshift)
+			} else if name.Name == "allow-tigera.calico-node-alertmanager-mesh" {
+				return testutils.SelectPolicyByProvider(scenario, expectedAlertmanagerMeshPolicy, expectedAlertmanagerMeshPolicyForOpenshift)
+			} else if name.Name == "allow-tigera.prometheus" {
+				return testutils.SelectPolicyByProvider(scenario, expectedPrometheusPolicy, expectedPrometheusPolicyForOpenshift)
+			} else if name.Name == "allow-tigera.tigera-prometheus-api" {
+				return testutils.SelectPolicyByProvider(scenario, expectedPrometheusApiPolicy, expectedPrometheusApiPolicyForOpenshift)
+			} else if name.Name == "allow-tigera.prometheus-operator" {
+				return testutils.SelectPolicyByProvider(scenario, expectedPrometheusOperatorPolicy, expectedPrometheusOperatorPolicyOpenshift)
+			}
+
+			return nil
+		}
+
+		DescribeTable("should render allow-tigera policy",
+			func(scenario testutils.AllowTigeraScenario) {
+				cfg.Openshift = scenario.Openshift
+
+				component := monitor.MonitorPolicy(cfg)
+				resourcesToCreate, _ := component.Objects()
+
+				for _, policyName := range policyNames {
+					policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resourcesToCreate)
+					expectedPolicy := getExpectedPolicy(policyName, scenario)
+					Expect(policy).To(Equal(expectedPolicy))
+				}
+			},
+			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
+			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
+			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
+		)
 	})
 })

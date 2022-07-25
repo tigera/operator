@@ -2007,6 +2007,8 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(ns["projectcalico.org/operator-node-migration"]).To(Equal("migrated"))
 	})
 
+	trueValue := true
+	falseValue := false
 	DescribeTable("test IP Pool configuration",
 		func(pool operatorv1.IPPool, expect map[string]string) {
 			// Provider does not matter for IPPool configuration
@@ -2029,6 +2031,8 @@ var _ = Describe("Node rendering tests", func() {
 				"CALICO_IPV4POOL_VXLAN",
 				"CALICO_IPV4POOL_NAT_OUTGOING",
 				"CALICO_IPV4POOL_NODE_SELECTOR",
+				"CALICO_IPV4POOL_DISABLE_BGP_EXPORT",
+				"CALICO_IPV6POOL_DISABLE_BGP_EXPORT",
 			} {
 				v, ok := expect[envVar]
 				if ok {
@@ -2158,18 +2162,60 @@ var _ = Describe("Node rendering tests", func() {
 				"CALICO_IPV4POOL_IPIP":          "Always",
 				"CALICO_IPV4POOL_NODE_SELECTOR": "has(thiskey)",
 			}),
-		Entry("Pool with all fields set",
+		Entry("Pool with v4 disable BGP export set to true",
 			operatorv1.IPPool{
-				CIDR:          "172.16.0.0/24",
-				Encapsulation: operatorv1.EncapsulationIPIP,
-				NATOutgoing:   "Disabled",
-				NodeSelector:  "has(thiskey)",
+				CIDR:             "172.16.0.0/24",
+				DisableBGPExport: &trueValue,
 			},
 			map[string]string{
-				"CALICO_IPV4POOL_CIDR":          "172.16.0.0/24",
-				"CALICO_IPV4POOL_IPIP":          "Always",
-				"CALICO_IPV4POOL_NAT_OUTGOING":  "false",
-				"CALICO_IPV4POOL_NODE_SELECTOR": "has(thiskey)",
+				"CALICO_IPV4POOL_CIDR":               "172.16.0.0/24",
+				"CALICO_IPV4POOL_IPIP":               "Always",
+				"CALICO_IPV4POOL_DISABLE_BGP_EXPORT": "true",
+			}),
+		Entry("Pool with v4 disable BGP export set to false",
+			operatorv1.IPPool{
+				CIDR:             "172.16.0.0/24",
+				DisableBGPExport: &falseValue,
+			},
+			map[string]string{
+				"CALICO_IPV4POOL_CIDR":               "172.16.0.0/24",
+				"CALICO_IPV4POOL_IPIP":               "Always",
+				"CALICO_IPV4POOL_DISABLE_BGP_EXPORT": "false",
+			}),
+		Entry("Pool with v6 disable BGP export set to true",
+			operatorv1.IPPool{
+				CIDR:             "fc00::/48",
+				DisableBGPExport: &trueValue,
+			},
+			map[string]string{
+				"CALICO_IPV6POOL_CIDR":               "fc00::/48",
+				"CALICO_IPV6POOL_IPIP":               "Always",
+				"CALICO_IPV6POOL_DISABLE_BGP_EXPORT": "true",
+			}),
+		Entry("Pool with v6 disable BGP export set to false",
+			operatorv1.IPPool{
+				CIDR:             "fc00::/48",
+				DisableBGPExport: &falseValue,
+			},
+			map[string]string{
+				"CALICO_IPV6POOL_CIDR":               "fc00::/48",
+				"CALICO_IPV6POOL_IPIP":               "Always",
+				"CALICO_IPV6POOL_DISABLE_BGP_EXPORT": "false",
+			}),
+		Entry("Pool with all fields set",
+			operatorv1.IPPool{
+				CIDR:             "172.16.0.0/24",
+				Encapsulation:    operatorv1.EncapsulationIPIP,
+				NATOutgoing:      "Disabled",
+				NodeSelector:     "has(thiskey)",
+				DisableBGPExport: &trueValue,
+			},
+			map[string]string{
+				"CALICO_IPV4POOL_CIDR":               "172.16.0.0/24",
+				"CALICO_IPV4POOL_IPIP":               "Always",
+				"CALICO_IPV4POOL_NAT_OUTGOING":       "false",
+				"CALICO_IPV4POOL_NODE_SELECTOR":      "has(thiskey)",
+				"CALICO_IPV4POOL_DISABLE_BGP_EXPORT": "true",
 			}),
 	)
 
@@ -2987,6 +3033,153 @@ var _ = Describe("Node rendering tests", func() {
 			SubPath:   render.BGPLayoutConfigMapKey,
 		}))
 		rtest.ExpectEnv(deploy.Spec.Template.Spec.Containers[0].Env, "CALICO_EARLY_NETWORKING", render.BGPLayoutPath)
+	})
+
+	Context("With calico-node DaemonSet overrides", func() {
+		var rr1 = corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":     resource.MustParse("2"),
+				"memory":  resource.MustParse("300Mi"),
+				"storage": resource.MustParse("20Gi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":     resource.MustParse("1"),
+				"memory":  resource.MustParse("150Mi"),
+				"storage": resource.MustParse("10Gi"),
+			},
+		}
+		var rr2 = corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("250m"),
+				corev1.ResourceMemory: resource.MustParse("64Mi"),
+			},
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("500m"),
+				corev1.ResourceMemory: resource.MustParse("500Mi"),
+			},
+		}
+
+		It("should handle calicoNodeDaemonSet overrides", func() {
+			var minReadySeconds int32 = 20
+
+			affinity := &corev1.Affinity{
+				NodeAffinity: &corev1.NodeAffinity{
+					RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+						NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+							MatchExpressions: []corev1.NodeSelectorRequirement{{
+								Key:      "custom-affinity-key",
+								Operator: corev1.NodeSelectorOpExists,
+							}},
+						}},
+					},
+				},
+			}
+			toleration := corev1.Toleration{
+				Key:      "foo",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "bar",
+			}
+
+			defaultInstance.CalicoNodeDaemonSet = &operatorv1.CalicoNodeDaemonSet{
+				Metadata: &operatorv1.Metadata{
+					Labels:      map[string]string{"top-level": "label1"},
+					Annotations: map[string]string{"top-level": "annot1"},
+				},
+				Spec: &operatorv1.CalicoNodeDaemonSetSpec{
+					MinReadySeconds: &minReadySeconds,
+					Template: &operatorv1.CalicoNodeDaemonSetPodTemplateSpec{
+						Metadata: &operatorv1.Metadata{
+							Labels:      map[string]string{"template-level": "label2"},
+							Annotations: map[string]string{"template-level": "annot2"},
+						},
+						Spec: &operatorv1.CalicoNodeDaemonSetPodSpec{
+							Containers: []operatorv1.CalicoNodeDaemonSetContainer{
+								{
+									Name:      "calico-node",
+									Resources: &rr1,
+								},
+							},
+							NodeSelector: map[string]string{
+								"custom-node-selector": "value",
+							},
+							Affinity:    affinity,
+							Tolerations: []corev1.Toleration{toleration},
+						},
+					},
+				},
+			}
+
+			component := render.Node(&cfg)
+			resources, _ := component.Objects()
+			dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			Expect(dsResource).ToNot(BeNil())
+
+			ds := dsResource.(*appsv1.DaemonSet)
+
+			Expect(ds.Labels).To(HaveLen(1))
+			Expect(ds.Labels["top-level"]).To(Equal("label1"))
+			Expect(ds.Annotations).To(HaveLen(1))
+			Expect(ds.Annotations["top-level"]).To(Equal("annot1"))
+
+			Expect(ds.Spec.MinReadySeconds).To(Equal(minReadySeconds))
+
+			// At runtime, the operator will also add some standard labels to the
+			// daemonset such as "k8s-app=calico-node". But the calico-node daemonset object
+			// produced by the render will have no labels so we expect just the one
+			// provided.
+			Expect(ds.Spec.Template.Labels).To(HaveLen(1))
+			Expect(ds.Spec.Template.Labels["template-level"]).To(Equal("label2"))
+
+			// With the default instance we expect 3 template-level annotations
+			// - 2 added by the operator by default
+			// - 1 added by the calicoNodeDaemonSet override
+			Expect(ds.Spec.Template.Annotations).To(HaveLen(3))
+			Expect(ds.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/tigera-ca-private"))
+			Expect(ds.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/cni-config"))
+			Expect(ds.Spec.Template.Annotations["template-level"]).To(Equal("annot2"))
+
+			Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(ds.Spec.Template.Spec.Containers[0].Resources).To(Equal(rr1))
+
+			Expect(ds.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
+			Expect(ds.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("custom-node-selector", "value"))
+
+			Expect(ds.Spec.Template.Spec.Tolerations).To(HaveLen(1))
+			Expect(ds.Spec.Template.Spec.Tolerations[0]).To(Equal(toleration))
+		})
+
+		It("should override ComponentResources", func() {
+			defaultInstance.ComponentResources = []operatorv1.ComponentResource{
+				{
+					ComponentName:        operatorv1.ComponentNameNode,
+					ResourceRequirements: &rr1,
+				},
+			}
+
+			defaultInstance.CalicoNodeDaemonSet = &operatorv1.CalicoNodeDaemonSet{
+				Spec: &operatorv1.CalicoNodeDaemonSetSpec{
+					Template: &operatorv1.CalicoNodeDaemonSetPodTemplateSpec{
+						Spec: &operatorv1.CalicoNodeDaemonSetPodSpec{
+							Containers: []operatorv1.CalicoNodeDaemonSetContainer{
+								{
+									Name:      "calico-node",
+									Resources: &rr2,
+								},
+							},
+						},
+					},
+				},
+			}
+
+			component := render.Node(&cfg)
+			resources, _ := component.Objects()
+			dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+			Expect(dsResource).ToNot(BeNil())
+
+			ds := dsResource.(*appsv1.DaemonSet)
+			Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(ds.Spec.Template.Spec.Containers[0].Resources).To(Equal(rr2))
+		})
 	})
 })
 

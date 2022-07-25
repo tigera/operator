@@ -65,7 +65,7 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 	// node container resources
 	for _, container := range c.node.Spec.Template.Spec.Containers {
 		if len(container.Resources.Limits) > 0 || len(container.Resources.Requests) > 0 {
-			if err = addContainerResources(install, "calico-node", container.Name, &container.Resources); err != nil {
+			if err = migrateContainerResources(install, "calico-node", container.Name, &container.Resources); err != nil {
 				return err
 			}
 		}
@@ -74,7 +74,7 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 	// node init container resources
 	for _, initContainer := range c.node.Spec.Template.Spec.InitContainers {
 		if len(initContainer.Resources.Limits) > 0 || len(initContainer.Resources.Requests) > 0 {
-			if err = addInitContainerResources(install, "calico-node", initContainer.Name, &initContainer.Resources); err != nil {
+			if err = migrateInitContainerResources(install, "calico-node", initContainer.Name, &initContainer.Resources); err != nil {
 				return err
 			}
 		}
@@ -84,7 +84,7 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 	if c.kubeControllers != nil {
 		for _, container := range c.kubeControllers.Spec.Template.Spec.Containers {
 			if len(container.Resources.Limits) > 0 || len(container.Resources.Requests) > 0 {
-				if err = addContainerResources(install, "calico-kube-controllers", container.Name, &container.Resources); err != nil {
+				if err = migrateContainerResources(install, "calico-kube-controllers", container.Name, &container.Resources); err != nil {
 					return err
 				}
 			}
@@ -96,14 +96,14 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 	if c.typha != nil {
 		for _, container := range c.typha.Spec.Template.Spec.Containers {
 			if len(container.Resources.Limits) > 0 || len(container.Resources.Requests) > 0 {
-				if err = addContainerResources(install, "calico-typha", container.Name, &container.Resources); err != nil {
+				if err = migrateContainerResources(install, "calico-typha", container.Name, &container.Resources); err != nil {
 					return err
 				}
 			}
 		}
 		for _, initContainer := range c.typha.Spec.Template.Spec.InitContainers {
 			if len(initContainer.Resources.Limits) > 0 || len(initContainer.Resources.Requests) > 0 {
-				if err = addInitContainerResources(install, "calico-typha", initContainer.Name, &initContainer.Resources); err != nil {
+				if err = migrateInitContainerResources(install, "calico-typha", initContainer.Name, &initContainer.Resources); err != nil {
 					return err
 				}
 			}
@@ -245,6 +245,7 @@ func getMinReadySeconds(override comp.ReplicatedPodResourceOverrides) *int32 {
 	return override.GetMinReadySeconds()
 }
 
+// migrateMinReadySeconds takes the components and migrates their minReadySeconds values to the installation.
 func migrateMinReadySeconds(c *components, install *operatorv1.Installation) error {
 	// Handle calico-node
 	minReadySeconds := getMinReadySeconds(install.Spec.CalicoNodeDaemonSet)
@@ -607,10 +608,10 @@ func convertComponentResources(install *operatorv1.Installation) {
 	install.Spec.ComponentResources = nil
 }
 
-// addContainerResources adds the resources for the specified component container if none was previously set. If the Installation
+// migrateContainerResources adds the resources for the specified component container if none was previously set. If the Installation
 // already had a resource for the component container then they are compared and if they are different then an error is returned.
 // If the component container resource is added to the Installation or the existing one matches then nil is returned.
-func addContainerResources(install *operatorv1.Installation, componentName, containerName string, resources *corev1.ResourceRequirements) error {
+func migrateContainerResources(install *operatorv1.Installation, componentName, containerName string, resources *corev1.ResourceRequirements) error {
 	// If resources already exist for this component container, verify that they equal the container's existing resources.
 	if existingResources, found := getContainerResourceOverride(install, componentName, containerName); found {
 		if !reflect.DeepEqual(existingResources, resources) {
@@ -643,10 +644,10 @@ func addContainerResources(install *operatorv1.Installation, componentName, cont
 	return nil
 }
 
-// addInitContainerResources adds the resources for the specified component init container if none was previously set. If the Installation
+// migrateInitContainerResources adds the resources for the specified component init container if none was previously set. If the Installation
 // already had a resource for the component init container then they are compared and if they are different then an error is returned.
 // If the component init container resource is added to the Installation or the existing one matches then nil is returned.
-func addInitContainerResources(install *operatorv1.Installation, componentName, initContainerName string, resources *corev1.ResourceRequirements) error {
+func migrateInitContainerResources(install *operatorv1.Installation, componentName, initContainerName string, resources *corev1.ResourceRequirements) error {
 	// If resources already exist for this component init container, verify that they equal the container's existing resources.
 	if existingResources, found := getInitContainerResourceOverride(install, componentName, initContainerName); found {
 		if !reflect.DeepEqual(existingResources, resources) {

@@ -432,7 +432,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(c.Create(ctx, &operatorv1.IntrusionDetection{
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Spec: operatorv1.IntrusionDetectionSpec{
-					AnomalyDetectionSpec: &operatorv1.AnomalyDetectionSpec{
+					AnomalyDetectionSpec: operatorv1.AnomalyDetectionSpec{
 						StorageType:      operatorv1.PersistentStorageType,
 						StorageClassName: malFormedStorageName,
 					},
@@ -450,7 +450,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(c.Create(ctx, &operatorv1.IntrusionDetection{
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Spec: operatorv1.IntrusionDetectionSpec{
-					AnomalyDetectionSpec: &operatorv1.AnomalyDetectionSpec{
+					AnomalyDetectionSpec: operatorv1.AnomalyDetectionSpec{
 						// error from setting persistent storage but no storage class is found
 						StorageType: operatorv1.PersistentStorageType,
 					},
@@ -474,7 +474,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(c.Create(ctx, &operatorv1.IntrusionDetection{
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Spec: operatorv1.IntrusionDetectionSpec{
-					AnomalyDetectionSpec: &operatorv1.AnomalyDetectionSpec{
+					AnomalyDetectionSpec: operatorv1.AnomalyDetectionSpec{
 						StorageType: operatorv1.PersistentStorageType,
 					},
 				},
@@ -627,7 +627,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(c.Create(ctx, &operatorv1.IntrusionDetection{
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Spec: operatorv1.IntrusionDetectionSpec{
-					AnomalyDetectionSpec: &operatorv1.AnomalyDetectionSpec{
+					AnomalyDetectionSpec: operatorv1.AnomalyDetectionSpec{
 						StorageType: operatorv1.PersistentStorageType,
 					},
 				},

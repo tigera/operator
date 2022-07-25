@@ -212,7 +212,6 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		)
 
 		configureADStorage := c.cfg.IntrusionDetction != nil &&
-			c.cfg.IntrusionDetction.Spec.AnomalyDetectionSpec != nil &&
 			c.cfg.IntrusionDetction.Spec.AnomalyDetectionSpec.StorageType == operatorv1.PersistentStorageType
 
 		if configureADStorage {

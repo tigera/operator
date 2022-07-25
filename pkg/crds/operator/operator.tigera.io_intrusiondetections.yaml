@@ -37,9 +37,9 @@ spec:
           spec:
             description: Specification of the desired state for Tigera intrusion detection.
             properties:
-              anomalyDetectionSpec:
+              anomalyDetection:
                 description: AnomalyDetectionSpec provides configuration for running
-                  AnomalyDetection Component within IntrusionDetection
+                  AnomalyDetectionSpec Component within IntrusionDetection
                 properties:
                   storageClassName:
                     description: 'StorageClassName will populate the PersistentVolumeClaim.StorageClassName

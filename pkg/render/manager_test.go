@@ -326,11 +326,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			managerDeployment := rtest.GetResource(rs, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			voltronContainer := rtest.GetContainer(managerDeployment.Spec.Template.Spec.Containers, "tigera-voltron")
 
-			rtest.ExpectEnv(voltronContainer.Env, "VOLTRON_USE_HTTPS_CERT_ON_VOLTRON", "false")
+			rtest.ExpectEnv(voltronContainer.Env, "VOLTRON_USE_HTTPS_CERT_ON_TUNNEL", "false")
 		})
 
 		It("should render when enabled", func() {
-			cfg.UseTrustedCertBundleWithVoltron = true
+			cfg.ManagementCluster.Spec.TunnelCertType = operatorv1.TunnelCertCASigned
 
 			resources, err := render.Manager(cfg)
 			Expect(err).ToNot(HaveOccurred())
@@ -339,7 +339,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			managerDeployment := rtest.GetResource(rs, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			voltronContainer := rtest.GetContainer(managerDeployment.Spec.Template.Spec.Containers, "tigera-voltron")
 
-			rtest.ExpectEnv(voltronContainer.Env, "VOLTRON_USE_HTTPS_CERT_ON_VOLTRON", "true")
+			rtest.ExpectEnv(voltronContainer.Env, "VOLTRON_USE_HTTPS_CERT_ON_TUNNEL", "true")
 		})
 
 	})

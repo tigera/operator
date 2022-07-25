@@ -118,8 +118,11 @@ func (c *component) sashaCronJob() *batchv1.CronJob {
 	envVars := []corev1.EnvVar{
 		{Name: "PULL_MAX_LAST_MINUTES", Value: "20"},
 		{Name: "CLUSTER_NAME", Value: c.esClusterName()},
-		// Sasha Phase 0: hashes are embedded as JSON in sasha image used in cron job
-		{Name: "HASHES_SOURCE", Value: "local"},
+
+		{Name: "SASHA_SECRETLOCATION", Value: "/certs/auth-config"},
+		{Name: "SASHA_VERIFYURL", Value: ""},
+		{Name: "SASHA_RUNTIMELOCATION", Value: "es"},
+		{Name: "SASHA_ALERTLOCATION", Value: "es"},
 	}
 
 	return &batchv1.CronJob{
@@ -149,10 +152,10 @@ func (c *component) sashaCronJob() *batchv1.CronJob {
 							Tolerations:  c.config.Installation.ControlPlaneTolerations,
 							Containers: []corev1.Container{
 								relasticsearch.ContainerDecorate(corev1.Container{
-									Name:    ResourceNameSashaJob,
-									Image:   c.config.sashaImage,
-									Command: []string{"./calico-sasha"},
-									Env:     envVars,
+									Name:  ResourceNameSashaJob,
+									Image: c.config.sashaImage,
+									//Command: []string{"./calico-sasha"},
+									Env: envVars,
 									Resources: corev1.ResourceRequirements{
 										Limits: corev1.ResourceList{
 											corev1.ResourceCPU:    resource.MustParse(ResourceSashaDefaultCPULimit),
@@ -161,6 +164,13 @@ func (c *component) sashaCronJob() *batchv1.CronJob {
 										Requests: corev1.ResourceList{
 											corev1.ResourceCPU:    resource.MustParse(ResourceSashaDefaultCPURequest),
 											corev1.ResourceMemory: resource.MustParse(ResourceSashaDefaultMemoryRequest),
+										},
+									},
+									VolumeMounts: []corev1.VolumeMount{
+										{
+											Name:      "runtime-security-auth-secret",
+											MountPath: "/certs/auth-config",
+											ReadOnly:  true,
 										},
 									},
 								},

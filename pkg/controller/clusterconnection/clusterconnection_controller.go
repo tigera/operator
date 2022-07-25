@@ -294,7 +294,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	ch := utils.NewComponentHandler(log, r.Client, r.Scheme, managementClusterConnection)
 	guardianCfg := &render.GuardianConfiguration{
 		URL:                managementClusterConnection.Spec.ManagementClusterAddr,
-		VerificationMethod: managementClusterConnection.Spec.ServerIdentityVerificationMethod,
+		VerificationMethod: managementClusterConnection.Spec.ManagementClusterIdentityVerificationMethod,
 		PullSecrets:        pullSecrets,
 		Openshift:          r.Provider == operatorv1.ProviderOpenShift,
 		Installation:       instl,

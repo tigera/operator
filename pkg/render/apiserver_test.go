@@ -813,7 +813,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		dep := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment")
 		Expect(dep).ToNot(BeNil())
 
-		Expect((dep.(*appsv1.Deployment)).Spec.Template.Spec.Containers[0].Args).To(ContainElement("--usePublicCA=true"))
+		Expect((dep.(*appsv1.Deployment)).Spec.Template.Spec.Containers[0].Args).To(ContainElement("--managementClusterIdentityVerificationMethod=CASigned"))
 	})
 
 	It("should add an init container if certificate management is enabled", func() {

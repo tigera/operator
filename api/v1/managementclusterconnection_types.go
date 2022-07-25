@@ -27,7 +27,7 @@ type ManagementClusterConnectionSpec struct {
 	// +optional
 	ManagementClusterAddr string `json:"managementClusterAddr,omitempty"`
 
-	// ServerIdentityVerificationMethod configures the way which guardian should verify voltron's identity.
+	// ManagementClusterIdentityVerificationMethod configures the way which guardian should verify voltron's identity.
 	//
 	// When set to SelfSigned, guardian will expect a cert in the certificate bundle which can be used to verify
 	// voltron's identity, and will expect voltron's cert to have a SN of 'voltron'.
@@ -37,7 +37,7 @@ type ManagementClusterConnectionSpec struct {
 	//
 	// Default: SelfSigned
 	// +optional
-	ServerIdentityVerificationMethod TunnelCertType `json:"serverIdentityVerificationMethod,omitempty"`
+	ManagementClusterIdentityVerificationMethod TunnelCertType `json:"managementClusterIdentityVerificationMethod,omitempty"`
 }
 
 // +kubebuilder:object:root=true

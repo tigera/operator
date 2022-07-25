@@ -982,8 +982,8 @@ func (c *apiServerComponent) startUpArgs() []string {
 		if c.cfg.ManagementCluster.Spec.Address != "" {
 			args = append(args, fmt.Sprintf("--managementClusterAddr=%s", c.cfg.ManagementCluster.Spec.Address))
 		}
-		if c.cfg.ManagementCluster.Spec.TunnelCertType == operatorv1.TunnelCertCASigned {
-			args = append(args, "--usePublicCA=true")
+		if c.cfg.ManagementCluster.Spec.TunnelCertType != "" {
+			args = append(args, fmt.Sprintf("--managementClusterIdentityVerificationMethod=%s", c.cfg.ManagementCluster.Spec.TunnelCertType))
 		}
 	}
 

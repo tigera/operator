@@ -801,6 +801,21 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect((dep.(*appsv1.Deployment)).Spec.Template.Spec.Containers[0].Args).To(ConsistOf(expectedArgs))
 	})
 
+	It("should render an API server with signed ca bundles enabled", func() {
+		cfg.ManagementCluster = managementCluster
+		cfg.TunnelCASecret = tunnelKeyPair
+		cfg.ManagementCluster.Spec.TunnelCertType = operatorv1.TunnelCertCASigned
+		component, err := render.APIServer(cfg)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+
+		resources, _ := component.Objects()
+
+		dep := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment")
+		Expect(dep).ToNot(BeNil())
+
+		Expect((dep.(*appsv1.Deployment)).Spec.Template.Spec.Containers[0].Args).To(ContainElement("--managementClusterIdentityVerificationMethod=CASigned"))
+	})
+
 	It("should add an init container if certificate management is enabled", func() {
 		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c", CACert: cfg.TLSKeyPair.GetCertificatePEM()}
 		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain)

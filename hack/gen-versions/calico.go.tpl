@@ -63,6 +63,18 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "calico/csi"}}
+	ComponentCalicoCSI = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
+{{ with index .Components "csi-node-driver-registrar"}}
+	ComponentCalicoCSIRegistrar = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 	ComponentOperatorInit = component{
 		Version: version.VERSION,
 		Image:   "tigera/operator",
@@ -77,5 +89,7 @@ var (
 		ComponentOperatorInit,
 		ComponentCalicoAPIServer,
 		ComponentWindowsUpgrade,
+		ComponentCalicoCSI,
+		ComponentCalicoCSIRegistrar,
 	}
 )

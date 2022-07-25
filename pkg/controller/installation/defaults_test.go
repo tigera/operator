@@ -52,6 +52,11 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 		Expect(instance.Spec.NonPrivileged).NotTo(BeNil())
 		Expect(*instance.Spec.NonPrivileged).To(Equal(operator.NonPrivilegedDisabled))
+		Expect(instance.Spec.VolumePlugin).NotTo(BeNil())
+		Expect(instance.Spec.VolumePlugin.Enable).To(Equal(false))
+		Expect(instance.Spec.VolumePlugin.KubeletDir).To(Equal("/var/lib/kubelet"))
+		Expect(instance.Spec.VolumePlugin.SockDir).To(Equal("/var/lib/kubelet/plugins/csi.tigera.io/"))
+		Expect(instance.Spec.VolumePlugin.RegistrationDir).To(Equal("/var/lib/kubelet/plugins_registry/"))
 	})
 
 	It("should properly fill defaults on an empty TigeraSecureEnterprise instance", func() {
@@ -76,6 +81,11 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 		Expect(instance.Spec.NonPrivileged).NotTo(BeNil())
 		Expect(*instance.Spec.NonPrivileged).To(Equal(operator.NonPrivilegedDisabled))
+		Expect(instance.Spec.VolumePlugin).NotTo(BeNil())
+		Expect(instance.Spec.VolumePlugin.Enable).To(Equal(false))
+		Expect(instance.Spec.VolumePlugin.KubeletDir).To(Equal("/var/lib/kubelet"))
+		Expect(instance.Spec.VolumePlugin.SockDir).To(Equal("/var/lib/kubelet/plugins/csi.tigera.io/"))
+		Expect(instance.Spec.VolumePlugin.RegistrationDir).To(Equal("/var/lib/kubelet/plugins_registry/"))
 	})
 
 	It("should not override custom configuration", func() {
@@ -147,6 +157,12 @@ var _ = Describe("Defaulting logic tests", func() {
 						MaxUnavailable: &one,
 					},
 				},
+				VolumePlugin: &operator.VolumePluginSpec{
+					Enable:          true,
+					KubeletDir:      "/my/kubelet/dir",
+					SockDir:         "/my/sock/dir",
+					RegistrationDir: "/my/reg/dir",
+				},
 			},
 		}
 		instanceCopy := instance.DeepCopyObject().(*operator.Installation)
@@ -213,6 +229,12 @@ var _ = Describe("Defaulting logic tests", func() {
 					RollingUpdate: &appsv1.RollingUpdateDaemonSet{
 						MaxUnavailable: &one,
 					},
+				},
+				VolumePlugin: &operator.VolumePluginSpec{
+					Enable:          true,
+					KubeletDir:      "/my/kubelet/dir",
+					SockDir:         "/my/sock/dir",
+					RegistrationDir: "/my/reg/dir",
 				},
 			},
 		}

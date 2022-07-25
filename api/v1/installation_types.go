@@ -127,6 +127,11 @@ type InstallationSpec struct {
 	// +optional
 	FlexVolumePath string `json:"flexVolumePath,omitempty"`
 
+	// VolumePlugin optionally specifies enablement of Calico CSI plugin. If not specified,
+	// VolumePlugin will be disabled by default.
+	// +optional
+	VolumePlugin *VolumePluginSpec `json:"volumePlugin,omitempty"`
+
 	// NodeUpdateStrategy can be used to customize the desired update strategy, such as the MaxUnavailable
 	// field.
 	// +optional
@@ -325,6 +330,29 @@ const (
 	LinuxDataplaneBPF      LinuxDataplaneOption = "BPF"
 	LinuxDataplaneVPP      LinuxDataplaneOption = "VPP"
 )
+
+// VolumePluginSpec provides configuration options for CSI plugin
+type VolumePluginSpec struct {
+	// Enable allows CSI to be turned on and off
+	// Default: false
+	// +kubebuilder:validation:format: boolean
+	Enable bool `json:"enable"`
+
+	// KubeletDir specifies the absolute path of the Kubelet root directory
+	// Default: /var/lib/kubelet
+	// +optional
+	KubeletDir string `json:"kubeletDir,omitempty"`
+
+	// SockDir specifies the absolute path of the plugins socket directory
+	// Default: /var/lib/kubelet/plugins/csi.tigera.io/
+	// +optional
+	SockDir string `json:"sockDir,omitempty"`
+
+	// RegistrationDir specifies the absolute path of the plugins registration directory
+	// Default: /var/lib/kubelet/plugins_registry/
+	// +optional
+	RegistrationDir string `json:"registrationDir,omitempty"`
+}
 
 // CalicoNetworkSpec specifies configuration options for Calico provided pod networking.
 type CalicoNetworkSpec struct {

@@ -19,6 +19,7 @@ package clusterconnection
 
 import (
 	"context"
+
 	"github.com/tigera/operator/pkg/controller/utils"
 
 	operatorv1 "github.com/tigera/operator/api/v1"

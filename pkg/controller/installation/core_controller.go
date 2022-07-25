@@ -721,6 +721,24 @@ func fillDefaults(instance *operator.Installation) error {
 		}
 	}
 
+	if instance.Spec.VolumePlugin == nil {
+		instance.Spec.VolumePlugin = &operator.VolumePluginSpec{
+			Enable: false,
+		}
+	}
+
+	if len(instance.Spec.VolumePlugin.KubeletDir) == 0 {
+		instance.Spec.VolumePlugin.KubeletDir = "/var/lib/kubelet"
+	}
+
+	if len(instance.Spec.VolumePlugin.SockDir) == 0 {
+		instance.Spec.VolumePlugin.SockDir = "/var/lib/kubelet/plugins/csi.tigera.io/"
+	}
+
+	if len(instance.Spec.VolumePlugin.RegistrationDir) == 0 {
+		instance.Spec.VolumePlugin.RegistrationDir = "/var/lib/kubelet/plugins_registry/"
+	}
+
 	// Default rolling update parameters.
 	one := intstr.FromInt(1)
 	if instance.Spec.NodeUpdateStrategy.RollingUpdate == nil {
@@ -1275,6 +1293,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		UsePSP:                  r.usePSP,
 	}
 	components = append(components, render.Node(&nodeCfg))
+
+	csiCfg := render.CSIConfiguration{
+		Installation: &instance.Spec,
+		Terminating:  terminating,
+	}
+	components = append(components, render.CSI(&csiCfg))
 
 	components = append(components,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{

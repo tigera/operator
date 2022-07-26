@@ -216,11 +216,11 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		if configureADStorage {
 			// ignore all fields if it's set to using default ephermeal storage
 			objs = append(objs,
-				c.adPersistentVolumeClaim(configureADStorage),
+				c.adPersistentVolumeClaim(),
 			)
 		} else {
 			objsToDelete = append(objsToDelete,
-				c.adPersistentVolumeClaim(configureADStorage))
+				c.adPersistentVolumeClaim())
 		}
 
 		objs = append(objs,
@@ -1319,20 +1319,8 @@ func (c *intrusionDetectionComponent) adAPIService() *corev1.Service {
 	}
 }
 
-func (c *intrusionDetectionComponent) adPersistentVolumeClaim(configureADStorage bool) *corev1.PersistentVolumeClaim {
-	pvSpec := corev1.PersistentVolumeClaimSpec{}
-	if configureADStorage {
-		adStorageClassName := c.cfg.IntrusionDetection.Spec.AnomalyDetection.StorageClassName
-		pvSpec = corev1.PersistentVolumeClaimSpec{
-			StorageClassName: &adStorageClassName,
-			AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-			Resources: corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceStorage: resource.MustParse(DefaultAnomalyDetectionPVRequestSizeGi),
-				},
-			},
-		}
-	}
+func (c *intrusionDetectionComponent) adPersistentVolumeClaim() *corev1.PersistentVolumeClaim {
+	adStorageClassName := c.cfg.IntrusionDetection.Spec.AnomalyDetection.StorageClassName
 
 	adPVC := corev1.PersistentVolumeClaim{
 		TypeMeta: metav1.TypeMeta{Kind: "PersistentVolumeClaim", APIVersion: "v1"},
@@ -1340,7 +1328,15 @@ func (c *intrusionDetectionComponent) adPersistentVolumeClaim(configureADStorage
 			Name:      ADPersistentVolumeClaimName,
 			Namespace: IntrusionDetectionNamespace,
 		},
-		Spec: pvSpec,
+		Spec: corev1.PersistentVolumeClaimSpec{
+			StorageClassName: &adStorageClassName,
+			AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: resource.MustParse(DefaultAnomalyDetectionPVRequestSizeGi),
+				},
+			},
+		},
 	}
 
 	return &adPVC

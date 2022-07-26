@@ -253,7 +253,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
-	if err := r.setDefaultsOnIntrusionDetection(ctx, instance); err != nil {
+	if err := r.fillDefaults(ctx, instance); err != nil {
 		log.Error(err, "Failed to set defaults on IntrusionDetection CR")
 		r.status.SetDegraded("Unable to set defaults on IntrusionDetection", err.Error())
 		return reconcile.Result{}, err
@@ -317,16 +317,16 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	// Query for StorageClass for AD API if provided
-	if instance.Spec.AnomalyDetectionSpec.StorageType == operatorv1.PersistentStorageType {
+	if instance.Spec.AnomalyDetection.StorageType == operatorv1.PersistentStorageType {
 		// validate to degrade early if the storage class name is not valid
-		if err = utils.ValidateResourceNameIsQualified(instance.Spec.AnomalyDetectionSpec.StorageClassName); err != nil {
+		if err = utils.ValidateResourceNameIsQualified(instance.Spec.AnomalyDetection.StorageClassName); err != nil {
 			errMessage := "Invalid AD Storage Class name provided"
 			log.Error(err, errMessage)
 			r.status.SetDegraded(errMessage, err.Error())
 			return reconcile.Result{}, err
 		}
 
-		if err = r.client.Get(ctx, client.ObjectKey{Name: instance.Spec.AnomalyDetectionSpec.StorageClassName}, &storagev1.StorageClass{}); err != nil {
+		if err = r.client.Get(ctx, client.ObjectKey{Name: instance.Spec.AnomalyDetection.StorageClassName}, &storagev1.StorageClass{}); err != nil {
 			if errors.IsNotFound(err) {
 				log.Error(err, "Anomaly Detection Storage Class not found")
 				r.status.SetDegraded("Failed to get storage class for anomaly detection", err.Error())
@@ -561,9 +561,9 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	return reconcile.Result{}, nil
 }
 
-// setDefaultsOnIntrusionDetection updates the IntrusionDetection resource with defaults if
+// fillDefaults updates the IntrusionDetection resource with defaults if
 // ComponentResources and AnomalyDetectionSpec are not populated.
-func (r *ReconcileIntrusionDetection) setDefaultsOnIntrusionDetection(ctx context.Context, ids *operatorv1.IntrusionDetection) error {
+func (r *ReconcileIntrusionDetection) fillDefaults(ctx context.Context, ids *operatorv1.IntrusionDetection) error {
 	if ids.Spec.ComponentResources == nil {
 		ids.Spec.ComponentResources = []operatorv1.IntrusionDetectionComponentResource{
 			{
@@ -583,13 +583,13 @@ func (r *ReconcileIntrusionDetection) setDefaultsOnIntrusionDetection(ctx contex
 
 	}
 
-	if ids.Spec.AnomalyDetectionSpec == (operatorv1.AnomalyDetectionSpec{}) {
-		ids.Spec.AnomalyDetectionSpec = operatorv1.AnomalyDetectionSpec{
+	if len(ids.Spec.AnomalyDetection.StorageType) == 0 {
+		ids.Spec.AnomalyDetection = operatorv1.AnomalyDetectionSpec{
 			StorageType: operatorv1.EphemeralStorageType,
 		}
 	} else {
-		if ids.Spec.AnomalyDetectionSpec.StorageType == operatorv1.PersistentStorageType && len(ids.Spec.AnomalyDetectionSpec.StorageClassName) == 0 {
-			ids.Spec.AnomalyDetectionSpec.StorageClassName = render.DefaultADStorageClassName
+		if ids.Spec.AnomalyDetection.StorageType == operatorv1.PersistentStorageType && len(ids.Spec.AnomalyDetection.StorageClassName) == 0 {
+			ids.Spec.AnomalyDetection.StorageClassName = render.DefaultADStorageClassName
 		}
 	}
 

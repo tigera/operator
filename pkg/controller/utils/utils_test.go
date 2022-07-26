@@ -194,7 +194,7 @@ var _ = Describe("ValidateResourceNameIsQualified", func() {
 	})
 
 	It("returns nil for an invalid resource name", func() {
-		invalidName := "inproper_resource_name"
+		invalidName := "improper_resource_name"
 
 		err := ValidateResourceNameIsQualified(invalidName)
 

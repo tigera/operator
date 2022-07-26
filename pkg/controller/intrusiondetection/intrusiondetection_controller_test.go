@@ -432,7 +432,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(c.Create(ctx, &operatorv1.IntrusionDetection{
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Spec: operatorv1.IntrusionDetectionSpec{
-					AnomalyDetectionSpec: operatorv1.AnomalyDetectionSpec{
+					AnomalyDetection: operatorv1.AnomalyDetectionSpec{
 						StorageType:      operatorv1.PersistentStorageType,
 						StorageClassName: malFormedStorageName,
 					},
@@ -450,7 +450,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(c.Create(ctx, &operatorv1.IntrusionDetection{
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Spec: operatorv1.IntrusionDetectionSpec{
-					AnomalyDetectionSpec: operatorv1.AnomalyDetectionSpec{
+					AnomalyDetection: operatorv1.AnomalyDetectionSpec{
 						// error from setting persistent storage but no storage class is found
 						StorageType: operatorv1.PersistentStorageType,
 					},
@@ -474,7 +474,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(c.Create(ctx, &operatorv1.IntrusionDetection{
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Spec: operatorv1.IntrusionDetectionSpec{
-					AnomalyDetectionSpec: operatorv1.AnomalyDetectionSpec{
+					AnomalyDetection: operatorv1.AnomalyDetectionSpec{
 						StorageType: operatorv1.PersistentStorageType,
 					},
 				},
@@ -612,7 +612,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Limits.Cpu()).Should(Equal(resource.MustParse(dpi.DefaultCPULimit)))
 			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Requests.Memory()).Should(Equal(resource.MustParse(dpi.DefaultMemoryRequest)))
 			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Limits.Memory()).Should(Equal(resource.MustParse(dpi.DefaultMemoryLimit)))
-			Expect(ids.Spec.AnomalyDetectionSpec.StorageType).To(Equal(operatorv1.EphemeralStorageType))
+			Expect(ids.Spec.AnomalyDetection.StorageType).To(Equal(operatorv1.EphemeralStorageType))
 		})
 
 		It("should set AD storage type name with the default value if storage type is persistent and its name is not provided", func() {
@@ -627,7 +627,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(c.Create(ctx, &operatorv1.IntrusionDetection{
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Spec: operatorv1.IntrusionDetectionSpec{
-					AnomalyDetectionSpec: operatorv1.AnomalyDetectionSpec{
+					AnomalyDetection: operatorv1.AnomalyDetectionSpec{
 						StorageType: operatorv1.PersistentStorageType,
 					},
 				},
@@ -640,8 +640,8 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			ids := operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}}
 
 			Expect(test.GetResource(c, &ids)).To(BeNil())
-			Expect(ids.Spec.AnomalyDetectionSpec.StorageType).To(Equal(operatorv1.PersistentStorageType))
-			Expect(ids.Spec.AnomalyDetectionSpec.StorageClassName).To(Equal(render.DefaultADStorageClassName))
+			Expect(ids.Spec.AnomalyDetection.StorageType).To(Equal(operatorv1.PersistentStorageType))
+			Expect(ids.Spec.AnomalyDetection.StorageClassName).To(Equal(render.DefaultADStorageClassName))
 		})
 
 		It("should not overwrite resource requirements if they are already set", func() {

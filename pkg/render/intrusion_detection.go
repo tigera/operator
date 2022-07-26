@@ -212,7 +212,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		)
 
 		configureADStorage := c.cfg.IntrusionDetction != nil &&
-			c.cfg.IntrusionDetction.Spec.AnomalyDetectionSpec.StorageType == operatorv1.PersistentStorageType
+			c.cfg.IntrusionDetction.Spec.AnomalyDetection.StorageType == operatorv1.PersistentStorageType
 
 		if configureADStorage {
 			// ignore all fields if it's set to using default ephermeal storage
@@ -1323,7 +1323,7 @@ func (c *intrusionDetectionComponent) adAPIService() *corev1.Service {
 func (c *intrusionDetectionComponent) adPersistentVolumeClaim(configureADStorage bool) *corev1.PersistentVolumeClaim {
 	pvSpec := corev1.PersistentVolumeClaimSpec{}
 	if configureADStorage {
-		adStorageClassName := c.cfg.IntrusionDetction.Spec.AnomalyDetectionSpec.StorageClassName
+		adStorageClassName := c.cfg.IntrusionDetction.Spec.AnomalyDetection.StorageClassName
 		pvSpec = corev1.PersistentVolumeClaimSpec{
 			StorageClassName: &adStorageClassName,
 			AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
@@ -1354,7 +1354,7 @@ func (c *intrusionDetectionComponent) adAPIDeployment(configureADStorage bool) *
 	}
 
 	if configureADStorage {
-		adStorageClassName := c.cfg.IntrusionDetction.Spec.AnomalyDetectionSpec.StorageClassName
+		adStorageClassName := c.cfg.IntrusionDetction.Spec.AnomalyDetection.StorageClassName
 		adModelVolumeSource = corev1.VolumeSource{
 			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 				ClaimName: adStorageClassName,

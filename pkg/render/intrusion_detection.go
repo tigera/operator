@@ -103,7 +103,7 @@ func IntrusionDetection(cfg *IntrusionDetectionConfiguration) Component {
 
 // IntrusionDetectionConfiguration contains all the config information needed to render the component.
 type IntrusionDetectionConfiguration struct {
-	IntrusionDetction     *operatorv1.IntrusionDetection
+	IntrusionDetection    operatorv1.IntrusionDetection
 	LogCollector          *operatorv1.LogCollector
 	ESSecrets             []*corev1.Secret
 	Installation          *operatorv1.InstallationSpec
@@ -211,8 +211,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 			c.adAPIAccessRoleBinding(),
 		)
 
-		configureADStorage := c.cfg.IntrusionDetction != nil &&
-			c.cfg.IntrusionDetction.Spec.AnomalyDetection.StorageType == operatorv1.PersistentStorageType
+		configureADStorage := c.cfg.IntrusionDetection.Spec.AnomalyDetection.StorageType == operatorv1.PersistentStorageType
 
 		if configureADStorage {
 			// ignore all fields if it's set to using default ephermeal storage
@@ -1323,7 +1322,7 @@ func (c *intrusionDetectionComponent) adAPIService() *corev1.Service {
 func (c *intrusionDetectionComponent) adPersistentVolumeClaim(configureADStorage bool) *corev1.PersistentVolumeClaim {
 	pvSpec := corev1.PersistentVolumeClaimSpec{}
 	if configureADStorage {
-		adStorageClassName := c.cfg.IntrusionDetction.Spec.AnomalyDetection.StorageClassName
+		adStorageClassName := c.cfg.IntrusionDetection.Spec.AnomalyDetection.StorageClassName
 		pvSpec = corev1.PersistentVolumeClaimSpec{
 			StorageClassName: &adStorageClassName,
 			AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
@@ -1348,18 +1347,19 @@ func (c *intrusionDetectionComponent) adPersistentVolumeClaim(configureADStorage
 }
 
 func (c *intrusionDetectionComponent) adAPIDeployment(configureADStorage bool) *appsv1.Deployment {
-
-	adModelVolumeSource := corev1.VolumeSource{
-		EmptyDir: &corev1.EmptyDirVolumeSource{},
-	}
-
+	var adModelVolumeSource corev1.VolumeSource
 	if configureADStorage {
-		adStorageClassName := c.cfg.IntrusionDetction.Spec.AnomalyDetection.StorageClassName
+		adStorageClassName := c.cfg.IntrusionDetection.Spec.AnomalyDetection.StorageClassName
 		adModelVolumeSource = corev1.VolumeSource{
 			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 				ClaimName: adStorageClassName,
 			},
 		}
+	} else {
+		adModelVolumeSource = corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		}
+
 	}
 
 	var initContainers []corev1.Container

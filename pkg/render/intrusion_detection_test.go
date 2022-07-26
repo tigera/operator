@@ -290,7 +290,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 
 	It("should render a persistentVolume claim if indicated that the AnomalyDetection Storage spec type is Persistent", func() {
 		testADStorageClassName := "test-storage-class-name"
-		cfg.IntrusionDetction = &operatorv1.IntrusionDetection{
+		cfg.IntrusionDetection = operatorv1.IntrusionDetection{
 			Spec: operatorv1.IntrusionDetectionSpec{
 				AnomalyDetection: operatorv1.AnomalyDetectionSpec{
 					StorageType:      operatorv1.PersistentStorageType,

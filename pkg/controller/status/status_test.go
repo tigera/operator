@@ -22,6 +22,7 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
+	appsv1 "k8s.io/api/apps/v1"
 	certV1 "k8s.io/api/certificates/v1"
 	certV1beta1 "k8s.io/api/certificates/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -54,6 +55,8 @@ var _ = Describe("Status reporting tests", func() {
 		Expect(certV1.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		err := apis.AddToScheme(scheme)
 		Expect(err).NotTo(HaveOccurred())
+		Expect(appsv1.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(corev1.AddToScheme(scheme)).NotTo(HaveOccurred())
 		client = fake.NewClientBuilder().WithScheme(scheme).Build()
 
 		sm = New(client, "test-component", &common.VersionInfo{Major: 1, Minor: 19}).(*statusManager)
@@ -180,6 +183,211 @@ var _ = Describe("Status reporting tests", func() {
 					Expect(sm.IsProgressing()).To(BeFalse())
 					Expect(sm.IsDegraded()).To(BeTrue())
 				})
+			})
+		})
+
+		Context("when pod is failed", func() {
+			var gen int64
+			BeforeEach(func() {
+				sm.ReadyToMonitor()
+				Expect(client.Create(ctx, &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1",
+						Name:      "DP1pod",
+						Labels: map[string]string{
+							"dp1Key": "dp1Value",
+						},
+					},
+					Spec: corev1.PodSpec{},
+					Status: corev1.PodStatus{
+						Phase: corev1.PodFailed,
+					},
+				})).NotTo(HaveOccurred())
+				Expect(client.Create(ctx, &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1",
+						Name:      "DS1pod",
+						Labels: map[string]string{
+							"ds1Key": "ds1Value",
+						},
+					},
+					Spec: corev1.PodSpec{},
+					Status: corev1.PodStatus{
+						Phase: corev1.PodFailed,
+					},
+				})).NotTo(HaveOccurred())
+				Expect(client.Create(ctx, &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1",
+						Name:      "SS1pod",
+						Labels: map[string]string{
+							"ss1Key": "ss1Value",
+						},
+					},
+					Spec: corev1.PodSpec{},
+					Status: corev1.PodStatus{
+						Phase: corev1.PodFailed,
+					},
+				})).NotTo(HaveOccurred())
+				gen = 5
+			})
+			It("should not degrade when daemonset has the proper pod counts", func() {
+				sm.AddDaemonsets([]types.NamespacedName{{Namespace: "NS1", Name: "DS1"}})
+				replicas := int32(1)
+
+				Expect(client.Create(ctx, &appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1", Name: "DS1",
+						Generation: gen,
+					},
+					Spec: appsv1.DaemonSetSpec{
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"ds1Key": "ds1Value"},
+						},
+					},
+					Status: appsv1.DaemonSetStatus{
+						ObservedGeneration:     gen,
+						CurrentNumberScheduled: replicas,
+						NumberMisscheduled:     0,
+						DesiredNumberScheduled: replicas,
+						NumberReady:            replicas,
+						UpdatedNumberScheduled: replicas,
+						NumberAvailable:        replicas,
+						NumberUnavailable:      0,
+					},
+				})).NotTo(HaveOccurred())
+				sm.updateStatus()
+				Expect(sm.IsDegraded()).To(BeFalse())
+			})
+			It("should degrade when the daemonsetdoes not have the correct pod counts", func() {
+				sm.AddDaemonsets([]types.NamespacedName{{Namespace: "NS1", Name: "DS1"}})
+				replicas := int32(1)
+
+				Expect(client.Create(ctx, &appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1", Name: "DS1",
+						Generation: gen,
+					},
+					Spec: appsv1.DaemonSetSpec{
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"ds1Key": "ds1Value"},
+						},
+					},
+					Status: appsv1.DaemonSetStatus{
+						ObservedGeneration:     gen,
+						CurrentNumberScheduled: replicas,
+						NumberMisscheduled:     0,
+						DesiredNumberScheduled: replicas,
+						NumberReady:            0, // correct value should be `replicas`
+						UpdatedNumberScheduled: replicas,
+						NumberAvailable:        replicas,
+						NumberUnavailable:      0,
+					},
+				})).NotTo(HaveOccurred())
+				sm.updateStatus()
+				Expect(sm.IsDegraded()).To(BeTrue())
+			})
+			It("should not degrade when deployment has the pod counts", func() {
+				sm.AddDeployments([]types.NamespacedName{{Namespace: "NS1", Name: "DP1"}})
+				replicas := int32(1)
+
+				Expect(client.Create(ctx, &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1", Name: "DP1",
+						Generation: gen,
+					},
+					Spec: appsv1.DeploymentSpec{
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"dp1Key": "dp1Value"},
+						},
+						Replicas: &replicas,
+					},
+					Status: appsv1.DeploymentStatus{
+						ObservedGeneration:  gen,
+						UnavailableReplicas: 0,
+						AvailableReplicas:   replicas,
+						ReadyReplicas:       replicas,
+					},
+				})).NotTo(HaveOccurred())
+				sm.updateStatus()
+				Expect(sm.IsDegraded()).To(BeFalse())
+			})
+			It("should degrade when the deployment does not have the correct pod counts", func() {
+				sm.AddDeployments([]types.NamespacedName{{Namespace: "NS1", Name: "DP1"}})
+				replicas := int32(1)
+
+				Expect(client.Create(ctx, &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1", Name: "DP1",
+						Generation: gen,
+					},
+					Spec: appsv1.DeploymentSpec{
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"dp1Key": "dp1Value"},
+						},
+						Replicas: &replicas,
+					},
+					Status: appsv1.DeploymentStatus{
+						ObservedGeneration:  gen,
+						UnavailableReplicas: 0,
+						AvailableReplicas:   0, // correct value should be `replicas`
+						ReadyReplicas:       replicas,
+					},
+				})).NotTo(HaveOccurred())
+				sm.updateStatus()
+				Expect(sm.IsDegraded()).To(BeTrue())
+			})
+			It("should not degrade when statefulset has the proper pod counts", func() {
+				sm.AddStatefulSets([]types.NamespacedName{{Namespace: "NS1", Name: "SS1"}})
+				replicas := int32(1)
+
+				Expect(client.Create(ctx, &appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1", Name: "SS1",
+						Generation: gen,
+					},
+					Spec: appsv1.StatefulSetSpec{
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"ss1Key": "ss1Value"},
+						},
+						Replicas: &replicas,
+					},
+					Status: appsv1.StatefulSetStatus{
+						ObservedGeneration: gen,
+						Replicas:           replicas,
+						ReadyReplicas:      replicas,
+						CurrentReplicas:    replicas,
+						UpdatedReplicas:    replicas,
+					},
+				})).NotTo(HaveOccurred())
+				sm.updateStatus()
+				Expect(sm.IsDegraded()).To(BeFalse())
+			})
+			It("should degrade when the deployment does not have the correct pod counts", func() {
+				sm.AddStatefulSets([]types.NamespacedName{{Namespace: "NS1", Name: "SS1"}})
+				replicas := int32(1)
+
+				Expect(client.Create(ctx, &appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1", Name: "SS1",
+						Generation: gen,
+					},
+					Spec: appsv1.StatefulSetSpec{
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"ss1Key": "ss1Value"},
+						},
+						Replicas: &replicas,
+					},
+					Status: appsv1.StatefulSetStatus{
+						ObservedGeneration: gen,
+						Replicas:           replicas,
+						ReadyReplicas:      0, // correct value should be `replicas`
+						CurrentReplicas:    replicas,
+						UpdatedReplicas:    replicas,
+					},
+				})).NotTo(HaveOccurred())
+				sm.updateStatus()
+				Expect(sm.IsDegraded()).To(BeTrue())
 			})
 		})
 

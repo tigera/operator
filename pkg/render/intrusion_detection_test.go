@@ -35,6 +35,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -220,6 +221,15 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal(bundle.VolumeMount(rmeta.OSTypeLinux).MountPath))
 		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal(adAPIKeyPair.VolumeMount(rmeta.OSTypeLinux).Name))
 		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal(adAPIKeyPair.VolumeMount(rmeta.OSTypeLinux).MountPath))
+		// emptyDir is expected as the default volume
+		Expect(adAPIDeployment.Spec.Template.Spec.Volumes).To(ContainElement(
+			corev1.Volume{
+				Name: "volume-storage",
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+		))
 
 		// Check all Role for respective AD API SAs
 		detectorsSecret := rtest.GetResource(resources, "anomaly-detectors", render.IntrusionDetectionNamespace, "", "v1", "Secret").(*corev1.Secret)
@@ -276,6 +286,39 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			Name:      render.ADAPIObjectName,
 			Namespace: render.IntrusionDetectionNamespace,
 		}))
+	})
+
+	It("should render a persistentVolume claim if indicated that the AnomalyDetection Storage spec type is Persistent", func() {
+		testADStorageClassName := "test-storage-class-name"
+		cfg.IntrusionDetection = operatorv1.IntrusionDetection{
+			Spec: operatorv1.IntrusionDetectionSpec{
+				AnomalyDetection: operatorv1.AnomalyDetectionSpec{
+					StorageType:      operatorv1.PersistentStorageType,
+					StorageClassName: testADStorageClassName,
+				},
+			},
+		}
+		cfg.Openshift = notOpenshift
+		cfg.ManagedCluster = false
+
+		component := render.IntrusionDetection(cfg)
+		resources, _ := component.Objects()
+
+		adAPIPVC := rtest.GetResource(resources, render.ADPersistentVolumeClaimName, render.IntrusionDetectionNamespace, "", "v1", "PersistentVolumeClaim").(*corev1.PersistentVolumeClaim)
+		Expect(*adAPIPVC.Spec.StorageClassName).To(Equal(testADStorageClassName))
+		Expect(adAPIPVC.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse(render.DefaultAnomalyDetectionPVRequestSizeGi)))
+
+		adAPIDeployment := rtest.GetResource(resources, render.ADAPIObjectName, render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(adAPIDeployment.Spec.Template.Spec.Volumes).To(ContainElement(
+			corev1.Volume{
+				Name: "volume-storage",
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: testADStorageClassName,
+					},
+				},
+			},
+		))
 	})
 
 	It("should render finalizers rbac resources in the IDS ClusterRole for an Openshift management/standalone cluster", func() {

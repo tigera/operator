@@ -292,7 +292,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		testADStorageClassName := "test-storage-class-name"
 		cfg.IntrusionDetction = &operatorv1.IntrusionDetection{
 			Spec: operatorv1.IntrusionDetectionSpec{
-				AnomalyDetectionSpec: operatorv1.AnomalyDetectionSpec{
+				AnomalyDetection: operatorv1.AnomalyDetectionSpec{
 					StorageType:      operatorv1.PersistentStorageType,
 					StorageClassName: testADStorageClassName,
 				},

@@ -197,7 +197,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedEnv))
 
 		// Verify tolerations.
-		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateCriticalAddonsOnly, rmeta.TolerateMaster))
+		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateCriticalAddonsAndControlPlane))
 	})
 
 	It("should render all calico kube-controllers resources for a default configuration (standalone) using TigeraSecureEnterprise", func() {
@@ -484,7 +484,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		resources, _ := component.Objects()
 		d := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(t, rmeta.TolerateMaster))
+		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(append(rmeta.TolerateControlPlane, t)))
 	})
 
 	It("should render resourcerequirements", func() {

@@ -606,7 +606,7 @@ var _ = Describe("Typha rendering tests", func() {
 		})
 
 		It("should override ControlPlaneTolerations when specified", func() {
-			cfg.Installation.ControlPlaneTolerations = []corev1.Toleration{rmeta.TolerateMaster}
+			cfg.Installation.ControlPlaneTolerations = rmeta.TolerateControlPlane
 
 			tol := corev1.Toleration{
 				Key:      "foo",

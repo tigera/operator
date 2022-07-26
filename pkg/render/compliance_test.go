@@ -424,10 +424,10 @@ var _ = Describe("compliance rendering tests", func() {
 			dpComplianceServer, dpComplianceController, complianceSnapshotter, complianceReporter, complianceBenchmarker := renderCompliance(&operatorv1.InstallationSpec{
 				ControlPlaneTolerations: []corev1.Toleration{t},
 			})
-			Expect(dpComplianceServer.Spec.Template.Spec.Tolerations).To(ContainElements(t, rmeta.TolerateMaster))
-			Expect(dpComplianceController.Spec.Template.Spec.Tolerations).To(ContainElements(t, rmeta.TolerateMaster))
-			Expect(complianceSnapshotter.Spec.Template.Spec.Tolerations).To(ContainElements(t, rmeta.TolerateMaster))
-			Expect(complianceReporter.Template.Spec.Tolerations).To(ContainElements(t, rmeta.TolerateMaster))
+			Expect(dpComplianceServer.Spec.Template.Spec.Tolerations).To(ContainElements(append(rmeta.TolerateControlPlane, t)))
+			Expect(dpComplianceController.Spec.Template.Spec.Tolerations).To(ContainElements(append(rmeta.TolerateControlPlane, t)))
+			Expect(complianceSnapshotter.Spec.Template.Spec.Tolerations).To(ContainElements(append(rmeta.TolerateControlPlane, t)))
+			Expect(complianceReporter.Template.Spec.Tolerations).To(ContainElements(append(rmeta.TolerateControlPlane, t)))
 			Expect(complianceBenchmarker.Spec.Template.Spec.Tolerations).To(ContainElements(rmeta.TolerateAll))
 		})
 

@@ -68,7 +68,7 @@ var _ = Describe("Convert typha check tests", func() {
 			td.Spec.Replicas = int32Ptr(1)
 
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td).WithLists(getK8sNodes(2)).Build()
-			_, err := Convert(ctx, c)
+			_, err := ConvertInstallation(ctx, c)
 			Expect(err).NotTo(HaveOccurred())
 		})
 		It("should not return an error with 3 nodes and 1 typha", func() {
@@ -76,7 +76,7 @@ var _ = Describe("Convert typha check tests", func() {
 			td.Spec.Replicas = int32Ptr(1)
 
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td).WithLists(getK8sNodes(3)).Build()
-			_, err := Convert(ctx, c)
+			_, err := ConvertInstallation(ctx, c)
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
@@ -86,7 +86,7 @@ var _ = Describe("Convert typha check tests", func() {
 			td.Spec.Replicas = int32Ptr(1)
 
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td).WithLists(getK8sNodes(5)).Build()
-			_, err := Convert(ctx, c)
+			_, err := ConvertInstallation(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 		})
 		It("should succeed with 8 nodes and 4 typha ", func() {
@@ -94,7 +94,7 @@ var _ = Describe("Convert typha check tests", func() {
 			td.Spec.Replicas = int32Ptr(4)
 
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td).WithLists(getK8sNodes(8)).Build()
-			_, err := Convert(ctx, c)
+			_, err := ConvertInstallation(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 		})
 	})
@@ -104,19 +104,19 @@ var _ = Describe("Convert typha check tests", func() {
 			td.Spec.Replicas = int32Ptr(0)
 
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td).WithLists(getK8sNodes(2)).Build()
-			_, err := Convert(ctx, c)
+			_, err := ConvertInstallation(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 		})
 		It("should not error with no replicas", func() {
 			td := emptyTyphaDeployment()
 
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig(), td).WithLists(getK8sNodes(2)).Build()
-			_, err := Convert(ctx, c)
+			_, err := ConvertInstallation(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 		})
 		It("should not error with no typha deployment", func() {
 			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig()).WithLists(getK8sNodes(2)).Build()
-			_, err := Convert(ctx, c)
+			_, err := ConvertInstallation(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
 		})
 	})

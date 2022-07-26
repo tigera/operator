@@ -78,3 +78,30 @@ func ConvertInstallation(ctx context.Context, client client.Client) (*operatorv1
 
 	return install, nil
 }
+
+func NeedsAPIServerConversion(ctx context.Context, client client.Client) (bool, error) {
+	comps, err := getInstallationComponents(ctx, client)
+	if err != nil {
+		return false, err
+	}
+	return comps != nil, nil
+}
+
+func ConvertAPIServer(ctx context.Context, client client.Client) (*operatorv1.APIServer, error) {
+	d, err := getAPIServerDeployment(ctx, client)
+	if err != nil {
+		if kerrors.IsNotFound(err) {
+			log.Error(err, "no existing calico API server found: %v", err)
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	apiServer := &operatorv1.APIServer{}
+
+	if err := handleAPIServer(d, apiServer); err != nil {
+		return nil, err
+	}
+
+	return apiServer, nil
+}

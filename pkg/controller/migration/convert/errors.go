@@ -38,6 +38,7 @@ const (
 	ComponentCalicoNode      = "daemonset/calico-node"
 	ComponentKubeControllers = "deployment/calico-kube-controllers"
 	ComponentTypha           = "deployment/calico-typha"
+	ComponentAPIServer       = "deployment/calico-apiserver"
 	ComponentCNIConfig       = "cni-config"
 	ComponentIPPools         = "ippools"
 )

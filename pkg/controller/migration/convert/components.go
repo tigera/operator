@@ -123,3 +123,19 @@ func loadCNI(comps *components) (nc cni.NetworkComponents, err error) {
 
 	return nc, err
 }
+
+// getAPIServerDeployment loads the calico apiserver deployment into a struct for later parsing.
+func getAPIServerDeployment(ctx context.Context, client client.Client) (*appsv1.Deployment, error) {
+	var as = new(appsv1.Deployment)
+	if err := client.Get(ctx, types.NamespacedName{
+		Name:      "calico-apiserver",
+		Namespace: "calico-apiserver",
+	}, as); err != nil {
+		if !errors.IsNotFound(err) {
+			return nil, fmt.Errorf("failed to get calico-apiserver deployment: %v", err)
+		}
+		log.Info("did not detect calico-apiserver")
+		as = nil
+	}
+	return as, nil
+}

@@ -16,9 +16,12 @@ package apiserver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/go-logr/logr"
+	"github.com/tigera/operator/pkg/controller/migration/convert"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -38,7 +41,7 @@ import (
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -180,11 +183,21 @@ type ReconcileAPIServer struct {
 	provider            operatorv1.Provider
 	amazonCRDExists     bool
 	enterpriseCRDsExist bool
+	migrationChecked    bool
 	status              status.StatusManager
 	clusterDomain       string
 	usePSP              bool
 	tierWatchReady      *utils.ReadyFlag
 	policyWatchesReady  *utils.ReadyFlag
+}
+
+func (r *ReconcileAPIServer) SetDegraded(reason operatorv1.TigeraStatusReason, message string, err error, log logr.Logger) {
+	log.WithValues(string(reason), message).Error(err, string(reason))
+	errormsg := ""
+	if err != nil {
+		errormsg = err.Error()
+	}
+	r.status.SetDegraded(string(reason), fmt.Sprintf("%s - Error: %s", message, errormsg))
 }
 
 // Reconcile reads that state of the cluster for a APIServer object and makes changes based on the state read
@@ -198,7 +211,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 	instance, msg, err := utils.GetAPIServer(ctx, r.client)
 	if err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			reqLogger.Info("APIServer config not found")
 			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
@@ -210,6 +223,28 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
+	if !r.migrationChecked {
+		nc, err := convert.NeedsAPIServerConversion(ctx, r.client)
+		if err != nil {
+			r.SetDegraded(operatorv1.ResourceValidationError, "Error checking for existing installation", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		if nc {
+			installed, err := convert.ConvertAPIServer(ctx, r.client)
+			if err != nil {
+				if errors.As(err, &convert.ErrIncompatibleCluster{}) {
+					r.SetDegraded(operatorv1.MigrationError, "Existing API Server cannot be managed by Tigera Operator as it is configured in a way that Operator does not currently support. Please update your existing API Server config", err, reqLogger)
+					// We should always requeue a convert problem. Don't return error
+					// to make sure we never back off retrying.
+					return reconcile.Result{RequeueAfter: 15 * time.Second}, nil
+				}
+				r.SetDegraded(operatorv1.MigrationError, "Error converting existing installation", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+			instance.Spec = utils.OverrideAPIServerSpec(installed.Spec, instance.Spec)
+		}
+	}
+
 	// Validate APIServer resource.
 	if err := validateAPIServerResource(instance); err != nil {
 		r.status.SetDegraded("APIServer is invalid", err.Error())
@@ -219,7 +254,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	// Query for the installation object.
 	variant, network, err := utils.GetInstallation(context.Background(), r.client)
 	if err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			r.status.SetDegraded("Installation not found", err.Error())
 			return reconcile.Result{}, err
 		}
@@ -305,7 +340,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 		if r.amazonCRDExists {
 			amazon, err = utils.GetAmazonCloudIntegration(ctx, r.client)
-			if errors.IsNotFound(err) {
+			if apierrors.IsNotFound(err) {
 				amazon = nil
 			} else if err != nil {
 				log.Error(err, "Error reading AmazonCloudIntegration")
@@ -398,7 +433,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 		// Fetch the Authentication spec. If present, we use to configure user authentication.
 		authenticationCR, err := utils.GetAuthentication(ctx, r.client)
-		if err != nil && !errors.IsNotFound(err) {
+		if err != nil && !apierrors.IsNotFound(err) {
 			r.status.SetDegraded("Error querying Authentication", err.Error())
 			return reconcile.Result{}, err
 		}

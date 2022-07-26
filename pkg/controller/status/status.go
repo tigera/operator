@@ -501,6 +501,16 @@ func (m *statusManager) syncState() {
 			progressing = append(progressing, fmt.Sprintf("DaemonSet %q update is being processed (generation %d, observed generation %d)", dsnn.String(), ds.Generation, ds.Status.ObservedGeneration))
 		}
 
+		// If all these are true then all expected pods are present and healthy
+		// so we don't need to worry about any failed pods so continue.
+		if ds.Generation == ds.Status.ObservedGeneration &&
+			ds.Status.NumberMisscheduled == 0 &&
+			ds.Status.NumberUnavailable == 0 &&
+			ds.Status.DesiredNumberScheduled == ds.Status.NumberAvailable &&
+			ds.Status.DesiredNumberScheduled == ds.Status.NumberReady {
+			continue
+		}
+
 		// Check if any pods within the daemonset are failing.
 		if f, err := m.podsFailing(ds.Spec.Selector, ds.Namespace); err == nil {
 			if f != "" {
@@ -527,6 +537,17 @@ func (m *statusManager) syncState() {
 			progressing = append(progressing, fmt.Sprintf("Deployment %q update is being processed (generation %d, observed generation %d)", depnn.String(), dep.Generation, dep.Status.ObservedGeneration))
 		}
 
+		// There could be old pods in the Errored, Terminated, or Completed state
+		// but if the following are true then we don't need to worry about those
+		// failed pods so continue.
+		if dep.Status.ObservedGeneration == dep.Generation &&
+			dep.Status.UnavailableReplicas == 0 &&
+			dep.Spec.Replicas != nil &&
+			*dep.Spec.Replicas == dep.Status.AvailableReplicas &&
+			*dep.Spec.Replicas == dep.Status.ReadyReplicas {
+			continue
+		}
+
 		// Check if any pods within the deployment are failing.
 		if f, err := m.podsFailing(dep.Spec.Selector, dep.Namespace); err == nil {
 			if f != "" {
@@ -549,6 +570,16 @@ func (m *statusManager) syncState() {
 			progressing = append(progressing, fmt.Sprintf("Statefulset %q is not available (awaiting %d replicas)", depnn.String(), ss.Status.CurrentReplicas-*ss.Spec.Replicas))
 		} else if ss.Status.ObservedGeneration < ss.Generation {
 			progressing = append(progressing, fmt.Sprintf("Statefulset %q update is being processed (generation %d, observed generation %d)", ss.String(), ss.Generation, ss.Status.ObservedGeneration))
+		}
+
+		// There could be old pods in the Errored, Terminated, or Completed state
+		// but if the following are true then we don't need to worry about those
+		// failed pods so continue.
+		if ss.Status.ObservedGeneration == ss.Generation &&
+			*ss.Spec.Replicas == ss.Status.CurrentReplicas &&
+			*ss.Spec.Replicas == ss.Status.ReadyReplicas &&
+			*ss.Spec.Replicas == ss.Status.UpdatedReplicas {
+			continue
 		}
 
 		// Check if any pods within the deployment are failing.

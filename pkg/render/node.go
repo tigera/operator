@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -421,6 +421,13 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				Resources: []string{"blockaffinities"},
 				Verbs:     []string{"watch"},
 			},
+			{
+				// Allows Calico to use the K8s TokenRequest API to create the tokens used by the CNI plugin.
+				APIGroups:     []string{""},
+				Resources:     []string{"serviceaccounts/token"},
+				ResourceNames: []string{"calico-node"},
+				Verbs:         []string{"create"},
+			},
 		},
 	}
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
@@ -837,6 +844,11 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 			// Volume for the bpffs itself, used by the main node container.
 			corev1.Volume{Name: "bpffs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
 		)
+
+		if c.cfg.Installation.Variant == operatorv1.Calico {
+			// Volume used by mount-cgroupv2 init container to access root cgroup name space of node.
+			volumes = append(volumes, corev1.Volume{Name: "init-proc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc/1"}}})
+		}
 	}
 
 	if c.vppDataplaneEnabled() {
@@ -978,6 +990,14 @@ func (c *nodeComponent) bpffsInitContainer() corev1.Container {
 			// so that it outlives the init container.
 			MountPropagation: &bidirectional,
 		},
+	}
+
+	if c.cfg.Installation.Variant == operatorv1.Calico {
+		mounts = append(mounts, corev1.VolumeMount{
+			MountPath: "/initproc",
+			Name:      "init-proc",
+			ReadOnly:  true,
+		})
 	}
 
 	return corev1.Container{

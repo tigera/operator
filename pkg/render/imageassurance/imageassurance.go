@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tigera/operator/pkg/render/common/clusterrole"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
@@ -25,6 +27,7 @@ const (
 	ResourceNameImageAssuranceScanner    = "tigera-image-assurance-scanner"
 	ResourceNameImageAssuranceDBMigrator = "tigera-image-assurance-db-migrator"
 	ResourceNameImageAssuranceCAW        = "tigera-image-assurance-caw"
+	ResourceNameImageAssurancePodWatcher = "tigera-image-assurance-pod-watcher"
 
 	PGConfigMapName  = "tigera-image-assurance-postgres"
 	PGCertSecretName = "tigera-image-assurance-postgres-cert"
@@ -38,6 +41,16 @@ const (
 
 	// tls certificates for tigera-manager and image assurance api
 	APICertSecretName = "tigera-image-assurance-api-cert-pair"
+
+	ScannerClusterRoleName             = "tigera-image-assurance-scanner-api-access"
+	ScannerClusterRoleBindingName      = "tigera-image-assurance-scanner-api-access"
+	ScannerAPIAccessServiceAccountName = "tigera-image-assurance-scanner-api-access"
+	ScannerAPIAccessSecretName         = "scanner-image-assurance-api-token"
+
+	PodWatcherClusterRoleName             = "tigera-image-assurance-pod-watcher-api-access"
+	PodWatcherClusterRoleBindingName      = "tigera-image-assurance-pod-watcher-api-access"
+	PodWatcherAPIAccessServiceAccountName = "tigera-image-assurance-pod-watcher-api-access"
+	PodWatcherAPIAccessSecretName         = "pod-watcher-image-assurance-api-token"
 
 	MountPathPostgresCerts = "/certs/db/"
 	mountPathAPITLSCerts   = "/certs/https/"
@@ -84,16 +97,20 @@ type Config struct {
 	TrustedCertBundle         certificatemanagement.TrustedBundle
 	KeyValidatorConfig        authentication.KeyValidatorConfig
 	TenantEncryptionKeySecret *corev1.Secret
+	ScannerAPIAccessToken     []byte
 
 	NeedsMigrating bool
 	ComponentsUp   bool
 
 	// Calculated internal fields.
-	tlsHash       string
-	apiImage      string
-	scannerImage  string
-	migratorImage string
-	cawImage      string
+	tlsHash         string
+	apiImage        string
+	scannerImage    string
+	migratorImage   string
+	cawImage        string
+	podWatcherImage string
+
+	PodWatcherAPIAccessToken []byte
 }
 
 type component struct {
@@ -132,6 +149,11 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
+	c.config.podWatcherImage, err = components.GetReference(components.ComponentImageAssurancePodWatcher, reg, path, prefix, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
 	if len(errMsgs) != 0 {
 		return fmt.Errorf(strings.Join(errMsgs, ","))
 	}
@@ -155,6 +177,7 @@ func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
 			c.apiDeployment(),
 			c.scannerDeployment(),
 			c.cawDeployment(),
+			c.podWatcherDeployment(),
 		}
 	}
 
@@ -206,7 +229,9 @@ func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
 	objs = append(objs,
 		c.scannerServiceAccount(),
 		c.scannerRole(),
+		c.scannerClusterRole(),
 		c.scannerRoleBinding(),
+		c.scannerAPIAccessTokenSecret(),
 		c.scannerDeployment(),
 	)
 
@@ -221,6 +246,18 @@ func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
 	// admission controller resources
 	objs = append(objs,
 		c.admissionControllerClusterRole(),
+	)
+
+	objs = append(objs,
+		c.podWatcherServiceAccount(),
+		c.podWatcherRole(),
+	)
+	objs = append(objs, clusterrole.ToRuntimeObjects(c.podWatcherClusterRoles()...)...)
+	objs = append(objs,
+		c.podWatcherRoleBinding(),
+		c.podWatcherClusterRoleBinding(),
+		c.podWatcherAPIAccessTokenSecret(),
+		c.podWatcherDeployment(),
 	)
 
 	if c.config.KeyValidatorConfig != nil {

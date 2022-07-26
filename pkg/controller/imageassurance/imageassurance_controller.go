@@ -42,6 +42,9 @@ import (
 
 var log = logf.Log.WithName("controller_image_assurance")
 
+// service accounts created by kube-controller for image assurance components for API access
+var apiTokenServiceAccounts = []string{imageassurance.ScannerAPIAccessServiceAccountName, imageassurance.PodWatcherAPIAccessServiceAccountName}
+
 // Add creates a new ImageAssurance Controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
@@ -123,14 +126,22 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("ImageAssurance-controller failed to watch Secret %s: %v", imageassurance.PGUserSecretName, err)
 	}
 
+	// watch for service accounts created in operator namespace by kube-controllers for image assurance.
+	for _, sa := range apiTokenServiceAccounts {
+		if err = utils.AddServiceAccountWatch(c, sa, common.OperatorNamespace()); err != nil {
+			return fmt.Errorf("ImageAssurance-controller failed to watch ServiceAccount %s: %v", sa, err)
+		}
+	}
+
 	if err = utils.AddJobWatch(c, imageassurance.ResourceNameImageAssuranceDBMigrator, imageassurance.NameSpaceImageAssurance); err != nil {
 		return fmt.Errorf("ImageAssurance-controller failed to watch Job %s: %v", imageassurance.ResourceNameImageAssuranceDBMigrator, err)
 	}
 
-	if err = utils.AddClusterRoleWatch(c, imageassurance.AdmissionControllerAPIClusterRoleName); err != nil {
-		return fmt.Errorf("ImageAssurance-controller failed to watch Cluster role %s: %v", imageassurance.ResourceNameImageAssuranceDBMigrator, err)
+	for _, role := range []string{imageassurance.PodWatcherClusterRoleName, imageassurance.ScannerClusterRoleName, imageassurance.AdmissionControllerAPIClusterRoleName} {
+		if err = utils.AddClusterRoleWatch(c, role); err != nil {
+			return fmt.Errorf("ImageAssurance-controller failed to watch Cluster role %s: %v", role, err)
+		}
 	}
-
 	// Watch for changes to authentication
 	err = c.Watch(&source.Kind{Type: &operatorv1.Authentication{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
@@ -266,6 +277,32 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
+	scannerAPIToken, err := getAPIAccessToken(r.client, imageassurance.ScannerAPIAccessServiceAccountName)
+	if err != nil {
+		reqLogger.Error(err, err.Error())
+		r.status.SetDegraded("Error in retrieving scanner API access token", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	if scannerAPIToken == nil {
+		reqLogger.Info("Waiting for scanner api access service account secret to be available")
+		r.status.SetDegraded("Waiting for scanner api access service account secret to be available", "")
+		return reconcile.Result{}, nil
+	}
+
+	podWatcherAPIToken, err := getAPIAccessToken(r.client, imageassurance.PodWatcherAPIAccessServiceAccountName)
+	if err != nil {
+		reqLogger.Error(err, err.Error())
+		r.status.SetDegraded("Error in retrieving pod watcher API access token", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	if podWatcherAPIToken == nil {
+		reqLogger.Info("Waiting for pod watcher api access service account secret to be available")
+		r.status.SetDegraded("Waiting for pod watcher api access service account secret to be available", "")
+		return reconcile.Result{}, nil
+	}
+
 	tenantEncryptionKeySecret, err := getTenantEncryptionKeySecret(r.client)
 	if err != nil {
 		reqLogger.Error(err, "Error retrieving tenant key")
@@ -343,6 +380,8 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		KeyValidatorConfig:        kvc,
 		TenantEncryptionKeySecret: tenantEncryptionKeySecret,
 		TrustedCertBundle:         trustedBundle,
+		ScannerAPIAccessToken:     scannerAPIToken,
+		PodWatcherAPIAccessToken:  podWatcherAPIToken,
 	}
 
 	components := []render.Component{
@@ -610,6 +649,12 @@ func componentsUp(client client.Client) (bool, error) {
 		Namespace: imageassurance.NameSpaceImageAssurance,
 	}
 
+	podWatcherDeployment := &appsv1.Deployment{}
+	podWatcherName := types.NamespacedName{
+		Name:      imageassurance.ResourceNameImageAssurancePodWatcher,
+		Namespace: imageassurance.NameSpaceImageAssurance,
+	}
+
 	if err := client.Get(context.Background(), apiName, apiDeployment); err != nil {
 		if !errors.IsNotFound(err) {
 			return false, err
@@ -627,6 +672,14 @@ func componentsUp(client client.Client) (bool, error) {
 	}
 
 	if err := client.Get(context.Background(), cawName, cawDeployment); err != nil {
+		if !errors.IsNotFound(err) {
+			return false, err
+		}
+	} else {
+		return true, nil
+	}
+
+	if err := client.Get(context.Background(), podWatcherName, podWatcherDeployment); err != nil {
 		if !errors.IsNotFound(err) {
 			return false, err
 		}
@@ -686,4 +739,30 @@ func getTenantEncryptionKeySecret(client client.Client) (*corev1.Secret, error) 
 	}
 
 	return cs, nil
+}
+
+// getAPIAccessToken returns the image assurance service account secret token created by kube-controllers.
+// It takes in service account name and uses it to validate the existence of the service account and return the token if present.
+func getAPIAccessToken(c client.Client, serviceAccountName string) ([]byte, error) {
+	sa := &corev1.ServiceAccount{}
+	if err := c.Get(context.Background(), types.NamespacedName{
+		Name:      serviceAccountName,
+		Namespace: common.OperatorNamespace(),
+	}, sa); err != nil {
+		return nil, err
+	}
+
+	if len(sa.Secrets) == 0 {
+		return nil, nil
+	}
+
+	saSecret := &corev1.Secret{}
+	if err := c.Get(context.Background(), types.NamespacedName{
+		Name:      sa.Secrets[0].Name,
+		Namespace: common.OperatorNamespace(),
+	}, saSecret); err != nil {
+		return nil, err
+	}
+
+	return saSecret.Data["token"], nil
 }

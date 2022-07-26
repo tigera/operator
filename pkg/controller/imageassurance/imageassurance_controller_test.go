@@ -165,8 +165,34 @@ var _ = Describe("Image Assurance Controller", func() {
 						Image:  "tigera/image-assurance-caw",
 						Digest: "sha256:123",
 					},
+					{
+						Image:  "tigera/image-assurance-pod-watcher",
+						Digest: "sha256:123",
+					},
 				},
 			},
+		})).NotTo(HaveOccurred())
+
+		Expect(c.Create(ctx, &corev1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.ScannerAPIAccessServiceAccountName, Namespace: common.OperatorNamespace()},
+			Secrets:    []corev1.ObjectReference{{Name: "sa-secret"}},
+		})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &corev1.ServiceAccount{
+			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.PodWatcherAPIAccessServiceAccountName, Namespace: common.OperatorNamespace()},
+			Secrets:    []corev1.ObjectReference{{Name: "sa-secret"}},
+		})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &rbacv1.ClusterRoleBinding{
+			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.PodWatcherClusterRoleBindingName},
+		})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &rbacv1.ClusterRoleBinding{
+			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.ScannerClusterRoleBindingName},
+		})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "sa-secret",
+				Namespace: common.OperatorNamespace(),
+			},
+			Data: map[string][]byte{"token": []byte("token")},
 		})).NotTo(HaveOccurred())
 	})
 
@@ -242,6 +268,20 @@ var _ = Describe("Image Assurance Controller", func() {
 		Expect(caw.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("%s%s%s",
 			components.ImageAssuranceRegistry,
 			components.ComponentImageAssuranceCAW.Image, "@sha256:123")))
+
+		By("ensuring that ImageAssurance pod watcher resources created properly")
+		podWatcher := appsv1.Deployment{
+			TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      imageassurance.ResourceNameImageAssurancePodWatcher,
+				Namespace: imageassurance.NameSpaceImageAssurance,
+			},
+		}
+		Expect(test.GetResource(c, &podWatcher)).To(BeNil())
+		Expect(podWatcher.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(podWatcher.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("%s%s%s",
+			components.ImageAssuranceRegistry,
+			components.ComponentImageAssurancePodWatcher.Image, "@sha256:123")))
 
 	})
 
@@ -346,6 +386,19 @@ var _ = Describe("Image Assurance Controller", func() {
 		Expect(caw.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf(components.ImageAssuranceRegistry+"%s%s",
 			components.ComponentImageAssuranceCAW.Image, "@sha256:123")))
 
+		By("ensuring that ImageAssurance pod watcher resources created properly")
+		podWatcher := appsv1.Deployment{
+			TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      imageassurance.ResourceNameImageAssurancePodWatcher,
+				Namespace: imageassurance.NameSpaceImageAssurance,
+			},
+		}
+		Expect(test.GetResource(c, &podWatcher)).To(BeNil())
+		Expect(podWatcher.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(podWatcher.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("%s%s%s",
+			components.ImageAssuranceRegistry, components.ComponentImageAssurancePodWatcher.Image, "@sha256:123")))
+
 		By("updating the Job image name something different ")
 		job.Spec.Template.Spec.Containers[0].Image = "newImageName"
 		Expect(c.Update(ctx, &job)).NotTo(HaveOccurred())
@@ -357,6 +410,7 @@ var _ = Describe("Image Assurance Controller", func() {
 		Expect(test.GetResource(c, &api)).To(HaveOccurred())
 		Expect(test.GetResource(c, &scanner)).To(HaveOccurred())
 		Expect(test.GetResource(c, &caw)).To(HaveOccurred())
+		Expect(test.GetResource(c, &podWatcher)).To(HaveOccurred())
 	})
 
 })

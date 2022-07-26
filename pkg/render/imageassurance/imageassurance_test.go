@@ -180,7 +180,9 @@ var _ = Describe("Image Assurance Render", func() {
 
 			{name: imageassurance.ResourceNameImageAssuranceScanner, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: imageassurance.ResourceNameImageAssuranceScanner, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "Role"},
+			{name: imageassurance.ScannerClusterRoleName, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
 			{name: imageassurance.ResourceNameImageAssuranceScanner, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "RoleBinding"},
+			{name: imageassurance.ScannerAPIAccessSecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
 			{name: imageassurance.ResourceNameImageAssuranceScanner, ns: imageassurance.NameSpaceImageAssurance, group: "apps", version: "v1", kind: "Deployment"},
 
 			{name: imageassurance.ResourceNameImageAssuranceCAW, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ServiceAccount"},
@@ -188,6 +190,15 @@ var _ = Describe("Image Assurance Render", func() {
 			{name: imageassurance.ResourceNameImageAssuranceCAW, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "RoleBinding"},
 			{name: imageassurance.ResourceNameImageAssuranceCAW, ns: imageassurance.NameSpaceImageAssurance, group: "apps", version: "v1", kind: "Deployment"},
 			{name: imageassurance.AdmissionControllerAPIClusterRoleName, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
+
+			{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "Role"},
+			{name: imageassurance.PodWatcherClusterRoleName, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
+			{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
+			{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "RoleBinding"},
+			{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRoleBinding"},
+			{name: imageassurance.PodWatcherAPIAccessSecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
+			{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: "apps", version: "v1", kind: "Deployment"},
 		}
 		return res
 	}
@@ -197,7 +208,6 @@ var _ = Describe("Image Assurance Render", func() {
 			{Name: "IMAGE_ASSURANCE_HTTPS_CERT", Value: "/certs/https/tls.crt"},
 			{Name: "IMAGE_ASSURANCE_HTTPS_KEY", Value: "/certs/https/tls.key"},
 			{Name: "IMAGE_ASSURANCE_TENANT_ENCRYPTION_KEY", Value: "/tenant-key/encryption_key"},
-			{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: certificatemanagement.TrustedCertBundleMountPath},
 			{Name: "IMAGE_ASSURANCE_DB_SSL_ROOT_CERT", Value: "/certs/db/server-ca"},
 			{Name: "IMAGE_ASSURANCE_DB_SSL_CERT", Value: "/certs/db/client-cert"},
 			{Name: "IMAGE_ASSURANCE_DB_SSL_KEY", Value: "/certs/db/client-key"},
@@ -311,10 +321,6 @@ var _ = Describe("Image Assurance Render", func() {
 		vms := []corev1.VolumeMount{
 			{Name: imageassurance.APICertSecretName, MountPath: "/certs/https/"},
 			{Name: imageassurance.PGCertSecretName, MountPath: "/certs/db/"},
-			{
-				Name:      certificatemanagement.TrustedCertConfigMapName,
-				MountPath: certificatemanagement.TrustedCertVolumeMountPath,
-			},
 			{Name: imageassurance.TenantEncryptionKeySecretName, MountPath: "/tenant-key/"},
 		}
 
@@ -515,63 +521,12 @@ var _ = Describe("Image Assurance Render", func() {
 		scannerEnv := scanner.Containers[0].Env
 		scannerExpectedENV := []corev1.EnvVar{
 			{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
-			{Name: "IMAGE_ASSURANCE_DB_LOG_LEVEL", Value: "SILENT"},
 			{Name: "IMAGE_ASSURANCE_TENANT_ENCRYPTION_KEY", Value: "/tenant-key/encryption_key"},
-			{Name: "IMAGE_ASSURANCE_DB_SSL_ROOT_CERT", Value: "/certs/db/server-ca"},
-			{Name: "IMAGE_ASSURANCE_DB_SSL_CERT", Value: "/certs/db/client-cert"},
-			{Name: "IMAGE_ASSURANCE_DB_SSL_KEY", Value: "/certs/db/client-key"},
 			{Name: "IMAGE_ASSURANCE_SCANNER_RETRIES", Value: "3"},
-			{Name: "IMAGE_ASSURANCE_DB_HOST_ADDR", Value: "",
-				ValueFrom: &corev1.EnvVarSource{
-					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: imageassurance.PGConfigMapName,
-						},
-						Key: imageassurance.PGConfigHostKey,
-					},
-				},
-			},
-			{Name: "IMAGE_ASSURANCE_DB_PORT", Value: "",
-				ValueFrom: &corev1.EnvVarSource{
-					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: imageassurance.PGConfigMapName,
-						},
-						Key: imageassurance.PGConfigPortKey,
-					},
-				},
-			},
-			{Name: "IMAGE_ASSURANCE_DB_NAME", Value: "",
-				ValueFrom: &corev1.EnvVarSource{
-					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: imageassurance.PGConfigMapName,
-						},
-						Key: imageassurance.PGConfigNameKey,
-					},
-				},
-			},
-			{Name: "IMAGE_ASSURANCE_DB_USER_NAME", Value: "",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: imageassurance.PGUserSecretName,
-						},
-						Key: imageassurance.PGUserSecretKey,
-					},
-				},
-			},
-			{Name: "IMAGE_ASSURANCE_DB_PASSWORD", Value: "",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: imageassurance.PGUserSecretName,
-						},
-						Key: imageassurance.PGUserPassKey,
-					},
-				},
-			},
 			rcimageassurance.EnvOrganizationID(),
+			{Name: "IMAGE_ASSURANCE_CA_BUNDLE_PATH", Value: "/certs/bast/tls.crt"},
+			{Name: "IMAGE_ASSURANCE_API_SERVICE_URL", Value: "https://tigera-image-assurance-api.tigera-image-assurance.svc:9443"},
+			{Name: "IMAGE_ASSURANCE_API_TOKEN", Value: ""},
 		}
 
 		Expect(len(scannerExpectedENV)).To(Equal(len(scannerEnv)))
@@ -590,6 +545,50 @@ var _ = Describe("Image Assurance Render", func() {
 		Expect(len(scannerVMs)).To(Equal(len(scannerVMs)))
 		for _, expected := range scannerExpectedVMs {
 			rtest.ExpectVolumeMount(scannerVMs, expected.Name, expected.MountPath)
+		}
+
+		// Check rendering of pod watcher deployment.
+		podWatcherDeployment := rtest.GetResource(resources, imageassurance.ResourceNameImageAssurancePodWatcher, imageassurance.NameSpaceImageAssurance,
+			"apps", "v1", "Deployment").(*appsv1.Deployment)
+		podWatcher := podWatcherDeployment.Spec.Template.Spec
+
+		Expect(podWatcher.HostNetwork).To(BeFalse())
+		Expect(podWatcher.HostIPC).To(BeFalse())
+		Expect(podWatcher.DNSPolicy).To(Equal(corev1.DNSClusterFirst))
+		Expect(len(podWatcher.Containers)).To(Equal(1))
+
+		podWatcherEnv := podWatcher.Containers[0].Env
+		podWatcherExpectedENV := []corev1.EnvVar{
+			{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
+			rcimageassurance.EnvOrganizationID(),
+			{Name: "IMAGE_ASSURANCE_API_CA", Value: "/certs/bast/tls.crt"},
+			{Name: "IMAGE_ASSURANCE_API_SERVICE_URL", Value: "https://tigera-image-assurance-api.tigera-image-assurance.svc:9443"},
+			{Name: "IMAGE_ASSURANCE_API_TOKEN", Value: ""},
+			{Name: "IMAGE_ASSURANCE_MULTI_CLUSTER_FORWARDING_CA", Value: certificatemanagement.TrustedCertBundleMountPath},
+		}
+
+		Expect(len(podWatcherExpectedENV)).To(Equal(len(podWatcherEnv)))
+		for _, expected := range podWatcherExpectedENV {
+			rtest.ExpectEnv(podWatcherEnv, expected.Name, expected.Value)
+		}
+
+		Expect(*api.Containers[0].SecurityContext.Privileged).To(BeTrue())
+
+		podWatcherVMs := podWatcher.Containers[0].VolumeMounts
+		podWatcherExpectedVMs := []corev1.VolumeMount{
+			{
+				Name:      certificatemanagement.TrustedCertConfigMapName,
+				MountPath: certificatemanagement.TrustedCertVolumeMountPath,
+			},
+			{
+				Name:      rcimageassurance.ImageAssuranceSecretName,
+				MountPath: rcimageassurance.CAMountPath,
+			},
+		}
+
+		Expect(len(podWatcherExpectedVMs)).To(Equal(len(podWatcherVMs)))
+		for _, expected := range podWatcherExpectedVMs {
+			rtest.ExpectVolumeMount(podWatcherVMs, expected.Name, expected.MountPath)
 		}
 	})
 
@@ -656,6 +655,7 @@ var _ = Describe("Image Assurance Render", func() {
 			{name: imageassurance.ResourceNameImageAssuranceAPI, ns: imageassurance.NameSpaceImageAssurance, group: "apps", version: "v1", kind: "Deployment"},
 			{name: imageassurance.ResourceNameImageAssuranceScanner, ns: imageassurance.NameSpaceImageAssurance, group: "apps", version: "v1", kind: "Deployment"},
 			{name: imageassurance.ResourceNameImageAssuranceCAW, ns: imageassurance.NameSpaceImageAssurance, group: "apps", version: "v1", kind: "Deployment"},
+			{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: "apps", version: "v1", kind: "Deployment"},
 		}
 
 		// Should delete the correct resources.

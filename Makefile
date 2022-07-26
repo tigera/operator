@@ -44,13 +44,17 @@ ifeq ($(ARCH),aarch64)
         override ARCH=arm64
 endif
 ifeq ($(ARCH),x86_64)
-    override ARCH=amd64
+        override ARCH=amd64
 endif
 
 # Required to prevent `FROM SCRATCH` from pulling an amd64 image in the build phase.
 ifeq ($(ARCH),arm64)
 	TARGET_PLATFORM=arm64/v8
-else
+endif
+ifeq ($(ARCH),ppc64le)
+	TARGET_PLATFORM=ppc64le
+endif
+ifeq ($(ARCH),amd64)
 	TARGET_PLATFORM=amd64
 endif
 EXTRA_DOCKER_ARGS += --platform=linux/$(TARGET_PLATFORM)
@@ -84,8 +88,10 @@ endif
 
 # list of arches *not* to build when doing *-all
 #    until s390x works correctly
-EXCLUDEARCH ?= s390x arm64
-VALIDARCHES = $(filter-out $(EXCLUDEARCH),$(ARCHES))
+EXCLUDEARCH ?= s390x
+# For operator-cloud we only need amd64 so overwrite any additional arches that
+# might be available in tigera/operator
+VALIDARCHES = amd64
 
 # We need CGO to leverage Boring SSL.  However, the cross-compile doesn't support CGO yet.
 ifeq ($(ARCH), $(filter $(ARCH),amd64))

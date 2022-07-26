@@ -10,11 +10,12 @@ const (
 	ConfigurationConfigMapName     = "tigera-image-assurance-config"
 	ConfigurationConfigMapOrgIDKey = "organizationID"
 
-	APIEndpoint                      = "https://tigera-image-assurance-api.tigera-image-assurance.svc:9443"
-	CABundlePath                     = "/certs/bast/tls.crt"
-	CAMountPath                      = "/certs/bast"
-	ImageAssuranceCertHashAnnotation = "hash.operator.tigera.io/image-assurance-tls"
-	ImageAssuranceSecretName         = "tigera-image-assurance-api-cert"
+	APIEndpoint                           = "https://tigera-image-assurance-api.tigera-image-assurance.svc:9443"
+	CABundlePath                          = "/certs/bast/tls.crt"
+	CAMountPath                           = "/certs/bast"
+	ImageAssuranceCertHashAnnotation      = "hash.operator.tigera.io/image-assurance-tls"
+	ImageAssuranceAPITokenHashAnnontation = "hash.operator.tigera.io/pod-watcher-image-assurance-api-token"
+	ImageAssuranceSecretName              = "tigera-image-assurance-api-cert"
 )
 
 // Resources contains all the resource needed for Image Assurance.

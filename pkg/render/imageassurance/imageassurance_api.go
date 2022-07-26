@@ -16,9 +16,9 @@ import (
 
 const (
 	apiRequestCPU    = "0.25"
-	apiRequestMemory = "50Mi"
+	apiRequestMemory = "150Mi"
 	apiLimitCPU      = "0.75"
-	apiLimitMemory   = "150Mi"
+	apiLimitMemory   = "300Mi"
 
 	ApiDBMaxOpenConn = "3"
 	ApiDBMaxIdleConn = "0"
@@ -56,11 +56,6 @@ func (c *component) apiClusterRole() *rbacv1.ClusterRole {
 			Namespace: NameSpaceImageAssurance,
 		},
 		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"managedclusters"},
-				Verbs:     []string{"get", "list", "watch"},
-			},
 			{
 				APIGroups: []string{"authentication.k8s.io"},
 				Resources: []string{"tokenreviews"},
@@ -144,13 +139,13 @@ func (c component) apiService() *corev1.Service {
 }
 
 func (c *component) apiDeployment() *appsv1.Deployment {
-
-	annots := c.config.TrustedCertBundle.HashAnnotations()
-	annots[pgConfigHashAnnotation] = rmeta.AnnotationHash(c.config.PGConfig.Data)
-	annots[pgUserHashAnnotation] = rmeta.AnnotationHash(c.config.PGUserSecret.Data)
-	annots[pgCertsHashAnnotation] = rmeta.AnnotationHash(c.config.PGCertSecret.Data)
-	annots[tenantKeySecretHashAnnotation] = rmeta.AnnotationHash(c.config.TenantEncryptionKeySecret.Data)
-	annots[apiCertHashAnnotation] = c.config.tlsHash
+	annots := map[string]string{
+		pgConfigHashAnnotation:        rmeta.AnnotationHash(c.config.PGConfig.Data),
+		pgUserHashAnnotation:          rmeta.AnnotationHash(c.config.PGUserSecret.Data),
+		pgCertsHashAnnotation:         rmeta.AnnotationHash(c.config.PGCertSecret.Data),
+		tenantKeySecretHashAnnotation: rmeta.AnnotationHash(c.config.TenantEncryptionKeySecret.Data),
+		apiCertHashAnnotation:         c.config.tlsHash,
+	}
 
 	env := []corev1.EnvVar{
 		rcimageassurance.EnvOrganizationID(),
@@ -160,7 +155,6 @@ func (c *component) apiDeployment() *appsv1.Deployment {
 		{Name: "IMAGE_ASSURANCE_HTTPS_CERT", Value: "/certs/https/tls.crt"},
 		{Name: "IMAGE_ASSURANCE_HTTPS_KEY", Value: "/certs/https/tls.key"},
 		{Name: "IMAGE_ASSURANCE_TENANT_ENCRYPTION_KEY", Value: "/tenant-key/encryption_key"},
-		{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: c.config.TrustedCertBundle.MountPath()},
 	}
 
 	env = pgDecorateENVVars(env, PGUserSecretName, MountPathPostgresCerts, PGConfigMapName)
@@ -176,7 +170,6 @@ func (c *component) apiDeployment() *appsv1.Deployment {
 	volumeMounts := []corev1.VolumeMount{
 		{Name: APICertSecretName, MountPath: mountPathAPITLSCerts, ReadOnly: true},
 		{Name: PGCertSecretName, MountPath: MountPathPostgresCerts, ReadOnly: true},
-		c.config.TrustedCertBundle.VolumeMount(),
 		{Name: TenantEncryptionKeySecretName, MountPath: MountTenantEncryptionKeySecret, ReadOnly: true},
 	}
 
@@ -281,7 +274,6 @@ func (c *component) apiVolumes() []corev1.Volume {
 				},
 			},
 		},
-		c.config.TrustedCertBundle.Volume(),
 	}
 
 	if c.config.KeyValidatorConfig != nil {

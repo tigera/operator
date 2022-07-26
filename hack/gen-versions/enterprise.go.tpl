@@ -145,6 +145,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "anomaly-detection-api" }}
+	ComponentAnomalyDetectionAPI = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with .Components.kibana }}
 	ComponentKibana = component{
 		Version: "tesla-{{ .Version }}",
@@ -295,6 +301,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "image-assurance-pod-watcher" }}
+	ComponentImageAssurancePodWatcher = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "sasha" }}
 	ComponentSasha = component{
 		Version: "{{ .Version }}",
@@ -322,6 +334,7 @@ var (
 		ComponentGuardian,
 		ComponentIntrusionDetectionController,
 		ComponentAnomalyDetectionJobs,
+		ComponentAnomalyDetectionAPI,
 		ComponentKibana,
 		ComponentManager,
 		ComponentDex,
@@ -348,6 +361,7 @@ var (
 		ComponentImageAssuranceScanner,
 		ComponentImageAssuranceDBMigrator,
 		ComponentImageAssuranceCAW,
+		ComponentImageAssurancePodWatcher,
 		ComponentSasha,
 	}
 )

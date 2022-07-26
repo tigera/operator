@@ -21,6 +21,13 @@ import (
 	"strconv"
 	"strings"
 
+	comp "github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/migration/convert/helpers"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+
+	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
 )
@@ -52,30 +59,53 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 		}
 	}
 
-	// node resource limits
-	node := getContainer(c.node.Spec.Template.Spec, "calico-node")
-	if len(node.Resources.Limits) > 0 || len(node.Resources.Requests) > 0 {
-		if err = addResources(install, operatorv1.ComponentNameNode, &node.Resources); err != nil {
-			return err
-		}
-	}
+	// Convert any deprecated ComponentResources to the new component override fields.
+	convertComponentResources(install)
 
-	// kube-controllers
-	if c.kubeControllers != nil {
-		kubeControllers := getContainer(c.kubeControllers.Spec.Template.Spec, containerKubeControllers)
-		if kubeControllers != nil && (len(kubeControllers.Resources.Limits) > 0 || len(kubeControllers.Resources.Requests) > 0) {
-			if err = addResources(install, operatorv1.ComponentNameKubeControllers, &kubeControllers.Resources); err != nil {
+	// node container resources
+	for _, container := range c.node.Spec.Template.Spec.Containers {
+		if len(container.Resources.Limits) > 0 || len(container.Resources.Requests) > 0 {
+			if err = migrateContainerResources(install, "calico-node", container.Name, &container.Resources); err != nil {
 				return err
 			}
 		}
 	}
 
-	if c.typha != nil {
-		// typha resource limits. typha is optional so check for nil first
-		typha := getContainer(c.typha.Spec.Template.Spec, "calico-typha")
-		if typha != nil && (len(typha.Resources.Limits) > 0 || len(typha.Resources.Requests) > 0) {
-			if err = addResources(install, operatorv1.ComponentNameTypha, &typha.Resources); err != nil {
+	// node init container resources
+	for _, initContainer := range c.node.Spec.Template.Spec.InitContainers {
+		if len(initContainer.Resources.Limits) > 0 || len(initContainer.Resources.Requests) > 0 {
+			if err = migrateInitContainerResources(install, "calico-node", initContainer.Name, &initContainer.Resources); err != nil {
 				return err
+			}
+		}
+	}
+
+	// kube-controllers container resources
+	if c.kubeControllers != nil {
+		for _, container := range c.kubeControllers.Spec.Template.Spec.Containers {
+			if len(container.Resources.Limits) > 0 || len(container.Resources.Requests) > 0 {
+				if err = migrateContainerResources(install, "calico-kube-controllers", container.Name, &container.Resources); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	// Note: kube-controllers doesn't have init containers.
+
+	// typha container resources. typha is optional so check for nil first
+	if c.typha != nil {
+		for _, container := range c.typha.Spec.Template.Spec.Containers {
+			if len(container.Resources.Limits) > 0 || len(container.Resources.Requests) > 0 {
+				if err = migrateContainerResources(install, "calico-typha", container.Name, &container.Resources); err != nil {
+					return err
+				}
+			}
+		}
+		for _, initContainer := range c.typha.Spec.Template.Spec.InitContainers {
+			if len(initContainer.Resources.Limits) > 0 || len(initContainer.Resources.Requests) > 0 {
+				if err = migrateInitContainerResources(install, "calico-typha", initContainer.Name, &initContainer.Resources); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -92,6 +122,16 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 
 	// node update-strategy
 	install.Spec.NodeUpdateStrategy = c.node.Spec.UpdateStrategy
+
+	// minReadySeconds
+	if err := migrateMinReadySeconds(c, install); err != nil {
+		return err
+	}
+
+	// tolerations
+	if err := migrateTolerations(c, install); err != nil {
+		return err
+	}
 
 	// alp
 	vol := getVolume(c.node.Spec.Template.Spec, "flexvol-driver-host")
@@ -198,6 +238,222 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 	return nil
 }
 
+func getMinReadySeconds(override comp.ReplicatedPodResourceOverrides) *int32 {
+	if reflect.ValueOf(override).IsNil() {
+		return nil
+	}
+	return override.GetMinReadySeconds()
+}
+
+// migrateMinReadySeconds takes the components and migrates their minReadySeconds values to the installation.
+func migrateMinReadySeconds(c *components, install *operatorv1.Installation) error {
+	// Handle calico-node
+	minReadySeconds := getMinReadySeconds(install.Spec.CalicoNodeDaemonSet)
+	if c.node.Spec.MinReadySeconds > 0 {
+		if minReadySeconds == nil {
+			// minReadySeconds set on the component but not the installation so migrate it over.
+			helpers.EnsureCalicoNodeSpecNotNil(install)
+			install.Spec.CalicoNodeDaemonSet.Spec.MinReadySeconds = &c.node.Spec.MinReadySeconds
+		} else {
+			if *minReadySeconds != c.node.Spec.MinReadySeconds {
+				return ErrIncompatibleMinReadySeconds(ComponentCalicoNode)
+			}
+		}
+	} else {
+		// minReadySeconds is not set on the component, check if it's set on the installation.
+		if minReadySeconds != nil {
+			return ErrIncompatibleMinReadySeconds(ComponentCalicoNode)
+		}
+	}
+
+	// Handle typha
+	if c.typha != nil {
+		minReadySeconds = getMinReadySeconds(install.Spec.TyphaDeployment)
+		if c.typha.Spec.MinReadySeconds > 0 {
+			if minReadySeconds == nil {
+				// minReadySeconds set on the component but not the installation so migrate it over.
+				helpers.EnsureTyphaPodSpecNotNil(install)
+				install.Spec.TyphaDeployment.Spec.MinReadySeconds = &c.typha.Spec.MinReadySeconds
+			} else {
+				if *minReadySeconds != c.typha.Spec.MinReadySeconds {
+					return ErrIncompatibleMinReadySeconds(ComponentTypha)
+				}
+			}
+		} else {
+			// minReadySeconds is not set on the component, check if it's set on the installation.
+			if minReadySeconds != nil {
+				return ErrIncompatibleMinReadySeconds(ComponentTypha)
+			}
+		}
+	}
+
+	// Handle kubecontrollers
+	if c.kubeControllers != nil {
+		minReadySeconds = getMinReadySeconds(install.Spec.CalicoKubeControllersDeployment)
+		if c.kubeControllers.Spec.MinReadySeconds > 0 {
+			if minReadySeconds == nil {
+				// minReadySeconds set on the component but not the installation so migrate it over.
+				helpers.EnsureKubeControllersPodSpecNotNil(install)
+				install.Spec.CalicoKubeControllersDeployment.Spec.MinReadySeconds = &c.kubeControllers.Spec.MinReadySeconds
+			} else {
+				if *minReadySeconds != c.kubeControllers.Spec.MinReadySeconds {
+					return ErrIncompatibleMinReadySeconds(ComponentKubeControllers)
+				}
+			}
+		} else {
+			// minReadySeconds is not set on the component, check if it's set on the installation.
+			if minReadySeconds != nil {
+				return ErrIncompatibleMinReadySeconds(ComponentKubeControllers)
+			}
+		}
+	}
+
+	return nil
+}
+
+func getTolerations(override comp.ReplicatedPodResourceOverrides) []corev1.Toleration {
+	if reflect.ValueOf(override).IsNil() {
+		return nil
+	}
+	return override.GetTolerations()
+}
+
+func areEqualTolerations(tols1 []corev1.Toleration, tols2 []corev1.Toleration) bool {
+	m1 := make(map[corev1.Toleration]int)
+	m2 := make(map[corev1.Toleration]int)
+
+	for _, t := range tols1 {
+		m1[t] += 1
+	}
+	for _, t := range tols2 {
+		m2[t] += 1
+	}
+	for key, v1 := range m1 {
+		if m2[key] != v1 {
+			return false
+		}
+	}
+	for key, v2 := range m2 {
+		if m1[key] != v2 {
+			return false
+		}
+	}
+	return true
+}
+
+// migrateTolerations takes the components and migrates their tolerations to the installation.
+func migrateTolerations(c *components, install *operatorv1.Installation) error {
+	// Handle calico-node
+	installTolerations := getTolerations(install.Spec.CalicoNodeDaemonSet)
+	compTolerations := c.node.Spec.Template.Spec.Tolerations
+
+	// A daemonset/deployment treats nil and empty tolerations the same so do that here too.
+	if len(compTolerations) == 0 {
+		// if the component has no tolerations, then the installation must specify empty, non-nil tolerations.
+		if installTolerations == nil || len(installTolerations) > 0 {
+			return ErrIncompatibleTolerations(ComponentCalicoNode)
+		}
+	} else {
+		// Check if the component tolerations are exactly the same as the default tolerations.
+		// In this case, the following are ok on the installation
+		// - all the default tolerations.
+		// - nil (i.e., not specifying any custom tolerations)
+		//
+		// If the component tolerations are not the default tolerations, ensure they equal those on the installation.
+		if areEqualTolerations(rmeta.TolerateAll, compTolerations) {
+			if installTolerations != nil && !areEqualTolerations(compTolerations, installTolerations) {
+				return ErrIncompatibleTolerations(ComponentCalicoNode)
+			}
+		} else {
+			// if the installation has nil tolerations, copy the component tolerations over.
+			// otherwise compare the tolerations.
+			if installTolerations == nil {
+				helpers.EnsureCalicoNodePodSpecNotNil(install)
+				install.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Tolerations = compTolerations
+			} else {
+				if !areEqualTolerations(compTolerations, installTolerations) {
+					return ErrIncompatibleTolerations(ComponentCalicoNode)
+				}
+			}
+		}
+	}
+
+	if c.typha != nil {
+		installTolerations = getTolerations(install.Spec.TyphaDeployment)
+		compTolerations = c.typha.Spec.Template.Spec.Tolerations
+
+		// A daemonset/deployment treats nil and empty tolerations the same so do that here too.
+		if len(compTolerations) == 0 {
+			// if the component has no tolerations, then the installation must specify empty, non-nil tolerations.
+			if installTolerations == nil || len(installTolerations) > 0 {
+				return ErrIncompatibleTolerations(ComponentTypha)
+			}
+		} else {
+			// Check if the component tolerations are exactly the same as the default tolerations.
+			// In this case, the following are ok on the installation
+			// - all the default tolerations.
+			// - nil (i.e., not specifying any custom tolerations)
+			//
+			// If the component tolerations are not the default tolerations, ensure they equal those on the installation.
+			if areEqualTolerations(rmeta.TolerateAll, compTolerations) {
+				if installTolerations != nil && !areEqualTolerations(compTolerations, installTolerations) {
+					return ErrIncompatibleTolerations(ComponentTypha)
+				}
+			} else {
+				// if the installation has nil tolerations, copy the component tolerations over.
+				// otherwise compare the tolerations.
+				if installTolerations == nil {
+					helpers.EnsureTyphaPodSpecNotNil(install)
+					install.Spec.TyphaDeployment.Spec.Template.Spec.Tolerations = compTolerations
+				} else {
+					if !areEqualTolerations(compTolerations, installTolerations) {
+						return ErrIncompatibleTolerations(ComponentTypha)
+					}
+				}
+			}
+		}
+	}
+
+	if c.kubeControllers != nil {
+		installTolerations = getTolerations(install.Spec.CalicoKubeControllersDeployment)
+		compTolerations = c.kubeControllers.Spec.Template.Spec.Tolerations
+
+		// A daemonset/deployment treats nil and empty tolerations the same so do that here too.
+		if len(compTolerations) == 0 {
+			// if the component has no tolerations, then the installation must specify empty, non-nil tolerations.
+			if installTolerations == nil || len(installTolerations) > 0 {
+				return ErrIncompatibleTolerations(ComponentKubeControllers)
+			}
+		} else {
+			// Check if the component tolerations are exactly the same as the default tolerations.
+			// In this case, the following are ok on the installation
+			// - all the default tolerations.
+			// - nil (i.e., not specifying any custom tolerations)
+			//
+			// If the component tolerations are not the default tolerations, ensure they equal those on the installation.
+			defaultTolerations := []corev1.Toleration{rmeta.TolerateMaster, rmeta.TolerateCriticalAddonsOnly}
+			if areEqualTolerations(defaultTolerations, compTolerations) {
+				if installTolerations != nil && !areEqualTolerations(compTolerations, installTolerations) {
+					return ErrIncompatibleTolerations(ComponentKubeControllers)
+				}
+			} else {
+				// if the installation has nil tolerations, copy the component tolerations over.
+				// otherwise compare the tolerations.
+				if installTolerations == nil {
+					helpers.EnsureKubeControllersPodSpecNotNil(install)
+					install.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Tolerations = compTolerations
+				} else {
+					if !areEqualTolerations(compTolerations, installTolerations) {
+						return ErrIncompatibleTolerations(ComponentKubeControllers)
+					}
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 // checkNodeHostPathVolume returns an error if a hostpath with the passed in name and path does not exist in a given podspec.
 func checkNodeHostPathVolume(spec corev1.PodSpec, name, path string) error {
 	v := getVolume(spec, name)
@@ -211,210 +467,372 @@ func checkNodeHostPathVolume(spec corev1.PodSpec, name, path string) error {
 	return nil
 }
 
-// addResources adds the rescReq resource for the specified component if none was previously set. If installation
-// already had a resource for compName then they are compared and if they are different then an error is returned.
-// If the Resource is added to installation or the existing one matches then nil is returned.
-func addResources(install *operatorv1.Installation, compName operatorv1.ComponentName, rescReq *corev1.ResourceRequirements) error {
-	if install.Spec.ComponentResources == nil {
-		install.Spec.ComponentResources = []operatorv1.ComponentResource{}
-	}
-
-	var existingRR *corev1.ResourceRequirements
-	// See if there is already a ComponentResource with the name
-	for _, x := range install.Spec.ComponentResources {
-		if x.ComponentName == compName {
-			existingRR = x.ResourceRequirements
-			break
+// getContainerResourceOverride gets the container resources override from the Installation for the given component's container.
+// Note: calico-windows-upgrade is not available in a manifest install so is not handled here.
+func getContainerResourceOverride(install *operatorv1.Installation, componentName, containerName string) (*corev1.ResourceRequirements, bool) {
+	switch componentName {
+	case "calico-node":
+		// Check if the component overrides is set for this component and find the container override if it exists.
+		if install.Spec.CalicoNodeDaemonSet != nil {
+			cs := install.Spec.CalicoNodeDaemonSet.GetContainers()
+			for _, c := range cs {
+				if c.Name == containerName {
+					return &c.Resources, true
+				}
+			}
+		}
+	case "calico-typha":
+		if install.Spec.TyphaDeployment != nil {
+			cs := install.Spec.TyphaDeployment.GetContainers()
+			for _, c := range cs {
+				if c.Name == containerName {
+					return &c.Resources, true
+				}
+			}
+		}
+	case "calico-kube-controllers":
+		if install.Spec.CalicoKubeControllersDeployment != nil {
+			cs := install.Spec.CalicoKubeControllersDeployment.GetContainers()
+			for _, c := range cs {
+				if c.Name == containerName {
+					return &c.Resources, true
+				}
+			}
 		}
 	}
-	if existingRR == nil {
-		install.Spec.ComponentResources = append(install.Spec.ComponentResources, operatorv1.ComponentResource{
-			ComponentName:        compName,
-			ResourceRequirements: rescReq.DeepCopy(),
-		})
-		return nil
-	}
-	if reflect.DeepEqual(existingRR, rescReq) {
-		return nil
-	}
 
-	return ErrIncompatibleCluster{
-		err:       "ResourcesRequirements for component did not match between Installation and migration source",
-		component: string(compName),
-		fix:       "remove the resource requirements / limits from your Installation resource, or remove them from the currently installed component",
-	}
+	return nil, false
 }
 
-// handleAnnotations is a migration handler that ensures the components only have expected annotations.
-// since Operator does not support setting custom annotations on components, these annotations
-// would otherwise be dropped.
-func handleAnnotations(c *components, _ *operatorv1.Installation) error {
-	if a := removeExpectedAnnotations(c.node.Annotations, map[string]string{}, toBeIgnoredAnnotationKeyRegExps); len(a) != 0 {
-		return ErrIncompatibleAnnotation(a, ComponentCalicoNode)
+// getInitContainerResourceOverride gets the init container resources override from the Installation for the given component's init container.
+// Note: calico-kube-controllers does not have init containers so is not handled here.
+// Note: calico-windows-upgrade is not available in a manifest install so is not handled here.
+func getInitContainerResourceOverride(install *operatorv1.Installation, componentName, initContainerName string) (*corev1.ResourceRequirements, bool) {
+	switch componentName {
+	case "calico-node":
+		// Check if the component overrides is set for this component and find the init container override if it exists.
+		if install.Spec.CalicoNodeDaemonSet != nil {
+			cs := install.Spec.CalicoNodeDaemonSet.GetInitContainers()
+			for _, c := range cs {
+				if c.Name == initContainerName {
+					return &c.Resources, true
+				}
+			}
+		}
+
+	case "calico-typha":
+		if install.Spec.TyphaDeployment != nil {
+			cs := install.Spec.TyphaDeployment.GetInitContainers()
+			for _, c := range cs {
+				if c.Name == initContainerName {
+					return &c.Resources, true
+				}
+			}
+		}
 	}
 
-	// the following cluster-autoscaler annotation is used to indicate a particular CRD should be handled
-	// the same as a daemonset by the cluster-autoscaler. This is not necessary on calico-node since it is
-	// not a CRD, but a core daemonset, however some orchestrators explicitly denote it anyways. As such,
-	// we ignore it.
-	if a := removeExpectedAnnotations(c.node.Spec.Template.Annotations, map[string]string{
-		"cluster-autoscaler.kubernetes.io/daemonset-pod": "true",
-	}, toBeIgnoredAnnotationKeyRegExps); len(a) != 0 {
-		return ErrIncompatibleAnnotation(a, ComponentCalicoNode+" podTemplateSpec")
+	return nil, false
+}
+
+// convertComponentResources takes an installation and converts any deprecated ComponentResources in it to the new
+// component resource override fields. The ComponentResources field will be nil after the conversion.
+func convertComponentResources(install *operatorv1.Installation) {
+	// For each ComponentResource we find, create a component resource override container for it if it doesn't already exist
+	// After processing all ComponentResources, we can remove them.
+	for _, compRes := range install.Spec.ComponentResources {
+		switch compRes.ComponentName {
+		case operatorv1.ComponentNameNode:
+			// Ensure the override field is non nil
+			helpers.EnsureCalicoNodeContainersNotNil(install)
+
+			// If the container already exists, do nothing since this container override takes precedence.
+			var found bool
+			for _, c := range install.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers {
+				if c.Name == render.CalicoNodeObjectName {
+					found = true
+				}
+			}
+
+			// If the container is not already specified, create the override container entry for it.
+			if !found {
+				container := operatorv1.CalicoNodeDaemonSetContainer{
+					Name:      render.CalicoNodeObjectName,
+					Resources: compRes.ResourceRequirements,
+				}
+				install.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers = append(install.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers, container)
+			}
+		case operatorv1.ComponentNameTypha:
+			// Ensure the override field is non nil
+			helpers.EnsureTyphaContainersNotNil(install)
+
+			// If the container already exists, do nothing since this container override takes precedence.
+			var found bool
+			for _, c := range install.Spec.TyphaDeployment.Spec.Template.Spec.Containers {
+				if c.Name == render.TyphaContainerName {
+					found = true
+				}
+			}
+
+			// If the container is not already specified, create the override container entry for it.
+			if !found {
+				container := operatorv1.TyphaDeploymentContainer{
+					Name:      render.TyphaContainerName,
+					Resources: compRes.ResourceRequirements,
+				}
+				install.Spec.TyphaDeployment.Spec.Template.Spec.Containers = append(install.Spec.TyphaDeployment.Spec.Template.Spec.Containers, container)
+			}
+		case operatorv1.ComponentNameKubeControllers:
+			// Ensure the override field is non nil
+			helpers.EnsureKubeControllersContainersNotNil(install)
+
+			// If the container already exists, do nothing since this container override takes precedence.
+			var found bool
+			for _, c := range install.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers {
+				if c.Name == kubecontrollers.KubeController {
+					found = true
+				}
+			}
+
+			// If the container is not already specified, create the override container entry for it.
+			if !found {
+				container := operatorv1.CalicoKubeControllersDeploymentContainer{
+					Name:      kubecontrollers.KubeController,
+					Resources: compRes.ResourceRequirements,
+				}
+				install.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers = append(install.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers, container)
+			}
+		}
 	}
 
-	if c.kubeControllers != nil {
-		if a := removeExpectedAnnotations(c.kubeControllers.Annotations, map[string]string{}, toBeIgnoredAnnotationKeyRegExps); len(a) != 0 {
-			return ErrIncompatibleAnnotation(a, ComponentKubeControllers)
+	// Lastly, clear out the ComponentResources slice.
+	install.Spec.ComponentResources = nil
+}
+
+// migrateContainerResources adds the resources for the specified component container if none was previously set. If the Installation
+// already had a resource for the component container then they are compared and if they are different then an error is returned.
+// If the component container resource is added to the Installation or the existing one matches then nil is returned.
+func migrateContainerResources(install *operatorv1.Installation, componentName, containerName string, resources *corev1.ResourceRequirements) error {
+	// If resources already exist for this component container, verify that they equal the container's existing resources.
+	if existingResources, found := getContainerResourceOverride(install, componentName, containerName); found {
+		if !reflect.DeepEqual(existingResources, resources) {
+			return ErrIncompatibleCluster{
+				err:       fmt.Sprintf("Resources for the component container %q did not match between Installation and migration source", containerName),
+				component: componentName,
+				fix:       "remove the component's container resources from your Installation resource, or remove them from the currently installed component",
+			}
 		}
-		if a := removeExpectedAnnotations(c.kubeControllers.Spec.Template.Annotations, map[string]string{}, toBeIgnoredAnnotationKeyRegExps); len(a) != 0 {
-			return ErrIncompatibleAnnotation(a, ComponentKubeControllers+" podTemplateSpec")
-		}
+		return nil
 	}
 
-	if c.typha != nil {
-		if a := removeExpectedAnnotations(c.typha.Annotations, map[string]string{}, toBeIgnoredAnnotationKeyRegExps); len(a) != 0 {
-			return ErrIncompatibleAnnotation(a, ComponentTypha)
+	// Create a container override using the resources and append it to the component resource override containers' field.
+	// Note: calico-windows-upgrade is not available in a manifest install so is not handled here.
+	switch componentName {
+	case render.CalicoNodeObjectName:
+		container := operatorv1.CalicoNodeDaemonSetContainer{Name: containerName, Resources: resources}
+		helpers.EnsureCalicoNodeContainersNotNil(install)
+		install.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers = append(install.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Containers, container)
+	case kubecontrollers.KubeController:
+		container := operatorv1.CalicoKubeControllersDeploymentContainer{Name: containerName, Resources: resources}
+		helpers.EnsureKubeControllersContainersNotNil(install)
+		install.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers = append(install.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers, container)
+	case render.TyphaContainerName:
+		container := operatorv1.TyphaDeploymentContainer{Name: containerName, Resources: resources}
+		helpers.EnsureTyphaContainersNotNil(install)
+		install.Spec.TyphaDeployment.Spec.Template.Spec.Containers = append(install.Spec.TyphaDeployment.Spec.Template.Spec.Containers, container)
+	}
+
+	return nil
+}
+
+// migrateInitContainerResources adds the resources for the specified component init container if none was previously set. If the Installation
+// already had a resource for the component init container then they are compared and if they are different then an error is returned.
+// If the component init container resource is added to the Installation or the existing one matches then nil is returned.
+func migrateInitContainerResources(install *operatorv1.Installation, componentName, initContainerName string, resources *corev1.ResourceRequirements) error {
+	// If resources already exist for this component init container, verify that they equal the container's existing resources.
+	if existingResources, found := getInitContainerResourceOverride(install, componentName, initContainerName); found {
+		if !reflect.DeepEqual(existingResources, resources) {
+			return ErrIncompatibleCluster{
+				err:       fmt.Sprintf("Resources for the component init container %q did not match between Installation and migration source", initContainerName),
+				component: componentName,
+				fix:       "remove the component's init container resources from your Installation resource, or remove them from the currently installed component",
+			}
 		}
-		if a := removeExpectedAnnotations(c.typha.Spec.Template.Annotations, map[string]string{
-			"cluster-autoscaler.kubernetes.io/safe-to-evict": "true",
-		}, toBeIgnoredAnnotationKeyRegExps); len(a) != 0 {
-			return ErrIncompatibleAnnotation(a, ComponentTypha+" podTemplateSpec")
+		return nil
+	}
+
+	// Create an init container override using the resources and append it to the component resource override init containers' field.
+	// Note: calico-kube-controllers does not have init containers, and calico-windows-upgrade is not available in manifest installs.
+	switch componentName {
+	case render.CalicoNodeObjectName:
+		container := operatorv1.CalicoNodeDaemonSetInitContainer{Name: initContainerName, Resources: resources}
+		helpers.EnsureCalicoNodeInitContainersNotNil(install)
+		install.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers = append(install.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.InitContainers, container)
+	case render.TyphaContainerName:
+		container := operatorv1.TyphaDeploymentInitContainer{Name: initContainerName, Resources: resources}
+		helpers.EnsureTyphaInitContainersNotNil(install)
+		install.Spec.TyphaDeployment.Spec.Template.Spec.InitContainers = append(install.Spec.TyphaDeployment.Spec.Template.Spec.InitContainers, container)
+	}
+
+	return nil
+}
+
+func hasNodeSelector(override comp.ReplicatedPodResourceOverrides) bool {
+	if reflect.ValueOf(override).IsNil() {
+		return false
+	}
+	return len(override.GetNodeSelector()) > 0
+}
+
+func mergeComponentMapWithInstallation(componentName string, install, comp map[string]string, errFunc func(key string) error) error {
+	// Verify that any items on the installation exist on the component.
+	for k, v := range install {
+		if x, ok := comp[k]; !ok || x != v {
+			return errFunc(k)
+		}
+	}
+	// Copy items from the component to the install.
+	for k, v := range comp {
+		// If a key already exists in the install but values differ, return an error.
+		if x, ok := install[k]; ok && x != v {
+			return errFunc(k)
+		}
+		install[k] = v
+	}
+
+	return nil
+}
+
+// mergeNodeSelector merges the nodeSelector on the component with that on the installation.
+func mergeNodeSelector(componentName string, installNodeSelector, compNodeSelector map[string]string) error {
+	return mergeComponentMapWithInstallation(componentName, installNodeSelector, compNodeSelector, func(key string) error {
+		return ErrIncompatibleNodeSelector(key, componentName)
+	})
+}
+
+func getTyphaAffinity(install *operatorv1.Installation) *corev1.Affinity {
+	// TyphaDeployment affinity takes precedence.
+	if install.Spec.TyphaDeployment != nil && install.Spec.TyphaDeployment.GetAffinity() != nil {
+		return install.Spec.TyphaDeployment.GetAffinity()
+	}
+
+	// If TyphaAffinity is defined, convert it to a v1.Affinity and return it
+	if install.Spec.TyphaAffinity != nil && install.Spec.TyphaAffinity.NodeAffinity != nil {
+		return &corev1.Affinity{
+			NodeAffinity: &corev1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution:  install.Spec.TyphaAffinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution,
+				PreferredDuringSchedulingIgnoredDuringExecution: install.Spec.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
+			},
 		}
 	}
 	return nil
 }
 
-// removeExpectedAnnotations returns the given annotations with common k8s-native annotations removed.
-// this function also accepts a second argument of additional annotations to remove.
-func removeExpectedAnnotations(existing, ignoreWithValue map[string]string, toBeIgnoredAnnotationKeyRegExps []*regexp.Regexp) map[string]string {
-	a := existing
-
-	for key, val := range existing {
-		if key == "deprecated.daemonset.template.generation" ||
-			key == "deployment.kubernetes.io/revision" ||
-			key == "scheduler.alpha.kubernetes.io/critical-pod" {
-			delete(a, key)
-			continue
-		}
-
-		if v, ok := ignoreWithValue[key]; ok && v == val {
-			delete(a, key)
-			continue
-		}
-
-		for _, annotationKeyRegexp := range toBeIgnoredAnnotationKeyRegExps {
-			if annotationKeyRegexp.MatchString(key) {
-				delete(a, key)
-				break
-			}
-		}
-	}
-
-	return a
-}
-
-// handleNodeSelectors is a migration handler which ensures that nodeSelectors are set as expected.
-// In general, setting custom nodeSelectors and nodeAffinity for components is not supported.
-// The exception to this is the calico-node nodeSelector, which is migrated into the
-// ControlPlaneNodeSelector field.
+// handleNodeSelectors is a migration handler which ensures that nodeSelectors and affinities are set as expected.
 func handleNodeSelectors(c *components, install *operatorv1.Installation) error {
-	// check calico-node nodeSelectors
+	// Handle calico-node.
 	if c.node.Spec.Template.Spec.Affinity != nil {
-		if !(install.Spec.KubernetesProvider == operatorv1.ProviderAKS && reflect.DeepEqual(c.node.Spec.Template.Spec.Affinity, &corev1.Affinity{
-			NodeAffinity: &corev1.NodeAffinity{
-				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
-					NodeSelectorTerms: []corev1.NodeSelectorTerm{{
-						MatchExpressions: []corev1.NodeSelectorRequirement{{
-							Key:      "type",
-							Operator: corev1.NodeSelectorOpNotIn,
-							Values:   []string{"virtual-kubelet"},
-						}},
-					}},
-				},
-			},
-		})) && !(install.Spec.KubernetesProvider == operatorv1.ProviderEKS && reflect.DeepEqual(c.node.Spec.Template.Spec.Affinity, &corev1.Affinity{
-			NodeAffinity: &corev1.NodeAffinity{
-				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
-					NodeSelectorTerms: []corev1.NodeSelectorTerm{{
-						MatchExpressions: []corev1.NodeSelectorRequirement{{
-							Key:      "eks.amazonaws.com/compute-type",
-							Operator: corev1.NodeSelectorOpNotIn,
-							Values:   []string{"fargate"},
-						}},
-					}},
-				},
-			},
-		})) {
-			return ErrIncompatibleCluster{
-				err:       "node affinity not supported for calico-node daemonset",
-				component: ComponentCalicoNode,
-				fix:       "remove the affinity",
+		if install.Spec.CalicoNodeDaemonSet == nil || install.Spec.CalicoNodeDaemonSet.GetAffinity() == nil {
+			// Affinity set on the component but not the installation so migrate it over.
+			helpers.EnsureCalicoNodePodSpecNotNil(install)
+			install.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity = c.node.Spec.Template.Spec.Affinity
+		} else {
+			// Affinity is set on the component and the installation, verify that they match.
+			if !reflect.DeepEqual(c.node.Spec.Template.Spec.Affinity, install.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity) {
+				return ErrIncompatibleAffinity(ComponentCalicoNode)
 			}
 		}
+	} else {
+		// Affinity is not set on the component, check if it's set on the installation.
+		if install.Spec.CalicoNodeDaemonSet != nil && install.Spec.CalicoNodeDaemonSet.GetAffinity() != nil {
+			return ErrIncompatibleAffinity(ComponentCalicoNode)
+		}
 	}
+
 	nodeSel := removeOSNodeSelectors(c.node.Spec.Template.Spec.NodeSelector)
 	delete(nodeSel, "projectcalico.org/operator-node-migration")
-	if len(nodeSel) > 0 {
-		// raise error unless the only nodeSelector is the  calico-node migration nodeSelector
-		return ErrIncompatibleCluster{
-			err:       fmt.Sprintf("unsupported nodeSelector for calico-node daemonset: %v", nodeSel),
-			component: ComponentCalicoNode,
-			fix:       "remove the nodeSelector",
-		}
 
+	// Merge any remaining nodeSelectors into the installation.
+	if len(nodeSel) == 0 {
+		if hasNodeSelector(install.Spec.CalicoNodeDaemonSet) {
+			return ErrNodeSelectorOnlyOnInstall(ComponentCalicoNode)
+		}
+	} else {
+		helpers.EnsureCalicoNodeNodeSelectorNotNil(install)
+		if err := mergeNodeSelector(ComponentCalicoNode, install.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector, nodeSel); err != nil {
+			return err
+		}
 	}
 
-	// check typha nodeSelectors
+	// Handle typha.
+	// We treat typha differently from the node and kube-controllers since there are two fields to determine typha affinity.
 	if c.typha != nil {
-		// we can migrate typha affinities provided they are a NodeAffinity for Preferred.
-		if aff := c.typha.Spec.Template.Spec.Affinity; aff != nil {
-			if aff.PodAffinity != nil || aff.PodAntiAffinity != nil {
-				return ErrIncompatibleCluster{
-					err:       "pod affinity and antiAffinity not supported for typha deployment",
-					component: ComponentTypha,
-					fix:       "remove the affinity",
+		installAffinity := getTyphaAffinity(install)
+		if c.typha.Spec.Template.Spec.Affinity != nil {
+			if installAffinity != nil {
+				// Affinity is set on the component and the installation, verify that they match.
+				if !reflect.DeepEqual(c.typha.Spec.Template.Spec.Affinity, installAffinity) {
+					return ErrIncompatibleAffinity(ComponentTypha)
 				}
 			}
-			if aff.NodeAffinity != nil {
-				if aff.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
-					return ErrIncompatibleCluster{
-						err:       "nodeAffinity 'RequiredDuringSchedulingIgnoredDuringExecution' not supported on Typha.",
-						component: ComponentTypha,
-						fix:       "remove the affinity",
-					}
-				}
-				install.Spec.TyphaAffinity = &operatorv1.TyphaAffinity{
-					NodeAffinity: &operatorv1.NodeAffinity{
-						PreferredDuringSchedulingIgnoredDuringExecution: aff.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution,
-					},
-				}
+			// Ensure that the affinity on the installation uses the new field and clears the deprecated TyphaAffinity.
+			helpers.EnsureTyphaPodSpecNotNil(install)
+			install.Spec.TyphaDeployment.Spec.Template.Spec.Affinity = c.typha.Spec.Template.Spec.Affinity
+			install.Spec.TyphaAffinity = nil
+		} else {
+			// Affinity is not set on the component, check if it's set on the installation.
+			if installAffinity != nil {
+				return ErrIncompatibleAffinity(ComponentTypha)
 			}
 		}
-		if nodeSel := removeOSNodeSelectors(c.typha.Spec.Template.Spec.NodeSelector); len(nodeSel) != 0 {
-			return ErrIncompatibleCluster{
-				err:       fmt.Sprintf("invalid nodeSelector for typha deployment: %v", nodeSel),
-				component: ComponentTypha,
-				fix:       "remove the nodeSelector",
+
+		nodeSel := removeOSNodeSelectors(c.typha.Spec.Template.Spec.NodeSelector)
+
+		// Merge any remaining nodeSelectors into the installation.
+		if len(nodeSel) == 0 {
+			if hasNodeSelector(install.Spec.TyphaDeployment) {
+				return ErrNodeSelectorOnlyOnInstall(ComponentTypha)
+			}
+		} else {
+			helpers.EnsureTyphaNodeSelectorNotNil(install)
+			if err := mergeNodeSelector(ComponentTypha, install.Spec.TyphaDeployment.Spec.Template.Spec.NodeSelector, nodeSel); err != nil {
+				return err
 			}
 		}
 	}
 
-	// check kube-controllers nodeSelectors
+	// Handle kube-controllers
 	if c.kubeControllers != nil {
+		// Handle affinity.
 		if c.kubeControllers.Spec.Template.Spec.Affinity != nil {
-			return ErrIncompatibleCluster{
-				err:       "node affinity not supported for kube-controller deployment",
-				component: ComponentKubeControllers,
-				fix:       "remove the affinity",
+			if install.Spec.CalicoKubeControllersDeployment == nil || install.Spec.CalicoKubeControllersDeployment.GetAffinity() == nil {
+				// Affinity set on the component but not the installation so migrate it over.
+				helpers.EnsureKubeControllersPodSpecNotNil(install)
+				install.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Affinity = c.node.Spec.Template.Spec.Affinity
+			} else {
+				// Affinity is set on the component and the installation, verify that they match.
+				if !reflect.DeepEqual(c.kubeControllers.Spec.Template.Spec.Affinity, install.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Affinity) {
+					return ErrIncompatibleAffinity(ComponentKubeControllers)
+				}
+			}
+		} else {
+			// Affinity is not set on the component, check if it's set on the installation.
+			if install.Spec.CalicoKubeControllersDeployment != nil && install.Spec.CalicoKubeControllersDeployment.GetAffinity() != nil {
+				return ErrIncompatibleAffinity(ComponentKubeControllers)
 			}
 		}
 
-		// kube-controllers nodeSelector is unique in that we do have an API for setting it's nodeSelectors.
-		// operator rendering code will automatically set the kubernetes.io/os=linux selector, so we just
-		// want to set the field to any other nodeSelectors set on it.
-		if sels := removeOSNodeSelectors(c.kubeControllers.Spec.Template.Spec.NodeSelector); len(sels) != 0 {
-			install.Spec.ControlPlaneNodeSelector = sels
+		nodeSel := removeOSNodeSelectors(c.kubeControllers.Spec.Template.Spec.NodeSelector)
+
+		// Merge any remaining nodeSelectors into the installation.
+		if len(nodeSel) == 0 {
+			if hasNodeSelector(install.Spec.CalicoKubeControllersDeployment) {
+				return ErrNodeSelectorOnlyOnInstall(ComponentKubeControllers)
+			}
+		} else {
+			helpers.EnsureKubeControllersNodeSelectorNotNil(install)
+			if err := mergeNodeSelector(ComponentKubeControllers, install.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector, nodeSel); err != nil {
+				return err
+			}
 		}
 	}
 

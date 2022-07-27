@@ -148,8 +148,9 @@ var _ = Describe("Rendering tests", func() {
 				ControlPlaneTolerations: []corev1.Toleration{t},
 			})
 			deployment := rtest.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-			Expect(deployment.Spec.Template.Spec.Tolerations).Should(ContainElements(t, rmeta.TolerateCriticalAddonsOnly, rmeta.TolerateMaster))
+			Expect(deployment.Spec.Template.Spec.Tolerations).Should(ContainElements(append(rmeta.TolerateCriticalAddonsAndControlPlane, t)))
 		})
+
 	})
 
 	Context("GuardianPolicy component", func() {

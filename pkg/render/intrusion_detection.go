@@ -115,7 +115,7 @@ type IntrusionDetectionConfiguration struct {
 	ManagedCluster     bool
 
 	// PVC fields Spec fields are immutable, set to true when and existing AD PVC
-	// is not found as to avoid update
+	// is not found as to avoind
 	ShouldRenderADPVC     bool
 	HasNoLicense          bool
 	TrustedCertBundle     certificatemanagement.TrustedBundle
@@ -1327,6 +1327,10 @@ func (c *intrusionDetectionComponent) adPersistentVolumeClaim() *corev1.Persiste
 	adStorageClassName := c.cfg.IntrusionDetection.Spec.AnomalyDetection.StorageClassName
 
 	adPVC := corev1.PersistentVolumeClaim{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "PersistentVolumeClaim",
+			APIVersion: "v1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ADPersistentVolumeClaimName,
 			Namespace: IntrusionDetectionNamespace,

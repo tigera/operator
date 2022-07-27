@@ -51,7 +51,24 @@ func (r *ReconcileManager) handleCloudResources(ctx context.Context, reqLogger l
 		return mcr, &reconcile.Result{}, nil
 	}
 
-	mcr.ImageAssuranceResources = &rcimageassurance.Resources{TLSSecret: secret}
+	// Get image assurance configuration config map.
+	cm, err := utils.GetImageAssuranceConfigurationConfigMap(r.client)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			reqLogger.Info(fmt.Sprintf("waiting for configmap '%s' to become available", rcimageassurance.ConfigurationConfigMapName))
+			r.status.SetDegraded(fmt.Sprintf("waiting for configmap '%s' to become available", rcimageassurance.ConfigurationConfigMapName), "")
+			return mcr, &reconcile.Result{}, nil
+		}
+
+		reqLogger.Error(err, fmt.Sprintf("failed to retrieve configmap: %s", rcimageassurance.ConfigurationConfigMapName))
+		r.status.SetDegraded(fmt.Sprintf("failed to retrieve configmap: %s", rcimageassurance.ConfigurationConfigMapName), err.Error())
+		return mcr, nil, err
+	}
+
+	mcr.ImageAssuranceResources = &rcimageassurance.Resources{
+		ConfigurationConfigMap: cm,
+		TLSSecret:              secret,
+	}
 	reqLogger.Info("Successfully processed resources for Image Assurance")
 
 	return mcr, nil, nil

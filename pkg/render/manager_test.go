@@ -23,6 +23,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -583,7 +584,22 @@ func renderObjects(roc renderConfig) []client.Object {
 	var cloudResources render.ManagerCloudResources
 	if roc.imageAssuranceEnabled {
 		voltronTls := rtest.CreateCertSecret(rcimageassurance.ImageAssuranceSecretName, common.OperatorNamespace(), dns.DefaultClusterDomain)
-		cloudResources.ImageAssuranceResources = &rcimageassurance.Resources{TLSSecret: voltronTls}
+		cloudResources.ImageAssuranceResources = &rcimageassurance.Resources{
+			ConfigurationConfigMap: &corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "ConfigMap",
+					APIVersion: "v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      rcimageassurance.ConfigurationConfigMapName,
+					Namespace: render.ManagerNamespace,
+				},
+				Data: map[string]string{
+					rcimageassurance.ConfigurationConfigMapOrgIDKey: "dummyOrgID",
+				},
+			},
+			TLSSecret: voltronTls,
+		}
 	}
 
 	esConfigMap := relasticsearch.NewClusterConfig("tenant_id.clusterTestName", 1, 1, 1)

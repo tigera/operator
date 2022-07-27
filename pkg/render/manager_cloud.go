@@ -9,6 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/tigera/operator/pkg/render/common/configmap"
 	rcimageassurance "github.com/tigera/operator/pkg/render/common/imageassurance"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -69,6 +70,9 @@ func (c *managerComponent) addCloudResources(objs []client.Object) []client.Obje
 				corev1.TLSCertKey: c.cfg.CloudResources.ImageAssuranceResources.TLSSecret.Data[corev1.TLSCertKey],
 			},
 		})...)
+
+		objs = append(objs, configmap.ToRuntimeObjects(configmap.CopyToNamespace(ManagerNamespace,
+			c.cfg.CloudResources.ImageAssuranceResources.ConfigurationConfigMap)...)...)
 	}
 
 	return objs
@@ -86,6 +90,14 @@ func (c *managerComponent) setManagerCloudEnvs(envs []corev1.EnvVar) []corev1.En
 		envs = append(envs,
 			corev1.EnvVar{Name: "ENABLE_IMAGE_ASSURANCE_SUPPORT", Value: "true"},
 			corev1.EnvVar{Name: "CNX_IMAGE_ASSURANCE_API_URL", Value: "/bast/v1"},
+			corev1.EnvVar{Name: "CNX_IMAGE_ASSURANCE_ORGANIZATION_ID",
+				ValueFrom: &corev1.EnvVarSource{
+					ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: rcimageassurance.ConfigurationConfigMapName},
+						Key:                  rcimageassurance.ConfigurationConfigMapOrgIDKey,
+					},
+				},
+			},
 		)
 	}
 	// move extra env vars into Manager, but sort them alphabetically first,

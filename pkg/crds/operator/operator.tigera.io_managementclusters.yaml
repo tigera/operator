@@ -44,6 +44,43 @@ spec:
                   that will connect both clusters. Valid examples are: "0.0.0.0:31000",
                   "example.com:32000", "[::1]:32500"'
                 type: string
+              tls:
+                description: TLS provides options for configuring how Managed Clusters
+                  can establish an mTLS connection with the Management Cluster.
+                properties:
+                  ca:
+                    description: "ca indicates how the tls.secretName cert which Voltron
+                      is using was signed. This information is used by the Tigera
+                      API Server when generating ManagementClusterConnection resources
+                      as it does in response to the creation of a ManagedCluster resource.
+                      See information on ManagementClusterConnectionTLS for more information
+                      on the effects of its values. \n Currently, 'Public' is only
+                      supported with a tls.secretName of manager-tls, and Tigera is
+                      only supported with a tls.secretName of tigera-management-cluster-connection.
+                      \n Note that using a self-signed bundle in tls.secretName=manager-tls
+                      while setting tls.ca=Public will result in tunnel clients being
+                      unable to verify the tunnel server's identity. If using tls.ca=Public
+                      with tls.secretName=manager-tls, a publicly signed cert bundle
+                      must be uploaded as manager-tls, as otherwise the operator will
+                      generate a self-signed one resulting in tunnel clients being
+                      unable to verify voltron's identity. \n Default: SelfSigned"
+                    type: string
+                  secretName:
+                    description: "secretName indicates the name of the secret in the
+                      tigera-operator namespace that contains a certificate bundle
+                      which should be used to serve voltron's tunnel. \n Currently,
+                      only two values are supported: tigera-management-cluster-connection
+                      and manager-tls. \n When set to tigera-management-cluster-connection
+                      voltron will use the same cert bundle which Guardian client
+                      certs are signed with. \n When set to manager-tls, voltron will
+                      use the same cert bundle which Manager UI is served with. \n
+                      If changed on a running cluster with connected managed clusters,
+                      all managed clusters will disconnect as they will no longer
+                      be able to verify Voltron's identity. To reconnect existing
+                      managed clusters, change the tls.ca of the  managed clusters'
+                      ManagementClusterConnection resource. \n Default: tigera-management-cluster-connection"
+                    type: string
+                type: object
             type: object
         type: object
     served: true

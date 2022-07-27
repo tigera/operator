@@ -197,3 +197,46 @@ var _ = Describe("Rendering tests", func() {
 		})
 	})
 })
+
+var _ = Describe("guardian", func() {
+	Context("with public CA", func() {
+		var (
+			cfg *render.GuardianConfiguration
+		)
+		BeforeEach(func() {
+			scheme := runtime.NewScheme()
+			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+			cli := fake.NewClientBuilder().WithScheme(scheme).Build()
+			certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
+			Expect(err).NotTo(HaveOccurred())
+
+			cfg = &render.GuardianConfiguration{
+				PullSecrets:       []*corev1.Secret{},
+				Installation:      &operatorv1.InstallationSpec{},
+				TunnelSecret:      &corev1.Secret{},
+				TrustedCertBundle: certificateManager.CreateTrustedBundle(),
+			}
+		})
+		It("should render when disabled", func() {
+			g := render.Guardian(cfg)
+			resources, _ := g.Objects()
+			Expect(resources).ToNot(BeNil())
+
+			deployment := rtest.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			container := rtest.GetContainer(deployment.Spec.Template.Spec.Containers, "tigera-guardian")
+			rtest.ExpectEnv(container.Env, "GUARDIAN_VOLTRON_CA_TYPE", "Voltron")
+		})
+
+		It("should render when enabled", func() {
+			cfg.TunnelCAType = operatorv1.CATypePublic
+
+			g := render.Guardian(cfg)
+			resources, _ := g.Objects()
+			Expect(resources).ToNot(BeNil())
+
+			deployment := rtest.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			container := rtest.GetContainer(deployment.Spec.Template.Spec.Containers, "tigera-guardian")
+			rtest.ExpectEnv(container.Env, "GUARDIAN_VOLTRON_CA_TYPE", "Public")
+		})
+	})
+})

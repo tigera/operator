@@ -219,7 +219,7 @@ func (c *dexComponent) deployment() client.Object {
 				Spec: corev1.PodSpec{
 					NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 					ServiceAccountName: DexObjectName,
-					Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster),
+					Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...),
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					InitContainers:     initContainers,
 					Containers: []corev1.Container{

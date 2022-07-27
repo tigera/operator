@@ -201,7 +201,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		Expect(d.Spec.Template.Spec.ServiceAccountName).To(Equal("tigera-apiserver"))
 
-		Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateMaster))
+		Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateControlPlane))
 
 		Expect(d.Spec.Template.Spec.ImagePullSecrets).To(BeEmpty())
 		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(2))
@@ -510,7 +510,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 		d := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(tol, rmeta.TolerateMaster))
+		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(append(rmeta.TolerateControlPlane, tol)))
 	})
 
 	It("should include a ClusterRole and ClusterRoleBindings for reading webhook configuration", func() {
@@ -1082,7 +1082,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		})
 
 		It("should override ControlPlaneTolerations when specified", func() {
-			cfg.Installation.ControlPlaneTolerations = []corev1.Toleration{rmeta.TolerateMaster}
+			cfg.Installation.ControlPlaneTolerations = rmeta.TolerateControlPlane
 
 			tol := corev1.Toleration{
 				Key:      "foo",
@@ -1501,7 +1501,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 
 		Expect(d.Spec.Template.Spec.ServiceAccountName).To(Equal("calico-apiserver"))
 
-		Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateMaster))
+		Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateControlPlane))
 
 		Expect(d.Spec.Template.Spec.ImagePullSecrets).To(BeEmpty())
 		Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(1))
@@ -1614,7 +1614,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 		d := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(tol, rmeta.TolerateMaster))
+		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(append(rmeta.TolerateControlPlane, tol)))
 	})
 
 	It("should set KUBERNETES_SERVICE_... variables if host networked", func() {
@@ -1859,7 +1859,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		})
 
 		It("should override ControlPlaneTolerations when specified", func() {
-			cfg.Installation.ControlPlaneTolerations = []corev1.Toleration{rmeta.TolerateMaster}
+			cfg.Installation.ControlPlaneTolerations = rmeta.TolerateControlPlane
 
 			tol := corev1.Toleration{
 				Key:      "foo",

@@ -15,7 +15,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/runtimesecurity"
-	rsrender "github.com/tigera/operator/pkg/render/runtimesecurity"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -59,7 +58,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
 		provider:        opts.DetectedProvider,
-		status:          status.New(mgr.GetClient(), "RuntimeSecurity", opts.KubernetesVersion),
+		status:          status.New(mgr.GetClient(), "runtimesecurity", opts.KubernetesVersion),
 		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
 	}
@@ -86,7 +85,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		return fmt.Errorf("RuntimeSecurity-controller failed to watch Tigera network resource: %v", err)
 	}
 
-	for _, secretName := range []string{rsrender.ElasticsearchSashaJobUserSecretName} {
+	for _, secretName := range []string{runtimesecurity.ElasticsearchSashaJobUserSecretName} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("RuntimeSecurity-controller failed to watch Secret resource: %v", err)
 		}
@@ -130,6 +129,8 @@ func (r *ReconcileRuntimeSecurity) Reconcile(ctx context.Context, request reconc
 		r.status.SetDegraded("Error querying for RuntimeSecurity", err.Error())
 		return reconcile.Result{}, err
 	}
+	r.status.OnCRFound()
+	reqLogger.V(2).Info("Loaded config", "config", rs)
 
 	variant, installation, err := utils.GetInstallation(ctx, r.client)
 
@@ -171,7 +172,7 @@ func (r *ReconcileRuntimeSecurity) Reconcile(ctx context.Context, request reconc
 	}
 
 	// get secrets for sasha elastic search access
-	ss, err := utils.ElasticsearchSecrets(context.Background(), []string{rsrender.ElasticsearchSashaJobUserSecretName}, r.client)
+	ss, err := utils.ElasticsearchSecrets(context.Background(), []string{runtimesecurity.ElasticsearchSashaJobUserSecretName}, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("Elasticsearch secrets are not available yet, waiting until they become available")

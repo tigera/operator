@@ -317,6 +317,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	// Query for StorageClass for AD API if provided
+	shouldRenderADPVC := false
 	if instance.Spec.AnomalyDetection.StorageType == operatorv1.PersistentStorageType {
 		// validate to degrade early if the storage class name is not valid
 		if err = utils.ValidateResourceNameIsQualified(instance.Spec.AnomalyDetection.StorageClassName); err != nil {
@@ -334,6 +335,17 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 			} else {
 				reqLogger.Error(err, "Failed to query for Anomaly Detection Storage Class")
 				r.status.SetDegraded("Failed to query storage class for anomaly detection", err.Error())
+				return reconcile.Result{}, err
+			}
+		}
+
+		err = r.client.Get(ctx, client.ObjectKey{Name: render.ADPersistentVolumeClaimName, Namespace: render.IntrusionDetectionNamespace}, &corev1.PersistentVolumeClaim{})
+		if err != nil {
+			if errors.IsNotFound(err) {
+				shouldRenderADPVC = true
+			} else {
+				reqLogger.Error(err, "Failed to query for Anomaly Detection PersistentVolumeClaim")
+				r.status.SetDegraded("Failed to query persistentvolumeclaim for anomaly detection", err.Error())
 				return reconcile.Result{}, err
 			}
 		}
@@ -461,6 +473,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		ClusterDomain:         r.clusterDomain,
 		ESLicenseType:         esLicenseType,
 		ManagedCluster:        managementClusterConnection != nil,
+		ShouldRenderADPVC:     shouldRenderADPVC,
 		HasNoLicense:          hasNoLicense,
 		TrustedCertBundle:     trustedBundle,
 		ADAPIServerCertSecret: adAPIServerTLSSecret,

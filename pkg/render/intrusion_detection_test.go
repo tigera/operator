@@ -288,7 +288,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		}))
 	})
 
-	It("should render a persistentVolume claim if indicated that the AnomalyDetection Storage spec type is Persistent", func() {
+	It("should render a persistentVolume claim if indicated that the AnomalyDetection Storage spec type is Persistent and an existing PVC is not found", func() {
 		testADStorageClassName := "test-storage-class-name"
 		cfg.IntrusionDetection = operatorv1.IntrusionDetection{
 			Spec: operatorv1.IntrusionDetectionSpec{
@@ -298,6 +298,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				},
 			},
 		}
+		cfg.ShouldRenderADPVC = true
 		cfg.Openshift = notOpenshift
 		cfg.ManagedCluster = false
 
@@ -319,6 +320,28 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				},
 			},
 		))
+	})
+
+	It("should not render a persistentVolume claim if indicated that the AnomalyDetection Storage spec type is Persistent but an existing PVC is found", func() {
+		testADStorageClassName := "test-storage-class-name"
+		cfg.IntrusionDetection = operatorv1.IntrusionDetection{
+			Spec: operatorv1.IntrusionDetectionSpec{
+				AnomalyDetection: operatorv1.AnomalyDetectionSpec{
+					StorageType:      operatorv1.PersistentStorageType,
+					StorageClassName: testADStorageClassName,
+				},
+			},
+		}
+		cfg.ShouldRenderADPVC = false
+		cfg.Openshift = notOpenshift
+		cfg.ManagedCluster = false
+
+		component := render.IntrusionDetection(cfg)
+		resources, _ := component.Objects()
+
+		adAPIPVC := rtest.GetResource(resources, render.ADPersistentVolumeClaimName, render.IntrusionDetectionNamespace, "", "v1", "PersistentVolumeClaim")
+
+		Expect(adAPIPVC).To(BeNil())
 	})
 
 	It("should render finalizers rbac resources in the IDS ClusterRole for an Openshift management/standalone cluster", func() {

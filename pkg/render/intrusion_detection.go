@@ -103,16 +103,20 @@ func IntrusionDetection(cfg *IntrusionDetectionConfiguration) Component {
 
 // IntrusionDetectionConfiguration contains all the config information needed to render the component.
 type IntrusionDetectionConfiguration struct {
-	IntrusionDetection    operatorv1.IntrusionDetection
-	LogCollector          *operatorv1.LogCollector
-	ESSecrets             []*corev1.Secret
-	Installation          *operatorv1.InstallationSpec
-	ESClusterConfig       *relasticsearch.ClusterConfig
-	PullSecrets           []*corev1.Secret
-	Openshift             bool
-	ClusterDomain         string
-	ESLicenseType         ElasticsearchLicenseType
-	ManagedCluster        bool
+	IntrusionDetection operatorv1.IntrusionDetection
+	LogCollector       *operatorv1.LogCollector
+	ESSecrets          []*corev1.Secret
+	Installation       *operatorv1.InstallationSpec
+	ESClusterConfig    *relasticsearch.ClusterConfig
+	PullSecrets        []*corev1.Secret
+	Openshift          bool
+	ClusterDomain      string
+	ESLicenseType      ElasticsearchLicenseType
+	ManagedCluster     bool
+
+	// PVC fields Spec fields are immutable, set to true when and existing AD PVC
+	// is not found as to avoid update
+	ShouldRenderADPVC     bool
 	HasNoLicense          bool
 	TrustedCertBundle     certificatemanagement.TrustedBundle
 	ADAPIServerCertSecret certificatemanagement.KeyPairInterface
@@ -211,20 +215,21 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 			c.adAPIAccessRoleBinding(),
 		)
 
-		configureADStorage := c.cfg.IntrusionDetection.Spec.AnomalyDetection.StorageType == operatorv1.PersistentStorageType
+		shouldConfigureADStorage := c.cfg.IntrusionDetection.Spec.AnomalyDetection.StorageType == operatorv1.PersistentStorageType
 
-		if configureADStorage {
+		if !shouldConfigureADStorage {
+			objsToDelete = append(objsToDelete,
+				c.adPersistentVolumeClaim(),
+			)
+		} else if shouldConfigureADStorage && c.cfg.ShouldRenderADPVC { //
 			objs = append(objs,
 				c.adPersistentVolumeClaim(),
 			)
-		} else {
-			objsToDelete = append(objsToDelete,
-				c.adPersistentVolumeClaim())
 		}
 
 		objs = append(objs,
 			c.adAPIService(),
-			c.adAPIDeployment(configureADStorage),
+			c.adAPIDeployment(shouldConfigureADStorage),
 		)
 
 		// RBAC for AD Detector Pods
@@ -1322,7 +1327,6 @@ func (c *intrusionDetectionComponent) adPersistentVolumeClaim() *corev1.Persiste
 	adStorageClassName := c.cfg.IntrusionDetection.Spec.AnomalyDetection.StorageClassName
 
 	adPVC := corev1.PersistentVolumeClaim{
-		TypeMeta: metav1.TypeMeta{Kind: "PersistentVolumeClaim", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ADPersistentVolumeClaimName,
 			Namespace: IntrusionDetectionNamespace,

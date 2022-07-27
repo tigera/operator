@@ -214,7 +214,6 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		configureADStorage := c.cfg.IntrusionDetection.Spec.AnomalyDetection.StorageType == operatorv1.PersistentStorageType
 
 		if configureADStorage {
-			// ignore all fields if it's set to using default ephermeal storage
 			objs = append(objs,
 				c.adPersistentVolumeClaim(),
 			)

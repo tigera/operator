@@ -783,7 +783,7 @@ func handleNodeSelectors(c *components, install *operatorv1.Installation) error 
 			if install.Spec.CalicoKubeControllersDeployment == nil || install.Spec.CalicoKubeControllersDeployment.GetAffinity() == nil {
 				// Affinity set on the component but not the installation so migrate it over.
 				helpers.EnsureKubeControllersPodSpecNotNil(install)
-				install.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Affinity = c.node.Spec.Template.Spec.Affinity
+				install.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Affinity = c.kubeControllers.Spec.Template.Spec.Affinity
 			} else {
 				// Affinity is set on the component and the installation, verify that they match.
 				if !reflect.DeepEqual(c.kubeControllers.Spec.Template.Spec.Affinity, install.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Affinity) {

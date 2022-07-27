@@ -370,95 +370,84 @@ var _ = Describe("core handler", func() {
 
 		emptyAff := &v1.Affinity{}
 
+		var nodeSelectorTests = []TableEntry{
+			Entry("should not error for no nodeSelector", nil, nil, nil, false),
+			Entry("should add nodeSelector to the installation", map[string]string{"foo": "bar"}, nil, map[string]string{"foo": "bar"}, false),
+			Entry("should remove linux OS nodeSelector terms", map[string]string{"beta.kubernetes.io/os": "linux", "foo": "bar", "kubernetes.io/os": "linux"}, nil, map[string]string{"foo": "bar"}, false),
+			Entry("should not error if the same nodeSelector is in the resource and the installation", map[string]string{"foo": "bar", "kubernetes.io/os": "linux"}, map[string]string{"foo": "bar"}, map[string]string{"foo": "bar"}, false),
+			Entry("should not error if the same nodeSelector is in the resource and the installation", map[string]string{"foo": "bar"}, map[string]string{"foo": "bar"}, map[string]string{"foo": "bar"}, false),
+			Entry("should error if the nodeSelector key exists in the resource and the installation but values differ", map[string]string{"foo": "bar"}, map[string]string{"foo": "baz"}, nil, true),
+			Entry("should error if the nodeSelector exists in the installation but not the resource", map[string]string{}, map[string]string{"foo": "baz"}, nil, true),
+		}
+
+		var nodeSelectorTestsForNode = append(nodeSelectorTests,
+			Entry("should not error if the migration nodeSelector is set", map[string]string{"projectcalico.org/operator-node-migration": "pre-operator"}, nil, nil, false),
+		)
+
+		var affinityTests = []TableEntry{
+			Entry("should not error for empty affinity", &v1.Affinity{}, nil, &v1.Affinity{}, false),
+			Entry("should not error for nil affinity", nil, nil, nil, false),
+			Entry("should not error if the same affinity is in the resource and the installation", aff1, aff1, aff1, false),
+			Entry("should error if the affinity exists in the resource and the installation but values differ", aff1, aff2, nil, true),
+			Entry("should error if the affinity exists in the installation but not the resource", nil, aff1, nil, true),
+		}
+
+		DescribeTable("calico-node nodeSelector",
+			func(compNodeSelector map[string]string, installNodeSelector map[string]string, expectedNodeSelector map[string]string, expectedErr bool) {
+				if compNodeSelector != nil {
+					comps.node.Spec.Template.Spec.NodeSelector = compNodeSelector
+				}
+
+				if installNodeSelector != nil {
+					helpers.EnsureCalicoNodePodSpecNotNil(i)
+					i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector = installNodeSelector
+				}
+
+				err := handleNodeSelectors(&comps, i)
+				if expectedErr {
+					Expect(err).To(HaveOccurred())
+				} else {
+					Expect(err).To(BeNil())
+
+					if expectedNodeSelector == nil {
+						Expect(i.Spec.CalicoNodeDaemonSet).To(BeNil())
+					} else {
+						Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector).To(HaveLen(len(expectedNodeSelector)))
+						for k, v := range expectedNodeSelector {
+							Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue(k, v))
+						}
+					}
+				}
+			}, nodeSelectorTestsForNode...,
+		)
+
+		DescribeTable("calico-node affinity",
+			func(compAffinity *corev1.Affinity, installAffinity *corev1.Affinity, expectedAffinity *corev1.Affinity, expectedErr bool) {
+				if compAffinity != nil {
+					comps.node.Spec.Template.Spec.Affinity = compAffinity
+				}
+
+				if installAffinity != nil {
+					helpers.EnsureCalicoNodePodSpecNotNil(i)
+					i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity = installAffinity
+				}
+
+				err := handleNodeSelectors(&comps, i)
+				if expectedErr {
+					Expect(err).To(HaveOccurred())
+				} else {
+					Expect(err).To(BeNil())
+
+					if expectedAffinity == nil {
+						Expect(i.Spec.CalicoNodeDaemonSet).To(BeNil())
+					} else {
+						Expect(*i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity).To(Equal(*expectedAffinity))
+					}
+				}
+			}, affinityTests...,
+		)
+
 		Describe("calico-node", func() {
-			It("should not error for no nodeSelector", func() {
-				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
-			})
-			It("should not error for nil nodeSelector", func() {
-				comps.node.Spec.Template.Spec.NodeSelector = nil
-				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
-			})
-			It("should add nodeSelector to the installation", func() {
-				comps.node.Spec.Template.Spec.NodeSelector = map[string]string{"foo": "bar"}
-				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
-				Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
-				Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("foo", "bar"))
-			})
-			It("should remove linux OS nodeSelector terms", func() {
-				comps.node.Spec.Template.Spec.NodeSelector = map[string]string{
-					"beta.kubernetes.io/os": "linux",
-					"foo":                   "bar",
-					"kubernetes.io/os":      "linux",
-				}
-				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
-				Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
-				Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("foo", "bar"))
-			})
-			It("should not error if the migration nodeSelector is set", func() {
-				comps.node.Spec.Template.Spec.NodeSelector = map[string]string{
-					"projectcalico.org/operator-node-migration": "pre-operator",
-				}
-				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
-				// We don't add the migration nodeSelector to the installation.
-				Expect(i.Spec.CalicoNodeDaemonSet).To(BeNil())
-			})
-			It("should not error if the same nodeSelector is in the resource and the installation", func() {
-				comps.node.Spec.Template.Spec.NodeSelector = map[string]string{
-					"foo":              "bar",
-					"kubernetes.io/os": "linux",
-				}
-				// We remove the OS nodeSelector key/value pair so they are equal
-				helpers.EnsureCalicoNodeNodeSelectorNotNil(i)
-				i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector = map[string]string{
-					"foo": "bar",
-				}
-
-				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
-				Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
-				Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("foo", "bar"))
-			})
-			It("should error if the nodeSelector key exists in the resource and the installation but values differ", func() {
-				comps.node.Spec.Template.Spec.NodeSelector = map[string]string{"foo": "bar"}
-				helpers.EnsureCalicoNodeNodeSelectorNotNil(i)
-				i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector = map[string]string{"foo": "baz"}
-				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
-			})
-			It("should error if the nodeSelector exists in the installation but not the resource", func() {
-				comps.node.Spec.Template.Spec.NodeSelector = map[string]string{}
-				helpers.EnsureCalicoNodeNodeSelectorNotNil(i)
-				i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector = map[string]string{"foo": "baz"}
-				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
-			})
-			It("should not error for empty affinity", func() {
-				comps.node.Spec.Template.Spec.Affinity = &v1.Affinity{}
-				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
-				Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity).To(Equal(comps.node.Spec.Template.Spec.Affinity))
-			})
-			It("should not error for nil affinity", func() {
-				comps.node.Spec.Template.Spec.Affinity = nil
-				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
-				Expect(i.Spec.CalicoNodeDaemonSet).To(BeNil())
-			})
-			It("should not error if the same affinity is in the resource and the installation", func() {
-				comps.node.Spec.Template.Spec.Affinity = aff1
-				helpers.EnsureCalicoNodePodSpecNotNil(i)
-				i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity = aff1
-
-				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
-				Expect(*i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity).To(Equal(*aff1))
-			})
-			It("should error if the affinity exists in the resource and the installation but values differ", func() {
-				comps.node.Spec.Template.Spec.Affinity = aff1
-				helpers.EnsureCalicoNodePodSpecNotNil(i)
-				i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity = aff2
-
-				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
-			})
-			It("should error if the affinity exists in the installation but not the resource", func() {
-				helpers.EnsureCalicoNodePodSpecNotNil(i)
-				i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity = aff1
-				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
-			})
 			It("shouldn't error for aks affinity on aks", func() {
 				aff := &v1.Affinity{
 					NodeAffinity: &v1.NodeAffinity{
@@ -497,56 +486,39 @@ var _ = Describe("core handler", func() {
 				Expect(*i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity).To(Equal(*aff))
 			})
 		})
-		Describe("typha", func() {
-			It("should not error for nil nodeSelector", func() {
-				comps.typha.Spec.Template.Spec.NodeSelector = nil
-				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
-			})
-			It("should add nodeSelector to the installation", func() {
-				comps.typha.Spec.Template.Spec.NodeSelector = map[string]string{"foo": "bar"}
-				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
-				Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
-				Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("foo", "bar"))
-			})
-			It("should remove linux OS nodeSelector terms", func() {
-				comps.typha.Spec.Template.Spec.NodeSelector = map[string]string{
-					"beta.kubernetes.io/os": "linux",
-					"foo":                   "bar",
-					"kubernetes.io/os":      "linux",
-				}
-				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
-				Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
-				Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("foo", "bar"))
-			})
-			It("should not error if the same nodeSelector is in the resource and the installation", func() {
-				comps.typha.Spec.Template.Spec.NodeSelector = map[string]string{
-					"foo":              "bar",
-					"kubernetes.io/os": "linux",
-				}
-				// We remove the OS nodeSelector key/value pair so they are equal
-				helpers.EnsureTyphaNodeSelectorNotNil(i)
-				i.Spec.TyphaDeployment.Spec.Template.Spec.NodeSelector = map[string]string{
-					"foo": "bar",
-				}
 
-				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
-				Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
-				Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("foo", "bar"))
-			})
-			It("should error if the nodeSelector key exists in the resource and the installation but values differ", func() {
-				comps.typha.Spec.Template.Spec.NodeSelector = map[string]string{"foo": "bar"}
-				helpers.EnsureTyphaNodeSelectorNotNil(i)
-				i.Spec.TyphaDeployment.Spec.Template.Spec.NodeSelector = map[string]string{"foo": "baz"}
-				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
-			})
-			It("should error if the nodeSelector exists in the installation but not the resource", func() {
-				comps.typha.Spec.Template.Spec.NodeSelector = map[string]string{}
-				helpers.EnsureTyphaNodeSelectorNotNil(i)
-				i.Spec.TyphaDeployment.Spec.Template.Spec.NodeSelector = map[string]string{"foo": "baz"}
-				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
-			})
+		Context("typha", func() {
+			DescribeTable("nodeSelector",
+				func(compNodeSelector map[string]string, installNodeSelector map[string]string, expectedNodeSelector map[string]string, expectedErr bool) {
+					if compNodeSelector != nil {
+						comps.typha.Spec.Template.Spec.NodeSelector = compNodeSelector
+					}
 
-			DescribeTable("should handle affinity",
+					if installNodeSelector != nil {
+						helpers.EnsureTyphaPodSpecNotNil(i)
+						i.Spec.TyphaDeployment.Spec.Template.Spec.NodeSelector = installNodeSelector
+					}
+
+					err := handleNodeSelectors(&comps, i)
+					if expectedErr {
+						Expect(err).To(HaveOccurred())
+					} else {
+						Expect(err).To(BeNil())
+
+						if expectedNodeSelector == nil {
+							Expect(i.Spec.TyphaDeployment).To(BeNil())
+						} else {
+							Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.NodeSelector).To(HaveLen(len(expectedNodeSelector)))
+							for k, v := range expectedNodeSelector {
+								Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue(k, v))
+							}
+						}
+					}
+				}, nodeSelectorTests...,
+			)
+
+			// These affinity tests differ from the other components because these takes into account TyphaAffinity.
+			DescribeTable("affinity",
 				func(compAffinity *corev1.Affinity, installNewAffinity *corev1.Affinity, installOldAffinity *corev1.Affinity, expectedAffinity *corev1.Affinity, expectedErr bool) {
 					if compAffinity != nil {
 						comps.typha.Spec.Template.Spec.Affinity = compAffinity
@@ -640,84 +612,61 @@ var _ = Describe("core handler", func() {
 			})
 		})
 
-		Describe("kube-controllers", func() {
-			It("should not error for nil nodeSelector", func() {
-				comps.kubeControllers.Spec.Template.Spec.NodeSelector = nil
-				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
-			})
-			It("should add nodeSelector to the installation", func() {
-				comps.kubeControllers.Spec.Template.Spec.NodeSelector = map[string]string{"foo": "bar"}
-				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
-				Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
-				Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("foo", "bar"))
-			})
-			It("should remove linux OS nodeSelector terms", func() {
-				comps.kubeControllers.Spec.Template.Spec.NodeSelector = map[string]string{
-					"beta.kubernetes.io/os": "linux",
-					"foo":                   "bar",
-					"kubernetes.io/os":      "linux",
-				}
-				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
-				Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
-				Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("foo", "bar"))
-			})
-			It("should not error if the same nodeSelector is in the resource and the installation", func() {
-				comps.kubeControllers.Spec.Template.Spec.NodeSelector = map[string]string{
-					"foo":              "bar",
-					"kubernetes.io/os": "linux",
-				}
-				// We remove the OS nodeSelector key/value pair so they are equal
-				helpers.EnsureKubeControllersNodeSelectorNotNil(i)
-				i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector = map[string]string{
-					"foo": "bar",
-				}
+		Context("kube-controllers", func() {
+			DescribeTable("nodeSelector",
+				func(compNodeSelector map[string]string, installNodeSelector map[string]string, expectedNodeSelector map[string]string, expectedErr bool) {
+					if compNodeSelector != nil {
+						comps.kubeControllers.Spec.Template.Spec.NodeSelector = compNodeSelector
+					}
 
-				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
-				Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
-				Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("foo", "bar"))
-			})
-			It("should error if the nodeSelector key exists in the resource and the installation but values differ", func() {
-				comps.kubeControllers.Spec.Template.Spec.NodeSelector = map[string]string{"foo": "bar"}
-				helpers.EnsureKubeControllersNodeSelectorNotNil(i)
-				i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector = map[string]string{"foo": "baz"}
-				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
-			})
-			It("should error if the nodeSelector exists in the installation but not the resource", func() {
-				comps.kubeControllers.Spec.Template.Spec.NodeSelector = map[string]string{}
-				helpers.EnsureKubeControllersNodeSelectorNotNil(i)
-				i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector = map[string]string{"foo": "baz"}
-				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
-			})
-			It("should not error for empty affinity", func() {
-				comps.kubeControllers.Spec.Template.Spec.Affinity = &v1.Affinity{}
-				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
-				Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Affinity).To(Equal(comps.node.Spec.Template.Spec.Affinity))
-			})
-			It("should not error for nil affinity", func() {
-				comps.kubeControllers.Spec.Template.Spec.Affinity = nil
-				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
-				Expect(i.Spec.CalicoKubeControllersDeployment).To(BeNil())
-			})
-			It("should not error if the same affinity is in the resource and the installation", func() {
-				comps.kubeControllers.Spec.Template.Spec.Affinity = aff1
-				helpers.EnsureKubeControllersPodSpecNotNil(i)
-				i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Affinity = aff1
+					if installNodeSelector != nil {
+						helpers.EnsureKubeControllersPodSpecNotNil(i)
+						i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector = installNodeSelector
+					}
 
-				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
-				Expect(*i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Affinity).To(Equal(*aff1))
-			})
-			It("should error if the affinity exists in the resource and the installation but values differ", func() {
-				comps.kubeControllers.Spec.Template.Spec.Affinity = aff1
-				helpers.EnsureKubeControllersPodSpecNotNil(i)
-				i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Affinity = aff2
+					err := handleNodeSelectors(&comps, i)
+					if expectedErr {
+						Expect(err).To(HaveOccurred())
+					} else {
+						Expect(err).To(BeNil())
 
-				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
-			})
-			It("should error if the affinity exists in the installation but not the resource", func() {
-				helpers.EnsureKubeControllersPodSpecNotNil(i)
-				i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Affinity = aff1
-				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
-			})
+						if expectedNodeSelector == nil {
+							Expect(i.Spec.CalicoKubeControllersDeployment).To(BeNil())
+						} else {
+							Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector).To(HaveLen(len(expectedNodeSelector)))
+							for k, v := range expectedNodeSelector {
+								Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue(k, v))
+							}
+						}
+					}
+				}, nodeSelectorTests...,
+			)
+
+			DescribeTable("affinity",
+				func(compAffinity *corev1.Affinity, installAffinity *corev1.Affinity, expectedAffinity *corev1.Affinity, expectedErr bool) {
+					if compAffinity != nil {
+						comps.kubeControllers.Spec.Template.Spec.Affinity = compAffinity
+					}
+
+					if installAffinity != nil {
+						helpers.EnsureKubeControllersPodSpecNotNil(i)
+						i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Affinity = installAffinity
+					}
+
+					err := handleNodeSelectors(&comps, i)
+					if expectedErr {
+						Expect(err).To(HaveOccurred())
+					} else {
+						Expect(err).To(BeNil())
+
+						if expectedAffinity == nil {
+							Expect(i.Spec.CalicoKubeControllersDeployment).To(BeNil())
+						} else {
+							Expect(*i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Affinity).To(Equal(*expectedAffinity))
+						}
+					}
+				}, affinityTests...,
+			)
 		})
 	})
 
@@ -725,6 +674,17 @@ var _ = Describe("core handler", func() {
 		var zero int32 = 0
 		var one int32 = 1
 		var two int32 = 2
+
+		var tests = []TableEntry{
+			Entry("only component is 0", &zero, nil, false),
+			Entry("only component is non-zero", &one, nil, false),
+			Entry("only install is 0", nil, &zero, false),
+			Entry("only install is non-zero", nil, &one, true),
+			Entry("both component and install are 0", &zero, &zero, false),
+			Entry("both component and install are both non-zero and equal", &one, &one, false),
+			Entry("both component and install are both non-zero and not equal", &one, &two, true),
+			Entry("both component and install are both non-zero and not equal", &two, &one, true),
+		}
 
 		DescribeTable("calico-node", func(compMinReadySeconds *int32, installMinReadySeconds *int32, expectErr bool) {
 			if compMinReadySeconds != nil {
@@ -745,16 +705,8 @@ var _ = Describe("core handler", func() {
 					Expect(*i.Spec.CalicoNodeDaemonSet.Spec.MinReadySeconds).To(Equal(*compMinReadySeconds))
 				}
 			}
-		},
-			Entry("only component is 0", &zero, nil, false),
-			Entry("only component is non-zero", &one, nil, false),
-			Entry("only install is 0", nil, &zero, false),
-			Entry("only install is non-zero", nil, &one, true),
-			Entry("both component and install are 0", &zero, &zero, false),
-			Entry("both component and install are both non-zero and equal", &one, &one, false),
-			Entry("both component and install are both non-zero and not equal", &one, &two, true),
-			Entry("both component and install are both non-zero and not equal", &two, &one, true),
-		)
+		}, tests...)
+
 		DescribeTable("typha", func(compMinReadySeconds *int32, installMinReadySeconds *int32, expectErr bool) {
 			if compMinReadySeconds != nil {
 				comps.typha.Spec.MinReadySeconds = *compMinReadySeconds
@@ -774,16 +726,8 @@ var _ = Describe("core handler", func() {
 					Expect(*i.Spec.TyphaDeployment.Spec.MinReadySeconds).To(Equal(*compMinReadySeconds))
 				}
 			}
-		},
-			Entry("only component is 0", &zero, nil, false),
-			Entry("only component is non-zero", &one, nil, false),
-			Entry("only install is 0", nil, &zero, false),
-			Entry("only install is non-zero", nil, &one, true),
-			Entry("both component and install are 0", &zero, &zero, false),
-			Entry("both component and install are both non-zero and equal", &one, &one, false),
-			Entry("both component and install are both non-zero and not equal", &one, &two, true),
-			Entry("both component and install are both non-zero and not equal", &two, &one, true),
-		)
+		}, tests...)
+
 		DescribeTable("kubecontrollers", func(compMinReadySeconds *int32, installMinReadySeconds *int32, expectErr bool) {
 			if compMinReadySeconds != nil {
 				comps.kubeControllers.Spec.MinReadySeconds = *compMinReadySeconds
@@ -803,16 +747,7 @@ var _ = Describe("core handler", func() {
 					Expect(*i.Spec.CalicoKubeControllersDeployment.Spec.MinReadySeconds).To(Equal(*compMinReadySeconds))
 				}
 			}
-		},
-			Entry("only component is 0", &zero, nil, false),
-			Entry("only component is non-zero", &one, nil, false),
-			Entry("only install is 0", nil, &zero, false),
-			Entry("only install is non-zero", nil, &one, true),
-			Entry("both component and install are 0", &zero, &zero, false),
-			Entry("both component and install are both non-zero and equal", &one, &one, false),
-			Entry("both component and install are both non-zero and not equal", &one, &two, true),
-			Entry("both component and install are both non-zero and not equal", &two, &one, true),
-		)
+		}, tests...)
 	})
 
 	Context("tolerations", func() {
@@ -850,6 +785,30 @@ var _ = Describe("core handler", func() {
 			tolerateCriticalAddonsOnly,
 		}
 
+		var tests = func(defaultTols []corev1.Toleration) []TableEntry {
+			return []TableEntry{
+				// empty component tolerations
+				Entry("ok if component has empty tolerations and install has empty tolerations", empty, empty, empty, true),
+				Entry("error if component has empty tolerations and install has nil tolerations", empty, nil, nil, false),
+				Entry("error if component has empty tolerations and install has tolerations", empty, []corev1.Toleration{t1}, nil, false),
+				// nil component tolerations
+				Entry("ok if component has nil tolerations and install has empty tolerations", nil, empty, empty, true),
+				Entry("error if component has nil tolerations and install has nil tolerations", nil, nil, nil, false),
+				Entry("error if component has nil tolerations and install has tolerations", nil, []corev1.Toleration{t1}, nil, false),
+				Entry("error if component has nil tolerations and install has tolerations", nil, []corev1.Toleration{t1}, nil, false),
+				// all default component tolerations
+				Entry("ok if component has all the default tolerations and install has nil tolerations", defaultTols, nil, nil, true),
+				Entry("ok if component has all the default tolerations and install has the same tolerations", defaultTols, defaultTols, nil, true),
+				Entry("error if component has all default tolerations and install has empty tolerations", defaultTols, empty, nil, false),
+				// component tolerations
+				Entry("ok if component has tolerations and install has nil tolerations", []corev1.Toleration{t1}, nil, []corev1.Toleration{t1}, true),
+				Entry("error if component has tolerations and install has empty tolerations", []corev1.Toleration{t1}, empty, nil, false),
+				Entry("error if component has tolerations and install has different tolerations", []corev1.Toleration{tolerateNoExecute, t1}, []corev1.Toleration{t1}, nil, false),
+				Entry("ok if component has tolerations and install has same tolerations", []corev1.Toleration{t1}, []corev1.Toleration{t1}, []corev1.Toleration{t1}, true),
+				Entry("ok if component has default and custom tolerations and install has the same tolerations", append(defaultTols, t1), append(defaultTols, t1), append(defaultTols, t1), true),
+			}
+		}
+
 		DescribeTable("calico-node", func(compTols []corev1.Toleration, installTols []corev1.Toleration, expectedInstallTols []corev1.Toleration, isValid bool) {
 			comps.node.Spec.Template.Spec.Tolerations = compTols
 
@@ -872,27 +831,7 @@ var _ = Describe("core handler", func() {
 					}
 				}
 			}
-		},
-			// empty component tolerations
-			Entry("ok if component has empty tolerations and install has empty tolerations", empty, empty, empty, true),
-			Entry("error if component has empty tolerations and install has nil tolerations", empty, nil, nil, false),
-			Entry("error if component has empty tolerations and install has tolerations", empty, []corev1.Toleration{t1}, nil, false),
-			// nil component tolerations
-			Entry("ok if component has nil tolerations and install has empty tolerations", nil, empty, empty, true),
-			Entry("error if component has nil tolerations and install has nil tolerations", nil, nil, nil, false),
-			Entry("error if component has nil tolerations and install has tolerations", nil, []corev1.Toleration{t1}, nil, false),
-			Entry("error if component has nil tolerations and install has tolerations", nil, []corev1.Toleration{t1}, nil, false),
-			// all default component tolerations
-			Entry("ok if component has all the default tolerations and install has nil tolerations", tolerateAll, nil, nil, true),
-			Entry("ok if component has all the default tolerations and install has the same tolerations", tolerateAll, tolerateAll, nil, true),
-			Entry("error if component has all default tolerations and install has empty tolerations", tolerateAll, empty, nil, false),
-			// component tolerations
-			Entry("ok if component has tolerations and install has nil tolerations", []corev1.Toleration{t1}, nil, []corev1.Toleration{t1}, true),
-			Entry("error if component has tolerations and install has empty tolerations", []corev1.Toleration{t1}, empty, nil, false),
-			Entry("error if component has tolerations and install has different tolerations", []corev1.Toleration{tolerateNoExecute, t1}, []corev1.Toleration{t1}, nil, false),
-			Entry("ok if component has tolerations and install has same tolerations", []corev1.Toleration{t1}, []corev1.Toleration{t1}, []corev1.Toleration{t1}, true),
-			Entry("ok if component has default and custom tolerations and install has the same tolerations", append(tolerateAll, t1), append(tolerateAll, t1), append(tolerateAll, t1), true),
-		)
+		}, tests(tolerateAll)...)
 
 		DescribeTable("typha", func(compTols []corev1.Toleration, installTols []corev1.Toleration, expectedInstallTols []corev1.Toleration, isValid bool) {
 			comps.typha.Spec.Template.Spec.Tolerations = compTols
@@ -916,27 +855,8 @@ var _ = Describe("core handler", func() {
 					}
 				}
 			}
-		},
-			// empty component tolerations
-			Entry("ok if component has empty tolerations and install has empty tolerations", empty, empty, empty, true),
-			Entry("error if component has empty tolerations and install has nil tolerations", empty, nil, nil, false),
-			Entry("error if component has empty tolerations and install has tolerations", empty, []corev1.Toleration{t1}, nil, false),
-			// nil component tolerations
-			Entry("ok if component has nil tolerations and install has empty tolerations", nil, empty, empty, true),
-			Entry("error if component has nil tolerations and install has nil tolerations", nil, nil, nil, false),
-			Entry("error if component has nil tolerations and install has tolerations", nil, []corev1.Toleration{t1}, nil, false),
-			Entry("error if component has nil tolerations and install has tolerations", nil, []corev1.Toleration{t1}, nil, false),
-			// all default component tolerations
-			Entry("ok if component has all the default tolerations and install has nil tolerations", tolerateAll, nil, nil, true),
-			Entry("ok if component has all the default tolerations and install has the same tolerations", tolerateAll, tolerateAll, nil, true),
-			Entry("error if component has all default tolerations and install has empty tolerations", tolerateAll, empty, nil, false),
-			// component tolerations
-			Entry("ok if component has tolerations and install has nil tolerations", []corev1.Toleration{t1}, nil, []corev1.Toleration{t1}, true),
-			Entry("error if component has tolerations and install has empty tolerations", []corev1.Toleration{t1}, empty, nil, false),
-			Entry("error if component has tolerations and install has different tolerations", []corev1.Toleration{tolerateNoExecute, t1}, []corev1.Toleration{t1}, nil, false),
-			Entry("ok if component has tolerations and install has same tolerations", []corev1.Toleration{t1}, []corev1.Toleration{t1}, []corev1.Toleration{t1}, true),
-			Entry("ok if component has default and custom tolerations and install has the same tolerations", append(tolerateAll, t1), append(tolerateAll, t1), append(tolerateAll, t1), true),
-		)
+		}, tests(tolerateAll)...)
+
 		DescribeTable("kube-controllers", func(compTols []corev1.Toleration, installTols []corev1.Toleration, expectedInstallTols []corev1.Toleration, isValid bool) {
 			comps.kubeControllers.Spec.Template.Spec.Tolerations = compTols
 
@@ -959,27 +879,7 @@ var _ = Describe("core handler", func() {
 					}
 				}
 			}
-		},
-			// empty component tolerations
-			Entry("ok if component has empty tolerations and install has empty tolerations", empty, empty, empty, true),
-			Entry("error if component has empty tolerations and install has nil tolerations", empty, nil, nil, false),
-			Entry("error if component has empty tolerations and install has tolerations", empty, []corev1.Toleration{t1}, nil, false),
-			// nil component tolerations
-			Entry("ok if component has nil tolerations and install has empty tolerations", nil, empty, empty, true),
-			Entry("error if component has nil tolerations and install has nil tolerations", nil, nil, nil, false),
-			Entry("error if component has nil tolerations and install has tolerations", nil, []corev1.Toleration{t1}, nil, false),
-			Entry("error if component has nil tolerations and install has tolerations", nil, []corev1.Toleration{t1}, nil, false),
-			// all default component tolerations - kubecontrollers has different default tolerations
-			Entry("ok if component has all the default tolerations and install has nil tolerations", kubeControllersTolerations, nil, nil, true),
-			Entry("ok if component has all the default tolerations and install has the same tolerations", kubeControllersTolerations, kubeControllersTolerations, nil, true),
-			Entry("error if component has all default tolerations and install has empty tolerations", kubeControllersTolerations, empty, nil, false),
-			// component tolerations
-			Entry("ok if component has tolerations and install has nil tolerations", []corev1.Toleration{t1}, nil, []corev1.Toleration{t1}, true),
-			Entry("error if component has tolerations and install has empty tolerations", []corev1.Toleration{t1}, empty, nil, false),
-			Entry("error if component has tolerations and install has different tolerations", []corev1.Toleration{tolerateNoExecute, t1}, []corev1.Toleration{t1}, nil, false),
-			Entry("ok if component has tolerations and install has same tolerations", []corev1.Toleration{t1}, []corev1.Toleration{t1}, []corev1.Toleration{t1}, true),
-			Entry("ok if component has some default and custom tolerations and install has the same tolerations", append(tolerateAll, t1), append(tolerateAll, t1), append(tolerateAll, t1), true),
-		)
+		}, tests(kubeControllersTolerations)...)
 	})
 
 	Context("node update strategy", func() {

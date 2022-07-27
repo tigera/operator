@@ -467,7 +467,7 @@ func mergeTyphaDeployment(cfg, override *operatorv1.TyphaDeployment) *operatorv1
 
 		switch compareFields(out.InitContainers, override.InitContainers) {
 		case BOnlySet, Different:
-			out.InitContainers = make([]operatorv1.TyphaDeploymentInitContainer, len(override.Containers))
+			out.InitContainers = make([]operatorv1.TyphaDeploymentInitContainer, len(override.InitContainers))
 			copy(out.InitContainers, override.InitContainers)
 		}
 

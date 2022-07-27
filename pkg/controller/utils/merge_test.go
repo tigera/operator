@@ -871,7 +871,7 @@ var _ = Describe("Installation merge tests", func() {
 			}
 		}, tolerationsTests...)
 
-		DescribeTable("merge multiple CalicoDaemonSet fields", func(main, second, expect *opv1.CalicoNodeDaemonSet) {
+		DescribeTable("merge multiple fields", func(main, second, expect *opv1.CalicoNodeDaemonSet) {
 			// start with empty spec
 			m = opv1.InstallationSpec{}
 			s = opv1.InstallationSpec{}
@@ -983,13 +983,973 @@ var _ = Describe("Installation merge tests", func() {
 	})
 
 	Context("test CalicoKubeControllersDeployment merge", func() {
-		// TODO
+		var m opv1.InstallationSpec
+		var s opv1.InstallationSpec
+
+		BeforeEach(func() {
+			m = opv1.InstallationSpec{
+				CalicoKubeControllersDeployment: &opv1.CalicoKubeControllersDeployment{
+					Spec: &opv1.CalicoKubeControllersDeploymentSpec{
+						Template: &opv1.CalicoKubeControllersDeploymentPodTemplateSpec{
+							Spec: &opv1.CalicoKubeControllersDeploymentPodSpec{},
+						},
+					},
+				},
+			}
+			s = opv1.InstallationSpec{
+				CalicoKubeControllersDeployment: &opv1.CalicoKubeControllersDeployment{
+					Spec: &opv1.CalicoKubeControllersDeploymentSpec{
+						Template: &opv1.CalicoKubeControllersDeploymentPodTemplateSpec{
+							Spec: &opv1.CalicoKubeControllersDeploymentPodSpec{},
+						},
+					},
+				},
+			}
+
+		})
+
+		DescribeTable("merge metadata", func(main, second, expect *opv1.Metadata) {
+			// start with empty installation spec
+			m = opv1.InstallationSpec{}
+			s = opv1.InstallationSpec{}
+			if main != nil {
+				m.CalicoKubeControllersDeployment = &opv1.CalicoKubeControllersDeployment{Metadata: main}
+			}
+			if second != nil {
+				s.CalicoKubeControllersDeployment = &opv1.CalicoKubeControllersDeployment{Metadata: second}
+			}
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CalicoKubeControllersDeployment).To(BeNil())
+			} else {
+				Expect(*inst.CalicoKubeControllersDeployment.Metadata).To(Equal(*expect))
+			}
+		}, metadataTests...)
+
+		DescribeTable("merge minReadySeconds", func(main, second, expect *int32) {
+			m.CalicoKubeControllersDeployment.Spec.MinReadySeconds = main
+			s.CalicoKubeControllersDeployment.Spec.MinReadySeconds = second
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CalicoKubeControllersDeployment.Spec.MinReadySeconds).To(BeNil())
+			} else {
+				Expect(*inst.CalicoKubeControllersDeployment.Spec.MinReadySeconds).To(Equal(*expect))
+			}
+		}, minReadySecondsTests...)
+
+		DescribeTable("merge pod template metadata", func(main, second, expect *opv1.Metadata) {
+			m.CalicoKubeControllersDeployment.Spec.Template.Metadata = main
+			s.CalicoKubeControllersDeployment.Spec.Template.Metadata = second
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CalicoKubeControllersDeployment.Spec.Template.Metadata).To(BeNil())
+			} else {
+				Expect(*inst.CalicoKubeControllersDeployment.Spec.Template.Metadata).To(Equal(*expect))
+			}
+		}, metadataTests...)
+
+		DescribeTable("merge containers", func(main, second, expect []v1.Container) {
+			var mainContainers []opv1.CalicoKubeControllersDeploymentContainer
+			for _, c := range main {
+				mainContainers = append(mainContainers, opv1.CalicoKubeControllersDeploymentContainer{Name: c.Name, Resources: &c.Resources})
+			}
+			var secondContainers []opv1.CalicoKubeControllersDeploymentContainer
+			for _, c := range second {
+				secondContainers = append(secondContainers, opv1.CalicoKubeControllersDeploymentContainer{Name: c.Name, Resources: &c.Resources})
+			}
+			m.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers = mainContainers
+			s.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers = secondContainers
+
+			var expectedContainers []opv1.CalicoKubeControllersDeploymentContainer
+			for _, c := range expect {
+				expectedContainers = append(expectedContainers, opv1.CalicoKubeControllersDeploymentContainer{Name: c.Name, Resources: &c.Resources})
+			}
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers).To(BeNil())
+			} else {
+				Expect(inst.CalicoKubeControllersDeployment.Spec.Template.Spec.Containers).To(Equal(expectedContainers))
+			}
+		}, containerTests...)
+
+		DescribeTable("merge affinity", func(main, second, expect *v1.Affinity) {
+			m.CalicoKubeControllersDeployment.Spec.Template.Spec.Affinity = main
+			s.CalicoKubeControllersDeployment.Spec.Template.Spec.Affinity = second
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CalicoKubeControllersDeployment.Spec.Template.Spec.Affinity).To(BeNil())
+			} else {
+				Expect(*inst.CalicoKubeControllersDeployment.Spec.Template.Spec.Affinity).To(Equal(*expect))
+			}
+		}, affinityTests...)
+
+		DescribeTable("merge nodeSelector", func(main, second, expect map[string]string) {
+			m.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector = main
+			s.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector = second
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector).To(BeNil())
+			} else {
+				Expect(inst.CalicoKubeControllersDeployment.Spec.Template.Spec.NodeSelector).To(Equal(expect))
+			}
+		}, nodeSelectorTests...)
+
+		DescribeTable("merge tolerations", func(main, second, expect []v1.Toleration) {
+			m.CalicoKubeControllersDeployment.Spec.Template.Spec.Tolerations = main
+			s.CalicoKubeControllersDeployment.Spec.Template.Spec.Tolerations = second
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CalicoKubeControllersDeployment.Spec.Template.Spec.Tolerations).To(BeNil())
+			} else {
+				Expect(inst.CalicoKubeControllersDeployment.Spec.Template.Spec.Tolerations).To(Equal(expect))
+			}
+		}, tolerationsTests...)
+
+		DescribeTable("merge multiple fields", func(main, second, expect *opv1.CalicoKubeControllersDeployment) {
+			// start with empty spec
+			m = opv1.InstallationSpec{}
+			s = opv1.InstallationSpec{}
+			if main != nil {
+				m.CalicoKubeControllersDeployment = main
+			}
+			if second != nil {
+				s.CalicoKubeControllersDeployment = second
+			}
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CalicoKubeControllersDeployment).To(BeNil())
+			} else {
+				Expect(*inst.CalicoKubeControllersDeployment).To(Equal(*expect))
+			}
+		},
+			Entry("Both unset", nil, nil, nil),
+			Entry("Different fields in the two are merged, some overridden",
+				&opv1.CalicoKubeControllersDeployment{
+					Metadata: &opv1.Metadata{
+						Labels: map[string]string{"l": "1"},
+					},
+					Spec: &opv1.CalicoKubeControllersDeploymentSpec{
+						MinReadySeconds: intPtr(5),
+						Template: &opv1.CalicoKubeControllersDeploymentPodTemplateSpec{
+							Spec: &opv1.CalicoKubeControllersDeploymentPodSpec{
+								Containers: []opv1.CalicoKubeControllersDeploymentContainer{
+									{
+										Name: "calico-kube-controllers",
+										Resources: &v1.ResourceRequirements{
+											Requests: v1.ResourceList{v1.ResourceCPU: resource.MustParse("1000m"), v1.ResourceMemory: resource.MustParse("500Mi")},
+											Limits:   v1.ResourceList{v1.ResourceCPU: resource.MustParse("1000m"), v1.ResourceMemory: resource.MustParse("1000Mi")},
+										},
+									},
+								},
+								NodeSelector: map[string]string{"selector": "test"},
+								Tolerations:  []v1.Toleration{_toleration1},
+							},
+						},
+					},
+				},
+				&opv1.CalicoKubeControllersDeployment{
+					Metadata: &opv1.Metadata{
+						Labels:      map[string]string{"overridden": "1"},
+						Annotations: map[string]string{"a": "1"},
+					},
+					Spec: &opv1.CalicoKubeControllersDeploymentSpec{
+						Template: &opv1.CalicoKubeControllersDeploymentPodTemplateSpec{
+							Metadata: &opv1.Metadata{
+								Labels:      map[string]string{"pod-label": "1"},
+								Annotations: map[string]string{"pod-annot": "1"},
+							},
+							Spec: &opv1.CalicoKubeControllersDeploymentPodSpec{
+								Containers: []opv1.CalicoKubeControllersDeploymentContainer{
+									{
+										Name: "calico-kube-controllers",
+										Resources: &v1.ResourceRequirements{
+											Requests: v1.ResourceList{v1.ResourceCPU: resource.MustParse("500m")},
+											Limits:   v1.ResourceList{v1.ResourceCPU: resource.MustParse("500m")},
+										},
+									},
+								},
+								Affinity:     _aff1,
+								NodeSelector: map[string]string{"overridden": "selector"},
+								Tolerations:  []v1.Toleration{},
+							},
+						},
+					},
+				},
+				&opv1.CalicoKubeControllersDeployment{
+					Metadata: &opv1.Metadata{
+						Labels:      map[string]string{"overridden": "1"},
+						Annotations: map[string]string{"a": "1"},
+					},
+					Spec: &opv1.CalicoKubeControllersDeploymentSpec{
+						MinReadySeconds: intPtr(5),
+						Template: &opv1.CalicoKubeControllersDeploymentPodTemplateSpec{
+							Metadata: &opv1.Metadata{
+								Labels:      map[string]string{"pod-label": "1"},
+								Annotations: map[string]string{"pod-annot": "1"},
+							},
+							Spec: &opv1.CalicoKubeControllersDeploymentPodSpec{
+								Containers: []opv1.CalicoKubeControllersDeploymentContainer{
+									{
+										Name: "calico-kube-controllers",
+										Resources: &v1.ResourceRequirements{
+											Requests: v1.ResourceList{v1.ResourceCPU: resource.MustParse("500m")},
+											Limits:   v1.ResourceList{v1.ResourceCPU: resource.MustParse("500m")},
+										},
+									},
+								},
+								Affinity:     _aff1,
+								NodeSelector: map[string]string{"overridden": "selector"},
+								Tolerations:  []v1.Toleration{},
+							},
+						},
+					},
+				},
+			))
 	})
+
 	Context("test TyphaDeployment merge", func() {
-		// TODO
+		var m opv1.InstallationSpec
+		var s opv1.InstallationSpec
+
+		BeforeEach(func() {
+			m = opv1.InstallationSpec{
+				TyphaDeployment: &opv1.TyphaDeployment{
+					Spec: &opv1.TyphaDeploymentSpec{
+						Template: &opv1.TyphaDeploymentPodTemplateSpec{
+							Spec: &opv1.TyphaDeploymentPodSpec{},
+						},
+					},
+				},
+			}
+			s = opv1.InstallationSpec{
+				TyphaDeployment: &opv1.TyphaDeployment{
+					Spec: &opv1.TyphaDeploymentSpec{
+						Template: &opv1.TyphaDeploymentPodTemplateSpec{
+							Spec: &opv1.TyphaDeploymentPodSpec{},
+						},
+					},
+				},
+			}
+
+		})
+
+		DescribeTable("merge metadata", func(main, second, expect *opv1.Metadata) {
+			// start with empty installation spec
+			m = opv1.InstallationSpec{}
+			s = opv1.InstallationSpec{}
+			if main != nil {
+				m.TyphaDeployment = &opv1.TyphaDeployment{Metadata: main}
+			}
+			if second != nil {
+				s.TyphaDeployment = &opv1.TyphaDeployment{Metadata: second}
+			}
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.TyphaDeployment).To(BeNil())
+			} else {
+				Expect(*inst.TyphaDeployment.Metadata).To(Equal(*expect))
+			}
+		}, metadataTests...)
+
+		DescribeTable("merge minReadySeconds", func(main, second, expect *int32) {
+			m.TyphaDeployment.Spec.MinReadySeconds = main
+			s.TyphaDeployment.Spec.MinReadySeconds = second
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.TyphaDeployment.Spec.MinReadySeconds).To(BeNil())
+			} else {
+				Expect(*inst.TyphaDeployment.Spec.MinReadySeconds).To(Equal(*expect))
+			}
+		}, minReadySecondsTests...)
+
+		DescribeTable("merge pod template metadata", func(main, second, expect *opv1.Metadata) {
+			m.TyphaDeployment.Spec.Template.Metadata = main
+			s.TyphaDeployment.Spec.Template.Metadata = second
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.TyphaDeployment.Spec.Template.Metadata).To(BeNil())
+			} else {
+				Expect(*inst.TyphaDeployment.Spec.Template.Metadata).To(Equal(*expect))
+			}
+		}, metadataTests...)
+
+		DescribeTable("merge initContainers", func(main, second, expect []v1.Container) {
+			var mainContainers []opv1.TyphaDeploymentInitContainer
+			for _, c := range main {
+				mainContainers = append(mainContainers, opv1.TyphaDeploymentInitContainer{Name: c.Name, Resources: &c.Resources})
+			}
+			var secondContainers []opv1.TyphaDeploymentInitContainer
+			for _, c := range second {
+				secondContainers = append(secondContainers, opv1.TyphaDeploymentInitContainer{Name: c.Name, Resources: &c.Resources})
+			}
+			m.TyphaDeployment.Spec.Template.Spec.InitContainers = mainContainers
+			s.TyphaDeployment.Spec.Template.Spec.InitContainers = secondContainers
+
+			var expectedContainers []opv1.TyphaDeploymentInitContainer
+			for _, c := range expect {
+				expectedContainers = append(expectedContainers, opv1.TyphaDeploymentInitContainer{Name: c.Name, Resources: &c.Resources})
+			}
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.TyphaDeployment.Spec.Template.Spec.InitContainers).To(BeNil())
+			} else {
+				Expect(inst.TyphaDeployment.Spec.Template.Spec.InitContainers).To(Equal(expectedContainers))
+			}
+		}, containerTests...)
+
+		// No init containers in CalicoKubeControllersDeployment.
+
+		DescribeTable("merge containers", func(main, second, expect []v1.Container) {
+			var mainContainers []opv1.TyphaDeploymentContainer
+			for _, c := range main {
+				mainContainers = append(mainContainers, opv1.TyphaDeploymentContainer{Name: c.Name, Resources: &c.Resources})
+			}
+			var secondContainers []opv1.TyphaDeploymentContainer
+			for _, c := range second {
+				secondContainers = append(secondContainers, opv1.TyphaDeploymentContainer{Name: c.Name, Resources: &c.Resources})
+			}
+			m.TyphaDeployment.Spec.Template.Spec.Containers = mainContainers
+			s.TyphaDeployment.Spec.Template.Spec.Containers = secondContainers
+
+			var expectedContainers []opv1.TyphaDeploymentContainer
+			for _, c := range expect {
+				expectedContainers = append(expectedContainers, opv1.TyphaDeploymentContainer{Name: c.Name, Resources: &c.Resources})
+			}
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.TyphaDeployment.Spec.Template.Spec.Containers).To(BeNil())
+			} else {
+				Expect(inst.TyphaDeployment.Spec.Template.Spec.Containers).To(Equal(expectedContainers))
+			}
+		}, containerTests...)
+
+		DescribeTable("merge affinity", func(main, second, expect *v1.Affinity) {
+			m.TyphaDeployment.Spec.Template.Spec.Affinity = main
+			s.TyphaDeployment.Spec.Template.Spec.Affinity = second
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.TyphaDeployment.Spec.Template.Spec.Affinity).To(BeNil())
+			} else {
+				Expect(*inst.TyphaDeployment.Spec.Template.Spec.Affinity).To(Equal(*expect))
+			}
+		}, affinityTests...)
+
+		DescribeTable("merge nodeSelector", func(main, second, expect map[string]string) {
+			m.TyphaDeployment.Spec.Template.Spec.NodeSelector = main
+			s.TyphaDeployment.Spec.Template.Spec.NodeSelector = second
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.TyphaDeployment.Spec.Template.Spec.NodeSelector).To(BeNil())
+			} else {
+				Expect(inst.TyphaDeployment.Spec.Template.Spec.NodeSelector).To(Equal(expect))
+			}
+		}, nodeSelectorTests...)
+
+		DescribeTable("merge tolerations", func(main, second, expect []v1.Toleration) {
+			m.TyphaDeployment.Spec.Template.Spec.Tolerations = main
+			s.TyphaDeployment.Spec.Template.Spec.Tolerations = second
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.TyphaDeployment.Spec.Template.Spec.Tolerations).To(BeNil())
+			} else {
+				Expect(inst.TyphaDeployment.Spec.Template.Spec.Tolerations).To(Equal(expect))
+			}
+		}, tolerationsTests...)
+
+		DescribeTable("merge multiple fields", func(main, second, expect *opv1.TyphaDeployment) {
+			// start with empty spec
+			m = opv1.InstallationSpec{}
+			s = opv1.InstallationSpec{}
+			if main != nil {
+				m.TyphaDeployment = main
+			}
+			if second != nil {
+				s.TyphaDeployment = second
+			}
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.TyphaDeployment).To(BeNil())
+			} else {
+				Expect(*inst.TyphaDeployment).To(Equal(*expect))
+			}
+		},
+			Entry("Both unset", nil, nil, nil),
+			Entry("Different fields in the two are merged, some overridden",
+				&opv1.TyphaDeployment{
+					Metadata: &opv1.Metadata{
+						Labels: map[string]string{"l": "1"},
+					},
+					Spec: &opv1.TyphaDeploymentSpec{
+						MinReadySeconds: intPtr(5),
+						Template: &opv1.TyphaDeploymentPodTemplateSpec{
+							Spec: &opv1.TyphaDeploymentPodSpec{
+								Containers: []opv1.TyphaDeploymentContainer{
+									{
+										Name: "calico-typha",
+										Resources: &v1.ResourceRequirements{
+											Requests: v1.ResourceList{v1.ResourceCPU: resource.MustParse("1000m"), v1.ResourceMemory: resource.MustParse("500Mi")},
+											Limits:   v1.ResourceList{v1.ResourceCPU: resource.MustParse("1000m"), v1.ResourceMemory: resource.MustParse("1000Mi")},
+										},
+									},
+								},
+								NodeSelector: map[string]string{"selector": "test"},
+								Tolerations:  []v1.Toleration{_toleration1},
+							},
+						},
+					},
+				},
+				&opv1.TyphaDeployment{
+					Metadata: &opv1.Metadata{
+						Labels:      map[string]string{"overridden": "1"},
+						Annotations: map[string]string{"a": "1"},
+					},
+					Spec: &opv1.TyphaDeploymentSpec{
+						Template: &opv1.TyphaDeploymentPodTemplateSpec{
+							Metadata: &opv1.Metadata{
+								Labels:      map[string]string{"pod-label": "1"},
+								Annotations: map[string]string{"pod-annot": "1"},
+							},
+							Spec: &opv1.TyphaDeploymentPodSpec{
+								InitContainers: []opv1.TyphaDeploymentInitContainer{
+									{
+										Name: "typha-certs-key-cert-provisioner",
+										Resources: &v1.ResourceRequirements{
+											Requests: v1.ResourceList{v1.ResourceCPU: resource.MustParse("500m")},
+											Limits:   v1.ResourceList{v1.ResourceCPU: resource.MustParse("500m")},
+										},
+									},
+								},
+								Affinity:     _aff1,
+								NodeSelector: map[string]string{"overridden": "selector"},
+								Tolerations:  []v1.Toleration{},
+							},
+						},
+					},
+				},
+				&opv1.TyphaDeployment{
+					Metadata: &opv1.Metadata{
+						Labels:      map[string]string{"overridden": "1"},
+						Annotations: map[string]string{"a": "1"},
+					},
+					Spec: &opv1.TyphaDeploymentSpec{
+						MinReadySeconds: intPtr(5),
+						Template: &opv1.TyphaDeploymentPodTemplateSpec{
+							Metadata: &opv1.Metadata{
+								Labels:      map[string]string{"pod-label": "1"},
+								Annotations: map[string]string{"pod-annot": "1"},
+							},
+							Spec: &opv1.TyphaDeploymentPodSpec{
+								Containers: []opv1.TyphaDeploymentContainer{
+									{
+										Name: "calico-typha",
+										Resources: &v1.ResourceRequirements{
+											Requests: v1.ResourceList{v1.ResourceCPU: resource.MustParse("1000m"), v1.ResourceMemory: resource.MustParse("500Mi")},
+											Limits:   v1.ResourceList{v1.ResourceCPU: resource.MustParse("1000m"), v1.ResourceMemory: resource.MustParse("1000Mi")},
+										},
+									},
+								},
+								InitContainers: []opv1.TyphaDeploymentInitContainer{
+									{
+										Name: "typha-certs-key-cert-provisioner",
+										Resources: &v1.ResourceRequirements{
+											Requests: v1.ResourceList{v1.ResourceCPU: resource.MustParse("500m")},
+											Limits:   v1.ResourceList{v1.ResourceCPU: resource.MustParse("500m")},
+										},
+									},
+								},
+								Affinity:     _aff1,
+								NodeSelector: map[string]string{"overridden": "selector"},
+								Tolerations:  []v1.Toleration{},
+							},
+						},
+					},
+				},
+			))
 	})
+
 	Context("test CalicoWindowsUpgradeDaemonSet merge", func() {
-		// TODO
+		var m opv1.InstallationSpec
+		var s opv1.InstallationSpec
+
+		BeforeEach(func() {
+			m = opv1.InstallationSpec{
+				CalicoWindowsUpgradeDaemonSet: &opv1.CalicoWindowsUpgradeDaemonSet{
+					Spec: &opv1.CalicoWindowsUpgradeDaemonSetSpec{
+						Template: &opv1.CalicoWindowsUpgradeDaemonSetPodTemplateSpec{
+							Spec: &opv1.CalicoWindowsUpgradeDaemonSetPodSpec{},
+						},
+					},
+				},
+			}
+			s = opv1.InstallationSpec{
+				CalicoWindowsUpgradeDaemonSet: &opv1.CalicoWindowsUpgradeDaemonSet{
+					Spec: &opv1.CalicoWindowsUpgradeDaemonSetSpec{
+						Template: &opv1.CalicoWindowsUpgradeDaemonSetPodTemplateSpec{
+							Spec: &opv1.CalicoWindowsUpgradeDaemonSetPodSpec{},
+						},
+					},
+				},
+			}
+
+		})
+
+		DescribeTable("merge metadata", func(main, second, expect *opv1.Metadata) {
+			// start with empty installation spec
+			m = opv1.InstallationSpec{}
+			s = opv1.InstallationSpec{}
+			if main != nil {
+				m.CalicoWindowsUpgradeDaemonSet = &opv1.CalicoWindowsUpgradeDaemonSet{Metadata: main}
+			}
+			if second != nil {
+				s.CalicoWindowsUpgradeDaemonSet = &opv1.CalicoWindowsUpgradeDaemonSet{Metadata: second}
+			}
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CalicoWindowsUpgradeDaemonSet).To(BeNil())
+			} else {
+				Expect(*inst.CalicoWindowsUpgradeDaemonSet.Metadata).To(Equal(*expect))
+			}
+		}, metadataTests...)
+
+		DescribeTable("merge minReadySeconds", func(main, second, expect *int32) {
+			m.CalicoWindowsUpgradeDaemonSet.Spec.MinReadySeconds = main
+			s.CalicoWindowsUpgradeDaemonSet.Spec.MinReadySeconds = second
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CalicoWindowsUpgradeDaemonSet.Spec.MinReadySeconds).To(BeNil())
+			} else {
+				Expect(*inst.CalicoWindowsUpgradeDaemonSet.Spec.MinReadySeconds).To(Equal(*expect))
+			}
+		}, minReadySecondsTests...)
+
+		DescribeTable("merge pod template metadata", func(main, second, expect *opv1.Metadata) {
+			m.CalicoWindowsUpgradeDaemonSet.Spec.Template.Metadata = main
+			s.CalicoWindowsUpgradeDaemonSet.Spec.Template.Metadata = second
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CalicoWindowsUpgradeDaemonSet.Spec.Template.Metadata).To(BeNil())
+			} else {
+				Expect(*inst.CalicoWindowsUpgradeDaemonSet.Spec.Template.Metadata).To(Equal(*expect))
+			}
+		}, metadataTests...)
+
+		// No init containers in CalicoWindowsUpgradeDaemonSet
+
+		DescribeTable("merge containers", func(main, second, expect []v1.Container) {
+			var mainContainers []opv1.CalicoWindowsUpgradeDaemonSetContainer
+			for _, c := range main {
+				mainContainers = append(mainContainers, opv1.CalicoWindowsUpgradeDaemonSetContainer{Name: c.Name, Resources: &c.Resources})
+			}
+			var secondContainers []opv1.CalicoWindowsUpgradeDaemonSetContainer
+			for _, c := range second {
+				secondContainers = append(secondContainers, opv1.CalicoWindowsUpgradeDaemonSetContainer{Name: c.Name, Resources: &c.Resources})
+			}
+			m.CalicoWindowsUpgradeDaemonSet.Spec.Template.Spec.Containers = mainContainers
+			s.CalicoWindowsUpgradeDaemonSet.Spec.Template.Spec.Containers = secondContainers
+
+			var expectedContainers []opv1.CalicoWindowsUpgradeDaemonSetContainer
+			for _, c := range expect {
+				expectedContainers = append(expectedContainers, opv1.CalicoWindowsUpgradeDaemonSetContainer{Name: c.Name, Resources: &c.Resources})
+			}
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CalicoWindowsUpgradeDaemonSet.Spec.Template.Spec.Containers).To(BeNil())
+			} else {
+				Expect(inst.CalicoWindowsUpgradeDaemonSet.Spec.Template.Spec.Containers).To(Equal(expectedContainers))
+			}
+		}, containerTests...)
+
+		DescribeTable("merge affinity", func(main, second, expect *v1.Affinity) {
+			m.CalicoWindowsUpgradeDaemonSet.Spec.Template.Spec.Affinity = main
+			s.CalicoWindowsUpgradeDaemonSet.Spec.Template.Spec.Affinity = second
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CalicoWindowsUpgradeDaemonSet.Spec.Template.Spec.Affinity).To(BeNil())
+			} else {
+				Expect(*inst.CalicoWindowsUpgradeDaemonSet.Spec.Template.Spec.Affinity).To(Equal(*expect))
+			}
+		}, affinityTests...)
+
+		DescribeTable("merge nodeSelector", func(main, second, expect map[string]string) {
+			m.CalicoWindowsUpgradeDaemonSet.Spec.Template.Spec.NodeSelector = main
+			s.CalicoWindowsUpgradeDaemonSet.Spec.Template.Spec.NodeSelector = second
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CalicoWindowsUpgradeDaemonSet.Spec.Template.Spec.NodeSelector).To(BeNil())
+			} else {
+				Expect(inst.CalicoWindowsUpgradeDaemonSet.Spec.Template.Spec.NodeSelector).To(Equal(expect))
+			}
+		}, nodeSelectorTests...)
+
+		DescribeTable("merge tolerations", func(main, second, expect []v1.Toleration) {
+			m.CalicoWindowsUpgradeDaemonSet.Spec.Template.Spec.Tolerations = main
+			s.CalicoWindowsUpgradeDaemonSet.Spec.Template.Spec.Tolerations = second
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CalicoWindowsUpgradeDaemonSet.Spec.Template.Spec.Tolerations).To(BeNil())
+			} else {
+				Expect(inst.CalicoWindowsUpgradeDaemonSet.Spec.Template.Spec.Tolerations).To(Equal(expect))
+			}
+		}, tolerationsTests...)
+
+		DescribeTable("merge multiple fields", func(main, second, expect *opv1.CalicoWindowsUpgradeDaemonSet) {
+			// start with empty spec
+			m = opv1.InstallationSpec{}
+			s = opv1.InstallationSpec{}
+			if main != nil {
+				m.CalicoWindowsUpgradeDaemonSet = main
+			}
+			if second != nil {
+				s.CalicoWindowsUpgradeDaemonSet = second
+			}
+			inst := OverrideInstallationSpec(m, s)
+			if expect == nil {
+				Expect(inst.CalicoWindowsUpgradeDaemonSet).To(BeNil())
+			} else {
+				Expect(*inst.CalicoWindowsUpgradeDaemonSet).To(Equal(*expect))
+			}
+		},
+			Entry("Both unset", nil, nil, nil),
+			Entry("Different fields in the two are merged, some overridden",
+				&opv1.CalicoWindowsUpgradeDaemonSet{
+					Metadata: &opv1.Metadata{
+						Labels: map[string]string{"l": "1"},
+					},
+					Spec: &opv1.CalicoWindowsUpgradeDaemonSetSpec{
+						MinReadySeconds: intPtr(5),
+						Template: &opv1.CalicoWindowsUpgradeDaemonSetPodTemplateSpec{
+							Spec: &opv1.CalicoWindowsUpgradeDaemonSetPodSpec{
+								Containers: []opv1.CalicoWindowsUpgradeDaemonSetContainer{
+									{
+										Name: "calico-windows-upgrade",
+										Resources: &v1.ResourceRequirements{
+											Requests: v1.ResourceList{v1.ResourceCPU: resource.MustParse("1000m"), v1.ResourceMemory: resource.MustParse("500Mi")},
+											Limits:   v1.ResourceList{v1.ResourceCPU: resource.MustParse("1000m"), v1.ResourceMemory: resource.MustParse("1000Mi")},
+										},
+									},
+								},
+								NodeSelector: map[string]string{"selector": "test"},
+								Tolerations:  []v1.Toleration{_toleration1},
+							},
+						},
+					},
+				},
+				&opv1.CalicoWindowsUpgradeDaemonSet{
+					Metadata: &opv1.Metadata{
+						Labels:      map[string]string{"overridden": "1"},
+						Annotations: map[string]string{"a": "1"},
+					},
+					Spec: &opv1.CalicoWindowsUpgradeDaemonSetSpec{
+						Template: &opv1.CalicoWindowsUpgradeDaemonSetPodTemplateSpec{
+							Metadata: &opv1.Metadata{
+								Labels:      map[string]string{"pod-label": "1"},
+								Annotations: map[string]string{"pod-annot": "1"},
+							},
+							Spec: &opv1.CalicoWindowsUpgradeDaemonSetPodSpec{
+								Affinity:     _aff1,
+								NodeSelector: map[string]string{"overridden": "selector"},
+								Tolerations:  []v1.Toleration{},
+							},
+						},
+					},
+				},
+				&opv1.CalicoWindowsUpgradeDaemonSet{
+					Metadata: &opv1.Metadata{
+						Labels:      map[string]string{"overridden": "1"},
+						Annotations: map[string]string{"a": "1"},
+					},
+					Spec: &opv1.CalicoWindowsUpgradeDaemonSetSpec{
+						MinReadySeconds: intPtr(5),
+						Template: &opv1.CalicoWindowsUpgradeDaemonSetPodTemplateSpec{
+							Metadata: &opv1.Metadata{
+								Labels:      map[string]string{"pod-label": "1"},
+								Annotations: map[string]string{"pod-annot": "1"},
+							},
+							Spec: &opv1.CalicoWindowsUpgradeDaemonSetPodSpec{
+								Containers: []opv1.CalicoWindowsUpgradeDaemonSetContainer{
+									{
+										Name: "calico-windows-upgrade",
+										Resources: &v1.ResourceRequirements{
+											Requests: v1.ResourceList{v1.ResourceCPU: resource.MustParse("1000m"), v1.ResourceMemory: resource.MustParse("500Mi")},
+											Limits:   v1.ResourceList{v1.ResourceCPU: resource.MustParse("1000m"), v1.ResourceMemory: resource.MustParse("1000Mi")},
+										},
+									},
+								},
+								Affinity:     _aff1,
+								NodeSelector: map[string]string{"overridden": "selector"},
+								Tolerations:  []v1.Toleration{},
+							},
+						},
+					},
+				},
+			))
+	})
+
+	Context("test APIServerDeployment merge", func() {
+		var m opv1.APIServerSpec
+		var s opv1.APIServerSpec
+
+		BeforeEach(func() {
+			m = opv1.APIServerSpec{
+				APIServerDeployment: &opv1.APIServerDeployment{
+					Spec: &opv1.APIServerDeploymentSpec{
+						Template: &opv1.APIServerDeploymentPodTemplateSpec{
+							Spec: &opv1.APIServerDeploymentPodSpec{},
+						},
+					},
+				},
+			}
+			s = opv1.APIServerSpec{
+				APIServerDeployment: &opv1.APIServerDeployment{
+					Spec: &opv1.APIServerDeploymentSpec{
+						Template: &opv1.APIServerDeploymentPodTemplateSpec{
+							Spec: &opv1.APIServerDeploymentPodSpec{},
+						},
+					},
+				},
+			}
+
+		})
+
+		DescribeTable("merge metadata", func(main, second, expect *opv1.Metadata) {
+			// start with empty APIServer  spec
+			m = opv1.APIServerSpec{}
+			s = opv1.APIServerSpec{}
+			if main != nil {
+				m.APIServerDeployment = &opv1.APIServerDeployment{Metadata: main}
+			}
+			if second != nil {
+				s.APIServerDeployment = &opv1.APIServerDeployment{Metadata: second}
+			}
+			res := OverrideAPIServerSpec(m, s)
+			if expect == nil {
+				Expect(res.APIServerDeployment).To(BeNil())
+			} else {
+				Expect(*res.APIServerDeployment.Metadata).To(Equal(*expect))
+			}
+		}, metadataTests...)
+
+		DescribeTable("merge minReadySeconds", func(main, second, expect *int32) {
+			m.APIServerDeployment.Spec.MinReadySeconds = main
+			s.APIServerDeployment.Spec.MinReadySeconds = second
+			res := OverrideAPIServerSpec(m, s)
+			if expect == nil {
+				Expect(res.APIServerDeployment.Spec.MinReadySeconds).To(BeNil())
+			} else {
+				Expect(*res.APIServerDeployment.Spec.MinReadySeconds).To(Equal(*expect))
+			}
+		}, minReadySecondsTests...)
+
+		DescribeTable("merge pod template metadata", func(main, second, expect *opv1.Metadata) {
+			m.APIServerDeployment.Spec.Template.Metadata = main
+			s.APIServerDeployment.Spec.Template.Metadata = second
+			res := OverrideAPIServerSpec(m, s)
+			if expect == nil {
+				Expect(res.APIServerDeployment.Spec.Template.Metadata).To(BeNil())
+			} else {
+				Expect(*res.APIServerDeployment.Spec.Template.Metadata).To(Equal(*expect))
+			}
+		}, metadataTests...)
+
+		DescribeTable("merge initContainers", func(main, second, expect []v1.Container) {
+			var mainContainers []opv1.APIServerDeploymentInitContainer
+			for _, c := range main {
+				mainContainers = append(mainContainers, opv1.APIServerDeploymentInitContainer{Name: c.Name, Resources: &c.Resources})
+			}
+			var secondContainers []opv1.APIServerDeploymentInitContainer
+			for _, c := range second {
+				secondContainers = append(secondContainers, opv1.APIServerDeploymentInitContainer{Name: c.Name, Resources: &c.Resources})
+			}
+			m.APIServerDeployment.Spec.Template.Spec.InitContainers = mainContainers
+			s.APIServerDeployment.Spec.Template.Spec.InitContainers = secondContainers
+
+			var expectedContainers []opv1.APIServerDeploymentInitContainer
+			for _, c := range expect {
+				expectedContainers = append(expectedContainers, opv1.APIServerDeploymentInitContainer{Name: c.Name, Resources: &c.Resources})
+			}
+			res := OverrideAPIServerSpec(m, s)
+			if expect == nil {
+				Expect(res.APIServerDeployment.Spec.Template.Spec.InitContainers).To(BeNil())
+			} else {
+				Expect(res.APIServerDeployment.Spec.Template.Spec.InitContainers).To(Equal(expectedContainers))
+			}
+		}, containerTests...)
+
+		DescribeTable("merge containers", func(main, second, expect []v1.Container) {
+			var mainContainers []opv1.APIServerDeploymentContainer
+			for _, c := range main {
+				mainContainers = append(mainContainers, opv1.APIServerDeploymentContainer{Name: c.Name, Resources: &c.Resources})
+			}
+			var secondContainers []opv1.APIServerDeploymentContainer
+			for _, c := range second {
+				secondContainers = append(secondContainers, opv1.APIServerDeploymentContainer{Name: c.Name, Resources: &c.Resources})
+			}
+			m.APIServerDeployment.Spec.Template.Spec.Containers = mainContainers
+			s.APIServerDeployment.Spec.Template.Spec.Containers = secondContainers
+
+			var expectedContainers []opv1.APIServerDeploymentContainer
+			for _, c := range expect {
+				expectedContainers = append(expectedContainers, opv1.APIServerDeploymentContainer{Name: c.Name, Resources: &c.Resources})
+			}
+			res := OverrideAPIServerSpec(m, s)
+			if expect == nil {
+				Expect(res.APIServerDeployment.Spec.Template.Spec.Containers).To(BeNil())
+			} else {
+				Expect(res.APIServerDeployment.Spec.Template.Spec.Containers).To(Equal(expectedContainers))
+			}
+		}, containerTests...)
+
+		DescribeTable("merge affinity", func(main, second, expect *v1.Affinity) {
+			m.APIServerDeployment.Spec.Template.Spec.Affinity = main
+			s.APIServerDeployment.Spec.Template.Spec.Affinity = second
+			res := OverrideAPIServerSpec(m, s)
+			if expect == nil {
+				Expect(res.APIServerDeployment.Spec.Template.Spec.Affinity).To(BeNil())
+			} else {
+				Expect(*res.APIServerDeployment.Spec.Template.Spec.Affinity).To(Equal(*expect))
+			}
+		}, affinityTests...)
+
+		DescribeTable("merge nodeSelector", func(main, second, expect map[string]string) {
+			m.APIServerDeployment.Spec.Template.Spec.NodeSelector = main
+			s.APIServerDeployment.Spec.Template.Spec.NodeSelector = second
+			res := OverrideAPIServerSpec(m, s)
+			if expect == nil {
+				Expect(res.APIServerDeployment.Spec.Template.Spec.NodeSelector).To(BeNil())
+			} else {
+				Expect(res.APIServerDeployment.Spec.Template.Spec.NodeSelector).To(Equal(expect))
+			}
+		}, nodeSelectorTests...)
+
+		DescribeTable("merge tolerations", func(main, second, expect []v1.Toleration) {
+			m.APIServerDeployment.Spec.Template.Spec.Tolerations = main
+			s.APIServerDeployment.Spec.Template.Spec.Tolerations = second
+			res := OverrideAPIServerSpec(m, s)
+			if expect == nil {
+				Expect(res.APIServerDeployment.Spec.Template.Spec.Tolerations).To(BeNil())
+			} else {
+				Expect(res.APIServerDeployment.Spec.Template.Spec.Tolerations).To(Equal(expect))
+			}
+		}, tolerationsTests...)
+
+		DescribeTable("merge multiple fields", func(main, second, expect *opv1.APIServerDeployment) {
+			// start with empty spec
+			m = opv1.APIServerSpec{}
+			s = opv1.APIServerSpec{}
+			if main != nil {
+				m.APIServerDeployment = main
+			}
+			if second != nil {
+				s.APIServerDeployment = second
+			}
+			res := OverrideAPIServerSpec(m, s)
+			if expect == nil {
+				Expect(res.APIServerDeployment).To(BeNil())
+			} else {
+				Expect(*res.APIServerDeployment).To(Equal(*expect))
+			}
+		},
+			Entry("Both unset", nil, nil, nil),
+			Entry("Different fields in the two are merged, some overridden",
+				&opv1.APIServerDeployment{
+					Metadata: &opv1.Metadata{
+						Labels: map[string]string{"l": "1"},
+					},
+					Spec: &opv1.APIServerDeploymentSpec{
+						MinReadySeconds: intPtr(5),
+						Template: &opv1.APIServerDeploymentPodTemplateSpec{
+							Spec: &opv1.APIServerDeploymentPodSpec{
+								InitContainers: []opv1.APIServerDeploymentInitContainer{
+									{
+										Name: "calico-apiserver-certs-key-cert-provisioner",
+										Resources: &v1.ResourceRequirements{
+											Requests: v1.ResourceList{v1.ResourceCPU: resource.MustParse("111m")},
+											Limits:   v1.ResourceList{v1.ResourceCPU: resource.MustParse("111m")},
+										},
+									},
+								},
+								NodeSelector: map[string]string{"selector": "test"},
+								Tolerations:  []v1.Toleration{_toleration1},
+							},
+						},
+					},
+				},
+				&opv1.APIServerDeployment{
+					Metadata: &opv1.Metadata{
+						Labels:      map[string]string{"overridden": "1"},
+						Annotations: map[string]string{"a": "1"},
+					},
+					Spec: &opv1.APIServerDeploymentSpec{
+						Template: &opv1.APIServerDeploymentPodTemplateSpec{
+							Metadata: &opv1.Metadata{
+								Labels:      map[string]string{"pod-label": "1"},
+								Annotations: map[string]string{"pod-annot": "1"},
+							},
+							Spec: &opv1.APIServerDeploymentPodSpec{
+								Containers: []opv1.APIServerDeploymentContainer{
+									{
+										Name: "calico-apiserver",
+										Resources: &v1.ResourceRequirements{
+											Requests: v1.ResourceList{v1.ResourceCPU: resource.MustParse("1000m"), v1.ResourceMemory: resource.MustParse("500Mi")},
+											Limits:   v1.ResourceList{v1.ResourceCPU: resource.MustParse("1000m"), v1.ResourceMemory: resource.MustParse("1000Mi")},
+										},
+									},
+								},
+								InitContainers: []opv1.APIServerDeploymentInitContainer{
+									{
+										Name: "calico-apiserver-certs-key-cert-provisioner",
+										Resources: &v1.ResourceRequirements{
+											Requests: v1.ResourceList{v1.ResourceCPU: resource.MustParse("500m")},
+											Limits:   v1.ResourceList{v1.ResourceCPU: resource.MustParse("500m")},
+										},
+									},
+								},
+								Affinity:     _aff1,
+								NodeSelector: map[string]string{"overridden": "selector"},
+								Tolerations:  []v1.Toleration{},
+							},
+						},
+					},
+				},
+				&opv1.APIServerDeployment{
+					Metadata: &opv1.Metadata{
+						Labels:      map[string]string{"overridden": "1"},
+						Annotations: map[string]string{"a": "1"},
+					},
+					Spec: &opv1.APIServerDeploymentSpec{
+						MinReadySeconds: intPtr(5),
+						Template: &opv1.APIServerDeploymentPodTemplateSpec{
+							Metadata: &opv1.Metadata{
+								Labels:      map[string]string{"pod-label": "1"},
+								Annotations: map[string]string{"pod-annot": "1"},
+							},
+							Spec: &opv1.APIServerDeploymentPodSpec{
+								Containers: []opv1.APIServerDeploymentContainer{
+									{
+										Name: "calico-apiserver",
+										Resources: &v1.ResourceRequirements{
+											Requests: v1.ResourceList{v1.ResourceCPU: resource.MustParse("1000m"), v1.ResourceMemory: resource.MustParse("500Mi")},
+											Limits:   v1.ResourceList{v1.ResourceCPU: resource.MustParse("1000m"), v1.ResourceMemory: resource.MustParse("1000Mi")},
+										},
+									},
+								},
+								InitContainers: []opv1.APIServerDeploymentInitContainer{
+									{
+										Name: "calico-apiserver-certs-key-cert-provisioner",
+										Resources: &v1.ResourceRequirements{
+											Requests: v1.ResourceList{v1.ResourceCPU: resource.MustParse("500m")},
+											Limits:   v1.ResourceList{v1.ResourceCPU: resource.MustParse("500m")},
+										},
+									},
+								},
+								Affinity:     _aff1,
+								NodeSelector: map[string]string{"overridden": "selector"},
+								Tolerations:  []v1.Toleration{},
+							},
+						},
+					},
+				},
+			))
 	})
 
 	Context("all fields handled", func() {

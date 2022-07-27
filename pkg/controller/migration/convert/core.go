@@ -659,7 +659,7 @@ func hasNodeSelector(override comp.ReplicatedPodResourceOverrides) bool {
 	return len(override.GetNodeSelector()) > 0
 }
 
-func mergeComponentMapWithInstallation(componentName string, install, comp map[string]string, errFunc func(key string) error) error {
+func mergeComponentMapWithInstallation(install, comp map[string]string, errFunc func(key string) error) error {
 	// Verify that any items on the installation exist on the component.
 	for k, v := range install {
 		if x, ok := comp[k]; !ok || x != v {
@@ -680,7 +680,7 @@ func mergeComponentMapWithInstallation(componentName string, install, comp map[s
 
 // mergeNodeSelector merges the nodeSelector on the component with that on the installation.
 func mergeNodeSelector(componentName string, installNodeSelector, compNodeSelector map[string]string) error {
-	return mergeComponentMapWithInstallation(componentName, installNodeSelector, compNodeSelector, func(key string) error {
+	return mergeComponentMapWithInstallation(installNodeSelector, compNodeSelector, func(key string) error {
 		return ErrIncompatibleNodeSelector(key, componentName)
 	})
 }

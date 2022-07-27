@@ -41,7 +41,7 @@ func handleAPIServer(d *appsv1.Deployment, apiServer *operatorv1.APIServer) erro
 	// handle apiserver container resources
 	for _, container := range d.Spec.Template.Spec.Containers {
 		if len(container.Resources.Limits) > 0 || len(container.Resources.Requests) > 0 {
-			if err := migrateAPIServerContainerResources(d, apiServer, &container); err != nil {
+			if err := migrateAPIServerContainerResources(apiServer, &container); err != nil {
 				return err
 			}
 		}
@@ -50,7 +50,7 @@ func handleAPIServer(d *appsv1.Deployment, apiServer *operatorv1.APIServer) erro
 	// handle apiserver init container resources
 	for _, initContainer := range d.Spec.Template.Spec.InitContainers {
 		if len(initContainer.Resources.Limits) > 0 || len(initContainer.Resources.Requests) > 0 {
-			if err := migrateAPIServerInitContainerResources(d, apiServer, &initContainer); err != nil {
+			if err := migrateAPIServerInitContainerResources(apiServer, &initContainer); err != nil {
 				return err
 			}
 		}
@@ -133,7 +133,7 @@ func handleAPIServerLabels(d *appsv1.Deployment, apiServer *operatorv1.APIServer
 	return nil
 }
 
-func migrateAPIServerContainerResources(d *appsv1.Deployment, apiServer *operatorv1.APIServer, container *corev1.Container) error {
+func migrateAPIServerContainerResources(apiServer *operatorv1.APIServer, container *corev1.Container) error {
 	var apiServerResources corev1.ResourceRequirements
 	var found bool
 
@@ -168,7 +168,7 @@ func migrateAPIServerContainerResources(d *appsv1.Deployment, apiServer *operato
 	return nil
 }
 
-func migrateAPIServerInitContainerResources(d *appsv1.Deployment, apiServer *operatorv1.APIServer, container *corev1.Container) error {
+func migrateAPIServerInitContainerResources(apiServer *operatorv1.APIServer, container *corev1.Container) error {
 	var apiServerResources corev1.ResourceRequirements
 	var found bool
 

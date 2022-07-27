@@ -424,12 +424,17 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		{Name: "VOLTRON_HTTPS_CERT", Value: certPath},
 		{Name: "VOLTRON_TUNNEL_KEY", Value: tunnelKeyPath},
 		{Name: "VOLTRON_TUNNEL_CERT", Value: tunnelCertPath},
+
 		{Name: "VOLTRON_INTERNAL_HTTPS_KEY", Value: intKeyPath},
 		{Name: "VOLTRON_INTERNAL_HTTPS_CERT", Value: intCertPath},
 		{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
 		{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
 		{Name: "VOLTRON_DEFAULT_FORWARD_SERVER", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc:9200"},
 		{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: fmt.Sprintf("%v", c.cfg.ComplianceFeatureActive)},
+	}
+
+	if c.cfg.ManagementCluster != nil {
+		env = append(env, corev1.EnvVar{Name: "VOLTRON_USE_HTTPS_CERT_ON_TUNNEL", Value: strconv.FormatBool(c.cfg.ManagementCluster.Spec.TunnelCertType == operatorv1.CATypePublic)})
 	}
 
 	if c.cfg.KeyValidatorConfig != nil {

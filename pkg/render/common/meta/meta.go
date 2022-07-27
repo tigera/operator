@@ -20,6 +20,7 @@ import (
 	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/ptr"
 
 	corev1 "k8s.io/api/core/v1"
 )
@@ -54,7 +55,7 @@ var (
 		Operator: corev1.TolerationOpExists,
 	}
 
-	// TolerateAll returns tolerations to tolerate all taints. When used, it is not necessary
+	// TolerateAll tolerates all taints. When used, it is not necessary
 	// to include the user's custom tolerations because we already tolerate everything.
 	TolerateAll = []corev1.Toleration{
 		TolerateCriticalAddonsOnly,
@@ -65,6 +66,19 @@ var (
 		{
 			Effect:   corev1.TaintEffectNoExecute,
 			Operator: corev1.TolerationOpExists,
+		},
+	}
+
+	// TolerateBootstrap tolerates the set of conditions that exist on a brand new cluster,
+	// useful to run components required to bootstrap networking.
+	TolerateBootstrap = []corev1.Toleration{
+		{
+			// Tolerate not-ready, which is the default toleration on new nodes.
+			// Set a TolerationSeconds so that we'll get rescheduled if a node goes NotReady
+			// in the future for an extended period of time.
+			Effect:            corev1.TaintEffectNoSchedule,
+			Key:               "node.kubernetes.io/not-ready",
+			TolerationSeconds: ptr.Int64ToPtr(300),
 		},
 	}
 )

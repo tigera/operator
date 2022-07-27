@@ -434,7 +434,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 	}
 
 	if c.cfg.ManagementCluster != nil {
-		env = append(env, corev1.EnvVar{Name: "VOLTRON_USE_HTTPS_CERT_ON_TUNNEL", Value: strconv.FormatBool(c.cfg.ManagementCluster.Spec.TLS.CA == operatorv1.CATypePublic)})
+		env = append(env, corev1.EnvVar{Name: "VOLTRON_USE_HTTPS_CERT_ON_TUNNEL", Value: strconv.FormatBool(c.cfg.ManagementCluster.Spec.TLS.SecretName == ManagerTLSSecretName)})
 	}
 
 	if c.cfg.KeyValidatorConfig != nil {

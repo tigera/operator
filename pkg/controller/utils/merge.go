@@ -467,7 +467,7 @@ func mergeTyphaDeployment(cfg, override *operatorv1.TyphaDeployment) *operatorv1
 
 		switch compareFields(out.InitContainers, override.InitContainers) {
 		case BOnlySet, Different:
-			out.InitContainers = make([]operatorv1.TyphaDeploymentInitContainer, len(override.Containers))
+			out.InitContainers = make([]operatorv1.TyphaDeploymentInitContainer, len(override.InitContainers))
 			copy(out.InitContainers, override.InitContainers)
 		}
 
@@ -596,6 +596,106 @@ func mergeCalicoWindowsUpgradeDaemonSet(cfg, override *operatorv1.CalicoWindowsU
 		return out
 	}
 	mergeSpec := func(cfg, override *operatorv1.CalicoWindowsUpgradeDaemonSetSpec) *operatorv1.CalicoWindowsUpgradeDaemonSetSpec {
+		out := cfg.DeepCopy()
+
+		switch compareFields(out.MinReadySeconds, override.MinReadySeconds) {
+		case BOnlySet, Different:
+			out.MinReadySeconds = override.MinReadySeconds
+		}
+
+		switch compareFields(out.Template, override.Template) {
+		case BOnlySet:
+			out.Template = override.Template.DeepCopy()
+		case Different:
+			out.Template = mergeTemplateSpec(out.Template, override.Template)
+		}
+
+		return out
+	}
+
+	switch compareFields(out.Spec, override.Spec) {
+	case BOnlySet:
+		out.Spec = override.Spec.DeepCopy()
+	case Different:
+		out.Spec = mergeSpec(out.Spec, override.Spec)
+	}
+
+	return out
+}
+
+func OverrideAPIServerSpec(cfg, override operatorv1.APIServerSpec) operatorv1.APIServerSpec {
+	out := *cfg.DeepCopy()
+
+	switch compareFields(out.APIServerDeployment, override.APIServerDeployment) {
+	case BOnlySet:
+		out.APIServerDeployment = override.APIServerDeployment.DeepCopy()
+	case Different:
+		out.APIServerDeployment = mergeAPIServerDeployment(out.APIServerDeployment, override.APIServerDeployment)
+	}
+	return out
+}
+
+func mergeAPIServerDeployment(cfg, override *operatorv1.APIServerDeployment) *operatorv1.APIServerDeployment {
+	out := cfg.DeepCopy()
+
+	switch compareFields(out.Metadata, override.Metadata) {
+	case BOnlySet:
+		out.Metadata = override.Metadata.DeepCopy()
+	case Different:
+		out.Metadata = mergeMetadata(out.Metadata, override.Metadata)
+	}
+
+	mergePodSpec := func(cfg, override *operatorv1.APIServerDeploymentPodSpec) *operatorv1.APIServerDeploymentPodSpec {
+		out := cfg.DeepCopy()
+
+		switch compareFields(out.InitContainers, override.InitContainers) {
+		case BOnlySet, Different:
+			out.InitContainers = make([]operatorv1.APIServerDeploymentInitContainer, len(override.InitContainers))
+			copy(out.InitContainers, override.InitContainers)
+		}
+
+		switch compareFields(out.Containers, override.Containers) {
+		case BOnlySet, Different:
+			out.Containers = make([]operatorv1.APIServerDeploymentContainer, len(override.Containers))
+			copy(out.Containers, override.Containers)
+		}
+
+		switch compareFields(out.Affinity, override.Affinity) {
+		case BOnlySet, Different:
+			out.Affinity = override.Affinity
+		}
+
+		switch compareFields(out.NodeSelector, override.NodeSelector) {
+		case BOnlySet, Different:
+			out.NodeSelector = override.NodeSelector
+		}
+
+		switch compareFields(out.Tolerations, override.Tolerations) {
+		case BOnlySet, Different:
+			out.Tolerations = override.Tolerations
+		}
+		return out
+	}
+	mergeTemplateSpec := func(cfg, override *operatorv1.APIServerDeploymentPodTemplateSpec) *operatorv1.APIServerDeploymentPodTemplateSpec {
+		out := cfg.DeepCopy()
+
+		switch compareFields(out.Metadata, override.Metadata) {
+		case BOnlySet:
+			out.Metadata = override.Metadata.DeepCopy()
+		case Different:
+			out.Metadata = mergeMetadata(out.Metadata, override.Metadata)
+		}
+
+		switch compareFields(out.Spec, override.Spec) {
+		case BOnlySet:
+			out.Spec = override.Spec.DeepCopy()
+		case Different:
+			out.Spec = mergePodSpec(out.Spec, override.Spec)
+		}
+
+		return out
+	}
+	mergeSpec := func(cfg, override *operatorv1.APIServerDeploymentSpec) *operatorv1.APIServerDeploymentSpec {
 		out := cfg.DeepCopy()
 
 		switch compareFields(out.MinReadySeconds, override.MinReadySeconds) {

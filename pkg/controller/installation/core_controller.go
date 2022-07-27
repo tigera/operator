@@ -805,16 +805,16 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	status := instance.Status
 	if !r.migrationChecked {
 		// update Installation resource with existing install if it exists.
-		nc, err := convert.NeedsConversion(ctx, r.client)
+		nc, err := convert.NeedsInstallationConversion(ctx, r.client)
 		if err != nil {
 			r.SetDegraded(operator.ResourceValidationError, "Error checking for existing installation", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 		if nc {
-			install, err := convert.Convert(ctx, r.client)
+			install, err := convert.ConvertInstallation(ctx, r.client)
 			if err != nil {
 				if errors.As(err, &convert.ErrIncompatibleCluster{}) {
-					r.SetDegraded(operator.MigrationError, "Existing Calico installation can not be managed by Tigera Operator as it is configured in a way that Operator does not currently support. Please update your existing Calico install config", err, reqLogger)
+					r.SetDegraded(operator.MigrationError, "Existing Calico installation cannot be managed by Tigera Operator as it is configured in a way that Operator does not currently support. Please update your existing Calico install config", err, reqLogger)
 					// We should always requeue a convert problem. Don't return error
 					// to make sure we never back off retrying.
 					return reconcile.Result{RequeueAfter: 15 * time.Second}, nil

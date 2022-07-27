@@ -505,6 +505,7 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 				"ipreservations",
 				"ipamblocks",
 				"blockaffinities",
+				"ipamconfigs",
 			},
 			Verbs: []string{
 				"get",
@@ -517,7 +518,7 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 			},
 		},
 	}
-	if !c.cfg.Openshift {
+	if !c.cfg.Openshift && c.cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},

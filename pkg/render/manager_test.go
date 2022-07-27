@@ -330,7 +330,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		})
 
 		It("should render when enabled", func() {
-			cfg.ManagementCluster.Spec.TLS.CA = operatorv1.CATypePublic
+			cfg.ManagementCluster.Spec.TLS.SecretName = render.ManagerTLSSecretName
 
 			resources, err := render.Manager(cfg)
 			Expect(err).ToNot(HaveOccurred())

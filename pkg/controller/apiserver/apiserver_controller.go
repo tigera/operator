@@ -302,6 +302,22 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 				r.status.SetDegraded("Unable to get or create the tunnel secret", err.Error())
 				return reconcile.Result{}, err
 			}
+
+			// verify tls configurations are valid
+			if managementCluster.Spec.TLS.CA == operatorv1.CATypePublic &&
+				managementCluster.Spec.TLS.SecretName != render.ManagerTLSSecretName {
+				err = fmt.Errorf("")
+				log.Error(err, "")
+				r.status.SetDegraded("", err.Error())
+				return reconcile.Result{}, err
+			}
+			if (managementCluster.Spec.TLS.CA == operatorv1.CATypeTigera || managementCluster.Spec.TLS.CA == "") &&
+				(managementCluster.Spec.TLS.SecretName != render.VoltronTunnelSecretName && managementCluster.Spec.TLS.SecretName != "") {
+				err = fmt.Errorf("")
+				log.Error(err, "")
+				r.status.SetDegraded("", err.Error())
+				return reconcile.Result{}, err
+			}
 		}
 
 		if r.amazonCRDExists {

@@ -505,6 +505,7 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 				"ipreservations",
 				"ipamblocks",
 				"blockaffinities",
+				"ipamconfigs",
 			},
 			Verbs: []string{
 				"get",

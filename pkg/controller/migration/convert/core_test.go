@@ -392,62 +392,62 @@ var _ = Describe("core handler", func() {
 			Entry("should error if the affinity exists in the installation but not the resource", nil, aff1, nil, true),
 		}
 
-		DescribeTable("calico-node nodeSelector",
-			func(compNodeSelector map[string]string, installNodeSelector map[string]string, expectedNodeSelector map[string]string, expectedErr bool) {
-				if compNodeSelector != nil {
-					comps.node.Spec.Template.Spec.NodeSelector = compNodeSelector
-				}
+		Context("calico-node", func() {
+			DescribeTable("nodeSelector",
+				func(compNodeSelector map[string]string, installNodeSelector map[string]string, expectedNodeSelector map[string]string, expectedErr bool) {
+					if compNodeSelector != nil {
+						comps.node.Spec.Template.Spec.NodeSelector = compNodeSelector
+					}
 
-				if installNodeSelector != nil {
-					helpers.EnsureCalicoNodePodSpecNotNil(i)
-					i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector = installNodeSelector
-				}
+					if installNodeSelector != nil {
+						helpers.EnsureCalicoNodePodSpecNotNil(i)
+						i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector = installNodeSelector
+					}
 
-				err := handleNodeSelectors(&comps, i)
-				if expectedErr {
-					Expect(err).To(HaveOccurred())
-				} else {
-					Expect(err).To(BeNil())
-
-					if expectedNodeSelector == nil {
-						Expect(i.Spec.CalicoNodeDaemonSet).To(BeNil())
+					err := handleNodeSelectors(&comps, i)
+					if expectedErr {
+						Expect(err).To(HaveOccurred())
 					} else {
-						Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector).To(HaveLen(len(expectedNodeSelector)))
-						for k, v := range expectedNodeSelector {
-							Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue(k, v))
+						Expect(err).To(BeNil())
+
+						if expectedNodeSelector == nil {
+							Expect(i.Spec.CalicoNodeDaemonSet).To(BeNil())
+						} else {
+							Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector).To(HaveLen(len(expectedNodeSelector)))
+							for k, v := range expectedNodeSelector {
+								Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue(k, v))
+							}
 						}
 					}
-				}
-			}, nodeSelectorTestsForNode...,
-		)
+				}, nodeSelectorTestsForNode...,
+			)
 
-		DescribeTable("calico-node affinity",
-			func(compAffinity *corev1.Affinity, installAffinity *corev1.Affinity, expectedAffinity *corev1.Affinity, expectedErr bool) {
-				if compAffinity != nil {
-					comps.node.Spec.Template.Spec.Affinity = compAffinity
-				}
-
-				if installAffinity != nil {
-					helpers.EnsureCalicoNodePodSpecNotNil(i)
-					i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity = installAffinity
-				}
-
-				err := handleNodeSelectors(&comps, i)
-				if expectedErr {
-					Expect(err).To(HaveOccurred())
-				} else {
-					Expect(err).To(BeNil())
-
-					if expectedAffinity == nil {
-						Expect(i.Spec.CalicoNodeDaemonSet).To(BeNil())
-					} else {
-						Expect(*i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity).To(Equal(*expectedAffinity))
+			DescribeTable("affinity",
+				func(compAffinity *corev1.Affinity, installAffinity *corev1.Affinity, expectedAffinity *corev1.Affinity, expectedErr bool) {
+					if compAffinity != nil {
+						comps.node.Spec.Template.Spec.Affinity = compAffinity
 					}
-				}
-			}, affinityTests...,
-		)
 
-		Describe("calico-node", func() {
+					if installAffinity != nil {
+						helpers.EnsureCalicoNodePodSpecNotNil(i)
+						i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity = installAffinity
+					}
+
+					err := handleNodeSelectors(&comps, i)
+					if expectedErr {
+						Expect(err).To(HaveOccurred())
+					} else {
+						Expect(err).To(BeNil())
+
+						if expectedAffinity == nil {
+							Expect(i.Spec.CalicoNodeDaemonSet).To(BeNil())
+						} else {
+							Expect(*i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Affinity).To(Equal(*expectedAffinity))
+						}
+					}
+				}, affinityTests...,
+			)
+
 			It("shouldn't error for aks affinity on aks", func() {
 				aff := &v1.Affinity{
 					NodeAffinity: &v1.NodeAffinity{

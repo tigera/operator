@@ -197,7 +197,7 @@ func handleAnnotations(c *components, install *operatorv1.Installation) error {
 
 // removeStandardOperatorLabels returns the given labels with standard labels added by the operator removed.
 func removeStandardOperatorLabels(existing map[string]string) map[string]string {
-	for key, _ := range existing {
+	for key := range existing {
 		// "app.kubernetes.io/name" is only set by the operator on deployments but we should not see it on daemonsets.
 		if key == "k8s-app" || key == "app.kubernetes.io/name" {
 			delete(existing, key)

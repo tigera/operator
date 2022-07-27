@@ -174,11 +174,11 @@ var _ = Describe("authentication controller tests", func() {
 		It("should use builtin images", func() {
 
 			r := ReconcileAuthentication{
-				client:             cli,
-				scheme:             scheme,
-				provider:           operatorv1.ProviderNone,
-				status:             mockStatus,
-				policyWatchesReady: readyFlag,
+				client:         cli,
+				scheme:         scheme,
+				provider:       operatorv1.ProviderNone,
+				status:         mockStatus,
+				tierWatchReady: readyFlag,
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -210,11 +210,11 @@ var _ = Describe("authentication controller tests", func() {
 			})).ToNot(HaveOccurred())
 
 			r := ReconcileAuthentication{
-				client:             cli,
-				scheme:             scheme,
-				provider:           operatorv1.ProviderNone,
-				status:             mockStatus,
-				policyWatchesReady: readyFlag,
+				client:         cli,
+				scheme:         scheme,
+				provider:       operatorv1.ProviderNone,
+				status:         mockStatus,
+				tierWatchReady: readyFlag,
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -238,7 +238,7 @@ var _ = Describe("authentication controller tests", func() {
 	})
 
 	Context("allow-tigera reconciliation", func() {
-		var r reconcile.Reconciler
+		var r *ReconcileAuthentication
 		BeforeEach(func() {
 			Expect(cli.Create(ctx, idpSecret)).ToNot(HaveOccurred())
 			Expect(cli.Create(ctx, &operatorv1.Authentication{
@@ -258,31 +258,21 @@ var _ = Describe("authentication controller tests", func() {
 			mockStatus = &status.MockStatus{}
 			mockStatus.On("OnCRFound").Return()
 			r = &ReconcileAuthentication{
-				client:             cli,
-				scheme:             scheme,
-				provider:           operatorv1.ProviderNone,
-				status:             mockStatus,
-				policyWatchesReady: readyFlag,
+				client:         cli,
+				scheme:         scheme,
+				provider:       operatorv1.ProviderNone,
+				status:         mockStatus,
+				tierWatchReady: readyFlag,
 			}
-		})
-
-		It("should wait if API server is unavailable", func() {
-			utils.DeleteAPIServerAndExpectWait(ctx, cli, r, mockStatus)
 		})
 
 		It("should wait if allow-tigera tier is unavailable", func() {
 			utils.DeleteAllowTigeraTierAndExpectWait(ctx, cli, r, mockStatus)
 		})
 
-		It("should wait if policy watches are not ready", func() {
-			r = &ReconcileAuthentication{
-				client:             cli,
-				scheme:             scheme,
-				provider:           operatorv1.ProviderNone,
-				status:             mockStatus,
-				policyWatchesReady: &utils.ReadyFlag{},
-			}
-			utils.ExpectWaitForPolicyWatches(ctx, r, mockStatus)
+		It("should wait if tier watch is not ready", func() {
+			r.tierWatchReady = &utils.ReadyFlag{}
+			utils.ExpectWaitForTierWatch(ctx, r, mockStatus)
 		})
 	})
 

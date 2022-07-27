@@ -67,10 +67,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	licenseAPIReady := &utils.ReadyFlag{}
 	dpiAPIReady := &utils.ReadyFlag{}
-	policyWatchesReady := &utils.ReadyFlag{}
+	tierWatchReady := &utils.ReadyFlag{}
 
 	// create the reconciler
-	reconciler := newReconciler(mgr, opts, licenseAPIReady, dpiAPIReady, policyWatchesReady)
+	reconciler := newReconciler(mgr, opts, licenseAPIReady, dpiAPIReady, tierWatchReady)
 
 	// Create a new controller
 	controller, err := controller.New("intrusiondetection-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
@@ -89,7 +89,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	go utils.WaitToAddResourceWatch(controller, k8sClient, log, dpiAPIReady,
 		[]client.Object{&v3.DeepPacketInspection{TypeMeta: metav1.TypeMeta{Kind: v3.KindDeepPacketInspection}}})
 
-	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, policyWatchesReady, []types.NamespacedName{
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
+	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, []types.NamespacedName{
 		{Name: render.IntrusionDetectionControllerPolicyName, Namespace: render.IntrusionDetectionNamespace},
 		{Name: render.IntrusionDetectionInstallerPolicyName, Namespace: render.IntrusionDetectionNamespace},
 		{Name: render.ADAPIPolicyName, Namespace: render.IntrusionDetectionNamespace},
@@ -102,17 +103,17 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag, dpiAPIReady *utils.ReadyFlag, policyWatchesReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag, dpiAPIReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag) reconcile.Reconciler {
 	r := &ReconcileIntrusionDetection{
-		client:             mgr.GetClient(),
-		scheme:             mgr.GetScheme(),
-		provider:           opts.DetectedProvider,
-		status:             status.New(mgr.GetClient(), "intrusion-detection", opts.KubernetesVersion),
-		clusterDomain:      opts.ClusterDomain,
-		licenseAPIReady:    licenseAPIReady,
-		dpiAPIReady:        dpiAPIReady,
-		policyWatchesReady: policyWatchesReady,
-		usePSP:             opts.UsePSP,
+		client:          mgr.GetClient(),
+		scheme:          mgr.GetScheme(),
+		provider:        opts.DetectedProvider,
+		status:          status.New(mgr.GetClient(), "intrusion-detection", opts.KubernetesVersion),
+		clusterDomain:   opts.ClusterDomain,
+		licenseAPIReady: licenseAPIReady,
+		dpiAPIReady:     dpiAPIReady,
+		tierWatchReady:  tierWatchReady,
+		usePSP:          opts.UsePSP,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -206,15 +207,15 @@ var _ reconcile.Reconciler = &ReconcileIntrusionDetection{}
 type ReconcileIntrusionDetection struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client             client.Client
-	scheme             *runtime.Scheme
-	provider           operatorv1.Provider
-	status             status.StatusManager
-	clusterDomain      string
-	licenseAPIReady    *utils.ReadyFlag
-	dpiAPIReady        *utils.ReadyFlag
-	policyWatchesReady *utils.ReadyFlag
-	usePSP             bool
+	client          client.Client
+	scheme          *runtime.Scheme
+	provider        operatorv1.Provider
+	status          status.StatusManager
+	clusterDomain   string
+	licenseAPIReady *utils.ReadyFlag
+	dpiAPIReady     *utils.ReadyFlag
+	tierWatchReady  *utils.ReadyFlag
+	usePSP          bool
 }
 
 // Reconcile reads that state of the cluster for a IntrusionDetection object and makes changes based on the state read
@@ -257,8 +258,9 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	if !r.policyWatchesReady.IsReady() {
-		r.status.SetDegraded("Waiting for NetworkPolicy watches to be established", "")
+	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
+	if !r.tierWatchReady.IsReady() {
+		r.status.SetDegraded("Waiting for Tier watch to be established", "")
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 

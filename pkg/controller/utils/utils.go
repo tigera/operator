@@ -123,7 +123,7 @@ func WaitToAddLicenseKeyWatch(controller controller.Controller, c kubernetes.Int
 	WaitToAddResourceWatch(controller, c, log, flag, []client.Object{&v3.LicenseKey{TypeMeta: metav1.TypeMeta{Kind: v3.KindLicenseKey}}})
 }
 
-func WaitToAddNetworkPolicyWatches(controller controller.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag, policies []types.NamespacedName) {
+func WaitToAddNetworkPolicyWatches(controller controller.Controller, c kubernetes.Interface, log logr.Logger, policies []types.NamespacedName) {
 	objs := []client.Object{}
 	for _, policy := range policies {
 		objs = append(objs, &v3.NetworkPolicy{
@@ -132,7 +132,9 @@ func WaitToAddNetworkPolicyWatches(controller controller.Controller, c kubernete
 		})
 	}
 
-	WaitToAddResourceWatch(controller, c, log, flag, objs)
+	// The success of a NetworkPolicy watch is not a dependency for resources to be installed or function correctly.
+	// Therefore, no ready flag is accepted or created for the watch.
+	WaitToAddResourceWatch(controller, c, log, nil, objs)
 }
 
 func WaitToAddTierWatch(tierName string, controller controller.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
@@ -140,6 +142,8 @@ func WaitToAddTierWatch(tierName string, controller controller.Controller, c kub
 		TypeMeta:   metav1.TypeMeta{Kind: "Tier", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{Name: tierName},
 	}
+
+	// The success of a Tier watch can be used as a signal that Tier queries will be resolved using the cache.
 	WaitToAddResourceWatch(controller, c, log, flag, []client.Object{obj})
 }
 
@@ -216,41 +220,6 @@ func IsFeatureActive(license v3.LicenseKey, featureName string) bool {
 	}
 
 	return false
-}
-
-// IsV3NetworkPolicyReconcilable :
-// v3 NetworkPolicy requires a specific state in the cluster in order to be reconcilable. Specifically, v3 NetworkPolicy
-// requires the following state at time of reconcile:
-//  * The Tigera API server to be available
-//  * The containing tier to be present
-//  * (If the policies to be reconciled require license features) A permissive license to be present
-//
-// Certain controllers play a part in manifesting this state by reconciling or satisfying the dependencies required to
-// reconcile the API server, tier, and license. Should these controllers reconcile NetworkPolicy, they should only do so
-// when the cluster has reached the state required to reconcile v3 NetworkPolicy. This prevents a chicken-and-egg
-// scenario where a controller fails to reconcile due to NetworkPolicy requirements not being met, and NetworkPolicy
-// requirements are not met because said controller is not reconciling.
-//
-// Controllers can use this method to verify that the state required to reconcile v3 NetworkPolicy has been met.
-//
-// Limitation: the availability of the Tigera API server is not verified in this method to avoid excess queries to
-// the K8S API server. Therefore, components that render both NetworkPolicy resources and resources that impact
-// API server availability should render NetworkPolicy resources after their API-server-impacting resources.
-func IsV3NetworkPolicyReconcilable(ctx context.Context, cli client.Client, tierName string, licenseFeatureNames ...string) bool {
-	// Validate tier presence by querying for the tier. Note that this does not validate Tigera API server availability
-	// as resources are cached.
-	if err := cli.Get(ctx, client.ObjectKey{Name: tierName}, &v3.Tier{}); err != nil {
-		return false
-	}
-
-	// If the policies to be reconciled require any license features, validate that the license is available.
-	if len(licenseFeatureNames) > 0 {
-		if _, err := FetchLicenseKey(ctx, cli); err != nil {
-			return false
-		}
-	}
-
-	return true
 }
 
 // ValidateCertPair checks if the given secret exists in the given
@@ -502,7 +471,9 @@ func WaitToAddResourceWatch(controller controller.Controller, c kubernetes.Inter
 		}
 
 		if len(resourcesToWatch) == 0 {
-			flag.MarkAsReady()
+			if flag != nil {
+				flag.MarkAsReady()
+			}
 			return
 		}
 	}

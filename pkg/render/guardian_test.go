@@ -44,10 +44,7 @@ var _ = Describe("Rendering tests", func() {
 	var g render.Component
 	var resources []client.Object
 
-	guardianPolicy := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/guardian.json")
-	guardianPolicyForOCP := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/guardian_ocp.json")
-
-	renderGuardian := func(i operatorv1.InstallationSpec, includeNetworkPolicy bool, addr string, openshift bool) {
+	createGuardianConfig := func(i operatorv1.InstallationSpec, addr string, openshift bool) *render.GuardianConfiguration {
 		secret := &corev1.Secret{
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
@@ -66,7 +63,7 @@ var _ = Describe("Rendering tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		bundle := certificateManager.CreateTrustedBundle()
 
-		cfg := &render.GuardianConfiguration{
+		return &render.GuardianConfiguration{
 			URL: addr,
 			PullSecrets: []*corev1.Secret{{
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
@@ -75,125 +72,128 @@ var _ = Describe("Rendering tests", func() {
 					Namespace: common.OperatorNamespace(),
 				},
 			}},
-			Installation:         &i,
-			TunnelSecret:         secret,
-			TrustedCertBundle:    bundle,
-			Openshift:            openshift,
-			IncludeNetworkPolicy: includeNetworkPolicy,
+			Installation:      &i,
+			TunnelSecret:      secret,
+			TrustedCertBundle: bundle,
+			Openshift:         openshift,
 		}
-		g = render.Guardian(cfg)
-		Expect(g.ResolveImages(nil)).To(BeNil())
-		resources, _ = g.Objects()
 	}
 
-	BeforeEach(func() {
-		renderGuardian(operatorv1.InstallationSpec{Registry: "my-reg/"}, true, "127.0.0.1:1234", false)
-	})
-
-	It("should render all resources for a managed cluster", func() {
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{name: render.GuardianNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: render.GuardianPolicyName, ns: render.GuardianNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: networkpolicy.TigeraComponentDefaultDenyPolicyName, ns: render.GuardianNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: "pull-secret", ns: render.GuardianNamespace, group: "", version: "v1", kind: "Secret"},
-			{name: render.GuardianServiceAccountName, ns: render.GuardianNamespace, group: "", version: "v1", kind: "ServiceAccount"},
-			{name: render.GuardianClusterRoleName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: render.GuardianClusterRoleBindingName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: render.GuardianDeploymentName, ns: render.GuardianNamespace, group: "apps", version: "v1", kind: "Deployment"},
-			{name: render.GuardianServiceName, ns: render.GuardianNamespace, group: "", version: "", kind: ""},
-			{name: render.GuardianSecretName, ns: render.GuardianNamespace, group: "", version: "v1", kind: "Secret"},
-			{name: certificatemanagement.TrustedCertConfigMapName, ns: render.GuardianNamespace, group: "", version: "v1", kind: "ConfigMap"},
-			{name: render.ManagerNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: render.ManagerServiceAccount, ns: render.ManagerNamespace, group: "", version: "v1", kind: "ServiceAccount"},
-			{name: render.ManagerClusterRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: render.ManagerClusterRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: render.ManagerClusterSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
-			{name: render.ManagerUserSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
-			{name: render.ManagerClusterSettingsLayerTigera, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
-			{name: render.ManagerClusterSettingsViewDefault, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
-		}
-		Expect(len(resources)).To(Equal(len(expectedResources)))
-		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+	Context("Guardian component", func() {
+		renderGuardian := func(i operatorv1.InstallationSpec) {
+			cfg := createGuardianConfig(i, "127.0.0.1:1234", false)
+			g = render.Guardian(cfg)
+			Expect(g.ResolveImages(nil)).To(BeNil())
+			resources, _ = g.Objects()
 		}
 
-		deployment := rtest.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(deployment.Spec.Template.Spec.Containers[0].Image).Should(Equal("my-reg/tigera/guardian:" + components.ComponentGuardian.Version))
+		BeforeEach(func() {
+			renderGuardian(operatorv1.InstallationSpec{Registry: "my-reg/"})
+		})
 
-		Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
-		Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
-		Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
-		Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(BeTrue())
-		Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(1001))
-
-		// Check the namespace.
-		ns := rtest.GetResource(resources, "tigera-guardian", "", "", "v1", "Namespace").(*corev1.Namespace)
-		Expect(ns.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("restricted"))
-		Expect(ns.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
-	})
-
-	It("should render controlPlaneTolerations", func() {
-		t := corev1.Toleration{
-			Key:      "foo",
-			Operator: corev1.TolerationOpEqual,
-			Value:    "bar",
-		}
-		renderGuardian(
-			operatorv1.InstallationSpec{
-				ControlPlaneTolerations: []corev1.Toleration{t},
-			},
-			true,
-			"127.0.0.1:1234",
-			false,
-		)
-		deployment := rtest.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(deployment.Spec.Template.Spec.Tolerations).Should(ContainElements(t, rmeta.TolerateCriticalAddonsOnly, rmeta.TolerateMaster))
-	})
-
-	Context("allow-tigera rendering", func() {
-		policyName := types.NamespacedName{Name: "allow-tigera.guardian-access", Namespace: "tigera-guardian"}
-
-		getExpectedPolicy := func(name types.NamespacedName, scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
-			if name.Name == "allow-tigera.guardian-access" && scenario.ManagedCluster {
-				return testutils.SelectPolicyByProvider(scenario, guardianPolicy, guardianPolicyForOCP)
+		It("should render all resources for a managed cluster", func() {
+			expectedResources := []struct {
+				name    string
+				ns      string
+				group   string
+				version string
+				kind    string
+			}{
+				{name: render.GuardianNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
+				{name: "pull-secret", ns: render.GuardianNamespace, group: "", version: "v1", kind: "Secret"},
+				{name: render.GuardianServiceAccountName, ns: render.GuardianNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+				{name: render.GuardianClusterRoleName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+				{name: render.GuardianClusterRoleBindingName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+				{name: render.GuardianDeploymentName, ns: render.GuardianNamespace, group: "apps", version: "v1", kind: "Deployment"},
+				{name: render.GuardianServiceName, ns: render.GuardianNamespace, group: "", version: "", kind: ""},
+				{name: render.GuardianSecretName, ns: render.GuardianNamespace, group: "", version: "v1", kind: "Secret"},
+				{name: certificatemanagement.TrustedCertConfigMapName, ns: render.GuardianNamespace, group: "", version: "v1", kind: "ConfigMap"},
+				{name: render.ManagerNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
+				{name: render.ManagerServiceAccount, ns: render.ManagerNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+				{name: render.ManagerClusterRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+				{name: render.ManagerClusterRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+				{name: render.ManagerClusterSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
+				{name: render.ManagerUserSettings, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettingsGroup"},
+				{name: render.ManagerClusterSettingsLayerTigera, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
+				{name: render.ManagerClusterSettingsViewDefault, ns: "", group: "projectcalico.org", version: "v3", kind: "UISettings"},
+			}
+			Expect(len(resources)).To(Equal(len(expectedResources)))
+			for i, expectedRes := range expectedResources {
+				rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 			}
 
-			return nil
+			deployment := rtest.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(deployment.Spec.Template.Spec.Containers[0].Image).Should(Equal("my-reg/tigera/guardian:" + components.ComponentGuardian.Version))
+
+			Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+			Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
+			Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+			Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(BeTrue())
+			Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(1001))
+
+			// Check the namespace.
+			ns := rtest.GetResource(resources, "tigera-guardian", "", "", "v1", "Namespace").(*corev1.Namespace)
+			Expect(ns.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("restricted"))
+			Expect(ns.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
+		})
+
+		It("should render controlPlaneTolerations", func() {
+			t := corev1.Toleration{
+				Key:      "foo",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "bar",
+			}
+			renderGuardian(operatorv1.InstallationSpec{
+				ControlPlaneTolerations: []corev1.Toleration{t},
+			})
+			deployment := rtest.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(deployment.Spec.Template.Spec.Tolerations).Should(ContainElements(t, rmeta.TolerateCriticalAddonsOnly, rmeta.TolerateMaster))
+		})
+	})
+
+	Context("GuardianPolicy component", func() {
+		guardianPolicy := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/guardian.json")
+		guardianPolicyForOCP := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/guardian_ocp.json")
+
+		renderGuardianPolicy := func(addr string, openshift bool) {
+			cfg := createGuardianConfig(operatorv1.InstallationSpec{Registry: "my-reg/"}, addr, openshift)
+			g, err := render.GuardianPolicy(cfg)
+			Expect(err).NotTo(HaveOccurred())
+			resources, _ = g.Objects()
 		}
 
-		DescribeTable("should render allow-tigera policy",
-			func(scenario testutils.AllowTigeraScenario) {
-				// Validate policy is rendered when policy flag is set.
-				renderGuardian(operatorv1.InstallationSpec{Registry: "my-reg/"}, true, "127.0.0.1:1234", scenario.Openshift)
-				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
-				expectedPolicy := getExpectedPolicy(policyName, scenario)
-				Expect(policy).To(Equal(expectedPolicy))
+		Context("allow-tigera rendering", func() {
+			policyName := types.NamespacedName{Name: "allow-tigera.guardian-access", Namespace: "tigera-guardian"}
 
-				// Validate policy is not rendered when policy flag is not set.
-				renderGuardian(operatorv1.InstallationSpec{Registry: "my-reg/"}, false, "127.0.0.1:1234", scenario.Openshift)
-				for _, obj := range resources {
-					Expect(obj.GetObjectKind().GroupVersionKind().Kind).ToNot(Equal("NetworkPolicy"))
+			getExpectedPolicy := func(name types.NamespacedName, scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
+				if name.Name == "allow-tigera.guardian-access" && scenario.ManagedCluster {
+					return testutils.SelectPolicyByProvider(scenario, guardianPolicy, guardianPolicyForOCP)
 				}
-			},
-			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
-			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
-		)
 
-		// The test matrix above validates against an IP-based management cluster address.
-		// Validate policy adaptation for domain-based management cluster address here.
-		It("should adapt Guardian policy if ManagementClusterAddr is domain-based", func() {
-			renderGuardian(operatorv1.InstallationSpec{Registry: "my-reg/"}, true, "mydomain.io:8080", false)
-			policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
-			managementClusterEgressRule := policy.Spec.Egress[4]
-			Expect(managementClusterEgressRule.Destination.Domains).To(Equal([]string{"mydomain.io"}))
-			Expect(managementClusterEgressRule.Destination.Ports).To(Equal(networkpolicy.Ports(8080)))
+				return nil
+			}
+
+			DescribeTable("should render allow-tigera policy",
+				func(scenario testutils.AllowTigeraScenario) {
+					renderGuardianPolicy("127.0.0.1:1234", scenario.Openshift)
+					policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+					expectedPolicy := getExpectedPolicy(policyName, scenario)
+					Expect(policy).To(Equal(expectedPolicy))
+				},
+				Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
+				Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
+			)
+
+			// The test matrix above validates against an IP-based management cluster address.
+			// Validate policy adaptation for domain-based management cluster address here.
+			It("should adapt Guardian policy if ManagementClusterAddr is domain-based", func() {
+				renderGuardianPolicy("mydomain.io:8080", false)
+				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+				managementClusterEgressRule := policy.Spec.Egress[4]
+				Expect(managementClusterEgressRule.Destination.Domains).To(Equal([]string{"mydomain.io"}))
+				Expect(managementClusterEgressRule.Destination.Ports).To(Equal(networkpolicy.Ports(8080)))
+			})
 		})
 	})
 })

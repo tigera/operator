@@ -20,6 +20,10 @@ import (
 	"net"
 	"time"
 
+	"github.com/go-logr/logr"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -61,10 +65,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	statusManager := status.New(mgr.GetClient(), "management-cluster-connection", opts.KubernetesVersion)
 
 	// Create the reconciler
-	licenseWatchReady := &utils.ReadyFlag{}
-	policyWatchesReady := &utils.ReadyFlag{}
 	tierWatchReady := &utils.ReadyFlag{}
-	reconciler := newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider, licenseWatchReady, tierWatchReady, policyWatchesReady, opts)
+	reconciler := newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider, tierWatchReady, opts)
 
 	// Create a new controller
 	controller, err := controller.New(controllerName, mgr, controller.Options{Reconciler: reconciler})
@@ -79,10 +81,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Watch for changes to License and Tier, as their status is used as input to determine whether network policy should be reconciled by this controller.
-	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, licenseWatchReady)
+	go utils.WaitToAddLicenseKeyWatch(controller, k8sClient, log, nil)
 	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, controller, k8sClient, log, tierWatchReady)
 
-	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, policyWatchesReady, []types.NamespacedName{
+	go utils.WaitToAddNetworkPolicyWatches(controller, k8sClient, log, []types.NamespacedName{
 		{Name: render.GuardianPolicyName, Namespace: render.GuardianNamespace},
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.GuardianNamespace},
 	})
@@ -96,20 +98,16 @@ func newReconciler(
 	schema *runtime.Scheme,
 	statusMgr status.StatusManager,
 	p operatorv1.Provider,
-	licenseWatchReady *utils.ReadyFlag,
 	tierWatchReady *utils.ReadyFlag,
-	policyWatchesReady *utils.ReadyFlag,
 	opts options.AddOptions,
 ) *ReconcileConnection {
 	c := &ReconcileConnection{
-		Client:             cli,
-		Scheme:             schema,
-		Provider:           p,
-		status:             statusMgr,
-		clusterDomain:      opts.ClusterDomain,
-		licenseWatchReady:  licenseWatchReady,
-		tierWatchReady:     tierWatchReady,
-		policyWatchesReady: policyWatchesReady,
+		Client:         cli,
+		Scheme:         schema,
+		Provider:       p,
+		status:         statusMgr,
+		clusterDomain:  opts.ClusterDomain,
+		tierWatchReady: tierWatchReady,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
@@ -163,14 +161,12 @@ var _ reconcile.Reconciler = &ReconcileConnection{}
 
 // ReconcileConnection reconciles a ManagementClusterConnection object
 type ReconcileConnection struct {
-	Client             client.Client
-	Scheme             *runtime.Scheme
-	Provider           operatorv1.Provider
-	status             status.StatusManager
-	clusterDomain      string
-	licenseWatchReady  *utils.ReadyFlag
-	tierWatchReady     *utils.ReadyFlag
-	policyWatchesReady *utils.ReadyFlag
+	Client         client.Client
+	Scheme         *runtime.Scheme
+	Provider       operatorv1.Provider
+	status         status.StatusManager
+	clusterDomain  string
+	tierWatchReady *utils.ReadyFlag
 }
 
 // Reconcile reads that state of the cluster for a ManagementClusterConnection object and makes changes based on the
@@ -254,33 +250,30 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		trustedCertBundle.AddCertificates(secret)
 	}
 
-	// In managed clusters, successful reconciliation of non-NetworkPolicy resources in the clusterconnection controller
-	// ensures that NetworkPolicy is reconcilable (by enabling* the creation of containing Tier and License). Therefore,
-	// to prevent a chicken-and-egg scenario, we only reconcile NetworkPolicy resources once we can confirm that all
-	// requirements to reconcile NetworkPolicy have been met.
-	//
-	// * In managed clusters, the License can only be pushed once Guardian has been deployed, and (as always) the Tier
-	//   can only be created once the License is available.
-	includeNetworkPolicy := true
-	var egressAccessControlFeatureRequired bool
-	var networkPolicyIsReconcilable bool
-	if clusterAddrHasDomain, err := managementClusterAddrHasDomain(managementClusterConnection); err == nil && clusterAddrHasDomain {
-		egressAccessControlFeatureRequired = true
-		networkPolicyIsReconcilable = utils.IsV3NetworkPolicyReconcilable(ctx, r.Client, networkpolicy.TigeraComponentTierName, common.EgressAccessControlFeature)
-	} else {
-		if err != nil {
-			log.Error(err, fmt.Sprintf(
-				"Failed to parse ManagementClusterAddr. Assuming %s does not require license feature %s",
-				render.GuardianPolicyName,
-				common.EgressAccessControlFeature,
-			))
-		}
-		egressAccessControlFeatureRequired = false
-		networkPolicyIsReconcilable = utils.IsV3NetworkPolicyReconcilable(ctx, r.Client, networkpolicy.TigeraComponentTierName)
+	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
+	if !r.tierWatchReady.IsReady() {
+		r.status.SetDegraded("Waiting for Tier watch to be established", "")
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
-	if networkPolicyIsReconcilable {
-		if egressAccessControlFeatureRequired {
+	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
+	includeV3NetworkPolicy := false
+	if err := r.Client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+		// The creation of the Tier depends on this controller to reconcile it's non-NetworkPolicy resources so that the
+		// License becomes available. Therefore, if we fail to query the Tier, we exclude NetworkPolicy from reconciliation
+		// and tolerate errors arising from the Tier not being created.
+		if !k8serrors.IsNotFound(err) {
+			log.Error(err, "Error querying allow-tigera tier")
+			r.status.SetDegraded("Error querying allow-tigera tier", err.Error())
+			return reconcile.Result{}, err
+		}
+	} else {
+		includeV3NetworkPolicy = true
+
+		// The Tier has been created, which means that this controller's reconciliation should no longer be a dependency
+		// of the License being deployed. If NetworkPolicy requires license features, it should now be safe to validate
+		// License presence and sufficiency.
+		if networkPolicyRequiresEgressAccessControl(managementClusterConnection, log) {
 			license, err := utils.FetchLicenseKey(ctx, r.Client)
 			if err != nil {
 				if k8serrors.IsNotFound(err) {
@@ -296,52 +289,65 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 			}
 		}
-
-		if !r.licenseWatchReady.IsReady() {
-			r.status.SetDegraded("Waiting for LicenseKeyAPI to be ready", "")
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-		}
-
-		if !r.tierWatchReady.IsReady() {
-			r.status.SetDegraded("Waiting for Tier watch to be established", "")
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-		}
-
-		if !r.policyWatchesReady.IsReady() {
-			r.status.SetDegraded("Waiting for NetworkPolicy watches to be established", "")
-			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-		}
-	} else {
-		includeNetworkPolicy = false
 	}
 
 	ch := utils.NewComponentHandler(log, r.Client, r.Scheme, managementClusterConnection)
 	guardianCfg := &render.GuardianConfiguration{
-		URL:                  managementClusterConnection.Spec.ManagementClusterAddr,
-		PullSecrets:          pullSecrets,
-		Openshift:            r.Provider == operatorv1.ProviderOpenShift,
-		Installation:         instl,
-		TunnelSecret:         tunnelSecret,
-		TrustedCertBundle:    trustedCertBundle,
-		IncludeNetworkPolicy: includeNetworkPolicy,
+		URL:               managementClusterConnection.Spec.ManagementClusterAddr,
+		PullSecrets:       pullSecrets,
+		Openshift:         r.Provider == operatorv1.ProviderOpenShift,
+		Installation:      instl,
+		TunnelSecret:      tunnelSecret,
+		TrustedCertBundle: trustedCertBundle,
 	}
-	component := render.Guardian(guardianCfg)
 
-	if err = imageset.ApplyImageSet(ctx, r.Client, variant, component); err != nil {
+	components := []render.Component{render.Guardian(guardianCfg)}
+
+	// v3 NetworkPolicy will fail to reconcile if the Tier is not created, which can only occur once a License is created.
+	// In managed clusters, the clusterconnection controller is a dependency for the License to be created. In case the
+	// License is unavailable and reconciliation of non-NetworkPolicy resources in the clusterconnection controller
+	// would resolve it, we render network policies last to prevent a chicken-and-egg scenario.
+	if includeV3NetworkPolicy {
+		policyComponent, err := render.GuardianPolicy(guardianCfg)
+		if err != nil {
+			log.Error(err, "Failed to create NetworkPolicy component for Guardian, policy will be omitted")
+		} else {
+			components = append(components, policyComponent)
+		}
+	}
+
+	if err = imageset.ApplyImageSet(ctx, r.Client, variant, components...); err != nil {
 		log.Error(err, "Error with images from ImageSet")
 		r.status.SetDegraded("Error with images from ImageSet", err.Error())
 		return reconcile.Result{}, err
 	}
 
-	if err := ch.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
-		r.status.SetDegraded("Error creating / updating resource", err.Error())
-		return result, err
+	for _, component := range components {
+		if err := ch.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+			r.status.SetDegraded("Error creating / updating resource", err.Error())
+			return result, err
+		}
 	}
 
 	r.status.ClearDegraded()
 
 	// We should create the Guardian deployment.
 	return result, nil
+}
+
+func networkPolicyRequiresEgressAccessControl(connection *operatorv1.ManagementClusterConnection, log logr.Logger) bool {
+	if clusterAddrHasDomain, err := managementClusterAddrHasDomain(connection); err == nil && clusterAddrHasDomain {
+		return true
+	} else {
+		if err != nil {
+			log.Error(err, fmt.Sprintf(
+				"Failed to parse ManagementClusterAddr. Assuming %s does not require license feature %s",
+				render.GuardianPolicyName,
+				common.EgressAccessControlFeature,
+			))
+		}
+		return false
+	}
 }
 
 func managementClusterAddrHasDomain(connection *operatorv1.ManagementClusterConnection) (bool, error) {

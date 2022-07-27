@@ -13,7 +13,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 
-	batchv1 "k8s.io/api/batch/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -24,7 +24,7 @@ import (
 const (
 	NameSpaceRuntimeSecurity            = "tigera-runtime-security"
 	ElasticsearchSashaJobUserSecretName = "tigera-ee-sasha-elasticsearch-access"
-	ResourceNameSashaJob                = "tigera-ee-sasha"
+	ResourceNameSashaPod                = "tigera-ee-sasha"
 	ResourceSashaDefaultCPULimit        = "1"
 	ResourceSashaDefaultMemoryLimit     = "1Gi"
 	ResourceSashaDefaultCPURequest      = "100m"
@@ -90,7 +90,7 @@ func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
 	if len(c.config.SashaESSecrets) > 0 {
 		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(NameSpaceRuntimeSecurity, c.config.SashaESSecrets...)...)...)
 		objs = append(objs, c.sashaServiceAccount())
-		objs = append(objs, c.sashaCronJob())
+		objs = append(objs, c.sashaDeployment())
 	}
 
 	return objs, nil
@@ -112,8 +112,7 @@ func (c *component) esClusterName() string {
 	return clusterName
 }
 
-func (c *component) sashaCronJob() *batchv1.CronJob {
-	const schedule = "*/5 * * * *"
+func (c *component) sashaDeployment() *appsv1.Deployment {
 
 	envVars := []corev1.EnvVar{
 		{Name: "PULL_MAX_LAST_MINUTES", Value: "20"},
@@ -125,6 +124,60 @@ func (c *component) sashaCronJob() *batchv1.CronJob {
 		{Name: "SASHA_ALERTLOCATION", Value: "es"},
 	}
 
+	rsSecretOptional := false
+
+	return &appsv1.Deployment{
+		Spec: appsv1.DeploymentSpec{
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      ResourceNameSashaPod,
+					Namespace: NameSpaceRuntimeSecurity,
+					Labels: map[string]string{
+						"k8s-app": ResourceNameSashaPod,
+					},
+				},
+				Spec: corev1.PodSpec{
+					NodeSelector: c.config.Installation.ControlPlaneNodeSelector,
+					Tolerations:  c.config.Installation.ControlPlaneTolerations,
+					Volumes: []corev1.Volume{
+						{
+							Name: "runtime-security-auth-secret",
+							VolumeSource: corev1.VolumeSource{
+								Secret: &corev1.SecretVolumeSource{
+									SecretName: "calico-cloud-client-config",
+									Optional:   &rsSecretOptional,
+								},
+							},
+						},
+					},
+					Containers: []corev1.Container{
+						{
+							Name:  ResourceNameSashaPod,
+							Image: c.config.sashaImage,
+							//Command: []string{"./calico-sasha"},
+							Env: envVars,
+							Resources: corev1.ResourceRequirements{
+								Limits: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse(ResourceSashaDefaultCPULimit),
+									corev1.ResourceMemory: resource.MustParse(ResourceSashaDefaultMemoryLimit),
+								},
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse(ResourceSashaDefaultCPURequest),
+									corev1.ResourceMemory: resource.MustParse(ResourceSashaDefaultMemoryRequest),
+								},
+							},
+						},
+					},
+					ImagePullSecrets:   secret.GetReferenceList(c.config.PullSecrets),
+					RestartPolicy:      corev1.RestartPolicyNever,
+					ServiceAccountName: ResourceNameSashaPod,
+				},
+			},
+		},
+	}
+}
+
+/*
 	return &batchv1.CronJob{
 		TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -150,6 +203,17 @@ func (c *component) sashaCronJob() *batchv1.CronJob {
 						Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
 							NodeSelector: c.config.Installation.ControlPlaneNodeSelector,
 							Tolerations:  c.config.Installation.ControlPlaneTolerations,
+							Volumes: []corev1.Volume{
+								{
+									Name: "runtime-security-auth-secret",
+									VolumeSource: corev1.VolumeSource{
+										Secret: &corev1.SecretVolumeSource{
+											SecretName: "calico-cloud-client-config",
+											Optional:   &rsSecretOptional,
+										},
+									},
+								},
+							},
 							Containers: []corev1.Container{
 								relasticsearch.ContainerDecorate(corev1.Container{
 									Name:  ResourceNameSashaJob,
@@ -169,7 +233,7 @@ func (c *component) sashaCronJob() *batchv1.CronJob {
 									VolumeMounts: []corev1.VolumeMount{
 										{
 											Name:      "runtime-security-auth-secret",
-											MountPath: "/certs/auth-config",
+											MountPath: "/certs/runtime-security-auth-secret",
 											ReadOnly:  true,
 										},
 									},
@@ -189,11 +253,11 @@ func (c *component) sashaCronJob() *batchv1.CronJob {
 			},
 		},
 	}
-}
+*/
 
 func (c *component) sashaServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: rbacv1.ServiceAccountKind, APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: ResourceNameSashaJob, Namespace: NameSpaceRuntimeSecurity},
+		ObjectMeta: metav1.ObjectMeta{Name: ResourceNameSashaPod, Namespace: NameSpaceRuntimeSecurity},
 	}
 }

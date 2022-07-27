@@ -365,7 +365,7 @@ func (c *typhaComponent) typhaDeployment() *appsv1.Deployment {
 	}
 
 	// Allow tolerations to be overwritten by the end-user.
-	tolerations := rmeta.TolerateAll
+	tolerations := rmeta.TolerateBootstrap
 	if len(c.cfg.Installation.ControlPlaneTolerations) != 0 {
 		tolerations = c.cfg.Installation.ControlPlaneTolerations
 	}

@@ -226,48 +226,29 @@ func migrateAPIServerMinReadySeconds(d *appsv1.Deployment, apiServer *operatorv1
 }
 
 func migrateAPIServerTolerations(d *appsv1.Deployment, apiServer *operatorv1.APIServer) error {
-	apiServerTolerations := getTolerations(apiServer.Spec.APIServerDeployment)
-	compTolerations := d.Spec.Template.Spec.Tolerations
+	var apiServerTolerations []corev1.Toleration
+	if apiServer.Spec.APIServerDeployment != nil {
+		apiServerTolerations = apiServer.Spec.APIServerDeployment.GetTolerations()
+	}
+	componentTolerations := d.Spec.Template.Spec.Tolerations
 
-	// A daemonset/deployment treats nil and empty tolerations the same so do that here too.
-	if len(compTolerations) == 0 {
-		// if the component has no tolerations, then the resource must specify empty, non-nil tolerations.
-		if apiServerTolerations == nil || len(apiServerTolerations) > 0 {
-			return ErrIncompatibleTolerations(ComponentAPIServer)
-		}
-	} else {
-		// Check if the component tolerations are exactly the same as the default tolerations.
-		// In this case, the following are ok on the API server
-		// - all the default tolerations.
-		// - nil (i.e., not specifying any custom tolerations)
-		//
-		// If the component tolerations are not the default tolerations, ensure they equal those on the resource.
-
-		// API server container has different tolerations depending on whether
-		// it's hostNetworked or not.
-		defaultAPIServerTolerations := []corev1.Toleration{rmeta.TolerateMaster}
-		if d.Spec.Template.Spec.HostNetwork {
-			defaultAPIServerTolerations = rmeta.TolerateAll
-		}
-
-		if areEqualTolerations(defaultAPIServerTolerations, compTolerations) {
-			if apiServerTolerations != nil && !areEqualTolerations(compTolerations, apiServerTolerations) {
-				return ErrIncompatibleTolerations(ComponentAPIServer)
-			}
-		} else {
-			// if the resource has nil tolerations, copy the component tolerations over.
-			// otherwise compare the tolerations.
-			if apiServerTolerations == nil {
-				helpers.EnsureAPIServerPodSpecNotNil(apiServer)
-				apiServer.Spec.APIServerDeployment.Spec.Template.Spec.Tolerations = compTolerations
-			} else {
-				if !areEqualTolerations(compTolerations, apiServerTolerations) {
-					return ErrIncompatibleTolerations(ComponentAPIServer)
-				}
-			}
-		}
+	// The API server container has different tolerations depending on whether it's hostNetworked or not.
+	defaultAPIServerTolerations := []corev1.Toleration{rmeta.TolerateMaster}
+	if d.Spec.Template.Spec.HostNetwork {
+		defaultAPIServerTolerations = rmeta.TolerateAll
 	}
 
+	migratedTolerations, err := determineMigratedTolerations(ComponentAPIServer, apiServerTolerations, componentTolerations, defaultAPIServerTolerations)
+	if err != nil {
+		return err
+	}
+
+	// If the resulting tolerations to migrate are nil and the APIServer tolerations were nil, do not update the APIServer.
+	// In all other cases, we need to update the APIServer.
+	if migratedTolerations != nil || apiServerTolerations != nil {
+		helpers.EnsureAPIServerPodSpecNotNil(apiServer)
+		apiServer.Spec.APIServerDeployment.Spec.Template.Spec.Tolerations = migratedTolerations
+	}
 	return nil
 }
 

@@ -859,14 +859,18 @@ var _ = Describe("core handler", func() {
 			}
 
 			err := handleCore(&comps, i)
-			if isValid {
-				if expectedInstallTols == nil {
-					Expect(i.Spec.CalicoNodeDaemonSet).To(BeNil())
-				} else {
-					Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Tolerations).To(Equal(expectedInstallTols))
-				}
-			} else {
+			if !isValid {
 				Expect(err).To(HaveOccurred())
+			} else {
+				if len(expectedInstallTols) > 0 {
+					Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Tolerations).To(Equal(expectedInstallTols))
+				} else {
+					if installTols == nil {
+						Expect(i.Spec.CalicoNodeDaemonSet).To(BeNil())
+					} else {
+						Expect(i.Spec.CalicoNodeDaemonSet.Spec.Template.Spec.Tolerations).To(Equal(expectedInstallTols))
+					}
+				}
 			}
 		},
 			// empty component tolerations
@@ -880,7 +884,7 @@ var _ = Describe("core handler", func() {
 			Entry("error if component has nil tolerations and install has tolerations", nil, []corev1.Toleration{t1}, nil, false),
 			// all default component tolerations
 			Entry("ok if component has all the default tolerations and install has nil tolerations", tolerateAll, nil, nil, true),
-			Entry("ok if component has all the default tolerations and install has the same tolerations", tolerateAll, tolerateAll, tolerateAll, true),
+			Entry("ok if component has all the default tolerations and install has the same tolerations", tolerateAll, tolerateAll, nil, true),
 			Entry("error if component has all default tolerations and install has empty tolerations", tolerateAll, empty, nil, false),
 			// component tolerations
 			Entry("ok if component has tolerations and install has nil tolerations", []corev1.Toleration{t1}, nil, []corev1.Toleration{t1}, true),
@@ -899,14 +903,18 @@ var _ = Describe("core handler", func() {
 			}
 
 			err := handleCore(&comps, i)
-			if isValid {
-				if expectedInstallTols == nil {
-					Expect(i.Spec.TyphaDeployment).To(BeNil())
-				} else {
-					Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.Tolerations).To(Equal(expectedInstallTols))
-				}
-			} else {
+			if !isValid {
 				Expect(err).To(HaveOccurred())
+			} else {
+				if len(expectedInstallTols) > 0 {
+					Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.Tolerations).To(Equal(expectedInstallTols))
+				} else {
+					if installTols == nil {
+						Expect(i.Spec.TyphaDeployment).To(BeNil())
+					} else {
+						Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.Tolerations).To(Equal(expectedInstallTols))
+					}
+				}
 			}
 		},
 			// empty component tolerations
@@ -920,7 +928,7 @@ var _ = Describe("core handler", func() {
 			Entry("error if component has nil tolerations and install has tolerations", nil, []corev1.Toleration{t1}, nil, false),
 			// all default component tolerations
 			Entry("ok if component has all the default tolerations and install has nil tolerations", tolerateAll, nil, nil, true),
-			Entry("ok if component has all the default tolerations and install has the same tolerations", tolerateAll, tolerateAll, tolerateAll, true),
+			Entry("ok if component has all the default tolerations and install has the same tolerations", tolerateAll, tolerateAll, nil, true),
 			Entry("error if component has all default tolerations and install has empty tolerations", tolerateAll, empty, nil, false),
 			// component tolerations
 			Entry("ok if component has tolerations and install has nil tolerations", []corev1.Toleration{t1}, nil, []corev1.Toleration{t1}, true),
@@ -938,14 +946,18 @@ var _ = Describe("core handler", func() {
 			}
 
 			err := handleCore(&comps, i)
-			if isValid {
-				if expectedInstallTols == nil {
-					Expect(i.Spec.CalicoKubeControllersDeployment).To(BeNil())
-				} else {
-					Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Tolerations).To(Equal(expectedInstallTols))
-				}
-			} else {
+			if !isValid {
 				Expect(err).To(HaveOccurred())
+			} else {
+				if len(expectedInstallTols) > 0 {
+					Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Tolerations).To(Equal(expectedInstallTols))
+				} else {
+					if installTols == nil {
+						Expect(i.Spec.CalicoKubeControllersDeployment).To(BeNil())
+					} else {
+						Expect(i.Spec.CalicoKubeControllersDeployment.Spec.Template.Spec.Tolerations).To(Equal(expectedInstallTols))
+					}
+				}
 			}
 		},
 			// empty component tolerations
@@ -959,7 +971,7 @@ var _ = Describe("core handler", func() {
 			Entry("error if component has nil tolerations and install has tolerations", nil, []corev1.Toleration{t1}, nil, false),
 			// all default component tolerations - kubecontrollers has different default tolerations
 			Entry("ok if component has all the default tolerations and install has nil tolerations", kubeControllersTolerations, nil, nil, true),
-			Entry("ok if component has all the default tolerations and install has the same tolerations", kubeControllersTolerations, kubeControllersTolerations, kubeControllersTolerations, true),
+			Entry("ok if component has all the default tolerations and install has the same tolerations", kubeControllersTolerations, kubeControllersTolerations, nil, true),
 			Entry("error if component has all default tolerations and install has empty tolerations", kubeControllersTolerations, empty, nil, false),
 			// component tolerations
 			Entry("ok if component has tolerations and install has nil tolerations", []corev1.Toleration{t1}, nil, []corev1.Toleration{t1}, true),
@@ -968,7 +980,6 @@ var _ = Describe("core handler", func() {
 			Entry("ok if component has tolerations and install has same tolerations", []corev1.Toleration{t1}, []corev1.Toleration{t1}, []corev1.Toleration{t1}, true),
 			Entry("ok if component has some default and custom tolerations and install has the same tolerations", append(tolerateAll, t1), append(tolerateAll, t1), append(tolerateAll, t1), true),
 		)
-
 	})
 
 	Context("node update strategy", func() {

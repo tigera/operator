@@ -15,6 +15,8 @@
 package dpi
 
 import (
+	"fmt"
+
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -217,6 +219,7 @@ func (d *dpiComponent) dpiEnvVars() []corev1.EnvVar {
 		{Name: "DPI_TYPHACAFILE", Value: d.cfg.TyphaNodeTLS.TrustedBundle.MountPath()},
 		{Name: "DPI_TYPHACERTFILE", Value: d.cfg.TyphaNodeTLS.NodeSecret.VolumeMountCertificateFilePath()},
 		{Name: "DPI_TYPHAKEYFILE", Value: d.cfg.TyphaNodeTLS.NodeSecret.VolumeMountKeyFilePath()},
+		{Name: "DPI_FIPSMODEENABLED", Value: fmt.Sprintf("%v", d.cfg.Installation.FIPSMode == operatorv1.FIPSModeEnabled)},
 	}
 	// We need at least the CN or URISAN set, we depend on the validation
 	// done by the core_controller that the Secret will have one.

@@ -288,6 +288,62 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(len(d.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(1))
 	})
 
+	Describe("public ca bundle", func() {
+		var (
+			cfg *render.ManagerConfiguration
+		)
+		BeforeEach(func() {
+			scheme := runtime.NewScheme()
+			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+			cli := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+			certificateManager, err := certificatemanager.Create(cli, installation, clusterDomain)
+			Expect(err).NotTo(HaveOccurred())
+
+			tunnelSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.VoltronTunnelSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
+			Expect(err).NotTo(HaveOccurred())
+			internalTraffic, err := certificateManager.GetOrCreateKeyPair(cli, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
+			Expect(err).NotTo(HaveOccurred())
+			managerTLS, err := certificateManager.GetOrCreateKeyPair(cli, render.ManagerTLSSecretName, common.OperatorNamespace(), []string{""})
+			Expect(err).NotTo(HaveOccurred())
+
+			cfg = &render.ManagerConfiguration{
+				TrustedCertBundle:     certificatemanagement.CreateTrustedBundle(certificateManager.KeyPair()),
+				TLSKeyPair:            managerTLS,
+				ManagementCluster:     &operatorv1.ManagementCluster{},
+				TunnelSecret:          tunnelSecret,
+				InternalTrafficSecret: internalTraffic,
+				Installation:          installation,
+				ESClusterConfig:       &relasticsearch.ClusterConfig{},
+			}
+		})
+
+		It("should render when disabled", func() {
+			resources, err := render.Manager(cfg)
+			Expect(err).ToNot(HaveOccurred())
+			rs, _ := resources.Objects()
+
+			managerDeployment := rtest.GetResource(rs, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			voltronContainer := rtest.GetContainer(managerDeployment.Spec.Template.Spec.Containers, "tigera-voltron")
+
+			rtest.ExpectEnv(voltronContainer.Env, "VOLTRON_USE_HTTPS_CERT_ON_TUNNEL", "false")
+		})
+
+		It("should render when enabled", func() {
+			cfg.ManagementCluster.Spec.TLS.SecretName = render.ManagerTLSSecretName
+
+			resources, err := render.Manager(cfg)
+			Expect(err).ToNot(HaveOccurred())
+			rs, _ := resources.Objects()
+
+			managerDeployment := rtest.GetResource(rs, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			voltronContainer := rtest.GetContainer(managerDeployment.Spec.Template.Spec.Containers, "tigera-voltron")
+
+			rtest.ExpectEnv(voltronContainer.Env, "VOLTRON_USE_HTTPS_CERT_ON_TUNNEL", "true")
+		})
+
+	})
+
 	It("should render multicluster settings properly", func() {
 		resources := renderObjects(renderConfig{oidc: false, managementCluster: &operatorv1.ManagementCluster{}, installation: installation})
 

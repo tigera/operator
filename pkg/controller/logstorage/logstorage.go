@@ -100,14 +100,16 @@ func (r *ReconcileLogStorage) createLogStorage(
 			r.status.SetDegraded("Failed to create Elasticsearch secrets", err.Error())
 			return reconcile.Result{}, false, finalizerCleanup, err
 		}
-
-		kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
-		if kibanaKeyPair, err = certificateManager.GetOrCreateKeyPair(r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames); err != nil {
-			reqLogger.Error(err, err.Error())
-			r.status.SetDegraded("Failed to create Kibana secrets", err.Error())
-			return reconcile.Result{}, false, finalizerCleanup, err
+		trustedBundle = certificateManager.CreateTrustedBundle(elasticKeyPair)
+		if install.FIPSMode == operatorv1.FIPSModeDisabled {
+			kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
+			if kibanaKeyPair, err = certificateManager.GetOrCreateKeyPair(r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames); err != nil {
+				reqLogger.Error(err, err.Error())
+				r.status.SetDegraded("Failed to create Kibana secrets", err.Error())
+				return reconcile.Result{}, false, finalizerCleanup, err
+			}
+			trustedBundle.AddCertificates(kibanaKeyPair)
 		}
-		trustedBundle = certificateManager.CreateTrustedBundle(elasticKeyPair, kibanaKeyPair)
 	}
 
 	elasticsearch, err := r.getElasticsearch(ctx)
@@ -117,11 +119,14 @@ func (r *ReconcileLogStorage) createLogStorage(
 		return reconcile.Result{}, false, finalizerCleanup, err
 	}
 
-	kibana, err := r.getKibana(ctx)
-	if err != nil {
-		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("An error occurred trying to retrieve Kibana", err.Error())
-		return reconcile.Result{}, false, finalizerCleanup, err
+	var kibana *kbv1.Kibana
+	if install.FIPSMode == operatorv1.FIPSModeDisabled {
+		kibana, err = r.getKibana(ctx)
+		if err != nil {
+			reqLogger.Error(err, err.Error())
+			r.status.SetDegraded("An error occurred trying to retrieve Kibana", err.Error())
+			return reconcile.Result{}, false, finalizerCleanup, err
+		}
 	}
 
 	// If Authentication spec present, we use it to configure dex as an authentication proxy.

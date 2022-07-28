@@ -64,6 +64,7 @@ const (
 	ECKOperatorNamespace    = "tigera-eck-operator"
 	ECKLicenseConfigMapName = "elastic-licensing"
 	ECKOperatorPolicyName   = networkpolicy.TigeraComponentPolicyPrefix + "elastic-operator-access"
+	ECKEnterpriseTrial      = "eck-trial-license"
 
 	ElasticsearchNamespace = "tigera-elasticsearch"
 
@@ -409,7 +410,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 			unusedSecret.Data = es.cfg.UnusedTLSSecret.Data
 			toCreate = append(toCreate, unusedSecret)
 		}
-		if es.cfg.KibanaKeyPair.UseCertificateManagement() {
+		if es.cfg.KibanaKeyPair != nil && es.cfg.KibanaKeyPair.UseCertificateManagement() {
 			// We need to render a secret. It won't ever be used by Kibana for TLS, but is needed to pass ECK's checks.
 			// If the secret changes / gets reconciled, it will not trigger a re-render of Kibana.
 			unusedSecret := es.cfg.KibanaKeyPair.Secret(KibanaNamespace)

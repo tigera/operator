@@ -15,6 +15,7 @@
 package kubecontrollers
 
 import (
+	"fmt"
 	"strings"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"

@@ -308,15 +308,22 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		if es.cfg.Provider != operatorv1.ProviderOpenShift {
 			toCreate = append(toCreate,
 				es.elasticsearchClusterRoleBinding(),
-				es.elasticsearchClusterRole(),
-				es.kibanaClusterRoleBinding(),
-				es.kibanaClusterRole())
+				es.elasticsearchClusterRole())
 
 			if es.cfg.UsePSP {
 				toCreate = append(toCreate,
 					es.eckOperatorPodSecurityPolicy(),
-					es.elasticsearchPodSecurityPolicy(),
+					es.elasticsearchPodSecurityPolicy())
+			}
+
+			if es.cfg.Installation.FIPSMode != operatorv1.FIPSModeEnabled {
+				toCreate = append(toCreate,
+					es.kibanaClusterRoleBinding(),
+					es.kibanaClusterRole(),
 					es.kibanaPodSecurityPolicy())
+				toDelete = append(toDelete, es.elasticEnterpriseTrial())
+			} else {
+				toCreate = append(toCreate, es.elasticEnterpriseTrial())
 			}
 		}
 
@@ -341,45 +348,51 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 		toCreate = append(toCreate, es.elasticsearchCluster())
 
-		// Kibana CRs
-		// In order to use restricted, we need to change:
-		// - securityContext.allowPrivilegeEscalation=false)
-		// - securityContext.capabilities.drop=["ALL"]
-		// - securityContext.runAsNonRoot=true
-		// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
-		toCreate = append(toCreate, CreateNamespace(KibanaNamespace, es.cfg.Installation.KubernetesProvider, PSSBaseline))
-		toCreate = append(toCreate, es.kibanaAllowTigeraPolicy())
-		toCreate = append(toCreate, networkpolicy.AllowTigeraDefaultDeny(KibanaNamespace))
-		toCreate = append(toCreate, es.kibanaServiceAccount())
 
-		if len(es.cfg.PullSecrets) > 0 {
-			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(KibanaNamespace, es.cfg.PullSecrets...)...)...)
-		}
+		if es.cfg.Installation.FIPSMode != operatorv1.FIPSModeEnabled {
+			// Kibana CRs
+			// In order to use restricted, we need to change:
+			// - securityContext.allowPrivilegeEscalation=false)
+			// - securityContext.capabilities.drop=["ALL"]
+			// - securityContext.runAsNonRoot=true
+			// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
+			toCreate = append(toCreate, CreateNamespace(KibanaNamespace, es.cfg.Installation.KubernetesProvider, PSSBaseline))
+			toCreate = append(toCreate, es.kibanaAllowTigeraPolicy())
+			toCreate = append(toCreate, networkpolicy.AllowTigeraDefaultDeny(KibanaNamespace))
+			toCreate = append(toCreate, es.kibanaServiceAccount())
 
-		if len(es.kibanaSecrets) > 0 {
-			toCreate = append(toCreate, secret.ToRuntimeObjects(es.kibanaSecrets...)...)
-		}
-
-		toCreate = append(toCreate, es.kibanaCR())
-
-		// Curator CRs
-		// If we have the curator secrets then create curator
-		if len(es.cfg.CuratorSecrets) > 0 {
-			toCreate = append(toCreate, es.esCuratorAllowTigeraPolicy())
-			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.cfg.CuratorSecrets...)...)...)
-			toCreate = append(toCreate, es.esCuratorServiceAccount())
-
-			// If the provider is not OpenShift apply the pod security policy for the curator.
-			if es.cfg.Provider != operatorv1.ProviderOpenShift {
-				toCreate = append(toCreate,
-					es.curatorClusterRole(),
-					es.curatorClusterRoleBinding())
-				if es.cfg.UsePSP {
-					toCreate = append(toCreate, es.curatorPodSecurityPolicy())
-				}
+			if len(es.cfg.PullSecrets) > 0 {
+				toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(KibanaNamespace, es.cfg.PullSecrets...)...)...)
 			}
 
-			toCreate = append(toCreate, es.curatorCronJob())
+			if len(es.kibanaSecrets) > 0 {
+				toCreate = append(toCreate, secret.ToRuntimeObjects(es.kibanaSecrets...)...)
+			}
+
+			toCreate = append(toCreate, es.kibanaCR())
+
+			// Curator CRs
+			// If we have the curator secrets then create curator
+			if len(es.cfg.CuratorSecrets) > 0 {
+				toCreate = append(toCreate, es.esCuratorAllowTigeraPolicy())
+				toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.cfg.CuratorSecrets...)...)...)
+				toCreate = append(toCreate, es.esCuratorServiceAccount())
+
+				// If the provider is not OpenShift apply the pod security policy for the curator.
+				if es.cfg.Provider != operatorv1.ProviderOpenShift {
+					toCreate = append(toCreate,
+						es.curatorClusterRole(),
+						es.curatorClusterRoleBinding())
+					if es.cfg.UsePSP {
+						toCreate = append(toCreate, es.curatorPodSecurityPolicy())
+					}
+				}
+
+				toCreate = append(toCreate, es.curatorCronJob())
+			}
+		} else {
+			toDelete = append(toDelete, es.kibanaCR())
+			toDelete = append(toDelete, es.curatorCronJob())
 		}
 
 		toCreate = append(toCreate, es.oidcUserRole())

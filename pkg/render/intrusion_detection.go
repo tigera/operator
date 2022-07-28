@@ -580,6 +580,10 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 			Name:  "MULTI_CLUSTER_FORWARDING_CA",
 			Value: c.cfg.TrustedCertBundle.MountPath(),
 		},
+		{
+			Name:  "FIPS_MODE_ENABLED",
+			Value: fmt.Sprintf("%v", c.cfg.Installation.FIPSMode == operatorv1.FIPSModeEnabled),
+		},
 	}
 
 	sc := securitycontext.NewBaseContext(securitycontext.RunAsUserID, securitycontext.RunAsGroupID)
@@ -1355,6 +1359,7 @@ func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 								{Name: "STORAGE_PATH", Value: adAPIStorageVolumePath},
 								{Name: "TLS_KEY", Value: c.cfg.ADAPIServerCertSecret.VolumeMountKeyFilePath()},
 								{Name: "TLS_CERT", Value: c.cfg.ADAPIServerCertSecret.VolumeMountCertificateFilePath()},
+								{Name: "FIPS_MODE_ENABLED", Value: fmt.Sprintf("%v", c.cfg.Installation.FIPSMode == operatorv1.FIPSModeEnabled)},
 							},
 							LivenessProbe: &corev1.Probe{
 								Handler: corev1.Handler{

@@ -253,6 +253,15 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
+	// validate AnomalyDetection Specs first before appending setting default values to give error feedback
+	// if ADSpec is misconfigured
+	if err = validateConfiguredAnomalyDetectionSpec(instance.Spec.AnomalyDetection); err != nil {
+		errMessage := "Invalid Anomaly Detection Specs provided"
+		log.Error(err, errMessage)
+		r.status.SetDegraded(errMessage, err.Error())
+		return reconcile.Result{}, err
+	}
+
 	if err := r.fillDefaults(ctx, instance); err != nil {
 		log.Error(err, "Failed to set defaults on IntrusionDetection CR")
 		r.status.SetDegraded("Unable to set defaults on IntrusionDetection", err.Error())
@@ -321,7 +330,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	if instance.Spec.AnomalyDetection.StorageType == operatorv1.PersistentStorageType {
 		// validate to degrade early if the storage class name is not valid
 		if err = utils.ValidateResourceNameIsQualified(instance.Spec.AnomalyDetection.StorageClassName); err != nil {
-			errMessage := "Invalid AD Storage Class name provided"
+			errMessage := "Invalid Anomaly Detection Storage Class name provided"
 			log.Error(err, errMessage)
 			r.status.SetDegraded(errMessage, err.Error())
 			return reconcile.Result{}, err
@@ -596,7 +605,7 @@ func (r *ReconcileIntrusionDetection) fillDefaults(ctx context.Context, ids *ope
 
 	}
 
-	if len(ids.Spec.AnomalyDetection.StorageType) == 0 {
+	if ids.Spec.AnomalyDetection == (operatorv1.AnomalyDetectionSpec{}) {
 		ids.Spec.AnomalyDetection = operatorv1.AnomalyDetectionSpec{
 			StorageType: operatorv1.EphemeralStorageType,
 		}
@@ -608,6 +617,15 @@ func (r *ReconcileIntrusionDetection) fillDefaults(ctx context.Context, ids *ope
 
 	if err := r.client.Update(ctx, ids); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func validateConfiguredAnomalyDetectionSpec(adSpec operatorv1.AnomalyDetectionSpec) error {
+
+	if (len(adSpec.StorageType) == 0 || adSpec.StorageType == operatorv1.EphemeralStorageType) && len(adSpec.StorageClassName) > 0 {
+		return fmt.Errorf("unable to set StorageClassName with StorageType as Ephemeral")
 	}
 
 	return nil

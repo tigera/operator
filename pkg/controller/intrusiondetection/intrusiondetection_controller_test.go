@@ -86,7 +86,8 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ClearDegraded")
 		mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
-		mockStatus.On("SetDegraded", "Invalid AD Storage Class name provided", mock.AnythingOfType("string")).Return().Maybe()
+		mockStatus.On("SetDegraded", "Invalid Anomaly Detection Storage Class name provided", mock.AnythingOfType("string")).Return().Maybe()
+		mockStatus.On("SetDegraded", "Invalid Anomaly Detection Specs provided", mock.AnythingOfType("string")).Return().Maybe()
 		mockStatus.On("SetDegraded", "Failed to get storage class for anomaly detection", mock.AnythingOfType("string")).Return().Maybe()
 		mockStatus.On("ReadyToMonitor")
 
@@ -435,6 +436,24 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 					AnomalyDetection: operatorv1.AnomalyDetectionSpec{
 						StorageType:      operatorv1.PersistentStorageType,
 						StorageClassName: malFormedStorageName,
+					},
+				},
+			})).ShouldNot(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).Should(HaveOccurred())
+			Expect(mockStatus.AssertNumberOfCalls(nil, "SetDegraded", 1)).To(BeTrue())
+		})
+
+		It("should degrade if ADSpec,StorageClassName is provided when type is Ephemeral", func() {
+			Expect(c.Delete(ctx, &operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
+
+			Expect(c.Create(ctx, &operatorv1.IntrusionDetection{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.IntrusionDetectionSpec{
+					AnomalyDetection: operatorv1.AnomalyDetectionSpec{
+						StorageType:      operatorv1.EphemeralStorageType,
+						StorageClassName: render.DefaultADStorageClassName,
 					},
 				},
 			})).ShouldNot(HaveOccurred())

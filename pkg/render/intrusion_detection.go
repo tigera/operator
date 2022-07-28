@@ -115,7 +115,8 @@ type IntrusionDetectionConfiguration struct {
 	ManagedCluster     bool
 
 	// PVC fields Spec fields are immutable, set to true when and existing AD PVC
-	// is not found as to avoind
+	// is not found as to avoid update failures.
+	// TODO replace with mergeState in /pkg/controller/utils/component.go
 	ShouldRenderADPVC     bool
 	HasNoLicense          bool
 	TrustedCertBundle     certificatemanagement.TrustedBundle

@@ -229,6 +229,9 @@ func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
+	//todo: revert
+	es.esOperatorImage = "gcr.io/tigera-dev/rd/tigera/eck-operator:rene-fips"
+
 	es.kibanaImage, err = components.GetReference(components.ComponentKibana, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
@@ -933,6 +936,11 @@ func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVo
 	if es.cfg.Installation.CertificateManagement != nil {
 		config["xpack.security.http.ssl.certificate_authorities"] = []string{"/usr/share/elasticsearch/config/http-certs/ca.crt"}
 	}
+	if es.cfg.Installation.FIPSMode == operatorv1.FIPSModeEnabled {
+		config["xpack.security.fips_mode.enabled"] = "true"
+		config["xpack.security.authc.password_hashing.algorithm"] = "pbkdf2_10000"
+
+	}
 
 	return esv1.NodeSet{
 		// This is configuration that ends up in /usr/share/elasticsearch/config/elasticsearch.yml on the Elastic container.
@@ -1494,6 +1502,22 @@ func (es elasticsearchComponent) curatorPodSecurityPolicy() *policyv1beta1.PodSe
 	psp := podsecuritypolicy.NewBasePolicy()
 	psp.GetObjectMeta().SetName(EsCuratorName)
 	return psp
+}
+
+// Applying this in the eck namespace will start a trial license for enterprise features.
+func (es elasticsearchComponent) elasticEnterpriseTrial() *corev1.Secret {
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ECKEnterpriseTrial,
+			Namespace: ECKOperatorNamespace,
+			Labels: map[string]string{
+				"license.k8s.elastic.co/type": "enterprise-trial",
+			},
+			Annotations: map[string]string{
+				"elastic.co/eula": "accepted",
+			},
+		},
+	}
 }
 
 func (es elasticsearchComponent) elasticsearchClusterRole() *rbacv1.ClusterRole {

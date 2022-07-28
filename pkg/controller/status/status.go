@@ -182,7 +182,7 @@ func (m *statusManager) updateStatus() {
 		}
 
 		if m.IsDegraded() {
-			m.setDegraded(m.degradedReason(), m.degradedMessage())
+			m.setDegraded(string(operator.PodFailure), fmt.Sprintf("%s - %s", m.degradedReason(), m.degradedMessage()))
 		} else {
 			if available {
 				m.clearDegradedWithReason(operator.AllObjectsAvailable, "All Objects Available")

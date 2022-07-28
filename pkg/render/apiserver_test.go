@@ -804,7 +804,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	It("should render an API server with signed ca bundles enabled", func() {
 		cfg.ManagementCluster = managementCluster
 		cfg.TunnelCASecret = tunnelKeyPair
-		cfg.ManagementCluster.Spec.TLS.CA = operatorv1.CATypePublic
+		cfg.ManagementCluster.Spec.TLS.SecretName = render.ManagerTLSSecretName
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 

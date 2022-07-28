@@ -48,26 +48,7 @@ type TLS struct {
 	// +optional
 	// Default: tigera-management-cluster-connection
 	SecretName string `json:"secretName,omitempty"`
-
-	// ca indicates how the tls.secretName cert which Voltron is using was signed.
-	// This information is used by the Tigera API Server when generating ManagementClusterConnection resources as it does in response to the creation of a ManagedCluster resource.
-	// See information on ManagementClusterConnectionTLS for more information on the effects of its values.
-	//
-	// Currently, 'Public' is only supported with a tls.secretName of manager-tls, and Tigera is only supported with a tls.secretName of tigera-management-cluster-connection.
-	//
-	// Note that using a self-signed bundle in tls.secretName=manager-tls while setting tls.ca=Public will result in tunnel clients being unable to verify the tunnel server's identity. If using tls.ca=Public with tls.secretName=manager-tls, a publicly signed cert bundle must be uploaded as manager-tls, as otherwise the operator will generate a self-signed one resulting in tunnel clients being unable to verify voltron's identity.
-	//
-	// +optional
-	// Default: SelfSigned
-	CA CAType `json:"ca,omitempty"`
 }
-
-type CAType string
-
-const (
-	CATypeTigera CAType = "Tigera"
-	CATypePublic CAType = "Public"
-)
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status

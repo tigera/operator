@@ -304,16 +304,10 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			}
 
 			// verify tls configurations are valid
-			if managementCluster.Spec.TLS.CA == operatorv1.CATypePublic &&
-				managementCluster.Spec.TLS.SecretName != render.ManagerTLSSecretName {
-				err = fmt.Errorf("")
-				log.Error(err, "")
-				r.status.SetDegraded("", err.Error())
-				return reconcile.Result{}, err
-			}
-			if (managementCluster.Spec.TLS.CA == operatorv1.CATypeTigera || managementCluster.Spec.TLS.CA == "") &&
-				(managementCluster.Spec.TLS.SecretName != render.VoltronTunnelSecretName && managementCluster.Spec.TLS.SecretName != "") {
-				err = fmt.Errorf("")
+			if managementCluster.Spec.TLS.SecretName != "" &&
+				managementCluster.Spec.TLS.SecretName != render.ManagerTLSSecretName &&
+				managementCluster.Spec.TLS.SecretName != render.VoltronTunnelSecretName {
+				err = fmt.Errorf("managementcluster spec.tls.secretName must be 'tigera-management-cluster-connection' or 'manager-tls'")
 				log.Error(err, "")
 				r.status.SetDegraded("", err.Error())
 				return reconcile.Result{}, err

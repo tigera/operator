@@ -43,6 +43,13 @@ type ManagementClusterTLS struct {
 	CA CAType `json:"ca,omitempty"`
 }
 
+type CAType string
+
+const (
+	CATypeTigera CAType = "Tigera"
+	CATypePublic CAType = "Public"
+)
+
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster

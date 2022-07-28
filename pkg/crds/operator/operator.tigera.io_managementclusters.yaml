@@ -48,23 +48,6 @@ spec:
                 description: TLS provides options for configuring how Managed Clusters
                   can establish an mTLS connection with the Management Cluster.
                 properties:
-                  ca:
-                    description: "ca indicates how the tls.secretName cert which Voltron
-                      is using was signed. This information is used by the Tigera
-                      API Server when generating ManagementClusterConnection resources
-                      as it does in response to the creation of a ManagedCluster resource.
-                      See information on ManagementClusterConnectionTLS for more information
-                      on the effects of its values. \n Currently, 'Public' is only
-                      supported with a tls.secretName of manager-tls, and Tigera is
-                      only supported with a tls.secretName of tigera-management-cluster-connection.
-                      \n Note that using a self-signed bundle in tls.secretName=manager-tls
-                      while setting tls.ca=Public will result in tunnel clients being
-                      unable to verify the tunnel server's identity. If using tls.ca=Public
-                      with tls.secretName=manager-tls, a publicly signed cert bundle
-                      must be uploaded as manager-tls, as otherwise the operator will
-                      generate a self-signed one resulting in tunnel clients being
-                      unable to verify voltron's identity. \n Default: SelfSigned"
-                    type: string
                   secretName:
                     description: "secretName indicates the name of the secret in the
                       tigera-operator namespace that contains a certificate bundle

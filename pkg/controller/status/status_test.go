@@ -236,15 +236,15 @@ var _ = Describe("Status reporting tests", func() {
 		})
 
 		It("should generate correct degraded reasons", func() {
-			Expect(sm.degradedReason()).To(Equal(""))
+			Expect(sm.degradedReason()).To(Equal("Unknown"))
 			sm.failing = []string{"This pod has died"}
 			Expect(sm.degradedReason()).To(Equal("Some pods are failing"))
 			sm.explicitDegradedReason = "Controller set us degraded"
-			Expect(sm.degradedReason()).To(Equal("Controller set us degraded; Some pods are failing"))
+			Expect(sm.degradedReason()).To(Equal("Controller set us degraded : Some pods are failing"))
 		})
 
 		It("should generate correct degraded messages", func() {
-			Expect(sm.degradedReason()).To(Equal(""))
+			Expect(sm.degradedReason()).To(Equal("Unknown"))
 			sm.failing = []string{"This pod has died"}
 			Expect(sm.degradedMessage()).To(Equal("This pod has died"))
 			sm.explicitDegradedMsg = "Controller set us degraded"
@@ -483,6 +483,19 @@ var _ = Describe("Status reporting tests", func() {
 				sm.SetWindowsUpgradeStatus([]string{}, []string{}, []string{"n1", "n2", "n3"}, nil)
 				Expect(sm.windowsNodeUpgrades.progressingReason()).To(Equal(""))
 			})
+
+			unknown := "Unknown"
+			random := "a"
+			random2 := "b"
+			DescribeTable("should remove reason Unknown from reasons",
+				func(reasons []string, expectedString string) {
+					Expect(formatReasons(reasons)).To(Equal(expectedString))
+				},
+				Entry("Just Unknown", []string{unknown}, unknown),
+				Entry("Just Unknown", []string{unknown, unknown}, unknown),
+				Entry("Just Unknown", []string{unknown, random, unknown}, random),
+				Entry("Just Unknown", []string{unknown, random, random2}, "a : b"),
+				Entry("Just Unknown", []string{unknown, random, random2, unknown}, "a : b"))
 		})
 	})
 })

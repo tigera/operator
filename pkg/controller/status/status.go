@@ -845,7 +845,27 @@ func (m *statusManager) degradedReason() string {
 	if len(m.failing) != 0 {
 		reasons = append(reasons, "Some pods are failing")
 	}
-	return strings.Join(reasons, "; ")
+
+	return formatReasons(reasons)
+}
+
+func formatReasons(reasonsArr []string) string {
+	const delim = " : "
+	const unknown = string(operator.Unknown)
+	m := map[string]bool{
+		unknown: true,
+	}
+	var reasons []string
+	for _, reason := range reasonsArr {
+		if !m[reason] {
+			reasons = append(reasons, reason)
+		}
+	}
+
+	if len(reasons) == 0 {
+		return unknown
+	}
+	return strings.Join(reasons, delim)
 }
 
 func (m *statusManager) clearDegradedWithReason(reason operator.TigeraStatusReason, msg string) {

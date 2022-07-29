@@ -982,7 +982,7 @@ func (c *apiServerComponent) startUpArgs() []string {
 		if c.cfg.ManagementCluster.Spec.Address != "" {
 			args = append(args, fmt.Sprintf("--managementClusterAddr=%s", c.cfg.ManagementCluster.Spec.Address))
 		}
-		if c.cfg.ManagementCluster.Spec.TLS.SecretName == ManagerInternalTLSSecretName {
+		if c.cfg.ManagementCluster.Spec.TLS.SecretName == ManagerTLSSecretName {
 			args = append(args, "--managementClusterCAType=Public")
 		}
 	}

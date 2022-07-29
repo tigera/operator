@@ -3036,7 +3036,7 @@ var _ = Describe("Node rendering tests", func() {
 		rtest.ExpectEnv(deploy.Spec.Template.Spec.Containers[0].Env, "CALICO_EARLY_NETWORKING", render.BGPLayoutPath)
 	})
 
-	It("should render the correct env and/or images when FIPS mode is enabled", func() {
+	It("should render the correct env and/or images when FIPS mode is enabled (EE)", func() {
 		cfg.Installation.FIPSMode = operatorv1.FIPSModeEnabled
 		cfg.Installation.Variant = operatorv1.TigeraSecureEnterprise
 		cfg.Installation.NodeMetricsPort = ptr.Int32ToPtr(123)
@@ -3054,6 +3054,29 @@ var _ = Describe("Node rendering tests", func() {
 		Expect(nodeDS.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-node"))
 		Expect(nodeDS.Spec.Template.Spec.Containers[0].Env).To(ContainElements(
 			corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERFIPSMODEENABLED", Value: "true"},
+			corev1.EnvVar{Name: "FELIX_PROMETHEUSMETRICSFIPSMODEENABLED", Value: "true"}))
+
+		Expect(nodeDS.Spec.Template.Spec.InitContainers[1].Name).To(Equal("install-cni"))
+		Expect(nodeDS.Spec.Template.Spec.InitContainers[1].Image).To(ContainSubstring("-fips"))
+	})
+
+	It("should render the correct env and/or images when FIPS mode is enabled (OSS)", func() {
+		cfg.Installation.FIPSMode = operatorv1.FIPSModeEnabled
+		cfg.Installation.Variant = operatorv1.Calico
+		cfg.Installation.NodeMetricsPort = ptr.Int32ToPtr(123)
+		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+		cfg.PrometheusServerTLS = certificateManager.KeyPair()
+		component := render.Node(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+		nodeDSObj := rtest.GetResource(resources, common.NodeDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet")
+		Expect(nodeDSObj).ToNot(BeNil())
+		nodeDS, ok := nodeDSObj.(*appsv1.DaemonSet)
+		Expect(ok).To(BeTrue())
+
+		Expect(nodeDS.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-node"))
+		Expect(nodeDS.Spec.Template.Spec.Containers[0].Env).To(ContainElements(
 			corev1.EnvVar{Name: "FELIX_PROMETHEUSMETRICSFIPSMODEENABLED", Value: "true"}))
 
 		Expect(nodeDS.Spec.Template.Spec.InitContainers[1].Name).To(Equal("install-cni"))

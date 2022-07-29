@@ -52,7 +52,7 @@ type expectedEnvVar struct {
 	secretKey  string
 }
 
-var _ = FDescribe("Intrusion Detection rendering tests", func() {
+var _ = Describe("Intrusion Detection rendering tests", func() {
 	var cfg *render.IntrusionDetectionConfiguration
 	var bundle certificatemanagement.TrustedBundle
 	var adAPIKeyPair certificatemanagement.KeyPairInterface

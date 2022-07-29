@@ -347,7 +347,6 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 		toCreate = append(toCreate, es.elasticsearchCluster())
 
-
 		if es.cfg.Installation.FIPSMode != operatorv1.FIPSModeEnabled {
 			// Kibana CRs
 			// In order to use restricted, we need to change:

@@ -17,6 +17,7 @@
 package render
 
 import (
+	"fmt"
 	"net"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"

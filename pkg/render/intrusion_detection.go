@@ -193,7 +193,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 	objs = append(objs, c.globalAlertTemplates()...)
 
 	// AD Related deployment only for management/standalone cluster
-	if !c.cfg.ManagedCluster && c.cfg.Installation.FIPSMode == operatorv1.FIPSModeDisabled {
+	if !c.cfg.ManagedCluster && c.cfg.Installation.FIPSMode != operatorv1.FIPSModeEnabled {
 		// Service + Deployment + RBAC for AD API
 		objs = append(objs,
 			c.adAPIAllowTigeraPolicy(),
@@ -217,7 +217,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		objs = append(objs, c.adDetectorPodTemplates()...)
 	}
 
-	if !c.cfg.ManagedCluster && c.cfg.Installation.FIPSMode == operatorv1.FIPSModeDisabled {
+	if !c.cfg.ManagedCluster && c.cfg.Installation.FIPSMode != operatorv1.FIPSModeEnabled {
 		objs = append(objs, c.intrusionDetectionElasticsearchAllowTigeraPolicy())
 		objs = append(objs, c.intrusionDetectionElasticsearchJob())
 	}

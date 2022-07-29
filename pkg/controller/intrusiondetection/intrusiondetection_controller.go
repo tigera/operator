@@ -605,12 +605,21 @@ func (r *ReconcileIntrusionDetection) fillDefaults(ctx context.Context, ids *ope
 
 	}
 
-	if ids.Spec.AnomalyDetection == (operatorv1.AnomalyDetectionSpec{}) {
-		ids.Spec.AnomalyDetection = operatorv1.AnomalyDetectionSpec{
-			StorageType: operatorv1.EphemeralStorageType,
+	if len(ids.Spec.AnomalyDetection.StorageType) == 0 {
+		if len(ids.Spec.AnomalyDetection.StorageClassName) == 0 {
+			ids.Spec.AnomalyDetection = operatorv1.AnomalyDetectionSpec{
+				StorageType: operatorv1.EphemeralStorageType,
+			}
+		} else {
+			// User specified a storage class, set to persistent
+			ids.Spec.AnomalyDetection = operatorv1.AnomalyDetectionSpec{
+				StorageType:      operatorv1.PersistentStorageType,
+				StorageClassName: ids.Spec.AnomalyDetection.StorageClassName,
+			}
 		}
 	} else {
-		if ids.Spec.AnomalyDetection.StorageType == operatorv1.PersistentStorageType && len(ids.Spec.AnomalyDetection.StorageClassName) == 0 {
+		if ids.Spec.AnomalyDetection.StorageType == operatorv1.PersistentStorageType &&
+			len(ids.Spec.AnomalyDetection.StorageClassName) == 0 {
 			ids.Spec.AnomalyDetection.StorageClassName = render.DefaultADStorageClassName
 		}
 	}
@@ -623,8 +632,8 @@ func (r *ReconcileIntrusionDetection) fillDefaults(ctx context.Context, ids *ope
 }
 
 func validateConfiguredAnomalyDetectionSpec(adSpec operatorv1.AnomalyDetectionSpec) error {
-
-	if (len(adSpec.StorageType) == 0 || adSpec.StorageType == operatorv1.EphemeralStorageType) && len(adSpec.StorageClassName) > 0 {
+	if (len(adSpec.StorageType) == 0 || adSpec.StorageType == operatorv1.EphemeralStorageType) &&
+		len(adSpec.StorageClassName) > 0 {
 		return fmt.Errorf("unable to set StorageClassName with StorageType as Ephemeral")
 	}
 

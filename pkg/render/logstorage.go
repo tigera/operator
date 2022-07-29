@@ -229,9 +229,6 @@ func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	//todo: revert
-	es.esOperatorImage = "gcr.io/tigera-dev/rd/tigera/eck-operator:rene-fips"
-
 	es.kibanaImage, err = components.GetReference(components.ComponentKibana, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
@@ -324,7 +321,6 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 					es.kibanaClusterRoleBinding(),
 					es.kibanaClusterRole(),
 					es.kibanaPodSecurityPolicy())
-				toDelete = append(toDelete, es.elasticEnterpriseTrial())
 			} else {
 				toCreate = append(toCreate, es.elasticEnterpriseTrial())
 			}

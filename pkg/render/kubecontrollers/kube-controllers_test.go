@@ -193,6 +193,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 			{Name: "ENABLED_CONTROLLERS", Value: "node"},
 			{Name: "KUBE_CONTROLLERS_CONFIG_NAME", Value: "default"},
+			{Name: "FIPS_MODE_ENABLED", Value: "false"},
 		}
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedEnv))
 

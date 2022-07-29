@@ -597,6 +597,68 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
 		)
 	})
+
+	It("should not render anomaly detection or es-job installer when FIPS mode is enabled", func() {
+		cfg.Installation.FIPSMode = operatorv1.FIPSModeEnabled
+		component := render.IntrusionDetection(cfg)
+		resources, _ := component.Objects()
+
+		// Should render the correct resources.
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "tigera-intrusion-detection", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "intrusion-detection-es-job-installer", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "intrusion-detection-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+			{name: "intrusion-detection-controller", ns: "tigera-intrusion-detection", group: "apps", version: "v1", kind: "Deployment"},
+			{name: "policy.pod", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "policy.globalnetworkpolicy", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "policy.globalnetworkset", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "policy.serviceaccount", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "network.cloudapi", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "network.ssh", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "network.lateral.access", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "network.lateral.originate", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "dns.servfail", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "dns.dos", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.dga", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.http-connection-spike", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.http-response-codes", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.http-verbs", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.ip-sweep", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.port-scan", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.generic-dns", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.time-series-dns", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.generic-flows", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.time-series-flows", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.generic-l7", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.dns-latency", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.l7-bytes", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.l7-latency", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "tigera.io.detector.process-restarts", ns: "", group: "projectcalico.org", version: "v3", kind: "GlobalAlertTemplate"},
+			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "intrusion-detection-psp", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "intrusion-detection", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+		}
+
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+		for i, expectedRes := range expectedResources {
+			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+
+			if expectedRes.kind == "GlobalAlertTemplate" {
+				rtest.ExpectGlobalAlertTemplateToBePopulated(resources[i])
+			}
+		}
+	})
 })
 
 func assertEnvVarlistMatch(envVars []corev1.EnvVar, expectedEnvVars []expectedEnvVar) {

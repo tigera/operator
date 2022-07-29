@@ -133,6 +133,7 @@ const (
 	MigrationError            TigeraStatusReason = "MigrationError"
 	InternalServerError       TigeraStatusReason = "InternalServerError"
 	NotApplicable             TigeraStatusReason = "NotApplicable"
+	UpgradeError              TigeraStatusReason = "UpgradeError"
 	Unknown                   TigeraStatusReason = "Unknown"
 )
 

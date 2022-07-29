@@ -669,6 +669,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			cfg.Installation.FIPSMode = operatorv1.FIPSModeEnabled
 			expectedCreateResources := []resourceTestObj{
 				{render.ECKOperatorNamespace, "", &corev1.Namespace{}, nil},
+				{render.ECKOperatorPolicyName, render.ECKOperatorNamespace, &v3.NetworkPolicy{}, nil},
 				{"tigera-pull-secret", render.ECKOperatorNamespace, &corev1.Secret{}, nil},
 				{"elastic-operator", "", &rbacv1.ClusterRole{}, nil},
 				{"elastic-operator", "", &rbacv1.ClusterRoleBinding{}, nil},
@@ -680,6 +681,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				{render.ECKEnterpriseTrial, render.ECKOperatorNamespace, &corev1.Secret{}, nil},
 				{render.ECKOperatorName, render.ECKOperatorNamespace, &appsv1.StatefulSet{}, nil},
 				{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
+				{render.ElasticsearchPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+				{render.ElasticsearchInternalPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+				{networkpolicy.TigeraComponentDefaultDenyPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 				{"tigera-pull-secret", render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 				{"tigera-elasticsearch", render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
 				{relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace(), &corev1.ConfigMap{}, nil},

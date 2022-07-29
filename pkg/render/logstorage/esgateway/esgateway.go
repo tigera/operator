@@ -188,6 +188,7 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 				Key: e.cfg.EsAdminUserName,
 			},
 		}},
+		{Name: "ES_GATEWAY_FIPS_MODE_ENABLED", Value: fmt.Sprintf("%v", e.cfg.Installation.FIPSMode == operatorv1.FIPSModeEnabled)},
 	}
 
 	var initContainers []corev1.Container

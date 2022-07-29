@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -48,6 +48,7 @@ var _ = Describe("Application layer controller tests", func() {
 	var r ReconcileApplicationLayer
 	var scheme *runtime.Scheme
 	var mockStatus *status.MockStatus
+	var installation *operatorv1.Installation
 
 	Context("image reconciliation", func() {
 		BeforeEach(func() {
@@ -61,28 +62,7 @@ var _ = Describe("Application layer controller tests", func() {
 			// Create a client that will have a crud interface of k8s objects.
 			c = fake.NewClientBuilder().WithScheme(scheme).Build()
 			ctx = context.Background()
-
-			mockStatus = &status.MockStatus{}
-			mockStatus.On("AddDaemonsets", mock.Anything).Return()
-			mockStatus.On("AddDeployments", mock.Anything).Return()
-			mockStatus.On("IsAvailable").Return(true)
-			mockStatus.On("AddStatefulSets", mock.Anything).Return()
-			mockStatus.On("AddCronJobs", mock.Anything)
-			mockStatus.On("OnCRFound").Return()
-			mockStatus.On("OnCRNotFound").Return()
-			mockStatus.On("ClearDegraded")
-			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
-			mockStatus.On("ReadyToMonitor")
-
-			r = ReconcileApplicationLayer{
-				client:          c,
-				scheme:          scheme,
-				provider:        operatorv1.ProviderNone,
-				status:          mockStatus,
-				licenseAPIReady: &utils.ReadyFlag{},
-			}
-
-			Expect(c.Create(ctx, &operatorv1.Installation{
+			installation = &operatorv1.Installation{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 				Spec: operatorv1.InstallationSpec{
 					Variant:  operatorv1.TigeraSecureEnterprise,
@@ -96,7 +76,17 @@ var _ = Describe("Application layer controller tests", func() {
 						KubernetesProvider: operatorv1.ProviderNone,
 					},
 				},
-			})).NotTo(HaveOccurred())
+			}
+			mockStatus = &status.MockStatus{}
+			mockStatus.On("OnCRFound").Return()
+
+			r = ReconcileApplicationLayer{
+				client:          c,
+				scheme:          scheme,
+				provider:        operatorv1.ProviderNone,
+				status:          mockStatus,
+				licenseAPIReady: &utils.ReadyFlag{},
+			}
 
 			Expect(c.Create(ctx, &crdv1.FelixConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
@@ -112,6 +102,16 @@ var _ = Describe("Application layer controller tests", func() {
 		})
 
 		It("should render accurate resources for for log collection", func() {
+			mockStatus.On("AddDaemonsets", mock.Anything).Return()
+			mockStatus.On("AddDeployments", mock.Anything).Return()
+			mockStatus.On("IsAvailable").Return(true)
+			mockStatus.On("AddStatefulSets", mock.Anything).Return()
+			mockStatus.On("AddCronJobs", mock.Anything)
+			mockStatus.On("OnCRNotFound").Return()
+			mockStatus.On("ClearDegraded")
+			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+			mockStatus.On("ReadyToMonitor")
+			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 
 			By("applying the ApplicationLayer CR to the fake cluster")
 			enabled := operatorv1.L7LogCollectionEnabled
@@ -170,5 +170,23 @@ var _ = Describe("Application layer controller tests", func() {
 			Expect(*fc.Spec.TPROXYMode).To(Equal(crdv1.TPROXYModeOptionDisabled))
 		})
 
+		It("should not work in combination with FIPS", func() {
+			installation.Spec.FIPSMode = operatorv1.FIPSModeEnabled
+			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+			mockStatus.On("SetDegraded", "application layer features cannot be used in combination with FIPSMode=Enabled", "").Return()
+			By("applying the ApplicationLayer CR to the fake cluster")
+			enabled := operatorv1.L7LogCollectionEnabled
+			Expect(c.Create(ctx, &operatorv1.ApplicationLayer{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.ApplicationLayerSpec{
+					LogCollection: &operatorv1.LogCollectionSpec{
+						CollectLogs: &enabled,
+					},
+				},
+			})).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			mockStatus.AssertExpectations(GinkgoT())
+		})
 	})
 })

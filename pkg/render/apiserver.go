@@ -968,6 +968,10 @@ func (c *apiServerComponent) startUpArgs() []string {
 		fmt.Sprintf("--tls-cert-file=%s", c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()),
 	}
 
+	if c.cfg.Installation.FIPSMode == operatorv1.FIPSModeEnabled {
+		args = append(args, fmt.Sprintf("--tls-max-version=VersionTLS12"))
+	}
+
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		args = append(args,
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
@@ -997,6 +1001,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		{Name: "LISTEN_ADDR", Value: fmt.Sprintf(":%d", QueryServerPort)},
 		{Name: "TLS_CERT", Value: fmt.Sprintf("/%s/tls.crt", ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant))},
 		{Name: "TLS_KEY", Value: fmt.Sprintf("/%s/tls.key", ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant))},
+		{Name: "FIPS_MODE_ENABLED", Value: fmt.Sprintf("%v", c.cfg.Installation.FIPSMode == operatorv1.FIPSModeEnabled)},
 	}
 
 	env = append(env, c.cfg.K8SServiceEndpoint.EnvVars(c.hostNetwork(), c.cfg.Installation.KubernetesProvider)...)

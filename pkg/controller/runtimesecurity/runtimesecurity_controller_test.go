@@ -121,7 +121,7 @@ var _ = Describe("Runtime Security Controller Tests", func() {
 		cronjob := batchv1.CronJob{
 			TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      rsrender.ResourceNameSashaJob,
+				Name:      rsrender.ResourceNameSashaPod,
 				Namespace: rsrender.NameSpaceRuntimeSecurity,
 			},
 		}

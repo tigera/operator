@@ -125,9 +125,18 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 	}
 
 	rsSecretOptional := false
+	numReplica := int32(1)
 
 	return &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "Sasha-deployment",
+			Namespace: NameSpaceRuntimeSecurity,
+			Labels: map[string]string{
+				"k8s-app": "Sasha-deployment",
+			},
+		},
 		Spec: appsv1.DeploymentSpec{
+			Replicas: &numReplica,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      ResourceNameSashaPod,

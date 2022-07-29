@@ -63,8 +63,8 @@ var _ = Describe("Runtime Security rendering tests", func() {
 		}{
 			{name: runtimesecurity.NameSpaceRuntimeSecurity, ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: runtimesecurity.ElasticsearchSashaJobUserSecretName, ns: runtimesecurity.NameSpaceRuntimeSecurity, group: "", version: "v1", kind: "Secret"},
-			{name: runtimesecurity.ResourceNameSashaJob, ns: runtimesecurity.NameSpaceRuntimeSecurity, group: "", version: "v1", kind: "ServiceAccount"},
-			{name: runtimesecurity.ResourceNameSashaJob, ns: runtimesecurity.NameSpaceRuntimeSecurity, group: "batch", version: "v1", kind: "Job"},
+			{name: runtimesecurity.ResourceNameSashaPod, ns: runtimesecurity.NameSpaceRuntimeSecurity, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: runtimesecurity.ResourceNameSashaPod, ns: runtimesecurity.NameSpaceRuntimeSecurity, group: "batch", version: "v1", kind: "Job"},
 		}
 
 		resources, _ := component.Objects()
@@ -78,7 +78,7 @@ var _ = Describe("Runtime Security rendering tests", func() {
 		}
 
 		// Check rendering of spec deployment.
-		cronjob := rtest.GetResource(resources, runtimesecurity.ResourceNameSashaJob, runtimesecurity.NameSpaceRuntimeSecurity,
+		cronjob := rtest.GetResource(resources, runtimesecurity.ResourceNameSashaPod, runtimesecurity.NameSpaceRuntimeSecurity,
 			"batch", "v1", "Job").(*batchv1.CronJob)
 		spec := cronjob.Spec.JobTemplate.Spec.Template.Spec
 		Expect(len(spec.Containers)).To(Equal(1))

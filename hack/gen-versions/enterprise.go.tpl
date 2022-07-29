@@ -254,6 +254,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "tigera-cni" }}
+	ComponentTigeraCNIFIPS = component{
+		Version: "{{ .Version }}-fips",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "cloud-controllers" }}
 	ComponentCloudControllers = component{
 		Version: "{{ .Version }}",
@@ -308,6 +314,7 @@ var (
 		ComponentTigeraNode,
 		ComponentTigeraTypha,
 		ComponentTigeraCNI,
+		ComponentTigeraCNIFIPS,
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,

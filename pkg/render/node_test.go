@@ -22,6 +22,7 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gstruct"
+	"github.com/tigera/operator/pkg/ptr"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -3033,6 +3034,30 @@ var _ = Describe("Node rendering tests", func() {
 			SubPath:   render.BGPLayoutConfigMapKey,
 		}))
 		rtest.ExpectEnv(deploy.Spec.Template.Spec.Containers[0].Env, "CALICO_EARLY_NETWORKING", render.BGPLayoutPath)
+	})
+
+	It("should render the correct env and/or images when FIPS mode is enabled", func() {
+		cfg.Installation.FIPSMode = operatorv1.FIPSModeEnabled
+		cfg.Installation.Variant = operatorv1.TigeraSecureEnterprise
+		cfg.Installation.NodeMetricsPort = ptr.Int32ToPtr(123)
+		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
+		Expect(err).NotTo(HaveOccurred())
+		cfg.PrometheusServerTLS = certificateManager.KeyPair()
+		component := render.Node(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+		nodeDSObj := rtest.GetResource(resources, common.NodeDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet")
+		Expect(nodeDSObj).ToNot(BeNil())
+		nodeDS, ok := nodeDSObj.(*appsv1.DaemonSet)
+		Expect(ok).To(BeTrue())
+
+		Expect(nodeDS.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-node"))
+		Expect(nodeDS.Spec.Template.Spec.Containers[0].Env).To(ContainElements(
+			corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERFIPSMODEENABLED", Value: "true"},
+			corev1.EnvVar{Name: "FELIX_PROMETHEUSMETRICSFIPSMODEENABLED", Value: "true"}))
+
+		Expect(nodeDS.Spec.Template.Spec.InitContainers[1].Name).To(Equal("install-cni"))
+		Expect(nodeDS.Spec.Template.Spec.InitContainers[1].Image).To(ContainSubstring("-fips"))
 	})
 
 	Context("With calico-node DaemonSet overrides", func() {

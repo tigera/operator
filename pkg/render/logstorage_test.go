@@ -196,10 +196,10 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{"elastic-operator", render.ECKOperatorNamespace, &corev1.ServiceAccount{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRole{}, nil},
-					{"tigera-kibana", "", &rbacv1.ClusterRoleBinding{}, nil},
-					{"tigera-kibana", "", &rbacv1.ClusterRole{}, nil},
 					{render.ECKOperatorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{"tigera-elasticsearch", "", &policyv1beta1.PodSecurityPolicy{}, nil},
+					{"tigera-kibana", "", &rbacv1.ClusterRoleBinding{}, nil},
+					{"tigera-kibana", "", &rbacv1.ClusterRole{}, nil},
 					{"tigera-kibana", "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{render.ECKOperatorName, render.ECKOperatorNamespace, &appsv1.StatefulSet{}, nil},
 					{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
@@ -306,10 +306,10 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{"elastic-operator", render.ECKOperatorNamespace, &corev1.ServiceAccount{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRole{}, nil},
-					{"tigera-kibana", "", &rbacv1.ClusterRoleBinding{}, nil},
-					{"tigera-kibana", "", &rbacv1.ClusterRole{}, nil},
 					{render.ECKOperatorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{"tigera-elasticsearch", "", &policyv1beta1.PodSecurityPolicy{}, nil},
+					{"tigera-kibana", "", &rbacv1.ClusterRoleBinding{}, nil},
+					{"tigera-kibana", "", &rbacv1.ClusterRole{}, nil},
 					{"tigera-kibana", "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{render.ECKOperatorName, render.ECKOperatorNamespace, &appsv1.StatefulSet{}, nil},
 					{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
@@ -372,10 +372,10 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{"elastic-operator", render.ECKOperatorNamespace, &corev1.ServiceAccount{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRole{}, nil},
-					{"tigera-kibana", "", &rbacv1.ClusterRoleBinding{}, nil},
-					{"tigera-kibana", "", &rbacv1.ClusterRole{}, nil},
 					{render.ECKOperatorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{"tigera-elasticsearch", "", &policyv1beta1.PodSecurityPolicy{}, nil},
+					{"tigera-kibana", "", &rbacv1.ClusterRoleBinding{}, nil},
+					{"tigera-kibana", "", &rbacv1.ClusterRole{}, nil},
 					{"tigera-kibana", "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{render.ECKOperatorName, render.ECKOperatorNamespace, &appsv1.StatefulSet{}, nil},
 					{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
@@ -455,10 +455,10 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{"elastic-operator", render.ECKOperatorNamespace, &corev1.ServiceAccount{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRole{}, nil},
-					{"tigera-kibana", "", &rbacv1.ClusterRoleBinding{}, nil},
-					{"tigera-kibana", "", &rbacv1.ClusterRole{}, nil},
 					{render.ECKOperatorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{"tigera-elasticsearch", "", &policyv1beta1.PodSecurityPolicy{}, nil},
+					{"tigera-kibana", "", &rbacv1.ClusterRoleBinding{}, nil},
+					{"tigera-kibana", "", &rbacv1.ClusterRole{}, nil},
 					{"tigera-kibana", "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{render.ECKOperatorName, render.ECKOperatorNamespace, &appsv1.StatefulSet{}, nil},
 					{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
@@ -663,6 +663,43 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						}
 					}
 				})
+			})
+		})
+		It("should not render kibana if FIPS mode is enabled", func() {
+			cfg.Installation.FIPSMode = operatorv1.FIPSModeEnabled
+			expectedCreateResources := []resourceTestObj{
+				{render.ECKOperatorNamespace, "", &corev1.Namespace{}, nil},
+				{render.ECKOperatorPolicyName, render.ECKOperatorNamespace, &v3.NetworkPolicy{}, nil},
+				{"tigera-pull-secret", render.ECKOperatorNamespace, &corev1.Secret{}, nil},
+				{"elastic-operator", "", &rbacv1.ClusterRole{}, nil},
+				{"elastic-operator", "", &rbacv1.ClusterRoleBinding{}, nil},
+				{"elastic-operator", render.ECKOperatorNamespace, &corev1.ServiceAccount{}, nil},
+				{"tigera-elasticsearch", "", &rbacv1.ClusterRoleBinding{}, nil},
+				{"tigera-elasticsearch", "", &rbacv1.ClusterRole{}, nil},
+				{render.ECKOperatorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
+				{"tigera-elasticsearch", "", &policyv1beta1.PodSecurityPolicy{}, nil},
+				{render.ECKEnterpriseTrial, render.ECKOperatorNamespace, &corev1.Secret{}, nil},
+				{render.ECKOperatorName, render.ECKOperatorNamespace, &appsv1.StatefulSet{}, nil},
+				{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
+				{render.ElasticsearchPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+				{render.ElasticsearchInternalPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+				{networkpolicy.TigeraComponentDefaultDenyPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+				{"tigera-pull-secret", render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+				{"tigera-elasticsearch", render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
+				{relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace(), &corev1.ConfigMap{}, nil},
+				{render.ElasticsearchName, render.ElasticsearchNamespace, &esv1.Elasticsearch{}, nil},
+				{render.EsManagerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
+				{render.EsManagerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
+			}
+
+			component := render.LogStorage(cfg)
+
+			createResources, deleteResources := component.Objects()
+
+			compareResources(createResources, expectedCreateResources)
+			compareResources(deleteResources, []resourceTestObj{
+				{render.KibanaName, render.KibanaNamespace, &kbv1.Kibana{}, nil},
+				{render.EsCuratorName, render.ElasticsearchNamespace, &batchv1beta.CronJob{}, nil},
 			})
 		})
 	})

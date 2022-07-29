@@ -587,6 +587,20 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("tigera-manager", render.ManagerNamespace)))
 	})
 
+	It("should set the right env when FIPS is enabled", func() {
+		installation.FIPSMode = operatorv1.FIPSModeEnabled
+		resources := renderObjects(renderConfig{oidc: false, managementCluster: nil, installation: installation, complianceFeatureActive: true})
+		Expect(resources).To(HaveLen(expectedResourcesNumber))
+		deploy, ok := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(ok).To(BeTrue())
+		Expect(deploy.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-manager"))
+		Expect(deploy.Spec.Template.Spec.Containers[1].Name).To(Equal("tigera-es-proxy"))
+		Expect(deploy.Spec.Template.Spec.Containers[2].Name).To(Equal("tigera-voltron"))
+		Expect(deploy.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "ENABLE_KIBANA", Value: "false"}))
+		Expect(deploy.Spec.Template.Spec.Containers[1].Env).To(ContainElement(corev1.EnvVar{Name: "FIPS_MODE_ENABLED", Value: "true"}))
+		Expect(deploy.Spec.Template.Spec.Containers[2].Env).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_FIPS_MODE_ENABLED", Value: "true"}))
+	})
+
 	Context("allow-tigera rendering", func() {
 		policyName := types.NamespacedName{Name: "allow-tigera.manager-access", Namespace: "tigera-manager"}
 

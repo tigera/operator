@@ -198,6 +198,7 @@ type ElasticsearchConfiguration struct {
 	ElasticLicenseType          ElasticsearchLicenseType
 	TrustedBundle               certificatemanagement.TrustedBundle
 	UnusedTLSSecret             *corev1.Secret
+	ApplyTrial                  bool
 
 	// Whether or not the cluster supports pod security policies.
 	UsePSP bool
@@ -321,11 +322,12 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 					es.kibanaClusterRoleBinding(),
 					es.kibanaClusterRole(),
 					es.kibanaPodSecurityPolicy())
-			} else {
-				toCreate = append(toCreate, es.elasticEnterpriseTrial())
 			}
 		}
 
+		if es.cfg.ApplyTrial {
+			toCreate = append(toCreate, es.elasticEnterpriseTrial())
+		}
 		toCreate = append(toCreate, es.eckOperatorStatefulSet())
 
 		// Elasticsearch CRs

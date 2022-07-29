@@ -74,6 +74,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 	reqLogger logr.Logger,
 	ctx context.Context,
 	certificateManager certificatemanager.CertificateManager,
+	applyTrial bool,
 ) (reconcile.Result, bool, bool, error) {
 	var elasticKeyPair, kibanaKeyPair certificatemanagement.KeyPairInterface
 	var err error
@@ -188,6 +189,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 		TrustedBundle:               trustedBundle,
 		UnusedTLSSecret:             unusedTLSSecret,
 		UsePSP:                      r.usePSP,
+		ApplyTrial:                  applyTrial,
 	}
 
 	component := render.LogStorage(logStorageCfg)
@@ -245,7 +247,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 			return reconcile.Result{}, false, finalizerCleanup, nil
 		}
 
-		if kibana == nil || kibana.Status.AssociationStatus != cmnv1.AssociationEstablished {
+		if install.FIPSMode != operatorv1.FIPSModeEnabled && (kibana == nil || kibana.Status.AssociationStatus != cmnv1.AssociationEstablished) {
 			r.status.SetDegraded("Waiting for Kibana cluster to be operational", "")
 			return reconcile.Result{}, false, finalizerCleanup, nil
 		}

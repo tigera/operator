@@ -21,6 +21,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -51,15 +52,18 @@ func (r *ReconcileLogStorage) createEsGateway(
 		r.status.SetDegraded("Error creating TLS certificate", err.Error())
 		return reconcile.Result{}, false, err
 	}
-	kibanaCertificate, err := certificateManager.GetCertificate(r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace())
-	if err != nil {
-		reqLogger.Error(err, "failed to get Kibana tls certificate secret")
-		r.status.SetDegraded("Failed to get Kibana tls certificate secret", err.Error())
-		return reconcile.Result{}, false, err
-	} else if kibanaCertificate == nil {
-		reqLogger.Info("Waiting for internal Kibana tls certificate secret to be available")
-		r.status.SetDegraded("Waiting for internal Kibana tls certificate secret to be available", "")
-		return reconcile.Result{}, false, nil
+	var kibanaCertificate certificatemanagement.CertificateInterface
+	if install.FIPSMode != operatorv1.FIPSModeEnabled {
+		kibanaCertificate, err := certificateManager.GetCertificate(r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace())
+		if err != nil {
+			reqLogger.Error(err, "failed to get Kibana tls certificate secret")
+			r.status.SetDegraded("Failed to get Kibana tls certificate secret", err.Error())
+			return reconcile.Result{}, false, err
+		} else if kibanaCertificate == nil {
+			reqLogger.Info("Waiting for internal Kibana tls certificate secret to be available")
+			r.status.SetDegraded("Waiting for internal Kibana tls certificate secret to be available", "")
+			return reconcile.Result{}, false, nil
+		}
 	}
 	esInternalCertificate, err := certificateManager.GetCertificate(r.client, render.TigeraElasticsearchInternalCertSecret, common.OperatorNamespace())
 	if err != nil {

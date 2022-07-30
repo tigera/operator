@@ -241,7 +241,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			fmt.Sprintf("testregistry.com/%s:%s", components.ComponentQueryServer.Image, components.ComponentQueryServer.Version),
 		))
 		Expect(d.Spec.Template.Spec.Containers[1].Args).To(BeEmpty())
-		Expect(len(d.Spec.Template.Spec.Containers[1].Env)).To(Equal(5))
+		Expect(len(d.Spec.Template.Spec.Containers[1].Env)).To(Equal(6))
 
 		Expect(d.Spec.Template.Spec.Containers[1].Env[0].Name).To(Equal("LOGLEVEL"))
 		Expect(d.Spec.Template.Spec.Containers[1].Env[0].Value).To(Equal("info"))
@@ -258,6 +258,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(d.Spec.Template.Spec.Containers[1].Env[4].Name).To(Equal("TLS_KEY"))
 		Expect(d.Spec.Template.Spec.Containers[1].Env[4].Value).To(Equal("/tigera-apiserver-certs/tls.key"))
 		Expect(d.Spec.Template.Spec.Containers[1].Env[4].ValueFrom).To(BeNil())
+		Expect(d.Spec.Template.Spec.Containers[1].Env[5].Name).To(Equal("FIPS_MODE_ENABLED"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[5].Value).To(Equal("false"))
 
 		// Expect the SECURITY_GROUP env variables to not be set
 		Expect(d.Spec.Template.Spec.Containers[1].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_DEFAULT_SECURITY_GROUPS")})))
@@ -320,6 +322,16 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		for _, r := range resources {
 			Expect(r.GetObjectKind()).NotTo(Equal("PodSecurityPolicy"))
 		}
+	})
+
+	It("should render the env variable for queryserver when FIPS is enabled", func() {
+		cfg.Installation.FIPSMode = operatorv1.FIPSModeEnabled
+		component, err := render.APIServer(cfg)
+		Expect(err).NotTo(HaveOccurred())
+		resources, _ := component.Objects()
+		d := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(d.Spec.Template.Spec.Containers[1].Name).To(Equal("tigera-queryserver"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env).To(ContainElement(corev1.EnvVar{Name: "FIPS_MODE_ENABLED", Value: "true"}))
 	})
 
 	It("should render an API server with custom configuration", func() {

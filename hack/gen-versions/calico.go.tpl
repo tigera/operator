@@ -27,6 +27,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "calico/cni" }}
+	ComponentCalicoCNIFIPS = component{
+		Version: "{{ .Version }}-fips",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "calico/kube-controllers" }}
 	ComponentCalicoKubeControllers = component{
 		Version: "{{ .Version }}",
@@ -70,6 +76,7 @@ var (
 
 	CalicoImages = []component{
 		ComponentCalicoCNI,
+		ComponentCalicoCNIFIPS,
 		ComponentCalicoKubeControllers,
 		ComponentCalicoNode,
 		ComponentCalicoTypha,

@@ -169,6 +169,11 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		inst.CalicoWindowsUpgradeDaemonSet = mergeCalicoWindowsUpgradeDaemonSet(inst.CalicoWindowsUpgradeDaemonSet, override.CalicoWindowsUpgradeDaemonSet)
 	}
 
+	switch compareFields(inst.FIPSMode, override.FIPSMode) {
+	case BOnlySet, Different:
+		inst.FIPSMode = override.FIPSMode
+	}
+
 	return inst
 }
 

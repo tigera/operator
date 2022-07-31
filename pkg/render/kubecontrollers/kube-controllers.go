@@ -490,7 +490,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 
 	podSpec := corev1.PodSpec{
 		NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
-		Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster, rmeta.TolerateCriticalAddonsOnly),
+		Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...),
 		ImagePullSecrets:   c.cfg.Installation.ImagePullSecrets,
 		ServiceAccountName: c.kubeControllerServiceAccountName,
 		Containers:         []corev1.Container{container},

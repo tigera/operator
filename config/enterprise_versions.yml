@@ -60,7 +60,7 @@ components:
     version: v3.14.1
   anomaly_detection_jobs:
     image: tigera/anomaly_detection_jobs
-    version: v3.14.1
+    version: v3.14.2-0
   anomaly-detection-api:
     image: tigera/anomaly-detection-api
     version: v3.14.1
@@ -135,19 +135,19 @@ components:
     version: v3.14.1
   image-assurance-api:
     image: tigera/image-assurance-api
-    version: v0.10.1
+    version: v0.10.2
   image-assurance-scanner:
     image: tigera/image-assurance-scanner
-    version: v0.10.1
+    version: v0.10.2
   image-assurance-db-migrator:
     image: tigera/image-assurance-db-migrator
-    version: v0.10.1
+    version: v0.10.2
   image-assurance-caw:
     image: tigera/image-assurance-caw
-    version: v0.10.1
+    version: v0.10.2
   image-assurance-pod-watcher:
     image: tigera/image-assurance-pod-watcher
-    version: v0.10.1
+    version: v0.10.2
   sasha:
     image: tigera/sasha
     version: v0.10.0-0.dev-649-gd99982c30c52-amd64

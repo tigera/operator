@@ -136,6 +136,11 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"k8s-app": ResourceNameSashaPod,
+				},
+			},
 			Replicas: &numReplica,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{

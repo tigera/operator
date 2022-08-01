@@ -16,3 +16,4 @@ pkg/render/kubecontrollers/kube-controllers-cloud.go
 pkg/controller/utils/utils_cloud.go
 pkg/render/common/imageassurance/resource.go
 pkg/render/common/clusterrole/clusterroles.go
+pkg/render/runtimesecurity/runtimesecurity.go

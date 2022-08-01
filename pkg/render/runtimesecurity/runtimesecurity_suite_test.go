@@ -12,6 +12,6 @@ import (
 
 func TestRender(t *testing.T) {
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../../report/runtimesecurity_suite.xml")
-	RunSpecsWithDefaultAndCustomReporters(t, "pkg/imageassurance/runtimesecurity Suite", []Reporter{junitReporter})
+	junitReporter := reporters.NewJUnitReporter("../../../report/runtimesecurity_suite.xml")
+	RunSpecsWithDefaultAndCustomReporters(t, "pkg/render/runtimesecurity Suite", []Reporter{junitReporter})
 }

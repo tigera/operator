@@ -127,6 +127,7 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 	numReplica := int32(1)
 
 	return &appsv1.Deployment{
+		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "sasha",
 			Namespace: NameSpaceRuntimeSecurity,

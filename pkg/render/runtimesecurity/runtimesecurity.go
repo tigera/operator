@@ -129,10 +129,10 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "Sasha-deployment",
+			Name:      "sasha",
 			Namespace: NameSpaceRuntimeSecurity,
 			Labels: map[string]string{
-				"k8s-app": "Sasha-deployment",
+				"k8s-app": "sasha",
 			},
 		},
 		Spec: appsv1.DeploymentSpec{

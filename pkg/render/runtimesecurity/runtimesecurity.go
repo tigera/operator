@@ -117,9 +117,8 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 	envVars := []corev1.EnvVar{
 		{Name: "PULL_MAX_LAST_MINUTES", Value: "20"},
 		{Name: "CLUSTER_NAME", Value: c.esClusterName()},
-
-		{Name: "SASHA_SECRETLOCATION", Value: "/certs/auth-config"},
-		{Name: "SASHA_VERIFYURL", Value: ""},
+		{Name: "SASHA_SECRETLOCATION", Value: "/var/run/calico-cloud/api/clientCredentials.yaml"},
+		{Name: "SASHA_VERIFYURL", Value: "https://sasha-verify.dev.calicocloud.io"},
 		{Name: "SASHA_RUNTIMELOCATION", Value: "es"},
 		{Name: "SASHA_ALERTLOCATION", Value: "es"},
 	}
@@ -155,10 +154,10 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 					Tolerations:  c.config.Installation.ControlPlaneTolerations,
 					Volumes: []corev1.Volume{
 						{
-							Name: "runtime-security-auth-secret",
+							Name: "cc-client-credentials",
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
-									SecretName: "calico-cloud-client-config",
+									SecretName: "tigera-calico-cloud-client-credentials",
 									Optional:   &rsSecretOptional,
 								},
 							},
@@ -178,6 +177,12 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 								Requests: corev1.ResourceList{
 									corev1.ResourceCPU:    resource.MustParse(ResourceSashaDefaultCPURequest),
 									corev1.ResourceMemory: resource.MustParse(ResourceSashaDefaultMemoryRequest),
+								},
+							},
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "cc-client-credentials",
+									MountPath: "/var/run/calico-cloud/api",
 								},
 							},
 						},

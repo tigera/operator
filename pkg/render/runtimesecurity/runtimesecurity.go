@@ -183,7 +183,6 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 						},
 					},
 					ImagePullSecrets:   secret.GetReferenceList(c.config.PullSecrets),
-					RestartPolicy:      corev1.RestartPolicyNever,
 					ServiceAccountName: ResourceNameSashaPod,
 				},
 			},

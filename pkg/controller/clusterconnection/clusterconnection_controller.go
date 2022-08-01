@@ -207,6 +207,18 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	preDefaultPatchFrom := client.MergeFrom(managementClusterConnection.DeepCopy())
+	fillDefaults(managementClusterConnection)
+
+	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
+	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
+	// Note that we only write the 'base' installation back. We don't want to write the changes from 'overlay', as those should only
+	// be stored in the 'overlay' resource.
+	if err := r.Client.Patch(ctx, managementClusterConnection, preDefaultPatchFrom); err != nil {
+		r.status.SetDegraded(string(operatorv1.ResourceUpdateError), err.Error())
+		return reconcile.Result{}, err
+	}
+
 	log.V(2).Info("Loaded ManagementClusterConnection config", "config", managementClusterConnection)
 	r.status.OnCRFound()
 
@@ -334,6 +346,15 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	// We should create the Guardian deployment.
 	return result, nil
+}
+
+func fillDefaults(mcc *operatorv1.ManagementClusterConnection) {
+	if mcc.Spec.TLS == nil {
+		mcc.Spec.TLS = &operatorv1.ManagementClusterTLS{}
+	}
+	if mcc.Spec.TLS.CA == "" {
+		mcc.Spec.TLS.CA = operatorv1.CATypeTigera
+	}
 }
 
 func networkPolicyRequiresEgressAccessControl(connection *operatorv1.ManagementClusterConnection, log logr.Logger) bool {

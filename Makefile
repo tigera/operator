@@ -88,8 +88,10 @@ endif
 
 # list of arches *not* to build when doing *-all
 #    until s390x works correctly
-EXCLUDEARCH ?= s390x arm64
-VALIDARCHES = $(filter-out $(EXCLUDEARCH),$(ARCHES))
+EXCLUDEARCH ?= s390x
+# For operator-cloud we only need amd64 so overwrite any additional arches that
+# might be available in tigera/operator
+VALIDARCHES = amd64
 
 # We need CGO to leverage Boring SSL.  However, the cross-compile doesn't support CGO yet.
 ifeq ($(ARCH), $(filter $(ARCH),amd64))

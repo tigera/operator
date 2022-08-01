@@ -150,7 +150,7 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 						"k8s-app": ResourceNameSashaPod,
 					},
 				},
-				Spec: corev1.PodSpec{
+				Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
 					NodeSelector: c.config.Installation.ControlPlaneNodeSelector,
 					Tolerations:  c.config.Installation.ControlPlaneTolerations,
 					Volumes: []corev1.Volume{
@@ -165,7 +165,7 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 						},
 					},
 					Containers: []corev1.Container{
-						{
+						relasticsearch.ContainerDecorate(corev1.Container{
 							Name:  ResourceNameSashaPod,
 							Image: c.config.sashaImage,
 							//Command: []string{"./calico-sasha"},
@@ -181,10 +181,14 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 								},
 							},
 						},
+							c.config.ESClusterConfig.ClusterName(),
+							ElasticsearchSashaJobUserSecretName,
+							c.config.ClusterDomain,
+							c.config.OsType),
 					},
 					ImagePullSecrets:   secret.GetReferenceList(c.config.PullSecrets),
 					ServiceAccountName: ResourceNameSashaPod,
-				},
+				}),
 			},
 		},
 	}

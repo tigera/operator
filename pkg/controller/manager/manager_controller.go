@@ -421,6 +421,8 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	var tunnelSecret certificatemanagement.KeyPairInterface
 	var internalTrafficSecret certificatemanagement.KeyPairInterface
 	if managementCluster != nil {
+		fillDefaults(managementCluster)
+
 		// We expect that the secret that holds the certificates for tunnel certificate generation
 		// is already created by the Api Server
 		tunnelSecret, err = certificateManager.GetKeyPair(r.client, render.VoltronTunnelSecretName, common.OperatorNamespace())
@@ -535,4 +537,13 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func fillDefaults(mc *operatorv1.ManagementCluster) {
+	if mc.Spec.TLS == nil {
+		mc.Spec.TLS = &operatorv1.TLS{}
+	}
+	if mc.Spec.TLS.SecretName == "" {
+		mc.Spec.TLS.SecretName = render.VoltronTunnelSecretName
+	}
 }

@@ -30,11 +30,11 @@ type ManagementClusterSpec struct {
 
 	// TLS provides options for configuring how Managed Clusters can establish an mTLS connection with the Management Cluster.
 	// +optional
-	TLS TLS `json:"tls,omitempty"`
+	TLS *TLS `json:"tls,omitempty"`
 }
 
 type TLS struct {
-	// secretName indicates the name of the secret in the tigera-operator namespace that contains a certificate bundle which should be used to serve voltron's tunnel.
+	// SecretName indicates the name of the secret in the tigera-operator namespace that contains the private key and certificate that the management cluster uses when it listens for incoming connections.
 	//
 	// Currently, only two values are supported: tigera-management-cluster-connection and manager-tls.
 	//
@@ -48,6 +48,7 @@ type TLS struct {
 	// If changed on a running cluster with connected managed clusters, all managed clusters will disconnect as they will no longer be able to verify Voltron's identity.
 	// To reconnect existing managed clusters, change the tls.ca of the  managed clusters' ManagementClusterConnection resource.
 	//
+	// +kubebuilder:validation:Enum="";tigera-management-cluster-connection;manager-tls
 	// +optional
 	// Default: tigera-management-cluster-connection
 	SecretName string `json:"secretName,omitempty"`

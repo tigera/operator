@@ -295,12 +295,6 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index .Components "image-assurance-caw" }}
-	ComponentImageAssuranceCAW = component{
-		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
-	}
-{{- end }}
 {{ with index .Components "image-assurance-pod-watcher" }}
 	ComponentImageAssurancePodWatcher = component{
 		Version: "{{ .Version }}",
@@ -360,7 +354,6 @@ var (
 		ComponentImageAssuranceApi,
 		ComponentImageAssuranceScanner,
 		ComponentImageAssuranceDBMigrator,
-		ComponentImageAssuranceCAW,
 		ComponentImageAssurancePodWatcher,
 		ComponentSasha,
 	}

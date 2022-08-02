@@ -250,11 +250,6 @@ var (
 		Image:   "tigera/image-assurance-db-migrator",
 	}
 
-	ComponentImageAssuranceCAW = component{
-		Version: "v0.10.2",
-		Image:   "tigera/image-assurance-caw",
-	}
-
 	ComponentImageAssurancePodWatcher = component{
 		Version: "v0.10.2",
 		Image:   "tigera/image-assurance-pod-watcher",
@@ -311,7 +306,6 @@ var (
 		ComponentImageAssuranceApi,
 		ComponentImageAssuranceScanner,
 		ComponentImageAssuranceDBMigrator,
-		ComponentImageAssuranceCAW,
 		ComponentImageAssurancePodWatcher,
 		ComponentSasha,
 	}

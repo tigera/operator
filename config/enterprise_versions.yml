@@ -142,9 +142,6 @@ components:
   image-assurance-db-migrator:
     image: tigera/image-assurance-db-migrator
     version: v0.10.2
-  image-assurance-caw:
-    image: tigera/image-assurance-caw
-    version: v0.10.2
   image-assurance-pod-watcher:
     image: tigera/image-assurance-pod-watcher
     version: v0.10.2

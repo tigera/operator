@@ -185,10 +185,6 @@ var _ = Describe("Image Assurance Render", func() {
 			{name: imageassurance.ScannerAPIAccessSecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
 			{name: imageassurance.ResourceNameImageAssuranceScanner, ns: imageassurance.NameSpaceImageAssurance, group: "apps", version: "v1", kind: "Deployment"},
 
-			{name: imageassurance.ResourceNameImageAssuranceCAW, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ServiceAccount"},
-			{name: imageassurance.ResourceNameImageAssuranceCAW, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "Role"},
-			{name: imageassurance.ResourceNameImageAssuranceCAW, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "RoleBinding"},
-			{name: imageassurance.ResourceNameImageAssuranceCAW, ns: imageassurance.NameSpaceImageAssurance, group: "apps", version: "v1", kind: "Deployment"},
 			{name: imageassurance.AdmissionControllerAPIClusterRoleName, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
 
 			{name: imageassurance.ResourceNameImageAssurancePodWatcher, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ServiceAccount"},
@@ -643,7 +639,7 @@ var _ = Describe("Image Assurance Render", func() {
 		}
 	})
 
-	It("should delete the scanner, caw and api deployments, along with the migrator job when the NeedsMigrating and ComponentsUp are both true", func() {
+	It("should delete the scanner, api and pod watcher deployments, along with the migrator job when the NeedsMigrating and ComponentsUp are both true", func() {
 		expectedResources := []struct {
 			name    string
 			ns      string

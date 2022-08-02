@@ -107,7 +107,6 @@ type Config struct {
 	apiImage        string
 	scannerImage    string
 	migratorImage   string
-	cawImage        string
 	podWatcherImage string
 
 	PodWatcherAPIAccessToken []byte
@@ -144,11 +143,6 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.config.cawImage, err = components.GetReference(components.ComponentImageAssuranceCAW, reg, path, prefix, is)
-	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
-	}
-
 	c.config.podWatcherImage, err = components.GetReference(components.ComponentImageAssurancePodWatcher, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
@@ -162,9 +156,10 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 }
 
 // Objects returns Image Assurance resources to be created or deleted based c.config.NeedsMigrating and c.config.ComponentsUp.
-// When both c.config.NeedsMigrating and c.config.ComponentsUp are true, we need to clean up the api, scanner and CAW deployments
+// When both c.config.NeedsMigrating and c.config.ComponentsUp are true, we need to clean up the api, scanner and pod watcher deployments
 // before proceeding. When only c.config.NeedsMigrating is true, return just the migrator job and associated resources.
 // When both c.config.NeedsMigrating and c.config.ComponentsUp are false, return all resources.
+// Right now we need to clean up CAW deployment for all circumstances because we stop supporting cloud-based scanning.
 func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
 	var objs []client.Object
 
@@ -235,14 +230,6 @@ func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
 		c.scannerDeployment(),
 	)
 
-	// caw resources
-	objs = append(objs,
-		c.cawServiceAccount(),
-		c.cawRole(),
-		c.cawRoleBinding(),
-		c.cawDeployment(),
-	)
-
 	// admission controller resources
 	objs = append(objs,
 		c.admissionControllerClusterRole(),
@@ -265,7 +252,7 @@ func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
 		objs = append(objs, configmap.ToRuntimeObjects(c.config.KeyValidatorConfig.RequiredConfigMaps(NameSpaceImageAssurance)...)...)
 	}
 
-	return objs, nil
+	return objs, []client.Object{c.cawDeployment()}
 }
 
 func (c *component) Ready() bool {

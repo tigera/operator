@@ -128,15 +128,15 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 		VolumeMounts: []corev1.VolumeMount{
 			corev1.VolumeMount{
 				Name:      "varrun",
-				MountPath: "/var/run",
+				MountPath: filepath.Clean("/var/run"),
 			},
 			corev1.VolumeMount{
 				Name:      "etccalico",
-				MountPath: "/etc/calico",
+				MountPath: filepath.Clean("/etc/calico"),
 			},
 			corev1.VolumeMount{
 				Name:      "socket-dir",
-				MountPath: "/csi",
+				MountPath: filepath.Clean("/csi"),
 			},
 			corev1.VolumeMount{
 				Name:             "kubelet-dir",
@@ -162,13 +162,13 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 		Env: []corev1.EnvVar{
 			corev1.EnvVar{
 				Name:  "ADDRESS",
-				Value: "/csi/csi.sock",
+				Value: filepath.Clean("/csi/csi.sock"),
 			},
 			corev1.EnvVar{
 				Name: "DRIVER_REG_SOCK_PATH",
 				// This path cannot also reference "/csi" because /csi only exists inside of the pod, but this path
 				// is used by the kubelet on the host node to issue CSI operations
-				Value: filepath.Join(c.cfg.Installation.KubeletVolumePluginPath, "csi.sock"),
+				Value: filepath.Join(c.cfg.Installation.KubeletVolumePluginPath, "plugins/csi.tigera.io/csi.sock"),
 			},
 			corev1.EnvVar{
 				Name: "KUBE_NODE_NAME",
@@ -205,7 +205,7 @@ func (c *csiComponent) csiVolumes() []corev1.Volume {
 			Name: "varrun",
 			VolumeSource: corev1.VolumeSource{
 				HostPath: &corev1.HostPathVolumeSource{
-					Path: "/var/run",
+					Path: filepath.Clean("/var/run"),
 				},
 			},
 		},
@@ -213,7 +213,7 @@ func (c *csiComponent) csiVolumes() []corev1.Volume {
 			Name: "etccalico",
 			VolumeSource: corev1.VolumeSource{
 				HostPath: &corev1.HostPathVolumeSource{
-					Path: "/etc/calico",
+					Path: filepath.Clean("/etc/calico"),
 				},
 			},
 		},
@@ -230,7 +230,7 @@ func (c *csiComponent) csiVolumes() []corev1.Volume {
 			Name: "socket-dir",
 			VolumeSource: corev1.VolumeSource{
 				HostPath: &corev1.HostPathVolumeSource{
-					Path: filepath.Join(c.cfg.Installation.KubeletVolumePluginPath, "plugins/csi.tigera.io/"),
+					Path: filepath.Join(c.cfg.Installation.KubeletVolumePluginPath, "plugins/csi.tigera.io"),
 					Type: &hostPathTypeDirOrCreate,
 				},
 			},
@@ -239,7 +239,7 @@ func (c *csiComponent) csiVolumes() []corev1.Volume {
 			Name: "registration-dir",
 			VolumeSource: corev1.VolumeSource{
 				HostPath: &corev1.HostPathVolumeSource{
-					Path: filepath.Join(c.cfg.Installation.KubeletVolumePluginPath, "plugins_registry/"),
+					Path: filepath.Join(c.cfg.Installation.KubeletVolumePluginPath, "plugins_registry"),
 					Type: &hostPathTypeDir,
 				},
 			},

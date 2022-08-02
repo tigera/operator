@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2020, 2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -318,6 +318,12 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 	if instance.Spec.FlexVolumePath != "None" && !path.IsAbs(instance.Spec.FlexVolumePath) {
 		return fmt.Errorf("Installation spec.FlexVolumePath '%s' is not an absolute path",
 			instance.Spec.FlexVolumePath)
+	}
+
+	// Verify that the kubeletVolumePluginPath is valid - either "None" (to disable) or a valid absolute path.
+	if instance.Spec.KubeletVolumePluginPath != "None" && !path.IsAbs(instance.Spec.KubeletVolumePluginPath) {
+		return fmt.Errorf("Installation spec.KubeletVolumePluginPath '%s' is not an absolute path",
+			instance.Spec.KubeletVolumePluginPath)
 	}
 
 	// We only support RollingUpdate for the node daemonset strategy.

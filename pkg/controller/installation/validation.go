@@ -320,20 +320,10 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			instance.Spec.FlexVolumePath)
 	}
 
-	// Verify VolumePluginSpec values if specified
-	if instance.Spec.VolumePlugin != nil {
-		if !path.IsAbs(instance.Spec.VolumePlugin.KubeletDir) {
-			return fmt.Errorf("Installation spec.VolumePlugin.KubeletDir '%s' is not an absolute path",
-				instance.Spec.VolumePlugin.KubeletDir)
-		}
-		if !path.IsAbs(instance.Spec.VolumePlugin.SockDir) {
-			return fmt.Errorf("Installation spec.VolumePlugin.SockDir '%s' is not an absolute path",
-				instance.Spec.VolumePlugin.SockDir)
-		}
-		if !path.IsAbs(instance.Spec.VolumePlugin.RegistrationDir) {
-			return fmt.Errorf("Installation spec.VolumePlugin.RegistrationDir '%s' is not an absolute path,",
-				instance.Spec.VolumePlugin.RegistrationDir)
-		}
+	// Verify that the kubeletVolumePluginPath is valid - either "None" (to disable) or a valid absolute path.
+	if instance.Spec.KubeletVolumePluginPath != "None" && !path.IsAbs(instance.Spec.KubeletVolumePluginPath) {
+		return fmt.Errorf("Installation spec.KubeletVolumePluginPath '%s' is not an absolute path",
+			instance.Spec.KubeletVolumePluginPath)
 	}
 
 	// We only support RollingUpdate for the node daemonset strategy.

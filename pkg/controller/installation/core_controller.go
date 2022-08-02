@@ -721,22 +721,8 @@ func fillDefaults(instance *operator.Installation) error {
 		}
 	}
 
-	if instance.Spec.VolumePlugin == nil {
-		instance.Spec.VolumePlugin = &operator.VolumePluginSpec{
-			Enable: false,
-		}
-	}
-
-	if len(instance.Spec.VolumePlugin.KubeletDir) == 0 {
-		instance.Spec.VolumePlugin.KubeletDir = "/var/lib/kubelet"
-	}
-
-	if len(instance.Spec.VolumePlugin.SockDir) == 0 {
-		instance.Spec.VolumePlugin.SockDir = "/var/lib/kubelet/plugins/csi.tigera.io/"
-	}
-
-	if len(instance.Spec.VolumePlugin.RegistrationDir) == 0 {
-		instance.Spec.VolumePlugin.RegistrationDir = "/var/lib/kubelet/plugins_registry/"
+	if len(instance.Spec.KubeletVolumePluginPath) == 0 {
+		instance.Spec.KubeletVolumePluginPath = "/var/lib/kubelet"
 	}
 
 	// Default rolling update parameters.

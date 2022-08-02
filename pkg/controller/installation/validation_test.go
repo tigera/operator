@@ -40,13 +40,8 @@ var _ = Describe("Installation validation tests", func() {
 					Type: operator.PluginCalico,
 					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
 				},
-				ComponentResources: []operator.ComponentResource{},
-				VolumePlugin: &operator.VolumePluginSpec{
-					Enable:          true,
-					KubeletDir:      "/var/lib/kubelet",
-					SockDir:         "/var/lib/kubelet/plugins/csi.tigera.io/",
-					RegistrationDir: "/var/lib/kubelet/plugins_registry/",
-				},
+				ComponentResources:      []operator.ComponentResource{},
+				KubeletVolumePluginPath: "/var/lib/kubelet",
 			},
 		}
 	})
@@ -298,22 +293,22 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
-	It("should not allow a relative path in VolumePluginSpec.KubeletDir", func() {
-		instance.Spec.VolumePlugin.KubeletDir = "relative/path"
+	It("should allow arbitrary absolute path in KubeletVolumePluginPath", func() {
+		instance.Spec.KubeletVolumePluginPath = "/some/abs/path"
+		err := validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should not allow a relative path in KubeletVolumePluginPath", func() {
+		instance.Spec.KubeletVolumePluginPath = "relative/path"
 		err := validateCustomResource(instance)
 		Expect(err).To(HaveOccurred())
 	})
 
-	It("should not allow a relative path in VolumePluginSpec.SockDir", func() {
-		instance.Spec.VolumePlugin.SockDir = "relative/path"
+	It("should allow 'None' value in KubeletVolumePluginPath", func() {
+		instance.Spec.KubeletVolumePluginPath = "None"
 		err := validateCustomResource(instance)
-		Expect(err).To(HaveOccurred())
-	})
-
-	It("should not allow a relative path in VolumePluginSpec.RegistrationDir", func() {
-		instance.Spec.VolumePlugin.RegistrationDir = "relative/path"
-		err := validateCustomResource(instance)
-		Expect(err).To(HaveOccurred())
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("should validate controlPlaneNodeSelector", func() {

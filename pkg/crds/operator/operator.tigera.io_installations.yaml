@@ -4242,6 +4242,11 @@ spec:
                       type: string
                   type: object
                 type: array
+              kubeletVolumePluginPath:
+                description: 'KubeletVolumePluginPath optionally specifies enablement
+                  of Calico CSI plugin. If not specified, CSI will be enabled by default.
+                  If set to ''None'', CSI will be disabled. Default: /var/lib/kubelet'
+                type: string
               kubernetesProvider:
                 description: KubernetesProvider specifies a particular provider of
                   the Kubernetes platform and enables provider-specific configuration.
@@ -5866,27 +5871,6 @@ spec:
                 - Calico
                 - TigeraSecureEnterprise
                 type: string
-              volumePlugin:
-                description: VolumePlugin optionally specifies enablement of Calico
-                  CSI plugin. If not specified, VolumePlugin will be disabled by default.
-                properties:
-                  enable:
-                    description: 'Enable allows CSI to be turned on and off Default:
-                      false'
-                    type: boolean
-                  kubeletDir:
-                    description: 'KubeletDir specifies the absolute path of the Kubelet
-                      root directory Default: /var/lib/kubelet'
-                    type: string
-                  registrationDir:
-                    description: 'RegistrationDir specifies the absolute path of the
-                      plugins registration directory Default: /var/lib/kubelet/plugins_registry/'
-                    type: string
-                  sockDir:
-                    description: 'SockDir specifies the absolute path of the plugins
-                      socket directory Default: /var/lib/kubelet/plugins/csi.tigera.io/'
-                    type: string
-                type: object
             type: object
           status:
             description: Most recently observed state for the Calico or Calico Enterprise
@@ -10410,6 +10394,12 @@ spec:
                           type: string
                       type: object
                     type: array
+                  kubeletVolumePluginPath:
+                    description: 'KubeletVolumePluginPath optionally specifies enablement
+                      of Calico CSI plugin. If not specified, CSI will be enabled
+                      by default. If set to ''None'', CSI will be disabled. Default:
+                      /var/lib/kubelet'
+                    type: string
                   kubernetesProvider:
                     description: KubernetesProvider specifies a particular provider
                       of the Kubernetes platform and enables provider-specific configuration.
@@ -12147,28 +12137,6 @@ spec:
                     - Calico
                     - TigeraSecureEnterprise
                     type: string
-                  volumePlugin:
-                    description: VolumePlugin optionally specifies enablement of Calico
-                      CSI plugin. If not specified, VolumePlugin will be disabled
-                      by default.
-                    properties:
-                      enable:
-                        description: 'Enable allows CSI to be turned on and off Default:
-                          false'
-                        type: boolean
-                      kubeletDir:
-                        description: 'KubeletDir specifies the absolute path of the
-                          Kubelet root directory Default: /var/lib/kubelet'
-                        type: string
-                      registrationDir:
-                        description: 'RegistrationDir specifies the absolute path
-                          of the plugins registration directory Default: /var/lib/kubelet/plugins_registry/'
-                        type: string
-                      sockDir:
-                        description: 'SockDir specifies the absolute path of the plugins
-                          socket directory Default: /var/lib/kubelet/plugins/csi.tigera.io/'
-                        type: string
-                    type: object
                 type: object
               conditions:
                 description: Conditions represents the latest observed set of conditions

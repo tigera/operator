@@ -29,15 +29,14 @@ var _ = Describe("CSI rendering tests", func() {
 
 	BeforeEach(func() {
 		defaultInstance = &operatorv1.InstallationSpec{
-			VolumePlugin: &operatorv1.VolumePluginSpec{},
+			KubeletVolumePluginPath: "/var/lib/kubelet",
 		}
 		cfg = render.CSIConfiguration{
 			Installation: defaultInstance,
 		}
 	})
 
-	It("should render properly when VolumePlugin is enabled", func() {
-		defaultInstance.VolumePlugin.Enable = true
+	It("should render properly with KubeletVolumePluginPath default value", func() {
 		expectedCreateObjs := []struct {
 			name    string
 			ns      string
@@ -60,8 +59,8 @@ var _ = Describe("CSI rendering tests", func() {
 		}
 	})
 
-	It("should render properly when VolumePlugin is disabled", func() {
-		defaultInstance.VolumePlugin.Enable = false
+	It("should render properly when KubeletVolumePluginPath is set to 'None'", func() {
+		defaultInstance.KubeletVolumePluginPath = "None"
 		expectedDelObjs := []struct {
 			name    string
 			ns      string

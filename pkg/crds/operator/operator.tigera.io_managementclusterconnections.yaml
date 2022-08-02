@@ -43,6 +43,25 @@ spec:
                   cluster. Ex.: "10.128.0.10:30449". A managed cluster should be able
                   to access this address. This field is used by managed clusters only.'
                 type: string
+              tls:
+                description: TLS provides options for configuring how Managed Clusters
+                  can establish an mTLS connection with the Management Cluster.
+                properties:
+                  ca:
+                    description: "CA indicates which verification method the tunnel
+                      client should use to verify the tunnel server's identity. \n
+                      When left blank or set to 'Tigera', the tunnel client will expect
+                      a self-signed cert to be included in the certificate bundle
+                      and will expect the cert to have a Common Name (CN) of 'voltron'.
+                      \n When set to 'Public', the tunnel client will use its installed
+                      system certs and will use the managementClusterAddr to verify
+                      the tunnel server's identity. \n Default: Tigera"
+                    enum:
+                    - ""
+                    - Tigera
+                    - Public
+                    type: string
+                type: object
             type: object
         type: object
     served: true

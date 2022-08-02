@@ -113,9 +113,9 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		inst.FlexVolumePath = override.FlexVolumePath
 	}
 
-	switch compareFields(inst.VolumePlugin, override.VolumePlugin) {
+	switch compareFields(inst.KubeletVolumePluginPath, override.KubeletVolumePluginPath) {
 	case BOnlySet, Different:
-		inst.VolumePlugin = override.VolumePlugin
+		inst.KubeletVolumePluginPath = override.KubeletVolumePluginPath
 	}
 
 	switch compareFields(inst.NodeUpdateStrategy, override.NodeUpdateStrategy) {

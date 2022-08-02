@@ -60,7 +60,7 @@ var _ = Describe("CSI rendering tests", func() {
 	})
 
 	It("should render properly when KubeletVolumePluginPath is set to 'None'", func() {
-		defaultInstance.KubeletVolumePluginPath = "None"
+		cfg.Installation.KubeletVolumePluginPath = "None"
 		expectedDelObjs := []struct {
 			name    string
 			ns      string

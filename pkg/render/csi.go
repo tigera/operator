@@ -320,7 +320,7 @@ func (c *csiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 	objs = append(objs, c.csiDriver())
 	objs = append(objs, c.csiDaemonset())
 
-	if c.cfg.Terminating || c.cfg.Installation.KubernetesProvider == "None" {
+	if c.cfg.Terminating || c.cfg.Installation.KubeletVolumePluginPath == "None" {
 		objsToDelete = objs
 	} else {
 		objsToCreate = objs

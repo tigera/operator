@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019, 2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,8 @@
 package installation
 
 import (
+	"path/filepath"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -40,7 +42,8 @@ var _ = Describe("Installation validation tests", func() {
 					Type: operator.PluginCalico,
 					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
 				},
-				ComponentResources: []operator.ComponentResource{},
+				ComponentResources:      []operator.ComponentResource{},
+				KubeletVolumePluginPath: filepath.Clean("/var/lib/kubelet"),
 			},
 		}
 	})
@@ -290,6 +293,24 @@ var _ = Describe("Installation validation tests", func() {
 		instance.Spec.FlexVolumePath = "foo/bar/baz"
 		err := validateCustomResource(instance)
 		Expect(err).To(HaveOccurred())
+	})
+
+	It("should allow arbitrary absolute path in KubeletVolumePluginPath", func() {
+		instance.Spec.KubeletVolumePluginPath = "/some/abs/path"
+		err := validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should not allow a relative path in KubeletVolumePluginPath", func() {
+		instance.Spec.KubeletVolumePluginPath = "relative/path"
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should allow 'None' value in KubeletVolumePluginPath", func() {
+		instance.Spec.KubeletVolumePluginPath = "None"
+		err := validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("should validate controlPlaneNodeSelector", func() {

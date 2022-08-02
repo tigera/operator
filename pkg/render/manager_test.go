@@ -506,7 +506,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			ControlPlaneTolerations: []corev1.Toleration{t},
 			ControlPlaneReplicas:    &replicas,
 		})
-		Expect(deployment.Spec.Template.Spec.Tolerations).To(ContainElements(t, rmeta.TolerateMaster, rmeta.TolerateCriticalAddonsOnly))
+		Expect(deployment.Spec.Template.Spec.Tolerations).To(ContainElements(append(rmeta.TolerateCriticalAddonsAndControlPlane, t)))
 	})
 
 	It("should render all resources for certificate management", func() {

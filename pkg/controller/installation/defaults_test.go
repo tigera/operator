@@ -17,8 +17,6 @@ package installation
 import (
 	. "github.com/onsi/ginkgo"
 	"github.com/onsi/ginkgo/extensions/table"
-	. "github.com/onsi/gomega"
-
 	osconfigv1 "github.com/openshift/api/config/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -52,11 +50,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 		Expect(instance.Spec.NonPrivileged).NotTo(BeNil())
 		Expect(*instance.Spec.NonPrivileged).To(Equal(operator.NonPrivilegedDisabled))
-		Expect(instance.Spec.VolumePlugin).NotTo(BeNil())
-		Expect(instance.Spec.VolumePlugin.Enable).To(Equal(false))
-		Expect(instance.Spec.VolumePlugin.KubeletDir).To(Equal("/var/lib/kubelet"))
-		Expect(instance.Spec.VolumePlugin.SockDir).To(Equal("/var/lib/kubelet/plugins/csi.tigera.io/"))
-		Expect(instance.Spec.VolumePlugin.RegistrationDir).To(Equal("/var/lib/kubelet/plugins_registry/"))
+		Expect(instance.Spec.KubeletVolumePluginPath).To(Equal("/var/lib/kubelet"))
 	})
 
 	It("should properly fill defaults on an empty TigeraSecureEnterprise instance", func() {
@@ -81,11 +75,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 		Expect(instance.Spec.NonPrivileged).NotTo(BeNil())
 		Expect(*instance.Spec.NonPrivileged).To(Equal(operator.NonPrivilegedDisabled))
-		Expect(instance.Spec.VolumePlugin).NotTo(BeNil())
-		Expect(instance.Spec.VolumePlugin.Enable).To(Equal(false))
-		Expect(instance.Spec.VolumePlugin.KubeletDir).To(Equal("/var/lib/kubelet"))
-		Expect(instance.Spec.VolumePlugin.SockDir).To(Equal("/var/lib/kubelet/plugins/csi.tigera.io/"))
-		Expect(instance.Spec.VolumePlugin.RegistrationDir).To(Equal("/var/lib/kubelet/plugins_registry/"))
+		Expect(instance.Spec.KubeletVolumePluginPath).To(Equal("/var/lib/kubelet"))
 	})
 
 	It("should not override custom configuration", func() {
@@ -157,12 +147,7 @@ var _ = Describe("Defaulting logic tests", func() {
 						MaxUnavailable: &one,
 					},
 				},
-				VolumePlugin: &operator.VolumePluginSpec{
-					Enable:          true,
-					KubeletDir:      "/my/kubelet/dir",
-					SockDir:         "/my/sock/dir",
-					RegistrationDir: "/my/reg/dir",
-				},
+				KubeletVolumePluginPath: "/my/kubelet/root/dir",
 			},
 		}
 		instanceCopy := instance.DeepCopyObject().(*operator.Installation)
@@ -230,12 +215,7 @@ var _ = Describe("Defaulting logic tests", func() {
 						MaxUnavailable: &one,
 					},
 				},
-				VolumePlugin: &operator.VolumePluginSpec{
-					Enable:          true,
-					KubeletDir:      "/my/kubelet/dir",
-					SockDir:         "/my/sock/dir",
-					RegistrationDir: "/my/reg/dir",
-				},
+				KubeletVolumePluginPath: "/my/kubelet/root/dir",
 			},
 		}
 		instanceCopy := instance.DeepCopyObject().(*operator.Installation)
@@ -445,6 +425,34 @@ var _ = Describe("Defaulting logic tests", func() {
 			&operator.Installation{
 				Spec: operator.InstallationSpec{
 					FlexVolumePath: "/foo/bar/",
+				},
+			}, "/foo/bar/",
+		),
+	)
+	table.DescribeTable("Test different values for KubeletVolumePluginPath",
+		func(i *operator.Installation, expectedKubeletVolumePluginPath string) {
+			Expect(fillDefaults(i)).To(BeNil())
+			Expect(i.Spec.KubeletVolumePluginPath).To(Equal(expectedKubeletVolumePluginPath))
+		},
+
+		table.Entry("KubeletVolumePluginPath set to None",
+			&operator.Installation{
+				Spec: operator.InstallationSpec{
+					KubeletVolumePluginPath: "None",
+				},
+			}, "None",
+		),
+
+		table.Entry("KubeletVolumePluginPath left empty (default)",
+			&operator.Installation{
+				Spec: operator.InstallationSpec{},
+			}, "/var/lib/kubelet",
+		),
+
+		table.Entry("KubeletVolumePluginPath set to a custom path",
+			&operator.Installation{
+				Spec: operator.InstallationSpec{
+					KubeletVolumePluginPath: "/foo/bar/",
 				},
 			}, "/foo/bar/",
 		),

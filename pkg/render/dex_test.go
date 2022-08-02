@@ -194,7 +194,7 @@ var _ = Describe("dex rendering tests", func() {
 			component := render.Dex(cfg)
 			resources, _ := component.Objects()
 			d := rtest.GetResource(resources, render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-			Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(t, rmeta.TolerateMaster))
+			Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(append(rmeta.TolerateControlPlane, t)))
 		})
 
 		It("should render all resources for a certificate management", func() {

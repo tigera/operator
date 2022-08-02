@@ -505,6 +505,7 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 				"ipreservations",
 				"ipamblocks",
 				"blockaffinities",
+				"ipamconfigs",
 			},
 			Verbs: []string{
 				"get",
@@ -1085,7 +1086,7 @@ func (c *apiServerComponent) tolerations() []corev1.Toleration {
 	if c.hostNetwork() {
 		return rmeta.TolerateAll
 	}
-	return append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateMaster)
+	return append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
 }
 
 // apiServerPodSecurityPolicy returns a PSP to create and a PSP to delete based on variant.

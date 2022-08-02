@@ -417,6 +417,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 					"blockaffinities",
 					"ipamblocks",
 					"ipamhandles",
+					"ipamconfigs",
 				},
 				Verbs: []string{"get", "list", "create", "update", "delete"},
 			},

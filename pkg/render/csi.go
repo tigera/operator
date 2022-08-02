@@ -182,11 +182,11 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 		VolumeMounts: []corev1.VolumeMount{
 			corev1.VolumeMount{
 				Name:      "socket-dir",
-				MountPath: "/csi",
+				MountPath: filepath.Clean("/csi"),
 			},
 			corev1.VolumeMount{
 				Name:      "registration-dir",
-				MountPath: "/registration",
+				MountPath: filepath.Clean("/registration"),
 			},
 		},
 	}

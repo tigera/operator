@@ -15,6 +15,8 @@
 package installation
 
 import (
+	"path/filepath"
+
 	. "github.com/onsi/ginkgo"
 	"github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -51,7 +53,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 		Expect(instance.Spec.NonPrivileged).NotTo(BeNil())
 		Expect(*instance.Spec.NonPrivileged).To(Equal(operator.NonPrivilegedDisabled))
-		Expect(instance.Spec.KubeletVolumePluginPath).To(Equal("/var/lib/kubelet"))
+		Expect(instance.Spec.KubeletVolumePluginPath).To(Equal(filepath.Clean("/var/lib/kubelet")))
 	})
 
 	It("should properly fill defaults on an empty TigeraSecureEnterprise instance", func() {
@@ -76,7 +78,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 		Expect(instance.Spec.NonPrivileged).NotTo(BeNil())
 		Expect(*instance.Spec.NonPrivileged).To(Equal(operator.NonPrivilegedDisabled))
-		Expect(instance.Spec.KubeletVolumePluginPath).To(Equal("/var/lib/kubelet"))
+		Expect(instance.Spec.KubeletVolumePluginPath).To(Equal(filepath.Clean("/var/lib/kubelet")))
 	})
 
 	It("should not override custom configuration", func() {
@@ -447,7 +449,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		table.Entry("KubeletVolumePluginPath left empty (default)",
 			&operator.Installation{
 				Spec: operator.InstallationSpec{},
-			}, "/var/lib/kubelet",
+			}, filepath.Clean("/var/lib/kubelet"),
 		),
 
 		table.Entry("KubeletVolumePluginPath set to a custom path",

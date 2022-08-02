@@ -22,6 +22,7 @@ import (
 	"math"
 	"net"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -722,7 +723,7 @@ func fillDefaults(instance *operator.Installation) error {
 	}
 
 	if len(instance.Spec.KubeletVolumePluginPath) == 0 {
-		instance.Spec.KubeletVolumePluginPath = "/var/lib/kubelet"
+		instance.Spec.KubeletVolumePluginPath = filepath.Clean("/var/lib/kubelet")
 	}
 
 	// Default rolling update parameters.

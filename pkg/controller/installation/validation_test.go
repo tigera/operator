@@ -15,6 +15,8 @@
 package installation
 
 import (
+	"path/filepath"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -41,7 +43,7 @@ var _ = Describe("Installation validation tests", func() {
 					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
 				},
 				ComponentResources:      []operator.ComponentResource{},
-				KubeletVolumePluginPath: "/var/lib/kubelet",
+				KubeletVolumePluginPath: filepath.Clean("/var/lib/kubelet"),
 			},
 		}
 	})

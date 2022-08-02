@@ -107,8 +107,7 @@ var _ = Describe("Runtime Security Controller Tests", func() {
 
 	It("should render accurate resources for runtime security", func() {
 
-		By("applying the Runtime CR to the fake cluster")
-		//apply image assurance cr
+		By("applying the Runtime Security CR to the fake cluster")
 		Expect(c.Create(ctx, &operatorv1.RuntimeSecurity{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 			Spec:       operatorv1.RuntimeSecuritySpec{},
@@ -117,11 +116,11 @@ var _ = Describe("Runtime Security Controller Tests", func() {
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).ShouldNot(HaveOccurred())
 
-		By("ensuring the Runtime Deployment resource created ")
+		By("ensuring the Sasha Deployment resource created ")
 		deploy := appsv1.Deployment{
 			TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "sasha",
+				Name:      rsrender.SashaClientName,
 				Namespace: rsrender.NameSpaceRuntimeSecurity,
 			},
 		}

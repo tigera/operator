@@ -24,11 +24,15 @@ import (
 const (
 	NameSpaceRuntimeSecurity            = "tigera-runtime-security"
 	ElasticsearchSashaJobUserSecretName = "tigera-ee-sasha-elasticsearch-access"
-	ResourceNameSashaPod                = "tigera-ee-sasha"
+	SashaClientName                     = "sasha"
 	ResourceSashaDefaultCPULimit        = "1"
 	ResourceSashaDefaultMemoryLimit     = "1Gi"
 	ResourceSashaDefaultCPURequest      = "100m"
 	ResourceSashaDefaultMemoryRequest   = "100Mi"
+	SashaVerifyAuthVolumeName           = "cc-client-credentials"
+	SashaVerifyAuthPath                 = "/var/run/calico-cloud/api"
+	SashaVerifyAuthFile                 = "/var/run/calico-cloud/api/clientCredentials.yaml"
+	SashaVerifyAuthURL                  = "https://sasha-verify.dev.calicocloud.io"
 )
 
 func RuntimeSecurity(
@@ -117,10 +121,8 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 	envVars := []corev1.EnvVar{
 		{Name: "PULL_MAX_LAST_MINUTES", Value: "20"},
 		{Name: "CLUSTER_NAME", Value: c.esClusterName()},
-		{Name: "SASHA_SECRETLOCATION", Value: "/var/run/calico-cloud/api/clientCredentials.yaml"},
-		{Name: "SASHA_VERIFYURL", Value: "https://sasha-verify.dev.calicocloud.io"},
-		{Name: "SASHA_RUNTIMELOCATION", Value: "es"},
-		{Name: "SASHA_ALERTLOCATION", Value: "es"},
+		{Name: "SASHA_SECRETLOCATION", Value: SashaVerifyAuthFile},
+		{Name: "SASHA_VERIFYURL", Value: SashaVerifyAuthURL},
 	}
 
 	rsSecretOptional := false
@@ -129,25 +131,25 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "sasha",
+			Name:      SashaClientName,
 			Namespace: NameSpaceRuntimeSecurity,
 			Labels: map[string]string{
-				"k8s-app": "sasha",
+				"k8s-app": SashaClientName,
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"k8s-app": ResourceNameSashaPod,
+					"k8s-app": SashaClientName,
 				},
 			},
 			Replicas: &numReplica,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      ResourceNameSashaPod,
+					Name:      SashaClientName,
 					Namespace: NameSpaceRuntimeSecurity,
 					Labels: map[string]string{
-						"k8s-app": ResourceNameSashaPod,
+						"k8s-app": SashaClientName,
 					},
 				},
 				Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
@@ -155,7 +157,7 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 					Tolerations:  c.config.Installation.ControlPlaneTolerations,
 					Volumes: []corev1.Volume{
 						{
-							Name: "cc-client-credentials",
+							Name: SashaVerifyAuthVolumeName,
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
 									SecretName: "tigera-calico-cloud-client-credentials",
@@ -166,10 +168,9 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 					},
 					Containers: []corev1.Container{
 						relasticsearch.ContainerDecorate(corev1.Container{
-							Name:  ResourceNameSashaPod,
+							Name:  SashaClientName,
 							Image: c.config.sashaImage,
-							//Command: []string{"./calico-sasha"},
-							Env: envVars,
+							Env:   envVars,
 							Resources: corev1.ResourceRequirements{
 								Limits: corev1.ResourceList{
 									corev1.ResourceCPU:    resource.MustParse(ResourceSashaDefaultCPULimit),
@@ -182,8 +183,8 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 							},
 							VolumeMounts: []corev1.VolumeMount{
 								{
-									Name:      "cc-client-credentials",
-									MountPath: "/var/run/calico-cloud/api",
+									Name:      SashaVerifyAuthVolumeName,
+									MountPath: SashaVerifyAuthPath,
 								},
 							},
 						},
@@ -193,7 +194,7 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 							c.config.OsType),
 					},
 					ImagePullSecrets:   secret.GetReferenceList(c.config.PullSecrets),
-					ServiceAccountName: ResourceNameSashaPod,
+					ServiceAccountName: SashaClientName,
 				}),
 			},
 		},
@@ -203,6 +204,6 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 func (c *component) sashaServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: rbacv1.ServiceAccountKind, APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: ResourceNameSashaPod, Namespace: NameSpaceRuntimeSecurity},
+		ObjectMeta: metav1.ObjectMeta{Name: SashaClientName, Namespace: NameSpaceRuntimeSecurity},
 	}
 }

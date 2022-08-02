@@ -63,8 +63,8 @@ var _ = Describe("Runtime Security rendering tests", func() {
 		}{
 			{name: runtimesecurity.NameSpaceRuntimeSecurity, ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: runtimesecurity.ElasticsearchSashaJobUserSecretName, ns: runtimesecurity.NameSpaceRuntimeSecurity, group: "", version: "v1", kind: "Secret"},
-			{name: runtimesecurity.ResourceNameSashaPod, ns: runtimesecurity.NameSpaceRuntimeSecurity, group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "sasha", ns: runtimesecurity.NameSpaceRuntimeSecurity, group: "apps", version: "v1", kind: "Deployment"},
+			{name: runtimesecurity.SashaClientName, ns: runtimesecurity.NameSpaceRuntimeSecurity, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: runtimesecurity.SashaClientName, ns: runtimesecurity.NameSpaceRuntimeSecurity, group: "apps", version: "v1", kind: "Deployment"},
 		}
 
 		resources, _ := component.Objects()
@@ -78,7 +78,7 @@ var _ = Describe("Runtime Security rendering tests", func() {
 		}
 
 		// Check rendering of spec deployment.
-		deploy := rtest.GetResource(resources, "sasha", runtimesecurity.NameSpaceRuntimeSecurity,
+		deploy := rtest.GetResource(resources, runtimesecurity.SashaClientName, runtimesecurity.NameSpaceRuntimeSecurity,
 			"apps", "v1", "Deployment").(*appsv1.Deployment)
 		spec := deploy.Spec.Template.Spec
 		Expect(len(spec.Containers)).To(Equal(1))

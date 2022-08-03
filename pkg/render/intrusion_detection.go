@@ -966,23 +966,6 @@ func (c *intrusionDetectionComponent) adJobsGlobalertTemplates() []client.Object
 				APIVersion: "projectcalico.org/v3",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name: adDetectorPrefixName + "ip-sweep",
-			},
-			Spec: v3.GlobalAlertSpec{
-				Type:        v3.GlobalAlertTypeAnomalyDetection,
-				Description: "IP Sweep detection",
-				Summary:     "Looks for pods in your cluster that are sending packets to many destinations.",
-				Detector:    &v3.DetectorParams{Name: "ip_sweep"},
-				Severity:    100,
-				Period:      &metav1.Duration{Duration: adDetectionJobsDefaultPeriod},
-			},
-		},
-		&v3.GlobalAlertTemplate{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "GlobalAlertTemplate",
-				APIVersion: "projectcalico.org/v3",
-			},
-			ObjectMeta: metav1.ObjectMeta{
 				Name: adDetectorPrefixName + "port-scan",
 			},
 			Spec: v3.GlobalAlertSpec{
@@ -1017,23 +1000,6 @@ func (c *intrusionDetectionComponent) adJobsGlobalertTemplates() []client.Object
 				APIVersion: "projectcalico.org/v3",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name: adDetectorPrefixName + "time-series-dns",
-			},
-			Spec: v3.GlobalAlertSpec{
-				Type:        v3.GlobalAlertTypeAnomalyDetection,
-				Description: "Time series anomaly in DNS log",
-				Summary:     "ooks at all numeric fields in the DNS log and how they changed over time.",
-				Severity:    100,
-				Detector:    &v3.DetectorParams{Name: "time_series_dns"},
-				Period:      &metav1.Duration{Duration: adDetectionJobsDefaultPeriod},
-			},
-		},
-		&v3.GlobalAlertTemplate{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "GlobalAlertTemplate",
-				APIVersion: "projectcalico.org/v3",
-			},
-			ObjectMeta: metav1.ObjectMeta{
 				Name: adDetectorPrefixName + "generic-flows",
 			},
 			Spec: v3.GlobalAlertSpec{
@@ -1042,23 +1008,6 @@ func (c *intrusionDetectionComponent) adJobsGlobalertTemplates() []client.Object
 				Summary:     "Looks for excessive values in several fields in the flows log.",
 				Severity:    100,
 				Detector:    &v3.DetectorParams{Name: "generic_flows"},
-				Period:      &metav1.Duration{Duration: adDetectionJobsDefaultPeriod},
-			},
-		},
-		&v3.GlobalAlertTemplate{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "GlobalAlertTemplate",
-				APIVersion: "projectcalico.org/v3",
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name: adDetectorPrefixName + "time-series-flows",
-			},
-			Spec: v3.GlobalAlertSpec{
-				Type:        v3.GlobalAlertTypeAnomalyDetection,
-				Description: "Time series anomaly in flows log",
-				Summary:     "Looks at all numeric fields in the flows log and how they changed over time.",
-				Severity:    100,
-				Detector:    &v3.DetectorParams{Name: "time_series_flows"},
 				Period:      &metav1.Duration{Duration: adDetectionJobsDefaultPeriod},
 			},
 		},
@@ -1127,6 +1076,57 @@ func (c *intrusionDetectionComponent) adJobsGlobalertTemplates() []client.Object
 				Summary:     "Looks for the clients that have too high latency of the DNS requests.",
 				Severity:    100,
 				Detector:    &v3.DetectorParams{Name: "l7_latency"},
+				Period:      &metav1.Duration{Duration: adDetectionJobsDefaultPeriod},
+			},
+		},
+		&v3.GlobalAlertTemplate{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "GlobalAlertTemplate",
+				APIVersion: "projectcalico.org/v3",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: adDetectorPrefixName + "bytes-in",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Type:        v3.GlobalAlertTypeAnomalyDetection,
+				Description: "Inbound Service bytes anomaly",
+				Summary:     "Looks for services that receive a high amount of data.",
+				Severity:    100,
+				Detector:    &v3.DetectorParams{Name: "bytes_in"},
+				Period:      &metav1.Duration{Duration: adDetectionJobsDefaultPeriod},
+			},
+		},
+		&v3.GlobalAlertTemplate{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "GlobalAlertTemplate",
+				APIVersion: "projectcalico.org/v3",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: adDetectorPrefixName + "bytes-out",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Type:        v3.GlobalAlertTypeAnomalyDetection,
+				Description: "Outbound Service bytes anomaly",
+				Summary:     "Looks for pods that send a high amount of data.",
+				Severity:    100,
+				Detector:    &v3.DetectorParams{Name: "bytes_out"},
+				Period:      &metav1.Duration{Duration: adDetectionJobsDefaultPeriod},
+			},
+		},
+		&v3.GlobalAlertTemplate{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "GlobalAlertTemplate",
+				APIVersion: "projectcalico.org/v3",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: adDetectorPrefixName + "process-bytes",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Type:        v3.GlobalAlertTypeAnomalyDetection,
+				Description: "Process bytes",
+				Summary:     "Looks for the processes with an excessive number of bytes sent or received.",
+				Severity:    100,
+				Detector:    &v3.DetectorParams{Name: "process_bytes"},
 				Period:      &metav1.Duration{Duration: adDetectionJobsDefaultPeriod},
 			},
 		},

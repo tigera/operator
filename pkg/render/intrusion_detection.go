@@ -971,7 +971,7 @@ func (c *intrusionDetectionComponent) adJobsGlobalertTemplates() []client.Object
 			Spec: v3.GlobalAlertSpec{
 				Type:        v3.GlobalAlertTypeAnomalyDetection,
 				Description: "Port Scan detection",
-				Summary:     "Looks for pods in your cluster that are sending packets to one destination on multiple ports..",
+				Summary:     "Looks for pods in your cluster that are sending packets to one destination on multiple ports.",
 				Severity:    100,
 				Detector:    &v3.DetectorParams{Name: "port_scan"},
 				Period:      &metav1.Duration{Duration: adDetectionJobsDefaultPeriod},

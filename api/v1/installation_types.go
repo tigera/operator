@@ -167,7 +167,7 @@ type InstallationSpec struct {
 	// Default: Disabled
 	// +kubebuilder:validation:Enum=Enabled;Disabled
 	// +optional
-	FIPSMode FIPSMode `json:"fipsMode,omitempty"`
+	FIPSMode *FIPSMode `json:"fipsMode,omitempty"`
 }
 
 type FIPSMode string

@@ -17,6 +17,7 @@ package manager
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -295,6 +296,8 @@ var _ = Describe("Manager controller tests", func() {
 	Context("reconciliation", func() {
 		var r ReconcileManager
 		var mockStatus *status.MockStatus
+		var licenseKey *v3.LicenseKey
+		var compliance *operatorv1.Compliance
 
 		BeforeEach(func() {
 			// Create an object we can use throughout the test to do the compliance reconcile loops.
@@ -309,6 +312,7 @@ var _ = Describe("Manager controller tests", func() {
 			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
 			mockStatus.On("SetDegraded", "Waiting for secret 'calico-node-prometheus-tls' to become available", "").Return().Maybe()
 			mockStatus.On("SetDegraded", "Waiting for secret 'tigera-packetcapture-server-tls' to become available", "").Return().Maybe()
+			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
 
 			r = ReconcileManager{
@@ -329,9 +333,15 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(c.Create(ctx, &v3.Tier{
 				ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
 			})).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &v3.LicenseKey{
+			licenseKey = &v3.LicenseKey{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
-			})).NotTo(HaveOccurred())
+				Status: v3.LicenseKeyStatus{
+					Features: []string{
+						common.ComplianceFeature,
+					},
+				},
+			}
+			Expect(c.Create(ctx, licenseKey)).NotTo(HaveOccurred())
 			Expect(c.Create(
 				ctx,
 				&operatorv1.Installation{
@@ -351,12 +361,13 @@ var _ = Describe("Manager controller tests", func() {
 					},
 				},
 			)).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &operatorv1.Compliance{
+			compliance = &operatorv1.Compliance{
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Status: operatorv1.ComplianceStatus{
 					State: operatorv1.TigeraStatusReady,
 				},
-			})).NotTo(HaveOccurred())
+			}
+			Expect(c.Create(ctx, compliance)).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{Name: common.TigeraPrometheusNamespace},
 			})).NotTo(HaveOccurred())
@@ -508,5 +519,93 @@ var _ = Describe("Manager controller tests", func() {
 				utils.ExpectWaitForTierWatch(ctx, &r, mockStatus)
 			})
 		})
+
+		Context("compliance reconciliation", func() {
+			It("should wait if license is not present", func() {
+				Expect(c.Delete(ctx, licenseKey)).NotTo(HaveOccurred())
+				mockStatus = &status.MockStatus{}
+				mockStatus.On("OnCRFound").Return()
+				mockStatus.On("SetDegraded", "License not found", "licensekeies.projectcalico.org \"default\" not found").Return()
+				r.status = mockStatus
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+
+				Expect(err).NotTo(HaveOccurred())
+				mockStatus.AssertExpectations(GinkgoT())
+			})
+
+			It("should wait if compliance CR and compliance-enabled license is present, but compliance is not ready", func() {
+				compliance.Status.State = ""
+				Expect(c.Update(ctx, compliance)).NotTo(HaveOccurred())
+				mockStatus = &status.MockStatus{}
+				mockStatus.On("OnCRFound").Return()
+				mockStatus.On("SetDegraded", "Compliance is not ready", "compliance status: ").Return()
+				r.status = mockStatus
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+
+				Expect(err).NotTo(HaveOccurred())
+				mockStatus.AssertExpectations(GinkgoT())
+			})
+
+			It("should complete reconcile with compliance features enabled when CR is ready and license feature is enabled", func() {
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).NotTo(HaveOccurred())
+
+				assertComplianceFeaturesEnabled(c, true)
+				mockStatus.AssertExpectations(GinkgoT())
+			})
+
+			It("should complete reconcile with compliance features disabled when CR is ready but license feature is not enabled", func() {
+				licenseKey.Status.Features = []string{}
+				Expect(c.Update(ctx, licenseKey)).NotTo(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).NotTo(HaveOccurred())
+
+				assertComplianceFeaturesEnabled(c, false)
+				mockStatus.AssertExpectations(GinkgoT())
+			})
+
+			It("should complete reconcile with compliance features disabled when license feature is enabled but CR is not present", func() {
+				Expect(c.Delete(ctx, compliance)).NotTo(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).NotTo(HaveOccurred())
+
+				assertComplianceFeaturesEnabled(c, false)
+				mockStatus.AssertExpectations(GinkgoT())
+			})
+
+			It("should complete reconcile with compliance features disabled when license feature is not enabled and CR is not present", func() {
+				licenseKey.Status.Features = []string{}
+				Expect(c.Update(ctx, licenseKey)).NotTo(HaveOccurred())
+				Expect(c.Delete(ctx, compliance)).NotTo(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).NotTo(HaveOccurred())
+
+				assertComplianceFeaturesEnabled(c, false)
+				mockStatus.AssertExpectations(GinkgoT())
+			})
+		})
 	})
 })
+
+func assertComplianceFeaturesEnabled(c client.Client, enabled bool) {
+	d := appsv1.Deployment{
+		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tigera-manager",
+			Namespace: render.ManagerNamespace,
+		},
+	}
+	Expect(test.GetResource(c, &d)).NotTo(HaveOccurred())
+	manager := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-manager")
+	voltron := test.GetContainer(d.Spec.Template.Spec.Containers, render.VoltronName)
+
+	Expect(manager).ToNot(BeNil())
+	Expect(manager.Env).To(ContainElement(corev1.EnvVar{Name: "ENABLE_COMPLIANCE_REPORTS", Value: strconv.FormatBool(enabled)}))
+	Expect(voltron).ToNot(BeNil())
+	Expect(voltron.Env).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: strconv.FormatBool(enabled)}))
+}

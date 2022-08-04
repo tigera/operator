@@ -17,7 +17,6 @@
 package render
 
 import (
-	"fmt"
 	"net"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -270,7 +269,7 @@ func (c *GuardianComponent) container() []corev1.Container {
 				{Name: "GUARDIAN_VOLTRON_URL", Value: c.cfg.URL},
 				{Name: "GUARDIAN_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 				{Name: "GUARDIAN_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
-				{Name: "GUARDIAN_FIPS_MODE_ENABLED", Value: fmt.Sprintf("%v", c.cfg.Installation.FIPSMode == operatorv1.FIPSModeEnabled)},
+				{Name: "GUARDIAN_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 			},
 			VolumeMounts: c.volumeMounts(),
 			LivenessProbe: &corev1.Probe{

@@ -147,14 +147,14 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		if c.cfg.Installation.FIPSMode == operatorv1.FIPSModeEnabled {
+		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
 			c.cniImage = appendIfErr(components.GetReference(components.ComponentTigeraCNIFIPS, reg, path, prefix, is))
 		} else {
 			c.cniImage = appendIfErr(components.GetReference(components.ComponentTigeraCNI, reg, path, prefix, is))
 		}
 		c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNode, reg, path, prefix, is))
 	} else {
-		if c.cfg.Installation.FIPSMode == operatorv1.FIPSModeEnabled {
+		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
 			c.cniImage = appendIfErr(components.GetReference(components.ComponentCalicoCNIFIPS, reg, path, prefix, is))
 		} else {
 			c.cniImage = appendIfErr(components.GetReference(components.ComponentCalicoCNI, reg, path, prefix, is))
@@ -1455,7 +1455,7 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 				corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERCERTFILE", Value: c.cfg.PrometheusServerTLS.VolumeMountCertificateFilePath()},
 				corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERKEYFILE", Value: c.cfg.PrometheusServerTLS.VolumeMountKeyFilePath()},
 				corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERCAFILE", Value: c.cfg.TLS.TrustedBundle.MountPath()},
-				corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERFIPSMODEENABLED", Value: fmt.Sprintf("%v", c.cfg.Installation.FIPSMode == operatorv1.FIPSModeEnabled)},
+				corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERFIPSMODEENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 			)
 		}
 		nodeEnv = append(nodeEnv, extraNodeEnv...)
@@ -1467,7 +1467,7 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		extraNodeEnv := []corev1.EnvVar{
 			{Name: "FELIX_PROMETHEUSMETRICSENABLED", Value: "true"},
 			{Name: "FELIX_PROMETHEUSMETRICSPORT", Value: fmt.Sprintf("%d", *c.cfg.Installation.NodeMetricsPort)},
-			{Name: "FELIX_PROMETHEUSMETRICSFIPSMODEENABLED", Value: fmt.Sprintf("%v", c.cfg.Installation.FIPSMode == operatorv1.FIPSModeEnabled)},
+			{Name: "FELIX_PROMETHEUSMETRICSFIPSMODEENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 		}
 		nodeEnv = append(nodeEnv, extraNodeEnv...)
 	}

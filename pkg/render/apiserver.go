@@ -968,7 +968,7 @@ func (c *apiServerComponent) startUpArgs() []string {
 		fmt.Sprintf("--tls-cert-file=%s", c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()),
 	}
 
-	if c.cfg.Installation.FIPSMode == operatorv1.FIPSModeEnabled {
+	if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
 		args = append(args, fmt.Sprintf("--tls-max-version=VersionTLS12"))
 	}
 
@@ -1001,7 +1001,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		{Name: "LISTEN_ADDR", Value: fmt.Sprintf(":%d", QueryServerPort)},
 		{Name: "TLS_CERT", Value: fmt.Sprintf("/%s/tls.crt", ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant))},
 		{Name: "TLS_KEY", Value: fmt.Sprintf("/%s/tls.key", ProjectCalicoApiServerTLSSecretName(c.cfg.Installation.Variant))},
-		{Name: "FIPS_MODE_ENABLED", Value: fmt.Sprintf("%v", c.cfg.Installation.FIPSMode == operatorv1.FIPSModeEnabled)},
+		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 	}
 
 	env = append(env, c.cfg.K8SServiceEndpoint.EnvVars(c.hostNetwork(), c.cfg.Installation.KubernetesProvider)...)

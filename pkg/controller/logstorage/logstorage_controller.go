@@ -676,7 +676,7 @@ func (r *ReconcileLogStorage) getKibana(ctx context.Context) (*kbv1.Kibana, erro
 // Overwriting an existing trial license will invalidate the old trial, and revert the cluster back to basic. When a user
 // installs a valid Elastic license, the trial will be ignored.
 func (r *ReconcileLogStorage) applyElasticTrialSecret(ctx context.Context, installation *operatorv1.InstallationSpec) (bool, error) {
-	if installation.FIPSMode != operatorv1.FIPSModeEnabled {
+	if !operatorv1.IsFIPSModeEnabled(installation.FIPSMode) {
 		return false, nil
 	}
 	if err := r.client.Get(ctx, types.NamespacedName{Name: render.ECKEnterpriseTrial, Namespace: render.ECKOperatorNamespace}, &corev1.Secret{}); err != nil {

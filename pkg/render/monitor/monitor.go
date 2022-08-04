@@ -344,7 +344,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		},
 		{
 			Name:  "FIPS_MODE_ENABLED",
-			Value: fmt.Sprintf("%v", mc.cfg.Installation.FIPSMode == operatorv1.FIPSModeEnabled),
+			Value: operatorv1.IsFIPSModeEnabledString(mc.cfg.Installation.FIPSMode),
 		},
 	}
 

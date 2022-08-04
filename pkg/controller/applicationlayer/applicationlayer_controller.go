@@ -216,8 +216,8 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		return reconcile.Result{}, nil
 	}
 
-	if installation.FIPSMode == operatorv1.FIPSModeEnabled {
-		msg := errors.New("application layer features cannot be used in combination with FIPSMode=Enabled")
+	if operatorv1.IsFIPSModeEnabled(installation.FIPSMode) {
+		msg := errors.New("ApplicationLayer features cannot be used in combination with FIPSMode=Enabled")
 		reqLogger.Error(err, msg.Error())
 		r.status.SetDegraded(msg.Error(), "")
 		return reconcile.Result{}, nil

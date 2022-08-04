@@ -53,7 +53,7 @@ func (r *ReconcileLogStorage) createEsGateway(
 		return reconcile.Result{}, false, err
 	}
 	var kibanaCertificate certificatemanagement.CertificateInterface
-	if install.FIPSMode != operatorv1.FIPSModeEnabled {
+	if !operatorv1.IsFIPSModeEnabled(install.FIPSMode) {
 		kibanaCertificate, err := certificateManager.GetCertificate(r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace())
 		if err != nil {
 			reqLogger.Error(err, "failed to get Kibana tls certificate secret")

@@ -125,23 +125,25 @@ func Manager(cfg *ManagerConfiguration) (Component, error) {
 
 // ManagerConfiguration contains all the config information needed to render the component.
 type ManagerConfiguration struct {
-	KeyValidatorConfig            authentication.KeyValidatorConfig
-	ESSecrets                     []*corev1.Secret
-	KibanaSecrets                 []*corev1.Secret
-	ComplianceServerCertSecret    *corev1.Secret
-	PacketCaptureServerCertSecret *corev1.Secret
-	PrometheusCertSecret          *corev1.Secret
-	ESClusterConfig               *relasticsearch.ClusterConfig
-	TLSKeyPair                    *corev1.Secret
-	PullSecrets                   []*corev1.Secret
-	Openshift                     bool
-	Installation                  *operatorv1.InstallationSpec
-	ManagementCluster             *operatorv1.ManagementCluster
-	TunnelSecret                  *corev1.Secret
-	InternalTrafficSecret         *corev1.Secret
-	ClusterDomain                 string
-	ESLicenseType                 ElasticsearchLicenseType
-	Replicas                      *int32
+	KeyValidatorConfig             authentication.KeyValidatorConfig
+	ESSecrets                      []*corev1.Secret
+	KibanaSecrets                  []*corev1.Secret
+	ComplianceServerCertSecret     *corev1.Secret
+	PacketCaptureServerCertSecret  *corev1.Secret
+	PrometheusCertSecret           *corev1.Secret
+	ESClusterConfig                *relasticsearch.ClusterConfig
+	TLSKeyPair                     *corev1.Secret
+	PullSecrets                    []*corev1.Secret
+	Openshift                      bool
+	Installation                   *operatorv1.InstallationSpec
+	ManagementCluster              *operatorv1.ManagementCluster
+	TunnelSecret                   *corev1.Secret
+	InternalTrafficSecret          *corev1.Secret
+	ClusterDomain                  string
+	ESLicenseType                  ElasticsearchLicenseType
+	Replicas                       *int32
+	Compliance                     *operatorv1.Compliance
+	ComplianceLicenseFeatureActive bool
 }
 
 type managerComponent struct {
@@ -517,6 +519,7 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 		{Name: "CNX_CLUSTER_NAME", Value: "cluster"},
 		{Name: "CNX_POLICY_RECOMMENDATION_SUPPORT", Value: "true"},
 		{Name: "ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
+		{Name: "ENABLE_COMPLIANCE_REPORTS", Value: strconv.FormatBool(c.cfg.Compliance != nil)},
 	}
 
 	envs = append(envs, c.managerOAuth2EnvVars()...)
@@ -570,14 +573,11 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
 		{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
 		{Name: "VOLTRON_DEFAULT_FORWARD_SERVER", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc:9200"},
+		{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: strconv.FormatBool(c.cfg.Compliance != nil && c.cfg.ComplianceLicenseFeatureActive)},
 	}
 
 	if c.cfg.KeyValidatorConfig != nil {
 		env = append(env, c.cfg.KeyValidatorConfig.RequiredEnv("VOLTRON_")...)
-	}
-
-	if c.cfg.ComplianceServerCertSecret == nil {
-		env = append(env, corev1.EnvVar{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: "false"})
 	}
 
 	return corev1.Container{

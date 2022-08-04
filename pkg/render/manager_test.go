@@ -15,7 +15,10 @@
 package render_test
 
 import (
+	"strconv"
+
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -44,6 +47,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	}
 	var replicas int32 = 2
 	installation := &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas}
+	compliance := &operatorv1.Compliance{}
 	const expectedResourcesNumber = 12
 
 	expectedDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
@@ -53,6 +57,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		resources := renderObjects(renderConfig{oidc: false, managementCluster: nil,
 			installation:            installation,
 			includeManagerTLSSecret: true,
+			compliance:              compliance,
+			complianceFeatureActive: true,
 		})
 
 		// Should render the correct resources.
@@ -94,6 +100,12 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(esProxy.Image).Should(Equal(components.TigeraRegistry + "tigera/es-proxy:" + components.ComponentEsProxy.Version))
 		Expect(voltron.Image).Should(Equal(components.TigeraRegistry + "tigera/voltron:" + components.ComponentManagerProxy.Version))
 
+		// manager container
+		Expect(manager.Env).Should(ContainElements(
+			corev1.EnvVar{Name: "ENABLE_COMPLIANCE_REPORTS", Value: "true"},
+		))
+
+		// es-proxy container
 		Expect(esProxy.Env).Should(ContainElements(
 			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
 		))
@@ -128,12 +140,50 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Volumes[5].Secret.SecretName).To(Equal(relasticsearch.PublicCertSecret))
 	})
 
+	type managerComplianceExpectation struct {
+		managerFlag bool
+		voltronFlag bool
+	}
+	DescribeTable("should set container env appropriately when compliance is not fully available",
+		func(crPresent bool, licenseFeatureActive bool, scenario managerComplianceExpectation) {
+			var complianceCR *operatorv1.Compliance
+			if crPresent {
+				complianceCR = &operatorv1.Compliance{}
+			}
+
+			resources := renderObjects(renderConfig{
+				oidc:                    false,
+				managementCluster:       nil,
+				installation:            installation,
+				includeManagerTLSSecret: true,
+				compliance:              complianceCR,
+				complianceFeatureActive: licenseFeatureActive,
+			})
+
+			deployment := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			manager := deployment.Spec.Template.Spec.Containers[0]
+			voltron := deployment.Spec.Template.Spec.Containers[2]
+			Expect(manager.Env).To(ContainElement(corev1.EnvVar{Name: "ENABLE_COMPLIANCE_REPORTS", Value: strconv.FormatBool(scenario.managerFlag)}))
+			Expect(voltron.Env).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: strconv.FormatBool(scenario.voltronFlag)}))
+		},
+		Entry("Both CR and license feature not present/active", false, false, managerComplianceExpectation{managerFlag: false, voltronFlag: false}),
+		Entry("CR not present, license feature active", false, true, managerComplianceExpectation{managerFlag: false, voltronFlag: false}),
+
+		// The manager supports two states of a product feature being unavailable: the product feature being feature-flagged off, and the current
+		// license not enabling the feature. The flag that we set on the manager container is a feature flag, which we should set purely based on
+		// whether the compliance CR is present, ignoring the license status. Therefore, when the CR is present but the license feature is not,
+		// we still expect that the manager feature flag should be set. The manager will render the insufficient license state appropriately.
+		Entry("CR present, license feature not active", true, false, managerComplianceExpectation{managerFlag: true, voltronFlag: false}),
+	)
+
 	It("should ensure cnx policy recommendation support is always set to true", func() {
 		resources := renderObjects(renderConfig{
 			oidc:                    false,
 			managementCluster:       nil,
 			installation:            installation,
 			includeManagerTLSSecret: true,
+			compliance:              compliance,
+			complianceFeatureActive: true,
 		})
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 
@@ -242,6 +292,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		resources := renderObjects(renderConfig{oidc: true, managementCluster: nil,
 			installation:            installation,
 			includeManagerTLSSecret: true,
+			compliance:              compliance,
+			complianceFeatureActive: true,
 		})
 		Expect(len(resources)).To(Equal(expectedResourcesNumber + 1)) //Extra tls secret was added.
 		d := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -255,6 +307,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		resources := renderObjects(renderConfig{oidc: false, managementCluster: &operatorv1.ManagementCluster{},
 			installation:            installation,
 			includeManagerTLSSecret: true,
+			compliance:              compliance,
+			complianceFeatureActive: true,
 		})
 
 		// Should render the correct resources.
@@ -478,6 +532,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				ControlPlaneReplicas:  &replicas,
 			},
 			includeManagerTLSSecret: false,
+			compliance:              compliance,
+			complianceFeatureActive: true,
 		})
 
 		// Should render the correct resources.
@@ -529,6 +585,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				ControlPlaneReplicas:  &replicas,
 			},
 			includeManagerTLSSecret: false,
+			compliance:              compliance,
+			complianceFeatureActive: true,
 		})
 		deploy, ok := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
@@ -545,6 +603,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				ControlPlaneReplicas:  &replicas,
 			},
 			includeManagerTLSSecret: false,
+			compliance:              compliance,
+			complianceFeatureActive: true,
 		})
 		deploy, ok := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
@@ -559,6 +619,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			managementCluster:       nil,
 			installation:            &operatorv1.InstallationSpec{},
 			includeManagerTLSSecret: true,
+			compliance:              compliance,
+			complianceFeatureActive: true,
 		})
 		secret, ok := rtest.GetResource(resources, render.ManagerTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret").(*corev1.Secret)
 		Expect(secret).To(BeNil())
@@ -574,6 +636,8 @@ type renderConfig struct {
 	managementCluster       *operatorv1.ManagementCluster
 	installation            *operatorv1.InstallationSpec
 	includeManagerTLSSecret bool
+	compliance              *operatorv1.Compliance
+	complianceFeatureActive bool
 }
 
 func renderObjects(roc renderConfig) []client.Object {
@@ -601,19 +665,21 @@ func renderObjects(roc renderConfig) []client.Object {
 	esConfigMap := relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 
 	cfg := &render.ManagerConfiguration{
-		KeyValidatorConfig:            dexCfg,
-		ComplianceServerCertSecret:    rtest.CreateCertSecret(render.ComplianceServerCertSecret, common.OperatorNamespace()),
-		PacketCaptureServerCertSecret: rtest.CreateCertSecret(render.PacketCaptureCertSecret, common.OperatorNamespace()),
-		PrometheusCertSecret:          rtest.CreateCertSecret(render.PrometheusTLSSecretName, common.OperatorNamespace()),
-		ESClusterConfig:               esConfigMap,
-		TLSKeyPair:                    managerTLS,
-		Installation:                  roc.installation,
-		ManagementCluster:             roc.managementCluster,
-		TunnelSecret:                  tunnelSecret,
-		InternalTrafficSecret:         internalTraffic,
-		ClusterDomain:                 dns.DefaultClusterDomain,
-		ESLicenseType:                 render.ElasticsearchLicenseTypeEnterpriseTrial,
-		Replicas:                      roc.installation.ControlPlaneReplicas,
+		KeyValidatorConfig:             dexCfg,
+		ComplianceServerCertSecret:     rtest.CreateCertSecret(render.ComplianceServerCertSecret, common.OperatorNamespace()),
+		PacketCaptureServerCertSecret:  rtest.CreateCertSecret(render.PacketCaptureCertSecret, common.OperatorNamespace()),
+		PrometheusCertSecret:           rtest.CreateCertSecret(render.PrometheusTLSSecretName, common.OperatorNamespace()),
+		ESClusterConfig:                esConfigMap,
+		TLSKeyPair:                     managerTLS,
+		Installation:                   roc.installation,
+		ManagementCluster:              roc.managementCluster,
+		TunnelSecret:                   tunnelSecret,
+		InternalTrafficSecret:          internalTraffic,
+		ClusterDomain:                  dns.DefaultClusterDomain,
+		ESLicenseType:                  render.ElasticsearchLicenseTypeEnterpriseTrial,
+		Replicas:                       roc.installation.ControlPlaneReplicas,
+		Compliance:                     roc.compliance,
+		ComplianceLicenseFeatureActive: roc.complianceFeatureActive,
 	}
 	component, err := render.Manager(cfg)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)

@@ -110,21 +110,22 @@ func Manager(cfg *ManagerConfiguration) (Component, error) {
 
 // ManagerConfiguration contains all the config information needed to render the component.
 type ManagerConfiguration struct {
-	KeyValidatorConfig      authentication.KeyValidatorConfig
-	ESSecrets               []*corev1.Secret
-	TrustedCertBundle       certificatemanagement.TrustedBundle
-	ESClusterConfig         *relasticsearch.ClusterConfig
-	TLSKeyPair              certificatemanagement.KeyPairInterface
-	PullSecrets             []*corev1.Secret
-	Openshift               bool
-	Installation            *operatorv1.InstallationSpec
-	ManagementCluster       *operatorv1.ManagementCluster
-	TunnelSecret            certificatemanagement.KeyPairInterface
-	InternalTrafficSecret   certificatemanagement.KeyPairInterface
-	ClusterDomain           string
-	ESLicenseType           ElasticsearchLicenseType
-	Replicas                *int32
-	ComplianceFeatureActive bool
+	KeyValidatorConfig             authentication.KeyValidatorConfig
+	ESSecrets                      []*corev1.Secret
+	TrustedCertBundle              certificatemanagement.TrustedBundle
+	ESClusterConfig                *relasticsearch.ClusterConfig
+	TLSKeyPair                     certificatemanagement.KeyPairInterface
+	PullSecrets                    []*corev1.Secret
+	Openshift                      bool
+	Installation                   *operatorv1.InstallationSpec
+	ManagementCluster              *operatorv1.ManagementCluster
+	TunnelSecret                   certificatemanagement.KeyPairInterface
+	InternalTrafficSecret          certificatemanagement.KeyPairInterface
+	ClusterDomain                  string
+	ESLicenseType                  ElasticsearchLicenseType
+	Replicas                       *int32
+	Compliance                     *operatorv1.Compliance
+	ComplianceLicenseFeatureActive bool
 
 	// Whether or not the cluster supports pod security policies.
 	UsePSP bool
@@ -350,7 +351,10 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 		{Name: "CNX_ALP_SUPPORT", Value: "true"},
 		{Name: "CNX_CLUSTER_NAME", Value: "cluster"},
 		{Name: "CNX_POLICY_RECOMMENDATION_SUPPORT", Value: "true"},
+
+		// Feature flags that should be set based on CR presence.
 		{Name: "ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
+		{Name: "ENABLE_COMPLIANCE_REPORTS", Value: strconv.FormatBool(c.cfg.Compliance != nil)},
 	}
 
 	envs = append(envs, c.managerOAuth2EnvVars()...)
@@ -429,7 +433,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
 		{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
 		{Name: "VOLTRON_DEFAULT_FORWARD_SERVER", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc:9200"},
-		{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: fmt.Sprintf("%v", c.cfg.ComplianceFeatureActive)},
+		{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: strconv.FormatBool(c.cfg.Compliance != nil && c.cfg.ComplianceLicenseFeatureActive)},
 	}
 
 	if c.cfg.KeyValidatorConfig != nil {

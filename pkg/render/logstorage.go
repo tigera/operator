@@ -64,6 +64,7 @@ const (
 	ECKOperatorNamespace    = "tigera-eck-operator"
 	ECKLicenseConfigMapName = "elastic-licensing"
 	ECKOperatorPolicyName   = networkpolicy.TigeraComponentPolicyPrefix + "elastic-operator-access"
+	ECKEnterpriseTrial      = "eck-trial-license"
 
 	ElasticsearchNamespace = "tigera-elasticsearch"
 
@@ -197,6 +198,7 @@ type ElasticsearchConfiguration struct {
 	ElasticLicenseType          ElasticsearchLicenseType
 	TrustedBundle               certificatemanagement.TrustedBundle
 	UnusedTLSSecret             *corev1.Secret
+	ApplyTrial                  bool
 
 	// Whether or not the cluster supports pod security policies.
 	UsePSP bool
@@ -307,18 +309,25 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		if es.cfg.Provider != operatorv1.ProviderOpenShift {
 			toCreate = append(toCreate,
 				es.elasticsearchClusterRoleBinding(),
-				es.elasticsearchClusterRole(),
-				es.kibanaClusterRoleBinding(),
-				es.kibanaClusterRole())
+				es.elasticsearchClusterRole())
 
 			if es.cfg.UsePSP {
 				toCreate = append(toCreate,
 					es.eckOperatorPodSecurityPolicy(),
-					es.elasticsearchPodSecurityPolicy(),
+					es.elasticsearchPodSecurityPolicy())
+			}
+
+			if es.cfg.Installation.FIPSMode != operatorv1.FIPSModeEnabled {
+				toCreate = append(toCreate,
+					es.kibanaClusterRoleBinding(),
+					es.kibanaClusterRole(),
 					es.kibanaPodSecurityPolicy())
 			}
 		}
 
+		if es.cfg.ApplyTrial {
+			toCreate = append(toCreate, es.elasticEnterpriseTrial())
+		}
 		toCreate = append(toCreate, es.eckOperatorStatefulSet())
 
 		// Elasticsearch CRs
@@ -340,45 +349,50 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 		toCreate = append(toCreate, es.elasticsearchCluster())
 
-		// Kibana CRs
-		// In order to use restricted, we need to change:
-		// - securityContext.allowPrivilegeEscalation=false)
-		// - securityContext.capabilities.drop=["ALL"]
-		// - securityContext.runAsNonRoot=true
-		// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
-		toCreate = append(toCreate, CreateNamespace(KibanaNamespace, es.cfg.Installation.KubernetesProvider, PSSBaseline))
-		toCreate = append(toCreate, es.kibanaAllowTigeraPolicy())
-		toCreate = append(toCreate, networkpolicy.AllowTigeraDefaultDeny(KibanaNamespace))
-		toCreate = append(toCreate, es.kibanaServiceAccount())
+		if es.cfg.Installation.FIPSMode != operatorv1.FIPSModeEnabled {
+			// Kibana CRs
+			// In order to use restricted, we need to change:
+			// - securityContext.allowPrivilegeEscalation=false)
+			// - securityContext.capabilities.drop=["ALL"]
+			// - securityContext.runAsNonRoot=true
+			// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
+			toCreate = append(toCreate, CreateNamespace(KibanaNamespace, es.cfg.Installation.KubernetesProvider, PSSBaseline))
+			toCreate = append(toCreate, es.kibanaAllowTigeraPolicy())
+			toCreate = append(toCreate, networkpolicy.AllowTigeraDefaultDeny(KibanaNamespace))
+			toCreate = append(toCreate, es.kibanaServiceAccount())
 
-		if len(es.cfg.PullSecrets) > 0 {
-			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(KibanaNamespace, es.cfg.PullSecrets...)...)...)
-		}
-
-		if len(es.kibanaSecrets) > 0 {
-			toCreate = append(toCreate, secret.ToRuntimeObjects(es.kibanaSecrets...)...)
-		}
-
-		toCreate = append(toCreate, es.kibanaCR())
-
-		// Curator CRs
-		// If we have the curator secrets then create curator
-		if len(es.cfg.CuratorSecrets) > 0 {
-			toCreate = append(toCreate, es.esCuratorAllowTigeraPolicy())
-			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.cfg.CuratorSecrets...)...)...)
-			toCreate = append(toCreate, es.esCuratorServiceAccount())
-
-			// If the provider is not OpenShift apply the pod security policy for the curator.
-			if es.cfg.Provider != operatorv1.ProviderOpenShift {
-				toCreate = append(toCreate,
-					es.curatorClusterRole(),
-					es.curatorClusterRoleBinding())
-				if es.cfg.UsePSP {
-					toCreate = append(toCreate, es.curatorPodSecurityPolicy())
-				}
+			if len(es.cfg.PullSecrets) > 0 {
+				toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(KibanaNamespace, es.cfg.PullSecrets...)...)...)
 			}
 
-			toCreate = append(toCreate, es.curatorCronJob())
+			if len(es.kibanaSecrets) > 0 {
+				toCreate = append(toCreate, secret.ToRuntimeObjects(es.kibanaSecrets...)...)
+			}
+
+			toCreate = append(toCreate, es.kibanaCR())
+
+			// Curator CRs
+			// If we have the curator secrets then create curator
+			if len(es.cfg.CuratorSecrets) > 0 {
+				toCreate = append(toCreate, es.esCuratorAllowTigeraPolicy())
+				toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.cfg.CuratorSecrets...)...)...)
+				toCreate = append(toCreate, es.esCuratorServiceAccount())
+
+				// If the provider is not OpenShift apply the pod security policy for the curator.
+				if es.cfg.Provider != operatorv1.ProviderOpenShift {
+					toCreate = append(toCreate,
+						es.curatorClusterRole(),
+						es.curatorClusterRoleBinding())
+					if es.cfg.UsePSP {
+						toCreate = append(toCreate, es.curatorPodSecurityPolicy())
+					}
+				}
+
+				toCreate = append(toCreate, es.curatorCronJob())
+			}
+		} else {
+			toDelete = append(toDelete, es.kibanaCR())
+			toDelete = append(toDelete, es.curatorCronJob())
 		}
 
 		toCreate = append(toCreate, es.oidcUserRole())
@@ -409,7 +423,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 			unusedSecret.Data = es.cfg.UnusedTLSSecret.Data
 			toCreate = append(toCreate, unusedSecret)
 		}
-		if es.cfg.KibanaKeyPair.UseCertificateManagement() {
+		if es.cfg.KibanaKeyPair != nil && es.cfg.KibanaKeyPair.UseCertificateManagement() {
 			// We need to render a secret. It won't ever be used by Kibana for TLS, but is needed to pass ECK's checks.
 			// If the secret changes / gets reconciled, it will not trigger a re-render of Kibana.
 			unusedSecret := es.cfg.KibanaKeyPair.Secret(KibanaNamespace)
@@ -918,6 +932,11 @@ func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVo
 
 	if es.cfg.Installation.CertificateManagement != nil {
 		config["xpack.security.http.ssl.certificate_authorities"] = []string{"/usr/share/elasticsearch/config/http-certs/ca.crt"}
+	}
+	if es.cfg.Installation.FIPSMode == operatorv1.FIPSModeEnabled {
+		config["xpack.security.fips_mode.enabled"] = "true"
+		config["xpack.security.authc.password_hashing.algorithm"] = "pbkdf2_10000"
+
 	}
 
 	return esv1.NodeSet{
@@ -1480,6 +1499,22 @@ func (es elasticsearchComponent) curatorPodSecurityPolicy() *policyv1beta1.PodSe
 	psp := podsecuritypolicy.NewBasePolicy()
 	psp.GetObjectMeta().SetName(EsCuratorName)
 	return psp
+}
+
+// Applying this in the eck namespace will start a trial license for enterprise features.
+func (es elasticsearchComponent) elasticEnterpriseTrial() *corev1.Secret {
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ECKEnterpriseTrial,
+			Namespace: ECKOperatorNamespace,
+			Labels: map[string]string{
+				"license.k8s.elastic.co/type": "enterprise-trial",
+			},
+			Annotations: map[string]string{
+				"elastic.co/eula": "accepted",
+			},
+		},
+	}
 }
 
 func (es elasticsearchComponent) elasticsearchClusterRole() *rbacv1.ClusterRole {

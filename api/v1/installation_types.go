@@ -162,7 +162,20 @@ type InstallationSpec struct {
 
 	// CalicoWindowsUpgradeDaemonSet configures the calico-windows-upgrade DaemonSet.
 	CalicoWindowsUpgradeDaemonSet *CalicoWindowsUpgradeDaemonSet `json:"calicoWindowsUpgradeDaemonSet,omitempty"`
+
+	// FIPSMode uses images and features only that are using FIPS 140-2 validated cryptographic modules and standards.
+	// Default: Disabled
+	// +kubebuilder:validation:Enum=Enabled;Disabled
+	// +optional
+	FIPSMode *FIPSMode `json:"fipsMode,omitempty"`
 }
+
+type FIPSMode string
+
+const (
+	FIPSModeEnabled  FIPSMode = "Enabled"
+	FIPSModeDisabled FIPSMode = "Disabled"
+)
 
 // Deprecated. Please use TyphaDeployment instead.
 // TyphaAffinity allows configuration of node affinity characteristics for Typha pods.

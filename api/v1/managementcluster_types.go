@@ -48,7 +48,7 @@ type TLS struct {
 	// If changed on a running cluster with connected managed clusters, all managed clusters will disconnect as they will no longer be able to verify Voltron's identity.
 	// To reconnect existing managed clusters, change the tls.ca of the  managed clusters' ManagementClusterConnection resource.
 	//
-	// +kubebuilder:validation:Enum="";tigera-management-cluster-connection;manager-tls
+	// +kubebuilder:validation:Enum=tigera-management-cluster-connection;manager-tls
 	// +optional
 	// Default: tigera-management-cluster-connection
 	SecretName string `json:"secretName,omitempty"`

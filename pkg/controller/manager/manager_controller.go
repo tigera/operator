@@ -426,8 +426,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 		// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
 		// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
-		// Note that we only write the 'base' installation back. We don't want to write the changes from 'overlay', as those should only
-		// be stored in the 'overlay' resource.
 		if err := r.client.Patch(ctx, managementCluster, preDefaultPatchFrom); err != nil {
 			r.status.SetDegraded(string(operatorv1.ResourceUpdateError), err.Error())
 			return reconcile.Result{}, err

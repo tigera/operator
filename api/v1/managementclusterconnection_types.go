@@ -40,7 +40,7 @@ type ManagementClusterTLS struct {
 	//
 	// When set to 'Public', the tunnel client will use its installed system certs and will use the managementClusterAddr to verify the tunnel server's identity.
 	//
-	// +kubebuilder:validation:Enum="";Tigera;Public
+	// +kubebuilder:validation:Enum=Tigera;Public
 	// Default: Tigera
 	CA CAType `json:"ca,omitempty"`
 }

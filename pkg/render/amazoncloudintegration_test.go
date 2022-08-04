@@ -69,8 +69,7 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 		cfg.Installation = &operatorv1.InstallationSpec{
 			ControlPlaneNodeSelector: map[string]string{"foo": "bar"},
 		}
-		component, err := render.AmazonCloudIntegration(cfg)
-		Expect(err).ToNot(HaveOccurred())
+		component := render.AmazonCloudIntegration(cfg)
 		resources, _ := component.Objects()
 		resource := rtest.GetResource(resources, AwsCIName, AwsCINs, "apps", "v1", "Deployment")
 		d := resource.(*appsv1.Deployment)
@@ -80,8 +79,7 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 	It("should render an AmazonCloudConfiguration with specified configuration", func() {
 		// AmazonCloudIntegration(aci *operatorv1.AmazonCloudIntegration, installation *operator.Installation, cred *AmazonCredential, ps []*corev1.Secret, openshift bool) (Component, error) {
 		cfg.Openshift = openshift
-		component, err := render.AmazonCloudIntegration(cfg)
-		Expect(err).To(BeNil(), "Expected AmazonCloudIntegration to create successfully %s", err)
+		component := render.AmazonCloudIntegration(cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 
 		resources, _ := component.Objects()
@@ -186,8 +184,7 @@ var _ = Describe("AmazonCloudIntegration rendering tests", func() {
 	It("should set MetadataAccess when configured", func() {
 		cfg.Openshift = openshift
 		cfg.AmazonCloudIntegration.Spec.DefaultPodMetadataAccess = operatorv1.MetadataAccessAllowed
-		component, err := render.AmazonCloudIntegration(cfg)
-		Expect(err).To(BeNil(), "Expected AmazonCloudIntegration to create successfully %s", err)
+		component := render.AmazonCloudIntegration(cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 
 		resources, _ := component.Objects()

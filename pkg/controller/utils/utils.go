@@ -529,3 +529,10 @@ func createPredicateForObject(objMeta metav1.Object) predicate.Predicate {
 		},
 	}
 }
+
+//AddTigeraStatusWatch creates a watch on the given object. It uses predicates to only return matching objects.
+func AddTigeraStatusWatch(c controller.Controller, name string) error {
+	return c.Watch(&source.Kind{Type: &operatorv1.TigeraStatus{ObjectMeta: metav1.ObjectMeta{Name: name}}}, &handler.EnqueueRequestForObject{}, predicate.NewPredicateFuncs(func(object client.Object) bool {
+		return object.GetName() == name
+	}))
+}

@@ -179,7 +179,6 @@ var _ = Describe("Monitor controller tests", func() {
 			mockStatus.On("OnCRFound").Return()
 			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("SetMetaData", mock.Anything).Return()
-			
 			r.status = mockStatus
 
 			utils.ExpectWaitForTierWatch(ctx, &r, mockStatus)

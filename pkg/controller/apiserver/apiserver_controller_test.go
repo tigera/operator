@@ -452,11 +452,12 @@ var _ = Describe("apiserver controller tests", func() {
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
 			r := ReconcileAPIServer{
-				client:        cli,
-				scheme:        scheme,
-				provider:      operatorv1.ProviderNone,
-				status:        mockStatus,
-				clusterDomain: dns.DefaultClusterDomain,
+				client:              cli,
+				scheme:              scheme,
+				provider:            operatorv1.ProviderNone,
+				enterpriseCRDsExist: true,
+				status:              mockStatus,
+				tierWatchReady:      ready,
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      "apiserver",
@@ -480,11 +481,12 @@ var _ = Describe("apiserver controller tests", func() {
 				Status:     operatorv1.TigeraStatusStatus{},
 			}
 			r := ReconcileAPIServer{
-				client:        cli,
-				scheme:        scheme,
-				provider:      operatorv1.ProviderNone,
-				status:        mockStatus,
-				clusterDomain: dns.DefaultClusterDomain,
+				client:              cli,
+				scheme:              scheme,
+				provider:            operatorv1.ProviderNone,
+				enterpriseCRDsExist: true,
+				status:              mockStatus,
+				tierWatchReady:      ready,
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
@@ -528,11 +530,12 @@ var _ = Describe("apiserver controller tests", func() {
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
 			r := ReconcileAPIServer{
-				client:        cli,
-				scheme:        scheme,
-				provider:      operatorv1.ProviderNone,
-				status:        mockStatus,
-				clusterDomain: dns.DefaultClusterDomain,
+				client:              cli,
+				scheme:              scheme,
+				provider:            operatorv1.ProviderNone,
+				enterpriseCRDsExist: true,
+				status:              mockStatus,
+				tierWatchReady:      ready,
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      "apiserver",
@@ -593,11 +596,12 @@ var _ = Describe("apiserver controller tests", func() {
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
 			r := ReconcileAPIServer{
-				client:        cli,
-				scheme:        scheme,
-				provider:      operatorv1.ProviderNone,
-				status:        mockStatus,
-				clusterDomain: dns.DefaultClusterDomain,
+				client:              cli,
+				scheme:              scheme,
+				provider:            operatorv1.ProviderNone,
+				enterpriseCRDsExist: true,
+				status:              mockStatus,
+				tierWatchReady:      ready,
 			}
 			installation.Status.Conditions = []metav1.Condition{
 				{
@@ -650,5 +654,4 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
 		})
 	})
-
 })

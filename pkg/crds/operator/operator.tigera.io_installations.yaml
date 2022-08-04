@@ -4204,7 +4204,8 @@ spec:
                 type: array
               fipsMode:
                 description: 'FIPSMode uses images and features only that are using
-                  FIPS 140-2 validated cryptographic modules and standards. Default: Disabled'
+                  FIPS 140-2 validated cryptographic modules and standards. Default:
+                  Disabled'
                 enum:
                 - Enabled
                 - Disabled
@@ -10359,8 +10360,7 @@ spec:
                   fipsMode:
                     description: 'FIPSMode uses images and features only that are
                       using FIPS 140-2 validated cryptographic modules and standards.
-                      Can only be enabled when Variant = TigeraSecureEnterprise. Default:
-                      Disabled'
+                      Default: Disabled'
                     enum:
                     - Enabled
                     - Disabled

@@ -287,7 +287,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				mockStatus = &status.MockStatus{}
 				mockStatus.On("Run").Return()
 				mockStatus.On("OnCRFound").Return()
-				mockStatus.On("SetDegraded", "Feature is not active", "License does not support feature: egress-access-control").Return()
+				mockStatus.On("SetDegraded", "ResourceReadError", "Feature is not active - License does not support feature: egress-access-control").Return()
 				mockStatus.On("SetMetaData", mock.Anything).Return()
 
 				r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone, ready)

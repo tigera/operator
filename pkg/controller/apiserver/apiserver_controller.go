@@ -217,7 +217,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 	// Validate APIServer resource.
 	if err := validateAPIServerResource(instance); err != nil {
-		r.status.SetDegraded("APIServer is invalid", err.Error())
+		status.SetDegraded(r.status, operatorv1.ResourceValidationError, "APIServer is invalid", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -339,8 +339,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		if r.tierWatchReady.IsReady() {
 			if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 				if !errors.IsNotFound(err) && !meta.IsNoMatchError(err) {
-					log.Error(err, "Error querying allow-tigera tier")
-					r.status.SetDegraded("Error querying allow-tigera tier", err.Error())
+					status.SetDegraded(r.status, operatorv1.ResourceReadError, "Error querying allow-tigera tier", err, reqLogger)
 					return reconcile.Result{}, err
 				}
 			} else {

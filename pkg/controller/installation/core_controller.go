@@ -1007,8 +1007,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if r.tierWatchReady.IsReady() {
 			if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 				if !apierrors.IsNotFound(err) && !meta.IsNoMatchError(err) {
-					log.Error(err, "Error querying allow-tigera tier")
-					r.status.SetDegraded("Error querying allow-tigera tier", err.Error())
+					status.SetDegraded(r.status, operator.ResourceReadError, "Error querying allow-tigera tier", err, reqLogger)
 					return reconcile.Result{}, err
 				}
 			} else {

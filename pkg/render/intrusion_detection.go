@@ -193,7 +193,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 	objs = append(objs, c.globalAlertTemplates()...)
 
 	// AD Related deployment only for management/standalone cluster
-	if !c.cfg.ManagedCluster {
+	if !c.cfg.ManagedCluster && c.cfg.Installation.FIPSMode != operatorv1.FIPSModeEnabled {
 		// Service + Deployment + RBAC for AD API
 		objs = append(objs,
 			c.adAPIAllowTigeraPolicy(),
@@ -217,7 +217,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		objs = append(objs, c.adDetectorPodTemplates()...)
 	}
 
-	if !c.cfg.ManagedCluster {
+	if !c.cfg.ManagedCluster && c.cfg.Installation.FIPSMode != operatorv1.FIPSModeEnabled {
 		objs = append(objs, c.intrusionDetectionElasticsearchAllowTigeraPolicy())
 		objs = append(objs, c.intrusionDetectionElasticsearchJob())
 	}
@@ -579,6 +579,10 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 		{
 			Name:  "MULTI_CLUSTER_FORWARDING_CA",
 			Value: c.cfg.TrustedCertBundle.MountPath(),
+		},
+		{
+			Name:  "FIPS_MODE_ENABLED",
+			Value: fmt.Sprintf("%v", c.cfg.Installation.FIPSMode == operatorv1.FIPSModeEnabled),
 		},
 	}
 
@@ -1355,6 +1359,7 @@ func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 								{Name: "STORAGE_PATH", Value: adAPIStorageVolumePath},
 								{Name: "TLS_KEY", Value: c.cfg.ADAPIServerCertSecret.VolumeMountKeyFilePath()},
 								{Name: "TLS_CERT", Value: c.cfg.ADAPIServerCertSecret.VolumeMountCertificateFilePath()},
+								{Name: "FIPS_MODE_ENABLED", Value: fmt.Sprintf("%v", c.cfg.Installation.FIPSMode == operatorv1.FIPSModeEnabled)},
 							},
 							LivenessProbe: &corev1.Probe{
 								Handler: corev1.Handler{
@@ -1496,6 +1501,10 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 		{
 			Name:      "MODEL_STORAGE_API_TOKEN",
 			ValueFrom: secret.GetEnvVarSource(adDetectorName, "token", false),
+		},
+		{
+			Name:  "FIPS_MODE_ENABLED",
+			Value: fmt.Sprintf("%v", c.cfg.Installation.FIPSMode == operatorv1.FIPSModeEnabled),
 		},
 	}
 

@@ -138,30 +138,31 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.cfg.Installation.Registry
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
-	var err error
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		c.cniImage, err = components.GetReference(components.ComponentTigeraCNI, reg, path, prefix, is)
-	} else {
-		c.cniImage, err = components.GetReference(components.ComponentCalicoCNI, reg, path, prefix, is)
-	}
-	errMsgs := []string{}
-	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
-	}
-
-	c.flexvolImage, err = components.GetReference(components.ComponentFlexVolume, reg, path, prefix, is)
-	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
+	var errMsgs []string
+	appendIfErr := func(imageName string, err error) string {
+		if err != nil {
+			errMsgs = append(errMsgs, err.Error())
+		}
+		return imageName
 	}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		c.nodeImage, err = components.GetReference(components.ComponentTigeraNode, reg, path, prefix, is)
+		if c.cfg.Installation.FIPSMode == operatorv1.FIPSModeEnabled {
+			c.cniImage = appendIfErr(components.GetReference(components.ComponentTigeraCNIFIPS, reg, path, prefix, is))
+		} else {
+			c.cniImage = appendIfErr(components.GetReference(components.ComponentTigeraCNI, reg, path, prefix, is))
+		}
+		c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNode, reg, path, prefix, is))
 	} else {
-		c.nodeImage, err = components.GetReference(components.ComponentCalicoNode, reg, path, prefix, is)
+		if c.cfg.Installation.FIPSMode == operatorv1.FIPSModeEnabled {
+			c.cniImage = appendIfErr(components.GetReference(components.ComponentCalicoCNIFIPS, reg, path, prefix, is))
+		} else {
+			c.cniImage = appendIfErr(components.GetReference(components.ComponentCalicoCNI, reg, path, prefix, is))
+		}
+		c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNode, reg, path, prefix, is))
 	}
-	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
-	}
+
+	c.flexvolImage = appendIfErr(components.GetReference(components.ComponentFlexVolume, reg, path, prefix, is))
 
 	if len(errMsgs) != 0 {
 		return fmt.Errorf(strings.Join(errMsgs, ","))
@@ -1454,6 +1455,7 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 				corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERCERTFILE", Value: c.cfg.PrometheusServerTLS.VolumeMountCertificateFilePath()},
 				corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERKEYFILE", Value: c.cfg.PrometheusServerTLS.VolumeMountKeyFilePath()},
 				corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERCAFILE", Value: c.cfg.TLS.TrustedBundle.MountPath()},
+				corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERFIPSMODEENABLED", Value: fmt.Sprintf("%v", c.cfg.Installation.FIPSMode == operatorv1.FIPSModeEnabled)},
 			)
 		}
 		nodeEnv = append(nodeEnv, extraNodeEnv...)
@@ -1465,6 +1467,7 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		extraNodeEnv := []corev1.EnvVar{
 			{Name: "FELIX_PROMETHEUSMETRICSENABLED", Value: "true"},
 			{Name: "FELIX_PROMETHEUSMETRICSPORT", Value: fmt.Sprintf("%d", *c.cfg.Installation.NodeMetricsPort)},
+			{Name: "FELIX_PROMETHEUSMETRICSFIPSMODEENABLED", Value: fmt.Sprintf("%v", c.cfg.Installation.FIPSMode == operatorv1.FIPSModeEnabled)},
 		}
 		nodeEnv = append(nodeEnv, extraNodeEnv...)
 	}

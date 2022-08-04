@@ -4202,6 +4202,13 @@ spec:
                       type: string
                   type: object
                 type: array
+              fipsMode:
+                description: 'FIPSMode uses images and features only that are using
+                  FIPS 140-2 validated cryptographic modules and standards. Default: Disabled'
+                enum:
+                - Enabled
+                - Disabled
+                type: string
               flexVolumePath:
                 description: FlexVolumePath optionally specifies a custom path for
                   FlexVolume. If not specified, FlexVolume will be enabled by default.
@@ -10349,6 +10356,15 @@ spec:
                           type: string
                       type: object
                     type: array
+                  fipsMode:
+                    description: 'FIPSMode uses images and features only that are
+                      using FIPS 140-2 validated cryptographic modules and standards.
+                      Can only be enabled when Variant = TigeraSecureEnterprise. Default:
+                      Disabled'
+                    enum:
+                    - Enabled
+                    - Disabled
+                    type: string
                   flexVolumePath:
                     description: FlexVolumePath optionally specifies a custom path
                       for FlexVolume. If not specified, FlexVolume will be enabled

@@ -68,7 +68,6 @@ spec:
                       managed clusters, change the tls.ca of the  managed clusters'
                       ManagementClusterConnection resource. \n Default: tigera-management-cluster-connection"
                     enum:
-                    - ""
                     - tigera-management-cluster-connection
                     - manager-tls
                     type: string

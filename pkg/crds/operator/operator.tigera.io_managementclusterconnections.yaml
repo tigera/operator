@@ -57,7 +57,6 @@ spec:
                       system certs and will use the managementClusterAddr to verify
                       the tunnel server's identity. \n Default: Tigera"
                     enum:
-                    - ""
                     - Tigera
                     - Public
                     type: string

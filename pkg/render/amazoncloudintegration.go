@@ -41,8 +41,8 @@ const (
 	credentialSecretHashAnnotation       = "hash.operator.tigera.io/credential-secret"
 )
 
-func AmazonCloudIntegration(cfg *AmazonCloudIntegrationConfiguration) (Component, error) {
-	return &amazonCloudIntegrationComponent{cfg: cfg}, nil
+func AmazonCloudIntegration(cfg *AmazonCloudIntegrationConfiguration) Component {
+	return &amazonCloudIntegrationComponent{cfg: cfg}
 }
 
 // AmazonCloudIntegrationConfiguration contains all the config information needed to render the component.

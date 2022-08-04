@@ -102,7 +102,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 			return reconcile.Result{}, false, finalizerCleanup, err
 		}
 		trustedBundle = certificateManager.CreateTrustedBundle(elasticKeyPair)
-		if install.FIPSMode != operatorv1.FIPSModeDisabled {
+		if install.FIPSMode != operatorv1.FIPSModeEnabled {
 			kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
 			if kibanaKeyPair, err = certificateManager.GetOrCreateKeyPair(r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames); err != nil {
 				reqLogger.Error(err, err.Error())

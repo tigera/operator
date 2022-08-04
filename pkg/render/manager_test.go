@@ -22,8 +22,10 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
+	"strconv"
 
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -41,13 +43,14 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		ValueFrom: nil,
 	}
 	installation := &operatorv1.InstallationSpec{}
+	compliance := &operatorv1.Compliance{}
 	const expectedResourcesNumber = 11
 
 	expectedDNSNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
 	expectedDNSNames = append(expectedDNSNames, "localhost")
 
 	It("should render all resources for a default configuration", func() {
-		resources := renderObjects(false, nil, installation, true)
+		resources := renderObjects(false, nil, installation, true, compliance, true)
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -82,6 +85,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Containers[1].Image).Should(Equal(components.TigeraRegistry + "tigera/es-proxy:" + components.ComponentEsProxy.Version))
 		Expect(deployment.Spec.Template.Spec.Containers[2].Image).Should(Equal(components.TigeraRegistry + "tigera/voltron:" + components.ComponentManagerProxy.Version))
 
+		var manager = deployment.Spec.Template.Spec.Containers[0]
+		Expect(manager.Env).Should(ContainElements(
+			corev1.EnvVar{Name: "ENABLE_COMPLIANCE_REPORTS", Value: "true"},
+		))
+
 		// Expect 1 volume mounts for es proxy
 		var esProxy = deployment.Spec.Template.Spec.Containers[1]
 		Expect(len(esProxy.VolumeMounts)).To(Equal(1))
@@ -114,8 +122,37 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Volumes[4].Secret.SecretName).To(Equal(relasticsearch.PublicCertSecret))
 	})
 
+	type managerComplianceExpectation struct {
+		managerFlag bool
+		voltronFlag bool
+	}
+	DescribeTable("should set container env appropriately when compliance is not fully available",
+		func(crPresent bool, licenseFeatureActive bool, scenario managerComplianceExpectation) {
+			var complianceCR *operatorv1.Compliance
+			if crPresent {
+				complianceCR = &operatorv1.Compliance{}
+			}
+
+			resources := renderObjects(false, nil, installation, true, complianceCR, licenseFeatureActive)
+
+			deployment := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			manager := deployment.Spec.Template.Spec.Containers[0]
+			voltron := deployment.Spec.Template.Spec.Containers[2]
+			Expect(manager.Env).To(ContainElement(corev1.EnvVar{Name: "ENABLE_COMPLIANCE_REPORTS", Value: strconv.FormatBool(scenario.managerFlag)}))
+			Expect(voltron.Env).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: strconv.FormatBool(scenario.voltronFlag)}))
+		},
+		Entry("Both CR and license feature not present/active", false, false, managerComplianceExpectation{managerFlag: false, voltronFlag: false}),
+		Entry("CR not present, license feature active", false, true, managerComplianceExpectation{managerFlag: false, voltronFlag: false}),
+
+		// The manager supports two states of a product feature being unavailable: the product feature being feature-flagged off, and the current
+		// license not enabling the feature. The flag that we set on the manager container is a feature flag, which we should set purely based on
+		// whether the compliance CR is present, ignoring the license status. Therefore, when the CR is present but the license feature is not,
+		// we still expect that the manager feature flag should be set. The manager will render the insufficient license state appropriately.
+		Entry("CR present, license feature not active", true, false, managerComplianceExpectation{managerFlag: true, voltronFlag: false}),
+	)
+
 	It("should ensure cnx policy recommendation support is always set to true", func() {
-		resources := renderObjects(false, nil, installation, true)
+		resources := renderObjects(false, nil, installation, true, compliance, true)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 
 		// Should render the correct resource based on test case.
@@ -210,7 +247,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		oidcEnvVar.Value = authority
 
 		// Should render the correct resource based on test case.
-		resources := renderObjects(true, nil, installation, true)
+		resources := renderObjects(true, nil, installation, true, compliance, true)
 		Expect(len(resources)).To(Equal(expectedResourcesNumber + 1)) //Extra tls secret was added.
 		d := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		// tigera-manager volumes/volumeMounts checks.
@@ -220,7 +257,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	It("should render multicluster settings properly", func() {
-		resources := renderObjects(false, &operatorv1.ManagementCluster{}, installation, true)
+		resources := renderObjects(false, &operatorv1.ManagementCluster{}, installation, true, compliance, true)
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -397,7 +434,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			rtest.CreateCertSecret(render.ManagerTLSSecretName, rmeta.OperatorNamespace()),
 			nil, false,
 			i,
-			nil, nil, nil, "", render.ElasticsearchLicenseTypeUnknown)
+			nil, nil, nil, "", render.ElasticsearchLicenseTypeUnknown,
+			nil, false)
 		Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 		resources, _ := component.Objects()
 		return rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -424,7 +462,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	It("should render all resources for certificate management", func() {
-		resources := renderObjects(false, nil, &operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{}}, false)
+		resources := renderObjects(false, nil, &operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{}}, false, compliance, true)
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -465,7 +503,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 })
 
-func renderObjects(oidc bool, managementCluster *operatorv1.ManagementCluster, installation *operatorv1.InstallationSpec, includeManagerTLSSecret bool) []client.Object {
+func renderObjects(oidc bool, managementCluster *operatorv1.ManagementCluster, installation *operatorv1.InstallationSpec, includeManagerTLSSecret bool, compliance *operatorv1.Compliance, complianceFeatureActive bool) []client.Object {
 	var dexCfg authentication.KeyValidatorConfig
 	if oidc {
 		var authentication *operatorv1.Authentication
@@ -504,6 +542,8 @@ func renderObjects(oidc bool, managementCluster *operatorv1.ManagementCluster, i
 		internalTraffic,
 		dns.DefaultClusterDomain,
 		render.ElasticsearchLicenseTypeEnterpriseTrial,
+		compliance,
+		complianceFeatureActive,
 	)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)
 	Expect(component.ResolveImages(nil)).To(BeNil())

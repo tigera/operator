@@ -180,7 +180,7 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 									e.cfg.TrustedBundle.VolumeMount(e.SupportedOSType()),
 								},
 								Env: []corev1.EnvVar{
-									{Name: "FIPS_MODE_ENABLED", Value: fmt.Sprintf("%v", e.cfg.Installation.FIPSMode == operatorv1.FIPSModeEnabled)},
+									{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(e.cfg.Installation.FIPSMode)},
 								},
 							}, render.DefaultElasticsearchClusterName, ElasticsearchMetricsSecret,
 							e.cfg.ClusterDomain, e.SupportedOSType(),

@@ -193,7 +193,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 	objs = append(objs, c.globalAlertTemplates()...)
 
 	// AD Related deployment only for management/standalone cluster
-	if !c.cfg.ManagedCluster && c.cfg.Installation.FIPSMode != operatorv1.FIPSModeEnabled {
+	if !c.cfg.ManagedCluster && !operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
 		// Service + Deployment + RBAC for AD API
 		objs = append(objs,
 			c.adAPIAllowTigeraPolicy(),
@@ -217,7 +217,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		objs = append(objs, c.adDetectorPodTemplates()...)
 	}
 
-	if !c.cfg.ManagedCluster && c.cfg.Installation.FIPSMode != operatorv1.FIPSModeEnabled {
+	if !c.cfg.ManagedCluster && !operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
 		objs = append(objs, c.intrusionDetectionElasticsearchAllowTigeraPolicy())
 		objs = append(objs, c.intrusionDetectionElasticsearchJob())
 	}
@@ -582,7 +582,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 		},
 		{
 			Name:  "FIPS_MODE_ENABLED",
-			Value: fmt.Sprintf("%v", c.cfg.Installation.FIPSMode == operatorv1.FIPSModeEnabled),
+			Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode),
 		},
 	}
 
@@ -1359,7 +1359,7 @@ func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 								{Name: "STORAGE_PATH", Value: adAPIStorageVolumePath},
 								{Name: "TLS_KEY", Value: c.cfg.ADAPIServerCertSecret.VolumeMountKeyFilePath()},
 								{Name: "TLS_CERT", Value: c.cfg.ADAPIServerCertSecret.VolumeMountCertificateFilePath()},
-								{Name: "FIPS_MODE_ENABLED", Value: fmt.Sprintf("%v", c.cfg.Installation.FIPSMode == operatorv1.FIPSModeEnabled)},
+								{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 							},
 							LivenessProbe: &corev1.Probe{
 								Handler: corev1.Handler{
@@ -1504,7 +1504,7 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 		},
 		{
 			Name:  "FIPS_MODE_ENABLED",
-			Value: fmt.Sprintf("%v", c.cfg.Installation.FIPSMode == operatorv1.FIPSModeEnabled),
+			Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode),
 		},
 	}
 

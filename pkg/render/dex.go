@@ -228,7 +228,7 @@ func (c *dexComponent) deployment() client.Object {
 							Image: c.image,
 							Env: append(
 								[]corev1.EnvVar{
-									{Name: "FIPS_MODE_ENABLED", Value: fmt.Sprintf("%v", c.cfg.Installation.FIPSMode == operatorv1.FIPSModeEnabled)},
+									{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 								},
 								c.cfg.DexConfig.RequiredEnv("")...),
 							LivenessProbe: c.probe(),

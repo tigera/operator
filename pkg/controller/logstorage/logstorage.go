@@ -102,7 +102,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 			return reconcile.Result{}, false, finalizerCleanup, err
 		}
 		trustedBundle = certificateManager.CreateTrustedBundle(elasticKeyPair)
-		if install.FIPSMode != operatorv1.FIPSModeEnabled {
+		if !operatorv1.IsFIPSModeEnabled(install.FIPSMode) {
 			kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
 			if kibanaKeyPair, err = certificateManager.GetOrCreateKeyPair(r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames); err != nil {
 				reqLogger.Error(err, err.Error())
@@ -121,7 +121,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 	}
 
 	var kibana *kbv1.Kibana
-	if install.FIPSMode != operatorv1.FIPSModeEnabled {
+	if !operatorv1.IsFIPSModeEnabled(install.FIPSMode) {
 		kibana, err = r.getKibana(ctx)
 		if err != nil {
 			reqLogger.Error(err, err.Error())
@@ -213,7 +213,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 			TrustedBundle: trustedBundle,
 		}),
 	)
-	if install.FIPSMode != operatorv1.FIPSModeEnabled {
+	if !operatorv1.IsFIPSModeEnabled(install.FIPSMode) {
 		components = append(components, component,
 			rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 				Namespace:       render.KibanaNamespace,
@@ -247,7 +247,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 			return reconcile.Result{}, false, finalizerCleanup, nil
 		}
 
-		if install.FIPSMode != operatorv1.FIPSModeEnabled && (kibana == nil || kibana.Status.AssociationStatus != cmnv1.AssociationEstablished) {
+		if !operatorv1.IsFIPSModeEnabled(install.FIPSMode) && (kibana == nil || kibana.Status.AssociationStatus != cmnv1.AssociationEstablished) {
 			r.status.SetDegraded("Waiting for Kibana cluster to be operational", "")
 			return reconcile.Result{}, false, finalizerCleanup, nil
 		}

@@ -317,7 +317,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 					es.elasticsearchPodSecurityPolicy())
 			}
 
-			if es.cfg.Installation.FIPSMode != operatorv1.FIPSModeEnabled {
+			if !operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
 				toCreate = append(toCreate,
 					es.kibanaClusterRoleBinding(),
 					es.kibanaClusterRole(),
@@ -349,7 +349,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 		toCreate = append(toCreate, es.elasticsearchCluster())
 
-		if es.cfg.Installation.FIPSMode != operatorv1.FIPSModeEnabled {
+		if !operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
 			// Kibana CRs
 			// In order to use restricted, we need to change:
 			// - securityContext.allowPrivilegeEscalation=false)
@@ -933,7 +933,7 @@ func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVo
 	if es.cfg.Installation.CertificateManagement != nil {
 		config["xpack.security.http.ssl.certificate_authorities"] = []string{"/usr/share/elasticsearch/config/http-certs/ca.crt"}
 	}
-	if es.cfg.Installation.FIPSMode == operatorv1.FIPSModeEnabled {
+	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
 		config["xpack.security.fips_mode.enabled"] = "true"
 		config["xpack.security.authc.password_hashing.algorithm"] = "pbkdf2_10000"
 

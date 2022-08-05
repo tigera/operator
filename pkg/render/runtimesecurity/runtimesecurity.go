@@ -13,7 +13,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 
-	batchv1 "k8s.io/api/batch/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -24,11 +24,15 @@ import (
 const (
 	NameSpaceRuntimeSecurity            = "tigera-runtime-security"
 	ElasticsearchSashaJobUserSecretName = "tigera-ee-sasha-elasticsearch-access"
-	ResourceNameSashaJob                = "tigera-ee-sasha"
+	SashaName                           = "sasha"
 	ResourceSashaDefaultCPULimit        = "1"
 	ResourceSashaDefaultMemoryLimit     = "1Gi"
 	ResourceSashaDefaultCPURequest      = "100m"
 	ResourceSashaDefaultMemoryRequest   = "100Mi"
+	SashaVerifyAuthVolumeName           = "cc-client-credentials"
+	SashaVerifyAuthPath                 = "/var/run/calico-cloud/api"
+	SashaVerifyAuthFile                 = "/var/run/calico-cloud/api/clientCredentials.yaml"
+	SashaVerifyAuthURL                  = "https://sasha-verify.dev.calicocloud.io"
 )
 
 func RuntimeSecurity(
@@ -82,7 +86,7 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 }
 
 func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
-	var objs []client.Object
+	var objs, toDelete []client.Object
 
 	objs = append(objs, render.CreateNamespace(NameSpaceRuntimeSecurity, c.config.Installation.KubernetesProvider))
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(NameSpaceRuntimeSecurity, c.config.PullSecrets...)...)...)
@@ -90,10 +94,12 @@ func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
 	if len(c.config.SashaESSecrets) > 0 {
 		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(NameSpaceRuntimeSecurity, c.config.SashaESSecrets...)...)...)
 		objs = append(objs, c.sashaServiceAccount())
-		objs = append(objs, c.sashaCronJob())
+		objs = append(objs, c.sashaDeployment())
 	}
 
-	return objs, nil
+	toDelete = append(toDelete, c.sashaCronJob())
+
+	return objs, toDelete
 }
 
 func (c *component) Ready() bool {
@@ -112,70 +118,86 @@ func (c *component) esClusterName() string {
 	return clusterName
 }
 
-func (c *component) sashaCronJob() *batchv1.CronJob {
-	const schedule = "*/5 * * * *"
+func (c *component) sashaDeployment() *appsv1.Deployment {
 
 	envVars := []corev1.EnvVar{
 		{Name: "PULL_MAX_LAST_MINUTES", Value: "20"},
 		{Name: "CLUSTER_NAME", Value: c.esClusterName()},
-		// Sasha Phase 0: hashes are embedded as JSON in sasha image used in cron job
-		{Name: "HASHES_SOURCE", Value: "local"},
+		{Name: "SASHA_SECRETLOCATION", Value: SashaVerifyAuthFile},
+		{Name: "SASHA_VERIFYURL", Value: SashaVerifyAuthURL},
 	}
 
-	return &batchv1.CronJob{
-		TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
+	rsSecretOptional := false
+	numReplica := int32(1)
+
+	return &appsv1.Deployment{
+		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ResourceNameSashaJob,
+			Name:      SashaName,
 			Namespace: NameSpaceRuntimeSecurity,
+			Labels: map[string]string{
+				"k8s-app": SashaName,
+			},
 		},
-		Spec: batchv1.CronJobSpec{
-			Schedule: schedule,
-			JobTemplate: batchv1.JobTemplateSpec{
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"k8s-app": SashaName,
+				},
+			},
+			Replicas: &numReplica,
+			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: ResourceNameSashaJob,
+					Name:      SashaName,
+					Namespace: NameSpaceRuntimeSecurity,
 					Labels: map[string]string{
-						"k8s-app": ResourceNameSashaJob,
+						"k8s-app": SashaName,
 					},
 				},
-				Spec: batchv1.JobSpec{
-					Template: corev1.PodTemplateSpec{
-						ObjectMeta: metav1.ObjectMeta{
-							Labels: map[string]string{
-								"k8s-app": ResourceNameSashaJob,
+				Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
+					NodeSelector: c.config.Installation.ControlPlaneNodeSelector,
+					Tolerations:  c.config.Installation.ControlPlaneTolerations,
+					Volumes: []corev1.Volume{
+						{
+							Name: SashaVerifyAuthVolumeName,
+							VolumeSource: corev1.VolumeSource{
+								Secret: &corev1.SecretVolumeSource{
+									SecretName: "tigera-calico-cloud-client-credentials",
+									Optional:   &rsSecretOptional,
+								},
 							},
 						},
-						Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
-							NodeSelector: c.config.Installation.ControlPlaneNodeSelector,
-							Tolerations:  c.config.Installation.ControlPlaneTolerations,
-							Containers: []corev1.Container{
-								relasticsearch.ContainerDecorate(corev1.Container{
-									Name:    ResourceNameSashaJob,
-									Image:   c.config.sashaImage,
-									Command: []string{"./calico-sasha"},
-									Env:     envVars,
-									Resources: corev1.ResourceRequirements{
-										Limits: corev1.ResourceList{
-											corev1.ResourceCPU:    resource.MustParse(ResourceSashaDefaultCPULimit),
-											corev1.ResourceMemory: resource.MustParse(ResourceSashaDefaultMemoryLimit),
-										},
-										Requests: corev1.ResourceList{
-											corev1.ResourceCPU:    resource.MustParse(ResourceSashaDefaultCPURequest),
-											corev1.ResourceMemory: resource.MustParse(ResourceSashaDefaultMemoryRequest),
-										},
-									},
-								},
-									c.config.ESClusterConfig.ClusterName(),
-									ElasticsearchSashaJobUserSecretName,
-									c.config.ClusterDomain,
-									c.SupportedOSType(),
-								),
-							},
-							ImagePullSecrets:   secret.GetReferenceList(c.config.PullSecrets),
-							RestartPolicy:      corev1.RestartPolicyNever,
-							ServiceAccountName: ResourceNameSashaJob,
-						}),
 					},
-				},
+					Containers: []corev1.Container{
+						relasticsearch.ContainerDecorate(corev1.Container{
+							Name:  SashaName,
+							Image: c.config.sashaImage,
+							Env:   envVars,
+							Resources: corev1.ResourceRequirements{
+								Limits: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse(ResourceSashaDefaultCPULimit),
+									corev1.ResourceMemory: resource.MustParse(ResourceSashaDefaultMemoryLimit),
+								},
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse(ResourceSashaDefaultCPURequest),
+									corev1.ResourceMemory: resource.MustParse(ResourceSashaDefaultMemoryRequest),
+								},
+							},
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      SashaVerifyAuthVolumeName,
+									MountPath: SashaVerifyAuthPath,
+								},
+							},
+						},
+							c.config.ESClusterConfig.ClusterName(),
+							ElasticsearchSashaJobUserSecretName,
+							c.config.ClusterDomain,
+							c.config.OsType),
+					},
+					ImagePullSecrets:   secret.GetReferenceList(c.config.PullSecrets),
+					ServiceAccountName: SashaName,
+				}),
 			},
 		},
 	}
@@ -184,6 +206,6 @@ func (c *component) sashaCronJob() *batchv1.CronJob {
 func (c *component) sashaServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: rbacv1.ServiceAccountKind, APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: ResourceNameSashaJob, Namespace: NameSpaceRuntimeSecurity},
+		ObjectMeta: metav1.ObjectMeta{Name: SashaName, Namespace: NameSpaceRuntimeSecurity},
 	}
 }

@@ -969,7 +969,7 @@ func (c *apiServerComponent) startUpArgs() []string {
 	}
 
 	if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-		args = append(args, fmt.Sprintf("--tls-max-version=VersionTLS12"))
+		args = append(args, "--tls-max-version=VersionTLS12")
 	}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {

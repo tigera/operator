@@ -74,6 +74,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 	reqLogger logr.Logger,
 	ctx context.Context,
 	certificateManager certificatemanager.CertificateManager,
+	applyTrial bool,
 ) (reconcile.Result, bool, bool, error) {
 	var elasticKeyPair, kibanaKeyPair certificatemanagement.KeyPairInterface
 	var err error
@@ -100,14 +101,16 @@ func (r *ReconcileLogStorage) createLogStorage(
 			r.status.SetDegraded("Failed to create Elasticsearch secrets", err.Error())
 			return reconcile.Result{}, false, finalizerCleanup, err
 		}
-
-		kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
-		if kibanaKeyPair, err = certificateManager.GetOrCreateKeyPair(r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames); err != nil {
-			reqLogger.Error(err, err.Error())
-			r.status.SetDegraded("Failed to create Kibana secrets", err.Error())
-			return reconcile.Result{}, false, finalizerCleanup, err
+		trustedBundle = certificateManager.CreateTrustedBundle(elasticKeyPair)
+		if !operatorv1.IsFIPSModeEnabled(install.FIPSMode) {
+			kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
+			if kibanaKeyPair, err = certificateManager.GetOrCreateKeyPair(r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames); err != nil {
+				reqLogger.Error(err, err.Error())
+				r.status.SetDegraded("Failed to create Kibana secrets", err.Error())
+				return reconcile.Result{}, false, finalizerCleanup, err
+			}
+			trustedBundle.AddCertificates(kibanaKeyPair)
 		}
-		trustedBundle = certificateManager.CreateTrustedBundle(elasticKeyPair, kibanaKeyPair)
 	}
 
 	elasticsearch, err := r.getElasticsearch(ctx)
@@ -117,11 +120,14 @@ func (r *ReconcileLogStorage) createLogStorage(
 		return reconcile.Result{}, false, finalizerCleanup, err
 	}
 
-	kibana, err := r.getKibana(ctx)
-	if err != nil {
-		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("An error occurred trying to retrieve Kibana", err.Error())
-		return reconcile.Result{}, false, finalizerCleanup, err
+	var kibana *kbv1.Kibana
+	if !operatorv1.IsFIPSModeEnabled(install.FIPSMode) {
+		kibana, err = r.getKibana(ctx)
+		if err != nil {
+			reqLogger.Error(err, err.Error())
+			r.status.SetDegraded("An error occurred trying to retrieve Kibana", err.Error())
+			return reconcile.Result{}, false, finalizerCleanup, err
+		}
 	}
 
 	// If Authentication spec present, we use it to configure dex as an authentication proxy.
@@ -183,6 +189,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 		TrustedBundle:               trustedBundle,
 		UnusedTLSSecret:             unusedTLSSecret,
 		UsePSP:                      r.usePSP,
+		ApplyTrial:                  applyTrial,
 	}
 
 	component := render.LogStorage(logStorageCfg)
@@ -205,18 +212,22 @@ func (r *ReconcileLogStorage) createLogStorage(
 			},
 			TrustedBundle: trustedBundle,
 		}),
-		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			Namespace:       render.KibanaNamespace,
-			ServiceAccounts: []string{render.KibanaName},
-			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-				// We do not want to delete the secret from the tigera-elasticsearch when CertificateManagement is
-				// enabled. Instead, it will be replaced with a TLS secret that serves merely to pass ECK's validation
-				// checks.
-				rcertificatemanagement.NewKeyPairOption(kibanaKeyPair, true, kibanaKeyPair != nil && !kibanaKeyPair.UseCertificateManagement()),
-			},
-			TrustedBundle: trustedBundle,
-		}),
 	)
+	if !operatorv1.IsFIPSModeEnabled(install.FIPSMode) {
+		components = append(components, component,
+			rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+				Namespace:       render.KibanaNamespace,
+				ServiceAccounts: []string{render.KibanaName},
+				KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+					// We do not want to delete the secret from the tigera-elasticsearch when CertificateManagement is
+					// enabled. Instead, it will be replaced with a TLS secret that serves merely to pass ECK's validation
+					// checks.
+					rcertificatemanagement.NewKeyPairOption(kibanaKeyPair, true, kibanaKeyPair != nil && !kibanaKeyPair.UseCertificateManagement()),
+				},
+				TrustedBundle: trustedBundle,
+			}),
+		)
+	}
 
 	for _, component := range components {
 		if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
@@ -236,7 +247,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 			return reconcile.Result{}, false, finalizerCleanup, nil
 		}
 
-		if kibana == nil || kibana.Status.AssociationStatus != cmnv1.AssociationEstablished {
+		if !operatorv1.IsFIPSModeEnabled(install.FIPSMode) && (kibana == nil || kibana.Status.AssociationStatus != cmnv1.AssociationEstablished) {
 			r.status.SetDegraded("Waiting for Kibana cluster to be operational", "")
 			return reconcile.Result{}, false, finalizerCleanup, nil
 		}

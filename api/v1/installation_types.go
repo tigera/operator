@@ -127,6 +127,12 @@ type InstallationSpec struct {
 	// +optional
 	FlexVolumePath string `json:"flexVolumePath,omitempty"`
 
+	// KubeletVolumePluginPath optionally specifies enablement of Calico CSI plugin. If not specified,
+	// CSI will be enabled by default. If set to 'None', CSI will be disabled.
+	// Default: /var/lib/kubelet
+	// +optional
+	KubeletVolumePluginPath string `json:"kubeletVolumePluginPath,omitempty"`
+
 	// NodeUpdateStrategy can be used to customize the desired update strategy, such as the MaxUnavailable
 	// field.
 	// +optional

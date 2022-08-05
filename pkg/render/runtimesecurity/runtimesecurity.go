@@ -86,7 +86,7 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 }
 
 func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
-	var objs []client.Object
+	var objs, toDelete []client.Object
 
 	objs = append(objs, render.CreateNamespace(NameSpaceRuntimeSecurity, c.config.Installation.KubernetesProvider))
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(NameSpaceRuntimeSecurity, c.config.PullSecrets...)...)...)
@@ -97,7 +97,9 @@ func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
 		objs = append(objs, c.sashaDeployment())
 	}
 
-	return objs, nil
+	toDelete = append(toDelete, c.sashaCronJob())
+
+	return objs, toDelete
 }
 
 func (c *component) Ready() bool {

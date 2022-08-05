@@ -158,6 +158,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 									"--tls.crt=/tigera-ee-elasticsearch-metrics-tls/tls.crt",
 									"--ca.crt=/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 								Env: []corev1.EnvVar{
+									{Name: "FIPS_MODE_ENABLED", Value: "false"},
 									{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
 									{Name: "ELASTIC_SCHEME", Value: "https"},
 									{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},

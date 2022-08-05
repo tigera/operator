@@ -95,6 +95,17 @@ var _ = Describe("compliance rendering tests", func() {
 		}
 	})
 
+	It("should render the env variable for queryserver when FIPS is enabled", func() {
+		fipsEnabled := operatorv1.FIPSModeEnabled
+		cfg.Installation.FIPSMode = &fipsEnabled
+		component, err := render.Compliance(cfg)
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+		d := rtest.GetResource(resources, "compliance-server", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "FIPS_MODE_ENABLED", Value: "true"}))
+	})
+
 	Context("Standalone cluster", func() {
 		It("should render all resources for a default configuration", func() {
 			component, err := render.Compliance(cfg)

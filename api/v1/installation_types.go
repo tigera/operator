@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	"fmt"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -162,7 +163,20 @@ type InstallationSpec struct {
 
 	// CalicoWindowsUpgradeDaemonSet configures the calico-windows-upgrade DaemonSet.
 	CalicoWindowsUpgradeDaemonSet *CalicoWindowsUpgradeDaemonSet `json:"calicoWindowsUpgradeDaemonSet,omitempty"`
+
+	// FIPSMode uses images and features only that are using FIPS 140-2 validated cryptographic modules and standards.
+	// Default: Disabled
+	// +kubebuilder:validation:Enum=Enabled;Disabled
+	// +optional
+	FIPSMode *FIPSMode `json:"fipsMode,omitempty"`
 }
+
+type FIPSMode string
+
+const (
+	FIPSModeEnabled  FIPSMode = "Enabled"
+	FIPSModeDisabled FIPSMode = "Disabled"
+)
 
 // Deprecated. Please use TyphaDeployment instead.
 // TyphaAffinity allows configuration of node affinity characteristics for Typha pods.
@@ -691,4 +705,14 @@ type CertificateManagement struct {
 	// +kubebuilder:validation:Enum="";SHA256WithRSA;SHA384WithRSA;SHA512WithRSA;ECDSAWithSHA256;ECDSAWithSHA384;ECDSAWithSHA512;
 	// +optional
 	SignatureAlgorithm string `json:"signatureAlgorithm,omitempty"`
+}
+
+// IsFIPSModeEnabled is a convenience function for turning a FIPSMode reference into a bool.
+func IsFIPSModeEnabled(mode *FIPSMode) bool {
+	return mode != nil && *mode == FIPSModeEnabled
+}
+
+// IsFIPSModeEnabledString is a convenience function for turning a FIPSMode reference into a string formatted bool.
+func IsFIPSModeEnabledString(mode *FIPSMode) string {
+	return fmt.Sprintf("%t", IsFIPSModeEnabled(mode))
 }

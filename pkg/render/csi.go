@@ -104,7 +104,7 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 	csiContainer := corev1.Container{
 		Name:            CSIContainerName,
 		Image:           c.csiImage,
-		ImagePullPolicy: corev1.PullAlways,
+		ImagePullPolicy: corev1.PullIfNotPresent,
 		Args: []string{
 			"--nodeid=$(KUBE_NODE_NAME)",
 			"--loglevel=$(LOG_LEVEL)",
@@ -150,7 +150,7 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 	registrarContainer := corev1.Container{
 		Name:            CSIRegistrarContainerName,
 		Image:           c.csiRegistrarImage,
-		ImagePullPolicy: corev1.PullAlways,
+		ImagePullPolicy: corev1.PullIfNotPresent,
 		Args: []string{
 			"--v=5",
 			"--csi-address=$(ADDRESS)",

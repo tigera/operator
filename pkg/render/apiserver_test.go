@@ -325,7 +325,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	It("should render the env variable for queryserver and arg for apiserver when FIPS is enabled", func() {
-		cfg.Installation.FIPSMode = operatorv1.FIPSModeEnabled
+		fipsEnabled := operatorv1.FIPSModeEnabled
+		cfg.Installation.FIPSMode = &fipsEnabled
 		component, err := render.APIServer(cfg)
 		Expect(err).NotTo(HaveOccurred())
 		resources, _ := component.Objects()

@@ -171,9 +171,10 @@ var _ = Describe("Application layer controller tests", func() {
 		})
 
 		It("should not work in combination with FIPS", func() {
-			installation.Spec.FIPSMode = operatorv1.FIPSModeEnabled
+			fipsEnabled := operatorv1.FIPSModeEnabled
+			installation.Spec.FIPSMode = &fipsEnabled
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
-			mockStatus.On("SetDegraded", "application layer features cannot be used in combination with FIPSMode=Enabled", "").Return()
+			mockStatus.On("SetDegraded", "ApplicationLayer features cannot be used in combination with FIPSMode=Enabled", "").Return()
 			By("applying the ApplicationLayer CR to the fake cluster")
 			enabled := operatorv1.L7LogCollectionEnabled
 			Expect(c.Create(ctx, &operatorv1.ApplicationLayer{

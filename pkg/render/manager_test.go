@@ -588,7 +588,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	It("should set the right env when FIPS is enabled", func() {
-		installation.FIPSMode = operatorv1.FIPSModeEnabled
+		fipsEnabled := operatorv1.FIPSModeEnabled
+		installation.FIPSMode = &fipsEnabled
 		resources := renderObjects(renderConfig{oidc: false, managementCluster: nil, installation: installation, complianceFeatureActive: true})
 		Expect(resources).To(HaveLen(expectedResourcesNumber))
 		deploy, ok := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)

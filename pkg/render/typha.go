@@ -520,7 +520,6 @@ func (c *typhaComponent) typhaEnvVars() []corev1.EnvVar {
 		// If a typha metrics port was given, then enable typha prometheus metrics and set the port.
 		typhaEnv = append(typhaEnv,
 			corev1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSENABLED", Value: "true"},
-			corev1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSFIPSMODEENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 			corev1.EnvVar{Name: "TYPHA_PROMETHEUSMETRICSPORT", Value: fmt.Sprintf("%d", *c.cfg.Installation.TyphaMetricsPort)},
 		)
 	}

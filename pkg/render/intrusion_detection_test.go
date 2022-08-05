@@ -599,7 +599,8 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 	})
 
 	It("should not render anomaly detection or es-job installer when FIPS mode is enabled", func() {
-		cfg.Installation.FIPSMode = operatorv1.FIPSModeEnabled
+		fipsEnabled := operatorv1.FIPSModeEnabled
+		cfg.Installation.FIPSMode = &fipsEnabled
 		component := render.IntrusionDetection(cfg)
 		resources, _ := component.Objects()
 

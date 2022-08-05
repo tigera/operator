@@ -96,7 +96,8 @@ var _ = Describe("compliance rendering tests", func() {
 	})
 
 	It("should render the env variable for queryserver when FIPS is enabled", func() {
-		cfg.Installation.FIPSMode = operatorv1.FIPSModeEnabled
+		fipsEnabled := operatorv1.FIPSModeEnabled
+		cfg.Installation.FIPSMode = &fipsEnabled
 		component, err := render.Compliance(cfg)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(component.ResolveImages(nil)).To(BeNil())

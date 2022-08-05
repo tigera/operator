@@ -217,7 +217,8 @@ var _ = Describe("ES Gateway rendering tests", func() {
 		})
 		It("should set the right env when FIPS mode is enabled", func() {
 			kp, bundle := getTLS(installation)
-			installation.FIPSMode = operatorv1.FIPSModeEnabled
+			enabled := operatorv1.FIPSModeEnabled
+			installation.FIPSMode = &enabled
 			component := EsGateway(&Config{
 				Installation: installation,
 				PullSecrets: []*corev1.Secret{

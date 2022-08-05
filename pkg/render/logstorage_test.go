@@ -666,7 +666,8 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			})
 		})
 		It("should not render kibana if FIPS mode is enabled", func() {
-			cfg.Installation.FIPSMode = operatorv1.FIPSModeEnabled
+			fipsEnabled := operatorv1.FIPSModeEnabled
+			cfg.Installation.FIPSMode = &fipsEnabled
 			cfg.ApplyTrial = true
 			expectedCreateResources := []resourceTestObj{
 				{render.ECKOperatorNamespace, "", &corev1.Namespace{}, nil},

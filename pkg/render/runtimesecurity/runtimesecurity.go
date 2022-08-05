@@ -24,7 +24,7 @@ import (
 const (
 	NameSpaceRuntimeSecurity            = "tigera-runtime-security"
 	ElasticsearchSashaJobUserSecretName = "tigera-ee-sasha-elasticsearch-access"
-	SashaClientName                     = "sasha"
+	SashaName                           = "sasha"
 	ResourceSashaDefaultCPULimit        = "1"
 	ResourceSashaDefaultMemoryLimit     = "1Gi"
 	ResourceSashaDefaultCPURequest      = "100m"
@@ -131,25 +131,25 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      SashaClientName,
+			Name:      SashaName,
 			Namespace: NameSpaceRuntimeSecurity,
 			Labels: map[string]string{
-				"k8s-app": SashaClientName,
+				"k8s-app": SashaName,
 			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"k8s-app": SashaClientName,
+					"k8s-app": SashaName,
 				},
 			},
 			Replicas: &numReplica,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      SashaClientName,
+					Name:      SashaName,
 					Namespace: NameSpaceRuntimeSecurity,
 					Labels: map[string]string{
-						"k8s-app": SashaClientName,
+						"k8s-app": SashaName,
 					},
 				},
 				Spec: relasticsearch.PodSpecDecorate(corev1.PodSpec{
@@ -168,7 +168,7 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 					},
 					Containers: []corev1.Container{
 						relasticsearch.ContainerDecorate(corev1.Container{
-							Name:  SashaClientName,
+							Name:  SashaName,
 							Image: c.config.sashaImage,
 							Env:   envVars,
 							Resources: corev1.ResourceRequirements{
@@ -194,7 +194,7 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 							c.config.OsType),
 					},
 					ImagePullSecrets:   secret.GetReferenceList(c.config.PullSecrets),
-					ServiceAccountName: SashaClientName,
+					ServiceAccountName: SashaName,
 				}),
 			},
 		},
@@ -204,6 +204,6 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 func (c *component) sashaServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: rbacv1.ServiceAccountKind, APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: SashaClientName, Namespace: NameSpaceRuntimeSecurity},
+		ObjectMeta: metav1.ObjectMeta{Name: SashaName, Namespace: NameSpaceRuntimeSecurity},
 	}
 }

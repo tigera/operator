@@ -679,6 +679,7 @@ func (r *ReconcileLogStorage) applyElasticTrialSecret(ctx context.Context, insta
 	if !operatorv1.IsFIPSModeEnabled(installation.FIPSMode) {
 		return false, nil
 	}
+	// FIPS mode is a licensed feature for Elasticsearch.
 	if err := r.client.Get(ctx, types.NamespacedName{Name: render.ECKEnterpriseTrial, Namespace: render.ECKOperatorNamespace}, &corev1.Secret{}); err != nil {
 		if errors.IsNotFound(err) {
 			return true, nil

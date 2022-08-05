@@ -193,6 +193,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 	objs = append(objs, c.globalAlertTemplates()...)
 
 	// AD Related deployment only for management/standalone cluster
+	// When FIPS mode is enabled, we currently disable our python based images.
 	if !c.cfg.ManagedCluster && !operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
 		// Service + Deployment + RBAC for AD API
 		objs = append(objs,
@@ -217,6 +218,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		objs = append(objs, c.adDetectorPodTemplates()...)
 	}
 
+	// When FIPS mode is enabled, we currently disable our python based images.
 	if !c.cfg.ManagedCluster && !operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
 		objs = append(objs, c.intrusionDetectionElasticsearchAllowTigeraPolicy())
 		objs = append(objs, c.intrusionDetectionElasticsearchJob())

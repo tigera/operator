@@ -467,6 +467,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	var clusterConfig *relasticsearch.ClusterConfig
 	var curatorSecrets []*corev1.Secret
 	var esLicenseType render.ElasticsearchLicenseType
+	var applyTrial bool
 
 	if managementClusterConnection == nil {
 		flowShards := logstoragecommon.CalculateFlowShards(ls.Spec.Nodes, logstoragecommon.DefaultElasticsearchShards)
@@ -486,6 +487,11 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		curatorSecrets, err = utils.ElasticsearchSecrets(context.Background(), []string{render.ElasticsearchCuratorUserSecret}, r.client)
 		if err != nil && !errors.IsNotFound(err) {
 			r.status.SetDegraded("Failed to get curator credentials", err.Error())
+			return reconcile.Result{}, err
+		}
+		applyTrial, err = r.applyElasticTrialSecret(ctx, install)
+		if err != nil {
+			r.status.SetDegraded("Failed to get eck trial license", err.Error())
 			return reconcile.Result{}, err
 		}
 
@@ -542,6 +548,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		reqLogger,
 		ctx,
 		certificateManager,
+		applyTrial,
 	)
 
 	if ls != nil && ls.DeletionTimestamp != nil && finalizerCleanup {
@@ -663,6 +670,23 @@ func (r *ReconcileLogStorage) getKibana(ctx context.Context) (*kbv1.Kibana, erro
 		return nil, err
 	}
 	return &kb, nil
+}
+
+// applyElasticTrialSecret returns true if we want to apply a new trial license.
+// Overwriting an existing trial license will invalidate the old trial, and revert the cluster back to basic. When a user
+// installs a valid Elastic license, the trial will be ignored.
+func (r *ReconcileLogStorage) applyElasticTrialSecret(ctx context.Context, installation *operatorv1.InstallationSpec) (bool, error) {
+	if !operatorv1.IsFIPSModeEnabled(installation.FIPSMode) {
+		return false, nil
+	}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: render.ECKEnterpriseTrial, Namespace: render.ECKOperatorNamespace}, &corev1.Secret{}); err != nil {
+		if errors.IsNotFound(err) {
+			return true, nil
+		} else {
+			return false, err
+		}
+	}
+	return false, nil
 }
 
 func (r *ReconcileLogStorage) getKibanaService(ctx context.Context) (*corev1.Service, error) {

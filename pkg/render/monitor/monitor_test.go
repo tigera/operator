@@ -457,6 +457,11 @@ var _ = Describe("monitor rendering tests", func() {
 				ValueFrom: nil,
 			},
 			{
+				Name:      "FIPS_MODE_ENABLED",
+				Value:     "false",
+				ValueFrom: nil,
+			},
+			{
 				Name:      "DEX_ENABLED",
 				Value:     "true",
 				ValueFrom: nil,

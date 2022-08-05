@@ -215,6 +215,11 @@ var (
 		Image:   "tigera/cni",
 	}
 
+	ComponentTigeraCNIFIPS = component{
+		Version: "master-fips",
+		Image:   "tigera/cni",
+	}
+
 	ComponentCloudControllers = component{
 		Version: "master",
 		Image:   "tigera/cloud-controllers",
@@ -265,6 +270,7 @@ var (
 		ComponentTigeraNode,
 		ComponentTigeraTypha,
 		ComponentTigeraCNI,
+		ComponentTigeraCNIFIPS,
 		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,

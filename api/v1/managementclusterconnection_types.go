@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2012,2015-2022 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,7 +26,34 @@ type ManagementClusterConnectionSpec struct {
 	// should be able to access this address. This field is used by managed clusters only.
 	// +optional
 	ManagementClusterAddr string `json:"managementClusterAddr,omitempty"`
+
+	// TLS provides options for configuring how Managed Clusters can establish an mTLS connection with the Management Cluster.
+	// +optional
+	TLS *ManagementClusterTLS `json:"tls,omitempty"`
 }
+
+type ManagementClusterTLS struct {
+	// CA indicates which verification method the tunnel client should use to verify the tunnel server's identity.
+	//
+	// When left blank or set to 'Tigera', the tunnel client will expect a self-signed cert to be included in the certificate bundle
+	// and will expect the cert to have a Common Name (CN) of 'voltron'.
+	//
+	// When set to 'Public', the tunnel client will use its installed system certs and will use the managementClusterAddr to verify the tunnel server's identity.
+	//
+	// +kubebuilder:validation:Enum=Tigera;Public
+	// Default: Tigera
+	CA CAType `json:"ca,omitempty"`
+}
+
+// CAType specifies which verification method the tunnel client should use to verify the tunnel server's identity.
+//
+// One of: Tigera, Public
+type CAType string
+
+const (
+	CATypeTigera CAType = "Tigera"
+	CATypePublic CAType = "Public"
+)
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status

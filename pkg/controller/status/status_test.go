@@ -444,18 +444,18 @@ var _ = Describe("Status reporting tests", func() {
 		})
 
 		It("should prioritize explicit degraded reason over pod failure", func() {
-			Expect(sm.degradedReason()).To(Equal(""))
+			Expect(sm.degradedReason()).To(Equal("Unknown"))
 			sm.failing = []string{"This pod has died"}
 			Expect(sm.degradedReason()).To(Equal("PodFailure"))
-			sm.explicitDegradedReason = "Controller set us degraded"
-			Expect(sm.degradedReason()).To(Equal("Controller set us degraded"))
+			sm.SetDegraded("ControllerSetUsDegraded", "error message")
+			Expect(sm.degradedReason()).To(Equal("ControllerSetUsDegraded"))
 		})
 
 		It("should generate correct degraded messages", func() {
-			Expect(sm.degradedReason()).To(Equal(""))
+			Expect(sm.degradedReason()).To(Equal("Unknown"))
 			sm.failing = []string{"This pod has died"}
 			Expect(sm.degradedMessage()).To(Equal("This pod has died"))
-			sm.explicitDegradedMsg = "Controller set us degraded"
+			sm.SetDegraded("ControllerSetUsDegraded", "Controller set us degraded")
 			Expect(sm.degradedMessage()).To(Equal("Controller set us degraded\nThis pod has died"))
 		})
 

@@ -222,7 +222,7 @@ func (m *statusManager) updateStatus() {
 func (m *statusManager) isExplicitlyDegraded() bool {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	return m.explicitDegradedReason != ""
+	return m.degraded
 }
 
 // Run starts the status manager state monitoring routine.
@@ -429,7 +429,7 @@ func (m *statusManager) ClearDegraded() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.degraded = false
-	m.explicitDegradedReason = string(operator.Unknown)
+	m.explicitDegradedReason = ""
 	m.explicitDegradedMsg = ""
 	m.windowsUpgradeDegradedMsg = ""
 }
@@ -895,10 +895,17 @@ func (m *statusManager) degradedMessage() string {
 	return strings.Join(msgs, "\n")
 }
 
+// This function should only be called if we are in a degraded state.
+// Every path should return a non-empty string that can be used in
+// the Condition Reason.
 func (m *statusManager) degradedReason() string {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	if m.explicitDegradedReason != "" {
+	if m.degraded {
+		// Ensure we always have a reason that is non-empty
+		if m.explicitDegradedReason == "" {
+			return string(operator.Unknown)
+		}
 		return m.explicitDegradedReason
 	}
 	// Add a reason if we have a windows upgrade degraded msg.
@@ -908,7 +915,7 @@ func (m *statusManager) degradedReason() string {
 	if len(m.failing) != 0 {
 		return string(operator.PodFailure)
 	}
-	return ""
+	return string(operator.Unknown)
 }
 
 func (m *statusManager) clearDegradedWithReason(reason operator.TigeraStatusReason, msg string) {

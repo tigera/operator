@@ -207,6 +207,16 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	preDefaultPatchFrom := client.MergeFrom(managementClusterConnection.DeepCopy())
+	fillDefaults(managementClusterConnection)
+
+	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
+	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
+	if err := r.Client.Patch(ctx, managementClusterConnection, preDefaultPatchFrom); err != nil {
+		r.status.SetDegraded(string(operatorv1.ResourceUpdateError), err.Error())
+		return reconcile.Result{}, err
+	}
+
 	log.V(2).Info("Loaded ManagementClusterConnection config", "config", managementClusterConnection)
 	r.status.OnCRFound()
 
@@ -294,6 +304,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	ch := utils.NewComponentHandler(log, r.Client, r.Scheme, managementClusterConnection)
 	guardianCfg := &render.GuardianConfiguration{
 		URL:               managementClusterConnection.Spec.ManagementClusterAddr,
+		TunnelCAType:      managementClusterConnection.Spec.TLS.CA,
 		PullSecrets:       pullSecrets,
 		Openshift:         r.Provider == operatorv1.ProviderOpenShift,
 		Installation:      instl,
@@ -333,6 +344,15 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	// We should create the Guardian deployment.
 	return result, nil
+}
+
+func fillDefaults(mcc *operatorv1.ManagementClusterConnection) {
+	if mcc.Spec.TLS == nil {
+		mcc.Spec.TLS = &operatorv1.ManagementClusterTLS{}
+	}
+	if mcc.Spec.TLS.CA == "" {
+		mcc.Spec.TLS.CA = operatorv1.CATypeTigera
+	}
 }
 
 func networkPolicyRequiresEgressAccessControl(connection *operatorv1.ManagementClusterConnection, log logr.Logger) bool {

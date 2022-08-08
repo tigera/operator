@@ -36,8 +36,6 @@ type ManagementClusterSpec struct {
 type TLS struct {
 	// SecretName indicates the name of the secret in the tigera-operator namespace that contains the private key and certificate that the management cluster uses when it listens for incoming connections.
 	//
-	// Currently, only two values are supported: tigera-management-cluster-connection and manager-tls.
-	//
 	// When set to tigera-management-cluster-connection voltron will use the same cert bundle which Guardian client certs are signed with.
 	//
 	// When set to manager-tls, voltron will use the same cert bundle which Manager UI is served with.
@@ -47,6 +45,8 @@ type TLS struct {
 	//
 	// If changed on a running cluster with connected managed clusters, all managed clusters will disconnect as they will no longer be able to verify Voltron's identity.
 	// To reconnect existing managed clusters, change the tls.ca of the  managed clusters' ManagementClusterConnection resource.
+	//
+	// One of: tigera-management-cluster-connection or manager-tls.
 	//
 	// +kubebuilder:validation:Enum=tigera-management-cluster-connection;manager-tls
 	// +optional

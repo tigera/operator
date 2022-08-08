@@ -45,6 +45,9 @@ type ManagementClusterTLS struct {
 	CA CAType `json:"ca,omitempty"`
 }
 
+// CAType specifies which verification method the tunnel client should use to verify the tunnel server's identity.
+//
+// One of: Tigera, Public
 type CAType string
 
 const (

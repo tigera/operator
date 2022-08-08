@@ -56,11 +56,11 @@ var (
 	}
 
 	ComponentEckElasticsearch = component{
-		Version: "7.16.2",
+		Version: "7.17.4",
 	}
 
 	ComponentEckKibana = component{
-		Version: "7.16.2",
+		Version: "7.17.4",
 	}
 
 	ComponentElasticTseeInstaller = component{

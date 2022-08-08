@@ -429,7 +429,7 @@ func (m *statusManager) ClearDegraded() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.degraded = false
-	m.explicitDegradedReason = string(operator.Unknown)
+	m.explicitDegradedReason = ""
 	m.explicitDegradedMsg = ""
 	m.windowsUpgradeDegradedMsg = ""
 }

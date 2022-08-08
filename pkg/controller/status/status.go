@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -78,6 +79,20 @@ type StatusManager interface {
 	ReadyToMonitor()
 	SetMetaData(meta *metav1.ObjectMeta)
 }
+
+// This regex matches any characters that are not allowed in a Status Reason.
+var reasonInvalidCharacters = regexp.MustCompile(`[^A-Za-z0-9_,:]`)
+
+// This regex matches any characters not allowed at the start of a Status Reason.
+// We use this to trim all invalid characters at the start of the Status Reason which is
+// why we use * in the regex.
+var reasonInvalidStartCharacters = regexp.MustCompile(`^[^A-Za-z]*`)
+
+// This regex matches any characters not allowed at the end of a Status Reason.
+// Also disallow _ since it doesn't add anything to the reason for us.
+// We use this to trim all invalid characters at the end of the Status Reason which is
+// why we use * in the regex.
+var reasonInvalidEndCharacters = regexp.MustCompile(`[^A-Za-z0-9]*$`)
 
 type statusManager struct {
 	client                    client.Client
@@ -196,7 +211,7 @@ func (m *statusManager) updateStatus() {
 		// If we've been given an explicit degraded reason then it should be reported even if readyToMonitor is false,
 		// as this degraded reason may be the reason why we're not ready to monitor.
 		if m.isExplicitlyDegraded() {
-			m.setDegraded(string(operator.PodFailure), fmt.Sprintf("%s - %s", m.degradedReason(), m.degradedMessage()))
+			m.setDegraded(m.degradedReason(), m.degradedMessage())
 		} else {
 			m.clearDegraded()
 		}
@@ -207,7 +222,7 @@ func (m *statusManager) updateStatus() {
 func (m *statusManager) isExplicitlyDegraded() bool {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	return m.explicitDegradedReason != ""
+	return m.degraded
 }
 
 // Run starts the status manager state monitoring routine.
@@ -347,7 +362,7 @@ func (m *statusManager) SetWindowsUpgradeStatus(pending, inProgress, completed [
 	defer m.lock.Unlock()
 
 	if err != nil {
-		m.windowsUpgradeDegradedMsg = err.Error()
+		m.windowsUpgradeDegradedMsg = fmt.Sprintf("Windows upgrade error: %s", err.Error())
 		return
 	}
 
@@ -414,7 +429,7 @@ func (m *statusManager) ClearDegraded() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.degraded = false
-	m.explicitDegradedReason = string(operator.Unknown)
+	m.explicitDegradedReason = ""
 	m.explicitDegradedMsg = ""
 	m.windowsUpgradeDegradedMsg = ""
 }
@@ -789,7 +804,16 @@ func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondi
 	m.crExists = true
 }
 
+func sanitizeReason(r string) string {
+	// First replace all invalid middle characters with '_', then strip all
+	// invalid beginning characters, and then strip all invalid ending characters
+	return reasonInvalidEndCharacters.ReplaceAllString(
+		reasonInvalidStartCharacters.ReplaceAllString(
+			reasonInvalidCharacters.ReplaceAllString(r, "_"), ""), "")
+}
+
 func (m *statusManager) setAvailable(reason, msg string) {
+	reason = sanitizeReason(reason)
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
@@ -800,6 +824,7 @@ func (m *statusManager) setAvailable(reason, msg string) {
 }
 
 func (m *statusManager) setDegraded(reason, msg string) {
+	reason = sanitizeReason(reason)
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
@@ -810,6 +835,7 @@ func (m *statusManager) setDegraded(reason, msg string) {
 }
 
 func (m *statusManager) setProgressing(reason, msg string) {
+	reason = sanitizeReason(reason)
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
@@ -869,21 +895,23 @@ func (m *statusManager) degradedMessage() string {
 	return strings.Join(msgs, "\n")
 }
 
+// This function should only be called if we are in a degraded state.
+// Every path should return a non-empty string that can be used in
+// the Condition Reason.
 func (m *statusManager) degradedReason() string {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	reasons := []string{}
-	if m.explicitDegradedReason != "" {
-		reasons = append(reasons, m.explicitDegradedReason)
+	if m.degraded {
+		return m.explicitDegradedReason
 	}
 	// Add a reason if we have a windows upgrade degraded msg.
 	if m.windowsUpgradeDegradedMsg != "" {
-		reasons = append(reasons, common.CalicoWindowsNodeUpgradeStatusErrorReason)
+		return string(operator.UpgradeError)
 	}
 	if len(m.failing) != 0 {
-		reasons = append(reasons, "Some pods are failing")
+		return string(operator.PodFailure)
 	}
-	return strings.Join(reasons, "; ")
+	return string(operator.Unknown)
 }
 
 func (m *statusManager) clearDegradedWithReason(reason operator.TigeraStatusReason, msg string) {

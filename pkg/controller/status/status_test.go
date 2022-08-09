@@ -443,19 +443,19 @@ var _ = Describe("Status reporting tests", func() {
 			Expect(sm.IsProgressing()).To(BeFalse())
 		})
 
-		It("should generate correct degraded reasons", func() {
-			Expect(sm.degradedReason()).To(Equal(""))
+		It("should prioritize explicit degraded reason over pod failure", func() {
+			Expect(sm.degradedReason()).To(Equal("Unknown"))
 			sm.failing = []string{"This pod has died"}
-			Expect(sm.degradedReason()).To(Equal("Some pods are failing"))
-			sm.explicitDegradedReason = "Controller set us degraded"
-			Expect(sm.degradedReason()).To(Equal("Controller set us degraded; Some pods are failing"))
+			Expect(sm.degradedReason()).To(Equal("PodFailure"))
+			sm.SetDegraded("ControllerSetUsDegraded", "error message")
+			Expect(sm.degradedReason()).To(Equal("ControllerSetUsDegraded"))
 		})
 
 		It("should generate correct degraded messages", func() {
-			Expect(sm.degradedReason()).To(Equal(""))
+			Expect(sm.degradedReason()).To(Equal("Unknown"))
 			sm.failing = []string{"This pod has died"}
 			Expect(sm.degradedMessage()).To(Equal("This pod has died"))
-			sm.explicitDegradedMsg = "Controller set us degraded"
+			sm.SetDegraded("ControllerSetUsDegraded", "Controller set us degraded")
 			Expect(sm.degradedMessage()).To(Equal("Controller set us degraded\nThis pod has died"))
 		})
 
@@ -693,4 +693,25 @@ var _ = Describe("Status reporting tests", func() {
 			})
 		})
 	})
+	DescribeTable("test sanitizeReason",
+		func(source, expected string) {
+			Expect(sanitizeReason(source)).To(Equal(expected))
+		},
+		Entry("Compliance example", "Error querying compliance", "Error_querying_compliance"),
+		Entry("tigera tier example with dash", "Waiting for allow-tigera tier to be created", "Waiting_for_allow_tigera_tier_to_be_created"),
+		Entry("ES example reason with comma",
+			"Elasticsearch cluster configuration is not available, waiting for it to become available",
+			"Elasticsearch_cluster_configuration_is_not_available,_waiting_for_it_to_become_available"),
+		Entry("Example reason with slash",
+			"failed to retrieve / validate  ",
+			"failed_to_retrieve___validate"),
+		Entry("Example reason with period",
+			"Failed to process the authentication CR.", "Failed_to_process_the_authentication_CR"),
+		Entry("Example with period",
+			"Failed to process the authentication CR.", "Failed_to_process_the_authentication_CR"),
+		Entry("Strip beginning invalid characters", ".+5_reason", "reason"),
+		Entry("Strip ending invalid characters", "reason1,:.,:", "reason1"),
+		Entry("sanitize on string that shouldn't be modifed",
+			string(operator.ResourceValidationError), string(operator.ResourceValidationError)),
+	)
 })

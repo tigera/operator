@@ -150,11 +150,7 @@ var _ = Describe("Image Assurance Controller", func() {
 			Spec: operatorv1.ImageSetSpec{
 				Images: []operatorv1.Image{
 					{
-						Image:  "tigera/image-assurance-db-migrator",
-						Digest: "sha256:123",
-					},
-					{
-						Image:  "tigera/image-assurance-api",
+						Image:  "tigera/image-assurance-api-proxy",
 						Digest: "sha256:123",
 					},
 					{
@@ -193,7 +189,6 @@ var _ = Describe("Image Assurance Controller", func() {
 	})
 
 	It("should render accurate resources for image assurance", func() {
-
 		By("applying the ImageAssurance CR to the fake cluster")
 		//apply image assurance cr
 		Expect(c.Create(ctx, &operatorv1.ImageAssurance{
@@ -204,29 +199,11 @@ var _ = Describe("Image Assurance Controller", func() {
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).ShouldNot(HaveOccurred())
 
-		By("ensuring the ImageAssurance DB migrator resource is created ")
-		job := batchv1.Job{
-			TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      imageassurance.ResourceNameImageAssuranceDBMigrator,
-				Namespace: imageassurance.NameSpaceImageAssurance,
-			},
-		}
-		Expect(test.GetResource(c, &job)).To(BeNil())
-
-		By("updating the Job status to succeeded ")
-		job.Status.Succeeded = 1
-		Expect(c.Update(ctx, &job)).NotTo(HaveOccurred())
-
-		By("Re-reconciling after the job was updated to Succeeded")
-		_, err = r.Reconcile(ctx, reconcile.Request{})
-		Expect(err).ShouldNot(HaveOccurred())
-
 		By("ensuring the ImageAssurance API resource created ")
 		api := appsv1.Deployment{
 			TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      imageassurance.ResourceNameImageAssuranceAPI,
+				Name:      imageassurance.APIProxyResourceName,
 				Namespace: imageassurance.NameSpaceImageAssurance,
 			},
 		}
@@ -235,7 +212,7 @@ var _ = Describe("Image Assurance Controller", func() {
 		Expect(api.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(api.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("%s%s%s",
 			components.ImageAssuranceRegistry,
-			components.ComponentImageAssuranceApi.Image, "@sha256:123")))
+			components.ComponentImageAssuranceApiProxy.Image, "@sha256:123")))
 
 		By("ensuring that ImageAssurance scanner resources created properly")
 		scanner := appsv1.Deployment{
@@ -266,119 +243,4 @@ var _ = Describe("Image Assurance Controller", func() {
 			components.ComponentImageAssurancePodWatcher.Image, "@sha256:123")))
 
 	})
-
-	It("should not render resources for image assurance if the migrator job fails", func() {
-		By("applying the ImageAssurance CR to the fake cluster")
-		//apply image assurance cr
-		Expect(c.Create(ctx, &operatorv1.ImageAssurance{
-			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-			Spec:       operatorv1.ImageAssuranceSpec{},
-		})).NotTo(HaveOccurred())
-
-		_, err := r.Reconcile(ctx, reconcile.Request{})
-		Expect(err).ShouldNot(HaveOccurred())
-
-		By("ensuring the ImageAssurance DB migrator resource is created ")
-		job := batchv1.Job{
-			TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      imageassurance.ResourceNameImageAssuranceDBMigrator,
-				Namespace: imageassurance.NameSpaceImageAssurance,
-			},
-		}
-		Expect(test.GetResource(c, &job)).To(BeNil())
-
-		By("updating the Job status to Failed ")
-		job.Status.Failed = 1
-		Expect(c.Update(ctx, &job)).NotTo(HaveOccurred())
-
-		By("Re-reconciling after the job was updated to Failed")
-		_, err = r.Reconcile(ctx, reconcile.Request{})
-		Expect(err).ShouldNot(HaveOccurred())
-	})
-
-	It("should clean up resources for image assurance if the migrator job has a new image name", func() {
-
-		By("applying the ImageAssurance CR to the fake cluster")
-		//apply image assurance cr
-		Expect(c.Create(ctx, &operatorv1.ImageAssurance{
-			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-			Spec:       operatorv1.ImageAssuranceSpec{},
-		})).NotTo(HaveOccurred())
-
-		_, err := r.Reconcile(ctx, reconcile.Request{})
-		Expect(err).ShouldNot(HaveOccurred())
-
-		By("ensuring the ImageAssurance DB migrator resource is created ")
-		job := batchv1.Job{
-			TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      imageassurance.ResourceNameImageAssuranceDBMigrator,
-				Namespace: imageassurance.NameSpaceImageAssurance,
-			},
-		}
-		Expect(test.GetResource(c, &job)).To(BeNil())
-
-		By("updating the Job status to succeeded ")
-		job.Status.Succeeded = 1
-		Expect(c.Update(ctx, &job)).NotTo(HaveOccurred())
-
-		By("Re-reconciling after the job was updated to Succeeded")
-		_, err = r.Reconcile(ctx, reconcile.Request{})
-		Expect(err).ShouldNot(HaveOccurred())
-
-		By("ensuring the ImageAssurance API resource created ")
-		api := appsv1.Deployment{
-			TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      imageassurance.ResourceNameImageAssuranceAPI,
-				Namespace: imageassurance.NameSpaceImageAssurance,
-			},
-		}
-
-		Expect(test.GetResource(c, &api)).To(BeNil())
-		Expect(api.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(api.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("%s%s%s",
-			components.ImageAssuranceRegistry,
-			components.ComponentImageAssuranceApi.Image, "@sha256:123")))
-
-		By("ensuring that ImageAssurance scanner resources created properly")
-		scanner := appsv1.Deployment{
-			TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      imageassurance.ResourceNameImageAssuranceScanner,
-				Namespace: imageassurance.NameSpaceImageAssurance,
-			},
-		}
-		Expect(test.GetResource(c, &scanner)).To(BeNil())
-		Expect(scanner.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(scanner.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("%s%s%s",
-			components.ImageAssuranceRegistry, components.ComponentImageAssuranceScanner.Image, "@sha256:123")))
-
-		By("ensuring that ImageAssurance pod watcher resources created properly")
-		podWatcher := appsv1.Deployment{
-			TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      imageassurance.ResourceNameImageAssurancePodWatcher,
-				Namespace: imageassurance.NameSpaceImageAssurance,
-			},
-		}
-		Expect(test.GetResource(c, &podWatcher)).To(BeNil())
-		Expect(podWatcher.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(podWatcher.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("%s%s%s",
-			components.ImageAssuranceRegistry, components.ComponentImageAssurancePodWatcher.Image, "@sha256:123")))
-
-		By("updating the Job image name something different ")
-		job.Spec.Template.Spec.Containers[0].Image = "newImageName"
-		Expect(c.Update(ctx, &job)).NotTo(HaveOccurred())
-
-		By("Re-reconciling after the job image name was updated")
-		_, err = r.Reconcile(ctx, reconcile.Request{})
-		Expect(err).ShouldNot(HaveOccurred())
-
-		Expect(test.GetResource(c, &api)).To(HaveOccurred())
-		Expect(test.GetResource(c, &scanner)).To(HaveOccurred())
-		Expect(test.GetResource(c, &podWatcher)).To(HaveOccurred())
-	})
-
 })

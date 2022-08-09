@@ -62,7 +62,6 @@ const (
 	pgConfigHashAnnotation        = "hash.operator.tigera.io/pgconfig"
 	pgUserHashAnnotation          = "hash.operator.tigera.io/pguser"
 	pgCertsHashAnnotation         = "hash.operator.tigera.io/pgcerts"
-	pgAdminUserHashAnnotation     = "hash.operator.tigera.io/pgadminuser"
 	apiCertHashAnnotation         = "hash.operator.tigera.io/apicerts"
 	tenantKeySecretHashAnnotation = "hash.operator.tigera.io/tenantkeysecret"
 )
@@ -90,6 +89,7 @@ type Config struct {
 	PGAdminUserSecret *corev1.Secret
 	PGUserSecret      *corev1.Secret
 	PGCertSecret      *corev1.Secret
+
 	// ConfigMap contains database host, port, name.
 	ConfigurationConfigMap    *corev1.ConfigMap
 	PGConfig                  *corev1.ConfigMap
@@ -99,14 +99,11 @@ type Config struct {
 	TenantEncryptionKeySecret *corev1.Secret
 	ScannerAPIAccessToken     []byte
 
-	NeedsMigrating bool
-	ComponentsUp   bool
-
 	// Calculated internal fields.
 	tlsHash         string
 	apiImage        string
+	apiProxyImage   string
 	scannerImage    string
-	migratorImage   string
 	podWatcherImage string
 
 	PodWatcherAPIAccessToken []byte
@@ -128,17 +125,12 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	var err error
 	var errMsgs []string
 
-	c.config.apiImage, err = components.GetReference(components.ComponentImageAssuranceApi, reg, path, prefix, is)
+	c.config.apiProxyImage, err = components.GetReference(components.ComponentImageAssuranceApiProxy, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
 	c.config.scannerImage, err = components.GetReference(components.ComponentImageAssuranceScanner, reg, path, prefix, is)
-	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
-	}
-
-	c.config.migratorImage, err = components.GetReference(components.ComponentImageAssuranceDBMigrator, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -160,21 +152,8 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 // before proceeding. When only c.config.NeedsMigrating is true, return just the migrator job and associated resources.
 // When both c.config.NeedsMigrating and c.config.ComponentsUp are false, return all resources.
 // Right now we need to clean up CAW deployment for all circumstances because we stop supporting cloud-based scanning.
-func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
+func (c *component) Objects() ([]client.Object, []client.Object) {
 	var objs []client.Object
-
-	if c.config.NeedsMigrating && c.config.ComponentsUp {
-		// TODO: deleting the migratorJob is a temporary measure, once we extend the componenthandler
-		// to handle updating a job by comparing spec fields rather than just the annotations, we can remove
-		// this deletion. https://tigera.atlassian.net/browse/CNX-15687.
-		return nil, []client.Object{
-			c.migratorJob(),
-			c.apiDeployment(),
-			c.scannerDeployment(),
-			c.cawDeployment(),
-			c.podWatcherDeployment(),
-		}
-	}
 
 	objs = append(objs,
 		render.CreateNamespace(NameSpaceImageAssurance, c.config.Installation.KubernetesProvider),
@@ -192,32 +171,16 @@ func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(NameSpaceImageAssurance, c.config.PullSecrets...)...)...)
 
-	// Migrator resources.
-	objs = append(objs,
-		c.migratorServiceAccount(),
-		c.migratorRole(),
-		c.migratorRoleBinding(),
-		c.migratorJob(),
-	)
-
-	if c.config.NeedsMigrating {
-		return objs, nil
-	}
-
 	// certificate pair for image assurance api tls
 	objs = append(objs, secret.ToRuntimeObjects(c.config.TLSSecret)...)
-
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(NameSpaceImageAssurance, c.config.TenantEncryptionKeySecret)...)...)
 
-	// api resources
 	objs = append(objs,
 		c.apiServiceAccount(),
-		c.apiRole(),
-		c.apiRoleBinding(),
 		c.apiClusterRole(),
 		c.apiClusterRoleBinding(),
-		c.apiService(),
-		c.apiDeployment(),
+		c.apiService(APIProxyResourceName),
+		c.apiProxyDeployment(),
 	)
 
 	// scanner resources
@@ -252,7 +215,17 @@ func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
 		objs = append(objs, configmap.ToRuntimeObjects(c.config.KeyValidatorConfig.RequiredConfigMaps(NameSpaceImageAssurance)...)...)
 	}
 
-	return objs, []client.Object{c.cawDeployment()}
+	return objs, []client.Object{
+		c.cawDeployment(),
+
+		c.migratorServiceAccount(),
+		c.migratorRole(),
+		c.migratorRoleBinding(),
+		c.migratorJob(),
+
+		c.apiRole(),
+		c.apiRoleBinding(),
+		c.apiDeployment()}
 }
 
 func (c *component) Ready() bool {

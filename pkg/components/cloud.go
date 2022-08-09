@@ -21,7 +21,7 @@ func cloudRegistry(c component, registry, version string) (string, string) {
 		switch c {
 		case ComponentEsProxy, ComponentIntrusionDetectionController, ComponentTigeraKubeControllers:
 			registry = CloudRegistry
-		case ComponentImageAssuranceApi, ComponentImageAssuranceScanner, ComponentImageAssuranceDBMigrator, ComponentImageAssurancePodWatcher:
+		case ComponentImageAssuranceApi, ComponentImageAssuranceApiProxy, ComponentImageAssuranceScanner, ComponentImageAssurancePodWatcher:
 			registry = ImageAssuranceRegistry
 		case ComponentSasha:
 			registry = RuntimeSecurityRegistry

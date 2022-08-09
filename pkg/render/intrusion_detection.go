@@ -1374,23 +1374,16 @@ func (c *intrusionDetectionComponent) adAPIDeployment(configureADStorage bool) *
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ADAPIObjectName,
 			Namespace: IntrusionDetectionNamespace,
-			Labels: map[string]string{
-				AppLabelName: ADAPIObjectName,
-			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &adAPIReplicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{AppLabelName: ADAPIObjectName}},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      ADAPIObjectName,
 					Namespace: IntrusionDetectionNamespace,
-					Labels: map[string]string{
-						AppLabelName: ADAPIObjectName,
-					},
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: ADAPIObjectName,

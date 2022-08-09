@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -253,18 +254,17 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
-	// validate AnomalyDetection Specs first before appending setting default values to give error feedback
-	// if ADSpec is misconfigured
-	if err = validateConfiguredAnomalyDetectionSpec(instance.Spec.AnomalyDetection); err != nil {
-		errMessage := "Invalid Anomaly Detection Specs provided"
-		log.Error(err, errMessage)
-		r.status.SetDegraded(errMessage, err.Error())
-		return reconcile.Result{}, err
-	}
-
 	if err := r.fillDefaults(ctx, instance); err != nil {
 		log.Error(err, "Failed to set defaults on IntrusionDetection CR")
 		r.status.SetDegraded("Unable to set defaults on IntrusionDetection", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	// validate AnomalyDetection Specs first to give error feedback if ADSpec is misconfigured
+	if err = validateConfiguredAnomalyDetectionSpec(instance.Spec.AnomalyDetection); err != nil {
+		errMessage := "Invalid Anomaly Detection Specs provided"
+		r.SetDegraded(operatorv1.InvalidConfigurationError, errMessage, err, reqLogger)
+
 		return reconcile.Result{}, err
 	}
 
@@ -330,20 +330,19 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	if instance.Spec.AnomalyDetection.StorageType == operatorv1.PersistentStorageType {
 		// validate to degrade early if the storage class name is not valid
 		if err = utils.ValidateResourceNameIsQualified(instance.Spec.AnomalyDetection.StorageClassName); err != nil {
-			errMessage := "Invalid Anomaly Detection Storage Class name provided"
-			log.Error(err, errMessage)
-			r.status.SetDegraded(errMessage, err.Error())
+			errMessage := "invalid Anomaly Detection Storage Class name provided"
+			r.SetDegraded(operatorv1.InvalidConfigurationError, errMessage, err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
 		if err = r.client.Get(ctx, client.ObjectKey{Name: instance.Spec.AnomalyDetection.StorageClassName}, &storagev1.StorageClass{}); err != nil {
 			if errors.IsNotFound(err) {
-				log.Error(err, "Anomaly Detection Storage Class not found")
-				r.status.SetDegraded("Failed to get storage class for anomaly detection", err.Error())
+				errMessage := "failed to get storage class for anomaly detection"
+				r.SetDegraded(operatorv1.ResourceNotFound, errMessage, err, reqLogger)
 				return reconcile.Result{}, err
 			} else {
-				reqLogger.Error(err, "Failed to query for Anomaly Detection Storage Class")
-				r.status.SetDegraded("Failed to query storage class for anomaly detection", err.Error())
+				errMessage := "failed to query for Anomaly Detection Storage Class"
+				r.SetDegraded(operatorv1.InternalServerError, errMessage, err, reqLogger)
 				return reconcile.Result{}, err
 			}
 		}
@@ -353,8 +352,8 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 			if errors.IsNotFound(err) {
 				shouldRenderADPVC = true
 			} else {
-				reqLogger.Error(err, "Failed to query for Anomaly Detection PersistentVolumeClaim")
-				r.status.SetDegraded("Failed to query persistentvolumeclaim for anomaly detection", err.Error())
+				errMessage := "failed to query persistentvolumeclaim for anomaly detection"
+				r.SetDegraded(operatorv1.InternalServerError, errMessage, err, reqLogger)
 				return reconcile.Result{}, err
 			}
 		}
@@ -629,6 +628,16 @@ func (r *ReconcileIntrusionDetection) fillDefaults(ctx context.Context, ids *ope
 	}
 
 	return nil
+}
+
+// SetDegraded sets status as degraded and logs the for the IntrusionDetection resource
+func (r *ReconcileIntrusionDetection) SetDegraded(reason operatorv1.TigeraStatusReason, message string, err error, log logr.Logger) {
+	log.WithValues(string(reason), message).Error(err, string(reason))
+	errormsg := ""
+	if err != nil {
+		errormsg = err.Error()
+	}
+	r.status.SetDegraded(string(reason), fmt.Sprintf("%s - Error: %s", message, errormsg))
 }
 
 func validateConfiguredAnomalyDetectionSpec(adSpec operatorv1.AnomalyDetectionSpec) error {

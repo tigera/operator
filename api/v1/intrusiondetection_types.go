@@ -52,6 +52,7 @@ type AnomalyDetectionSpec struct {
 }
 
 // StorageType sets the type of storage to be used for the specified component.
+// One of: Ephemeral, Persistent
 type StorageType string
 
 const (

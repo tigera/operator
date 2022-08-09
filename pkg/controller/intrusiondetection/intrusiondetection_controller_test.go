@@ -86,9 +86,8 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ClearDegraded")
 		mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
-		mockStatus.On("SetDegraded", "Invalid Anomaly Detection Storage Class name provided", mock.AnythingOfType("string")).Return().Maybe()
-		mockStatus.On("SetDegraded", "Invalid Anomaly Detection Specs provided", mock.AnythingOfType("string")).Return().Maybe()
-		mockStatus.On("SetDegraded", "Failed to get storage class for anomaly detection", mock.AnythingOfType("string")).Return().Maybe()
+		mockStatus.On("SetDegraded", string(operatorv1.InvalidConfigurationError), mock.AnythingOfType("string")).Return().Maybe()
+		mockStatus.On("SetDegraded", string(operatorv1.ResourceNotFound), mock.AnythingOfType("string")).Return().Maybe()
 		mockStatus.On("ReadyToMonitor")
 
 		// Create an object we can use throughout the test to do the compliance reconcile loops.

@@ -31,6 +31,7 @@ require (
 	k8s.io/apimachinery v0.23.2
 	k8s.io/client-go v0.23.2
 	k8s.io/kube-aggregator v0.21.7
+	k8s.io/utils v0.0.0-20210930125809-cb0fa318a74b
 	sigs.k8s.io/controller-runtime v0.9.7
 	sigs.k8s.io/kind v0.11.1 // Do not remove, not used by code but used by build
 )

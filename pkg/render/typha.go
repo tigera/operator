@@ -537,7 +537,7 @@ func (c *typhaComponent) healthPort() int {
 func (c *typhaComponent) livenessReadinessProbes() (*corev1.Probe, *corev1.Probe) {
 	port := intstr.FromInt(c.healthPort())
 	lp := &corev1.Probe{
-		Handler: corev1.Handler{
+		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
 				Host: "localhost",
 				Path: "/liveness",
@@ -547,7 +547,7 @@ func (c *typhaComponent) livenessReadinessProbes() (*corev1.Probe, *corev1.Probe
 		TimeoutSeconds: 10,
 	}
 	rp := &corev1.Probe{
-		Handler: corev1.Handler{
+		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
 				Host: "localhost",
 				Path: "/readiness",

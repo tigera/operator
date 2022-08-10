@@ -1,3 +1,17 @@
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package convert
 
 import (
@@ -75,13 +89,13 @@ func awsCNIPolicyOnlyConfig() []runtime.Object {
 							},
 							SecurityContext: &corev1.SecurityContext{Privileged: &isPrivileged},
 							LivenessProbe: &corev1.Probe{
-								Handler:             corev1.Handler{Exec: &corev1.ExecAction{Command: []string{"/bin/calico-node", "-felix-live"}}},
+								ProbeHandler:        corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: []string{"/bin/calico-node", "-felix-live"}}},
 								PeriodSeconds:       10,
 								InitialDelaySeconds: 10,
 								FailureThreshold:    6,
 							},
 							ReadinessProbe: &corev1.Probe{
-								Handler:       corev1.Handler{Exec: &corev1.ExecAction{Command: []string{"/bin/calico-node", "-felix-ready"}}},
+								ProbeHandler:  corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: []string{"/bin/calico-node", "-felix-ready"}}},
 								PeriodSeconds: 10,
 							},
 							VolumeMounts: []corev1.VolumeMount{
@@ -155,7 +169,7 @@ func awsCNIPolicyOnlyConfig() []runtime.Object {
 								{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"},
 							},
 							LivenessProbe: &corev1.Probe{
-								Handler: corev1.Handler{
+								ProbeHandler: corev1.ProbeHandler{
 									HTTPGet: &corev1.HTTPGetAction{
 										Host: "localhost",
 										Path: "/liveness",
@@ -170,7 +184,7 @@ func awsCNIPolicyOnlyConfig() []runtime.Object {
 								RunAsNonRoot:             &_true,
 							},
 							ReadinessProbe: &corev1.Probe{
-								Handler: corev1.Handler{
+								ProbeHandler: corev1.ProbeHandler{
 									HTTPGet: &corev1.HTTPGetAction{
 										Host: "localhost",
 										Path: "/readiness",

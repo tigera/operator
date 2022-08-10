@@ -248,14 +248,14 @@ func calicoDefaultConfig() []runtime.Object {
 								},
 							},
 							LivenessProbe: &corev1.Probe{
-								Handler: corev1.Handler{Exec: &corev1.ExecAction{
+								ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
 									Command: []string{"/bin/calico-node", "-felix-live", "-bird-live"}}},
 								PeriodSeconds:       10,
 								InitialDelaySeconds: 10,
 								FailureThreshold:    6,
 							},
 							ReadinessProbe: &corev1.Probe{
-								Handler: corev1.Handler{Exec: &corev1.ExecAction{
+								ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
 									Command: []string{"/bin/calico-node", "-felix-ready", "-bird-ready"}}},
 								PeriodSeconds: 10,
 							},
@@ -320,7 +320,7 @@ func calicoDefaultConfig() []runtime.Object {
 								{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 							},
 							ReadinessProbe: &corev1.Probe{
-								Handler: corev1.Handler{Exec: &corev1.ExecAction{
+								ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
 									Command: []string{"/usr/bin/check-status", "-r"}}},
 							},
 						}},

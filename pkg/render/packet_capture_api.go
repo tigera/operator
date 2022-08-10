@@ -285,7 +285,7 @@ func (pc *packetCaptureApiComponent) container() corev1.Container {
 
 func (pc *packetCaptureApiComponent) healthProbe() *corev1.Probe {
 	return &corev1.Probe{
-		Handler: corev1.Handler{
+		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
 				Path:   "/health",
 				Port:   intstr.FromInt(PacketCapturePort),

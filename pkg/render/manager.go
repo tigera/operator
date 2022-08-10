@@ -296,7 +296,7 @@ func (c *managerComponent) managerVolumes() []corev1.Volume {
 // managerProbe returns the probe for the manager container.
 func (c *managerComponent) managerProbe() *corev1.Probe {
 	return &corev1.Probe{
-		Handler: corev1.Handler{
+		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
 				Path:   "/",
 				Port:   intstr.FromInt(managerPort),
@@ -311,7 +311,7 @@ func (c *managerComponent) managerProbe() *corev1.Probe {
 // managerEsProxyProbe returns the probe for the ES proxy container.
 func (c *managerComponent) managerEsProxyProbe() *corev1.Probe {
 	return &corev1.Probe{
-		Handler: corev1.Handler{
+		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
 				Path:   "/tigera-elasticsearch/version",
 				Port:   intstr.FromInt(managerPort),
@@ -326,7 +326,7 @@ func (c *managerComponent) managerEsProxyProbe() *corev1.Probe {
 // managerProxyProbe returns the probe for the proxy container.
 func (c *managerComponent) managerProxyProbe() *corev1.Probe {
 	return &corev1.Probe{
-		Handler: corev1.Handler{
+		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
 				Path:   "/voltron/api/health",
 				Port:   intstr.FromInt(managerPort),

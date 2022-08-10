@@ -335,6 +335,13 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		dp := rtest.GetResource(resources, "intrusion-detection-controller", "tigera-intrusion-detection", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		envs := dp.Spec.Template.Spec.Containers[0].Env
 
+		// Validate that even with syslog configured we still have the CA configmap Volume
+		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(idc.Spec.Template.Spec.Volumes[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+		Expect(idc.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+		Expect(idc.Spec.Template.Spec.Volumes[1].Name).To(Equal("var-log-calico"))
+		Expect(idc.Spec.Template.Spec.Volumes[1].VolumeSource.HostPath.Path).To(Equal("/var/log/calico"))
+
 		expectedEnvs := []struct {
 			name       string
 			val        string

@@ -668,7 +668,20 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 		It("should not render kibana if FIPS mode is enabled", func() {
 			fipsEnabled := operatorv1.FIPSModeEnabled
 			cfg.Installation.FIPSMode = &fipsEnabled
+			cfg.LogStorage.Spec.Nodes.ResourceRequirements = &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					"cpu":    resource.MustParse("1"),
+					"memory": resource.MustParse("150Mi"),
+				},
+				Requests: corev1.ResourceList{
+					"cpu":     resource.MustParse("1"),
+					"memory":  resource.MustParse("150Mi"),
+					"storage": resource.MustParse("10Gi"),
+				},
+			}
+
 			cfg.ApplyTrial = true
+			cfg.KeyStoreSecret = render.CreateElasticsearchKeystoreSecret()
 			expectedCreateResources := []resourceTestObj{
 				{render.ECKOperatorNamespace, "", &corev1.Namespace{}, nil},
 				{render.ECKOperatorPolicyName, render.ECKOperatorNamespace, &v3.NetworkPolicy{}, nil},
@@ -690,6 +703,8 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				{"tigera-elasticsearch", render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
 				{relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace(), &corev1.ConfigMap{}, nil},
 				{render.ElasticsearchName, render.ElasticsearchNamespace, &esv1.Elasticsearch{}, nil},
+				{render.ElasticsearchKeystoreSecret, common.OperatorNamespace(), &corev1.Secret{}, nil},
+				{render.ElasticsearchKeystoreSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 				{render.EsManagerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
 				{render.EsManagerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
 			}
@@ -703,6 +718,16 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				{render.KibanaName, render.KibanaNamespace, &kbv1.Kibana{}, nil},
 				{render.EsCuratorName, render.ElasticsearchNamespace, &batchv1beta.CronJob{}, nil},
 			})
+
+			es := getElasticsearch(createResources)
+			esContainer := es.Spec.NodeSets[0].PodTemplate.Spec.Containers[0]
+			initContainers := es.Spec.NodeSets[0].PodTemplate.Spec.InitContainers
+			Expect(esContainer.Env).Should(ContainElement(corev1.EnvVar{
+				Name:  "ES_JAVA_OPTS",
+				Value: fmt.Sprintf("-Xms75M -Xmx75M --module-path /usr/share/bc-fips/ -Djavax.net.ssl.trustStore=/usr/share/elasticsearch/config/cacerts.bcfks-Djavax.net.ssl.trustStoreType=BCFKS -Djavax.net.ssl.trustStorePassword=${KEYSTORE_PASSWORD} -Dorg.bouncycastle.fips.approved_only=true"),
+			}))
+			Expect(initContainers).To(HaveLen(3))
+			Expect(initContainers[1].Name).To(Equal("elastic-internal-init-jvm-keystore"))
 		})
 	})
 

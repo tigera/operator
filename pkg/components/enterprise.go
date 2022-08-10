@@ -261,7 +261,7 @@ var (
 	}
 
 	ComponentSasha = component{
-		Version: "v0.10.0-0.dev-686-g6258d3f5f58d-amd64",
+		Version: "release-v1.0",
 		Image:   "tigera/sasha",
 	}
 	EnterpriseComponents = []component{

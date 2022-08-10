@@ -572,7 +572,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	var env []corev1.EnvVar
 	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
 		javaOpts := fmt.Sprintf("--module-path /usr/share/bc-fips/ "+
-			"-Djavax.net.ssl.trustStore=/usr/share/elasticsearch/config/cacerts.bcfks"+
+			"-Djavax.net.ssl.trustStore=/usr/share/elasticsearch/config/cacerts.bcfks "+
 			"-Djavax.net.ssl.trustStoreType=BCFKS "+
 			"-Djavax.net.ssl.trustStorePassword=${%s} "+
 			"-Dorg.bouncycastle.fips.approved_only=true", ElasticsearchKeystoreEnvName)

@@ -710,7 +710,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			}
 
 			component := render.LogStorage(cfg)
-
+			component.ResolveImages(nil)
 			createResources, deleteResources := component.Objects()
 
 			compareResources(createResources, expectedCreateResources)
@@ -726,7 +726,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				Name:  "ES_JAVA_OPTS",
 				Value: fmt.Sprintf("-Xms75M -Xmx75M --module-path /usr/share/bc-fips/ -Djavax.net.ssl.trustStore=/usr/share/elasticsearch/config/cacerts.bcfks-Djavax.net.ssl.trustStoreType=BCFKS -Djavax.net.ssl.trustStorePassword=${KEYSTORE_PASSWORD} -Dorg.bouncycastle.fips.approved_only=true"),
 			}))
-			Expect(esContainer.Image).To(ContainSubstring("-fips"))
+			Expect(es.Spec.Image).To(ContainSubstring("-fips"))
 			Expect(initContainers).To(HaveLen(3))
 			Expect(initContainers[1].Name).To(Equal("elastic-internal-init-jvm-keystore"))
 			Expect(initContainers[1].Image).To(ContainSubstring("-fips"))

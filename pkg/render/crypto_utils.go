@@ -34,6 +34,20 @@ func CreateDexClientSecret() *corev1.Secret {
 	}
 }
 
+// CreateElasticsearchKeystoreSecret creates a secret to be used for initializing the keystore on Elasticsearch.
+func CreateElasticsearchKeystoreSecret() *corev1.Secret {
+	return &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ElasticsearchKeystoreSecret,
+			Namespace: common.OperatorNamespace(),
+		},
+		Data: map[string][]byte{
+			ElasticsearchKeystoreEnvName: []byte(calicrypto.GeneratePassword(24)),
+		},
+	}
+}
+
 // CreateCertificateSecret is a convenience method for creating a secret that contains only a ca or cert to trust.
 func CreateCertificateSecret(caPem []byte, secretName string, namespace string) *corev1.Secret {
 	return &corev1.Secret{

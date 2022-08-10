@@ -138,6 +138,39 @@ const (
 )
 
 const (
+	// ElasticsearchKeystoreSecret Currently only used when FIPS mode is enabled, we need to initialize the keystore with a password.
+	ElasticsearchKeystoreSecret         = "tigera-secure-elasticsearch-keystore"
+	ElasticsearchKeystoreEnvName        = "KEYSTORE_PASSWORD"
+	ElasticsearchKeystoreHashAnnotation = "hash.operator.tigera.io/keystore-password"
+
+	keystoreInitContainerName = "elastic-internal-init-jvm-keystore"
+	keystoreInitScript        = `#!/usr/bin/env bash
+set -eux
+
+echo "Initializing jdk keystore and setting it to BouncyCastleFipsProvider..."
+
+/usr/share/elasticsearch/jdk/bin/keytool \
+	-destkeystore /usr/share/elasticsearch/config/cacerts.bcfks \
+	-deststorepass ${%s} \
+	-deststoretype bcfks \
+	-importkeystore \
+	-providerclass org.bouncycastle.jcajce.provider.BouncyCastleFipsProvider \
+	-providerpath /usr/share/bc-fips/bc-fips.jar \
+	-srckeystore /usr/share/elasticsearch/jdk/lib/security/cacerts \
+	-srcstorepass changeit \
+	-srcstoretype jks
+
+echo "Keystore initialization successful."
+
+echo "Initializing Elasticsearch keystore..."
+
+bin/elasticsearch-keystore create -p <<EOF                                                                                               
+${%s}
+${%s}
+EOF
+
+echo "Elasticsearch keystore initialization successful."
+`
 	csrRootCAConfigMapName = "elasticsearch-config"
 )
 
@@ -199,6 +232,7 @@ type ElasticsearchConfiguration struct {
 	TrustedBundle               certificatemanagement.TrustedBundle
 	UnusedTLSSecret             *corev1.Secret
 	ApplyTrial                  bool
+	KeyStoreSecret              *corev1.Secret
 
 	// Whether or not the cluster supports pod security policies.
 	UsePSP bool
@@ -391,6 +425,10 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 				toCreate = append(toCreate, es.curatorCronJob())
 			}
 		} else {
+			if es.cfg.KeyStoreSecret != nil {
+				toCreate = append(toCreate, es.cfg.KeyStoreSecret)
+				toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.cfg.KeyStoreSecret)...)...)
+			}
 			toDelete = append(toDelete, es.kibanaCR())
 			toDelete = append(toDelete, es.curatorCronJob())
 		}
@@ -498,6 +536,59 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 
 	var volumeMounts []corev1.VolumeMount
 
+	resources := corev1.ResourceRequirements{
+		Limits: corev1.ResourceList{
+			"cpu":    resource.MustParse("1"),
+			"memory": resource.MustParse("4Gi"),
+		},
+		Requests: corev1.ResourceList{
+			"cpu":    resource.MustParse("250m"),
+			"memory": resource.MustParse("4Gi"),
+		},
+	}
+	var javaOptsEnv corev1.EnvVar
+	// If the user has provided resource requirements, then use the user overrides instead
+	if es.cfg.LogStorage.Spec.Nodes != nil && es.cfg.LogStorage.Spec.Nodes.ResourceRequirements != nil {
+		userOverrides := *es.cfg.LogStorage.Spec.Nodes.ResourceRequirements
+		resources = overrideResourceRequirements(resources, userOverrides)
+
+		// Now extract the memory request value to compute the recommended heap size for ES container
+		recommendedHeapSize := memoryQuantityToJVMHeapSize(resources.Requests.Memory())
+		javaOptsEnv = corev1.EnvVar{
+			Name:  "ES_JAVA_OPTS",
+			Value: fmt.Sprintf("-Xms%v -Xmx%v", recommendedHeapSize, recommendedHeapSize),
+		}
+	} else {
+		// Set to 50% of the default memory, such that resources can be divided over ES and Lucene.
+		javaOptsEnv = corev1.EnvVar{
+			Name:  "ES_JAVA_OPTS",
+			Value: fmt.Sprintf("-Xms2G -Xmx2G"),
+		}
+	}
+	var env []corev1.EnvVar
+	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
+		javaOpts := fmt.Sprintf("--module-path /usr/share/bc-fips/ "+
+			"-Djavax.net.ssl.trustStore=/usr/share/elasticsearch/config/cacerts.bcfks"+
+			"-Djavax.net.ssl.trustStoreType=BCFKS "+
+			"-Djavax.net.ssl.trustStorePassword=${%s} "+
+			"-Dorg.bouncycastle.fips.approved_only=true", ElasticsearchKeystoreEnvName)
+		// Add FIPS java opts to the already existing java opts.
+		javaOptsEnv.Value = fmt.Sprintf("%s %s", javaOptsEnv.Value, javaOpts)
+		env = append(env,
+			javaOptsEnv,
+			corev1.EnvVar{
+				Name: ElasticsearchKeystoreEnvName,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: ElasticsearchKeystoreSecret},
+						Key:                  ElasticsearchKeystoreEnvName,
+					},
+				},
+			})
+	} else {
+		env = append(env, javaOptsEnv)
+	}
+
 	esContainer := corev1.Container{
 		Name: "elasticsearch",
 		ReadinessProbe: &corev1.Probe{
@@ -512,20 +603,8 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			SuccessThreshold:    1,
 			TimeoutSeconds:      5,
 		},
-		Resources: corev1.ResourceRequirements{
-			Limits: corev1.ResourceList{
-				"cpu":    resource.MustParse("1"),
-				"memory": resource.MustParse("4Gi"),
-			},
-			Requests: corev1.ResourceList{
-				"cpu":    resource.MustParse("250m"),
-				"memory": resource.MustParse("4Gi"),
-			},
-		},
-		Env: []corev1.EnvVar{
-			// Set to 50% of the default memory, such that resources can be divided over ES and Lucene.
-			{Name: "ES_JAVA_OPTS", Value: "-Xms2G -Xmx2G"},
-		},
+		Resources:    resources,
+		Env:          env,
 		VolumeMounts: volumeMounts,
 	}
 
@@ -534,21 +613,6 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	if es.cfg.Provider == operatorv1.ProviderOpenShift {
 		esContainer.SecurityContext = &corev1.SecurityContext{
 			RunAsUser: ptr.Int64ToPtr(1000),
-		}
-	}
-
-	// If the user has provided resource requirements, then use the user overrides instead
-	if es.cfg.LogStorage.Spec.Nodes != nil && es.cfg.LogStorage.Spec.Nodes.ResourceRequirements != nil {
-		userOverrides := *es.cfg.LogStorage.Spec.Nodes.ResourceRequirements
-		esContainer.Resources = overrideResourceRequirements(esContainer.Resources, userOverrides)
-
-		// Now extract the memory request value to compute the recommended heap size for ES container
-		recommendedHeapSize := memoryQuantityToJVMHeapSize(esContainer.Resources.Requests.Memory())
-		esContainer.Env = []corev1.EnvVar{
-			{
-				Name:  "ES_JAVA_OPTS",
-				Value: fmt.Sprintf("-Xms%v -Xmx%v", recommendedHeapSize, recommendedHeapSize),
-			},
 		}
 	}
 
@@ -570,10 +634,37 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	}
 
 	initContainers := []corev1.Container{initOSSettingsContainer}
-
 	annotations := es.cfg.TrustedBundle.HashAnnotations()
 	annotations[ElasticsearchTLSHashAnnotation] = rmeta.SecretsAnnotationHash(es.cfg.ElasticsearchUserSecret)
 	annotations[es.cfg.ElasticsearchKeyPair.HashAnnotationKey()] = es.cfg.ElasticsearchKeyPair.HashAnnotationValue()
+
+	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
+		initKeystore := corev1.Container{
+			Name:  keystoreInitContainerName,
+			Image: es.esImage,
+			SecurityContext: &corev1.SecurityContext{
+				Privileged: ptr.BoolToPtr(false),
+			},
+			Env: []corev1.EnvVar{
+				{
+					Name: ElasticsearchKeystoreEnvName,
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: ElasticsearchKeystoreSecret},
+							Key:                  ElasticsearchKeystoreEnvName,
+						},
+					},
+				},
+				{
+					Name:  "ES_JAVA_OPTS",
+					Value: "--module-path /usr/share/bc-fips/",
+				},
+			},
+			Command: []string{"/usr/bin/env", "bash", "-c", fmt.Sprintf(keystoreInitScript, ElasticsearchKeystoreEnvName, ElasticsearchKeystoreEnvName, ElasticsearchKeystoreEnvName)},
+		}
+		initContainers = append(initContainers, initKeystore)
+		annotations[ElasticsearchKeystoreHashAnnotation] = rmeta.SecretsAnnotationHash(es.cfg.KeyStoreSecret)
+	}
 
 	var volumes []corev1.Volume
 
@@ -935,8 +1026,7 @@ func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVo
 	}
 	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
 		config["xpack.security.fips_mode.enabled"] = "true"
-		config["xpack.security.authc.password_hashing.algorithm"] = "pbkdf2_10000"
-
+		config["xpack.security.authc.password_hashing.algorithm"] = "pbkdf2_stretch"
 	}
 
 	return esv1.NodeSet{

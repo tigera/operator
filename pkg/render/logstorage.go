@@ -253,7 +253,11 @@ func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := es.cfg.Installation.ImagePath
 	prefix := es.cfg.Installation.ImagePrefix
 	var err error
-	es.esImage, err = components.GetReference(components.ComponentElasticsearch, reg, path, prefix, is)
+	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
+		es.esImage, err = components.GetReference(components.ComponentElasticsearchFIPS, reg, path, prefix, is)
+	} else {
+		es.esImage, err = components.GetReference(components.ComponentElasticsearch, reg, path, prefix, is)
+	}
 	errMsgs := make([]string, 0)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())

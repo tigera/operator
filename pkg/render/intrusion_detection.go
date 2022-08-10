@@ -520,24 +520,22 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 		ps = append(ps, corev1.LocalObjectReference{Name: x.Name})
 	}
 
-	// If syslog forwarding is enabled then set the necessary hostpath volume to write
-	// logs for Fluentd to access.
 	volumes := []corev1.Volume{
 		c.cfg.TrustedCertBundle.Volume(),
 	}
+	// If syslog forwarding is enabled then set the necessary hostpath volume to write
+	// logs for Fluentd to access.
 	if c.syslogForwardingIsEnabled() {
 		dirOrCreate := corev1.HostPathDirectoryOrCreate
-		volumes = []corev1.Volume{
-			{
-				Name: "var-log-calico",
-				VolumeSource: corev1.VolumeSource{
-					HostPath: &corev1.HostPathVolumeSource{
-						Path: "/var/log/calico",
-						Type: &dirOrCreate,
-					},
+		volumes = append(volumes, corev1.Volume{
+			Name: "var-log-calico",
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: "/var/log/calico",
+					Type: &dirOrCreate,
 				},
 			},
-		}
+		})
 	}
 
 	container := relasticsearch.ContainerDecorateIndexCreator(

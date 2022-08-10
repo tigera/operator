@@ -391,6 +391,13 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 
 		assertEnvVarlistMatch(envs, expectedEnvs)
 
+		// Validate that even with syslog configured we still have the CA configmap Volume
+		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(idc.Spec.Template.Spec.Volumes[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+		Expect(idc.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+		Expect(idc.Spec.Template.Spec.Volumes[1].Name).To(Equal("var-log-calico"))
+		Expect(idc.Spec.Template.Spec.Volumes[1].VolumeSource.HostPath.Path).To(Equal("/var/log/calico"))
+
 		// expect AD PodTemplate EnvVars
 		expectedADEnvs := []expectedEnvVar{
 			{"ELASTIC_HOST", dns.GetServiceDNSNames(render.ESGatewayServiceName, render.ElasticsearchNamespace, cfg.ClusterDomain)[2], "", ""},

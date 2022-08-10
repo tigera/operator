@@ -384,7 +384,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 					Env:          env,
 					VolumeMounts: volumeMounts,
 					ReadinessProbe: &corev1.Probe{
-						Handler: corev1.Handler{
+						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
 								Path:   tigeraPrometheusServiceHealthEndpoint,
 								Port:   intstr.FromInt(PrometheusProxyPort),
@@ -393,7 +393,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 						},
 					},
 					LivenessProbe: &corev1.Probe{
-						Handler: corev1.Handler{
+						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
 								Path:   tigeraPrometheusServiceHealthEndpoint,
 								Port:   intstr.FromInt(PrometheusProxyPort),

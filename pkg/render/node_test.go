@@ -75,8 +75,9 @@ var _ = Describe("Node rendering tests", func() {
 			},
 			CalicoNetwork: &operatorv1.CalicoNetworkSpec{
 				BGP:                        &bgpEnabled,
-				IPPools:                    []operatorv1.IPPool{{CIDR: "192.168.1.0/16"}},
+				IPPools:                    []operatorv1.IPPool{{CIDR: "192.168.1.0/16"}, {CIDR: "2001:db8:1::/122 "}},
 				NodeAddressAutodetectionV4: &operatorv1.NodeAddressAutodetection{FirstFound: &ff},
+				NodeAddressAutodetectionV6: &operatorv1.NodeAddressAutodetection{FirstFound: &ff},
 				HostPorts:                  &hp,
 				MultiInterfaceMode:         &miMode,
 			},
@@ -219,11 +220,12 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp"},
 			{Name: "IP", Value: "autodetect"},
 			{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
-			{Name: "IP6", Value: "none"},
+			{Name: "IP6", Value: "autodetect"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
-			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
+			{Name: "FELIX_IPV6SUPPORT", Value: "true"},
+			{Name: "IP6_AUTODETECTION_METHOD", Value: "first-found"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
 			{Name: "FELIX_HEALTHPORT", Value: "9099"},
 			{
@@ -442,12 +444,13 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp"},
 			{Name: "IP", Value: "autodetect"},
 			{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
-			{Name: "IP6", Value: "none"},
+			{Name: "IP6", Value: "autodetect"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
 			{Name: "FELIX_BPFENABLED", Value: "true"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
-			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
+			{Name: "FELIX_IPV6SUPPORT", Value: "true"},
+			{Name: "IP6_AUTODETECTION_METHOD", Value: "first-found"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
 			{Name: "FELIX_HEALTHPORT", Value: "9099"},
 			{
@@ -613,7 +616,9 @@ var _ = Describe("Node rendering tests", func() {
 		expectedNodeEnv := []corev1.EnvVar{
 			{Name: "FELIX_IPINIPMTU", Value: "1450"},
 			{Name: "FELIX_VXLANMTU", Value: "1450"},
+			{Name: "FELIX_VXLANMTUV6", Value: "1450"},
 			{Name: "FELIX_WIREGUARDMTU", Value: "1450"},
+			{Name: "FELIX_WIREGUARDMTUV6", Value: "1450"},
 		}
 		for _, e := range expectedNodeEnv {
 			Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ContainElement(e))
@@ -665,12 +670,13 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp"},
 			{Name: "IP", Value: "autodetect"},
 			{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
-			{Name: "IP6", Value: "none"},
+			{Name: "IP6", Value: "autodetect"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
-			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
+			{Name: "FELIX_IPV6SUPPORT", Value: "true"},
+			{Name: "IP6_AUTODETECTION_METHOD", Value: "first-found"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
 			{Name: "FELIX_HEALTHPORT", Value: "9099"},
 			{
@@ -946,11 +952,12 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,ecs"},
 			{Name: "IP", Value: "autodetect"},
 			{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
-			{Name: "IP6", Value: "none"},
+			{Name: "IP6", Value: "autodetect"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_VXLAN", Value: "Always"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
-			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
+			{Name: "FELIX_IPV6SUPPORT", Value: "true"},
+			{Name: "IP6_AUTODETECTION_METHOD", Value: "first-found"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
 			{Name: "FELIX_HEALTHPORT", Value: "9099"},
 			{
@@ -1352,11 +1359,12 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,ecs"},
 			{Name: "IP", Value: "autodetect"},
 			{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
-			{Name: "IP6", Value: "none"},
+			{Name: "IP6", Value: "autodetect"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_VXLAN", Value: "Always"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
-			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
+			{Name: "FELIX_IPV6SUPPORT", Value: "true"},
+			{Name: "IP6_AUTODETECTION_METHOD", Value: "first-found"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
 			{Name: "FELIX_HEALTHPORT", Value: "9099"},
 			{
@@ -1675,12 +1683,13 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,openshift,bgp"},
 			{Name: "IP", Value: "autodetect"},
 			{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
-			{Name: "IP6", Value: "none"},
+			{Name: "IP6", Value: "autodetect"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
-			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
+			{Name: "FELIX_IPV6SUPPORT", Value: "true"},
+			{Name: "IP6_AUTODETECTION_METHOD", Value: "first-found"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
 			{Name: "FELIX_HEALTHPORT", Value: "9199"},
 			{
@@ -1757,12 +1766,13 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "CLUSTER_TYPE", Value: "k8s,operator,openshift,bgp"},
 			{Name: "IP", Value: "autodetect"},
 			{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
-			{Name: "IP6", Value: "none"},
+			{Name: "IP6", Value: "autodetect"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
 			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
-			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
+			{Name: "FELIX_IPV6SUPPORT", Value: "true"},
+			{Name: "IP6_AUTODETECTION_METHOD", Value: "first-found"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
 			{Name: "FELIX_HEALTHPORT", Value: "9199"},
 			{
@@ -2819,11 +2829,12 @@ var _ = Describe("Node rendering tests", func() {
 			{Name: "IP", Value: "autodetect"},
 			{Name: "USE_POD_CIDR", Value: "true"},
 			{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
-			{Name: "IP6", Value: "none"},
+			{Name: "IP6", Value: "autodetect"},
 			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
 			{Name: "CALICO_IPV4POOL_IPIP", Value: "Never"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
-			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
+			{Name: "FELIX_IPV6SUPPORT", Value: "true"},
+			{Name: "IP6_AUTODETECTION_METHOD", Value: "first-found"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
 			{Name: "FELIX_HEALTHPORT", Value: "9099"},
 			{
@@ -3187,12 +3198,12 @@ var _ = Describe("Node rendering tests", func() {
 func verifyProbesAndLifecycle(ds *appsv1.DaemonSet, isOpenshift, isEnterprise bool) {
 	// Verify readiness and liveness probes.
 	expectedReadiness := &corev1.Probe{
-		Handler:        corev1.Handler{Exec: &corev1.ExecAction{Command: []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}}},
+		ProbeHandler:   corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}}},
 		TimeoutSeconds: 5,
 		PeriodSeconds:  10,
 	}
 	expectedLiveness := &corev1.Probe{
-		Handler: corev1.Handler{
+		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
 				Host: "localhost",
 				Path: "/liveness",
@@ -3232,7 +3243,7 @@ func verifyProbesAndLifecycle(ds *appsv1.DaemonSet, isOpenshift, isEnterprise bo
 	ExpectWithOffset(1, ds.Spec.Template.Spec.Containers[0].LivenessProbe).To(Equal(expectedLiveness))
 
 	expectedLifecycle := &corev1.Lifecycle{
-		PreStop: &corev1.Handler{Exec: &corev1.ExecAction{Command: []string{"/bin/calico-node", "-shutdown"}}},
+		PreStop: &corev1.LifecycleHandler{Exec: &corev1.ExecAction{Command: []string{"/bin/calico-node", "-shutdown"}}},
 	}
 	ExpectWithOffset(1, ds.Spec.Template.Spec.Containers[0].Lifecycle).To(Equal(expectedLifecycle))
 

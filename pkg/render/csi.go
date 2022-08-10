@@ -267,13 +267,9 @@ func (c *csiComponent) csiTemplate() corev1.PodTemplateSpec {
 
 // csiDaemonset creates the daemonset necessary to enable the CSI driver
 func (c *csiComponent) csiDaemonset() *appsv1.DaemonSet {
-	dsLabels := map[string]string{
-		"app.kubernetes.io/name": CSIDaemonSetName,
-	}
 	dsMeta := metav1.ObjectMeta{
 		Name:      CSIDaemonSetName,
 		Namespace: CSIDaemonSetNamespace,
-		Labels:    dsLabels,
 	}
 
 	typeMeta := metav1.TypeMeta{
@@ -281,14 +277,7 @@ func (c *csiComponent) csiDaemonset() *appsv1.DaemonSet {
 		APIVersion: "apps/v1",
 	}
 
-	selector := &metav1.LabelSelector{
-		MatchLabels: map[string]string{
-			"name": CSIDaemonSetName,
-		},
-	}
-
 	dsSpec := appsv1.DaemonSetSpec{
-		Selector: selector,
 		Template: c.csiTemplate(),
 	}
 

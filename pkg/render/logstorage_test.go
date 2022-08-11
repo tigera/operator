@@ -730,6 +730,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			Expect(initContainers).To(HaveLen(3))
 			Expect(initContainers[1].Name).To(Equal("elastic-internal-init-jvm-keystore"))
 			Expect(initContainers[1].Image).To(ContainSubstring("-fips"))
+			Expect(initContainers[1].Command).To(ContainSubstring("#!/usr/bin/env bash"))
 		})
 	})
 

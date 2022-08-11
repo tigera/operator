@@ -15,6 +15,7 @@
 package render
 
 import (
+	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -144,35 +145,11 @@ const (
 	ElasticsearchKeystoreHashAnnotation = "hash.operator.tigera.io/keystore-password"
 
 	keystoreInitContainerName = "elastic-internal-init-jvm-keystore"
-	keystoreInitScript        = `#!/usr/bin/env bash
-set -eux
-
-echo "Initializing jdk keystore and setting it to BouncyCastleFipsProvider..."
-
-/usr/share/elasticsearch/jdk/bin/keytool \
-	-destkeystore /usr/share/elasticsearch/config/cacerts.bcfks \
-	-deststorepass ${%s} \
-	-deststoretype bcfks \
-	-importkeystore \
-	-providerclass org.bouncycastle.jcajce.provider.BouncyCastleFipsProvider \
-	-providerpath /usr/share/bc-fips/bc-fips.jar \
-	-srckeystore /usr/share/elasticsearch/jdk/lib/security/cacerts \
-	-srcstorepass changeit \
-	-srcstoretype jks
-
-echo "Keystore initialization successful."
-
-echo "Initializing Elasticsearch keystore..."
-
-bin/elasticsearch-keystore create -p <<EOF                                                                                               
-${%s}
-${%s}
-EOF
-
-echo "Elasticsearch keystore initialization successful."
-`
-	csrRootCAConfigMapName = "elasticsearch-config"
+	csrRootCAConfigMapName    = "elasticsearch-config"
 )
+
+//go:embed embed/initialize_keystore.sh
+var KeystoreInitScript string
 
 // Certificate management constants.
 const (
@@ -664,7 +641,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 					Value: "--module-path /usr/share/bc-fips/",
 				},
 			},
-			Command: []string{"/usr/bin/env", "bash", "-c", fmt.Sprintf(keystoreInitScript, ElasticsearchKeystoreEnvName, ElasticsearchKeystoreEnvName, ElasticsearchKeystoreEnvName)},
+			Command: []string{"/usr/bin/env", "bash", "-c", fmt.Sprintf(KeystoreInitScript, ElasticsearchKeystoreEnvName, ElasticsearchKeystoreEnvName, ElasticsearchKeystoreEnvName)},
 		}
 		initContainers = append(initContainers, initKeystore)
 		annotations[ElasticsearchKeystoreHashAnnotation] = rmeta.SecretsAnnotationHash(es.cfg.KeyStoreSecret)

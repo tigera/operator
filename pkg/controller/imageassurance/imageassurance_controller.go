@@ -9,7 +9,6 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -23,8 +22,6 @@ import (
 	"github.com/tigera/operator/pkg/render/imageassurance"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
-	appsv1 "k8s.io/api/apps/v1"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -310,13 +307,6 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
-	migratorJob, err := getMigratorJob(r.client)
-	if err != nil {
-		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Error retrieving db-migrator job", err.Error())
-		return reconcile.Result{}, err
-	}
-
 	imageSet, err := imageset.GetImageSet(ctx, r.client, variant)
 	if err != nil {
 		reqLogger.Error(err, err.Error())
@@ -331,20 +321,6 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 	}
 
 	ch := utils.NewComponentHandler(log, r.client, r.scheme, ia)
-
-	needsMigrating, err := needsMigrating(installation, imageSet, migratorJob)
-	if err != nil {
-		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Error calculating if migration is needed", err.Error())
-		return reconcile.Result{}, err
-	}
-
-	componentsUp, err := componentsUp(r.client)
-	if err != nil {
-		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Error when checking if image assurance deployments are up", err.Error())
-		return reconcile.Result{RequeueAfter: 20 * time.Second}, err
-	}
 
 	// Fetch the Authentication spec. If present, we use to configure user authentication.
 	authenticationCR, err := utils.GetAuthentication(ctx, r.client)
@@ -375,8 +351,6 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		PGCertSecret:              pgCertSecret,
 		PGUserSecret:              pgUserSecret,
 		TLSSecret:                 tlsSecret,
-		NeedsMigrating:            needsMigrating,
-		ComponentsUp:              componentsUp,
 		KeyValidatorConfig:        kvc,
 		TenantEncryptionKeySecret: tenantEncryptionKeySecret,
 		TrustedCertBundle:         trustedBundle,
@@ -406,35 +380,6 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 			r.status.SetDegraded("Error creating / updating resource", err.Error())
 			return reconcile.Result{}, err
 		}
-	}
-
-	migratorJob, err = getMigratorJob(r.client)
-	if err != nil {
-		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Error retrieving db-migrator job", err.Error())
-		return reconcile.Result{}, err
-	}
-
-	// Queue up another Reconcile if the migratorJob is not yet created or, needs to be recreated after
-	// deleting Image Assurance deployments.
-	if migratorJob == nil || (componentsUp && needsMigrating) {
-		reqLogger.Info("Waiting for migrator job to be created")
-		r.status.SetDegraded("Waiting for migrator job to be created", "")
-		return reconcile.Result{RequeueAfter: 1 * time.Second}, nil
-	}
-
-	// Wait until the migrator job reports a success status.
-	if migratorJob.Status.Succeeded == 0 && migratorJob.Status.Failed == 0 {
-		reqLogger.Info("Waiting for migrator job to finsih running")
-		r.status.SetDegraded("Waiting for migrator job to finish running", "")
-		return reconcile.Result{}, nil
-	}
-
-	if migratorJob.Status.Succeeded == 0 {
-		err = fmt.Errorf("migrator job failed %v", migratorJob.Status)
-		reqLogger.Error(err, err.Error())
-		r.status.SetDegraded("Migrator job failed", err.Error())
-		return reconcile.Result{}, nil
 	}
 
 	// Clear the degraded bit since we've reached this far.
@@ -610,101 +555,6 @@ func getPGConfig(client client.Client) (*corev1.ConfigMap, error) {
 	}
 
 	return cm, nil
-}
-
-// getMigratorJob returns the db-migrator job if it exists, and nil otherwise.
-func getMigratorJob(client client.Client) (*batchv1.Job, error) {
-	job := &batchv1.Job{}
-	name := types.NamespacedName{
-		Name:      imageassurance.ResourceNameImageAssuranceDBMigrator,
-		Namespace: imageassurance.NameSpaceImageAssurance,
-	}
-
-	if err := client.Get(context.Background(), name, job); err != nil {
-		if errors.IsNotFound(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return job, nil
-}
-
-// componentsUp returns true if any image assurance component is up.
-func componentsUp(client client.Client) (bool, error) {
-	apiDeployment := &appsv1.Deployment{}
-	apiName := types.NamespacedName{
-		Name:      imageassurance.ResourceNameImageAssuranceAPI,
-		Namespace: imageassurance.NameSpaceImageAssurance,
-	}
-
-	scannerDeployment := &appsv1.Deployment{}
-	scannerName := types.NamespacedName{
-		Name:      imageassurance.ResourceNameImageAssuranceScanner,
-		Namespace: imageassurance.NameSpaceImageAssurance,
-	}
-
-	podWatcherDeployment := &appsv1.Deployment{}
-	podWatcherName := types.NamespacedName{
-		Name:      imageassurance.ResourceNameImageAssurancePodWatcher,
-		Namespace: imageassurance.NameSpaceImageAssurance,
-	}
-
-	if err := client.Get(context.Background(), apiName, apiDeployment); err != nil {
-		if !errors.IsNotFound(err) {
-			return false, err
-		}
-	} else {
-		return true, nil
-	}
-
-	if err := client.Get(context.Background(), scannerName, scannerDeployment); err != nil {
-		if !errors.IsNotFound(err) {
-			return false, err
-		}
-	} else {
-		return true, nil
-	}
-
-	if err := client.Get(context.Background(), podWatcherName, podWatcherDeployment); err != nil {
-		if !errors.IsNotFound(err) {
-			return false, err
-		}
-	} else {
-		return true, nil
-	}
-
-	return false, nil
-}
-
-// needsMigrating calculates if the db-migrator component needs to run.
-func needsMigrating(installation *operatorv1.InstallationSpec, imageSet *operatorv1.ImageSet, migratorJob *batchv1.Job) (bool, error) {
-	needsMigrating := false
-
-	newJobImageName, err := components.GetReference(
-		components.ComponentImageAssuranceDBMigrator,
-		installation.Registry,
-		installation.ImagePath,
-		installation.ImagePrefix,
-		imageSet,
-	)
-	if err != nil {
-		return false, err
-	}
-
-	previousJobImageName := ""
-	if migratorJob != nil {
-		if migratorJob.Status.Succeeded == 0 {
-			needsMigrating = true
-		}
-
-		previousJobImageName = migratorJob.Spec.Template.Spec.Containers[0].Image
-	}
-
-	if previousJobImageName == "" || previousJobImageName != newJobImageName {
-		needsMigrating = true
-	}
-
-	return needsMigrating, nil
 }
 
 // getTenantEncryptionKeySecret returns the image assurance tenant key.

@@ -283,14 +283,14 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index .Components "image-assurance-scanner" }}
-	ComponentImageAssuranceScanner = component{
+{{ with index .Components "image-assurance-api-proxy" }}
+	ComponentImageAssuranceApiProxy = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index .Components "image-assurance-db-migrator" }}
-	ComponentImageAssuranceDBMigrator = component{
+{{ with index .Components "image-assurance-scanner" }}
+	ComponentImageAssuranceScanner = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",
 	}
@@ -352,8 +352,8 @@ var (
 		ComponentTigeraWindowsUpgrade,
 		ComponentDikastes,
 		ComponentImageAssuranceApi,
+		ComponentImageAssuranceApiProxy,
 		ComponentImageAssuranceScanner,
-		ComponentImageAssuranceDBMigrator,
 		ComponentImageAssurancePodWatcher,
 		ComponentSasha,
 	}

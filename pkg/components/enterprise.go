@@ -236,22 +236,22 @@ var (
 	}
 
 	ComponentImageAssuranceApi = component{
-		Version: "v0.10.2",
+		Version: "v0.11.0-0.dev-63-gc58b98adee5d",
 		Image:   "tigera/image-assurance-api",
 	}
 
+	ComponentImageAssuranceApiProxy = component{
+		Version: "v0.11.0-0.dev-63-gc58b98adee5d",
+		Image:   "tigera/image-assurance-api-proxy",
+	}
+
 	ComponentImageAssuranceScanner = component{
-		Version: "v0.10.2",
+		Version: "v0.11.0-0.dev-63-gc58b98adee5d",
 		Image:   "tigera/image-assurance-scanner",
 	}
 
-	ComponentImageAssuranceDBMigrator = component{
-		Version: "v0.10.2",
-		Image:   "tigera/image-assurance-db-migrator",
-	}
-
 	ComponentImageAssurancePodWatcher = component{
-		Version: "v0.10.2",
+		Version: "v0.11.0-0.dev-63-gc58b98adee5d",
 		Image:   "tigera/image-assurance-pod-watcher",
 	}
 
@@ -304,8 +304,8 @@ var (
 		ComponentTigeraWindowsUpgrade,
 		ComponentDikastes,
 		ComponentImageAssuranceApi,
+		ComponentImageAssuranceApiProxy,
 		ComponentImageAssuranceScanner,
-		ComponentImageAssuranceDBMigrator,
 		ComponentImageAssurancePodWatcher,
 		ComponentSasha,
 	}

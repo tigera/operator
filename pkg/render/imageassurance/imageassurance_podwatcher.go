@@ -27,7 +27,7 @@ func (c *component) podWatcherServiceAccount() *corev1.ServiceAccount {
 	}
 }
 
-func (c component) podWatcherAPIAccessTokenSecret() *corev1.Secret {
+func (c *component) podWatcherAPIAccessTokenSecret() *corev1.Secret {
 	return &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{

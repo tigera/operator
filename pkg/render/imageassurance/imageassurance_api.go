@@ -114,7 +114,7 @@ func (c *component) apiRoleBinding() *rbacv1.RoleBinding {
 	}
 }
 
-func (c component) apiService() *corev1.Service {
+func (c *component) apiService(appName string) *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -122,7 +122,7 @@ func (c component) apiService() *corev1.Service {
 			Namespace: NameSpaceImageAssurance,
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{"k8s-app": ResourceNameImageAssuranceAPI},
+			Selector: map[string]string{"k8s-app": appName},
 			Type:     corev1.ServiceTypeClusterIP,
 			Ports: []corev1.ServicePort{
 				{

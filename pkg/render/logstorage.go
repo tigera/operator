@@ -144,7 +144,7 @@ const (
 	ElasticsearchKeystoreEnvName        = "KEYSTORE_PASSWORD"
 	ElasticsearchKeystoreHashAnnotation = "hash.operator.tigera.io/keystore-password"
 
-	keystoreInitContainerName = "elastic-internal-init-jvm-keystore"
+	keystoreInitContainerName = "elastic-internal-init-keystore"
 	csrRootCAConfigMapName    = "elasticsearch-config"
 )
 

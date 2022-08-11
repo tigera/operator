@@ -16,6 +16,7 @@ const (
 	ImageAssuranceCertHashAnnotation      = "hash.operator.tigera.io/image-assurance-tls"
 	ImageAssuranceAPITokenHashAnnontation = "hash.operator.tigera.io/pod-watcher-image-assurance-api-token"
 	ImageAssuranceSecretName              = "tigera-image-assurance-api-cert"
+	ScannerCLITokenSecretName             = "tigera-image-assurance-scanner-cli-token"
 )
 
 // Resources contains all the resource needed for Image Assurance.

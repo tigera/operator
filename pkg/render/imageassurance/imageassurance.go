@@ -46,6 +46,7 @@ const (
 	ScannerClusterRoleBindingName      = "tigera-image-assurance-scanner-api-access"
 	ScannerAPIAccessServiceAccountName = "tigera-image-assurance-scanner-api-access"
 	ScannerAPIAccessSecretName         = "scanner-image-assurance-api-token"
+	ScannerCLIClusterRoleName          = "tigera-image-assurance-scanner-cli-api-access"
 
 	PodWatcherClusterRoleName             = "tigera-image-assurance-pod-watcher-api-access"
 	PodWatcherClusterRoleBindingName      = "tigera-image-assurance-pod-watcher-api-access"
@@ -188,6 +189,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		c.scannerServiceAccount(),
 		c.scannerRole(),
 		c.scannerClusterRole(),
+		c.scannerCLIClusterRole(),
 		c.scannerRoleBinding(),
 		c.scannerAPIAccessTokenSecret(),
 		c.scannerDeployment(),

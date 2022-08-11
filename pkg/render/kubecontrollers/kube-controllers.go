@@ -143,6 +143,11 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 				Verbs:     []string{"watch", "list", "get", "update", "create"},
 			},
 			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"serviceaccounts/token"},
+				Verbs:     []string{"create"},
+			},
+			rbacv1.PolicyRule{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},
 				Verbs:     []string{"watch", "list", "get"},

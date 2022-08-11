@@ -184,6 +184,7 @@ var _ = Describe("Image Assurance Render", func() {
 		{name: imageassurance.ResourceNameImageAssuranceScanner, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ServiceAccount"},
 		{name: imageassurance.ResourceNameImageAssuranceScanner, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "Role"},
 		{name: imageassurance.ScannerClusterRoleName, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
+		{name: imageassurance.ScannerCLIClusterRoleName, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
 		{name: imageassurance.ResourceNameImageAssuranceScanner, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "RoleBinding"},
 		{name: imageassurance.ScannerAPIAccessSecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
 		{name: imageassurance.ResourceNameImageAssuranceScanner, ns: imageassurance.NameSpaceImageAssurance, group: "apps", version: "v1", kind: "Deployment"},
@@ -366,8 +367,6 @@ var _ = Describe("Image Assurance Render", func() {
 			rtest.ExpectEnv(scannerEnv, expected.Name, expected.Value)
 		}
 
-		Expect(*scanner.Containers[0].SecurityContext.Privileged).To(BeTrue())
-
 		scannerVMs := scanner.Containers[0].VolumeMounts
 		scannerExpectedVMs := []corev1.VolumeMount{
 			{Name: imageassurance.PGCertSecretName, MountPath: "/certs/db/"},
@@ -403,8 +402,6 @@ var _ = Describe("Image Assurance Render", func() {
 		for _, expected := range podWatcherExpectedENV {
 			rtest.ExpectEnv(podWatcherEnv, expected.Name, expected.Value)
 		}
-
-		Expect(*podWatcher.Containers[0].SecurityContext.Privileged).To(BeTrue())
 
 		podWatcherVMs := podWatcher.Containers[0].VolumeMounts
 		podWatcherExpectedVMs := []corev1.VolumeMount{

@@ -218,7 +218,6 @@ func (c *component) podWatcherDeployment() *appsv1.Deployment {
 	}
 
 	terminationGracePeriod := int64(30)
-	isPrivileged := true
 
 	container := corev1.Container{
 		Name:            ResourceNameImageAssurancePodWatcher,
@@ -235,9 +234,6 @@ func (c *component) podWatcherDeployment() *appsv1.Deployment {
 			},
 		},
 		Env: env,
-		SecurityContext: &corev1.SecurityContext{
-			Privileged: &isPrivileged,
-		},
 		VolumeMounts: []corev1.VolumeMount{
 			c.config.TrustedCertBundle.VolumeMount(),
 			{Name: rcimageassurance.ImageAssuranceSecretName, MountPath: rcimageassurance.CAMountPath, ReadOnly: true},

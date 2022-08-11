@@ -165,7 +165,6 @@ func (c *component) apiDeployment() *appsv1.Deployment {
 	)
 
 	terminationGracePeriod := int64(30)
-	privileged := true
 
 	volumeMounts := []corev1.VolumeMount{
 		{Name: APICertSecretName, MountPath: mountPathAPITLSCerts, ReadOnly: true},
@@ -192,10 +191,7 @@ func (c *component) apiDeployment() *appsv1.Deployment {
 				corev1.ResourceMemory: resource.MustParse(apiLimitMemory),
 			},
 		},
-		Env: env,
-		SecurityContext: &corev1.SecurityContext{
-			Privileged: &privileged,
-		},
+		Env:          env,
 		VolumeMounts: volumeMounts,
 	}
 

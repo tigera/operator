@@ -22,6 +22,7 @@ import (
 	"math"
 	"net"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -721,6 +722,10 @@ func fillDefaults(instance *operator.Installation) error {
 		}
 	}
 
+	if len(instance.Spec.KubeletVolumePluginPath) == 0 {
+		instance.Spec.KubeletVolumePluginPath = filepath.Clean("/var/lib/kubelet")
+	}
+
 	// Default rolling update parameters.
 	one := intstr.FromInt(1)
 	if instance.Spec.NodeUpdateStrategy.RollingUpdate == nil {
@@ -1275,6 +1280,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		UsePSP:                  r.usePSP,
 	}
 	components = append(components, render.Node(&nodeCfg))
+
+	csiCfg := render.CSIConfiguration{
+		Installation: &instance.Spec,
+		Terminating:  terminating,
+	}
+	components = append(components, render.CSI(&csiCfg))
 
 	components = append(components,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{

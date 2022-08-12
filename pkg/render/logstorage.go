@@ -543,7 +543,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		// Set to 50% of the default memory, such that resources can be divided over ES and Lucene.
 		javaOptsEnv = corev1.EnvVar{
 			Name:  "ES_JAVA_OPTS",
-			Value: fmt.Sprintf("-Xms2G -Xmx2G"),
+			Value: "-Xms2G -Xmx2G",
 		}
 	}
 	var env []corev1.EnvVar

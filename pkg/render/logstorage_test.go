@@ -710,7 +710,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			}
 
 			component := render.LogStorage(cfg)
-			component.ResolveImages(nil)
+			Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
 			createResources, deleteResources := component.Objects()
 
 			compareResources(createResources, expectedCreateResources)
@@ -724,7 +724,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			initContainers := es.Spec.NodeSets[0].PodTemplate.Spec.InitContainers
 			Expect(esContainer.Env).Should(ContainElement(corev1.EnvVar{
 				Name:  "ES_JAVA_OPTS",
-				Value: fmt.Sprintf("-Xms75M -Xmx75M --module-path /usr/share/bc-fips/ -Djavax.net.ssl.trustStore=/usr/share/elasticsearch/config/cacerts.bcfks -Djavax.net.ssl.trustStoreType=BCFKS -Djavax.net.ssl.trustStorePassword=${KEYSTORE_PASSWORD} -Dorg.bouncycastle.fips.approved_only=true"),
+				Value: "-Xms75M -Xmx75M --module-path /usr/share/bc-fips/ -Djavax.net.ssl.trustStore=/usr/share/elasticsearch/config/cacerts.bcfks -Djavax.net.ssl.trustStoreType=BCFKS -Djavax.net.ssl.trustStorePassword=${KEYSTORE_PASSWORD} -Dorg.bouncycastle.fips.approved_only=true",
 			}))
 			Expect(es.Spec.Image).To(ContainSubstring("-fips"))
 			Expect(initContainers).To(HaveLen(3))

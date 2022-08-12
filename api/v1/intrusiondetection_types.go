@@ -30,15 +30,15 @@ type IntrusionDetectionSpec struct {
 
 	// AnomalyDetection provides configuration for running AnomalyDetection Component within
 	// IntrusionDetection.Anomaly Detection configuration will only be applied to standalone and
-	// management clusters. The field is not used for managed clusters in a Multi-cluster
-	// management setup.
+	// management clusters.
 	// +optional
 	AnomalyDetection AnomalyDetectionSpec `json:"anomalyDetection,omitempty"`
 }
 
 type AnomalyDetectionSpec struct {
 	// StorageType sets the type of storage to use for storing Anomaly Detection Models. By default it will use the ephemeral
-	// emptyDir on the node Anomaly Detection will be deployed to.
+	// emptyDir on the node Anomaly Detection will be deployed to. This field is not used for managed clusters in a Multi-cluster
+	// management setup.
 	// default: Ephemeral
 	// +optional
 	// +kubebuilder:validation:Enum=Ephemeral;Persistent
@@ -48,6 +48,7 @@ type AnomalyDetectionSpec struct {
 	// Anomaly Detection API pod for model storage. The StorageClassName should only be modified when no StorageClass is currently
 	// active. We recommend choosing a storage class dedicated to AnomalyDetection only. Otherwise, model retention
 	// cannot be guaranteed during upgrades. See https://docs.tigera.io/maintenance/upgrading for up-to-date instructions.
+	// This field is not used for managed clusters in a Multi-cluster management setup.
 	// Default: tigera-anomaly-detection
 	// +optional
 	StorageClassName string `json:"storageClassName,omitempty"`

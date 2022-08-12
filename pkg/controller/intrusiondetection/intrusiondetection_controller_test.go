@@ -425,6 +425,27 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(test.GetResource(c, &j)).To(BeNil())
 		})
 
+		It("should not set AD Spec defaults in a managed cluster", func() {
+			defaultTSEEInstanceKey := client.ObjectKey{Name: "tigera-secure"}
+
+			Expect(c.Create(ctx, &operatorv1.ManagementClusterConnection{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.ManagementClusterConnectionSpec{
+					ManagementClusterAddr: "127.0.0.1:12345",
+				},
+			})).ToNot(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			result := &operatorv1.IntrusionDetection{}
+			err = c.Get(ctx, defaultTSEEInstanceKey, result)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(len(result.Spec.AnomalyDetection.StorageClassName)).To(Equal(0))
+			Expect(len(result.Spec.AnomalyDetection.StorageType)).To(Equal(0))
+		})
+
 		It("should degrade if provided a non kubernets qualified AD storage name", func() {
 			Expect(c.Delete(ctx, &operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
 

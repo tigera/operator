@@ -40,9 +40,7 @@ spec:
               anomalyDetection:
                 description: AnomalyDetection provides configuration for running AnomalyDetection
                   Component within IntrusionDetection.Anomaly Detection configuration
-                  will only be applied to standalone and management clusters. The
-                  field is not used for managed clusters in a Multi-cluster management
-                  setup.
+                  will only be applied to standalone and management clusters.
                 properties:
                   storageClassName:
                     description: 'StorageClassName will populate the PersistentVolumeClaim.StorageClassName
@@ -51,13 +49,15 @@ spec:
                       when no StorageClass is currently active. We recommend choosing
                       a storage class dedicated to AnomalyDetection only. Otherwise,
                       model retention cannot be guaranteed during upgrades. See https://docs.tigera.io/maintenance/upgrading
-                      for up-to-date instructions. Default: tigera-anomaly-detection'
+                      for up-to-date instructions. This field is not used for managed
+                      clusters in a Multi-cluster management setup. Default: tigera-anomaly-detection'
                     type: string
                   storageType:
                     description: 'StorageType sets the type of storage to use for
                       storing Anomaly Detection Models. By default it will use the
                       ephemeral emptyDir on the node Anomaly Detection will be deployed
-                      to. default: Ephemeral'
+                      to. This field is not used for managed clusters in a Multi-cluster
+                      management setup. default: Ephemeral'
                     enum:
                     - Ephemeral
                     - Persistent

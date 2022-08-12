@@ -254,7 +254,16 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 
-	if err := r.fillDefaults(ctx, instance); err != nil {
+	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
+	if err != nil {
+		log.Error(err, "Failed to read ManagementClusterConnection")
+		r.status.SetDegraded("Failed to read ManagementClusterConnection", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	isManagedCluster := managementClusterConnection != nil
+
+	if err := r.fillDefaults(ctx, instance, isManagedCluster); err != nil {
 		log.Error(err, "Failed to set defaults on IntrusionDetection CR")
 		r.status.SetDegraded("Unable to set defaults on IntrusionDetection", err.Error())
 		return reconcile.Result{}, err
@@ -327,7 +336,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 
 	// Query for StorageClass for AD API if provided
 	shouldRenderADPVC := false
-	if instance.Spec.AnomalyDetection.StorageType == operatorv1.PersistentStorageType {
+	if !isManagedCluster && instance.Spec.AnomalyDetection.StorageType == operatorv1.PersistentStorageType {
 		// validate to degrade early if the storage class name is not valid
 		if err = utils.ValidateResourceNameIsQualified(instance.Spec.AnomalyDetection.StorageClassName); err != nil {
 			errMessage := "invalid Anomaly Detection Storage Class name provided"
@@ -381,20 +390,13 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
-	if err != nil {
-		log.Error(err, "Failed to read ManagementClusterConnection")
-		r.status.SetDegraded("Failed to read ManagementClusterConnection", err.Error())
-		return reconcile.Result{}, err
-	}
-
 	secrets := []string{
 		render.ElasticsearchIntrusionDetectionUserSecret,
 		render.ElasticsearchADJobUserSecret,
 		render.ElasticsearchPerformanceHotspotsUserSecret,
 	}
 
-	if managementClusterConnection == nil {
+	if !isManagedCluster {
 		secrets = append(secrets, render.ElasticsearchIntrusionDetectionJobUserSecret)
 	}
 
@@ -448,7 +450,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	var esLicenseType render.ElasticsearchLicenseType
 	trustedBundle := certificateManager.CreateTrustedBundle(esgwCertificate)
 
-	if managementClusterConnection == nil {
+	if !isManagedCluster {
 		if esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger); err != nil {
 			r.status.SetDegraded("Failed to get Elasticsearch license", err.Error())
 			return reconcile.Result{}, err
@@ -480,7 +482,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		Openshift:             r.provider == operatorv1.ProviderOpenShift,
 		ClusterDomain:         r.clusterDomain,
 		ESLicenseType:         esLicenseType,
-		ManagedCluster:        managementClusterConnection != nil,
+		ManagedCluster:        isManagedCluster,
 		ShouldRenderADPVC:     shouldRenderADPVC,
 		HasNoLicense:          hasNoLicense,
 		TrustedCertBundle:     trustedBundle,
@@ -517,7 +519,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		TyphaNodeTLS:       typhaNodeTLS,
 		PullSecrets:        pullSecrets,
 		Openshift:          r.provider == operatorv1.ProviderOpenShift,
-		ManagedCluster:     managementClusterConnection != nil,
+		ManagedCluster:     isManagedCluster,
 		HasNoLicense:       hasNoLicense,
 		HasNoDPIResource:   hasNoDPIResource,
 		ESClusterConfig:    esClusterConfig,
@@ -584,7 +586,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 
 // fillDefaults updates the IntrusionDetection resource with defaults if
 // ComponentResources and AnomalyDetectionSpec are not populated.
-func (r *ReconcileIntrusionDetection) fillDefaults(ctx context.Context, ids *operatorv1.IntrusionDetection) error {
+func (r *ReconcileIntrusionDetection) fillDefaults(ctx context.Context, ids *operatorv1.IntrusionDetection, isManagedCluster bool) error {
 	if ids.Spec.ComponentResources == nil {
 		ids.Spec.ComponentResources = []operatorv1.IntrusionDetectionComponentResource{
 			{
@@ -601,25 +603,26 @@ func (r *ReconcileIntrusionDetection) fillDefaults(ctx context.Context, ids *ope
 				},
 			},
 		}
-
 	}
 
-	if len(ids.Spec.AnomalyDetection.StorageType) == 0 {
-		if len(ids.Spec.AnomalyDetection.StorageClassName) == 0 {
-			ids.Spec.AnomalyDetection = operatorv1.AnomalyDetectionSpec{
-				StorageType: operatorv1.EphemeralStorageType,
+	if !isManagedCluster { // does not set defaults for managed clustes the AD Fields specs will simply be ignored
+		if len(ids.Spec.AnomalyDetection.StorageType) == 0 {
+			if len(ids.Spec.AnomalyDetection.StorageClassName) == 0 {
+				ids.Spec.AnomalyDetection = operatorv1.AnomalyDetectionSpec{
+					StorageType: operatorv1.EphemeralStorageType,
+				}
+			} else {
+				// User specified a storage class, set to persistent
+				ids.Spec.AnomalyDetection = operatorv1.AnomalyDetectionSpec{
+					StorageType:      operatorv1.PersistentStorageType,
+					StorageClassName: ids.Spec.AnomalyDetection.StorageClassName,
+				}
 			}
 		} else {
-			// User specified a storage class, set to persistent
-			ids.Spec.AnomalyDetection = operatorv1.AnomalyDetectionSpec{
-				StorageType:      operatorv1.PersistentStorageType,
-				StorageClassName: ids.Spec.AnomalyDetection.StorageClassName,
+			if ids.Spec.AnomalyDetection.StorageType == operatorv1.PersistentStorageType &&
+				len(ids.Spec.AnomalyDetection.StorageClassName) == 0 {
+				ids.Spec.AnomalyDetection.StorageClassName = render.DefaultADStorageClassName
 			}
-		}
-	} else {
-		if ids.Spec.AnomalyDetection.StorageType == operatorv1.PersistentStorageType &&
-			len(ids.Spec.AnomalyDetection.StorageClassName) == 0 {
-			ids.Spec.AnomalyDetection.StorageClassName = render.DefaultADStorageClassName
 		}
 	}
 

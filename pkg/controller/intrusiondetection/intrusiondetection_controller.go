@@ -606,23 +606,15 @@ func (r *ReconcileIntrusionDetection) fillDefaults(ctx context.Context, ids *ope
 	}
 
 	if !isManagedCluster { // does not set defaults for managed clustes the AD Fields specs will simply be ignored
-		if len(ids.Spec.AnomalyDetection.StorageType) == 0 {
-			if len(ids.Spec.AnomalyDetection.StorageClassName) == 0 {
-				ids.Spec.AnomalyDetection = operatorv1.AnomalyDetectionSpec{
-					StorageType: operatorv1.EphemeralStorageType,
-				}
-			} else {
-				// User specified a storage class, set to persistent
-				ids.Spec.AnomalyDetection = operatorv1.AnomalyDetectionSpec{
-					StorageType:      operatorv1.PersistentStorageType,
-					StorageClassName: ids.Spec.AnomalyDetection.StorageClassName,
-				}
+		if len(ids.Spec.AnomalyDetection.StorageClassName) > 0 {
+			// User specified a storage class, set to persistent
+			ids.Spec.AnomalyDetection = operatorv1.AnomalyDetectionSpec{
+				StorageType:      operatorv1.PersistentStorageType,
+				StorageClassName: ids.Spec.AnomalyDetection.StorageClassName,
 			}
-		} else {
-			if ids.Spec.AnomalyDetection.StorageType == operatorv1.PersistentStorageType &&
-				len(ids.Spec.AnomalyDetection.StorageClassName) == 0 {
-				ids.Spec.AnomalyDetection.StorageClassName = render.DefaultADStorageClassName
-			}
+		} else if ids.Spec.AnomalyDetection.StorageType == operatorv1.PersistentStorageType &&
+			len(ids.Spec.AnomalyDetection.StorageClassName) == 0 {
+			ids.Spec.AnomalyDetection.StorageClassName = render.DefaultADStorageClassName
 		}
 	}
 

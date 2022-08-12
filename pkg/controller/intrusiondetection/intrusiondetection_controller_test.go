@@ -446,6 +446,69 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(len(result.Spec.AnomalyDetection.StorageType)).To(Equal(0))
 		})
 
+		It("should not set AD Spec defaults if not originally not defined", func() {
+			defaultTSEEInstanceKey := client.ObjectKey{Name: "tigera-secure"}
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			result := &operatorv1.IntrusionDetection{}
+			err = c.Get(ctx, defaultTSEEInstanceKey, result)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(len(result.Spec.AnomalyDetection.StorageClassName)).To(Equal(0))
+			Expect(len(result.Spec.AnomalyDetection.StorageType)).To(Equal(0))
+		})
+
+		It("should set default AD StorageName if set to persistent storage", func() {
+			Expect(c.Delete(ctx, &operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
+
+			Expect(c.Create(ctx, &operatorv1.IntrusionDetection{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.IntrusionDetectionSpec{
+					AnomalyDetection: operatorv1.AnomalyDetectionSpec{
+						StorageType: operatorv1.PersistentStorageType,
+					},
+				},
+			})).ShouldNot(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).Should(HaveOccurred())
+
+			result := &operatorv1.IntrusionDetection{}
+			defaultTSEEInstanceKey := client.ObjectKey{Name: "tigera-secure"}
+			err = c.Get(ctx, defaultTSEEInstanceKey, result)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(result.Spec.AnomalyDetection.StorageClassName).To(Equal(render.DefaultADStorageClassName))
+			Expect(result.Spec.AnomalyDetection.StorageType).To(Equal(operatorv1.PersistentStorageType))
+		})
+
+		It("should set default AD StorageType to Persistent if storageClass name is provided", func() {
+			Expect(c.Delete(ctx, &operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
+
+			testStorageClassName := "test-storage-class"
+			Expect(c.Create(ctx, &operatorv1.IntrusionDetection{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.IntrusionDetectionSpec{
+					AnomalyDetection: operatorv1.AnomalyDetectionSpec{
+						StorageClassName: testStorageClassName,
+					},
+				},
+			})).ShouldNot(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).Should(HaveOccurred())
+
+			result := &operatorv1.IntrusionDetection{}
+			defaultTSEEInstanceKey := client.ObjectKey{Name: "tigera-secure"}
+			err = c.Get(ctx, defaultTSEEInstanceKey, result)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(result.Spec.AnomalyDetection.StorageClassName).To(Equal(testStorageClassName))
+			Expect(result.Spec.AnomalyDetection.StorageType).To(Equal(operatorv1.PersistentStorageType))
+		})
+
 		It("should degrade if provided a non kubernets qualified AD storage name", func() {
 			Expect(c.Delete(ctx, &operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
 
@@ -651,7 +714,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Limits.Cpu()).Should(Equal(resource.MustParse(dpi.DefaultCPULimit)))
 			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Requests.Memory()).Should(Equal(resource.MustParse(dpi.DefaultMemoryRequest)))
 			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Limits.Memory()).Should(Equal(resource.MustParse(dpi.DefaultMemoryLimit)))
-			Expect(ids.Spec.AnomalyDetection.StorageType).To(Equal(operatorv1.EphemeralStorageType))
 		})
 
 		It("should set AD storage type name with the default value if storage type is persistent and its name is not provided", func() {

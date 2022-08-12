@@ -39,7 +39,10 @@ spec:
             properties:
               anomalyDetection:
                 description: AnomalyDetection provides configuration for running AnomalyDetection
-                  Component within IntrusionDetection
+                  Component within IntrusionDetection.Anomaly Detection configuration
+                  will only be applied to standalone and management clusters. The
+                  field is not used for managed clusters in a Multi-cluster management
+                  setup.
                 properties:
                   storageClassName:
                     description: 'StorageClassName will populate the PersistentVolumeClaim.StorageClassName

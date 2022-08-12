@@ -29,7 +29,9 @@ type IntrusionDetectionSpec struct {
 	ComponentResources []IntrusionDetectionComponentResource `json:"componentResources,omitempty"`
 
 	// AnomalyDetection provides configuration for running AnomalyDetection Component within
-	// IntrusionDetection
+	// IntrusionDetection.Anomaly Detection configuration will only be applied to standalone and
+	// management clusters. The field is not used for managed clusters in a Multi-cluster
+	// management setup.
 	// +optional
 	AnomalyDetection AnomalyDetectionSpec `json:"anomalyDetection,omitempty"`
 }

@@ -29,7 +29,7 @@ type IntrusionDetectionSpec struct {
 	ComponentResources []IntrusionDetectionComponentResource `json:"componentResources,omitempty"`
 
 	// AnomalyDetection provides configuration for running AnomalyDetection Component within
-	// IntrusionDetection.Anomaly Detection configuration will only be applied to standalone and
+	// IntrusionDetection. Anomaly Detection configuration will only be applied to standalone and
 	// management clusters.
 	// +optional
 	AnomalyDetection AnomalyDetectionSpec `json:"anomalyDetection,omitempty"`
@@ -39,7 +39,6 @@ type AnomalyDetectionSpec struct {
 	// StorageType sets the type of storage to use for storing Anomaly Detection Models. By default it will use the ephemeral
 	// emptyDir on the node Anomaly Detection will be deployed to. This field is not used for managed clusters in a Multi-cluster
 	// management setup.
-	// default: Ephemeral
 	// +optional
 	// +kubebuilder:validation:Enum=Ephemeral;Persistent
 	StorageType StorageType `json:"storageType,omitempty"`

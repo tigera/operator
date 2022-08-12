@@ -75,6 +75,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 	ctx context.Context,
 	certificateManager certificatemanager.CertificateManager,
 	applyTrial bool,
+	keyStoreSecret *corev1.Secret,
 ) (reconcile.Result, bool, bool, error) {
 	var elasticKeyPair, kibanaKeyPair certificatemanagement.KeyPairInterface
 	var err error
@@ -190,6 +191,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 		UnusedTLSSecret:             unusedTLSSecret,
 		UsePSP:                      r.usePSP,
 		ApplyTrial:                  applyTrial,
+		KeyStoreSecret:              keyStoreSecret,
 	}
 
 	component := render.LogStorage(logStorageCfg)

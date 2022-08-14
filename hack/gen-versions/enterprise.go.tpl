@@ -83,6 +83,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with .Components.elasticsearch }}
+	ComponentElasticsearchFIPS = component{
+		Version: "{{ .Version }}-fips",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 {{ with index .Components "eck-elasticsearch-operator" }}
 	ComponentECKElasticsearchOperator = component{
 		Version: "{{ .Version }}",
@@ -290,6 +296,7 @@ var (
 		ComponentDeepPacketInspection,
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,
+		ComponentElasticsearchFIPS,
 		ComponentElasticsearchOperator,
 		ComponentEsCurator,
 		ComponentEsProxy,

@@ -558,37 +558,6 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-managing-compute-resources.html and
 	// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-jvm-heap-size.html#k8s-jvm-heap-size
 
-	var volumeMounts []corev1.VolumeMount
-
-	resources := corev1.ResourceRequirements{
-		Limits: corev1.ResourceList{
-			"cpu":    resource.MustParse("1"),
-			"memory": resource.MustParse("4Gi"),
-		},
-		Requests: corev1.ResourceList{
-			"cpu":    resource.MustParse("250m"),
-			"memory": resource.MustParse("4Gi"),
-		},
-	}
-	var javaOptsEnv corev1.EnvVar
-	// If the user has provided resource requirements, then use the user overrides instead
-	if es.cfg.LogStorage.Spec.Nodes != nil && es.cfg.LogStorage.Spec.Nodes.ResourceRequirements != nil {
-		userOverrides := *es.cfg.LogStorage.Spec.Nodes.ResourceRequirements
-		resources = overrideResourceRequirements(resources, userOverrides)
-
-		// Now extract the memory request value to compute the recommended heap size for ES container
-		recommendedHeapSize := memoryQuantityToJVMHeapSize(resources.Requests.Memory())
-		javaOptsEnv = corev1.EnvVar{
-			Name:  "ES_JAVA_OPTS",
-			Value: fmt.Sprintf("-Xms%v -Xmx%v", recommendedHeapSize, recommendedHeapSize),
-		}
-	} else {
-		// Set to 50% of the default memory, such that resources can be divided over ES and Lucene.
-		javaOptsEnv = corev1.EnvVar{
-			Name:  "ES_JAVA_OPTS",
-			Value: "-Xms2G -Xmx2G",
-		}
-	}
 	var env []corev1.EnvVar
 
 	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {

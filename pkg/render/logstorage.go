@@ -407,6 +407,10 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 			}
 		} else {
 			if es.cfg.KeyStoreSecret != nil {
+				if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
+					es.cfg.KeyStoreSecret.Data["ES_JAVA_OPTS"] = []byte(es.javaOpts())
+				}
+
 				toCreate = append(toCreate, es.cfg.KeyStoreSecret)
 				toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.cfg.KeyStoreSecret)...)...)
 			}
@@ -509,6 +513,45 @@ func (es elasticsearchComponent) pvcTemplate() corev1.PersistentVolumeClaim {
 	return pvcTemplate
 }
 
+func (es elasticsearchComponent) resourceRequirements() corev1.ResourceRequirements {
+	resources := corev1.ResourceRequirements{
+		Limits: corev1.ResourceList{
+			"cpu":    resource.MustParse("1"),
+			"memory": resource.MustParse("4Gi"),
+		},
+		Requests: corev1.ResourceList{
+			"cpu":    resource.MustParse("250m"),
+			"memory": resource.MustParse("4Gi"),
+		},
+	}
+	if es.cfg.LogStorage.Spec.Nodes != nil && es.cfg.LogStorage.Spec.Nodes.ResourceRequirements != nil {
+		userOverrides := *es.cfg.LogStorage.Spec.Nodes.ResourceRequirements
+		resources = overrideResourceRequirements(resources, userOverrides)
+	}
+	return resources
+}
+
+func (es elasticsearchComponent) javaOpts() string {
+	var javaOpts string
+	resources := es.resourceRequirements()
+	if es.cfg.LogStorage.Spec.Nodes != nil && es.cfg.LogStorage.Spec.Nodes.ResourceRequirements != nil {
+		// Now extract the memory request value to compute the recommended heap size for ES container
+		recommendedHeapSize := memoryQuantityToJVMHeapSize(resources.Requests.Memory())
+		javaOpts = fmt.Sprintf("-Xms%v -Xmx%v", recommendedHeapSize, recommendedHeapSize)
+	} else {
+		javaOpts = "-Xms2G -Xmx2G"
+	}
+	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
+		javaOpts = fmt.Sprintf("%s --module-path /usr/share/bc-fips/ "+
+			"-Djavax.net.ssl.trustStore=/usr/share/elasticsearch/config/cacerts.bcfks "+
+			"-Djavax.net.ssl.trustStoreType=BCFKS "+
+			"-Djavax.net.ssl.trustStorePassword=%s "+
+			"-Dorg.bouncycastle.fips.approved_only=true", javaOpts, es.cfg.KeyStoreSecret.Data[ElasticsearchKeystoreEnvName])
+
+	}
+	return javaOpts
+}
+
 // Generate the pod template required for the ElasticSearch nodes (controls the ElasticSearch container)
 func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	// Setup default configuration for ES container. For more information on managing resources, see:
@@ -547,27 +590,23 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		}
 	}
 	var env []corev1.EnvVar
+
 	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
-		javaOpts := fmt.Sprintf("--module-path /usr/share/bc-fips/ "+
-			"-Djavax.net.ssl.trustStore=/usr/share/elasticsearch/config/cacerts.bcfks "+
-			"-Djavax.net.ssl.trustStoreType=BCFKS "+
-			"-Djavax.net.ssl.trustStorePassword=${%s} "+
-			"-Dorg.bouncycastle.fips.approved_only=true", ElasticsearchKeystoreEnvName)
-		// Add FIPS java opts to the already existing java opts.
-		javaOptsEnv.Value = fmt.Sprintf("%s %s", javaOptsEnv.Value, javaOpts)
-		env = append(env,
-			javaOptsEnv,
-			corev1.EnvVar{
-				Name: ElasticsearchKeystoreEnvName,
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{Name: ElasticsearchKeystoreSecret},
-						Key:                  ElasticsearchKeystoreEnvName,
-					},
+		// We mount it from a secret, as it contains sensitive information.
+		env = append(env, corev1.EnvVar{
+			Name: "ES_JAVA_OPTS",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{Name: ElasticsearchKeystoreSecret},
+					Key:                  "ES_JAVA_OPTS",
 				},
-			})
+			},
+		})
 	} else {
-		env = append(env, javaOptsEnv)
+		env = append(env, corev1.EnvVar{
+			Name:  "ES_JAVA_OPTS",
+			Value: es.javaOpts(),
+		})
 	}
 
 	esContainer := corev1.Container{
@@ -584,9 +623,8 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			SuccessThreshold:    1,
 			TimeoutSeconds:      5,
 		},
-		Resources:    resources,
-		Env:          env,
-		VolumeMounts: volumeMounts,
+		Resources: es.resourceRequirements(),
+		Env:       env,
 	}
 
 	// For OpenShift, set the user to run as non-root specifically. This prevents issues with the elasticsearch

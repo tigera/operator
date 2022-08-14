@@ -682,6 +682,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 			cfg.ApplyTrial = true
 			cfg.KeyStoreSecret = render.CreateElasticsearchKeystoreSecret()
+			cfg.KeyStoreSecret.Data[render.ElasticsearchKeystoreEnvName] = []byte("12345")
 			expectedCreateResources := []resourceTestObj{
 				{render.ECKOperatorNamespace, "", &corev1.Namespace{}, nil},
 				{render.ECKOperatorPolicyName, render.ECKOperatorNamespace, &v3.NetworkPolicy{}, nil},
@@ -721,11 +722,22 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 			es := getElasticsearch(createResources)
 			esContainer := es.Spec.NodeSets[0].PodTemplate.Spec.Containers[0]
-			initContainers := es.Spec.NodeSets[0].PodTemplate.Spec.InitContainers
 			Expect(esContainer.Env).Should(ContainElement(corev1.EnvVar{
-				Name:  "ES_JAVA_OPTS",
-				Value: "-Xms75M -Xmx75M --module-path /usr/share/bc-fips/ -Djavax.net.ssl.trustStore=/usr/share/elasticsearch/config/cacerts.bcfks -Djavax.net.ssl.trustStoreType=BCFKS -Djavax.net.ssl.trustStorePassword=${KEYSTORE_PASSWORD} -Dorg.bouncycastle.fips.approved_only=true",
+				Name: "ES_JAVA_OPTS",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: render.ElasticsearchKeystoreSecret},
+						Key:                  "ES_JAVA_OPTS",
+					},
+				},
 			}))
+			initContainers := es.Spec.NodeSets[0].PodTemplate.Spec.InitContainers
+
+			resource := rtest.GetResource(createResources, render.ElasticsearchKeystoreSecret, common.OperatorNamespace(), "", "v1", "Secret")
+			Expect(resource).ShouldNot(BeNil())
+			keystoreSecret, ok := resource.(*corev1.Secret)
+			Expect(ok).To(BeTrue())
+			Expect(keystoreSecret.Data["ES_JAVA_OPTS"]).Should(Equal([]byte("-Xms75M -Xmx75M --module-path /usr/share/bc-fips/ -Djavax.net.ssl.trustStore=/usr/share/elasticsearch/config/cacerts.bcfks -Djavax.net.ssl.trustStoreType=BCFKS -Djavax.net.ssl.trustStorePassword=12345 -Dorg.bouncycastle.fips.approved_only=true")))
 			Expect(es.Spec.Image).To(ContainSubstring("-fips"))
 			Expect(initContainers).To(HaveLen(3))
 			Expect(initContainers[1].Name).To(Equal("elastic-internal-init-keystore"))

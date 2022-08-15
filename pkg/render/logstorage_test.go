@@ -739,6 +739,26 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			Expect(ok).To(BeTrue())
 			Expect(keystoreSecret.Data["ES_JAVA_OPTS"]).Should(Equal([]byte("-Xms75M -Xmx75M --module-path /usr/share/bc-fips/ -Djavax.net.ssl.trustStore=/usr/share/elasticsearch/config/cacerts.bcfks -Djavax.net.ssl.trustStoreType=BCFKS -Djavax.net.ssl.trustStorePassword=12345 -Dorg.bouncycastle.fips.approved_only=true")))
 			Expect(es.Spec.Image).To(ContainSubstring("-fips"))
+			Expect(es.Spec.NodeSets[0].PodTemplate.Spec.Containers[0].Env).To(ConsistOf(
+				corev1.EnvVar{
+					Name: render.ElasticsearchKeystoreEnvName,
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: render.ElasticsearchKeystoreSecret},
+							Key:                  render.ElasticsearchKeystoreEnvName,
+						},
+					},
+				},
+				corev1.EnvVar{
+					Name: "ES_JAVA_OPTS",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: render.ElasticsearchKeystoreSecret},
+							Key:                  "ES_JAVA_OPTS",
+						},
+					},
+				},
+			))
 			Expect(initContainers).To(HaveLen(3))
 			Expect(initContainers[1].Name).To(Equal("elastic-internal-init-keystore"))
 			Expect(initContainers[1].Image).To(ContainSubstring("-fips"))

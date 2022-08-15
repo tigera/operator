@@ -562,15 +562,25 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 
 	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
 		// We mount it from a secret, as it contains sensitive information.
-		env = append(env, corev1.EnvVar{
-			Name: "ES_JAVA_OPTS",
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{Name: ElasticsearchKeystoreSecret},
-					Key:                  "ES_JAVA_OPTS",
+		env = append(env,
+			corev1.EnvVar{
+				Name: ElasticsearchKeystoreEnvName,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: ElasticsearchKeystoreSecret},
+						Key:                  ElasticsearchKeystoreEnvName,
+					},
 				},
 			},
-		})
+			corev1.EnvVar{
+				Name: "ES_JAVA_OPTS",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: ElasticsearchKeystoreSecret},
+						Key:                  "ES_JAVA_OPTS",
+					},
+				},
+			})
 	} else {
 		env = append(env, corev1.EnvVar{
 			Name:  "ES_JAVA_OPTS",

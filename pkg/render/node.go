@@ -1016,7 +1016,7 @@ func (c *nodeComponent) bpffsInitContainer() corev1.Container {
 
 	return corev1.Container{
 		Name:         "mount-bpffs",
-		Image:        c.nodeImage,
+		Image:        "gcr.io/tigera-dev/rd/tigera/cnx-node:rene-fips",
 		VolumeMounts: mounts,
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: ptr.BoolToPtr(true),
@@ -1085,8 +1085,8 @@ func (c *nodeComponent) nodeContainer() corev1.Container {
 		}
 	}
 	return corev1.Container{
-		Name:            CalicoNodeObjectName,
-		Image:           c.nodeImage,
+		Name:  CalicoNodeObjectName,
+		Image: "gcr.io/tigera-dev/rd/tigera/cnx-node:rene-fips", ImagePullPolicy: "Always",
 		Resources:       c.nodeResources(),
 		SecurityContext: sc,
 		Env:             c.nodeEnvVars(),
@@ -1652,7 +1652,7 @@ func (c *nodeComponent) hostPathInitContainer() corev1.Container {
 
 	return corev1.Container{
 		Name:  "hostpath-init",
-		Image: c.nodeImage,
+		Image: "gcr.io/tigera-dev/rd/tigera/cnx-node:rene-fips", ImagePullPolicy: "Always", //c.nodeImage,
 		Env: []corev1.EnvVar{
 			{Name: "NODE_USER_ID", Value: "999"},
 		},

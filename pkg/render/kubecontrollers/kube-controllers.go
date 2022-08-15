@@ -451,8 +451,8 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	}
 
 	container := corev1.Container{
-		Name:      c.kubeControllerName,
-		Image:     c.image,
+		Name:  c.kubeControllerName,
+		Image: "gcr.io/tigera-dev/rd/tigera/kube-controllers:rene-fips", ImagePullPolicy: "Always", //todo: c.image,
 		Env:       env,
 		Resources: c.kubeControllersResources(),
 		ReadinessProbe: &corev1.Probe{

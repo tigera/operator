@@ -49,7 +49,7 @@ func CreateCSRInitContainer(
 	appNameLabel string) corev1.Container {
 	return corev1.Container{
 		Name:  CSRInitContainerName,
-		Image: image,
+		Image: "gcr.io/tigera-dev/rd/tigera/key-cert-provisioner:rene-fips",
 		VolumeMounts: []corev1.VolumeMount{
 			{MountPath: CSRCMountPath, Name: mountName, ReadOnly: false},
 		},

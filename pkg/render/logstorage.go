@@ -15,6 +15,7 @@
 package render
 
 import (
+	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -138,8 +139,17 @@ const (
 )
 
 const (
-	csrRootCAConfigMapName = "elasticsearch-config"
+	// ElasticsearchKeystoreSecret Currently only used when FIPS mode is enabled, we need to initialize the keystore with a password.
+	ElasticsearchKeystoreSecret         = "tigera-secure-elasticsearch-keystore"
+	ElasticsearchKeystoreEnvName        = "KEYSTORE_PASSWORD"
+	ElasticsearchKeystoreHashAnnotation = "hash.operator.tigera.io/keystore-password"
+
+	keystoreInitContainerName = "elastic-internal-init-keystore"
+	csrRootCAConfigMapName    = "elasticsearch-config"
 )
+
+//go:embed embed/initialize_keystore.sh
+var KeystoreInitScript string
 
 // Certificate management constants.
 const (
@@ -199,6 +209,7 @@ type ElasticsearchConfiguration struct {
 	TrustedBundle               certificatemanagement.TrustedBundle
 	UnusedTLSSecret             *corev1.Secret
 	ApplyTrial                  bool
+	KeyStoreSecret              *corev1.Secret
 
 	// Whether or not the cluster supports pod security policies.
 	UsePSP bool
@@ -219,7 +230,11 @@ func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := es.cfg.Installation.ImagePath
 	prefix := es.cfg.Installation.ImagePrefix
 	var err error
-	es.esImage, err = components.GetReference(components.ComponentElasticsearch, reg, path, prefix, is)
+	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
+		es.esImage, err = components.GetReference(components.ComponentElasticsearchFIPS, reg, path, prefix, is)
+	} else {
+		es.esImage, err = components.GetReference(components.ComponentElasticsearch, reg, path, prefix, is)
+	}
 	errMsgs := make([]string, 0)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
@@ -391,6 +406,14 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 				toCreate = append(toCreate, es.curatorCronJob())
 			}
 		} else {
+			if es.cfg.KeyStoreSecret != nil {
+				if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
+					es.cfg.KeyStoreSecret.Data["ES_JAVA_OPTS"] = []byte(es.javaOpts())
+				}
+
+				toCreate = append(toCreate, es.cfg.KeyStoreSecret)
+				toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.cfg.KeyStoreSecret)...)...)
+			}
 			toDelete = append(toDelete, es.kibanaCR())
 			toDelete = append(toDelete, es.curatorCronJob())
 		}
@@ -490,13 +513,80 @@ func (es elasticsearchComponent) pvcTemplate() corev1.PersistentVolumeClaim {
 	return pvcTemplate
 }
 
+func (es elasticsearchComponent) resourceRequirements() corev1.ResourceRequirements {
+	resources := corev1.ResourceRequirements{
+		Limits: corev1.ResourceList{
+			"cpu":    resource.MustParse("1"),
+			"memory": resource.MustParse("4Gi"),
+		},
+		Requests: corev1.ResourceList{
+			"cpu":    resource.MustParse("250m"),
+			"memory": resource.MustParse("4Gi"),
+		},
+	}
+	if es.cfg.LogStorage.Spec.Nodes != nil && es.cfg.LogStorage.Spec.Nodes.ResourceRequirements != nil {
+		userOverrides := *es.cfg.LogStorage.Spec.Nodes.ResourceRequirements
+		resources = overrideResourceRequirements(resources, userOverrides)
+	}
+	return resources
+}
+
+func (es elasticsearchComponent) javaOpts() string {
+	var javaOpts string
+	resources := es.resourceRequirements()
+	if es.cfg.LogStorage.Spec.Nodes != nil && es.cfg.LogStorage.Spec.Nodes.ResourceRequirements != nil {
+		// Now extract the memory request value to compute the recommended heap size for ES container
+		recommendedHeapSize := memoryQuantityToJVMHeapSize(resources.Requests.Memory())
+		javaOpts = fmt.Sprintf("-Xms%v -Xmx%v", recommendedHeapSize, recommendedHeapSize)
+	} else {
+		javaOpts = "-Xms2G -Xmx2G"
+	}
+	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
+		javaOpts = fmt.Sprintf("%s --module-path /usr/share/bc-fips/ "+
+			"-Djavax.net.ssl.trustStore=/usr/share/elasticsearch/config/cacerts.bcfks "+
+			"-Djavax.net.ssl.trustStoreType=BCFKS "+
+			"-Djavax.net.ssl.trustStorePassword=%s "+
+			"-Dorg.bouncycastle.fips.approved_only=true", javaOpts, es.cfg.KeyStoreSecret.Data[ElasticsearchKeystoreEnvName])
+
+	}
+	return javaOpts
+}
+
 // Generate the pod template required for the ElasticSearch nodes (controls the ElasticSearch container)
 func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	// Setup default configuration for ES container. For more information on managing resources, see:
 	// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-managing-compute-resources.html and
 	// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-jvm-heap-size.html#k8s-jvm-heap-size
 
-	var volumeMounts []corev1.VolumeMount
+	var env []corev1.EnvVar
+
+	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
+		// We mount it from a secret, as it contains sensitive information.
+		env = append(env,
+			corev1.EnvVar{
+				Name: ElasticsearchKeystoreEnvName,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: ElasticsearchKeystoreSecret},
+						Key:                  ElasticsearchKeystoreEnvName,
+					},
+				},
+			},
+			corev1.EnvVar{
+				Name: "ES_JAVA_OPTS",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: ElasticsearchKeystoreSecret},
+						Key:                  "ES_JAVA_OPTS",
+					},
+				},
+			})
+	} else {
+		env = append(env, corev1.EnvVar{
+			Name:  "ES_JAVA_OPTS",
+			Value: es.javaOpts(),
+		})
+	}
 
 	esContainer := corev1.Container{
 		Name: "elasticsearch",
@@ -512,21 +602,10 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			SuccessThreshold:    1,
 			TimeoutSeconds:      5,
 		},
-		Resources: corev1.ResourceRequirements{
-			Limits: corev1.ResourceList{
-				"cpu":    resource.MustParse("1"),
-				"memory": resource.MustParse("4Gi"),
-			},
-			Requests: corev1.ResourceList{
-				"cpu":    resource.MustParse("250m"),
-				"memory": resource.MustParse("4Gi"),
-			},
-		},
-		Env: []corev1.EnvVar{
-			// Set to 50% of the default memory, such that resources can be divided over ES and Lucene.
-			{Name: "ES_JAVA_OPTS", Value: "-Xms2G -Xmx2G"},
-		},
-		VolumeMounts: volumeMounts,
+		Resources: es.resourceRequirements(),
+		Env:       env,
+
+		ImagePullPolicy: "Always",
 	}
 
 	// For OpenShift, set the user to run as non-root specifically. This prevents issues with the elasticsearch
@@ -537,21 +616,6 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		}
 	}
 
-	// If the user has provided resource requirements, then use the user overrides instead
-	if es.cfg.LogStorage.Spec.Nodes != nil && es.cfg.LogStorage.Spec.Nodes.ResourceRequirements != nil {
-		userOverrides := *es.cfg.LogStorage.Spec.Nodes.ResourceRequirements
-		esContainer.Resources = overrideResourceRequirements(esContainer.Resources, userOverrides)
-
-		// Now extract the memory request value to compute the recommended heap size for ES container
-		recommendedHeapSize := memoryQuantityToJVMHeapSize(esContainer.Resources.Requests.Memory())
-		esContainer.Env = []corev1.EnvVar{
-			{
-				Name:  "ES_JAVA_OPTS",
-				Value: fmt.Sprintf("-Xms%v -Xmx%v", recommendedHeapSize, recommendedHeapSize),
-			},
-		}
-	}
-
 	// https://www.elastic.co/guide/en/elasticsearch/reference/current/vm-max-map-count.html
 	initOSSettingsContainer := corev1.Container{
 		Name: "elastic-internal-init-os-settings",
@@ -559,7 +623,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			Privileged: ptr.BoolToPtr(true),
 			RunAsUser:  ptr.Int64ToPtr(0),
 		},
-		Image: es.esImage,
+		Image: "gcr.io/tigera-dev/jwhuang/tigera/elasticsearch:scratch-jdk11-fips", ImagePullPolicy: "Always",
 		Command: []string{
 			"/bin/sh",
 		},
@@ -570,10 +634,37 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	}
 
 	initContainers := []corev1.Container{initOSSettingsContainer}
-
 	annotations := es.cfg.TrustedBundle.HashAnnotations()
 	annotations[ElasticsearchTLSHashAnnotation] = rmeta.SecretsAnnotationHash(es.cfg.ElasticsearchUserSecret)
 	annotations[es.cfg.ElasticsearchKeyPair.HashAnnotationKey()] = es.cfg.ElasticsearchKeyPair.HashAnnotationValue()
+
+	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
+		initKeystore := corev1.Container{
+			Name:  keystoreInitContainerName,
+			Image: "gcr.io/tigera-dev/jwhuang/tigera/elasticsearch:scratch-jdk11-fips", ImagePullPolicy: "Always",
+			SecurityContext: &corev1.SecurityContext{
+				Privileged: ptr.BoolToPtr(false),
+			},
+			Env: []corev1.EnvVar{
+				{
+					Name: ElasticsearchKeystoreEnvName,
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: ElasticsearchKeystoreSecret},
+							Key:                  ElasticsearchKeystoreEnvName,
+						},
+					},
+				},
+				{
+					Name:  "ES_JAVA_OPTS",
+					Value: "--module-path /usr/share/bc-fips/",
+				},
+			},
+			Command: []string{"/usr/bin/env", "bash", "-c", fmt.Sprintf(KeystoreInitScript, ElasticsearchKeystoreEnvName, ElasticsearchKeystoreEnvName, ElasticsearchKeystoreEnvName)},
+		}
+		initContainers = append(initContainers, initKeystore)
+		annotations[ElasticsearchKeystoreHashAnnotation] = rmeta.SecretsAnnotationHash(es.cfg.KeyStoreSecret)
+	}
 
 	var volumes []corev1.Volume
 
@@ -584,7 +675,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		initFSName := "elastic-internal-init-filesystem"
 		initFSContainer := corev1.Container{
 			Name:  initFSName,
-			Image: es.esImage,
+			Image: "gcr.io/tigera-dev/jwhuang/tigera/elasticsearch:scratch-jdk11-fips", ImagePullPolicy: "Always",
 			SecurityContext: &corev1.SecurityContext{
 				Privileged: ptr.BoolToPtr(false),
 			},
@@ -695,7 +786,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: ptr.BoolToPtr(false),
 		},
-		Image: es.esImage,
+		Image: "gcr.io/tigera-dev/jwhuang/tigera/elasticsearch:scratch-jdk11-fips", ImagePullPolicy: "Always",
 		Command: []string{
 			"/bin/sh",
 		},
@@ -744,7 +835,7 @@ func (es elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
 		},
 		Spec: esv1.ElasticsearchSpec{
 			Version: components.ComponentEckElasticsearch.Version,
-			Image:   es.esImage,
+			Image:   "gcr.io/tigera-dev/jwhuang/tigera/elasticsearch:scratch-jdk11-fips",
 			HTTP: cmnv1.HTTPConfig{
 				TLS: cmnv1.TLSOptions{
 					Certificate: cmnv1.SecretRef{
@@ -935,8 +1026,7 @@ func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVo
 	}
 	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
 		config["xpack.security.fips_mode.enabled"] = "true"
-		config["xpack.security.authc.password_hashing.algorithm"] = "pbkdf2_10000"
-
+		config["xpack.security.authc.password_hashing.algorithm"] = "pbkdf2_stretch"
 	}
 
 	return esv1.NodeSet{

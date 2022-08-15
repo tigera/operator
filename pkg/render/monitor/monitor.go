@@ -138,6 +138,7 @@ func (mc *monitorComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
+	mc.prometheusImage = "gcr.io/tigera-dev/rd/tigera/prometheus:rene-fips" // todo: revert
 
 	mc.prometheusServiceImage, err = components.GetReference(components.ComponentTigeraPrometheusService, reg, path, prefix, is)
 	if err != nil {
@@ -379,7 +380,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 			Containers: []corev1.Container{
 				{
 					Name:  "authn-proxy",
-					Image: mc.prometheusServiceImage,
+					Image: "gcr.io/tigera-dev/rd/tigera/prometheus-service:rene-fips", ImagePullPolicy: "Always", //todo: mc.prometheusServiceImage,
 					Ports: []corev1.ContainerPort{
 						{
 							ContainerPort: PrometheusProxyPort,

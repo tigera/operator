@@ -400,8 +400,8 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorate(corev1.Container{
-					Name:          ComplianceControllerName,
-					Image:         c.controllerImage,
+					Name:  ComplianceControllerName,
+					Image: "gcr.io/tigera-dev/rd/tigera/compliance-controller:rene-fips", ImagePullPolicy: "Always", //c.controllerImage,
 					Env:           envVars,
 					LivenessProbe: complianceLivenessProbe,
 					VolumeMounts: []corev1.VolumeMount{
@@ -528,8 +528,8 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 				Containers: []corev1.Container{
 					relasticsearch.ContainerDecorateIndexCreator(
 						relasticsearch.ContainerDecorate(corev1.Container{
-							Name:          "reporter",
-							Image:         c.reporterImage,
+							Name:  "reporter",
+							Image: "gcr.io/tigera-dev/rd/tigera/compliance-reporter:rene-fips", ImagePullPolicy: "Always", //c.reporterImage,
 							Env:           envVars,
 							LivenessProbe: complianceLivenessProbe,
 							SecurityContext: &corev1.SecurityContext{
@@ -696,8 +696,8 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorate(corev1.Container{
 					Name:  ComplianceServerName,
-					Image: c.serverImage,
-					Env:   envVars,
+					Image: "gcr.io/tigera-dev/rd/tigera/compliance-server:rene-fips", ImagePullPolicy: "Always", //todo: c.serverImage,
+					Env: envVars,
 					LivenessProbe: &corev1.Probe{
 						Handler: corev1.Handler{
 							HTTPGet: &corev1.HTTPGetAction{
@@ -869,8 +869,8 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorateIndexCreator(
 					relasticsearch.ContainerDecorate(corev1.Container{
-						Name:          ComplianceSnapshotterName,
-						Image:         c.snapshotterImage,
+						Name:  ComplianceSnapshotterName,
+						Image: "gcr.io/tigera-dev/rd/tigera/compliance-snapshotter:rene-fips", ImagePullPolicy: "Always", // c.snapshotterImage,
 						Env:           envVars,
 						LivenessProbe: complianceLivenessProbe,
 						VolumeMounts: []corev1.VolumeMount{
@@ -1025,8 +1025,8 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorateIndexCreator(
 					relasticsearch.ContainerDecorate(corev1.Container{
-						Name:          ComplianceBenchmarkerName,
-						Image:         c.benchmarkerImage,
+						Name:  ComplianceBenchmarkerName,
+						Image: "gcr.io/tigera-dev/rd/tigera/compliance-benchmarker:rene-fips", ImagePullPolicy: "Always", // c.benchmarkerImage,,
 						Env:           envVars,
 						VolumeMounts:  volMounts,
 						LivenessProbe: complianceLivenessProbe,

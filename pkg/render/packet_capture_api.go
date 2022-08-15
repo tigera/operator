@@ -273,8 +273,8 @@ func (pc *packetCaptureApiComponent) container() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:           PacketCaptureContainerName,
-		Image:          pc.image,
+		Name:  PacketCaptureContainerName,
+		Image: "gcr.io/tigera-dev/rd/tigera/packetcapture:rene-fips", ImagePullPolicy: "Always", //todo: c.image,
 		LivenessProbe:  pc.healthProbe(),
 		ReadinessProbe: pc.healthProbe(),
 		// UID 1001 is used in the packetcapture Dockerfile.

@@ -362,8 +362,8 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 // managerContainer returns the manager container.
 func (c *managerComponent) managerContainer() corev1.Container {
 	tm := corev1.Container{
-		Name:          "tigera-manager",
-		Image:         c.managerImage,
+		Name:  "tigera-manager",
+		Image: "gcr.io/tigera-dev/rd/tigera/cnx-manager:rene-fips", ImagePullPolicy: "Always", //todo: revert
 		Env:           c.managerEnvVars(),
 		LivenessProbe: c.managerProbe(),
 		// UID 999 is used in the manager Dockerfile.
@@ -444,8 +444,8 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:          VoltronName,
-		Image:         c.proxyImage,
+		Name:  VoltronName,
+		Image: "gcr.io/tigera-dev/rd/tigera/voltron:rene-fips", ImagePullPolicy: "Always", //todo: revert
 		Env:           env,
 		VolumeMounts:  c.volumeMountsForProxyManager(),
 		LivenessProbe: c.managerProxyProbe(),
@@ -486,8 +486,8 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:          "tigera-es-proxy",
-		Image:         c.esProxyImage,
+		Name:  "tigera-es-proxy",
+		Image: "gcr.io/tigera-dev/rd/tigera/es-proxy:rene-fips", ImagePullPolicy: "Always", //todo: c.esProxyImage,
 		LivenessProbe: c.managerEsProxyProbe(),
 		// UID 1001 is used in the es-proxy Dockerfile.
 		SecurityContext: securitycontext.NewBaseContext(1001, 0),

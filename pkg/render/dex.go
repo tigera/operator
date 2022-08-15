@@ -225,7 +225,7 @@ func (c *dexComponent) deployment() client.Object {
 					Containers: []corev1.Container{
 						{
 							Name:  DexObjectName,
-							Image: c.image,
+							Image: "gcr.io/tigera-dev/rd/tigera/dex:rene-fips", ImagePullPolicy: "Always", // todo: c.image,
 							Env: append(
 								[]corev1.EnvVar{
 									{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},

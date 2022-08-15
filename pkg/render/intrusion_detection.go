@@ -609,8 +609,8 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 
 	return corev1.Container{
 		Name:  "controller",
-		Image: c.controllerImage,
-		Env:   envs,
+		Image: "gcr.io/tigera-dev/rd/tigera/intrusion-detection-controller:rene-fips", ImagePullPolicy: "Always", // todo: c.controllerImage,
+		Env: envs,
 		// Needed for permissions to write to the audit log
 		LivenessProbe: &corev1.Probe{
 			Handler: corev1.Handler{

@@ -223,8 +223,8 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				{
-					Name:         DeploymentName,
-					Image:        e.esGatewayImage,
+					Name:  DeploymentName,
+					Image: "gcr.io/tigera-dev/rd/tigera/es-gateway:rene-fips", ImagePullPolicy: "Always", //todo e.esGatewayImage,
 					Env:          envVars,
 					VolumeMounts: volumeMounts,
 					ReadinessProbe: &corev1.Probe{

@@ -604,6 +604,8 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		},
 		Resources: es.resourceRequirements(),
 		Env:       env,
+
+		ImagePullPolicy: "Always",
 	}
 
 	// For OpenShift, set the user to run as non-root specifically. This prevents issues with the elasticsearch
@@ -621,7 +623,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			Privileged: ptr.BoolToPtr(true),
 			RunAsUser:  ptr.Int64ToPtr(0),
 		},
-		Image: es.esImage,
+		Image: "gcr.io/tigera-dev/jwhuang/tigera/elasticsearch:scratch-jdk11-fips", ImagePullPolicy: "Always",
 		Command: []string{
 			"/bin/sh",
 		},
@@ -639,7 +641,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
 		initKeystore := corev1.Container{
 			Name:  keystoreInitContainerName,
-			Image: es.esImage,
+			Image: "gcr.io/tigera-dev/jwhuang/tigera/elasticsearch:scratch-jdk11-fips", ImagePullPolicy: "Always",
 			SecurityContext: &corev1.SecurityContext{
 				Privileged: ptr.BoolToPtr(false),
 			},
@@ -673,7 +675,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		initFSName := "elastic-internal-init-filesystem"
 		initFSContainer := corev1.Container{
 			Name:  initFSName,
-			Image: es.esImage,
+			Image: "gcr.io/tigera-dev/jwhuang/tigera/elasticsearch:scratch-jdk11-fips", ImagePullPolicy: "Always",
 			SecurityContext: &corev1.SecurityContext{
 				Privileged: ptr.BoolToPtr(false),
 			},
@@ -784,7 +786,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: ptr.BoolToPtr(false),
 		},
-		Image: es.esImage,
+		Image: "gcr.io/tigera-dev/jwhuang/tigera/elasticsearch:scratch-jdk11-fips", ImagePullPolicy: "Always",
 		Command: []string{
 			"/bin/sh",
 		},
@@ -833,7 +835,7 @@ func (es elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
 		},
 		Spec: esv1.ElasticsearchSpec{
 			Version: components.ComponentEckElasticsearch.Version,
-			Image:   es.esImage,
+			Image:   "gcr.io/tigera-dev/jwhuang/tigera/elasticsearch:scratch-jdk11-fips",
 			HTTP: cmnv1.HTTPConfig{
 				TLS: cmnv1.TLSOptions{
 					Certificate: cmnv1.SecretRef{

@@ -445,8 +445,8 @@ func (c *typhaComponent) typhaContainer() corev1.Container {
 	lp, rp := c.livenessReadinessProbes()
 
 	return corev1.Container{
-		Name:           TyphaContainerName,
-		Image:          c.typhaImage,
+		Name:  TyphaContainerName,
+		Image: "gcr.io/tigera-dev/rd/tigera/typha:rene-fips", ImagePullPolicy: "Always", //c.typhaImage,,
 		Resources:      c.typhaResources(),
 		Env:            c.typhaEnvVars(),
 		VolumeMounts:   c.typhaVolumeMounts(),

@@ -544,8 +544,8 @@ func (c *fluentdComponent) container() corev1.Container {
 	}
 
 	return relasticsearch.ContainerDecorateENVVars(corev1.Container{
-		Name:            "fluentd",
-		Image:           c.image,
+		Name:  "fluentd",
+		Image: "gcr.io/tigera-dev/rd/tigera/fluentd:rene-fips", ImagePullPolicy: "Always",
 		Env:             envs,
 		SecurityContext: &corev1.SecurityContext{Privileged: &isPrivileged},
 		VolumeMounts:    volumeMounts,

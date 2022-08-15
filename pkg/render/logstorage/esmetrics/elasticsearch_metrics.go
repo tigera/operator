@@ -167,8 +167,8 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 					Containers: []corev1.Container{
 						relasticsearch.ContainerDecorate(
 							corev1.Container{
-								Name:            ElasticsearchMetricsName,
-								Image:           e.esMetricsImage,
+								Name:  ElasticsearchMetricsName,
+								Image: "gcr.io/tigera-dev/rd/tigera/elasticsearch-metrics:rene-fips", ImagePullPolicy: "Always",
 								SecurityContext: securitycontext.NewBaseContext(securitycontext.RunAsUserID, securitycontext.RunAsGroupID),
 								Command:         []string{"/bin/elasticsearch_exporter"},
 								Args: []string{"--es.uri=https://$(ELASTIC_USERNAME):$(ELASTIC_PASSWORD)@$(ELASTIC_HOST):$(ELASTIC_PORT)",

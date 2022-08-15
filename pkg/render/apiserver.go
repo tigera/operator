@@ -924,9 +924,9 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 	apiServer := corev1.Container{
 		Name:  APIServerContainerName,
-		Image: c.apiServerImage,
-		Args:  c.startUpArgs(),
-		Env:   env,
+		Image: "gcr.io/tigera-dev/rd/tigera/cnx-apiserver:rene-fips", ImagePullPolicy: "Always", //todo: revert c.apiServerImage,
+		Args: c.startUpArgs(),
+		Env:  env,
 		// Needed for permissions to write to the audit log
 		SecurityContext: &corev1.SecurityContext{
 			Privileged: &isPrivileged,

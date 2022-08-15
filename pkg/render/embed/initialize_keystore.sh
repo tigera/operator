@@ -24,3 +24,9 @@ ${%s}
 EOF
 
 echo "Elasticsearch keystore initialization successful."
+
+echo "Chowning for user elasticsearch:elasticsearch /usr/share/elasticsearch/config/elasticsearch.keystore"
+
+chown elasticsearch:elasticsearch /usr/share/elasticsearch/config/elasticsearch.keystore
+
+echo "Chowning successful."

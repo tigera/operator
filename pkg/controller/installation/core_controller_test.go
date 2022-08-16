@@ -531,7 +531,7 @@ var _ = Describe("Testing core-controller installation", func() {
 						{Image: "tigera/key-cert-provisioner", Digest: "sha256:calicocsrinithash"},
 						{Image: "tigera/calico-windows-upgrade", Digest: "sha256:calicowindowshash"},
 						{Image: "calico/csi", Digest: "sha256:calicocsihash"},
-						{Image: "sig-storage/csi-node-driver-registrar", Digest: "sha256:sigstoragecsinodedriverregistrarhash"},
+						{Image: "calico/node-driver-registrar", Digest: "sha256:caliconodedriverregistrarhash"},
 					},
 				},
 			})).ToNot(HaveOccurred())

@@ -68,8 +68,8 @@ var (
 	}
 
 	ComponentCalicoCSIRegistrar = component{
-		Version: "v2.5.0",
-		Image:   "sig-storage/csi-node-driver-registrar",
+		Version: "master",
+		Image:   "calico/node-driver-registrar",
 	}
 	ComponentOperatorInit = component{
 		Version: version.VERSION,

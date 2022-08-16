@@ -509,6 +509,30 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(result.Spec.AnomalyDetection.StorageType).To(Equal(operatorv1.PersistentStorageType))
 		})
 
+		It("should degrade if AD Spec is set in managed cluster", func() {
+			Expect(c.Create(ctx, &operatorv1.ManagementClusterConnection{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.ManagementClusterConnectionSpec{
+					ManagementClusterAddr: "127.0.0.1:12345",
+				},
+			})).ToNot(HaveOccurred())
+
+			Expect(c.Delete(ctx, &operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
+
+			Expect(c.Create(ctx, &operatorv1.IntrusionDetection{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.IntrusionDetectionSpec{
+					AnomalyDetection: operatorv1.AnomalyDetectionSpec{
+						StorageType: operatorv1.PersistentStorageType,
+					},
+				},
+			})).ShouldNot(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).Should(HaveOccurred())
+			Expect(mockStatus.AssertNumberOfCalls(nil, "SetDegraded", 1)).To(BeTrue())
+		})
+
 		It("should degrade if provided a non kubernets qualified AD storage name", func() {
 			Expect(c.Delete(ctx, &operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
 

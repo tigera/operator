@@ -270,7 +270,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	// validate AnomalyDetection Specs first to give error feedback if ADSpec is misconfigured
-	if err = validateConfiguredAnomalyDetectionSpec(instance.Spec.AnomalyDetection); err != nil {
+	if err = validateConfiguredAnomalyDetectionSpec(instance.Spec.AnomalyDetection, isManagedCluster); err != nil {
 		errMessage := "Invalid Anomaly Detection Specs provided"
 		r.SetDegraded(operatorv1.InvalidConfigurationError, errMessage, err, reqLogger)
 
@@ -635,7 +635,11 @@ func (r *ReconcileIntrusionDetection) SetDegraded(reason operatorv1.TigeraStatus
 	r.status.SetDegraded(string(reason), fmt.Sprintf("%s - Error: %s", message, errormsg))
 }
 
-func validateConfiguredAnomalyDetectionSpec(adSpec operatorv1.AnomalyDetectionSpec) error {
+func validateConfiguredAnomalyDetectionSpec(adSpec operatorv1.AnomalyDetectionSpec, isManagedController bool) error {
+	if isManagedController && (len(adSpec.StorageType) > 0 || len(adSpec.StorageClassName) > 0) {
+		return fmt.Errorf("unable to set Anomaly Detection Specification in a managed ckuster")
+	}
+
 	if (len(adSpec.StorageType) == 0 || adSpec.StorageType == operatorv1.EphemeralStorageType) &&
 		len(adSpec.StorageClassName) > 0 {
 		return fmt.Errorf("unable to set StorageClassName with StorageType as Ephemeral")

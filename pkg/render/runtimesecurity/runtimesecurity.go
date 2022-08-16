@@ -121,10 +121,7 @@ func (c *component) esClusterName() string {
 func (c *component) sashaDeployment() *appsv1.Deployment {
 
 	envVars := []corev1.EnvVar{
-		{Name: "PULL_MAX_LAST_MINUTES", Value: "20"},
-		{Name: "CLUSTER_NAME", Value: c.esClusterName()},
 		{Name: "SASHA_SECRETLOCATION", Value: SashaVerifyAuthFile},
-		{Name: "SASHA_VERIFYURL", Value: SashaVerifyAuthURL},
 	}
 
 	rsSecretOptional := false

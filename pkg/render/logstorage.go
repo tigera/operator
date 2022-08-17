@@ -15,7 +15,6 @@
 package render
 
 import (
-	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -147,9 +146,6 @@ const (
 	keystoreInitContainerName = "elastic-internal-init-keystore"
 	csrRootCAConfigMapName    = "elasticsearch-config"
 )
-
-//go:embed embed/initialize_keystore.sh
-var KeystoreInitScript string
 
 // Certificate management constants.
 const (
@@ -661,7 +657,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			// This is a script made by Tigera in our docker image to initialize the JVM keystore and the ES keystore
 			// using the password from env var KEYSTORE_PASSWORD.
 			Command: []string{"/bin/sh"},
-			Args:    []string{"-c", "/etc/initialize_keystore.sh"},
+			Args:    []string{"-c", "/usr/bin/initialize_keystore.sh"},
 		}
 		initContainers = append(initContainers, initKeystore)
 		annotations[ElasticsearchKeystoreHashAnnotation] = rmeta.SecretsAnnotationHash(es.cfg.KeyStoreSecret)

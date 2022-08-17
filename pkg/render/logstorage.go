@@ -658,7 +658,10 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 					Value: "--module-path /usr/share/bc-fips/",
 				},
 			},
-			Command: []string{"/usr/bin/env", "bash", "-c", fmt.Sprintf(KeystoreInitScript, ElasticsearchKeystoreEnvName, ElasticsearchKeystoreEnvName, ElasticsearchKeystoreEnvName)},
+			// This is a script made by Tigera in our docker image to initialize the JVM keystore and the ES keystore
+			// using the password from env var KEYSTORE_PASSWORD.
+			Command: []string{"/bin/sh"},
+			Args:    []string{"-c", "/etc/initialize_keystore.sh"},
 		}
 		initContainers = append(initContainers, initKeystore)
 		annotations[ElasticsearchKeystoreHashAnnotation] = rmeta.SecretsAnnotationHash(es.cfg.KeyStoreSecret)

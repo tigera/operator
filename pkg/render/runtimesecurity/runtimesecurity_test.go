@@ -5,7 +5,6 @@ package runtimesecurity_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	batchv1 "k8s.io/api/batch/v1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -15,6 +14,7 @@ import (
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/runtimesecurity"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -63,8 +63,8 @@ var _ = Describe("Runtime Security rendering tests", func() {
 		}{
 			{name: runtimesecurity.NameSpaceRuntimeSecurity, ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: runtimesecurity.ElasticsearchSashaJobUserSecretName, ns: runtimesecurity.NameSpaceRuntimeSecurity, group: "", version: "v1", kind: "Secret"},
-			{name: runtimesecurity.ResourceNameSashaJob, ns: runtimesecurity.NameSpaceRuntimeSecurity, group: "", version: "v1", kind: "ServiceAccount"},
-			{name: runtimesecurity.ResourceNameSashaJob, ns: runtimesecurity.NameSpaceRuntimeSecurity, group: "batch", version: "v1", kind: "Job"},
+			{name: runtimesecurity.SashaName, ns: runtimesecurity.NameSpaceRuntimeSecurity, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: runtimesecurity.SashaName, ns: runtimesecurity.NameSpaceRuntimeSecurity, group: "apps", version: "v1", kind: "Deployment"},
 		}
 
 		resources, _ := component.Objects()
@@ -78,9 +78,9 @@ var _ = Describe("Runtime Security rendering tests", func() {
 		}
 
 		// Check rendering of spec deployment.
-		cronjob := rtest.GetResource(resources, runtimesecurity.ResourceNameSashaJob, runtimesecurity.NameSpaceRuntimeSecurity,
-			"batch", "v1", "Job").(*batchv1.CronJob)
-		spec := cronjob.Spec.JobTemplate.Spec.Template.Spec
+		deploy := rtest.GetResource(resources, runtimesecurity.SashaName, runtimesecurity.NameSpaceRuntimeSecurity,
+			"apps", "v1", "Deployment").(*appsv1.Deployment)
+		spec := deploy.Spec.Template.Spec
 		Expect(len(spec.Containers)).To(Equal(1))
 	})
 

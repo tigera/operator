@@ -98,6 +98,7 @@ func (c *component) Objects() (objsToCreate, objsToDelete []client.Object) {
 	}
 
 	toDelete = append(toDelete, c.sashaCronJob())
+	toDelete = append(toDelete, c.oldSashaServiceAccount())
 
 	return objs, toDelete
 }

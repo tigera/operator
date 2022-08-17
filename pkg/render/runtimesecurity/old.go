@@ -8,6 +8,7 @@ import (
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -83,5 +84,12 @@ func (c *component) sashaCronJob() *batchv1.CronJob {
 				},
 			},
 		},
+	}
+}
+
+func (c *component) oldSashaServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		TypeMeta:   metav1.TypeMeta{Kind: rbacv1.ServiceAccountKind, APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: ResourceNameSashaJob, Namespace: NameSpaceRuntimeSecurity},
 	}
 }

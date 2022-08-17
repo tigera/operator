@@ -150,4 +150,4 @@ components:
     version: v0.10.2
   sasha:
     image: tigera/sasha
-    version: v0.10.0-0.dev-815-g3060e3f71fa5
+    version: v0.10.0-0.dev-818-g9efdfed4112f

@@ -115,9 +115,18 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
 		))
 
-		Expect(esProxy.VolumeMounts).To(HaveLen(1))
-		Expect(esProxy.VolumeMounts[0].Name).To(Equal("elastic-ca-cert-volume"))
-		Expect(esProxy.VolumeMounts[0].MountPath).To(Equal("/etc/ssl/elastic/"))
+		Expect(esProxy.VolumeMounts).To(HaveLen(2))
+		Expect(esProxy.VolumeMounts).To(ConsistOf([]corev1.VolumeMount{
+			{
+				Name:      "tigera-ca-bundle",
+				MountPath: "/etc/pki/tls/certs/",
+				ReadOnly:  true,
+			},
+			{
+				Name:      "elastic-ca-cert-volume",
+				MountPath: "/etc/ssl/elastic/",
+			},
+		}))
 
 		Expect(*esProxy.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
 		Expect(*esProxy.SecurityContext.Privileged).To(BeFalse())

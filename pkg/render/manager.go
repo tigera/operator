@@ -466,9 +466,9 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		{Name: "ELASTIC_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
 	}
 
-	var volumeMounts []corev1.VolumeMount
+	// This mount is used both to trust Dex, but also to trust the Voltron tunnel (MCM).
+	volumeMounts := []corev1.VolumeMount{c.cfg.TrustedCertBundle.VolumeMount()}
 	if c.cfg.ManagementCluster != nil {
-		volumeMounts = append(volumeMounts, c.cfg.TrustedCertBundle.VolumeMount())
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_CA_PATH", Value: certificatemanagement.TrustedCertBundleMountPath})
 	}
 

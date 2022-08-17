@@ -763,7 +763,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			Expect(initContainers[1].Name).To(Equal("elastic-internal-init-keystore"))
 			Expect(initContainers[1].Image).To(ContainSubstring("-fips"))
 			Expect(initContainers[1].Command).To(Equal([]string{"/bin/sh"}))
-			Expect(initContainers[1].Args).To(Equal([]string{"-c", "/etc/initialize_keystore.sh"}))
+			Expect(initContainers[1].Args).To(Equal([]string{"-c", "/usr/bin/initialize_keystore.sh"}))
 		})
 	})
 

@@ -183,6 +183,25 @@ var _ = Describe("Utils APIServer type tests", func() {
 	)
 })
 
+var _ = Describe("ValidateResourceNameIsQualified", func() {
+
+	It("returns nil for a compliant kubernetes name.", func() {
+		qualifiedName := "proper-resource-name"
+
+		err := ValidateResourceNameIsQualified(qualifiedName)
+
+		Expect(err).To(BeNil())
+	})
+
+	It("returns nil for an invalid resource name", func() {
+		invalidName := "improper_resource_name"
+
+		err := ValidateResourceNameIsQualified(invalidName)
+
+		Expect(err).ToNot(BeNil())
+	})
+})
+
 type fakeClient struct {
 	discovery discovery.DiscoveryInterface
 	kubernetes.Interface

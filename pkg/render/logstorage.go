@@ -589,7 +589,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		ReadinessProbe: &corev1.Probe{
 			Handler: corev1.Handler{
 				Exec: &corev1.ExecAction{
-					Command: []string{"/readiness-probe"},
+					Command: []string{"/usr/bin/readiness-probe"},
 				},
 			},
 			FailureThreshold:    3,

@@ -34,6 +34,10 @@ spec:
             type: object
           spec:
             description: ImageAssuranceSpec defines the desired state of ImageAssurance
+            properties:
+              apiProxyURL:
+                description: APIProxyURL is the url the api proxy should proxy too.
+                type: string
             type: object
           status:
             description: ImageAssuranceStatus defines the observed state of ImageAssurance

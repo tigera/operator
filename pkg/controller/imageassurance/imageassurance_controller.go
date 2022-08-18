@@ -245,6 +245,12 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
+	if ia.Spec.APIProxyURL == "" {
+		reqLogger.Error(err, "APIProxyURL cannot be nil or empty")
+		r.status.SetDegraded("APIProxyURL cannot be nil or empty", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	certificateManager, err := certificatemanager.Create(r.client, installation, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
@@ -356,6 +362,7 @@ func (r *ReconcileImageAssurance) Reconcile(ctx context.Context, request reconci
 		TrustedCertBundle:         trustedBundle,
 		ScannerAPIAccessToken:     scannerAPIToken,
 		PodWatcherAPIAccessToken:  podWatcherAPIToken,
+		APIProxyURL:               ia.Spec.APIProxyURL,
 	}
 
 	components := []render.Component{

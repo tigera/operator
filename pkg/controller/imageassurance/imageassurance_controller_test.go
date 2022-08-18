@@ -193,7 +193,9 @@ var _ = Describe("Image Assurance Controller", func() {
 		//apply image assurance cr
 		Expect(c.Create(ctx, &operatorv1.ImageAssurance{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-			Spec:       operatorv1.ImageAssuranceSpec{},
+			Spec: operatorv1.ImageAssuranceSpec{
+				APIProxyURL: "https://ia-api.dev.calicocloud.io",
+			},
 		})).NotTo(HaveOccurred())
 
 		_, err := r.Reconcile(ctx, reconcile.Request{})

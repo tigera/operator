@@ -8,6 +8,8 @@ import (
 
 // ImageAssuranceSpec defines the desired state of ImageAssurance
 type ImageAssuranceSpec struct {
+	// APIProxyURL is the url the api proxy should proxy too.
+	APIProxyURL string `json:"apiProxyURL,omitempty"`
 }
 
 // ImageAssuranceStatus defines the observed state of ImageAssurance

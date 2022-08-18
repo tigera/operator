@@ -65,6 +65,8 @@ const (
 	pgCertsHashAnnotation         = "hash.operator.tigera.io/pgcerts"
 	apiCertHashAnnotation         = "hash.operator.tigera.io/apicerts"
 	tenantKeySecretHashAnnotation = "hash.operator.tigera.io/tenantkeysecret"
+
+	CalicoCloudAuthSecretName = "tigera-calico-cloud-client-credentials"
 )
 
 func ImageAssurance(
@@ -108,6 +110,8 @@ type Config struct {
 	podWatcherImage string
 
 	PodWatcherAPIAccessToken []byte
+
+	APIProxyURL string
 }
 
 type component struct {

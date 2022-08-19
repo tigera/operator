@@ -5,7 +5,7 @@ components:
     version: v3.14.1
   cnx-manager:
     image: tigera/cnx-manager
-    version: v3.14.2-0
+    version: v3.14.2-1
   voltron:
     image: tigera/voltron
     version: v3.14.1
@@ -147,4 +147,4 @@ components:
     version: v0.11.0-0.dev-63-gc58b98adee5d
   sasha:
     image: tigera/sasha
-    version: v0.9.0-amd64
+    version: v0.10.0-0.dev-818-g9efdfed4112f

@@ -24,3 +24,8 @@ pkg/render/common/clusterrole/clusterroles.go
 pkg/controller/manager/manager_controller_cloud.go
 pkg/render/manager_cloud.go
 pkg/render/manager_cloud_test.go
+pkg/render/runtimesecurity/runtimesecurity.go
+pkg/controller/runtimesecurity/runtimesecurity_controller_test.go
+pkg/render/runtimesecurity/runtimesecurity_suite_test.go
+pkg/render/runtimesecurity/runtimesecurity_test.go
+pkg/render/runtimesecurity/old.go

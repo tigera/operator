@@ -256,8 +256,8 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 
 	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
 	if err != nil {
-		log.Error(err, "Failed to read ManagementClusterConnection")
-		r.status.SetDegraded("Failed to read ManagementClusterConnection", err.Error())
+		errMessage := "Failed to read ManagementClusterConnection"
+		r.SetDegraded(operatorv1.ResourceReadError, errMessage, err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -351,20 +351,32 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 				return reconcile.Result{}, err
 			} else {
 				errMessage := "failed to query for Anomaly Detection Storage Class"
-				r.SetDegraded(operatorv1.InternalServerError, errMessage, err, reqLogger)
+				r.SetDegraded(operatorv1.ResourceReadError, errMessage, err, reqLogger)
 				return reconcile.Result{}, err
 			}
 		}
 
-		err = r.client.Get(ctx, client.ObjectKey{Name: render.ADPersistentVolumeClaimName, Namespace: render.IntrusionDetectionNamespace}, &corev1.PersistentVolumeClaim{})
+		pvc := &corev1.PersistentVolumeClaim{}
+		err = r.client.Get(ctx, client.ObjectKey{Name: render.ADPersistentVolumeClaimName, Namespace: render.IntrusionDetectionNamespace}, pvc)
 		if err != nil {
 			if errors.IsNotFound(err) {
 				shouldRenderADPVC = true
 			} else {
 				errMessage := "failed to query persistentvolumeclaim for anomaly detection"
-				r.SetDegraded(operatorv1.InternalServerError, errMessage, err, reqLogger)
+				r.SetDegraded(operatorv1.ResourceReadError, errMessage, err, reqLogger)
 				return reconcile.Result{}, err
 			}
+		}
+
+		// delete the found PVC if it does not have the storageclass name specified in AD Spec
+		if !shouldRenderADPVC && pvc.Spec.StorageClassName != &instance.Spec.AnomalyDetection.StorageClassName {
+			err := r.client.Delete(ctx, pvc)
+			if err != nil {
+				errMessage := "failed to remove misconfigured PersistentVolumeClaim for Anomaly Detection"
+				r.SetDegraded(operatorv1.ResourceUpdateError, errMessage, err, reqLogger)
+				return reconcile.Result{}, err
+			}
+			shouldRenderADPVC = true // set to true to rerender
 		}
 	}
 
@@ -606,13 +618,7 @@ func (r *ReconcileIntrusionDetection) fillDefaults(ctx context.Context, ids *ope
 	}
 
 	if !isManagedCluster { // does not set defaults for managed clustes the AD Fields specs will simply be ignored
-		if len(ids.Spec.AnomalyDetection.StorageClassName) > 0 {
-			// User specified a storage class, set to persistent
-			ids.Spec.AnomalyDetection = operatorv1.AnomalyDetectionSpec{
-				StorageType:      operatorv1.PersistentStorageType,
-				StorageClassName: ids.Spec.AnomalyDetection.StorageClassName,
-			}
-		} else if ids.Spec.AnomalyDetection.StorageType == operatorv1.PersistentStorageType &&
+		if ids.Spec.AnomalyDetection.StorageType == operatorv1.PersistentStorageType &&
 			len(ids.Spec.AnomalyDetection.StorageClassName) == 0 {
 			ids.Spec.AnomalyDetection.StorageClassName = render.DefaultADStorageClassName
 		}

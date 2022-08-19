@@ -114,7 +114,7 @@ type IntrusionDetectionConfiguration struct {
 	ESLicenseType      ElasticsearchLicenseType
 	ManagedCluster     bool
 
-	// PVC fields Spec fields are immutable, set to true when and existing AD PVC
+	// PVC fields Spec fields are immutable, set to true when an existing AD PVC
 	// is not found as to avoid update failures.
 	ShouldRenderADPVC     bool
 	HasNoLicense          bool
@@ -221,7 +221,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 			objsToDelete = append(objsToDelete,
 				c.adPersistentVolumeClaim(),
 			)
-		} else if shouldConfigureADStorage && c.cfg.ShouldRenderADPVC { //
+		} else if shouldConfigureADStorage && c.cfg.ShouldRenderADPVC {
 			objs = append(objs,
 				c.adPersistentVolumeClaim(),
 			)

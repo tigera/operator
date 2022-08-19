@@ -303,6 +303,7 @@ var _ = Describe("Image Assurance Render", func() {
 			TLSSecret:                 &tlsSecrets,
 			TrustedCertBundle:         bundle,
 			TenantEncryptionKeySecret: &tenantEncryptionKeySecret,
+			APIProxyURL:               "https://ia-api.dev.calicocloud.io",
 		})
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		createdResources, deletedResources := component.Objects()
@@ -443,6 +444,7 @@ var _ = Describe("Image Assurance Render", func() {
 			TrustedCertBundle:         bundle,
 			KeyValidatorConfig:        dexCfg,
 			TenantEncryptionKeySecret: &tenantEncryptionKeySecret,
+			APIProxyURL:               "https://ia-api.dev.calicocloud.io",
 		})
 
 		createdResources, _ := component.Objects()

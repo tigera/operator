@@ -27,35 +27,35 @@ func (c *component) apiProxyDeployment() *appsv1.Deployment {
 		{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
 		{Name: "IMAGE_ASSURANCE_HTTPS_CERT", Value: "/certs/https/tls.crt"},
 		{Name: "IMAGE_ASSURANCE_HTTPS_KEY", Value: "/certs/https/tls.key"},
-		{Name: "IMAGE_ASSURANCE_PROXY_URL", Value: "https://ia-api.dev.calicocloud.io"},
+		{Name: "IMAGE_ASSURANCE_PROXY_URL", Value: c.config.APIProxyURL},
 		{Name: "IMAGE_ASSURANCE_PROXY_HTTPS_CERT", Value: "/certs/https/tls.crt"},
 		{Name: "AUTH0_AUDIENCE", ValueFrom: &corev1.EnvVarSource{
 			SecretKeyRef: &corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: "tigera-calico-cloud-client-credentials"},
+				LocalObjectReference: corev1.LocalObjectReference{Name: CalicoCloudAuthSecretName},
 				Key:                  "audience",
 			},
 		}},
 		{Name: "AUTH0_CLIENT_ID", ValueFrom: &corev1.EnvVarSource{
 			SecretKeyRef: &corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: "tigera-calico-cloud-client-credentials"},
+				LocalObjectReference: corev1.LocalObjectReference{Name: CalicoCloudAuthSecretName},
 				Key:                  "client_id",
 			},
 		}},
 		{Name: "AUTH0_CLIENT_SECRET", ValueFrom: &corev1.EnvVarSource{
 			SecretKeyRef: &corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: "tigera-calico-cloud-client-credentials"},
+				LocalObjectReference: corev1.LocalObjectReference{Name: CalicoCloudAuthSecretName},
 				Key:                  "client_secret",
 			},
 		}},
 		{Name: "AUTH0_TOKEN_URL", ValueFrom: &corev1.EnvVarSource{
 			SecretKeyRef: &corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: "tigera-calico-cloud-client-credentials"},
+				LocalObjectReference: corev1.LocalObjectReference{Name: CalicoCloudAuthSecretName},
 				Key:                  "token_url",
 			},
 		}},
 		{Name: "AUTH0_CLOUD_BASE_URL", ValueFrom: &corev1.EnvVarSource{
 			SecretKeyRef: &corev1.SecretKeySelector{
-				LocalObjectReference: corev1.LocalObjectReference{Name: "tigera-calico-cloud-client-credentials"},
+				LocalObjectReference: corev1.LocalObjectReference{Name: CalicoCloudAuthSecretName},
 				Key:                  "cloud_base_url",
 			},
 		}},

@@ -1,5 +1,6 @@
 api/v1/zz_generated.deepcopy.go
 api/v1beta1/zz_generated.deepcopy.go
+api/v1/imageassurance_types.go
 pkg/apis/crd.projectcalico.org/v1/zz_generated.deepcopy.go
 pkg/render/applicationlayer/modsecurityrules.go
 pkg/controller/intrusiondetection/intrusiondetection_controller_cloud_test.go

@@ -47,8 +47,9 @@ type AnomalyDetectionSpec struct {
 	// Anomaly Detection API pod for model storage. The StorageClassName should only be modified when no StorageClass is currently
 	// active. We recommend choosing a storage class dedicated to AnomalyDetection only. Otherwise, model retention
 	// cannot be guaranteed during upgrades. See https://docs.tigera.io/maintenance/upgrading for up-to-date instructions.
-	// This field is not used for managed clusters in a Multi-cluster management setup.
-	// Default: tigera-anomaly-detection
+	// This field is not used for managed clusters in a Multi-cluster management setup. This field can only be set if the
+	// StorageType is Persistent otherwise it is empty. If storageType is Persistent this field will be defaulted to
+	// tigera-anomaly-detection
 	// +optional
 	StorageClassName string `json:"storageClassName,omitempty"`
 }

@@ -105,10 +105,9 @@ var _ = Describe("Runtime Security Controller Tests", func() {
 
 	})
 
-	It("should render accurate resources for for image assurance", func() {
+	It("should render accurate resources for runtime security", func() {
 
-		By("applying the RuntTime CR to the fake cluster")
-		//apply image assurance cr
+		By("applying the Runtime Security CR to the fake cluster")
 		Expect(c.Create(ctx, &operatorv1.RuntimeSecurity{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 			Spec:       operatorv1.RuntimeSecuritySpec{},
@@ -117,17 +116,17 @@ var _ = Describe("Runtime Security Controller Tests", func() {
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).ShouldNot(HaveOccurred())
 
-		By("ensuring the RuntTime CronJob resource created ")
-		cronjob := batchv1.CronJob{
-			TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
+		By("ensuring the Sasha Deployment resource created ")
+		deploy := appsv1.Deployment{
+			TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      rsrender.ResourceNameSashaJob,
+				Name:      rsrender.SashaName,
 				Namespace: rsrender.NameSpaceRuntimeSecurity,
 			},
 		}
-		Expect(test.GetResource(c, &cronjob)).To(BeNil())
+		Expect(test.GetResource(c, &deploy)).To(BeNil())
 
-		spec := cronjob.Spec.JobTemplate.Spec.Template.Spec
+		spec := deploy.Spec.Template.Spec
 		Expect(spec.Containers).To(HaveLen(1))
 		Expect(spec.Containers[0].Image).To(Equal(fmt.Sprintf("some.registry.org/%s:%s",
 			components.ComponentSasha.Image, components.ComponentSasha.Version)))

@@ -39,15 +39,10 @@ type expectedResource struct {
 
 var _ = Describe("Image Assurance Render", func() {
 	var (
-		installation              *operatorv1.InstallationSpec
-		pgAdminUserSecret         corev1.Secret
-		pgUserSecret              corev1.Secret
-		pgServerCertSecret        corev1.Secret
-		tlsSecrets                corev1.Secret
-		pgConfig                  corev1.ConfigMap
-		config                    corev1.ConfigMap
-		tenantEncryptionKeySecret corev1.Secret
-		bundle                    certificatemanagement.TrustedBundle
+		installation *operatorv1.InstallationSpec
+		tlsSecrets   corev1.Secret
+		config       corev1.ConfigMap
+		bundle       certificatemanagement.TrustedBundle
 	)
 
 	BeforeEach(func() {
@@ -57,45 +52,6 @@ var _ = Describe("Image Assurance Render", func() {
 			Registry:           components.UseDefault,
 			ImagePath:          components.UseDefault,
 			ImagePrefix:        components.UseDefault,
-		}
-
-		pgUserSecret = corev1.Secret{
-			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      imageassurance.PGUserSecretName,
-				Namespace: imageassurance.NameSpaceImageAssurance,
-			},
-			Data: map[string][]byte{
-				"username": []byte("username"),
-				"password": []byte("my-secret-pass"),
-			},
-		}
-
-		pgAdminUserSecret = corev1.Secret{
-			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      imageassurance.PGAdminUserSecretName,
-				Namespace: common.OperatorNamespace(),
-			},
-			Data: map[string][]byte{
-				"username": []byte("username"),
-				"password": []byte("my-secret-pass"),
-			},
-		}
-
-		pgConfig = corev1.ConfigMap{
-			TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      imageassurance.PGConfigMapName,
-				Namespace: common.OperatorNamespace(),
-			},
-			Data: map[string]string{
-				"host":      "some.domain.io",
-				"name":      "my-database",
-				"port":      "1234",
-				"dbOrgID":   "tenant123",
-				"dbOrgName": "tenantName",
-			},
 		}
 
 		config = corev1.ConfigMap{
@@ -109,26 +65,13 @@ var _ = Describe("Image Assurance Render", func() {
 			},
 		}
 
-		pgServerCertSecret = corev1.Secret{
-			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      imageassurance.PGCertSecretName,
-				Namespace: common.OperatorNamespace(),
-			},
-			Data: map[string][]byte{
-				"server-ca":   []byte("server-ca"),
-				"client-cert": []byte("client-cert"),
-				"client-key":  []byte("client-key"),
-			},
-		}
-
 		// relies on secrets in operator namespace
 		tlsSecrets = corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      imageassurance.APICertSecretName,
 				Namespace: common.OperatorNamespace(),
 			},
-			Data: map[string][]byte{"tls.key": []byte("tlskey"), "tls.cert": []byte("tlscert")},
+			Data: map[string][]byte{"tls.key": []byte("tls-key"), "tls.cert": []byte("tls-cert")},
 		}
 
 		scheme := runtime.NewScheme()
@@ -137,15 +80,6 @@ var _ = Describe("Image Assurance Render", func() {
 		certificateManager, err := certificatemanager.Create(cli, nil, dns.DefaultClusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		bundle = certificateManager.CreateTrustedBundle()
-
-		tenantEncryptionKeySecret = corev1.Secret{
-			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      imageassurance.TenantEncryptionKeySecretName,
-				Namespace: common.OperatorNamespace(),
-			},
-			Data: map[string][]byte{"encryption_key": []byte("encryption_key")},
-		}
 	})
 
 	var expectedDeletedResources = []expectedResource{
@@ -165,15 +99,10 @@ var _ = Describe("Image Assurance Render", func() {
 		{name: imageassurance.NameSpaceImageAssurance, ns: "", group: "", version: "v1", kind: "Namespace"},
 
 		// secrets
-		{name: imageassurance.PGCertSecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
-		{name: imageassurance.PGUserSecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
-		{name: imageassurance.PGAdminUserSecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
-		{name: imageassurance.PGConfigMapName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ConfigMap"},
 		{name: rcimageassurance.ConfigurationConfigMapName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ConfigMap"},
 
 		// image assurance adp resources
 		{name: imageassurance.APICertSecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
-		{name: imageassurance.TenantEncryptionKeySecretName, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "Secret"},
 
 		{name: imageassurance.ResourceNameImageAssuranceAPI, ns: imageassurance.NameSpaceImageAssurance, group: "", version: "v1", kind: "ServiceAccount"},
 		{name: imageassurance.ResourceNameImageAssuranceAPI, ns: imageassurance.NameSpaceImageAssurance, group: rbacv1.GroupName, version: "v1", kind: "ClusterRole"},
@@ -292,18 +221,13 @@ var _ = Describe("Image Assurance Render", func() {
 	It("should render all resources with default image assurance configuration", func() {
 		// Should render the correct resources.
 		component := imageassurance.ImageAssurance(&imageassurance.Config{
-			PullSecrets:               nil,
-			Installation:              installation,
-			OsType:                    rmeta.OSTypeLinux,
-			PGCertSecret:              &pgServerCertSecret,
-			PGAdminUserSecret:         &pgAdminUserSecret,
-			PGUserSecret:              &pgUserSecret,
-			PGConfig:                  &pgConfig,
-			ConfigurationConfigMap:    &config,
-			TLSSecret:                 &tlsSecrets,
-			TrustedCertBundle:         bundle,
-			TenantEncryptionKeySecret: &tenantEncryptionKeySecret,
-			APIProxyURL:               "https://ia-api.dev.calicocloud.io",
+			PullSecrets:            nil,
+			Installation:           installation,
+			OsType:                 rmeta.OSTypeLinux,
+			ConfigurationConfigMap: &config,
+			TLSSecret:              &tlsSecrets,
+			TrustedCertBundle:      bundle,
+			APIProxyURL:            "https://ia-api.dev.calicocloud.io",
 		})
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		createdResources, deletedResources := component.Objects()
@@ -370,11 +294,10 @@ var _ = Describe("Image Assurance Render", func() {
 
 		scannerVMs := scanner.Containers[0].VolumeMounts
 		scannerExpectedVMs := []corev1.VolumeMount{
-			{Name: imageassurance.PGCertSecretName, MountPath: "/certs/db/"},
-			{Name: imageassurance.TenantEncryptionKeySecretName, MountPath: "/tenant-key/"},
+			{Name: "tigera-image-assurance-api-cert", MountPath: "/certs/bast"},
 		}
 
-		Expect(len(scannerVMs)).To(Equal(len(scannerVMs)))
+		Expect(len(scannerVMs)).To(Equal(len(scannerExpectedVMs)))
 		for _, expected := range scannerExpectedVMs {
 			rtest.ExpectVolumeMount(scannerVMs, expected.Name, expected.MountPath)
 		}
@@ -432,19 +355,14 @@ var _ = Describe("Image Assurance Render", func() {
 		var dexCfg = render.NewDexKeyValidatorConfig(authentication, nil, dns.DefaultClusterDomain)
 
 		component := imageassurance.ImageAssurance(&imageassurance.Config{
-			PullSecrets:               nil,
-			Installation:              installation,
-			OsType:                    rmeta.OSTypeLinux,
-			PGCertSecret:              &pgServerCertSecret,
-			PGAdminUserSecret:         &pgAdminUserSecret,
-			PGUserSecret:              &pgUserSecret,
-			PGConfig:                  &pgConfig,
-			ConfigurationConfigMap:    &config,
-			TLSSecret:                 &tlsSecrets,
-			TrustedCertBundle:         bundle,
-			KeyValidatorConfig:        dexCfg,
-			TenantEncryptionKeySecret: &tenantEncryptionKeySecret,
-			APIProxyURL:               "https://ia-api.dev.calicocloud.io",
+			PullSecrets:            nil,
+			Installation:           installation,
+			OsType:                 rmeta.OSTypeLinux,
+			ConfigurationConfigMap: &config,
+			TLSSecret:              &tlsSecrets,
+			TrustedCertBundle:      bundle,
+			KeyValidatorConfig:     dexCfg,
+			APIProxyURL:            "https://ia-api.dev.calicocloud.io",
 		})
 
 		createdResources, _ := component.Objects()

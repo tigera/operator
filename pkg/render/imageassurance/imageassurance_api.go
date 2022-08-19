@@ -3,25 +3,11 @@
 package imageassurance
 
 import (
-	rcimageassurance "github.com/tigera/operator/pkg/render/common/imageassurance"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-)
-
-const (
-	apiRequestCPU    = "0.25"
-	apiRequestMemory = "150Mi"
-	apiLimitCPU      = "0.75"
-	apiLimitMemory   = "300Mi"
-
-	ApiDBMaxOpenConn = "3"
-	ApiDBMaxIdleConn = "0"
 )
 
 func (c *component) apiServiceAccount() *corev1.ServiceAccount {
@@ -139,142 +125,11 @@ func (c *component) apiService(appName string) *corev1.Service {
 }
 
 func (c *component) apiDeployment() *appsv1.Deployment {
-	annots := map[string]string{
-		pgConfigHashAnnotation:        rmeta.AnnotationHash(c.config.PGConfig.Data),
-		pgUserHashAnnotation:          rmeta.AnnotationHash(c.config.PGUserSecret.Data),
-		pgCertsHashAnnotation:         rmeta.AnnotationHash(c.config.PGCertSecret.Data),
-		tenantKeySecretHashAnnotation: rmeta.AnnotationHash(c.config.TenantEncryptionKeySecret.Data),
-		apiCertHashAnnotation:         c.config.tlsHash,
-	}
-
-	env := []corev1.EnvVar{
-		rcimageassurance.EnvOrganizationID(),
-		{Name: "IMAGE_ASSURANCE_PORT", Value: "5557"},
-		{Name: "IMAGE_ASSURANCE_LOG_LEVEL", Value: "INFO"},
-		{Name: "IMAGE_ASSURANCE_DB_LOG_LEVEL", Value: "SILENT"},
-		{Name: "IMAGE_ASSURANCE_HTTPS_CERT", Value: "/certs/https/tls.crt"},
-		{Name: "IMAGE_ASSURANCE_HTTPS_KEY", Value: "/certs/https/tls.key"},
-		{Name: "IMAGE_ASSURANCE_TENANT_ENCRYPTION_KEY", Value: "/tenant-key/encryption_key"},
-	}
-
-	env = pgDecorateENVVars(env, PGUserSecretName, MountPathPostgresCerts, PGConfigMapName)
-
-	env = append(env,
-		corev1.EnvVar{Name: "IMAGE_ASSURANCE_DB_MAX_OPEN_CONNECTIONS", Value: ApiDBMaxOpenConn},
-		corev1.EnvVar{Name: "IMAGE_ASSURANCE_DB_MAX_IDLE_CONNECTIONS", Value: ApiDBMaxIdleConn},
-	)
-
-	terminationGracePeriod := int64(30)
-
-	volumeMounts := []corev1.VolumeMount{
-		{Name: APICertSecretName, MountPath: mountPathAPITLSCerts, ReadOnly: true},
-		{Name: PGCertSecretName, MountPath: MountPathPostgresCerts, ReadOnly: true},
-		{Name: TenantEncryptionKeySecretName, MountPath: MountTenantEncryptionKeySecret, ReadOnly: true},
-	}
-
-	if c.config.KeyValidatorConfig != nil {
-		env = append(env, c.config.KeyValidatorConfig.RequiredEnv("IMAGE_ASSURANCE_")...)
-		volumeMounts = append(volumeMounts, c.config.KeyValidatorConfig.RequiredVolumeMounts()...)
-	}
-
-	container := corev1.Container{
-		Name:            ResourceNameImageAssuranceAPI,
-		Image:           c.config.apiImage,
-		ImagePullPolicy: corev1.PullAlways,
-		Resources: corev1.ResourceRequirements{
-			Requests: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse(apiRequestCPU),
-				corev1.ResourceMemory: resource.MustParse(apiRequestMemory),
-			},
-			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse(apiLimitCPU),
-				corev1.ResourceMemory: resource.MustParse(apiLimitMemory),
-			},
-		},
-		Env:          env,
-		VolumeMounts: volumeMounts,
-	}
-
-	podSpec := corev1.PodSpec{
-		DNSPolicy:                     corev1.DNSClusterFirst,
-		ImagePullSecrets:              c.config.Installation.ImagePullSecrets,
-		NodeSelector:                  map[string]string{"kubernetes.io/os": "linux"},
-		RestartPolicy:                 corev1.RestartPolicyAlways,
-		ServiceAccountName:            ResourceNameImageAssuranceAPI,
-		TerminationGracePeriodSeconds: &terminationGracePeriod,
-		Containers:                    []corev1.Container{container},
-		Volumes:                       c.apiVolumes(),
-	}
-	replicas := int32(1)
-	d := appsv1.Deployment{
+	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ResourceNameImageAssuranceAPI,
 			Namespace: NameSpaceImageAssurance,
-			Labels: map[string]string{
-				"k8s-app": ResourceNameImageAssuranceAPI,
-			},
-		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: &replicas,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"k8s-app": ResourceNameImageAssuranceAPI,
-				},
-			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      ResourceNameImageAssuranceAPI,
-					Namespace: NameSpaceImageAssurance,
-					Labels: map[string]string{
-						"k8s-app": ResourceNameImageAssuranceAPI,
-					},
-					Annotations: annots,
-				},
-				Spec: podSpec,
-			},
 		},
 	}
-
-	return &d
-}
-
-func (c *component) apiVolumes() []corev1.Volume {
-	defaultMode := int32(420)
-
-	volumes := []corev1.Volume{
-		{
-			Name: APICertSecretName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName:  APICertSecretName,
-					DefaultMode: &defaultMode,
-				},
-			},
-		},
-		{
-			Name: PGCertSecretName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName:  PGCertSecretName,
-					DefaultMode: &defaultMode,
-				},
-			},
-		},
-		{
-			Name: TenantEncryptionKeySecretName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName:  TenantEncryptionKeySecretName,
-					DefaultMode: &defaultMode,
-				},
-			},
-		},
-	}
-
-	if c.config.KeyValidatorConfig != nil {
-		volumes = append(volumes, c.config.KeyValidatorConfig.RequiredVolumes()...)
-	}
-
-	return volumes
 }

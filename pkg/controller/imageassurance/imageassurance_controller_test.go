@@ -91,52 +91,13 @@ var _ = Describe("Image Assurance Controller", func() {
 				Variant: operatorv1.TigeraSecureEnterprise,
 				Computed: &operatorv1.InstallationSpec{
 					Registry: "my-reg",
-					// The test is provider agnostic.
+					// The test is provider-agnostic.
 					KubernetesProvider: operatorv1.ProviderNone,
 				},
 			},
 		})).NotTo(HaveOccurred())
 
-		// Create empty secrets, so that reconciles passes.
-		Expect(c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.PGUserSecretName, Namespace: imageassurance.NameSpaceImageAssurance},
-			Data: map[string][]byte{
-				"username": []byte("username"),
-				"password": []byte("my-secret-pass"),
-			},
-		})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.PGAdminUserSecretName, Namespace: common.OperatorNamespace()},
-			Data: map[string][]byte{
-				"username": []byte("username"),
-				"password": []byte("my-secret-pass"),
-			},
-		})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, internalManagerTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.PGCertSecretName, Namespace: common.OperatorNamespace()},
-			Data: map[string][]byte{
-				"server-ca":   []byte("server-ca"),
-				"client-cert": []byte("client-cert"),
-				"client-key":  []byte("client-key"),
-			},
-		})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.TenantEncryptionKeySecretName, Namespace: common.OperatorNamespace()},
-			Data: map[string][]byte{
-				"encryption_key": []byte("encryption_key"),
-			},
-		})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{Name: imageassurance.PGConfigMapName, Namespace: common.OperatorNamespace()},
-			Data: map[string]string{
-				"host":      "some.domain.io",
-				"name":      "my-database",
-				"port":      "1234",
-				"dbOrgID":   "tenant123",
-				"dbOrgName": "tenant name",
-			},
-		})).NotTo(HaveOccurred())
 
 		Expect(c.Create(ctx, &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{Name: rcimageassurance.ConfigurationConfigMapName, Namespace: common.OperatorNamespace()},

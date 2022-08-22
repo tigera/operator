@@ -288,12 +288,11 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		}))
 	})
 
-	It("should render a persistentVolume claim if indicated that the AnomalyDetection Storage spec type is Persistent and an existing PVC is not found", func() {
+	It("should render a persistentVolume claim if an AD StorageClassName is provided and an existing PVC does not exist", func() {
 		testADStorageClassName := "test-storage-class-name"
 		cfg.IntrusionDetection = operatorv1.IntrusionDetection{
 			Spec: operatorv1.IntrusionDetectionSpec{
 				AnomalyDetection: operatorv1.AnomalyDetectionSpec{
-					StorageType:      operatorv1.PersistentStorageType,
 					StorageClassName: testADStorageClassName,
 				},
 			},
@@ -322,12 +321,11 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		))
 	})
 
-	It("should not render a persistentVolume claim if indicated that the AnomalyDetection Storage spec type is Persistent but an existing PVC is found", func() {
+	It("should not render a persistentVolume claim if indicated that the AD StorageClassName is provided but an existing PVC already exists", func() {
 		testADStorageClassName := "test-storage-class-name"
 		cfg.IntrusionDetection = operatorv1.IntrusionDetection{
 			Spec: operatorv1.IntrusionDetectionSpec{
 				AnomalyDetection: operatorv1.AnomalyDetectionSpec{
-					StorageType:      operatorv1.PersistentStorageType,
 					StorageClassName: testADStorageClassName,
 				},
 			},

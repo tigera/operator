@@ -215,7 +215,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 			c.adAPIAccessRoleBinding(),
 		)
 
-		shouldConfigureADStorage := c.cfg.IntrusionDetection.Spec.AnomalyDetection.StorageType == operatorv1.PersistentStorageType
+		shouldConfigureADStorage := len(c.cfg.IntrusionDetection.Spec.AnomalyDetection.StorageClassName) > 0
 
 		if !shouldConfigureADStorage {
 			objsToDelete = append(objsToDelete,

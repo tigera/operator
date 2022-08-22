@@ -57,6 +57,8 @@ import (
 )
 
 var _ = Describe("IntrusionDetection controller tests", func() {
+	const expectedADStorageClassName = "tigera-anomaly-detection"
+
 	var c client.Client
 	var ctx context.Context
 	var r ReconcileIntrusionDetection
@@ -447,7 +449,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			Expect(len(result.Spec.AnomalyDetection.StorageClassName)).To(Equal(0))
-			Expect(len(result.Spec.AnomalyDetection.StorageType)).To(Equal(0))
 		})
 
 		It("should not set AD Spec defaults if not originally not defined", func() {
@@ -461,54 +462,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			Expect(len(result.Spec.AnomalyDetection.StorageClassName)).To(Equal(0))
-			Expect(len(result.Spec.AnomalyDetection.StorageType)).To(Equal(0))
-		})
-
-		It("should degrade if AD storage class name is provided without persistent storage type", func() {
-			Expect(c.Create(ctx, &storagev1.StorageClass{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: render.DefaultADStorageClassName,
-				},
-			})).ShouldNot(HaveOccurred())
-
-			Expect(c.Delete(ctx, &operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).ShouldNot(HaveOccurred())
-
-			Expect(c.Create(ctx, &operatorv1.IntrusionDetection{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-				Spec: operatorv1.IntrusionDetectionSpec{
-					AnomalyDetection: operatorv1.AnomalyDetectionSpec{
-						StorageClassName: render.DefaultADStorageClassName,
-					},
-				},
-			})).ShouldNot(HaveOccurred())
-
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).Should(HaveOccurred())
-			Expect(mockStatus.AssertNumberOfCalls(nil, "SetDegraded", 1)).To(BeTrue())
-		})
-
-		It("should set default AD StorageName if set to persistent storage", func() {
-			Expect(c.Delete(ctx, &operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
-
-			Expect(c.Create(ctx, &operatorv1.IntrusionDetection{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-				Spec: operatorv1.IntrusionDetectionSpec{
-					AnomalyDetection: operatorv1.AnomalyDetectionSpec{
-						StorageType: operatorv1.PersistentStorageType,
-					},
-				},
-			})).ShouldNot(HaveOccurred())
-
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).Should(HaveOccurred())
-
-			result := &operatorv1.IntrusionDetection{}
-			defaultTSEEInstanceKey := client.ObjectKey{Name: "tigera-secure"}
-			err = c.Get(ctx, defaultTSEEInstanceKey, result)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			Expect(result.Spec.AnomalyDetection.StorageClassName).To(Equal(render.DefaultADStorageClassName))
-			Expect(result.Spec.AnomalyDetection.StorageType).To(Equal(operatorv1.PersistentStorageType))
 		})
 
 		It("should degrade if AD Spec is set in managed cluster", func() {
@@ -525,7 +478,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Spec: operatorv1.IntrusionDetectionSpec{
 					AnomalyDetection: operatorv1.AnomalyDetectionSpec{
-						StorageType: operatorv1.PersistentStorageType,
+						StorageClassName: expectedADStorageClassName,
 					},
 				},
 			})).ShouldNot(HaveOccurred())
@@ -543,7 +496,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Spec: operatorv1.IntrusionDetectionSpec{
 					AnomalyDetection: operatorv1.AnomalyDetectionSpec{
-						StorageType:      operatorv1.PersistentStorageType,
 						StorageClassName: malFormedStorageName,
 					},
 				},
@@ -561,8 +513,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Spec: operatorv1.IntrusionDetectionSpec{
 					AnomalyDetection: operatorv1.AnomalyDetectionSpec{
-						StorageType:      operatorv1.EphemeralStorageType,
-						StorageClassName: render.DefaultADStorageClassName,
+						StorageClassName: expectedADStorageClassName,
 					},
 				},
 			})).ShouldNot(HaveOccurred())
@@ -572,15 +523,14 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(mockStatus.AssertNumberOfCalls(nil, "SetDegraded", 1)).To(BeTrue())
 		})
 
-		It("should degrade with a persistent storage configuration if storage class is not found", func() {
+		It("should degrade when the storage class is not found if storage class is specified", func() {
 			Expect(c.Delete(ctx, &operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).ShouldNot(HaveOccurred())
 
 			Expect(c.Create(ctx, &operatorv1.IntrusionDetection{
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Spec: operatorv1.IntrusionDetectionSpec{
 					AnomalyDetection: operatorv1.AnomalyDetectionSpec{
-						// error from setting persistent storage but no storage class is found
-						StorageType: operatorv1.PersistentStorageType,
+						StorageClassName: expectedADStorageClassName,
 					},
 				},
 			})).ShouldNot(HaveOccurred())
@@ -593,7 +543,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		It("should continue with a persistent storage configuration if storage class is found", func() {
 			Expect(c.Create(ctx, &storagev1.StorageClass{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: render.DefaultADStorageClassName,
+					Name: expectedADStorageClassName,
 				},
 			})).ShouldNot(HaveOccurred())
 
@@ -603,8 +553,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Spec: operatorv1.IntrusionDetectionSpec{
 					AnomalyDetection: operatorv1.AnomalyDetectionSpec{
-						StorageType:      operatorv1.PersistentStorageType,
-						StorageClassName: render.DefaultADStorageClassName,
+						StorageClassName: expectedADStorageClassName,
 					},
 				},
 			})).ShouldNot(HaveOccurred())
@@ -619,7 +568,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 
 			Expect(c.Create(ctx, &storagev1.StorageClass{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: render.DefaultADStorageClassName,
+					Name: expectedADStorageClassName,
 				},
 			})).ShouldNot(HaveOccurred())
 
@@ -640,8 +589,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Spec: operatorv1.IntrusionDetectionSpec{
 					AnomalyDetection: operatorv1.AnomalyDetectionSpec{
-						StorageType:      operatorv1.PersistentStorageType,
-						StorageClassName: render.DefaultADStorageClassName,
+						StorageClassName: expectedADStorageClassName,
 					},
 				},
 			})).ShouldNot(HaveOccurred())

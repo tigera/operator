@@ -336,7 +336,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 
 	// Query for StorageClass for AD API if provided
 	shouldRenderADPVC := false
-	if !isManagedCluster && instance.Spec.AnomalyDetection.StorageType == operatorv1.PersistentStorageType {
+	if !isManagedCluster && len(instance.Spec.AnomalyDetection.StorageClassName) > 0 {
 		// validate to degrade early if the storage class name is not valid
 		if err = utils.ValidateResourceNameIsQualified(instance.Spec.AnomalyDetection.StorageClassName); err != nil {
 			errMessage := "invalid Anomaly Detection Storage Class name provided"
@@ -617,13 +617,6 @@ func (r *ReconcileIntrusionDetection) fillDefaults(ctx context.Context, ids *ope
 		}
 	}
 
-	if !isManagedCluster { // does not set defaults for managed clustes the AD Fields specs will simply be ignored
-		if ids.Spec.AnomalyDetection.StorageType == operatorv1.PersistentStorageType &&
-			len(ids.Spec.AnomalyDetection.StorageClassName) == 0 {
-			ids.Spec.AnomalyDetection.StorageClassName = render.DefaultADStorageClassName
-		}
-	}
-
 	if err := r.client.Update(ctx, ids); err != nil {
 		return err
 	}
@@ -642,13 +635,8 @@ func (r *ReconcileIntrusionDetection) SetDegraded(reason operatorv1.TigeraStatus
 }
 
 func validateConfiguredAnomalyDetectionSpec(adSpec operatorv1.AnomalyDetectionSpec, isManagedController bool) error {
-	if isManagedController && (len(adSpec.StorageType) > 0 || len(adSpec.StorageClassName) > 0) {
+	if isManagedController && len(adSpec.StorageClassName) > 0 {
 		return fmt.Errorf("unable to set Anomaly Detection Specification in a managed ckuster")
-	}
-
-	if (len(adSpec.StorageType) == 0 || adSpec.StorageType == operatorv1.EphemeralStorageType) &&
-		len(adSpec.StorageClassName) > 0 {
-		return fmt.Errorf("unable to set StorageClassName with StorageType as Ephemeral")
 	}
 
 	return nil

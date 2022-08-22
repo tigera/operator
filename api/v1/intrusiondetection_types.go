@@ -36,35 +36,17 @@ type IntrusionDetectionSpec struct {
 }
 
 type AnomalyDetectionSpec struct {
-	// StorageType sets the type of storage to use for storing Anomaly Detection Models. By default it will use the ephemeral
-	// emptyDir on the node Anomaly Detection will be deployed to. This field is not used for managed clusters in a Multi-cluster
-	// management setup.
-	// +optional
-	// +kubebuilder:validation:Enum=Ephemeral;Persistent
-	StorageType StorageType `json:"storageType,omitempty"`
 
-	// StorageClassName will populate the PersistentVolumeClaim.StorageClassName that is used to provision disks for the
-	// Anomaly Detection API pod for model storage. The StorageClassName should only be modified when no StorageClass is currently
-	// active. We recommend choosing a storage class dedicated to AnomalyDetection only. Otherwise, model retention
-	// cannot be guaranteed during upgrades. See https://docs.tigera.io/maintenance/upgrading for up-to-date instructions.
-	// This field is not used for managed clusters in a Multi-cluster management setup. This field can only be set if the
-	// StorageType is Persistent otherwise it is empty. If storageType is Persistent this field will be defaulted to
-	// tigera-anomaly-detection
+	// StorageClassName will be used to query for an existing StorageClass with the same as the field value. It will also
+	// populate the PersistentVolumeClaim.StorageClassName that is used to provision disks for the Anomaly Detection API
+	// pod for model storage. If the field is left blank, Anomaly Detection API will be using EmptyDir VolumeSource.
+	// The StorageClassName should only be modified when no StorageClass is currently active. We recommend choosing a
+	// storage class dedicated to AnomalyDetection only. Otherwise, model retention cannot be guaranteed during upgrades.
+	// See https://docs.tigera.io/maintenance/upgrading for up-to-date instructions.
+	// This field is not used for managed clusters in a Multi-cluster management setup.
 	// +optional
 	StorageClassName string `json:"storageClassName,omitempty"`
 }
-
-// StorageType sets the type of storage to be used for the specified component.
-// One of: Ephemeral, Persistent
-type StorageType string
-
-const (
-	// ephemeral storage type sets the ephemeral emptyDir() to be used by the component. Data created in this storage type will
-	// follow the Pod's lifetime and get created and deleted along with the Pod.
-	EphemeralStorageType StorageType = "Ephemeral"
-	// PersistentStorageType mounts a PersistentVolume of the provided StorageClassName to Anomaly Detection pods in order to store data.
-	PersistentStorageType StorageType = "Persistent"
-)
 
 // IntrusionDetectionStatus defines the observed state of Tigera intrusion detection capabilities.
 type IntrusionDetectionStatus struct {

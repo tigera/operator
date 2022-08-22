@@ -369,7 +369,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		}
 
 		// delete the found PVC if it does not have the storageclass name specified in AD Spec
-		if !shouldRenderADPVC && pvc.Spec.StorageClassName != &instance.Spec.AnomalyDetection.StorageClassName {
+		if !shouldRenderADPVC && *(pvc.Spec.StorageClassName) != instance.Spec.AnomalyDetection.StorageClassName {
 			err := r.client.Delete(ctx, pvc)
 			if err != nil {
 				errMessage := "failed to remove misconfigured PersistentVolumeClaim for Anomaly Detection"

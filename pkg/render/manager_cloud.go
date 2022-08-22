@@ -99,6 +99,7 @@ func (c *managerComponent) setManagerCloudEnvs(envs []corev1.EnvVar) []corev1.En
 				},
 			},
 			corev1.EnvVar{Name: "IMAGE_ASSURANCE_SCANNER_CLI_TOKEN_SECRET_NAME", Value: rcimageassurance.ScannerCLITokenSecretName},
+			corev1.EnvVar{Name: "IMAGE_ASSURANCE_SCANNER_CLI_DOWNLOAD_URL", Value: rcimageassurance.ScannerCLIDownloadURL},
 		)
 	}
 	// move extra env vars into Manager, but sort them alphabetically first,

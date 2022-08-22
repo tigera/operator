@@ -61,7 +61,6 @@ const (
 	IntrusionDetectionControllerPolicyName = networkpolicy.TigeraComponentPolicyPrefix + IntrusionDetectionControllerName
 	IntrusionDetectionInstallerPolicyName  = networkpolicy.TigeraComponentPolicyPrefix + "intrusion-detection-elastic"
 
-	DefaultADStorageClassName              = "tigera-anomaly-detection"
 	ADPersistentVolumeClaimName            = "tigera-anomaly-detection"
 	DefaultAnomalyDetectionPVRequestSizeGi = "10Gi"
 	adAPIStorageVolumeName                 = "volume-storage"

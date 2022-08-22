@@ -263,7 +263,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 
 	isManagedCluster := managementClusterConnection != nil
 
-	if err := r.fillDefaults(ctx, instance, isManagedCluster); err != nil {
+	if err := r.fillDefaults(ctx, instance); err != nil {
 		log.Error(err, "Failed to set defaults on IntrusionDetection CR")
 		r.status.SetDegraded("Unable to set defaults on IntrusionDetection", err.Error())
 		return reconcile.Result{}, err
@@ -598,7 +598,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 
 // fillDefaults updates the IntrusionDetection resource with defaults if
 // ComponentResources and AnomalyDetectionSpec are not populated.
-func (r *ReconcileIntrusionDetection) fillDefaults(ctx context.Context, ids *operatorv1.IntrusionDetection, isManagedCluster bool) error {
+func (r *ReconcileIntrusionDetection) fillDefaults(ctx context.Context, ids *operatorv1.IntrusionDetection) error {
 	if ids.Spec.ComponentResources == nil {
 		ids.Spec.ComponentResources = []operatorv1.IntrusionDetectionComponentResource{
 			{

@@ -211,7 +211,6 @@ func (c *component) scannerCLIClusterRole() *rbacv1.ClusterRole {
 func (c *component) scannerDeployment() *appsv1.Deployment {
 
 	annots := map[string]string{
-		tenantKeySecretHashAnnotation:                     rmeta.AnnotationHash(c.config.TenantEncryptionKeySecret.Data),
 		rcimageassurance.ImageAssuranceCertHashAnnotation: rmeta.AnnotationHash(c.config.tlsHash),
 	}
 
@@ -248,8 +247,6 @@ func (c *component) scannerDeployment() *appsv1.Deployment {
 		},
 		Env: env,
 		VolumeMounts: []corev1.VolumeMount{
-			{Name: PGCertSecretName, MountPath: MountPathPostgresCerts, ReadOnly: true},
-			{Name: TenantEncryptionKeySecretName, MountPath: MountTenantEncryptionKeySecret, ReadOnly: true},
 			{Name: rcimageassurance.ImageAssuranceSecretName, MountPath: rcimageassurance.CAMountPath, ReadOnly: true},
 		},
 	}
@@ -300,27 +297,7 @@ func (c *component) scannerDeployment() *appsv1.Deployment {
 }
 
 func (c *component) scannerVolumes() []corev1.Volume {
-	defaultMode := int32(420)
-
 	return []corev1.Volume{
-		{
-			Name: PGCertSecretName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName:  PGCertSecretName,
-					DefaultMode: &defaultMode,
-				},
-			},
-		},
-		{
-			Name: TenantEncryptionKeySecretName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName:  TenantEncryptionKeySecretName,
-					DefaultMode: &defaultMode,
-				},
-			},
-		},
 		{
 			Name: rcimageassurance.ImageAssuranceSecretName,
 			VolumeSource: corev1.VolumeSource{

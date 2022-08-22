@@ -20,13 +20,18 @@ import (
 	"fmt"
 	"time"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	. "github.com/onsi/ginkgo"
+	"github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/gomega"
+
+	"github.com/go-logr/logr"
+	"github.com/stretchr/testify/mock"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	schedv1 "k8s.io/api/scheduling/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -37,13 +42,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/go-logr/logr"
-	. "github.com/onsi/ginkgo"
-	"github.com/onsi/ginkgo/extensions/table"
-	. "github.com/onsi/gomega"
-	"github.com/stretchr/testify/mock"
-
 	osconfigv1 "github.com/openshift/api/config/v1"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
@@ -61,7 +61,6 @@ import (
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/test"
-	storagev1 "k8s.io/api/storage/v1"
 )
 
 var mismatchedError = fmt.Errorf("Installation spec.kubernetesProvider 'DockerEnterprise' does not match auto-detected value 'OpenShift'")
@@ -405,7 +404,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			r.calicoWindowsUpgrader.Start(ctx)
 			certificateManager, err := certificatemanager.Create(c, nil, "")
 			Expect(err).NotTo(HaveOccurred())
-			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{render.PrometheusTLSSecretName})
+			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
@@ -642,7 +641,7 @@ var _ = Describe("Testing core-controller installation", func() {
 	})
 
 	table.DescribeTable("test Node Affinity defaults",
-		func(expected bool, provider operator.Provider, result []v1.NodeSelectorTerm) {
+		func(expected bool, provider operator.Provider, result []corev1.NodeSelectorTerm) {
 			installation := &operator.Installation{
 				Spec: operator.InstallationSpec{
 					KubernetesProvider: provider,
@@ -659,8 +658,8 @@ var _ = Describe("Testing core-controller installation", func() {
 		table.Entry("AKS provider sets default",
 			true,
 			operator.ProviderAKS,
-			[]v1.NodeSelectorTerm{{
-				MatchExpressions: []v1.NodeSelectorRequirement{
+			[]corev1.NodeSelectorTerm{{
+				MatchExpressions: []corev1.NodeSelectorRequirement{
 					{
 						Key:      "type",
 						Operator: corev1.NodeSelectorOpNotIn,
@@ -668,7 +667,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					},
 					{
 						Key:      "kubernetes.azure.com/cluster",
-						Operator: v1.NodeSelectorOpExists,
+						Operator: corev1.NodeSelectorOpExists,
 					},
 				},
 			}},
@@ -676,7 +675,7 @@ var _ = Describe("Testing core-controller installation", func() {
 		table.Entry("Expect no default value for DockerEE provider",
 			false,
 			operator.ProviderDockerEE,
-			[]v1.NodeSelectorTerm{},
+			[]corev1.NodeSelectorTerm{},
 		),
 	)
 
@@ -814,7 +813,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			certificateManager, err = certificatemanager.Create(c, nil, "")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
-			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{render.PrometheusTLSSecretName})
+			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
@@ -1030,7 +1029,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			}
 			certificateManager, err := certificatemanager.Create(c, nil, "")
 			Expect(err).NotTo(HaveOccurred())
-			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{render.PrometheusTLSSecretName})
+			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())

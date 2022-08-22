@@ -19,21 +19,7 @@ import (
 	"fmt"
 	"strings"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
-	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/pkg/render/common/authentication"
-	"github.com/tigera/operator/pkg/render/common/configmap"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/secret"
-	"github.com/tigera/operator/pkg/render/common/securitycontext"
-	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -42,7 +28,20 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/ptr"
+	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/authentication"
+	"github.com/tigera/operator/pkg/render/common/configmap"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
@@ -58,25 +57,25 @@ const (
 	TigeraPrometheusRole        = "tigera-prometheus-role"
 	TigeraPrometheusRoleBinding = "tigera-prometheus-role-binding"
 
-	PrometheusPolicyName         = networkpolicy.TigeraComponentPolicyPrefix + "prometheus"
-	PrometheusAPIPolicyName      = networkpolicy.TigeraComponentPolicyPrefix + "tigera-prometheus-api"
-	PrometheusOperatorPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "prometheus-operator"
-	AlertManagerPolicyName       = networkpolicy.TigeraComponentPolicyPrefix + CalicoNodeAlertmanager
-	MeshAlertManagerPolicyName   = AlertManagerPolicyName + "-mesh"
+	PrometheusAPIPolicyName       = networkpolicy.TigeraComponentPolicyPrefix + "tigera-prometheus-api"
+	PrometheusClientTLSSecretName = "calico-node-prometheus-client-tls"
+	PrometheusDefaultPort         = 9090
+	PrometheusHTTPAPIServiceName  = "prometheus-http-api"
+	PrometheusOperatorPolicyName  = networkpolicy.TigeraComponentPolicyPrefix + "prometheus-operator"
+	PrometheusPolicyName          = networkpolicy.TigeraComponentPolicyPrefix + "prometheus"
+	PrometheusProxyPort           = 9095
+	PrometheusServiceAccountName  = "prometheus"
+	PrometheusTLSSecretName       = "calico-node-prometheus-tls"
 
-	PrometheusHTTPAPIServiceName    = "prometheus-http-api"
-	PrometheusDefaultPort           = 9090
-	PrometheusProxyPort             = 9095
-	PrometheusTLSSecretName         = "calico-node-prometheus-tls"
-	PrometheusClientTLSSecretName   = "calico-node-prometheus-client-tls"
-	calicoNodePrometheusServiceName = "calico-node-prometheus"
+	AlertManagerPolicyName     = networkpolicy.TigeraComponentPolicyPrefix + CalicoNodeAlertmanager
+	AlertmanagerConfigSecret   = "alertmanager-calico-node-alertmanager"
+	AlertmanagerPort           = 9093
+	MeshAlertManagerPolicyName = AlertManagerPolicyName + "-mesh"
 
+	calicoNodePrometheusServiceName       = "calico-node-prometheus"
 	tigeraPrometheusServiceHealthEndpoint = "/health"
 
-	AlertmanagerConfigSecret = "alertmanager-calico-node-alertmanager"
-	AlertmanagerPort         = 9093
-
-	PrometheusServiceAccountName = "prometheus"
+	bearerTokenFile = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 )
 
 var alertManagerSelector = fmt.Sprintf(
@@ -192,6 +191,7 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		mc.serviceMonitorCalicoNode(),
 		mc.serviceMonitorElasticsearch(),
 		mc.serviceMonitorFluentd(),
+		mc.serviceMonitorQueryServer(),
 		mc.prometheusHTTPAPIService(),
 		mc.clusterRole(),
 		mc.clusterRoleBinding(),
@@ -477,6 +477,12 @@ func (mc *monitorComponent) prometheusClusterRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"get"},
 			},
 			{
+				APIGroups:     []string{""},
+				Resources:     []string{"services/proxy"},
+				ResourceNames: []string{"https:tigera-api:8080"},
+				Verbs:         []string{"get"},
+			},
+			{
 				NonResourceURLs: []string{"/metrics"},
 				Verbs:           []string{"get"},
 			},
@@ -656,6 +662,37 @@ func (mc *monitorComponent) serviceMonitorFluentd() *monitoringv1.ServiceMonitor
 					ScrapeTimeout: "5s",
 					Scheme:        "https",
 					TLSConfig:     mc.tlsConfig(render.FluentdPrometheusTLSSecretName),
+				},
+			},
+		},
+	}
+}
+
+func (mc *monitorComponent) serviceMonitorQueryServer() *monitoringv1.ServiceMonitor {
+	return &monitoringv1.ServiceMonitor{
+		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: MonitoringAPIVersion},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      render.QueryserverServiceName,
+			Namespace: common.TigeraPrometheusNamespace,
+			Labels:    map[string]string{"team": "network-operators"},
+		},
+		Spec: monitoringv1.ServiceMonitorSpec{
+			Selector:          metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": render.QueryserverServiceName}},
+			NamespaceSelector: monitoringv1.NamespaceSelector{MatchNames: []string{render.QueryserverNamespace}},
+			Endpoints: []monitoringv1.Endpoint{
+				{
+					HonorLabels:     true,
+					Interval:        "5s",
+					Port:            "queryserver",
+					ScrapeTimeout:   "5s",
+					Scheme:          "https",
+					BearerTokenFile: bearerTokenFile,
+					TLSConfig: &monitoringv1.TLSConfig{
+						CAFile: mc.cfg.TrustedCertBundle.MountPath(),
+						SafeTLSConfig: monitoringv1.SafeTLSConfig{
+							ServerName: render.ProjectCalicoApiServerServiceName(mc.cfg.Installation.Variant),
+						},
+					},
 				},
 			},
 		},
@@ -845,6 +882,14 @@ func allowTigeraPrometheusPolicy(cfg *Config) *v3.NetworkPolicy {
 			Destination: v3.EntityRule{
 				// Egress access for BGP metrics
 				Ports: networkpolicy.Ports(9900),
+			},
+		},
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				// Egress access form QueryServer metrics
+				Ports: networkpolicy.Ports(8080),
 			},
 		},
 		{

@@ -277,20 +277,18 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	trustedSecretNames := []string{render.PacketCaptureCertSecret, render.PrometheusTLSSecretName}
-	var installCompliance = utils.IsFeatureActive(license, common.ComplianceFeature)
-	if installCompliance {
+
+	complianceLicenseFeatureActive := utils.IsFeatureActive(license, common.ComplianceFeature)
+	complianceCR, err := compliance.GetCompliance(ctx, r.client)
+	if err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded("Error querying compliance", err.Error())
+		return reconcile.Result{}, err
+	}
+
+	if complianceLicenseFeatureActive && complianceCR != nil {
 		// Check that compliance is running.
-		compliance, err := compliance.GetCompliance(ctx, r.client)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				r.status.SetDegraded("Compliance not found", err.Error())
-				return reconcile.Result{}, err
-			}
-			r.status.SetDegraded("Error querying compliance", err.Error())
-			return reconcile.Result{}, err
-		}
-		if compliance.Status.State != operatorv1.TigeraStatusReady {
-			r.status.SetDegraded("Compliance is not ready", fmt.Sprintf("compliance status: %s", compliance.Status.State))
+		if complianceCR.Status.State != operatorv1.TigeraStatusReady {
+			r.status.SetDegraded("Compliance is not ready", fmt.Sprintf("compliance status: %s", complianceCR.Status.State))
 			return reconcile.Result{}, nil
 		}
 		trustedSecretNames = append(trustedSecretNames, render.ComplianceServerCertSecret)
@@ -445,22 +443,23 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	managerCfg := &render.ManagerConfiguration{
-		KeyValidatorConfig:      keyValidatorConfig,
-		ESSecrets:               esSecrets,
-		KibanaSecrets:           []*corev1.Secret{kibanaPublicCertSecret},
-		TrustedCertBundle:       trustedBundle,
-		ESClusterConfig:         esClusterConfig,
-		TLSKeyPair:              tlsSecret,
-		PullSecrets:             pullSecrets,
-		Openshift:               r.provider == operatorv1.ProviderOpenShift,
-		Installation:            installation,
-		ManagementCluster:       managementCluster,
-		TunnelSecret:            tunnelSecret,
-		InternalTrafficSecret:   internalTrafficSecret,
-		ClusterDomain:           r.clusterDomain,
-		ESLicenseType:           elasticLicenseType,
-		Replicas:                replicas,
-		ComplianceFeatureActive: installCompliance,
+		KeyValidatorConfig:             keyValidatorConfig,
+		ESSecrets:                      esSecrets,
+		KibanaSecrets:                  []*corev1.Secret{kibanaPublicCertSecret},
+		TrustedCertBundle:              trustedBundle,
+		ESClusterConfig:                esClusterConfig,
+		TLSKeyPair:                     tlsSecret,
+		PullSecrets:                    pullSecrets,
+		Openshift:                      r.provider == operatorv1.ProviderOpenShift,
+		Installation:                   installation,
+		ManagementCluster:              managementCluster,
+		TunnelSecret:                   tunnelSecret,
+		InternalTrafficSecret:          internalTrafficSecret,
+		ClusterDomain:                  r.clusterDomain,
+		ESLicenseType:                  elasticLicenseType,
+		Replicas:                       replicas,
+		Compliance:                     complianceCR,
+		ComplianceLicenseFeatureActive: complianceLicenseFeatureActive,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

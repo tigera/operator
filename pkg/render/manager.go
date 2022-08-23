@@ -124,6 +124,7 @@ type ManagerConfiguration struct {
 	ClusterDomain           string
 	ESLicenseType           ElasticsearchLicenseType
 	Replicas                *int32
+	Compliance              *operatorv1.Compliance
 	ComplianceFeatureActive bool
 
 	// Whether or not the cluster supports pod security policies.
@@ -353,6 +354,7 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 		{Name: "ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
 		// Kibana does not have a FIPS compatible mode, therefore we disable the button in the UI.
 		{Name: "ENABLE_KIBANA", Value: strconv.FormatBool(!operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode))},
+		{Name: "ENABLE_COMPLIANCE_REPORTS", Value: strconv.FormatBool(c.cfg.Compliance != nil)},
 	}
 
 	envs = append(envs, c.managerOAuth2EnvVars()...)
@@ -431,7 +433,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
 		{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
 		{Name: "VOLTRON_DEFAULT_FORWARD_SERVER", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc:9200"},
-		{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: fmt.Sprintf("%v", c.cfg.ComplianceFeatureActive)},
+		{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: strconv.FormatBool(c.cfg.Compliance != nil && c.cfg.ComplianceFeatureActive)},
 		{Name: "VOLTRON_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 	}
 

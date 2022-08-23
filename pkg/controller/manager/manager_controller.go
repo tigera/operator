@@ -313,14 +313,14 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	complianceLicenseFeatureActive := utils.IsFeatureActive(license, common.ComplianceFeature)
 	complianceCR, err := compliance.GetCompliance(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
-		r.status.SetDegraded("Error querying compliance", err.Error())
+		r.status.SetDegraded(string(operatorv1.ResourceReadError), fmt.Sprintf("Error querying compliance: %s", err.Error()))
 		return reconcile.Result{}, err
 	}
 
 	if complianceLicenseFeatureActive && complianceCR != nil {
 		// Check that compliance is running.
 		if complianceCR.Status.State != operatorv1.TigeraStatusReady {
-			r.status.SetDegraded("Compliance is not ready", fmt.Sprintf("compliance status: %s", complianceCR.Status.State))
+			r.status.SetDegraded(string(operatorv1.ResourceNotReady), "Compliance is not ready")
 			return reconcile.Result{}, nil
 		}
 		trustedSecretNames = append(trustedSecretNames, render.ComplianceServerCertSecret)
@@ -481,23 +481,23 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	managerCfg := &render.ManagerConfiguration{
-		KeyValidatorConfig:             keyValidatorConfig,
-		ESSecrets:                      esSecrets,
-		TrustedCertBundle:              trustedBundle,
-		ESClusterConfig:                esClusterConfig,
-		TLSKeyPair:                     tlsSecret,
-		PullSecrets:                    pullSecrets,
-		Openshift:                      r.provider == operatorv1.ProviderOpenShift,
-		Installation:                   installation,
-		ManagementCluster:              managementCluster,
-		TunnelSecret:                   tunnelSecret,
-		InternalTrafficSecret:          internalTrafficSecret,
-		ClusterDomain:                  r.clusterDomain,
-		ESLicenseType:                  elasticLicenseType,
-		Replicas:                       replicas,
-		Compliance:                     complianceCR,
-		ComplianceLicenseFeatureActive: complianceLicenseFeatureActive,
-		UsePSP:                         r.usePSP,
+		KeyValidatorConfig:      keyValidatorConfig,
+		ESSecrets:               esSecrets,
+		TrustedCertBundle:       trustedBundle,
+		ESClusterConfig:         esClusterConfig,
+		TLSKeyPair:              tlsSecret,
+		PullSecrets:             pullSecrets,
+		Openshift:               r.provider == operatorv1.ProviderOpenShift,
+		Installation:            installation,
+		ManagementCluster:       managementCluster,
+		TunnelSecret:            tunnelSecret,
+		InternalTrafficSecret:   internalTrafficSecret,
+		ClusterDomain:           r.clusterDomain,
+		ESLicenseType:           elasticLicenseType,
+		Replicas:                replicas,
+		Compliance:              complianceCR,
+		ComplianceFeatureActive: complianceLicenseFeatureActive,
+		UsePSP:                  r.usePSP,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

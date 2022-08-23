@@ -774,21 +774,21 @@ func renderObjects(roc renderConfig) []client.Object {
 
 	esConfigMap := relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 	cfg := &render.ManagerConfiguration{
-		KeyValidatorConfig:             dexCfg,
-		TrustedCertBundle:              bundle,
-		ESClusterConfig:                esConfigMap,
-		TLSKeyPair:                     managerTLS,
-		Installation:                   roc.installation,
-		ManagementCluster:              roc.managementCluster,
-		TunnelSecret:                   tunnelSecret,
-		InternalTrafficSecret:          internalTraffic,
-		ClusterDomain:                  dns.DefaultClusterDomain,
-		ESLicenseType:                  render.ElasticsearchLicenseTypeEnterpriseTrial,
-		Replicas:                       roc.installation.ControlPlaneReplicas,
-		Compliance:                     roc.compliance,
-		ComplianceLicenseFeatureActive: roc.complianceFeatureActive,
-		Openshift:                      roc.openshift,
-		UsePSP:                         true,
+		KeyValidatorConfig:      dexCfg,
+		TrustedCertBundle:       bundle,
+		ESClusterConfig:         esConfigMap,
+		TLSKeyPair:              managerTLS,
+		Installation:            roc.installation,
+		ManagementCluster:       roc.managementCluster,
+		TunnelSecret:            tunnelSecret,
+		InternalTrafficSecret:   internalTraffic,
+		ClusterDomain:           dns.DefaultClusterDomain,
+		ESLicenseType:           render.ElasticsearchLicenseTypeEnterpriseTrial,
+		Replicas:                roc.installation.ControlPlaneReplicas,
+		Compliance:              roc.compliance,
+		ComplianceFeatureActive: roc.complianceFeatureActive,
+		Openshift:               roc.openshift,
+		UsePSP:                  true,
 	}
 	component, err := render.Manager(cfg)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)

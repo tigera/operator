@@ -539,7 +539,7 @@ var _ = Describe("Manager controller tests", func() {
 				Expect(c.Update(ctx, compliance)).NotTo(HaveOccurred())
 				mockStatus = &status.MockStatus{}
 				mockStatus.On("OnCRFound").Return()
-				mockStatus.On("SetDegraded", "Compliance is not ready", "compliance status: ").Return()
+				mockStatus.On("SetDegraded", "ResourceNotReady", "Compliance is not ready").Return()
 				r.status = mockStatus
 
 				_, err := r.Reconcile(ctx, reconcile.Request{})

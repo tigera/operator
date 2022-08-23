@@ -110,22 +110,22 @@ func Manager(cfg *ManagerConfiguration) (Component, error) {
 
 // ManagerConfiguration contains all the config information needed to render the component.
 type ManagerConfiguration struct {
-	KeyValidatorConfig             authentication.KeyValidatorConfig
-	ESSecrets                      []*corev1.Secret
-	TrustedCertBundle              certificatemanagement.TrustedBundle
-	ESClusterConfig                *relasticsearch.ClusterConfig
-	TLSKeyPair                     certificatemanagement.KeyPairInterface
-	PullSecrets                    []*corev1.Secret
-	Openshift                      bool
-	Installation                   *operatorv1.InstallationSpec
-	ManagementCluster              *operatorv1.ManagementCluster
-	TunnelSecret                   certificatemanagement.KeyPairInterface
-	InternalTrafficSecret          certificatemanagement.KeyPairInterface
-	ClusterDomain                  string
-	ESLicenseType                  ElasticsearchLicenseType
-	Replicas                       *int32
-	Compliance                     *operatorv1.Compliance
-	ComplianceLicenseFeatureActive bool
+	KeyValidatorConfig      authentication.KeyValidatorConfig
+	ESSecrets               []*corev1.Secret
+	TrustedCertBundle       certificatemanagement.TrustedBundle
+	ESClusterConfig         *relasticsearch.ClusterConfig
+	TLSKeyPair              certificatemanagement.KeyPairInterface
+	PullSecrets             []*corev1.Secret
+	Openshift               bool
+	Installation            *operatorv1.InstallationSpec
+	ManagementCluster       *operatorv1.ManagementCluster
+	TunnelSecret            certificatemanagement.KeyPairInterface
+	InternalTrafficSecret   certificatemanagement.KeyPairInterface
+	ClusterDomain           string
+	ESLicenseType           ElasticsearchLicenseType
+	Replicas                *int32
+	Compliance              *operatorv1.Compliance
+	ComplianceFeatureActive bool
 
 	// Whether or not the cluster supports pod security policies.
 	UsePSP bool
@@ -433,7 +433,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
 		{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
 		{Name: "VOLTRON_DEFAULT_FORWARD_SERVER", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc:9200"},
-		{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: strconv.FormatBool(c.cfg.Compliance != nil && c.cfg.ComplianceLicenseFeatureActive)},
+		{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: strconv.FormatBool(c.cfg.Compliance != nil && c.cfg.ComplianceFeatureActive)},
 		{Name: "VOLTRON_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 	}
 

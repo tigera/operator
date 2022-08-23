@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
 	"github.com/stretchr/testify/mock"
@@ -163,7 +164,7 @@ var _ = Describe("Manager controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ElasticsearchManagerUserSecret,
 					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, rtest.CreateCertSecret(render.ComplianceServerCertSecret, common.OperatorNamespace(), render.PacketCaptureCertSecret)))
+			Expect(c.Create(ctx, rtest.CreateCertSecret(render.ComplianceServerCertSecret, common.OperatorNamespace(), render.ComplianceServerCertSecret)))
 			Expect(c.Create(ctx, rtest.CreateCertSecret(render.PacketCaptureCertSecret, common.OperatorNamespace(), render.PacketCaptureCertSecret)))
 			Expect(c.Create(ctx, rtest.CreateCertSecret(render.PrometheusTLSSecretName, common.OperatorNamespace(), render.PrometheusTLSSecretName)))
 			Expect(c.Create(ctx, &corev1.ConfigMap{
@@ -278,9 +279,11 @@ var _ = Describe("Manager controller tests", func() {
 		})
 	})
 
-	Context("image reconciliation", func() {
+	Context("reconciliation", func() {
 		var r ReconcileManager
 		var mockStatus *status.MockStatus
+		var licenseKey *v3.LicenseKey
+		var compliance *operatorv1.Compliance
 
 		BeforeEach(func() {
 			// Create an object we can use throughout the test to do the compliance reconcile loops.
@@ -295,6 +298,7 @@ var _ = Describe("Manager controller tests", func() {
 			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
 			mockStatus.On("SetDegraded", "Waiting for secret 'calico-node-prometheus-tls' to become available", "").Return().Maybe()
 			mockStatus.On("SetDegraded", "Waiting for secret 'tigera-packetcapture-server-tls' to become available", "").Return().Maybe()
+			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
 
 			r = ReconcileManager{
@@ -311,9 +315,15 @@ var _ = Describe("Manager controller tests", func() {
 					State: operatorv1.TigeraStatusReady,
 				},
 			})).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &v3.LicenseKey{
+			licenseKey = &v3.LicenseKey{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
-			})).NotTo(HaveOccurred())
+				Status: v3.LicenseKeyStatus{
+					Features: []string{
+						common.ComplianceFeature,
+					},
+				},
+			}
+			Expect(c.Create(ctx, licenseKey)).NotTo(HaveOccurred())
 			Expect(c.Create(
 				ctx,
 				&operatorv1.Installation{
@@ -333,12 +343,13 @@ var _ = Describe("Manager controller tests", func() {
 					},
 				},
 			)).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &operatorv1.Compliance{
+			compliance = &operatorv1.Compliance{
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Status: operatorv1.ComplianceStatus{
 					State: operatorv1.TigeraStatusReady,
 				},
-			})).NotTo(HaveOccurred())
+			}
+			Expect(c.Create(ctx, compliance)).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{Name: common.TigeraPrometheusNamespace},
 			})).NotTo(HaveOccurred())
@@ -352,18 +363,7 @@ var _ = Describe("Manager controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ElasticsearchManagerUserSecret,
 					Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-
-			Expect(c.Create(ctx, &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.ComplianceServerCertSecret,
-					Namespace: common.OperatorNamespace(),
-				},
-				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-				Data: map[string][]byte{
-					"tls.crt": []byte("crt"),
-					"tls.key": []byte("crt"),
-				},
-			})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, rtest.CreateCertSecret(render.ComplianceServerCertSecret, common.OperatorNamespace(), render.ComplianceServerCertSecret)))
 			Expect(c.Create(ctx, rtest.CreateCertSecret(render.PacketCaptureCertSecret, common.OperatorNamespace(), render.PacketCaptureCertSecret)))
 			Expect(c.Create(ctx, rtest.CreateCertSecret(render.PrometheusTLSSecretName, common.OperatorNamespace(), render.PrometheusTLSSecretName)))
 			Expect(c.Create(ctx, &corev1.ConfigMap{
@@ -458,6 +458,55 @@ var _ = Describe("Manager controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentManagerProxy.Image,
 					"sha256:voltronhash")))
+		})
+
+		Context("compliance reconciliation", func() {
+			It("should degrade if license is not present", func() {
+				Expect(c.Delete(ctx, licenseKey)).NotTo(HaveOccurred())
+				mockStatus = &status.MockStatus{}
+				mockStatus.On("OnCRFound").Return()
+				mockStatus.On("SetDegraded", "License not found", "licensekeies.projectcalico.org \"default\" not found").Return()
+				r.status = mockStatus
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+
+				Expect(err).NotTo(HaveOccurred())
+				mockStatus.AssertExpectations(GinkgoT())
+			})
+
+			It("should degrade if compliance CR and compliance-enabled license is present, but compliance is not ready", func() {
+				compliance.Status.State = ""
+				Expect(c.Update(ctx, compliance)).NotTo(HaveOccurred())
+				mockStatus = &status.MockStatus{}
+				mockStatus.On("OnCRFound").Return()
+				mockStatus.On("SetDegraded", "Compliance is not ready", "compliance status: ").Return()
+				r.status = mockStatus
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+
+				Expect(err).NotTo(HaveOccurred())
+				mockStatus.AssertExpectations(GinkgoT())
+			})
+
+			DescribeTable("should not degrade when compliance CR or compliance license feature is not present/active", func(crPresent, licenseFeatureActive bool) {
+				if !crPresent {
+					Expect(c.Delete(ctx, compliance)).NotTo(HaveOccurred())
+				}
+				if !licenseFeatureActive {
+					licenseKey.Status.Features = []string{}
+					Expect(c.Update(ctx, licenseKey)).NotTo(HaveOccurred())
+				}
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+
+				// Expect no error, and no degraded status from compliance
+				Expect(err).NotTo(HaveOccurred())
+				mockStatus.AssertExpectations(GinkgoT())
+			},
+				Entry("CR and license feature not present/active", false, false),
+				Entry("CR not present, license feature active", false, true),
+				Entry("CR present, license feature inactive", true, false),
+			)
 		})
 	})
 })

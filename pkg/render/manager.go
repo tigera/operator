@@ -102,6 +102,8 @@ func Manager(
 	clusterDomain string,
 	esLicenseType ElasticsearchLicenseType,
 	replicas *int32,
+	compliance *operatorv1.Compliance,
+	complianceLicenseFeatureActive bool,
 ) (Component, error) {
 	var tlsSecrets []*corev1.Secret
 	tlsAnnotations := map[string]string{
@@ -132,46 +134,50 @@ func Manager(
 		tlsAnnotations[ManagerInternalTLSHashAnnotation] = rmeta.AnnotationHash(internalTrafficSecret.Data)
 	}
 	return &managerComponent{
-		keyValidatorConfig:            keyValidatorConfig,
-		esSecrets:                     esSecrets,
-		kibanaSecrets:                 kibanaSecrets,
-		complianceServerCertSecret:    complianceServerCertSecret,
-		packetCaptureServerCertSecret: packetCaptureServerCertSecret,
-		prometheusCertSecret:          prometheusCertSecret,
-		esClusterConfig:               esClusterConfig,
-		tlsSecrets:                    tlsSecrets,
-		tlsAnnotations:                tlsAnnotations,
-		pullSecrets:                   pullSecrets,
-		openshift:                     openshift,
-		clusterDomain:                 clusterDomain,
-		installation:                  installation,
-		managementCluster:             managementCluster,
-		esLicenseType:                 esLicenseType,
-		replicas:                      replicas,
+		keyValidatorConfig:             keyValidatorConfig,
+		esSecrets:                      esSecrets,
+		kibanaSecrets:                  kibanaSecrets,
+		complianceServerCertSecret:     complianceServerCertSecret,
+		packetCaptureServerCertSecret:  packetCaptureServerCertSecret,
+		prometheusCertSecret:           prometheusCertSecret,
+		esClusterConfig:                esClusterConfig,
+		tlsSecrets:                     tlsSecrets,
+		tlsAnnotations:                 tlsAnnotations,
+		pullSecrets:                    pullSecrets,
+		openshift:                      openshift,
+		clusterDomain:                  clusterDomain,
+		installation:                   installation,
+		managementCluster:              managementCluster,
+		esLicenseType:                  esLicenseType,
+		replicas:                       replicas,
+		compliance:                     compliance,
+		complianceLicenseFeatureActive: complianceLicenseFeatureActive,
 	}, nil
 }
 
 type managerComponent struct {
-	keyValidatorConfig            authentication.KeyValidatorConfig
-	esSecrets                     []*corev1.Secret
-	kibanaSecrets                 []*corev1.Secret
-	complianceServerCertSecret    *corev1.Secret
-	packetCaptureServerCertSecret *corev1.Secret
-	prometheusCertSecret          *corev1.Secret
-	esClusterConfig               *relasticsearch.ClusterConfig
-	tlsSecrets                    []*corev1.Secret
-	tlsAnnotations                map[string]string
-	pullSecrets                   []*corev1.Secret
-	openshift                     bool
-	clusterDomain                 string
-	installation                  *operatorv1.InstallationSpec
-	managementCluster             *operatorv1.ManagementCluster
-	esLicenseType                 ElasticsearchLicenseType
-	managerImage                  string
-	proxyImage                    string
-	esProxyImage                  string
-	csrInitImage                  string
-	replicas                      *int32
+	keyValidatorConfig             authentication.KeyValidatorConfig
+	esSecrets                      []*corev1.Secret
+	kibanaSecrets                  []*corev1.Secret
+	complianceServerCertSecret     *corev1.Secret
+	packetCaptureServerCertSecret  *corev1.Secret
+	prometheusCertSecret           *corev1.Secret
+	esClusterConfig                *relasticsearch.ClusterConfig
+	tlsSecrets                     []*corev1.Secret
+	tlsAnnotations                 map[string]string
+	pullSecrets                    []*corev1.Secret
+	openshift                      bool
+	clusterDomain                  string
+	installation                   *operatorv1.InstallationSpec
+	managementCluster              *operatorv1.ManagementCluster
+	esLicenseType                  ElasticsearchLicenseType
+	managerImage                   string
+	proxyImage                     string
+	esProxyImage                   string
+	csrInitImage                   string
+	replicas                       *int32
+	compliance                     *operatorv1.Compliance
+	complianceLicenseFeatureActive bool
 }
 
 func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -536,6 +542,7 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 		{Name: "CNX_CLUSTER_NAME", Value: "cluster"},
 		{Name: "CNX_POLICY_RECOMMENDATION_SUPPORT", Value: "true"},
 		{Name: "ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.managementCluster != nil)},
+		{Name: "ENABLE_COMPLIANCE_REPORTS", Value: strconv.FormatBool(c.compliance != nil)},
 	}
 
 	envs = append(envs, c.managerOAuth2EnvVars()...)
@@ -589,14 +596,11 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.managementCluster != nil)},
 		{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
 		{Name: "VOLTRON_DEFAULT_FORWARD_SERVER", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc:9200"},
+		{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: strconv.FormatBool(c.compliance != nil && c.complianceLicenseFeatureActive)},
 	}
 
 	if c.keyValidatorConfig != nil {
 		env = append(env, c.keyValidatorConfig.RequiredEnv("VOLTRON_")...)
-	}
-
-	if c.complianceServerCertSecret == nil {
-		env = append(env, corev1.EnvVar{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: "false"})
 	}
 
 	return corev1.Container{

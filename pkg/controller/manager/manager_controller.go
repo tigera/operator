@@ -313,22 +313,18 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		tlsSecret = nil
 	}
 
-	var installCompliance = utils.IsFeatureActive(license, common.ComplianceFeature)
 	var complianceServerCertSecret *corev1.Secret
+	complianceLicenseFeatureActive := utils.IsFeatureActive(license, common.ComplianceFeature)
+	complianceCR, err := compliance.GetCompliance(ctx, r.client)
+	if err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded("Error querying compliance", err.Error())
+		return reconcile.Result{}, err
+	}
 
-	if installCompliance {
+	if complianceLicenseFeatureActive && complianceCR != nil {
 		// Check that compliance is running.
-		compliance, err := compliance.GetCompliance(ctx, r.client)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				r.status.SetDegraded("Compliance not found", err.Error())
-				return reconcile.Result{}, err
-			}
-			r.status.SetDegraded("Error querying compliance", err.Error())
-			return reconcile.Result{}, err
-		}
-		if compliance.Status.State != operatorv1.TigeraStatusReady {
-			r.status.SetDegraded("Compliance is not ready", fmt.Sprintf("compliance status: %s", compliance.Status.State))
+		if complianceCR.Status.State != operatorv1.TigeraStatusReady {
+			r.status.SetDegraded("Compliance is not ready", fmt.Sprintf("compliance status: %s", complianceCR.Status.State))
 			return reconcile.Result{}, nil
 		}
 
@@ -532,6 +528,8 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		r.clusterDomain,
 		elasticLicenseType,
 		replicas,
+		complianceCR,
+		complianceLicenseFeatureActive,
 	)
 	if err != nil {
 		log.Error(err, "Error rendering Manager")

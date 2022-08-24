@@ -147,11 +147,6 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 				Verbs:     []string{"watch", "get", "list"},
 			},
 			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"secrets"},
-				Verbs:     []string{"watch", "list", "get", "update", "create"},
-			},
-			rbacv1.PolicyRule{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},
 				Verbs:     []string{"watch", "list", "get"},
@@ -334,8 +329,8 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 	rules := []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{""},
-			Resources: []string{"configmaps"},
-			Verbs:     []string{"watch", "list", "get", "update", "create"},
+			Resources: []string{"configmaps", "secrets"},
+			Verbs:     []string{"watch", "list", "get", "update", "create", "delete"},
 		},
 		{
 			// Needed to validate the license
@@ -377,16 +372,6 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 			rbacv1.PolicyRule{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"licensekeys"},
-				Verbs:     []string{"get", "create", "update", "list", "watch"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"secrets"},
-				Verbs:     []string{"get", "create", "update", "list", "watch"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"configmaps"},
 				Verbs:     []string{"get", "create", "update", "list", "watch"},
 			},
 		)

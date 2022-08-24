@@ -496,7 +496,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		ESLicenseType:           elasticLicenseType,
 		Replicas:                replicas,
 		Compliance:              complianceCR,
-		ComplianceFeatureActive: complianceLicenseFeatureActive,
+		ComplianceLicenseActive: complianceLicenseFeatureActive,
 		UsePSP:                  r.usePSP,
 	}
 

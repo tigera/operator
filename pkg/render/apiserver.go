@@ -1725,7 +1725,7 @@ func (c *apiServerComponent) uiSettingsPassthruClusterRolebinding() *rbacv1.Clus
 //
 // Calico Enterprise only
 func (c *apiServerComponent) auditPolicyConfigMap() *corev1.ConfigMap {
-	const defaultAuditPolicy = `apiVersion: audit.k8s.io/v1beta1
+	const defaultAuditPolicy = `apiVersion: audit.k8s.io/v1
 kind: Policy
 rules:
 - level: RequestResponse

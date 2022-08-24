@@ -5,7 +5,7 @@ components:
     version: v3.14.1
   cnx-manager:
     image: tigera/cnx-manager
-    version: v3.14.2-1
+    version: v3.14.2-3
   voltron:
     image: tigera/voltron
     version: v3.14.1
@@ -17,7 +17,7 @@ components:
     version: v3.14.1
   cnx-kube-controllers:
     image: tigera/kube-controllers
-    version: v3.14.2-0
+    version: v3.14.2-2
   typha:
     image: tigera/typha
     version: v3.14.1

@@ -74,7 +74,7 @@ var (
 	}
 
 	ComponentElasticsearchFIPS = component{
-		Version: "master-fips",
+		Version: "v3.14.1-fips",
 		Image:   "tigera/elasticsearch",
 	}
 

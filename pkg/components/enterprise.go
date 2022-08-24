@@ -136,7 +136,7 @@ var (
 	}
 
 	ComponentManager = component{
-		Version: "tesla-v3.14.2-1",
+		Version: "tesla-v3.14.2-3",
 		Image:   "tigera/cnx-manager",
 	}
 
@@ -201,7 +201,7 @@ var (
 	}
 
 	ComponentTigeraKubeControllers = component{
-		Version: "v3.14.2-0",
+		Version: "v3.14.2-2",
 		Image:   "tigera/kube-controllers",
 	}
 

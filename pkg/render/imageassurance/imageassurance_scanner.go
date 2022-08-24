@@ -27,7 +27,7 @@ func (c *component) scannerServiceAccount() *corev1.ServiceAccount {
 	}
 }
 
-func (c component) scannerAPIAccessTokenSecret() *corev1.Secret {
+func (c *component) scannerAPIAccessTokenSecret() *corev1.Secret {
 	return &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -149,10 +149,68 @@ func (c *component) scannerRoleBinding() *rbacv1.RoleBinding {
 	}
 }
 
+func (c *component) scannerCLIClusterRole() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ScannerCLIClusterRoleName,
+			Namespace: NameSpaceImageAssurance,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{
+					"imageassurance.tigera.io",
+				},
+				Resources: []string{
+					"organizations",
+				},
+				Verbs: []string{
+					"get",
+				},
+				ResourceNames: []string{
+					c.config.ConfigurationConfigMap.Data[rcimageassurance.ConfigurationConfigMapOrgIDKey],
+				},
+			},
+			{
+				APIGroups: []string{
+					"imageassurance.tigera.io",
+				},
+				Resources: []string{
+					"registries", "repositories", "images",
+				},
+				Verbs: []string{
+					"get",
+				},
+			},
+			{
+				APIGroups: []string{
+					"imageassurance.tigera.io",
+				},
+				Resources: []string{
+					"images",
+				},
+				Verbs: []string{
+					"create",
+				},
+			},
+			{
+				APIGroups: []string{
+					"imageassurance.tigera.io",
+				},
+				Resources: []string{
+					"vulnerabilities",
+				},
+				Verbs: []string{
+					"create",
+				},
+			},
+		},
+	}
+}
+
 func (c *component) scannerDeployment() *appsv1.Deployment {
 
 	annots := map[string]string{
-		tenantKeySecretHashAnnotation:                     rmeta.AnnotationHash(c.config.TenantEncryptionKeySecret.Data),
 		rcimageassurance.ImageAssuranceCertHashAnnotation: rmeta.AnnotationHash(c.config.tlsHash),
 	}
 
@@ -172,7 +230,6 @@ func (c *component) scannerDeployment() *appsv1.Deployment {
 	}
 
 	terminationGracePeriod := int64(30)
-	isPrivileged := true
 
 	container := corev1.Container{
 		Name:            ResourceNameImageAssuranceScanner,
@@ -189,12 +246,7 @@ func (c *component) scannerDeployment() *appsv1.Deployment {
 			},
 		},
 		Env: env,
-		SecurityContext: &corev1.SecurityContext{
-			Privileged: &isPrivileged,
-		},
 		VolumeMounts: []corev1.VolumeMount{
-			{Name: PGCertSecretName, MountPath: MountPathPostgresCerts, ReadOnly: true},
-			{Name: TenantEncryptionKeySecretName, MountPath: MountTenantEncryptionKeySecret, ReadOnly: true},
 			{Name: rcimageassurance.ImageAssuranceSecretName, MountPath: rcimageassurance.CAMountPath, ReadOnly: true},
 		},
 	}
@@ -245,27 +297,7 @@ func (c *component) scannerDeployment() *appsv1.Deployment {
 }
 
 func (c *component) scannerVolumes() []corev1.Volume {
-	defaultMode := int32(420)
-
 	return []corev1.Volume{
-		{
-			Name: PGCertSecretName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName:  PGCertSecretName,
-					DefaultMode: &defaultMode,
-				},
-			},
-		},
-		{
-			Name: TenantEncryptionKeySecretName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName:  TenantEncryptionKeySecretName,
-					DefaultMode: &defaultMode,
-				},
-			},
-		},
 		{
 			Name: rcimageassurance.ImageAssuranceSecretName,
 			VolumeSource: corev1.VolumeSource{

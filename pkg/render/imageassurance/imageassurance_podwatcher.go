@@ -27,7 +27,7 @@ func (c *component) podWatcherServiceAccount() *corev1.ServiceAccount {
 	}
 }
 
-func (c component) podWatcherAPIAccessTokenSecret() *corev1.Secret {
+func (c *component) podWatcherAPIAccessTokenSecret() *corev1.Secret {
 	return &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -218,7 +218,6 @@ func (c *component) podWatcherDeployment() *appsv1.Deployment {
 	}
 
 	terminationGracePeriod := int64(30)
-	isPrivileged := true
 
 	container := corev1.Container{
 		Name:            ResourceNameImageAssurancePodWatcher,
@@ -235,9 +234,6 @@ func (c *component) podWatcherDeployment() *appsv1.Deployment {
 			},
 		},
 		Env: env,
-		SecurityContext: &corev1.SecurityContext{
-			Privileged: &isPrivileged,
-		},
 		VolumeMounts: []corev1.VolumeMount{
 			c.config.TrustedCertBundle.VolumeMount(),
 			{Name: rcimageassurance.ImageAssuranceSecretName, MountPath: rcimageassurance.CAMountPath, ReadOnly: true},

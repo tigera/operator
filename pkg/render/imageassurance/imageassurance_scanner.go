@@ -176,7 +176,7 @@ func (c *component) scannerCLIClusterRole() *rbacv1.ClusterRole {
 					"imageassurance.tigera.io",
 				},
 				Resources: []string{
-					"registries", "repositories", "images",
+					"registries", "repositories",
 				},
 				Verbs: []string{
 					"get",
@@ -190,7 +190,7 @@ func (c *component) scannerCLIClusterRole() *rbacv1.ClusterRole {
 					"images",
 				},
 				Verbs: []string{
-					"create",
+					"get", "create", "update",
 				},
 			},
 			{

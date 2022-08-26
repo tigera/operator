@@ -75,9 +75,8 @@ type KubeControllersConfiguration struct {
 	// Whether or not the LogStorage CRD is present in the cluster.
 	LogStorageExists bool
 
-	EnabledESOIDCWorkaround bool
-	ClusterDomain           string
-	MetricsPort             int
+	ClusterDomain string
+	MetricsPort   int
 
 	// For details on why this is needed see 'Node and Installation finalizer' in the core_controller.
 	Terminating bool
@@ -415,9 +414,10 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		if c.kubeControllerName == EsKubeController {
-			if c.cfg.EnabledESOIDCWorkaround {
-				env = append(env, corev1.EnvVar{Name: "ENABLE_ELASTICSEARCH_OIDC_WORKAROUND", Value: "true"})
-			}
+			// What started as a workaround is now the default behaviour. This features uses our backend in order to
+			// log into Kibana for users from external identity providers, rather than configuring an authn realm
+			// in the Elastic stack.
+			env = append(env, corev1.EnvVar{Name: "ENABLE_ELASTICSEARCH_OIDC_WORKAROUND", Value: "true"})
 
 			if c.cfg.Authentication != nil {
 				env = append(env,

@@ -159,10 +159,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Entry("Both CR and license feature not present/active", false, false, managerComplianceExpectation{managerFlag: false, voltronFlag: false}),
 		Entry("CR not present, license feature active", false, true, managerComplianceExpectation{managerFlag: false, voltronFlag: false}),
 
-		// The manager supports two states of a product feature being unavailable: the product feature being feature-flagged off, and the current
-		// license not enabling the feature. The flag that we set on the manager container is a feature flag, which we should set purely based on
-		// whether the compliance CR is present, ignoring the license status. Therefore, when the CR is present but the license feature is not,
-		// we still expect that the manager feature flag should be set. The manager will render the insufficient license state appropriately.
+		// We expect the manager feature flag to be true in this case, since the CR is present. The manager will render an insufficient license state.
 		Entry("CR present, license feature not active", true, false, managerComplianceExpectation{managerFlag: true, voltronFlag: false}),
 	)
 
@@ -628,19 +625,19 @@ func renderObjects(roc renderConfig) []client.Object {
 
 	esConfigMap := relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 	cfg := &render.ManagerConfiguration{
-		KeyValidatorConfig:             dexCfg,
-		TrustedCertBundle:              bundle,
-		ESClusterConfig:                esConfigMap,
-		TLSKeyPair:                     managerTLS,
-		Installation:                   roc.installation,
-		ManagementCluster:              roc.managementCluster,
-		TunnelSecret:                   tunnelSecret,
-		InternalTrafficSecret:          internalTraffic,
-		ClusterDomain:                  dns.DefaultClusterDomain,
-		ESLicenseType:                  render.ElasticsearchLicenseTypeEnterpriseTrial,
-		Replicas:                       roc.installation.ControlPlaneReplicas,
-		Compliance:                     roc.compliance,
-		ComplianceLicenseFeatureActive: roc.complianceFeatureActive,
+		KeyValidatorConfig:      dexCfg,
+		TrustedCertBundle:       bundle,
+		ESClusterConfig:         esConfigMap,
+		TLSKeyPair:              managerTLS,
+		Installation:            roc.installation,
+		ManagementCluster:       roc.managementCluster,
+		TunnelSecret:            tunnelSecret,
+		InternalTrafficSecret:   internalTraffic,
+		ClusterDomain:           dns.DefaultClusterDomain,
+		ESLicenseType:           render.ElasticsearchLicenseTypeEnterpriseTrial,
+		Replicas:                roc.installation.ControlPlaneReplicas,
+		Compliance:              roc.compliance,
+		ComplianceLicenseActive: roc.complianceFeatureActive,
 	}
 	component, err := render.Manager(cfg)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)

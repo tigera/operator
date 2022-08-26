@@ -73,6 +73,11 @@ var (
 		Image:   "tigera/elasticsearch",
 	}
 
+	ComponentElasticsearchFIPS = component{
+		Version: "v3.14.1-fips",
+		Image:   "tigera/elasticsearch",
+	}
+
 	ComponentECKElasticsearchOperator = component{
 		Version: "1.8.0",
 	}
@@ -246,6 +251,7 @@ var (
 		ComponentDeepPacketInspection,
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,
+		ComponentElasticsearchFIPS,
 		ComponentElasticsearchOperator,
 		ComponentEsCurator,
 		ComponentEsProxy,

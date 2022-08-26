@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -367,9 +367,11 @@ var _ = Describe("Manager controller tests", func() {
 			Entry("Self provided TLS & certificate management", true, true, true))
 	})
 
-	Context("image reconciliation", func() {
+	Context("reconciliation", func() {
 		var r ReconcileManager
 		var mockStatus *status.MockStatus
+		var licenseKey *v3.LicenseKey
+		var compliance *operatorv1.Compliance
 
 		BeforeEach(func() {
 			// Create an object we can use throughout the test to do the compliance reconcile loops.
@@ -400,9 +402,15 @@ var _ = Describe("Manager controller tests", func() {
 					State: operatorv1.TigeraStatusReady,
 				},
 			})).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &v3.LicenseKey{
+			licenseKey = &v3.LicenseKey{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
-			})).NotTo(HaveOccurred())
+				Status: v3.LicenseKeyStatus{
+					Features: []string{
+						common.ComplianceFeature,
+					},
+				},
+			}
+			Expect(c.Create(ctx, licenseKey)).NotTo(HaveOccurred())
 			Expect(c.Create(
 				ctx,
 				&operatorv1.Installation{
@@ -422,12 +430,13 @@ var _ = Describe("Manager controller tests", func() {
 					},
 				},
 			)).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &operatorv1.Compliance{
+			compliance = &operatorv1.Compliance{
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Status: operatorv1.ComplianceStatus{
 					State: operatorv1.TigeraStatusReady,
 				},
-			})).NotTo(HaveOccurred())
+			}
+			Expect(c.Create(ctx, compliance)).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{Name: common.TigeraPrometheusNamespace},
 			})).NotTo(HaveOccurred())
@@ -565,6 +574,55 @@ var _ = Describe("Manager controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentManagerProxy.Image,
 					"sha256:voltronhash")))
+		})
+
+		Context("compliance reconciliation", func() {
+			It("should degrade if license is not present", func() {
+				Expect(c.Delete(ctx, licenseKey)).NotTo(HaveOccurred())
+				mockStatus = &status.MockStatus{}
+				mockStatus.On("OnCRFound").Return()
+				mockStatus.On("SetDegraded", "License not found", "licensekeies.projectcalico.org \"default\" not found").Return()
+				r.status = mockStatus
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+
+				Expect(err).NotTo(HaveOccurred())
+				mockStatus.AssertExpectations(GinkgoT())
+			})
+
+			It("should degrade if compliance CR and compliance-enabled license is present, but compliance is not ready", func() {
+				compliance.Status.State = ""
+				Expect(c.Update(ctx, compliance)).NotTo(HaveOccurred())
+				mockStatus = &status.MockStatus{}
+				mockStatus.On("OnCRFound").Return()
+				mockStatus.On("SetDegraded", "Compliance is not ready", "compliance status: ").Return()
+				r.status = mockStatus
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+
+				Expect(err).NotTo(HaveOccurred())
+				mockStatus.AssertExpectations(GinkgoT())
+			})
+
+			DescribeTable("should not degrade when compliance CR or compliance license feature is not present/active", func(crPresent, licenseFeatureActive bool) {
+				if !crPresent {
+					Expect(c.Delete(ctx, compliance)).NotTo(HaveOccurred())
+				}
+				if !licenseFeatureActive {
+					licenseKey.Status.Features = []string{}
+					Expect(c.Update(ctx, licenseKey)).NotTo(HaveOccurred())
+				}
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+
+				// Expect no error, and no degraded status from compliance
+				Expect(err).NotTo(HaveOccurred())
+				mockStatus.AssertExpectations(GinkgoT())
+			},
+				Entry("CR and license feature not present/active", false, false),
+				Entry("CR not present, license feature active", false, true),
+				Entry("CR present, license feature inactive", true, false),
+			)
 		})
 	})
 })

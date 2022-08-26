@@ -116,7 +116,8 @@ type ManagerConfiguration struct {
 	ClusterDomain           string
 	ESLicenseType           ElasticsearchLicenseType
 	Replicas                *int32
-	ComplianceFeatureActive bool
+	Compliance              *operatorv1.Compliance
+	ComplianceLicenseActive bool
 }
 
 type managerComponent struct {
@@ -352,6 +353,10 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 		{Name: "CNX_CLUSTER_NAME", Value: "cluster"},
 		{Name: "CNX_POLICY_RECOMMENDATION_SUPPORT", Value: "true"},
 		{Name: "ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
+		// The manager supports two states of a product feature being unavailable: the product feature being feature-flagged off,
+		// and the current license not enabling the feature. The compliance flag that we set on the manager container is a feature
+		// flag, which we should set purely based on whether the compliance CR is present, ignoring the license status.
+		{Name: "ENABLE_COMPLIANCE_REPORTS", Value: strconv.FormatBool(c.cfg.Compliance != nil)},
 	}
 
 	envs = append(envs, c.managerOAuth2EnvVars()...)
@@ -426,7 +431,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
 		{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
 		{Name: "VOLTRON_DEFAULT_FORWARD_SERVER", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc:9200"},
-		{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: fmt.Sprintf("%v", c.cfg.ComplianceFeatureActive)},
+		{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: strconv.FormatBool(c.cfg.Compliance != nil && c.cfg.ComplianceLicenseActive)},
 	}
 
 	if c.cfg.KeyValidatorConfig != nil {

@@ -49,12 +49,6 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 		return reconcile.Result{}, false, err
 	}
 
-	enableESOIDCWorkaround := false
-	if (authentication != nil && authentication.Spec.OIDC != nil && authentication.Spec.OIDC.Type == operatorv1.OIDCTypeTigera) ||
-		esLicenseType == render.ElasticsearchLicenseTypeBasic {
-		enableESOIDCWorkaround = true
-	}
-
 	certificateManager, err := certificatemanager.Create(r.client, install, r.clusterDomain)
 	if err != nil {
 		log.Error(err, "unable to create the Tigera CA")
@@ -85,7 +79,6 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 		ManagementCluster:            managementCluster,
 		ClusterDomain:                r.clusterDomain,
 		ManagerInternalSecret:        managerInternalTLSSecret,
-		EnabledESOIDCWorkaround:      enableESOIDCWorkaround,
 		Authentication:               authentication,
 		KubeControllersGatewaySecret: kubeControllersUserSecret,
 		LogStorageExists:             true,

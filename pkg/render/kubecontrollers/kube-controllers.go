@@ -75,9 +75,8 @@ type KubeControllersConfiguration struct {
 	// Whether or not the LogStorage CRD is present in the cluster.
 	LogStorageExists bool
 
-	EnabledESOIDCWorkaround bool
-	ClusterDomain           string
-	MetricsPort             int
+	ClusterDomain string
+	MetricsPort   int
 
 	// For details on why this is needed see 'Node and Installation finalizer' in the core_controller.
 	Terminating bool
@@ -145,11 +144,6 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 				APIGroups: []string{"elasticsearch.k8s.elastic.co"},
 				Resources: []string{"elasticsearches"},
 				Verbs:     []string{"watch", "get", "list"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"secrets"},
-				Verbs:     []string{"watch", "list", "get", "update", "create"},
 			},
 			rbacv1.PolicyRule{
 				APIGroups: []string{"projectcalico.org"},
@@ -334,8 +328,8 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 	rules := []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{""},
-			Resources: []string{"configmaps"},
-			Verbs:     []string{"watch", "list", "get", "update", "create"},
+			Resources: []string{"configmaps", "secrets"},
+			Verbs:     []string{"watch", "list", "get", "update", "create", "delete"},
 		},
 		{
 			// Needed to validate the license
@@ -379,16 +373,6 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 				Resources: []string{"licensekeys"},
 				Verbs:     []string{"get", "create", "update", "list", "watch"},
 			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"secrets"},
-				Verbs:     []string{"get", "create", "update", "list", "watch"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"configmaps"},
-				Verbs:     []string{"get", "create", "update", "list", "watch"},
-			},
 		)
 	}
 
@@ -430,9 +414,10 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		if c.kubeControllerName == EsKubeController {
-			if c.cfg.EnabledESOIDCWorkaround {
-				env = append(env, corev1.EnvVar{Name: "ENABLE_ELASTICSEARCH_OIDC_WORKAROUND", Value: "true"})
-			}
+			// What started as a workaround is now the default behaviour. This feature uses our backend in order to
+			// log into Kibana for users from external identity providers, rather than configuring an authn realm
+			// in the Elastic stack.
+			env = append(env, corev1.EnvVar{Name: "ENABLE_ELASTICSEARCH_OIDC_WORKAROUND", Value: "true"})
 
 			if c.cfg.Authentication != nil {
 				env = append(env,

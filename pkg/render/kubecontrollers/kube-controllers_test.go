@@ -277,7 +277,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
 		cfg.ManagerInternalSecret = internalManagerTLSSecret
 		cfg.MetricsPort = 9094
-		cfg.EnabledESOIDCWorkaround = true
 
 		component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -402,7 +401,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
 		cfg.ManagerInternalSecret = internalManagerTLSSecret
 		cfg.MetricsPort = 9094
-		cfg.EnabledESOIDCWorkaround = true
 
 		component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -544,7 +542,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
 		cfg.ManagerInternalSecret = internalManagerTLSSecret
 		cfg.MetricsPort = 9094
-		cfg.EnabledESOIDCWorkaround = true
 		cfg.Authentication = &operatorv1.Authentication{Spec: operatorv1.AuthenticationSpec{
 			UsernamePrefix: "uOIDC:",
 			GroupsPrefix:   "gOIDC:",
@@ -794,7 +791,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
 			cfg.ManagerInternalSecret = internalManagerTLSSecret
 			cfg.MetricsPort = 9094
-			cfg.EnabledESOIDCWorkaround = true
 			component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
 			resources, _ := component.Objects()
 
@@ -912,7 +908,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				cfg.LogStorageExists = true
 				cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
 				cfg.ManagerInternalSecret = internalManagerTLSSecret
-				cfg.EnabledESOIDCWorkaround = true
 
 				component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
 				resources, _ := component.Objects()

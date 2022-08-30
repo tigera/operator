@@ -252,7 +252,22 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 	reqLogger.V(2).Info("Loaded config", "config", instance)
 	r.status.OnCRFound()
+
+	// Default fields on the LogCollector instance if needed.
 	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
+	modifiedFields := fillDefaults(instance)
+	if len(modifiedFields) > 0 {
+		if err = r.client.Patch(ctx, instance, preDefaultPatchFrom); err != nil {
+			r.status.SetDegraded(
+				fmt.Sprintf(
+					"Failed to set defaults for LogCollector fields: [%s]",
+					strings.Join(modifiedFields, ", "),
+				),
+				err.Error(),
+			)
+			return reconcile.Result{}, err
+		}
+	}
 
 	if !utils.IsAPIServerReady(r.client, reqLogger) {
 		r.status.SetDegraded("Waiting for Tigera API server to be ready", "")
@@ -290,18 +305,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 		r.status.SetDegraded("Error querying license", err.Error())
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
-	}
-	modifiedFields := fillDefaults(instance)
-	// Update the LogCollector instance with any changes that have occurred.
-	if err = r.client.Patch(ctx, instance, preDefaultPatchFrom); err != nil {
-		r.status.SetDegraded(
-			fmt.Sprintf(
-				"Failed to set defaults for LogCollector fields: [%s]",
-				strings.Join(modifiedFields, ", "),
-			),
-			err.Error(),
-		)
-		return reconcile.Result{}, err
 	}
 
 	// Fetch the Installation instance. We need this for a few reasons.

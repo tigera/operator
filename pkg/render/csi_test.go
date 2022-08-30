@@ -17,6 +17,9 @@ package render_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
+	appsv1 "k8s.io/api/apps/v1"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
@@ -81,5 +84,11 @@ var _ = Describe("CSI rendering tests", func() {
 		for i, expectedRes := range expectedDelObjs {
 			rtest.ExpectResource(delObjs[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
+	})
+
+	It("should set priority class to system-node-critical", func() {
+		resources, _ := render.CSI(&cfg).Objects()
+		ds := rtest.GetResource(resources, render.CSIDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal("system-node-critical"))
 	})
 })

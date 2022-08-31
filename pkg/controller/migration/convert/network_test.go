@@ -111,6 +111,7 @@ var _ = Describe("Convert network tests", func() {
 			Expect(cfg.Spec.CNI.Type).To(Equal(operatorv1.PluginCalico))
 			Expect(cfg.Spec.CNI.IPAM.Type).To(Equal(operatorv1.IPAMPluginCalico))
 			Expect(*cfg.Spec.CalicoNetwork.BGP).To(Equal(operatorv1.BGPEnabled))
+			Expect(cfg.Spec.CalicoNetwork.ContainerIPForwarding).To(BeNil())
 		})
 		It("should convert Calico v3.15 manifest", func() {
 			c := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(append([]runtime.Object{v4pool, emptyFelixConfig()}, calicoDefaultConfig()...)...).Build()
@@ -501,6 +502,30 @@ var _ = Describe("Convert network tests", func() {
 			expectedV6pool, err := convertPool(*v6pool)
 			Expect(err).ToNot(HaveOccurred())
 			Expect(cfg.Spec.CalicoNetwork.IPPools).To(ContainElements(expectedV4pool, expectedV6pool))
+		})
+		It("migrate allow_ip_forwarding=true container setting", func() {
+			ds := emptyNodeSpec()
+			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
+				Name:  "CNI_NETWORK_CONFIG",
+				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "host-local"}, "container_settings": {"allow_ip_forwarding": true}}`,
+			}}
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig()).Build()
+			cfg, err := Convert(ctx, c)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cfg).ToNot(BeNil())
+			Expect(cfg.Spec.CalicoNetwork.ContainerIPForwarding).ToNot(BeNil())
+			Expect(*cfg.Spec.CalicoNetwork.ContainerIPForwarding).To(Equal(operatorv1.ContainerIPForwardingEnabled))
+		})
+		It("migrate allow_ip_forwarding=false container setting", func() {
+			ds := emptyNodeSpec()
+			ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
+				Name:  "CNI_NETWORK_CONFIG",
+				Value: `{"type": "calico", "name": "k8s-pod-network", "ipam": {"type": "host-local"}, "container_settings": {"allow_ip_forwarding": false}}`,
+			}}
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyKubeControllerSpec(), v4pool, emptyFelixConfig()).Build()
+			cfg, err := Convert(ctx, c)
+			Expect(err).ToNot(HaveOccurred())
+			Expect(cfg.Spec.CalicoNetwork.ContainerIPForwarding).To(BeNil())
 		})
 
 		DescribeTable("test invalid ipam and backend",

@@ -147,4 +147,4 @@ components:
     version: v1.0.1
   sasha:
     image: tigera/sasha
-    version: v1.0.0
+    version: v1.0.2

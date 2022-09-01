@@ -221,12 +221,10 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 			fix:       "disable 'IpAddrsNoIpam' in the CNI configuration",
 		}
 	}
+
 	if c.cni.CalicoConfig.ContainerSettings.AllowIPForwarding {
-		return ErrIncompatibleCluster{
-			err:       "AllowIPForwarding not supported",
-			component: ComponentCNIConfig,
-			fix:       "disable 'AllowIPForwarding' in the CNI configuration",
-		}
+		containerIPForward := v1.ContainerIPForwardingEnabled
+		install.Spec.CalicoNetwork.ContainerIPForwarding = &containerIPForward
 	}
 
 	return nil

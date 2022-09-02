@@ -28,17 +28,15 @@ import (
 	"strings"
 	"time"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"k8s.io/apimachinery/pkg/api/meta"
+	"github.com/elastic/cloud-on-k8s/pkg/utils/stringsutil"
+	"github.com/go-logr/logr"
+	configv1 "github.com/openshift/api/config/v1"
 
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-
-	apps "k8s.io/api/apps/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -48,6 +46,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -58,10 +57,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	"github.com/elastic/cloud-on-k8s/pkg/utils/stringsutil"
-
-	"github.com/go-logr/logr"
-	configv1 "github.com/openshift/api/config/v1"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/active"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
@@ -80,6 +76,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/monitor"
@@ -331,7 +328,7 @@ func add(c controller.Controller, r *ReconcileInstallation) error {
 		}
 
 		// Watch the internal manager TLS secret in the calico namespace, where it's copied for kube-controllers.
-		if err = utils.AddSecretsWatch(c, "calico-node-prometheus-tls", common.TigeraPrometheusNamespace); err != nil {
+		if err = utils.AddSecretsWatch(c, monitor.PrometheusTLSSecretName, common.TigeraPrometheusNamespace); err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch secret '%s' in '%s' namespace: %w", render.ManagerInternalTLSSecretName, common.OperatorNamespace(), err)
 		}
 
@@ -362,7 +359,7 @@ func add(c controller.Controller, r *ReconcileInstallation) error {
 // this controller.
 func secondaryResources() []client.Object {
 	return []client.Object{
-		&apps.DaemonSet{},
+		&appsv1.DaemonSet{},
 		&rbacv1.ClusterRole{},
 		&rbacv1.ClusterRoleBinding{},
 		&corev1.ServiceAccount{},
@@ -405,7 +402,7 @@ func updateInstallationWithDefaults(ctx context.Context, client client.Client, i
 	}
 
 	var openshiftConfig *configv1.Network
-	var kubeadmConfig *v1.ConfigMap
+	var kubeadmConfig *corev1.ConfigMap
 	if instance.Spec.KubernetesProvider == operator.ProviderOpenShift {
 		openshiftConfig = &configv1.Network{}
 		// If configured to run in openshift, then also fetch the openshift configuration API.
@@ -415,7 +412,7 @@ func updateInstallationWithDefaults(ctx context.Context, client client.Client, i
 		}
 	} else {
 		// Check if we're running on kubeadm by getting the config map.
-		kubeadmConfig = &v1.ConfigMap{}
+		kubeadmConfig = &corev1.ConfigMap{}
 		key := types.NamespacedName{Name: kubeadmConfigMap, Namespace: metav1.NamespaceSystem}
 		err = client.Get(ctx, key, kubeadmConfig)
 		if err != nil {
@@ -425,7 +422,7 @@ func updateInstallationWithDefaults(ctx context.Context, client client.Client, i
 			kubeadmConfig = nil
 		}
 	}
-	awsNode := &apps.DaemonSet{}
+	awsNode := &appsv1.DaemonSet{}
 	key := types.NamespacedName{Name: "aws-node", Namespace: metav1.NamespaceSystem}
 	err = client.Get(ctx, key, awsNode)
 	if err != nil {
@@ -444,7 +441,7 @@ func updateInstallationWithDefaults(ctx context.Context, client client.Client, i
 
 // mergeAndFillDefaults merges in configuration from the Kubernetes provider, if applicable, and then
 // populates defaults in the Installation instance.
-func mergeAndFillDefaults(i *operator.Installation, o *configv1.Network, kubeadmConfig *v1.ConfigMap, awsNode *apps.DaemonSet) error {
+func mergeAndFillDefaults(i *operator.Installation, o *configv1.Network, kubeadmConfig *corev1.ConfigMap, awsNode *appsv1.DaemonSet) error {
 	if o != nil {
 		// Merge in OpenShift configuration.
 		if err := updateInstallationForOpenshiftNetwork(i, o); err != nil {
@@ -510,9 +507,9 @@ func fillDefaults(instance *operator.Installation) error {
 		case operator.ProviderAKS:
 			instance.Spec.TyphaAffinity = &operator.TyphaAffinity{
 				NodeAffinity: &operator.NodeAffinity{
-					RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-						NodeSelectorTerms: []v1.NodeSelectorTerm{{
-							MatchExpressions: []v1.NodeSelectorRequirement{
+					RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+						NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+							MatchExpressions: []corev1.NodeSelectorRequirement{
 								{
 									Key:      "type",
 									Operator: corev1.NodeSelectorOpNotIn,
@@ -520,7 +517,7 @@ func fillDefaults(instance *operator.Installation) error {
 								},
 								{
 									Key:      "kubernetes.azure.com/cluster",
-									Operator: v1.NodeSelectorOpExists,
+									Operator: corev1.NodeSelectorOpExists,
 								},
 							},
 						}},
@@ -729,7 +726,7 @@ func fillDefaults(instance *operator.Installation) error {
 	// Default rolling update parameters.
 	one := intstr.FromInt(1)
 	if instance.Spec.NodeUpdateStrategy.RollingUpdate == nil {
-		instance.Spec.NodeUpdateStrategy.RollingUpdate = &apps.RollingUpdateDaemonSet{}
+		instance.Spec.NodeUpdateStrategy.RollingUpdate = &appsv1.RollingUpdateDaemonSet{}
 	}
 	if instance.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable == nil {
 		instance.Spec.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &one
@@ -1731,7 +1728,7 @@ func updateInstallationForOpenshiftNetwork(i *operator.Installation, o *configv1
 	return mergePlatformPodCIDRs(i, platformCIDRs)
 }
 
-func updateInstallationForKubeadm(i *operator.Installation, c *v1.ConfigMap) error {
+func updateInstallationForKubeadm(i *operator.Installation, c *corev1.ConfigMap) error {
 	// If CNI plugin is specified and not Calico then skip any CalicoNetwork initialization
 	if i.Spec.CNI != nil && i.Spec.CNI.Type != operator.PluginCalico {
 		return nil
@@ -1747,7 +1744,7 @@ func updateInstallationForKubeadm(i *operator.Installation, c *v1.ConfigMap) err
 	return mergePlatformPodCIDRs(i, platformCIDRs)
 }
 
-func updateInstallationForAWSNode(i *operator.Installation, ds *apps.DaemonSet) error {
+func updateInstallationForAWSNode(i *operator.Installation, ds *appsv1.DaemonSet) error {
 	if ds == nil {
 		return nil
 	}

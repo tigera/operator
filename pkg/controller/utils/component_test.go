@@ -1347,7 +1347,7 @@ type mockClient struct {
 	Index int
 }
 
-func (mc *mockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object) error { //nolint:staticcheck ignore SA4009: argument obj is overwritten before first use
+func (mc *mockClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object) error {
 	defer func() { mc.Index++ }()
 	funcName := "Get"
 	if len(mc.Info) <= mc.Index {
@@ -1357,8 +1357,6 @@ func (mc *mockClient) Get(ctx context.Context, key client.ObjectKey, obj client.
 		panic(fmt.Sprintf("mockClient current (%d) call is for %v, not %s", mc.Index, mc.Info[mc.Index].Method, funcName))
 	}
 	if mc.Info[mc.Index].Return == nil {
-		//nolint ignore SA4005 ignore ineffassign
-		obj = mc.Info[mc.Index].Obj
 		return nil
 	}
 

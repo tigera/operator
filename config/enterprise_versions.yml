@@ -5,7 +5,7 @@ components:
     version: v3.14.1
   cnx-manager:
     image: tigera/cnx-manager
-    version: v3.14.2-5
+    version: v3.14.2-6
   voltron:
     image: tigera/voltron
     version: v3.14.1
@@ -135,16 +135,16 @@ components:
     version: v3.14.1
   image-assurance-api:
     image: tigera/image-assurance-api
-    version: v1.0.2
+    version: v1.0.3
   image-assurance-api-proxy:
     image: tigera/image-assurance-api-proxy
-    version: v1.0.2
+    version: v1.0.3
   image-assurance-scanner:
     image: tigera/image-assurance-scanner
-    version: v1.0.2
+    version: v1.0.3
   image-assurance-pod-watcher:
     image: tigera/image-assurance-pod-watcher
-    version: v1.0.2
+    version: v1.0.3
   sasha:
     image: tigera/sasha
     version: v1.0.2

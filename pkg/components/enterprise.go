@@ -136,7 +136,7 @@ var (
 	}
 
 	ComponentManager = component{
-		Version: "tesla-v3.14.2-5",
+		Version: "tesla-v3.14.2-6",
 		Image:   "tigera/cnx-manager",
 	}
 
@@ -236,22 +236,22 @@ var (
 	}
 
 	ComponentImageAssuranceApi = component{
-		Version: "v1.0.2",
+		Version: "v1.0.3",
 		Image:   "tigera/image-assurance-api",
 	}
 
 	ComponentImageAssuranceApiProxy = component{
-		Version: "v1.0.2",
+		Version: "v1.0.3",
 		Image:   "tigera/image-assurance-api-proxy",
 	}
 
 	ComponentImageAssuranceScanner = component{
-		Version: "v1.0.2",
+		Version: "v1.0.3",
 		Image:   "tigera/image-assurance-scanner",
 	}
 
 	ComponentImageAssurancePodWatcher = component{
-		Version: "v1.0.2",
+		Version: "v1.0.3",
 		Image:   "tigera/image-assurance-pod-watcher",
 	}
 

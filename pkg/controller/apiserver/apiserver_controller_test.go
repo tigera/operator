@@ -34,6 +34,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/tls"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/test"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -99,6 +100,26 @@ var _ = Describe("apiserver controller tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		packetCaptureSecret, err = secret.CreateTLSSecret(cryptoCA, render.PacketCaptureCertSecret, common.OperatorNamespace(), "key.key", "cert.crt", time.Hour, nil, dns.GetServiceDNSNames(render.PacketCaptureServiceName, render.PacketCaptureNamespace, dns.DefaultClusterDomain)...)
 		Expect(err).NotTo(HaveOccurred())
+		Expect(cli.Create(ctx, &operatorv1.Authentication{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+			Spec: operatorv1.AuthenticationSpec{
+				ManagerDomain: "https://localhost:9443",
+				OIDC: &operatorv1.AuthenticationOIDC{
+					IssuerURL: "https://localhost:9443/dex",
+				},
+			},
+		})).ToNot(HaveOccurred())
+		dexSecret, err := secret.CreateTLSSecret(cryptoCA, render.DexTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey, time.Hour, nil, dns.GetServiceDNSNames(render.DexTLSSecretName, render.DexNamespace, dns.DefaultClusterDomain)...)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cli.Create(ctx, dexSecret)).ToNot(HaveOccurred())
+		Expect(cli.Create(ctx, &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-oidc-credentials", Namespace: common.OperatorNamespace()},
+			Data: map[string][]byte{
+				render.ClientIDSecretField:     []byte("a"),
+				render.ClientSecretSecretField: []byte("a"),
+				render.RootCASecretField:       []byte("a"),
+			},
+		})).ToNot(HaveOccurred())
 
 		// Set up a mock status
 		mockStatus = &status.MockStatus{}
@@ -173,6 +194,18 @@ var _ = Describe("apiserver controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentPacketCapture.Image,
 					components.ComponentPacketCapture.Version)))
+			Expect(pcContainer.VolumeMounts).To(ConsistOf([]corev1.VolumeMount{
+				{
+					Name:      packetCaptureSecret.Name,
+					ReadOnly:  true,
+					MountPath: fmt.Sprintf("/%s", packetCaptureSecret.Name),
+				},
+				{
+					Name:      certificatemanagement.TrustedCertConfigMapName,
+					ReadOnly:  true,
+					MountPath: certificatemanagement.TrustedCertVolumeMountPath,
+				},
+			}))
 			csrinitContainer := test.GetContainer(pcDeployment.Spec.Template.Spec.InitContainers, "tigera-packetcapture-server-tls-key-cert-provisioner")
 			Expect(csrinitContainer).ToNot(BeNil())
 			Expect(csrinitContainer.Image).To(Equal(

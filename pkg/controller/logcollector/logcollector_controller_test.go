@@ -20,7 +20,19 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
 	"github.com/stretchr/testify/mock"
+
+	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
@@ -33,16 +45,6 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/test"
-
-	appsv1 "k8s.io/api/apps/v1"
-	batchv1 "k8s.io/api/batch/v1"
-	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 var _ = Describe("LogCollector controller tests", func() {
@@ -134,7 +136,7 @@ var _ = Describe("LogCollector controller tests", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      render.ElasticsearchEksLogForwarderUserSecret,
 				Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-		prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{render.PrometheusTLSSecretName})
+		prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusTLSSecretName})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 

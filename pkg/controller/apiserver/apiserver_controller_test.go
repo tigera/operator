@@ -19,37 +19,35 @@ import (
 	"fmt"
 	"time"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	netv1 "k8s.io/api/networking/v1"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"github.com/tigera/operator/pkg/render/common/secret"
 
 	"github.com/stretchr/testify/mock"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/render"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/tls"
-	"github.com/tigera/operator/test"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
+	netv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/render"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/tls"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/test"
 )
 
 var _ = Describe("apiserver controller tests", func() {
@@ -223,7 +221,7 @@ var _ = Describe("apiserver controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentCSRInitContainer.Image,
 					components.ComponentCSRInitContainer.Version)))
-			pcSecret := v1.Secret{
+			pcSecret := corev1.Secret{
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.PacketCaptureCertSecret,
@@ -309,7 +307,7 @@ var _ = Describe("apiserver controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentCSRInitContainer.Image,
 					"sha256:calicocsrinithash")))
-			pcSecret := v1.Secret{
+			pcSecret := corev1.Secret{
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.PacketCaptureCertSecret,
@@ -366,7 +364,7 @@ var _ = Describe("apiserver controller tests", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
-			secret := &v1.Secret{}
+			secret := &corev1.Secret{}
 			Expect(cli.Get(ctx, client.ObjectKey{Namespace: common.OperatorNamespace(), Name: secretName}, secret)).ShouldNot(HaveOccurred())
 			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
 

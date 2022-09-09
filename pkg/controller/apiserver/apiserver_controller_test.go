@@ -19,19 +19,13 @@ import (
 	"fmt"
 	"time"
 
-	netv1 "k8s.io/api/networking/v1"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/tigera/operator/pkg/render/common/secret"
 
 	"github.com/stretchr/testify/mock"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
@@ -40,6 +34,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/tls"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/test"
 
 	appsv1 "k8s.io/api/apps/v1"

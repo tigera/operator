@@ -408,6 +408,19 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			return reconcile.Result{}, err
 		}
 
+		var certificates []certificatemanagement.CertificateInterface
+		if keyValidatorConfig != nil {
+			dexSecret, err := certificateManager.GetCertificate(r.client, render.DexTLSSecretName, common.OperatorNamespace())
+			if err != nil {
+				reqLogger.Error(err, fmt.Sprintf("failed to retrieve %s", render.DexTLSSecretName))
+				r.status.SetDegraded(fmt.Sprintf("Failed to retrieve %s", render.DexTLSSecretName), err.Error())
+				return reconcile.Result{}, err
+			} else if dexSecret != nil {
+				certificates = append(certificates, dexSecret)
+			}
+		}
+		trustedBundle := certificateManager.CreateTrustedBundle(certificates...)
+
 		packetCaptureApiCfg := &render.PacketCaptureApiConfiguration{
 			PullSecrets:                 pullSecrets,
 			Openshift:                   r.provider == operatorv1.ProviderOpenShift,
@@ -416,6 +429,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			ServerCertSecret:            packetCaptureCertSecret,
 			ClusterDomain:               r.clusterDomain,
 			ManagementClusterConnection: managementClusterConnection,
+			TrustedBundle:               trustedBundle,
 		}
 		pc := render.PacketCaptureAPI(packetCaptureApiCfg)
 		pcPolicy = render.PacketCaptureAPIPolicy(packetCaptureApiCfg)
@@ -426,6 +440,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 				KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 					rcertificatemanagement.NewKeyPairOption(packetCaptureCertSecret, true, true),
 				},
+				TrustedBundle: trustedBundle,
 			}),
 		)
 		certificateManager.AddToStatusManager(r.status, render.PacketCaptureNamespace)

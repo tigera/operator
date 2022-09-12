@@ -50,18 +50,18 @@ var _ = Describe("Parser", func() {
 
 	It("should not detect an installation if none exists", func() {
 		c := fake.NewClientBuilder().WithScheme(scheme).Build()
-		Expect(NeedsConversion(ctx, c)).To(BeFalse())
+		Expect(NeedsInstallationConversion(ctx, c)).To(BeFalse())
 	})
 
 	It("should detect an installation if one exists", func() {
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig()).Build()
-		_, err := Convert(ctx, c)
+		_, err := ConvertInstallation(ctx, c)
 		Expect(err).ToNot(HaveOccurred())
 	})
 
 	It("should detect a valid installation", func() {
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(emptyNodeSpec(), emptyKubeControllerSpec(), pool, emptyFelixConfig()).Build()
-		_, err := Convert(ctx, c)
+		_, err := ConvertInstallation(ctx, c)
 		Expect(err).ToNot(HaveOccurred())
 	})
 
@@ -72,7 +72,7 @@ var _ = Describe("Parser", func() {
 				Namespace: "kube-system",
 			},
 		}, pool, emptyFelixConfig()).Build()
-		_, err := Convert(ctx, c)
+		_, err := ConvertInstallation(ctx, c)
 		Expect(err).To(HaveOccurred())
 	})
 
@@ -83,7 +83,7 @@ var _ = Describe("Parser", func() {
 			Value: "bar",
 		}}
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(node, emptyKubeControllerSpec(), pool, emptyFelixConfig()).Build()
-		_, err := Convert(ctx, c)
+		_, err := ConvertInstallation(ctx, c)
 		Expect(err).To(HaveOccurred())
 	})
 
@@ -101,7 +101,7 @@ var _ = Describe("Parser", func() {
 		}
 
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyKubeControllerSpec(), pool, emptyFelixConfig()).Build()
-		cfg, err := Convert(ctx, c)
+		cfg, err := ConvertInstallation(ctx, c)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(cfg).ToNot(BeNil())
 		exp := int32(24)
@@ -116,7 +116,7 @@ var _ = Describe("Parser", func() {
 		}}
 
 		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ds, emptyKubeControllerSpec(), pool, emptyFelixConfig()).Build()
-		_, err := Convert(ctx, c)
+		_, err := ConvertInstallation(ctx, c)
 		Expect(err).To(HaveOccurred())
 	})
 

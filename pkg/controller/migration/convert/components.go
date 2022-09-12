@@ -1,3 +1,16 @@
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 package convert
 
 import (
@@ -24,8 +37,8 @@ type components struct {
 	cni cni.NetworkComponents
 }
 
-// getComponents loads the main calico components into structs for later parsing.
-func getComponents(ctx context.Context, client client.Client) (*components, error) {
+// getInstallationComponents loads the main calico components into structs for later parsing.
+func getInstallationComponents(ctx context.Context, client client.Client) (*components, error) {
 	var ds = appsv1.DaemonSet{}
 
 	// verify canal isn't present, or block
@@ -109,4 +122,20 @@ func loadCNI(comps *components) (nc cni.NetworkComponents, err error) {
 	}
 
 	return nc, err
+}
+
+// getAPIServerDeployment loads the calico apiserver deployment into a struct for later parsing.
+func getAPIServerDeployment(ctx context.Context, client client.Client) (*appsv1.Deployment, error) {
+	var as = new(appsv1.Deployment)
+	if err := client.Get(ctx, types.NamespacedName{
+		Name:      "calico-apiserver",
+		Namespace: "calico-apiserver",
+	}, as); err != nil {
+		if !errors.IsNotFound(err) {
+			return nil, fmt.Errorf("failed to get calico-apiserver deployment: %v", err)
+		}
+		log.Info("did not detect calico-apiserver")
+		as = nil
+	}
+	return as, nil
 }

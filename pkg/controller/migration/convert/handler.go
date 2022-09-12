@@ -31,6 +31,7 @@ var handlers = []handler{
 	handleNetwork,
 	handleCore,
 	handleAnnotations,
+	handleLabels,
 	handleNodeSelectors,
 	handleFelixNodeMetrics,
 	handleTyphaMetrics,

@@ -15,15 +15,19 @@
 package convert_test
 
 import (
-	"log"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
+	"github.com/onsi/ginkgo/reporters"
 	. "github.com/onsi/gomega"
+	uzap "go.uber.org/zap"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 func TestConverter(t *testing.T) {
-	log.SetOutput(GinkgoWriter)
+	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true), zap.Level(uzap.NewAtomicLevelAt(uzap.DebugLevel))))
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Converter Suite")
+	junitReporter := reporters.NewJUnitReporter("../../../report/converter_suite.xml")
+	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/migration/convert/convert Suite", []Reporter{junitReporter})
 }

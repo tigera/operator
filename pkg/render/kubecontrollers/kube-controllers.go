@@ -442,7 +442,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		Resources: c.kubeControllersResources(),
 		ReadinessProbe: &corev1.Probe{
 			PeriodSeconds: int32(10),
-			Handler: corev1.Handler{
+			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
 						"/usr/bin/check-status",
@@ -456,7 +456,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 			PeriodSeconds:       int32(10),
 			InitialDelaySeconds: int32(10),
 			FailureThreshold:    int32(6),
-			Handler: corev1.Handler{
+			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
 						"/usr/bin/check-status",

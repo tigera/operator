@@ -1537,7 +1537,7 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 func (c *nodeComponent) nodeLifecycle() *corev1.Lifecycle {
 	preStopCmd := []string{"/bin/calico-node", "-shutdown"}
 	lc := &corev1.Lifecycle{
-		PreStop: &corev1.Handler{Exec: &corev1.ExecAction{Command: preStopCmd}},
+		PreStop: &corev1.LifecycleHandler{Exec: &corev1.ExecAction{Command: preStopCmd}},
 	}
 	return lc
 }
@@ -1559,7 +1559,7 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Pr
 	}
 
 	lp := &corev1.Probe{
-		Handler: corev1.Handler{
+		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
 				Host: "localhost",
 				Path: "/liveness",
@@ -1569,7 +1569,7 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Pr
 		TimeoutSeconds: 10,
 	}
 	rp := &corev1.Probe{
-		Handler: corev1.Handler{Exec: &corev1.ExecAction{Command: readinessCmd}},
+		ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: readinessCmd}},
 		// Set the TimeoutSeconds greater than the default of 1 to allow additional time on loaded nodes.
 		// This timeout should be less than the PeriodSeconds.
 		TimeoutSeconds: 5,

@@ -253,7 +253,7 @@ const complianceServerPort = 5443
 // complianceLivenssProbe is the liveness probe to use for compliance components.
 // They all use the same liveness configuration, so we just define it once here.
 var complianceLivenessProbe = &corev1.Probe{
-	Handler: corev1.Handler{
+	ProbeHandler: corev1.ProbeHandler{
 		HTTPGet: &corev1.HTTPGetAction{
 			Path: "/liveness",
 			Port: intstr.FromInt(9099),
@@ -699,7 +699,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 					Image: c.serverImage,
 					Env:   envVars,
 					LivenessProbe: &corev1.Probe{
-						Handler: corev1.Handler{
+						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
 								Path:   "/compliance/version",
 								Port:   intstr.FromInt(complianceServerPort),
@@ -711,7 +711,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 						FailureThreshold:    5,
 					},
 					ReadinessProbe: &corev1.Probe{
-						Handler: corev1.Handler{
+						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
 								Path:   "/compliance/version",
 								Port:   intstr.FromInt(complianceServerPort),

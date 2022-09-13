@@ -275,7 +275,7 @@ func (c *GuardianComponent) container() []corev1.Container {
 			},
 			VolumeMounts: c.volumeMounts(),
 			LivenessProbe: &corev1.Probe{
-				Handler: corev1.Handler{
+				ProbeHandler: corev1.ProbeHandler{
 					HTTPGet: &corev1.HTTPGetAction{
 						Path: "/health",
 						Port: intstr.FromInt(9080),
@@ -285,7 +285,7 @@ func (c *GuardianComponent) container() []corev1.Container {
 				PeriodSeconds:       10,
 			},
 			ReadinessProbe: &corev1.Probe{
-				Handler: corev1.Handler{
+				ProbeHandler: corev1.ProbeHandler{
 					HTTPGet: &corev1.HTTPGetAction{
 						Path: "/health",
 						Port: intstr.FromInt(9080),

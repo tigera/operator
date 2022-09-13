@@ -636,7 +636,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 		Env:   envs,
 		// Needed for permissions to write to the audit log
 		LivenessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
+			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
 						"/healthz",
@@ -1417,7 +1417,7 @@ func (c *intrusionDetectionComponent) adAPIDeployment(configureADStorage bool) *
 								{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 							},
 							LivenessProbe: &corev1.Probe{
-								Handler: corev1.Handler{
+								ProbeHandler: corev1.ProbeHandler{
 									HTTPGet: &corev1.HTTPGetAction{
 										Path:   "/health",
 										Port:   intstr.FromInt(adAPIPort),
@@ -1426,7 +1426,7 @@ func (c *intrusionDetectionComponent) adAPIDeployment(configureADStorage bool) *
 								},
 							},
 							ReadinessProbe: &corev1.Probe{
-								Handler: corev1.Handler{
+								ProbeHandler: corev1.ProbeHandler{
 									HTTPGet: &corev1.HTTPGetAction{
 										Path:   "/health",
 										Port:   intstr.FromInt(adAPIPort),

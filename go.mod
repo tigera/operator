@@ -9,7 +9,7 @@ require (
 	github.com/elastic/cloud-on-k8s v0.0.0-20210914143041-4f367c381636
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-ldap/ldap v3.0.3+incompatible
-	github.com/go-logr/logr v0.4.0
+	github.com/go-logr/logr v1.2.3
 	github.com/hashicorp/go-version v1.2.1
 	github.com/olivere/elastic/v7 v7.0.6
 	github.com/onsi/ginkgo v1.16.5
@@ -21,17 +21,18 @@ require (
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.52.1
 	github.com/r3labs/diff/v2 v2.8.0
 	github.com/stretchr/testify v1.8.0
-	github.com/tigera/api v0.0.0-20220325204048-b3e0b35ba256
-	go.uber.org/zap v1.19.0
+	github.com/tigera/api v0.0.0-20220913211214-c3f5117f4f40
+	go.uber.org/zap v1.21.0
 	golang.org/x/crypto v0.0.0-20220829220503-c86fa9a7ed90
 	gopkg.in/inf.v0 v0.9.1
 	gopkg.in/yaml.v2 v2.4.0
-	k8s.io/api v0.22.3
-	k8s.io/apiextensions-apiserver v0.22.3
-	k8s.io/apimachinery v0.22.3
-	k8s.io/client-go v0.22.3
-	k8s.io/kube-aggregator v0.21.7
-	sigs.k8s.io/controller-runtime v0.9.7
+	k8s.io/api v0.24.2
+	k8s.io/apiextensions-apiserver v0.24.2
+	k8s.io/apimachinery v0.24.2
+	k8s.io/client-go v0.24.2
+	k8s.io/kube-aggregator v0.24.2
+	k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9
+	sigs.k8s.io/controller-runtime v0.12.3
 	sigs.k8s.io/kind v0.11.1 // Do not remove, not used by code but used by build
 )
 
@@ -41,8 +42,9 @@ replace (
 
 	// Scanners flag anything less than v0.3.6 as having a CVE.
 	golang.org/x/text => golang.org/x/text v0.3.7
+	k8s.io/apiserver => k8s.io/apiserver v0.24.0
 
-	k8s.io/klog => k8s.io/klog v1.0.0
-	k8s.io/klog/v2 => k8s.io/klog/v2 v2.1.0
-	sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.9.7
+//k8s.io/klog => k8s.io/klog v1.0.0
+//k8s.io/klog/v2 => k8s.io/klog/v2 v2.1.0
+//sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.9.7
 )

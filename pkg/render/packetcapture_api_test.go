@@ -206,7 +206,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 					RunAsUser:                ptr.Int64ToPtr(1001),
 				},
 				ReadinessProbe: &corev1.Probe{
-					Handler: corev1.Handler{
+					ProbeHandler: corev1.ProbeHandler{
 						HTTPGet: &corev1.HTTPGetAction{
 							Path:   "/health",
 							Port:   intstr.FromInt(8444),
@@ -217,7 +217,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 					PeriodSeconds:       10,
 				},
 				LivenessProbe: &corev1.Probe{
-					Handler: corev1.Handler{
+					ProbeHandler: corev1.ProbeHandler{
 						HTTPGet: &corev1.HTTPGetAction{
 							Path:   "/health",
 							Port:   intstr.FromInt(8444),

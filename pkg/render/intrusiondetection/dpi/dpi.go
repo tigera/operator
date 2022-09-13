@@ -240,7 +240,7 @@ func (d *dpiComponent) dpiVolumeMounts() []corev1.VolumeMount {
 
 func (d *dpiComponent) dpiReadinessProbes() *corev1.Probe {
 	return &corev1.Probe{
-		Handler: corev1.Handler{
+		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
 				Host:   "localhost",
 				Path:   "/readiness",

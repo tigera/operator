@@ -43,8 +43,4 @@ replace (
 	// Scanners flag anything less than v0.3.6 as having a CVE.
 	golang.org/x/text => golang.org/x/text v0.3.7
 	k8s.io/apiserver => k8s.io/apiserver v0.24.0
-
-//k8s.io/klog => k8s.io/klog v1.0.0
-//k8s.io/klog/v2 => k8s.io/klog/v2 v2.1.0
-//sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.9.7
 )

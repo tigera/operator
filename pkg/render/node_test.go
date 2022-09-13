@@ -3289,7 +3289,7 @@ func verifyProbesAndLifecycle(ds *appsv1.DaemonSet, isOpenshift, isEnterprise bo
 	ExpectWithOffset(1, ds.Spec.Template.Spec.Containers[0].LivenessProbe).To(Equal(expectedLiveness))
 
 	expectedLifecycle := &corev1.Lifecycle{
-		PreStop: &corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: []string{"/bin/calico-node", "-shutdown"}}},
+		PreStop: &corev1.LifecycleHandler{Exec: &corev1.ExecAction{Command: []string{"/bin/calico-node", "-shutdown"}}},
 	}
 	ExpectWithOffset(1, ds.Spec.Template.Spec.Containers[0].Lifecycle).To(Equal(expectedLifecycle))
 

@@ -934,7 +934,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		},
 		VolumeMounts: volumeMounts,
 		LivenessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
+			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path:   "/version",
 					Port:   intstr.FromInt(APIServerPort),
@@ -945,7 +945,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 			PeriodSeconds:       10,
 		},
 		ReadinessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
+			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
 						"/code/filecheck",
@@ -1023,7 +1023,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		Image: c.queryServerImage,
 		Env:   env,
 		LivenessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
+			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path:   "/version",
 					Port:   intstr.FromInt(QueryServerPort),

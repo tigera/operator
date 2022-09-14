@@ -228,7 +228,7 @@ func (e esGateway) esGatewayDeployment() *appsv1.Deployment {
 					Env:          envVars,
 					VolumeMounts: volumeMounts,
 					ReadinessProbe: &corev1.Probe{
-						Handler: corev1.Handler{
+						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
 								Path:   "/health",
 								Port:   intstr.FromInt(Port),

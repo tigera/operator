@@ -746,7 +746,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 // networks.
 func (c *fluentdComponent) startup() *corev1.Probe {
 	return &corev1.Probe{
-		Handler: corev1.Handler{
+		ProbeHandler: corev1.ProbeHandler{
 			Exec: &corev1.ExecAction{
 				Command: c.livenessCmd(),
 			},
@@ -759,7 +759,7 @@ func (c *fluentdComponent) startup() *corev1.Probe {
 
 func (c *fluentdComponent) liveness() *corev1.Probe {
 	return &corev1.Probe{
-		Handler: corev1.Handler{
+		ProbeHandler: corev1.ProbeHandler{
 			Exec: &corev1.ExecAction{
 				Command: c.livenessCmd(),
 			},
@@ -772,7 +772,7 @@ func (c *fluentdComponent) liveness() *corev1.Probe {
 
 func (c *fluentdComponent) readiness() *corev1.Probe {
 	return &corev1.Probe{
-		Handler: corev1.Handler{
+		ProbeHandler: corev1.ProbeHandler{
 			Exec: &corev1.ExecAction{
 				Command: c.readinessCmd(),
 			},

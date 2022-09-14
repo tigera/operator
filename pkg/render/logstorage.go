@@ -587,7 +587,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	esContainer := corev1.Container{
 		Name: "elasticsearch",
 		ReadinessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
+			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{"/usr/bin/readiness-probe"},
 				},
@@ -1426,7 +1426,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 					Containers: []corev1.Container{{
 						Name: "kibana",
 						ReadinessProbe: &corev1.Probe{
-							Handler: corev1.Handler{
+							ProbeHandler: corev1.ProbeHandler{
 								HTTPGet: &corev1.HTTPGetAction{
 									Path: fmt.Sprintf("/%s/login", KibanaBasePath),
 									Port: intstr.IntOrString{
@@ -1460,7 +1460,7 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
 	f := false
 	t := true
 	elasticCuratorLivenessProbe := &corev1.Probe{
-		Handler: corev1.Handler{
+		ProbeHandler: corev1.ProbeHandler{
 			Exec: &corev1.ExecAction{
 				Command: []string{
 					"/usr/bin/curator",

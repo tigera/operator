@@ -288,7 +288,7 @@ func (c *dexComponent) service() client.Object {
 // Perform a HTTP GET to determine if an endpoint is available.
 func (c *dexComponent) probe() *corev1.Probe {
 	return &corev1.Probe{
-		Handler: corev1.Handler{
+		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
 				Path:   "/dex/.well-known/openid-configuration",
 				Port:   intstr.FromInt(DexPort),

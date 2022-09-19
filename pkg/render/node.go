@@ -1426,6 +1426,14 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		if v4Method == "" && bgpEnabled(c.cfg.Installation) {
 			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_ROUTER_ID", Value: "hash"})
 		}
+
+		// Set IPv6 VXLAN and Wireguard MTU
+		if mtu != nil {
+			vxlanMtuV6 := strconv.Itoa(int(*mtu))
+			wireguardMtuV6 := strconv.Itoa(int(*mtu))
+			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_VXLANMTUV6", Value: vxlanMtuV6})
+			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_WIREGUARDMTUV6", Value: wireguardMtuV6})
+		}
 	} else {
 		// IPv6 Auto-detection is disabled.
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "IP6", Value: "none"})

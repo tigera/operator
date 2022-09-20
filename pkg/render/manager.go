@@ -354,6 +354,8 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 		{Name: "ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
 		// Kibana does not have a FIPS compatible mode, therefore we disable the button in the UI.
 		{Name: "ENABLE_KIBANA", Value: strconv.FormatBool(!operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode))},
+		// Currently, we do not support anomaly detection when FIPS mode is enabled, therefore we disable the button in the UI.
+		{Name: "ENABLE_ANOMALY_DETECTION", Value: strconv.FormatBool(!operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode))},
 		// The manager supports two states of a product feature being unavailable: the product feature being feature-flagged off,
 		// and the current license not enabling the feature. The compliance flag that we set on the manager container is a feature
 		// flag, which we should set purely based on whether the compliance CR is present, ignoring the license status.

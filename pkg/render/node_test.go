@@ -1815,6 +1815,103 @@ var _ = Describe("Node rendering tests", func() {
 		verifyProbesAndLifecycle(ds, true, true)
 	})
 
+	It("should render all resources when variant is TigeraSecureEnterprise and running on RKE2", func() {
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "calico-node", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "calico-node", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "calico-node-metrics", ns: "calico-system", group: "", version: "v1", kind: "Service"},
+			{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: common.NodeDaemonSetName, ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+			{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
+		}
+
+		defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
+		defaultInstance.KubernetesProvider = operatorv1.ProviderRKE2
+		cfg.NodeReporterMetricsPort = 9081
+		cfg.FelixHealthPort = 9199
+
+		component := render.Node(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(len(expectedResources)), fmt.Sprintf("Actual resources: %#v", resources))
+
+		// Should render the correct resources.
+		i := 0
+		for _, expectedRes := range expectedResources {
+			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			i++
+		}
+
+		// The DaemonSet should have the correct configuration.
+		ds := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(components.TigeraRegistry + "tigera/cnx-node:" + components.ComponentTigeraNode.Version))
+
+		rtest.ExpectEnv(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/etc/cni/net.d")
+
+		expectedNodeEnv := []corev1.EnvVar{
+			// Default envvars.
+			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+			{Name: "WAIT_FOR_DATASTORE", Value: "true"},
+			{Name: "CALICO_MANAGE_CNI", Value: "true"},
+			{Name: "CALICO_NETWORKING_BACKEND", Value: "bird"},
+			{Name: "CLUSTER_TYPE", Value: "k8s,operator,bgp"},
+			{Name: "IP", Value: "autodetect"},
+			{Name: "IP_AUTODETECTION_METHOD", Value: "first-found"},
+			{Name: "IP6", Value: "none"},
+			{Name: "CALICO_IPV4POOL_CIDR", Value: "192.168.1.0/16"},
+			{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"},
+			{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},
+			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
+			{Name: "FELIX_IPV6SUPPORT", Value: "false"},
+			{Name: "FELIX_HEALTHENABLED", Value: "true"},
+			{Name: "FELIX_HEALTHPORT", Value: "9199"},
+			{
+				Name: "NODENAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
+				},
+			},
+			{
+				Name: "NAMESPACE",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.namespace"},
+				},
+			},
+			{Name: "FELIX_TYPHAK8SNAMESPACE", Value: "calico-system"},
+			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
+			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
+			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
+			// Tigera-specific envvars
+			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
+			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: "9081"},
+			{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
+			{Name: "FELIX_FLOWLOGSFILEINCLUDELABELS", Value: "true"},
+			{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
+			{Name: "FELIX_FLOWLOGSFILEINCLUDESERVICE", Value: "true"},
+			{Name: "FELIX_FLOWLOGSENABLENETWORKSETS", Value: "true"},
+			{Name: "FELIX_FLOWLOGSCOLLECTPROCESSINFO", Value: "true"},
+			{Name: "FELIX_DNSLOGSFILEENABLED", Value: "true"},
+			{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
+
+			// The RKE2 envvar overrides.
+			{Name: "MULTI_INTERFACE_MODE", Value: operatorv1.MultiInterfaceModeNone.Value()},
+			{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:kube-system/rke2-coredns-rke2-coredns"},
+			{Name: "FIPS_MODE_ENABLED", Value: "false"},
+		}
+		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
+		Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
+
+		verifyProbesAndLifecycle(ds, true, true)
+	})
+
 	It("should render volumes and node volumemounts when bird templates are provided", func() {
 		expectedResources := []struct {
 			name    string

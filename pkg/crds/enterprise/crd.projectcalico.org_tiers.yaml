@@ -14,6 +14,7 @@ spec:
     listKind: TierList
     plural: tiers
     singular: tier
+  preserveUnknownFields: false
   scope: Cluster
   versions:
   - name: v1

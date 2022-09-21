@@ -14,6 +14,7 @@ spec:
     listKind: GlobalReportList
     plural: globalreports
     singular: globalreport
+  preserveUnknownFields: false
   scope: Cluster
   versions:
   - name: v1

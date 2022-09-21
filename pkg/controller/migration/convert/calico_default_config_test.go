@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -211,7 +211,23 @@ func calicoDefaultConfig() []runtime.Object {
 										},
 									},
 								},
+								{Name: "FELIX_VXLANMTUV6",
+									ValueFrom: &corev1.EnvVarSource{
+										ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+											LocalObjectReference: corev1.LocalObjectReference{Name: "calico-config"},
+											Key:                  "veth_mtu",
+										},
+									},
+								},
 								{Name: "FELIX_WIREGUARDMTU",
+									ValueFrom: &corev1.EnvVarSource{
+										ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+											LocalObjectReference: corev1.LocalObjectReference{Name: "calico-config"},
+											Key:                  "veth_mtu",
+										},
+									},
+								},
+								{Name: "FELIX_WIREGUARDMTUV6",
 									ValueFrom: &corev1.EnvVarSource{
 										ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
 											LocalObjectReference: corev1.LocalObjectReference{Name: "calico-config"},

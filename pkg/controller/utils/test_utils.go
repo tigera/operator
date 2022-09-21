@@ -20,7 +20,10 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
+	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/status"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -33,7 +36,7 @@ func DeleteAllowTigeraTierAndExpectWait(ctx context.Context, c client.Client, r 
 	err := c.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})
 	Expect(err).ShouldNot(HaveOccurred())
 
-	mockStatus.On("SetDegraded", "Waiting for allow-tigera tier to be created", "tiers.projectcalico.org \"allow-tigera\" not found").Return()
+	mockStatus.On("SetDegraded", operator.ResourceNotReady, "Waiting for allow-tigera tier to be created - Error: tiers.projectcalico.org \"allow-tigera\" not found").Return()
 
 	_, err = r.Reconcile(ctx, reconcile.Request{})
 	Expect(err).ShouldNot(HaveOccurred())
@@ -44,7 +47,7 @@ func DeleteAllowTigeraTierAndExpectWait(ctx context.Context, c client.Client, r 
 // Assumes that mockStatus has any required initial status progression expectations set, and that the Reconciler utilizes
 // the mockStatus object.
 func ExpectWaitForTierWatch(ctx context.Context, r reconcile.Reconciler, mockStatus *status.MockStatus) {
-	mockStatus.On("SetDegraded", "Waiting for Tier watch to be established", "").Return()
+	mockStatus.On("SetDegraded", operator.ResourceNotReady, "Waiting for Tier watch to be established - Error: ").Return()
 	_, err := r.Reconcile(ctx, reconcile.Request{})
 	Expect(err).ShouldNot(HaveOccurred())
 	mockStatus.AssertExpectations(GinkgoT())

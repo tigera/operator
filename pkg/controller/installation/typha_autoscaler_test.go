@@ -19,11 +19,13 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tigera/operator/pkg/controller/status"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
+	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/status"
 	. "github.com/tigera/operator/test"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -247,7 +249,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		_, err := c.AppsV1().Deployments("calico-system").Create(ctx, typha, metav1.CreateOptions{})
 		Expect(err).To(BeNil())
 
-		statusManager.On("SetDegraded", "ResourceScalingError", "Failed to autoscale typha - not enough linux nodes to schedule typha pods on, require 3 and have 2")
+		statusManager.On("SetDegraded", operator.ResourceScalingError, "Failed to autoscale typha - not enough linux nodes to schedule typha pods on, require 3 and have 2 - Error: ")
 
 		// Create a few nodes
 		_ = CreateNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)

@@ -119,7 +119,7 @@ var _ = Describe("tier controller tests", func() {
 		err := c.Delete(ctx, &operatorv1.APIServer{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})
 		Expect(err).ShouldNot(HaveOccurred())
 		mockStatus = &status.MockStatus{}
-		mockStatus.On("SetDegraded", "Waiting for Tigera API server to be ready", "").Return()
+		mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Tigera API server to be ready - Error: ").Return()
 		r = ReconcileTiers{
 			client:             c,
 			scheme:             scheme,
@@ -146,7 +146,7 @@ var _ = Describe("tier controller tests", func() {
 			tierWatchReady:     readyFlag,
 			policyWatchesReady: readyFlag,
 		}
-		mockStatus.On("SetDegraded", "License not found", "licensekeies.projectcalico.org \"default\" not found").Return()
+		mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, "License not found - Error: licensekeies.projectcalico.org \"default\" not found").Return()
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).ShouldNot(HaveOccurred())
 		mockStatus.AssertExpectations(GinkgoT())
@@ -172,7 +172,7 @@ var _ = Describe("tier controller tests", func() {
 			tierWatchReady:     readyFlag,
 			policyWatchesReady: readyFlag,
 		}
-		mockStatus.On("SetDegraded", "Feature is not active", "License does not support feature: tiers").Return()
+		mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Feature is not active - License does not support feature: tiers - Error: ").Return()
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).ShouldNot(HaveOccurred())
 		mockStatus.AssertExpectations(GinkgoT())

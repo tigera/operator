@@ -11,6 +11,7 @@ spec:
     listKind: NetworkSetList
     plural: networksets
     singular: networkset
+  preserveUnknownFields: false
   scope: Namespaced
   versions:
   - name: v1

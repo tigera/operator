@@ -337,8 +337,8 @@ func (c *component) volumes() []corev1.Volume {
 	volumes = append(volumes, corev1.Volume{
 		Name: FelixSync,
 		VolumeSource: corev1.VolumeSource{
-			FlexVolume: &corev1.FlexVolumeSource{
-				Driver: "nodeagent/uds",
+			CSI: &corev1.CSIVolumeSource{
+				Driver: "csi.tigera.io",
 			},
 		},
 	})

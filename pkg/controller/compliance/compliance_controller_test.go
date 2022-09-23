@@ -564,7 +564,7 @@ var _ = Describe("Compliance controller tests", func() {
 		})
 
 		It("should not create resources", func() {
-			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Feature is not active - License does not support this feature - Error: ").Return()
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Feature is not active - License does not support this feature", mock.Anything, mock.Anything).Return()
 
 			result, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).NotTo(HaveOccurred())

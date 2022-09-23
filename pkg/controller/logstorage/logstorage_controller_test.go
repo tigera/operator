@@ -280,7 +280,7 @@ var _ = Describe("LogStorage controller", func() {
 					It("returns an error if the LogStorage resource exists and is not marked for deletion", func() {
 						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, readyFlag)
 						Expect(err).ShouldNot(HaveOccurred())
-						mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "LogStorage validation failed - cluster type is managed but LogStorage CR still exists - Error: ").Return()
+						mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "LogStorage validation failed - cluster type is managed but LogStorage CR still exists", mock.Anything, mock.Anything).Return()
 						result, err := r.Reconcile(ctx, reconcile.Request{})
 						Expect(result).Should(Equal(reconcile.Result{}))
 						Expect(err).ShouldNot(HaveOccurred())
@@ -413,7 +413,7 @@ var _ = Describe("LogStorage controller", func() {
 					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, readyFlag)
 					Expect(err).ShouldNot(HaveOccurred())
 
-					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational - Error: ").Return()
+					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", mock.Anything, mock.Anything).Return()
 					result, err := r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 					// Expect to be waiting for Elasticsearch and Kibana to be functional
@@ -458,14 +458,14 @@ var _ = Describe("LogStorage controller", func() {
 					}
 					Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
 
-					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for curator secrets to become available - Error: ").Return()
+					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for curator secrets to become available", mock.Anything, mock.Anything).Return()
 					result, err = r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 					// Expect to be waiting for curator secret
 					Expect(result).Should(Equal(reconcile.Result{}))
 					Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: curatorUsrSecretObjMeta})).ShouldNot(HaveOccurred())
 
-					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for elasticsearch metrics secrets to become available - Error: ").Return()
+					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for elasticsearch metrics secrets to become available", mock.Anything, mock.Anything).Return()
 					_, err = r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 
@@ -533,7 +533,7 @@ var _ = Describe("LogStorage controller", func() {
 					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, readyFlag)
 					Expect(err).ShouldNot(HaveOccurred())
 
-					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational - Error: ").Return()
+					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", mock.Anything, mock.Anything).Return()
 					result, err := r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 					// Expect to be waiting for Elasticsearch and Kibana to be functional
@@ -575,7 +575,7 @@ var _ = Describe("LogStorage controller", func() {
 					}
 					Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
 
-					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for curator secrets to become available - Error: ").Return()
+					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for curator secrets to become available", mock.Anything, mock.Anything).Return()
 					result, err = r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 					// Expect to be waiting for curator secret
@@ -592,7 +592,7 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(cli.Get(ctx, curatorObjKey, &batchv1beta.CronJob{})).ShouldNot(HaveOccurred())
 
 					By("confirming logstorage is degraded if ConfigMap is not available")
-					mockStatus.On("SetDegraded", operatorv1.ResourceReadError, "Failed to get oidc user Secret and ConfigMap - Error: configmaps \"tigera-known-oidc-users\" not found").Return()
+					mockStatus.On("SetDegraded", operatorv1.ResourceReadError, "Failed to get oidc user Secret and ConfigMap", "configmaps \"tigera-known-oidc-users\" not found", mock.Anything).Return()
 					Expect(cli.Delete(ctx, &corev1.ConfigMap{
 						ObjectMeta: metav1.ObjectMeta{Namespace: render.ElasticsearchNamespace, Name: render.OIDCUsersConfigMapName},
 					})).ShouldNot(HaveOccurred())
@@ -659,7 +659,7 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(err).ShouldNot(HaveOccurred())
 
 					// Elasticsearch and kibana secrets are good.
-					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational - Error: ").Return()
+					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", mock.Anything, mock.Anything).Return()
 					_, err = r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 
@@ -697,7 +697,7 @@ var _ = Describe("LogStorage controller", func() {
 					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, readyFlag)
 					Expect(err).ShouldNot(HaveOccurred())
 
-					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational - Error: ").Return()
+					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", mock.Anything, mock.Anything).Return()
 					result, err := r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 					// Expect to be waiting for Elasticsearch and Kibana to be functional
@@ -750,7 +750,7 @@ var _ = Describe("LogStorage controller", func() {
 					}
 					Expect(cli.Create(ctx, esAdminUserSecret)).ShouldNot(HaveOccurred())
 
-					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for curator secrets to become available - Error: ").Return()
+					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for curator secrets to become available", mock.Anything, mock.Anything).Return()
 					_, err = r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 
@@ -794,7 +794,7 @@ var _ = Describe("LogStorage controller", func() {
 					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, readyFlag)
 					Expect(err).ShouldNot(HaveOccurred())
 
-					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational - Error: ").Return()
+					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", mock.Anything, mock.Anything).Return()
 					result, err := r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 					// Expect to be waiting for Elasticsearch and Kibana to be functional
@@ -836,7 +836,7 @@ var _ = Describe("LogStorage controller", func() {
 					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, readyFlag)
 					Expect(err).ShouldNot(HaveOccurred())
 
-					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational - Error: ").Return()
+					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", mock.Anything, mock.Anything).Return()
 					result, err := r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 					// Expect to be waiting for Elasticsearch and Kibana to be functional
@@ -910,7 +910,7 @@ var _ = Describe("LogStorage controller", func() {
 					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, readyFlag)
 					Expect(err).ShouldNot(HaveOccurred())
 
-					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for curator secrets to become available - Error: ").Return()
+					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for curator secrets to become available", mock.Anything, mock.Anything).Return()
 					result, err := r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 					// Expect to be waiting for Elasticsearch and Kibana to be functional
@@ -990,7 +990,7 @@ var _ = Describe("LogStorage controller", func() {
 					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, readyFlag)
 					Expect(err).ShouldNot(HaveOccurred())
 
-					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for curator secrets to become available - Error: ").Return()
+					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for curator secrets to become available", mock.Anything, mock.Anything).Return()
 					result, err := r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 					Expect(result).Should(Equal(reconcile.Result{}))
@@ -1028,7 +1028,7 @@ var _ = Describe("LogStorage controller", func() {
 					r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, readyFlag)
 					Expect(err).ShouldNot(HaveOccurred())
 
-					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational - Error: ").Return()
+					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", mock.Anything, mock.Anything).Return()
 					result, err := r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 					// Expect to be waiting for Elasticsearch and Kibana to be functional
@@ -1079,7 +1079,7 @@ var _ = Describe("LogStorage controller", func() {
 						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, readyFlag)
 						Expect(err).ShouldNot(HaveOccurred())
 
-						mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational - Error: ").Return()
+						mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", mock.Anything, mock.Anything).Return()
 
 						result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 							Name:      "log-storage",
@@ -1132,7 +1132,7 @@ var _ = Describe("LogStorage controller", func() {
 						})).ShouldNot(HaveOccurred())
 						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, readyFlag)
 						Expect(err).ShouldNot(HaveOccurred())
-						mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational - Error: ").Return()
+						mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", mock.Anything, mock.Anything).Return()
 						result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 							Name:      "log-storage",
 							Namespace: "",
@@ -1201,7 +1201,7 @@ var _ = Describe("LogStorage controller", func() {
 						})).ShouldNot(HaveOccurred())
 						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, readyFlag)
 						Expect(err).ShouldNot(HaveOccurred())
-						mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational - Error: ").Return()
+						mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", mock.Anything, mock.Anything).Return()
 						result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 							Name:      "log-storage",
 							Namespace: "",
@@ -1288,7 +1288,7 @@ var _ = Describe("LogStorage controller", func() {
 						})).ShouldNot(HaveOccurred())
 						r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, mockEsCliCreator, dns.DefaultClusterDomain, readyFlag)
 						Expect(err).ShouldNot(HaveOccurred())
-						mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational - Error: ").Return()
+						mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", mock.Anything, mock.Anything).Return()
 						result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 							Name:      "log-storage",
 							Namespace: "",
@@ -1760,7 +1760,7 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(cli.Get(ctx, utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
 					Expect(ls.Finalizers).Should(ContainElement("tigera.io/eck-cleanup"))
 
-					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational - Error: ").Return()
+					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", mock.Anything, mock.Anything).Return()
 					result, err = r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 					Expect(result).Should(Equal(reconcile.Result{}))

@@ -180,7 +180,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
-		status.SetDegraded(r.status, operatorv1.ResourceReadError, "Error querying for Application Layer", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying for Application Layer", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	r.status.OnCRFound()
@@ -208,13 +208,13 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	err = validateApplicationLayer(applicationLayer)
 
 	if err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceValidationError, "", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "", err, reqLogger)
 		return reconcile.Result{}, nil
 	}
 
 	// Write the application layer back to the datastore, so the controllers depending on this can reconcile.
 	if err = r.client.Patch(ctx, applicationLayer, preDefaultPatchFrom); err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceUpdateError, "Failed to write defaults to applicationLayer", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write defaults to applicationLayer", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -222,28 +222,28 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			status.SetDegraded(r.status, operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
 			return reconcile.Result{}, nil
 		}
-		status.SetDegraded(r.status, operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	if variant != operatorv1.TigeraSecureEnterprise {
-		status.SetDegraded(r.status, operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), nil, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
 
 	if operatorv1.IsFIPSModeEnabled(installation.FIPSMode) {
 		msg := errors.New("ApplicationLayer features cannot be used in combination with FIPSMode=Enabled")
-		status.SetDegraded(r.status, operatorv1.ResourceValidationError, msg.Error(), nil, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceValidationError, msg.Error(), nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
 
 	if err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -251,7 +251,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	err = r.patchFelixTproxyMode(ctx, applicationLayer)
 
 	if err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourcePatchError, "Error patching felix configuration", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourcePatchError, "Error patching felix configuration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -259,11 +259,11 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	var modSecurityRuleSet *corev1.ConfigMap
 	if r.isWAFEnabled(&applicationLayer.Spec) {
 		if modSecurityRuleSet, passthroughModSecurityRuleSet, err = r.getModSecurityRuleSet(ctx); err != nil {
-			status.SetDegraded(r.status, operatorv1.ResourceReadError, "Error getting Web Application Firewall ModSecurity rule set", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting Web Application Firewall ModSecurity rule set", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 		if err = validateModSecurityRuleSet(modSecurityRuleSet); err != nil {
-			status.SetDegraded(r.status, operatorv1.ResourceValidationError, "Error validating Web Application Firewall ModSecurity rule set", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceValidationError, "Error validating Web Application Firewall ModSecurity rule set", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
@@ -284,14 +284,14 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	ch := utils.NewComponentHandler(log, r.client, r.scheme, applicationLayer)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	if passthroughModSecurityRuleSet {
 		err = ch.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(modSecurityRuleSet), r.status)
 		if err != nil {
-			status.SetDegraded(r.status, operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
@@ -299,7 +299,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	// TODO: when there are more ApplicationLayer options then it will need to be restructured, as each of the
 	// different features will not have their own CreateOrUpdateOrDelete
 	if err = ch.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -457,7 +457,7 @@ func (r *ReconcileApplicationLayer) patchFelixTproxyMode(ctx context.Context, al
 	err := r.client.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 
 	if err != nil && !apierrors.IsNotFound(err) {
-		status.SetDegraded(r.status, operatorv1.ResourceReadError, "Unable to read FelixConfiguration", err, log)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read FelixConfiguration", err, log)
 		return err
 	}
 

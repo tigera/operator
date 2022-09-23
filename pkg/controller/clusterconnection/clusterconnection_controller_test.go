@@ -79,7 +79,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		mockStatus.On("AddStatefulSets", mock.Anything)
 		mockStatus.On("AddCronJobs", mock.Anything)
 		mockStatus.On("ClearDegraded", mock.Anything)
-		mockStatus.On("SetDegraded", mock.Anything, mock.Anything)
+		mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("SetMetaData", mock.Anything).Return()
@@ -288,7 +288,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				mockStatus = &status.MockStatus{}
 				mockStatus.On("Run").Return()
 				mockStatus.On("OnCRFound").Return()
-				mockStatus.On("SetDegraded", operatorv1.ResourceReadError, "Feature is not active - License does not support feature: egress-access-control - Error: ").Return()
+				mockStatus.On("SetDegraded", operatorv1.ResourceReadError, "Feature is not active - License does not support feature: egress-access-control", mock.Anything, mock.Anything).Return()
 				mockStatus.On("SetMetaData", mock.Anything).Return()
 
 				r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone, ready)

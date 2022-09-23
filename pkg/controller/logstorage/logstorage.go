@@ -19,8 +19,6 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/tigera/operator/pkg/controller/status"
-
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -89,16 +87,16 @@ func (r *ReconcileLogStorage) createLogStorage(
 		if err = r.client.Get(ctx, client.ObjectKey{Name: ls.Spec.StorageClassName}, &storagev1.StorageClass{}); err != nil {
 			if errors.IsNotFound(err) {
 				err := fmt.Errorf("couldn't find storage class %s, this must be provided", ls.Spec.StorageClassName)
-				status.SetDegraded(r.status, operatorv1.ResourceNotFound, "Failed to get storage class", err, reqLogger)
+				r.status.SetDegraded(operatorv1.ResourceNotFound, "Failed to get storage class", err, reqLogger)
 				return reconcile.Result{}, false, finalizerCleanup, nil
 			}
-			status.SetDegraded(r.status, operatorv1.ResourceReadError, "Failed to get storage class", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get storage class", err, reqLogger)
 			return reconcile.Result{}, false, finalizerCleanup, err
 		}
 
 		esDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
 		if elasticKeyPair, err = certificateManager.GetOrCreateKeyPair(r.client, render.TigeraElasticsearchInternalCertSecret, common.OperatorNamespace(), esDNSNames); err != nil {
-			status.SetDegraded(r.status, operatorv1.ResourceCreateError, "Failed to create Elasticsearch secrets", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create Elasticsearch secrets", err, reqLogger)
 			return reconcile.Result{}, false, finalizerCleanup, err
 		}
 
@@ -107,7 +105,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 			kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
 			if kibanaKeyPair, err = certificateManager.GetOrCreateKeyPair(r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames); err != nil {
 				reqLogger.Error(err, err.Error())
-				status.SetDegraded(r.status, operatorv1.ResourceCreateError, "Failed to create Kibana secrets", err, reqLogger)
+				r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create Kibana secrets", err, reqLogger)
 				return reconcile.Result{}, false, finalizerCleanup, err
 			}
 			trustedBundle.AddCertificates(kibanaKeyPair)
@@ -116,7 +114,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 
 	elasticsearch, err := r.getElasticsearch(ctx)
 	if err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
 		return reconcile.Result{}, false, finalizerCleanup, err
 	}
 
@@ -124,14 +122,14 @@ func (r *ReconcileLogStorage) createLogStorage(
 	if !operatorv1.IsFIPSModeEnabled(install.FIPSMode) {
 		kibana, err = r.getKibana(ctx)
 		if err != nil {
-			status.SetDegraded(r.status, operatorv1.ResourceReadError, "An error occurred trying to retrieve Kibana", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Kibana", err, reqLogger)
 			return reconcile.Result{}, false, finalizerCleanup, err
 		}
 	}
 
 	// If Authentication spec present, we use it to configure dex as an authentication proxy.
 	if authentication != nil && authentication.Status.State != operatorv1.TigeraStatusReady {
-		status.SetDegraded(r.status, operatorv1.ResourceNotReady, fmt.Sprintf("Authentication is not ready - authentication status: %s", authentication.Status.State), nil, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Authentication is not ready - authentication status: %s", authentication.Status.State), nil, reqLogger)
 		return reconcile.Result{}, false, finalizerCleanup, nil
 	}
 
@@ -159,7 +157,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 			unusedTLSSecret.Data[corev1.TLSCertKey] = install.CertificateManagement.CACert
 		}
 		if err != nil {
-			status.SetDegraded(r.status, operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve secret %s/%s", common.OperatorNamespace(), relasticsearch.UnusedCertSecret), err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve secret %s/%s", common.OperatorNamespace(), relasticsearch.UnusedCertSecret), err, reqLogger)
 			return reconcile.Result{}, false, finalizerCleanup, nil
 		}
 	}
@@ -195,7 +193,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 	component := render.LogStorage(logStorageCfg)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, false, finalizerCleanup, err
 	}
 
@@ -230,7 +228,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 
 	for _, component := range components {
 		if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
-			status.SetDegraded(r.status, operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, false, finalizerCleanup, err
 		}
 	}
@@ -241,12 +239,12 @@ func (r *ReconcileLogStorage) createLogStorage(
 
 	if managementClusterConnection == nil {
 		if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
-			status.SetDegraded(r.status, operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", nil, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", nil, reqLogger)
 			return reconcile.Result{}, false, finalizerCleanup, nil
 		}
 
 		if !operatorv1.IsFIPSModeEnabled(install.FIPSMode) && (kibana == nil || kibana.Status.AssociationStatus != cmnv1.AssociationEstablished) {
-			status.SetDegraded(r.status, operatorv1.ResourceNotReady, "Waiting for Kibana cluster to be operational", nil, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Kibana cluster to be operational", nil, reqLogger)
 			return reconcile.Result{}, false, finalizerCleanup, nil
 		}
 	}
@@ -258,7 +256,7 @@ func (r *ReconcileLogStorage) validateLogStorage(curatorSecrets []*corev1.Secret
 	var err error
 
 	if len(curatorSecrets) == 0 {
-		status.SetDegraded(r.status, operatorv1.ResourceNotReady, "Waiting for curator secrets to become available", nil, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for curator secrets to become available", nil, reqLogger)
 		return reconcile.Result{}, false, nil
 	}
 
@@ -267,7 +265,7 @@ func (r *ReconcileLogStorage) validateLogStorage(curatorSecrets []*corev1.Secret
 	// needed for logging user into Kibana is not available.
 	if esLicenseType == render.ElasticsearchLicenseTypeBasic {
 		if err = r.checkOIDCUsersEsResource(ctx); err != nil {
-			status.SetDegraded(r.status, operatorv1.ResourceReadError, "Failed to get oidc user Secret and ConfigMap", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get oidc user Secret and ConfigMap", err, reqLogger)
 			return reconcile.Result{}, false, err
 		}
 	}
@@ -278,12 +276,12 @@ func (r *ReconcileLogStorage) applyILMPolicies(ls *operatorv1.LogStorage, reqLog
 	// ES should be in ready phase when execution reaches here, apply ILM polices
 	esClient, err := r.esCliCreator(r.client, ctx, relasticsearch.HTTPSEndpoint(rmeta.OSTypeLinux, r.clusterDomain))
 	if err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceCreateError, "Failed to connect to Elasticsearch - failed to create the Elasticsearch client", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to connect to Elasticsearch - failed to create the Elasticsearch client", err, reqLogger)
 		return reconcile.Result{}, false, err
 	}
 
 	if err = esClient.SetILMPolicies(ctx, ls); err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceUpdateError, "Failed to create or update Elasticsearch lifecycle policies", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to create or update Elasticsearch lifecycle policies", err, reqLogger)
 		return reconcile.Result{}, false, err
 	}
 	return reconcile.Result{}, true, nil

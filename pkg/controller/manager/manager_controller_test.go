@@ -103,9 +103,9 @@ var _ = Describe("Manager controller tests", func() {
 			mockStatus.On("IsAvailable").Return(true)
 			mockStatus.On("OnCRFound").Return()
 			mockStatus.On("ClearDegraded")
-			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
-			mockStatus.On("SetDegraded", "Waiting for secret 'tigera-packetcapture-server-tls' to become available", "").Return().Maybe()
-			mockStatus.On("SetDegraded", "Waiting for secret 'calico-node-prometheus-tls' to become available", "").Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for LicenseKeyAPI to be ready", mock.Anything, mock.Anything).Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for secret 'tigera-packetcapture-server-tls' to become available", mock.Anything, mock.Anything).Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for secret 'calico-node-prometheus-tls' to become available", mock.Anything, mock.Anything).Return().Maybe()
 			mockStatus.On("ReadyToMonitor")
 			mockStatus.On("SetMetaData", mock.Anything).Return()
 
@@ -311,9 +311,9 @@ var _ = Describe("Manager controller tests", func() {
 			mockStatus.On("IsAvailable").Return(true)
 			mockStatus.On("OnCRFound").Return()
 			mockStatus.On("ClearDegraded")
-			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
-			mockStatus.On("SetDegraded", "Waiting for secret 'calico-node-prometheus-tls' to become available", "").Return().Maybe()
-			mockStatus.On("SetDegraded", "Waiting for secret 'tigera-packetcapture-server-tls' to become available", "").Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for LicenseKeyAPI to be ready", mock.Anything, mock.Anything).Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for secret 'calico-node-prometheus-tls' to become available", mock.Anything, mock.Anything).Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for secret 'tigera-packetcapture-server-tls' to become available", mock.Anything, mock.Anything).Return().Maybe()
 			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("ReadyToMonitor")
 			mockStatus.On("SetMetaData", mock.Anything).Return()
@@ -529,7 +529,7 @@ var _ = Describe("Manager controller tests", func() {
 				Expect(c.Delete(ctx, licenseKey)).NotTo(HaveOccurred())
 				mockStatus = &status.MockStatus{}
 				mockStatus.On("OnCRFound").Return()
-				mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, "License not found - Error: licensekeies.projectcalico.org \"default\" not found").Return()
+				mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, "License not found", "licensekeies.projectcalico.org \"default\" not found", mock.Anything).Return()
 				mockStatus.On("SetMetaData", mock.Anything).Return()
 				r.status = mockStatus
 
@@ -544,7 +544,7 @@ var _ = Describe("Manager controller tests", func() {
 				Expect(c.Update(ctx, compliance)).NotTo(HaveOccurred())
 				mockStatus = &status.MockStatus{}
 				mockStatus.On("OnCRFound").Return()
-				mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Compliance is not ready - Error: ").Return()
+				mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Compliance is not ready", mock.Anything, mock.Anything).Return()
 				mockStatus.On("SetMetaData", mock.Anything).Return()
 				r.status = mockStatus
 

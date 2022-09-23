@@ -79,7 +79,7 @@ var _ = Describe("LogCollector controller tests", func() {
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ClearDegraded")
-		mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+		mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for LicenseKeyAPI to be ready", mock.Anything, mock.Anything).Return().Maybe()
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("SetMetaData", mock.Anything).Return()
 
@@ -314,7 +314,7 @@ var _ = Describe("LogCollector controller tests", func() {
 				})
 
 				It("should not forward logs to s3", func() {
-					mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Feature is not active - License does not support feature: export-logs - Error: ").Return()
+					mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Feature is not active - License does not support feature: export-logs", mock.Anything, mock.Anything).Return()
 					_, err := r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
 
@@ -412,7 +412,7 @@ var _ = Describe("LogCollector controller tests", func() {
 				})
 
 				It("should not forward logs to splunk", func() {
-					mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Feature is not active - License does not support feature: export-logs - Error: ").Return()
+					mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Feature is not active - License does not support feature: export-logs", mock.Anything, mock.Anything).Return()
 
 					_, err := r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())
@@ -514,7 +514,7 @@ var _ = Describe("LogCollector controller tests", func() {
 				})
 
 				It("should not forward logs to syslog", func() {
-					mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Feature is not active - License does not support feature: export-logs - Error: ").Return()
+					mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Feature is not active - License does not support feature: export-logs", mock.Anything, mock.Anything).Return()
 
 					_, err := r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).ShouldNot(HaveOccurred())

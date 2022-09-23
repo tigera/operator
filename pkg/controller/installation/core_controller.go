@@ -806,19 +806,19 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		// update Installation resource with existing install if it exists.
 		nc, err := convert.NeedsConversion(ctx, r.client)
 		if err != nil {
-			status.SetDegraded(r.status, operator.ResourceValidationError, "Error checking for existing installation", err, reqLogger)
+			r.status.SetDegraded(operator.ResourceValidationError, "Error checking for existing installation", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 		if nc {
 			install, err := convert.Convert(ctx, r.client)
 			if err != nil {
 				if errors.As(err, &convert.ErrIncompatibleCluster{}) {
-					status.SetDegraded(r.status, operator.MigrationError, "Existing Calico installation can not be managed by Tigera Operator as it is configured in a way that Operator does not currently support. Please update your existing Calico install config", err, reqLogger)
+					r.status.SetDegraded(operator.MigrationError, "Existing Calico installation can not be managed by Tigera Operator as it is configured in a way that Operator does not currently support. Please update your existing Calico install config", err, reqLogger)
 					// We should always requeue a convert problem. Don't return error
 					// to make sure we never back off retrying.
 					return reconcile.Result{RequeueAfter: 15 * time.Second}, nil
 				}
-				status.SetDegraded(r.status, operator.MigrationError, "Error converting existing installation", err, reqLogger)
+				r.status.SetDegraded(operator.MigrationError, "Error converting existing installation", err, reqLogger)
 				return reconcile.Result{}, err
 			}
 			instance.Spec = utils.OverrideInstallationSpec(install.Spec, instance.Spec)
@@ -827,7 +827,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// update Installation with defaults
 	if err := updateInstallationWithDefaults(ctx, r.client, instance, r.autoDetectedProvider); err != nil {
-		status.SetDegraded(r.status, operator.ResourceReadError, "Error querying installation", err, reqLogger)
+		r.status.SetDegraded(operator.ResourceReadError, "Error querying installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -835,7 +835,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Validate the configuration.
 	if err := validateCustomResource(instance); err != nil {
-		status.SetDegraded(r.status, operator.InvalidConfigurationError, "Invalid Installation provided", err, reqLogger)
+		r.status.SetDegraded(operator.InvalidConfigurationError, "Invalid Installation provided", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -847,7 +847,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		crbKey := types.NamespacedName{Name: "calico-node"}
 		err := r.client.Get(ctx, crbKey, &crb)
 		if err != nil && !apierrors.IsNotFound(err) {
-			status.SetDegraded(r.status, operator.ResourceNotFound, "Unable to get ClusterRoleBinding", err, reqLogger)
+			r.status.SetDegraded(operator.ResourceNotFound, "Unable to get ClusterRoleBinding", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 		found := false
@@ -869,7 +869,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Note that we only write the 'base' installation back. We don't want to write the changes from 'overlay', as those should only
 	// be stored in the 'overlay' resource.
 	if err := r.client.Patch(ctx, instance, preDefaultPatchFrom); err != nil {
-		status.SetDegraded(r.status, operator.ResourceUpdateError, "Failed to write defaults", err, reqLogger)
+		r.status.SetDegraded(operator.ResourceUpdateError, "Failed to write defaults", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -887,7 +887,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 		// Validate the configuration.
 		if err := validateCustomResource(instance); err != nil {
-			status.SetDegraded(r.status, operator.InvalidConfigurationError, "Invalid computed config", err, reqLogger)
+			r.status.SetDegraded(operator.InvalidConfigurationError, "Invalid computed config", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
@@ -910,7 +910,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if reflect.DeepEqual(instanceStatus, operator.InstallationStatus{}) {
 		instance.Status = operator.InstallationStatus{}
 		if err := r.client.Status().Update(ctx, instance); err != nil {
-			status.SetDegraded(r.status, operator.ResourceUpdateError, "Failed to write default status", err, reqLogger)
+			r.status.SetDegraded(operator.ResourceUpdateError, "Failed to write default status", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
@@ -919,7 +919,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// the run the reset the degraded status and requeue the request.
 	if r.typhaAutoscaler.isDegraded() {
 		if err := r.typhaAutoscaler.triggerRun(); err != nil {
-			status.SetDegraded(r.status, operator.ResourceScalingError, "Failed to scale typha", err, reqLogger)
+			r.status.SetDegraded(operator.ResourceScalingError, "Failed to scale typha", err, reqLogger)
 			return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 		}
 	}
@@ -934,9 +934,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			log.Info("Rebooting to enable TigeraSecure controllers")
 			os.Exit(0)
 		} else if err != nil {
-			status.SetDegraded(r.status, operator.InternalServerError, "Error discovering Tigera Secure availability", err, reqLogger)
+			r.status.SetDegraded(operator.InternalServerError, "Error discovering Tigera Secure availability", err, reqLogger)
 		} else {
-			status.SetDegraded(r.status, operator.InternalServerError, "Cannot deploy Tigera Secure", fmt.Errorf("Missing Tigera Secure custom resource definitions"), reqLogger)
+			r.status.SetDegraded(operator.InternalServerError, "Cannot deploy Tigera Secure", fmt.Errorf("Missing Tigera Secure custom resource definitions"), reqLogger)
 		}
 
 		// Queue a retry. We don't want to watch the APIServer API since it might not exist and would cause
@@ -950,7 +950,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if !r.amazonCRDExists {
 		amazonCRDRequired, err := utils.RequiresAmazonController(r.config)
 		if err != nil {
-			status.SetDegraded(r.status, operator.ResourceNotFound, "Error discovering AmazonCloudIntegration CRD", err, reqLogger)
+			r.status.SetDegraded(operator.ResourceNotFound, "Error discovering AmazonCloudIntegration CRD", err, reqLogger)
 			reqLogger.Info("Scheduling a retry in 30 seconds")
 			return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 		}
@@ -963,7 +963,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Query for pull secrets in operator namespace
 	pullSecrets, err := utils.GetNetworkingPullSecrets(&instance.Spec, r.client)
 	if err != nil {
-		status.SetDegraded(r.status, operator.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
+		r.status.SetDegraded(operator.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -975,7 +975,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		logCollector, err = utils.GetLogCollector(ctx, r.client)
 		if logCollector != nil {
 			if err != nil {
-				status.SetDegraded(r.status, operator.ResourceReadError, "Error reading LogCollector", err, reqLogger)
+				r.status.SetDegraded(operator.ResourceReadError, "Error reading LogCollector", err, reqLogger)
 				return reconcile.Result{}, err
 			}
 		}
@@ -983,20 +983,20 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		managementCluster, err = utils.GetManagementCluster(ctx, r.client)
 		if managementCluster != nil {
 			if err != nil {
-				status.SetDegraded(r.status, operator.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
+				r.status.SetDegraded(operator.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
 				return reconcile.Result{}, err
 			}
 		}
 
 		managementClusterConnection, err = utils.GetManagementClusterConnection(ctx, r.client)
 		if err != nil {
-			status.SetDegraded(r.status, operator.ResourceReadError, "Error reading ManagementClusterConnection", err, reqLogger)
+			r.status.SetDegraded(operator.ResourceReadError, "Error reading ManagementClusterConnection", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
 		if managementClusterConnection != nil && managementCluster != nil {
 			err = fmt.Errorf("having both a managementCluster and a managementClusterConnection is not supported")
-			status.SetDegraded(r.status, operator.ResourceValidationError, "", err, reqLogger)
+			r.status.SetDegraded(operator.ResourceValidationError, "", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
@@ -1009,7 +1009,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if r.tierWatchReady.IsReady() {
 			if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 				if !apierrors.IsNotFound(err) && !meta.IsNoMatchError(err) {
-					status.SetDegraded(r.status, operator.ResourceReadError, "Error querying allow-tigera tier", err, reqLogger)
+					r.status.SetDegraded(operator.ResourceReadError, "Error querying allow-tigera tier", err, reqLogger)
 					return reconcile.Result{}, err
 				}
 			} else {
@@ -1020,7 +1020,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	certificateManager, err := certificatemanager.Create(r.client, &instance.Spec, r.clusterDomain)
 	if err != nil {
-		status.SetDegraded(r.status, operator.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
+		r.status.SetDegraded(operator.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	var managerInternalTLSSecret certificatemanagement.KeyPairInterface
@@ -1028,7 +1028,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		dnsNames := append(dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, r.clusterDomain), render.ManagerServiceIP)
 		managerInternalTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), dnsNames)
 		if err != nil {
-			status.SetDegraded(r.status, operator.CertificateError, fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err, reqLogger)
+			r.status.SetDegraded(operator.CertificateError, fmt.Sprintf("Error ensuring internal manager TLS certificate %q exists and has valid DNS names", render.ManagerInternalTLSSecretName), err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
@@ -1036,19 +1036,19 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	typhaNodeTLS, err := GetOrCreateTyphaNodeTLSConfig(r.client, certificateManager)
 	if err != nil {
 		log.Error(err, "Error with Typha/Felix secrets")
-		status.SetDegraded(r.status, operator.CertificateError, "Error with Typha/Felix secrets", err, reqLogger)
+		r.status.SetDegraded(operator.CertificateError, "Error with Typha/Felix secrets", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	birdTemplates, err := getBirdTemplates(r.client)
 	if err != nil {
-		status.SetDegraded(r.status, operator.ResourceReadError, "Error retrieving confd templates", err, reqLogger)
+		r.status.SetDegraded(operator.ResourceReadError, "Error retrieving confd templates", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	bgpLayout, err := getConfigMap(r.client, render.BGPLayoutConfigMapName)
 	if err != nil {
-		status.SetDegraded(r.status, operator.ResourceReadError, "Error retrieving BGP layout ConfigMap", err, reqLogger)
+		r.status.SetDegraded(operator.ResourceReadError, "Error retrieving BGP layout ConfigMap", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -1056,14 +1056,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		// Validate that BGP layout ConfigMap has the expected key.
 		if _, ok := bgpLayout.Data[render.BGPLayoutConfigMapKey]; !ok {
 			err = fmt.Errorf("BGP layout ConfigMap does not have %v key", render.BGPLayoutConfigMapKey)
-			status.SetDegraded(r.status, operator.ResourceValidationError, "Error in BGP layout ConfigMap", err, reqLogger)
+			r.status.SetDegraded(operator.ResourceValidationError, "Error in BGP layout ConfigMap", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
 
 	err = utils.GetK8sServiceEndPoint(r.client)
 	if err != nil {
-		status.SetDegraded(r.status, operator.ResourceReadError, "Error reading services endpoint configmap", err, reqLogger)
+		r.status.SetDegraded(operator.ResourceReadError, "Error reading services endpoint configmap", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -1071,7 +1071,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if instance.Spec.KubernetesProvider == operator.ProviderOpenShift {
 		openShiftOnAws, err = isOpenshiftOnAws(instance, ctx, r.client)
 		if err != nil {
-			status.SetDegraded(r.status, operator.ResourceReadError, "Error checking if OpenShift is on AWS", err, reqLogger)
+			r.status.SetDegraded(operator.ResourceReadError, "Error checking if OpenShift is on AWS", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
@@ -1082,7 +1082,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// to mimic a 'normal' rolling update.
 	needNsMigration, err := r.namespaceMigration.NeedsCoreNamespaceMigration(ctx)
 	if err != nil {
-		status.SetDegraded(r.status, operator.ResourceReadError, "Error checking if namespace migration is needed", err, reqLogger)
+		r.status.SetDegraded(operator.ResourceReadError, "Error checking if namespace migration is needed", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -1092,7 +1092,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if apierrors.IsNotFound(err) {
 			aci = nil
 		} else if err != nil {
-			status.SetDegraded(r.status, operator.ResourceReadError, "Error reading AmazonCloudIntegration", err, reqLogger)
+			r.status.SetDegraded(operator.ResourceReadError, "Error reading AmazonCloudIntegration", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
@@ -1101,7 +1101,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	felixConfiguration := &crdv1.FelixConfiguration{}
 	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, felixConfiguration)
 	if err != nil && !apierrors.IsNotFound(err) {
-		status.SetDegraded(r.status, operator.ResourceReadError, "Unable to read FelixConfiguration", err, reqLogger)
+		r.status.SetDegraded(operator.ResourceReadError, "Unable to read FelixConfiguration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -1124,13 +1124,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 		if nodeReporterMetricsPort == 0 {
 			err := errors.New("felixConfiguration prometheusReporterPort=0 not supported")
-			status.SetDegraded(r.status, operator.InvalidConfigurationError, "invalid metrics port", err, reqLogger)
+			r.status.SetDegraded(operator.InvalidConfigurationError, "invalid metrics port", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
 		nodePrometheusTLS, err = certificateManager.GetOrCreateKeyPair(r.client, render.NodePrometheusTLSServerSecret, common.OperatorNamespace(), dns.GetServiceDNSNames(render.CalicoNodeMetricsService, common.CalicoNamespace, r.clusterDomain))
 		if err != nil {
-			status.SetDegraded(r.status, operator.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
+			r.status.SetDegraded(operator.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 		if nodePrometheusTLS != nil {
@@ -1138,7 +1138,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 		prometheusClientCert, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
 		if err != nil {
-			status.SetDegraded(r.status, operator.CertificateError, "Unable to fetch prometheus certificate", err, reqLogger)
+			r.status.SetDegraded(operator.CertificateError, "Unable to fetch prometheus certificate", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 		if prometheusClientCert != nil {
@@ -1150,7 +1150,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	kubeControllersConfig := &crdv1.KubeControllersConfiguration{}
 	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, kubeControllersConfig)
 	if err != nil && !apierrors.IsNotFound(err) {
-		status.SetDegraded(r.status, operator.ResourceReadError, "Unable to read KubeControllersConfiguration", err, reqLogger)
+		r.status.SetDegraded(operator.ResourceReadError, "Unable to read KubeControllersConfiguration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -1236,7 +1236,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			}),
 			client.InNamespace(common.CalicoNamespace))
 		if err != nil {
-			status.SetDegraded(r.status, operator.ResourceReadError, "Failed to query for KubeController pods", err, reqLogger)
+			r.status.SetDegraded(operator.ResourceReadError, "Failed to query for KubeController pods", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 		if len(l.Items) == 0 {
@@ -1249,7 +1249,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	bgpConfiguration := &crdv1.BGPConfiguration{}
 	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, bgpConfiguration)
 	if err != nil && !apierrors.IsNotFound(err) {
-		status.SetDegraded(r.status, operator.ResourceReadError, "Unable to read BGPConfiguration", err, reqLogger)
+		r.status.SetDegraded(operator.ResourceReadError, "Unable to read BGPConfiguration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -1324,17 +1324,17 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	imageSet, err := imageset.GetImageSet(ctx, r.client, instance.Spec.Variant)
 	if err != nil {
-		status.SetDegraded(r.status, operator.ResourceReadError, "Error getting ImageSet", err, reqLogger)
+		r.status.SetDegraded(operator.ResourceReadError, "Error getting ImageSet", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	if err = imageset.ValidateImageSet(imageSet); err != nil {
-		status.SetDegraded(r.status, operator.ResourceValidationError, "Error validating ImageSet", err, reqLogger)
+		r.status.SetDegraded(operator.ResourceValidationError, "Error validating ImageSet", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	if err = imageset.ResolveImages(imageSet, components...); err != nil {
-		status.SetDegraded(r.status, operator.ResourceValidationError, "Error resolving ImageSet for components", err, reqLogger)
+		r.status.SetDegraded(operator.ResourceValidationError, "Error resolving ImageSet for components", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -1342,7 +1342,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 	for _, component := range components {
 		if err := handler.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
-			status.SetDegraded(r.status, operator.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
+			r.status.SetDegraded(operator.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
@@ -1357,7 +1357,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Deployments and Daemonset exist with our special migration nodeSelectors.
 	if needNsMigration {
 		if err := r.namespaceMigration.Run(ctx, reqLogger); err != nil {
-			status.SetDegraded(r.status, operator.ResourceMigrationError, "error migrating resources to calico-system", err, reqLogger)
+			r.status.SetDegraded(operator.ResourceMigrationError, "error migrating resources to calico-system", err, reqLogger)
 			// We should always requeue a migration problem. Don't return error
 			// to make sure we never start backing off retrying.
 			return reconcile.Result{Requeue: true}, nil
@@ -1366,7 +1366,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{Requeue: true}, nil
 	} else if r.namespaceMigration.NeedCleanup() {
 		if err := r.namespaceMigration.CleanupMigration(ctx); err != nil {
-			status.SetDegraded(r.status, operator.ResourceMigrationError, "error migrating resources to calico-system", err, reqLogger)
+			r.status.SetDegraded(operator.ResourceMigrationError, "error migrating resources to calico-system", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
@@ -1381,7 +1381,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		// a value from there.
 		statusMTU, err = readMTUFile()
 		if err != nil {
-			status.SetDegraded(r.status, operator.ResourceReadError, "error reading network MTU", err, reqLogger)
+			r.status.SetDegraded(operator.ResourceReadError, "error reading network MTU", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	} else {
@@ -1402,7 +1402,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		openshiftConfig := &configv1.Network{}
 		err = r.client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, openshiftConfig)
 		if err != nil {
-			status.SetDegraded(r.status, operator.ResourceReadError, "Unable to update OpenShift Network config: failed to read OpenShift network configuration", err, reqLogger)
+			r.status.SetDegraded(operator.ResourceReadError, "Unable to update OpenShift Network config: failed to read OpenShift network configuration", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
@@ -1417,7 +1417,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		openshiftConfig.Status.ClusterNetworkMTU = statusMTU
 
 		if err = r.client.Patch(ctx, openshiftConfig, patchFrom); err != nil {
-			status.SetDegraded(r.status, operator.ResourcePatchError, "Error patching openshift network status", err, reqLogger.WithValues("openshiftConfig", openshiftConfig))
+			r.status.SetDegraded(operator.ResourcePatchError, "Error patching openshift network status", err, reqLogger.WithValues("openshiftConfig", openshiftConfig))
 			return reconcile.Result{}, err
 		}
 	}
@@ -1595,12 +1595,12 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 	}
 	if fc.ResourceVersion == "" {
 		if err := r.client.Create(ctx, fc); err != nil {
-			status.SetDegraded(r.status, operator.ResourceCreateError, "Unable to Create default FelixConfiguration", err, log)
+			r.status.SetDegraded(operator.ResourceCreateError, "Unable to Create default FelixConfiguration", err, log)
 			return err
 		}
 	} else {
 		if err := r.client.Patch(ctx, fc, patchFrom); err != nil {
-			status.SetDegraded(r.status, operator.ResourcePatchError, "Unable to Patch default FelixConfiguration", err, log)
+			r.status.SetDegraded(operator.ResourcePatchError, "Unable to Patch default FelixConfiguration", err, log)
 			return err
 		}
 	}
@@ -1620,7 +1620,7 @@ var osExitOverride = os.Exit
 func (r *ReconcileInstallation) checkActive(log logr.Logger) (*corev1.ConfigMap, error) {
 	cm, err := active.GetActiveConfigMap(r.client)
 	if err != nil {
-		status.SetDegraded(r.status, operator.ResourceValidationError,
+		r.status.SetDegraded(operator.ResourceValidationError,
 			fmt.Sprintf("Error determining if operator in %s namespace is active", common.OperatorNamespace()),
 			err,
 			log)
@@ -1651,7 +1651,7 @@ func (r *ReconcileInstallation) updateCRDs(ctx context.Context, variant operator
 	// Installation CR will not remove the CRDs.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
 	if err := handler.CreateOrUpdateOrDelete(ctx, crdComponent, nil); err != nil {
-		status.SetDegraded(r.status, operator.ResourceUpdateError, "Error creating / updating CRD resource", err, log)
+		r.status.SetDegraded(operator.ResourceUpdateError, "Error creating / updating CRD resource", err, log)
 		return err
 	}
 	return nil

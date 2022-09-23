@@ -73,7 +73,7 @@ type StatusManager interface {
 	RemoveCronJobs(cjs ...types.NamespacedName)
 	RemoveCertificateSigningRequests(name string)
 	SetWindowsUpgradeStatus(pending, inProgress, completed []string, err error)
-	SetDegraded(reason operator.TigeraStatusReason, msg string)
+	SetDegraded(reason operator.TigeraStatusReason, msg string, err error, log logr.Logger)
 	ClearDegraded()
 	IsAvailable() bool
 	IsProgressing() bool
@@ -418,12 +418,17 @@ func (m *statusManager) RemoveCertificateSigningRequests(name string) {
 }
 
 // SetDegraded sets degraded state with the provided reason and message.
-func (m *statusManager) SetDegraded(reason operator.TigeraStatusReason, msg string) {
+func (m *statusManager) SetDegraded(reason operator.TigeraStatusReason, msg string, err error, log logr.Logger) {
+	log.WithValues(string(reason), msg).Error(err, string(reason))
+	errormsg := ""
+	if err != nil {
+		errormsg = err.Error()
+	}
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.degraded = true
 	m.explicitDegradedReason = string(reason)
-	m.explicitDegradedMsg = msg
+	m.explicitDegradedMsg = fmt.Sprintf("%s - Error: %s", msg, errormsg)
 }
 
 // ClearDegraded clears degraded state.
@@ -1064,13 +1069,4 @@ func UpdateStatusCondition(statuscondition []metav1.Condition, conditions []oper
 		}
 	}
 	return statuscondition
-}
-
-func SetDegraded(status StatusManager, reason operator.TigeraStatusReason, message string, err error, log logr.Logger) {
-	log.WithValues(string(reason), message).Error(err, string(reason))
-	errormsg := ""
-	if err != nil {
-		errormsg = err.Error()
-	}
-	status.SetDegraded(reason, fmt.Sprintf("%s - Error: %s", message, errormsg))
 }

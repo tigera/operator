@@ -192,7 +192,6 @@ var _ = Describe("Application layer controller tests", func() {
 				mockStatus.On("AddCronJobs", mock.Anything)
 				mockStatus.On("OnCRNotFound").Return()
 				mockStatus.On("ClearDegraded")
-				mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
 				mockStatus.On("ReadyToMonitor")
 				mockStatus.On("SetMetaData", mock.Anything).Return()
 				Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
@@ -237,7 +236,6 @@ var _ = Describe("Application layer controller tests", func() {
 				mockStatus.On("AddCronJobs", mock.Anything)
 				mockStatus.On("OnCRNotFound").Return()
 				mockStatus.On("ClearDegraded")
-				mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
 				mockStatus.On("ReadyToMonitor")
 				mockStatus.On("SetMetaData", mock.Anything).Return()
 				Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
@@ -266,7 +264,6 @@ var _ = Describe("Application layer controller tests", func() {
 				mockStatus.On("AddCronJobs", mock.Anything)
 				mockStatus.On("OnCRNotFound").Return()
 				mockStatus.On("ClearDegraded")
-				mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
 				mockStatus.On("ReadyToMonitor")
 				mockStatus.On("SetMetaData", mock.Anything).Return()
 				Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
@@ -337,7 +334,6 @@ var _ = Describe("Application layer controller tests", func() {
 				mockStatus.On("AddCronJobs", mock.Anything)
 				mockStatus.On("OnCRNotFound").Return()
 				mockStatus.On("ClearDegraded")
-				mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
 				mockStatus.On("ReadyToMonitor")
 				mockStatus.On("SetMetaData", mock.Anything).Return()
 				Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
@@ -405,7 +401,7 @@ var _ = Describe("Application layer controller tests", func() {
 			fipsEnabled := operatorv1.FIPSModeEnabled
 			installation.Spec.FIPSMode = &fipsEnabled
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
-			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "ApplicationLayer features cannot be used in combination with FIPSMode=Enabled - Error: ").Return()
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "ApplicationLayer features cannot be used in combination with FIPSMode=Enabled", mock.Anything, mock.Anything).Return()
 			mockStatus.On("SetMetaData", mock.Anything).Return()
 			By("applying the ApplicationLayer CR to the fake cluster")
 			enabled := operatorv1.L7LogCollectionEnabled

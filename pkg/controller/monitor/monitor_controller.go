@@ -200,7 +200,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
-		status.SetDegraded(r.status, operatorv1.ResourceReadError, "Failed to query Monitor", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query Monitor", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	reqLogger.V(2).Info("Loaded config", "config", instance)
@@ -225,22 +225,22 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	variant, install, err := utils.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			status.SetDegraded(r.status, operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-		status.SetDegraded(r.status, operatorv1.ResourceReadError, "Failed to query Installation", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query Installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(install, r.client)
 	if err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	if !r.prometheusReady.IsReady() {
 		err = fmt.Errorf("waiting for Prometheus resources")
-		status.SetDegraded(r.status, operatorv1.ResourceNotReady, "Waiting for Prometheus resources to be ready", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Prometheus resources to be ready", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -248,25 +248,25 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		if errors.IsNotFound(err) {
 			log.Info("No ConfigMap found, a default one will be created.")
 		} else {
-			status.SetDegraded(r.status, operatorv1.ResourceReadError, "Internal error attempting to retrieve ConfigMap", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Internal error attempting to retrieve ConfigMap", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
 
 	certificateManager, err := certificatemanager.Create(r.client, install, r.clusterDomain)
 	if err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	serverTLSSecret, err := certificateManager.GetOrCreateKeyPair(r.client, monitor.PrometheusTLSSecretName, common.OperatorNamespace(), dns.GetServiceDNSNames(monitor.PrometheusHTTPAPIServiceName, common.TigeraPrometheusNamespace, r.clusterDomain))
 	if err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	clientTLSSecret, err := certificateManager.GetOrCreateKeyPair(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusClientTLSSecretName})
 	if err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -280,7 +280,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		if err == nil {
 			trustedBundle.AddCertificates(certificate)
 		} else {
-			status.SetDegraded(r.status, operatorv1.ResourceReadError, "Error fetching TLS certificate", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error fetching TLS certificate", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
@@ -289,23 +289,23 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	// Fetch the Authentication spec. If present, we use to configure user authentication.
 	authenticationCR, err := utils.GetAuthentication(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
-		status.SetDegraded(r.status, operatorv1.ResourceReadError, "Error querying Authentication", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying Authentication", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	if authenticationCR != nil && authenticationCR.Status.State != operatorv1.TigeraStatusReady {
-		status.SetDegraded(r.status, operatorv1.ResourceNotReady, fmt.Sprintf("Authentication is not ready - authenticationCR status: %s", authenticationCR.Status.State), err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Authentication is not ready - authenticationCR status: %s", authenticationCR.Status.State), err, reqLogger)
 		return reconcile.Result{}, nil
 	}
 
 	keyValidatorConfig, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.clusterDomain)
 	if err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceUpdateError, "Failed to process the authentication CR.", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to process the authentication CR.", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
 	if !r.tierWatchReady.IsReady() {
-		status.SetDegraded(r.status, operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
@@ -316,7 +316,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		// License becomes available (in managed clusters). Therefore, if we fail to query the Tier, we exclude NetworkPolicy
 		// from reconciliation and tolerate errors arising from the Tier not being created.
 		if !errors.IsNotFound(err) {
-			status.SetDegraded(r.status, operatorv1.ResourceReadError, "Error querying allow-tigera tier", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying allow-tigera tier", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	} else {
@@ -328,7 +328,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 
 	alertmanagerConfigSecret, createInOperatorNamespace, err := r.readAlertmanagerConfigSecret(ctx)
 	if err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceReadError, "Error retrieving Alertmanager configuration secret", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving Alertmanager configuration secret", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -371,13 +371,13 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, components...); err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	for _, component := range components {
 		if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
-			status.SetDegraded(r.status, operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
@@ -394,7 +394,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 
 	instance.Status.State = operatorv1.TigeraStatusReady
 	if err := r.client.Status().Update(ctx, instance); err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceUpdateError, fmt.Sprintf("Error updating the monitor status %s", operatorv1.TigeraStatusReady), err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, fmt.Sprintf("Error updating the monitor status %s", operatorv1.TigeraStatusReady), err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

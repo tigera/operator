@@ -45,6 +45,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -85,6 +86,7 @@ var _ = Describe("Compliance controller tests", func() {
 		mockStatus.On("ClearDegraded")
 		mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
 		mockStatus.On("ReadyToMonitor")
+		mockStatus.On("SetMetaData", mock.Anything).Return()
 
 		// Create an object we can use throughout the test to do the compliance reconcile loops.
 		// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
@@ -528,6 +530,7 @@ var _ = Describe("Compliance controller tests", func() {
 		BeforeEach(func() {
 			mockStatus = &status.MockStatus{}
 			mockStatus.On("OnCRFound").Return()
+			mockStatus.On("SetMetaData", mock.Anything).Return()
 
 			readyFlag = &utils.ReadyFlag{}
 			readyFlag.MarkAsReady()
@@ -561,7 +564,7 @@ var _ = Describe("Compliance controller tests", func() {
 		})
 
 		It("should not create resources", func() {
-			mockStatus.On("SetDegraded", "Feature is not active", "License does not support this feature").Return()
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Feature is not active - License does not support this feature", mock.Anything, mock.Anything).Return()
 
 			result, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).NotTo(HaveOccurred())
@@ -630,6 +633,178 @@ var _ = Describe("Compliance controller tests", func() {
 		AfterEach(func() {
 			By("Deleting the previous license")
 			Expect(c.Delete(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}, Status: v3.LicenseKeyStatus{Features: []string{}}})).NotTo(HaveOccurred())
+		})
+	})
+
+	Context("Reconcile for Condition status", func() {
+		generation := int64(2)
+		It("should reconcile with creating new status condition with one item", func() {
+			ts := &operatorv1.TigeraStatus{
+				ObjectMeta: metav1.ObjectMeta{Name: "compliance"},
+				Spec:       operatorv1.TigeraStatusSpec{},
+				Status: operatorv1.TigeraStatusStatus{
+					Conditions: []operatorv1.TigeraStatusCondition{
+						{
+							Type:               operatorv1.ComponentAvailable,
+							Status:             operatorv1.ConditionTrue,
+							Reason:             string(operatorv1.AllObjectsAvailable),
+							Message:            "All Objects are available",
+							ObservedGeneration: generation,
+						},
+					},
+				},
+			}
+			Expect(c.Create(ctx, ts)).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
+				Name:      "compliance",
+				Namespace: "",
+			}})
+			Expect(err).ShouldNot(HaveOccurred())
+			instance, err := GetCompliance(ctx, r.client)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(instance.Status.Conditions).To(HaveLen(1))
+			Expect(instance.Status.Conditions[0].Type).To(Equal("Ready"))
+			Expect(string(instance.Status.Conditions[0].Status)).To(Equal(string(operatorv1.ConditionTrue)))
+			Expect(instance.Status.Conditions[0].Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
+			Expect(instance.Status.Conditions[0].Message).To(Equal("All Objects are available"))
+			Expect(instance.Status.Conditions[0].ObservedGeneration).To(Equal(generation))
+		})
+		It("should reconcile with empty tigerastatus conditions ", func() {
+			ts := &operatorv1.TigeraStatus{
+				ObjectMeta: metav1.ObjectMeta{Name: "compliance"},
+				Spec:       operatorv1.TigeraStatusSpec{},
+				Status:     operatorv1.TigeraStatusStatus{},
+			}
+			Expect(c.Create(ctx, ts)).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
+				Name:      "compliance",
+				Namespace: "",
+			}})
+			Expect(err).ShouldNot(HaveOccurred())
+			instance, err := GetCompliance(ctx, r.client)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(instance.Status.Conditions).To(HaveLen(0))
+		})
+		It("should reconcile with creating new status condition  with multiple conditions as true", func() {
+			ts := &operatorv1.TigeraStatus{
+				ObjectMeta: metav1.ObjectMeta{Name: "compliance"},
+				Spec:       operatorv1.TigeraStatusSpec{},
+				Status: operatorv1.TigeraStatusStatus{
+					Conditions: []operatorv1.TigeraStatusCondition{
+						{
+							Type:               operatorv1.ComponentAvailable,
+							Status:             operatorv1.ConditionTrue,
+							Reason:             string(operatorv1.AllObjectsAvailable),
+							Message:            "All Objects are available",
+							ObservedGeneration: generation,
+						},
+						{
+							Type:               operatorv1.ComponentProgressing,
+							Status:             operatorv1.ConditionTrue,
+							Reason:             string(operatorv1.ResourceNotReady),
+							Message:            "Progressing Installation.operatorv1.tigera.io",
+							ObservedGeneration: generation,
+						},
+						{
+							Type:               operatorv1.ComponentDegraded,
+							Status:             operatorv1.ConditionTrue,
+							Reason:             string(operatorv1.ResourceUpdateError),
+							Message:            "Error resolving ImageSet for components",
+							ObservedGeneration: generation,
+						},
+					},
+				},
+			}
+			Expect(c.Create(ctx, ts)).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
+				Name:      "compliance",
+				Namespace: "",
+			}})
+			Expect(err).ShouldNot(HaveOccurred())
+			instance, err := GetCompliance(ctx, r.client)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(instance.Status.Conditions).To(HaveLen(3))
+			Expect(instance.Status.Conditions[0].Type).To(Equal("Ready"))
+			Expect(string(instance.Status.Conditions[0].Status)).To(Equal(string(operatorv1.ConditionTrue)))
+			Expect(instance.Status.Conditions[0].Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
+			Expect(instance.Status.Conditions[0].Message).To(Equal("All Objects are available"))
+			Expect(instance.Status.Conditions[0].ObservedGeneration).To(Equal(generation))
+
+			Expect(instance.Status.Conditions[1].Type).To(Equal("Progressing"))
+			Expect(string(instance.Status.Conditions[1].Status)).To(Equal(string(operatorv1.ConditionTrue)))
+			Expect(instance.Status.Conditions[1].Reason).To(Equal(string(operatorv1.ResourceNotReady)))
+			Expect(instance.Status.Conditions[1].Message).To(Equal("Progressing Installation.operatorv1.tigera.io"))
+			Expect(instance.Status.Conditions[1].ObservedGeneration).To(Equal(generation))
+
+			Expect(instance.Status.Conditions[2].Type).To(Equal("Degraded"))
+			Expect(string(instance.Status.Conditions[2].Status)).To(Equal(string(operatorv1.ConditionTrue)))
+			Expect(instance.Status.Conditions[2].Reason).To(Equal(string(operatorv1.ResourceUpdateError)))
+			Expect(instance.Status.Conditions[2].Message).To(Equal("Error resolving ImageSet for components"))
+			Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
+		})
+		It("should reconcile with creating new status condition and toggle Available to true & others to false", func() {
+			ts := &operatorv1.TigeraStatus{
+				ObjectMeta: metav1.ObjectMeta{Name: "compliance"},
+				Spec:       operatorv1.TigeraStatusSpec{},
+				Status: operatorv1.TigeraStatusStatus{
+					Conditions: []operatorv1.TigeraStatusCondition{
+						{
+							Type:               operatorv1.ComponentAvailable,
+							Status:             operatorv1.ConditionTrue,
+							Reason:             string(operatorv1.AllObjectsAvailable),
+							Message:            "All Objects are available",
+							ObservedGeneration: generation,
+						},
+						{
+							Type:               operatorv1.ComponentProgressing,
+							Status:             operatorv1.ConditionFalse,
+							Reason:             string(operatorv1.NotApplicable),
+							Message:            "Not Applicable",
+							ObservedGeneration: generation,
+						},
+						{
+							Type:               operatorv1.ComponentDegraded,
+							Status:             operatorv1.ConditionFalse,
+							Reason:             string(operatorv1.NotApplicable),
+							Message:            "Not Applicable",
+							ObservedGeneration: generation,
+						},
+					},
+				},
+			}
+			Expect(c.Create(ctx, ts)).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
+				Name:      "compliance",
+				Namespace: "",
+			}})
+			Expect(err).ShouldNot(HaveOccurred())
+			instance, err := GetCompliance(ctx, r.client)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(instance.Status.Conditions).To(HaveLen(3))
+			Expect(instance.Status.Conditions[0].Type).To(Equal("Ready"))
+			Expect(string(instance.Status.Conditions[0].Status)).To(Equal(string(operatorv1.ConditionTrue)))
+			Expect(instance.Status.Conditions[0].Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
+			Expect(instance.Status.Conditions[0].Message).To(Equal("All Objects are available"))
+			Expect(instance.Status.Conditions[0].ObservedGeneration).To(Equal(generation))
+
+			Expect(instance.Status.Conditions[1].Type).To(Equal("Progressing"))
+			Expect(string(instance.Status.Conditions[1].Status)).To(Equal(string(operatorv1.ConditionFalse)))
+			Expect(instance.Status.Conditions[1].Reason).To(Equal(string(operatorv1.NotApplicable)))
+			Expect(instance.Status.Conditions[1].Message).To(Equal("Not Applicable"))
+			Expect(instance.Status.Conditions[1].ObservedGeneration).To(Equal(generation))
+
+			Expect(instance.Status.Conditions[2].Type).To(Equal("Degraded"))
+			Expect(string(instance.Status.Conditions[2].Status)).To(Equal(string(operatorv1.ConditionFalse)))
+			Expect(instance.Status.Conditions[2].Reason).To(Equal(string(operatorv1.NotApplicable)))
+			Expect(instance.Status.Conditions[2].Message).To(Equal("Not Applicable"))
+			Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
 		})
 	})
 })

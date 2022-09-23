@@ -122,7 +122,7 @@ func (t *typhaAutoscaler) start(ctx context.Context) {
 		if err := t.autoscaleReplicas(); err != nil {
 			degraded = true
 			typhaLog.Error(err, "Failed to autoscale typha")
-			t.statusManager.SetDegraded(string(operator.ResourceScalingError), fmt.Sprintf("Failed to autoscale typha - %s", err.Error()))
+			t.statusManager.SetDegraded(operator.ResourceScalingError, fmt.Sprintf("Failed to autoscale typha - %s", err.Error()), nil, log)
 		}
 
 		for {
@@ -133,7 +133,7 @@ func (t *typhaAutoscaler) start(ctx context.Context) {
 					typhaLog.Error(err, "Failed to autoscale typha")
 
 					// Since this run was triggered by the ticker we need to degrade the tigera status now.
-					t.statusManager.SetDegraded(string(operator.ResourceScalingError), fmt.Sprintf("Failed to autoscale typha - %s", err.Error()))
+					t.statusManager.SetDegraded(operator.ResourceScalingError, fmt.Sprintf("Failed to autoscale typha - %s", err.Error()), nil, log)
 				} else {
 					degraded = false
 				}

@@ -21,7 +21,6 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
 	"github.com/stretchr/testify/mock"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -30,6 +29,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -84,7 +84,8 @@ var _ = Describe("apiserver controller tests", func() {
 		replicas := int32(2)
 		installation = &operatorv1.Installation{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "default",
+				Name:       "default",
+				Generation: 2,
 			},
 			Status: operatorv1.InstallationStatus{
 				Variant:  operatorv1.TigeraSecureEnterprise,
@@ -140,6 +141,7 @@ var _ = Describe("apiserver controller tests", func() {
 		mockStatus.On("AddCertificateSigningRequests", mock.Anything)
 		mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 		mockStatus.On("ReadyToMonitor")
+		mockStatus.On("SetMetaData", mock.Anything).Return()
 	})
 
 	Context("verify reconciliation", func() {
@@ -452,6 +454,233 @@ var _ = Describe("apiserver controller tests", func() {
 			policies := v3.NetworkPolicyList{}
 			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
 			Expect(policies.Items).To(HaveLen(0))
+
+		})
+	})
+
+	Context("Reconcile for Condition status", func() {
+		generation := int64(2)
+		BeforeEach(func() {
+			Expect(cli.Create(ctx, installation)).NotTo(HaveOccurred())
+		})
+		It("should reconcile with creating new status condition with one item", func() {
+			ts := &operatorv1.TigeraStatus{
+				ObjectMeta: metav1.ObjectMeta{Name: "apiserver"},
+				Spec:       operatorv1.TigeraStatusSpec{},
+				Status: operatorv1.TigeraStatusStatus{
+					Conditions: []operatorv1.TigeraStatusCondition{
+						{
+							Type:               operatorv1.ComponentAvailable,
+							Status:             operatorv1.ConditionTrue,
+							Reason:             string(operatorv1.AllObjectsAvailable),
+							Message:            "All Objects are available",
+							ObservedGeneration: generation,
+						},
+					},
+				},
+			}
+			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
+			r := ReconcileAPIServer{
+				client:              cli,
+				scheme:              scheme,
+				provider:            operatorv1.ProviderNone,
+				enterpriseCRDsExist: true,
+				status:              mockStatus,
+				tierWatchReady:      ready,
+			}
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
+				Name:      "apiserver",
+				Namespace: "",
+			}})
+			Expect(err).ShouldNot(HaveOccurred())
+			instance, _, err := utils.GetAPIServer(ctx, r.client)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(instance.Status.Conditions).To(HaveLen(1))
+
+			Expect(instance.Status.Conditions[0].Type).To(Equal("Ready"))
+			Expect(string(instance.Status.Conditions[0].Status)).To(Equal(string(operatorv1.ConditionTrue)))
+			Expect(instance.Status.Conditions[0].Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
+			Expect(instance.Status.Conditions[0].Message).To(Equal("All Objects are available"))
+			Expect(instance.Status.Conditions[0].ObservedGeneration).To(Equal(generation))
+		})
+		It("should reconcile with empty tigerastatus conditions ", func() {
+			ts := &operatorv1.TigeraStatus{
+				ObjectMeta: metav1.ObjectMeta{Name: "apiserver"},
+				Spec:       operatorv1.TigeraStatusSpec{},
+				Status:     operatorv1.TigeraStatusStatus{},
+			}
+			r := ReconcileAPIServer{
+				client:              cli,
+				scheme:              scheme,
+				provider:            operatorv1.ProviderNone,
+				enterpriseCRDsExist: true,
+				status:              mockStatus,
+				tierWatchReady:      ready,
+			}
+			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
+				Name:      "apiserver",
+				Namespace: "",
+			}})
+			Expect(err).ShouldNot(HaveOccurred())
+			instance, _, err := utils.GetAPIServer(ctx, r.client)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(instance.Status.Conditions).To(HaveLen(0))
+		})
+		It("should reconcile with creating new status condition  with multiple conditions as true", func() {
+			ts := &operatorv1.TigeraStatus{
+				ObjectMeta: metav1.ObjectMeta{Name: "apiserver"},
+				Spec:       operatorv1.TigeraStatusSpec{},
+				Status: operatorv1.TigeraStatusStatus{
+					Conditions: []operatorv1.TigeraStatusCondition{
+						{
+							Type:               operatorv1.ComponentAvailable,
+							Status:             operatorv1.ConditionTrue,
+							Reason:             string(operatorv1.AllObjectsAvailable),
+							Message:            "All Objects are available",
+							ObservedGeneration: generation,
+						},
+						{
+							Type:               operatorv1.ComponentProgressing,
+							Status:             operatorv1.ConditionTrue,
+							Reason:             string(operatorv1.ResourceNotReady),
+							Message:            "Progressing Installation.operatorv1.tigera.io",
+							ObservedGeneration: generation,
+						},
+						{
+							Type:               operatorv1.ComponentDegraded,
+							Status:             operatorv1.ConditionTrue,
+							Reason:             string(operatorv1.ResourceUpdateError),
+							Message:            "Error resolving ImageSet for components",
+							ObservedGeneration: generation,
+						},
+					},
+				},
+			}
+			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
+			r := ReconcileAPIServer{
+				client:              cli,
+				scheme:              scheme,
+				provider:            operatorv1.ProviderNone,
+				enterpriseCRDsExist: true,
+				status:              mockStatus,
+				tierWatchReady:      ready,
+			}
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
+				Name:      "apiserver",
+				Namespace: "",
+			}})
+			Expect(err).ShouldNot(HaveOccurred())
+			instance, _, err := utils.GetAPIServer(ctx, r.client)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(instance.Status.Conditions).To(HaveLen(3))
+
+			Expect(instance.Status.Conditions[0].Type).To(Equal("Ready"))
+			Expect(string(instance.Status.Conditions[0].Status)).To(Equal(string(operatorv1.ConditionTrue)))
+			Expect(instance.Status.Conditions[0].Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
+			Expect(instance.Status.Conditions[0].Message).To(Equal("All Objects are available"))
+			Expect(instance.Status.Conditions[0].ObservedGeneration).To(Equal(generation))
+
+			Expect(instance.Status.Conditions[1].Type).To(Equal("Progressing"))
+			Expect(string(instance.Status.Conditions[1].Status)).To(Equal(string(operatorv1.ConditionTrue)))
+			Expect(instance.Status.Conditions[1].Reason).To(Equal(string(operatorv1.ResourceNotReady)))
+			Expect(instance.Status.Conditions[1].Message).To(Equal("Progressing Installation.operatorv1.tigera.io"))
+			Expect(instance.Status.Conditions[1].ObservedGeneration).To(Equal(generation))
+
+			Expect(instance.Status.Conditions[2].Type).To(Equal("Degraded"))
+			Expect(string(instance.Status.Conditions[2].Status)).To(Equal(string(operatorv1.ConditionTrue)))
+			Expect(instance.Status.Conditions[2].Reason).To(Equal(string(operatorv1.ResourceUpdateError)))
+			Expect(instance.Status.Conditions[2].Message).To(Equal("Error resolving ImageSet for components"))
+			Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
+		})
+		It("should reconcile with creating new status condition and toggle Available to true & others to false", func() {
+			ts := &operatorv1.TigeraStatus{
+				ObjectMeta: metav1.ObjectMeta{Name: "apiserver"},
+				Spec:       operatorv1.TigeraStatusSpec{},
+				Status: operatorv1.TigeraStatusStatus{
+					Conditions: []operatorv1.TigeraStatusCondition{
+						{
+							Type:               operatorv1.ComponentAvailable,
+							Status:             operatorv1.ConditionTrue,
+							Reason:             string(operatorv1.AllObjectsAvailable),
+							Message:            "All Objects are available",
+							ObservedGeneration: generation,
+						},
+						{
+							Type:               operatorv1.ComponentProgressing,
+							Status:             operatorv1.ConditionFalse,
+							Reason:             string(operatorv1.NotApplicable),
+							Message:            "Not Applicable",
+							ObservedGeneration: generation,
+						},
+						{
+							Type:               operatorv1.ComponentDegraded,
+							Status:             operatorv1.ConditionFalse,
+							Reason:             string(operatorv1.NotApplicable),
+							Message:            "Not Applicable",
+							ObservedGeneration: generation,
+						},
+					},
+				},
+			}
+			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
+			r := ReconcileAPIServer{
+				client:              cli,
+				scheme:              scheme,
+				provider:            operatorv1.ProviderNone,
+				enterpriseCRDsExist: true,
+				status:              mockStatus,
+				tierWatchReady:      ready,
+			}
+			installation.Status.Conditions = []metav1.Condition{
+				{
+					Type:               "Ready",
+					Status:             metav1.ConditionStatus(operatorv1.ConditionFalse),
+					Reason:             string(operatorv1.NotApplicable),
+					Message:            "Not Applicable",
+					LastTransitionTime: metav1.NewTime(time.Now()),
+				},
+				{
+					Type:               "Progressing",
+					Status:             metav1.ConditionStatus(operatorv1.ConditionTrue),
+					LastTransitionTime: metav1.NewTime(time.Now()),
+					Reason:             string(operatorv1.ResourceNotReady),
+					Message:            "All resources are not available",
+				},
+				{
+					Type:               "Degraded",
+					Status:             metav1.ConditionStatus(operatorv1.ConditionFalse),
+					Reason:             string(operatorv1.NotApplicable),
+					Message:            "Not Applicable",
+					LastTransitionTime: metav1.NewTime(time.Now()),
+				},
+			}
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
+				Name:      "apiserver",
+				Namespace: "",
+			}})
+			Expect(err).ShouldNot(HaveOccurred())
+			instance, _, err := utils.GetAPIServer(ctx, r.client)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(instance.Status.Conditions).To(HaveLen(3))
+
+			Expect(instance.Status.Conditions[0].Type).To(Equal("Ready"))
+			Expect(string(instance.Status.Conditions[0].Status)).To(Equal(string(operatorv1.ConditionTrue)))
+			Expect(instance.Status.Conditions[0].Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
+			Expect(instance.Status.Conditions[0].Message).To(Equal("All Objects are available"))
+			Expect(instance.Status.Conditions[0].ObservedGeneration).To(Equal(generation))
+
+			Expect(instance.Status.Conditions[1].Type).To(Equal("Progressing"))
+			Expect(string(instance.Status.Conditions[1].Status)).To(Equal(string(operatorv1.ConditionFalse)))
+			Expect(instance.Status.Conditions[1].Reason).To(Equal(string(operatorv1.NotApplicable)))
+			Expect(instance.Status.Conditions[1].Message).To(Equal("Not Applicable"))
+			Expect(instance.Status.Conditions[1].ObservedGeneration).To(Equal(generation))
+
+			Expect(instance.Status.Conditions[2].Type).To(Equal("Degraded"))
+			Expect(string(instance.Status.Conditions[2].Status)).To(Equal(string(operatorv1.ConditionFalse)))
+			Expect(instance.Status.Conditions[2].Reason).To(Equal(string(operatorv1.NotApplicable)))
+			Expect(instance.Status.Conditions[2].Message).To(Equal("Not Applicable"))
+			Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
 		})
 	})
 })

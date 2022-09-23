@@ -117,7 +117,7 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 	reqLogger.Info("Reconciling Tiers")
 
 	if !utils.IsAPIServerReady(r.client, reqLogger) {
-		r.status.SetDegraded("Waiting for Tigera API server to be ready", "")
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tigera API server to be ready", nil, reqLogger)
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
@@ -125,14 +125,14 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 	license, err := utils.FetchLicenseKey(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			r.status.SetDegraded("License not found", err.Error())
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, reqLogger)
 			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 		}
-		r.status.SetDegraded("Error querying license", err.Error())
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying license", err, reqLogger)
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 	if !utils.IsFeatureActive(license, common.TiersFeature) {
-		r.status.SetDegraded("Feature is not active", "License does not support feature: tiers")
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "Feature is not active - License does not support feature: tiers", err, reqLogger)
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
@@ -141,7 +141,7 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 	componentHandler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
 	err = componentHandler.CreateOrUpdateOrDelete(ctx, component, nil)
 	if err != nil {
-		r.status.SetDegraded("Error creating / updating resource", err.Error())
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

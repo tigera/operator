@@ -21,9 +21,8 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-
 	"github.com/stretchr/testify/mock"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
@@ -39,6 +38,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -76,8 +76,10 @@ var _ = Describe("authentication controller tests", func() {
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ClearDegraded")
-		mockStatus.On("SetDegraded", mock.Anything, mock.Anything).Return()
+		mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 		mockStatus.On("ReadyToMonitor")
+		mockStatus.On("OnCRNotFound").Return()
+		mockStatus.On("SetMetaData", mock.Anything).Return()
 
 		// Apply prerequisites for the basic reconcile to succeed.
 		Expect(cli.Create(ctx, &operatorv1.Installation{
@@ -124,6 +126,198 @@ var _ = Describe("authentication controller tests", func() {
 		}
 
 		replicas = 2
+	})
+
+	Context("Reconcile for Condition status", func() {
+		BeforeEach(func() {
+			Expect(cli.Create(ctx, &operatorv1.Authentication{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.AuthenticationSpec{
+					ManagerDomain: "https://example.com",
+					OIDC: &operatorv1.AuthenticationOIDC{
+						IssuerURL:      "https://example.com",
+						UsernameClaim:  "email",
+						GroupsClaim:    "group",
+						GroupsPrefix:   "g",
+						UsernamePrefix: "u",
+					},
+				},
+			})).ToNot(HaveOccurred())
+			Expect(cli.Create(ctx, idpSecret)).ToNot(HaveOccurred())
+		})
+		generation := int64(2)
+		It("should reconcile with creating new status condition with one item", func() {
+			ts := &operatorv1.TigeraStatus{
+				ObjectMeta: metav1.ObjectMeta{Name: "authentication"},
+				Spec:       operatorv1.TigeraStatusSpec{},
+				Status: operatorv1.TigeraStatusStatus{
+					Conditions: []operatorv1.TigeraStatusCondition{
+						{
+							Type:               operatorv1.ComponentAvailable,
+							Status:             operatorv1.ConditionTrue,
+							Reason:             string(operatorv1.AllObjectsAvailable),
+							Message:            "All Objects are available",
+							ObservedGeneration: generation,
+						},
+					},
+				},
+			}
+			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag}
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
+				Name:      "authentication",
+				Namespace: "",
+			}})
+			Expect(err).ShouldNot(HaveOccurred())
+			instance, err := utils.GetAuthentication(ctx, r.client)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(instance.Status.Conditions).To(HaveLen(1))
+			Expect(instance.Status.Conditions[0].Type).To(Equal("Ready"))
+			Expect(string(instance.Status.Conditions[0].Status)).To(Equal(string(operatorv1.ConditionTrue)))
+			Expect(instance.Status.Conditions[0].Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
+			Expect(instance.Status.Conditions[0].Message).To(Equal("All Objects are available"))
+			Expect(instance.Status.Conditions[0].ObservedGeneration).To(Equal(generation))
+		})
+		It("should reconcile with empty tigerastatus conditions ", func() {
+			ts := &operatorv1.TigeraStatus{
+				ObjectMeta: metav1.ObjectMeta{Name: "authentication"},
+				Spec:       operatorv1.TigeraStatusSpec{},
+				Status:     operatorv1.TigeraStatusStatus{},
+			}
+
+			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
+
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag}
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
+				Name:      "authentication",
+				Namespace: "",
+			}})
+			Expect(err).ShouldNot(HaveOccurred())
+			instance, err := utils.GetAuthentication(ctx, r.client)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(instance.Status.Conditions).To(HaveLen(0))
+		})
+		It("should reconcile with creating new status condition  with multiple conditions as true", func() {
+			ts := &operatorv1.TigeraStatus{
+				ObjectMeta: metav1.ObjectMeta{Name: "authentication"},
+				Spec:       operatorv1.TigeraStatusSpec{},
+				Status: operatorv1.TigeraStatusStatus{
+					Conditions: []operatorv1.TigeraStatusCondition{
+						{
+							Type:               operatorv1.ComponentAvailable,
+							Status:             operatorv1.ConditionTrue,
+							Reason:             string(operatorv1.AllObjectsAvailable),
+							Message:            "All Objects are available",
+							ObservedGeneration: generation,
+						},
+						{
+							Type:               operatorv1.ComponentProgressing,
+							Status:             operatorv1.ConditionTrue,
+							Reason:             string(operatorv1.ResourceNotReady),
+							Message:            "Progressing Installation.operatorv1.tigera.io",
+							ObservedGeneration: generation,
+						},
+						{
+							Type:               operatorv1.ComponentDegraded,
+							Status:             operatorv1.ConditionTrue,
+							Reason:             string(operatorv1.ResourceUpdateError),
+							Message:            "Error resolving ImageSet for components",
+							ObservedGeneration: generation,
+						},
+					},
+				},
+			}
+			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag}
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
+				Name:      "authentication",
+				Namespace: "",
+			}})
+			Expect(err).ShouldNot(HaveOccurred())
+			instance, err := utils.GetAuthentication(ctx, r.client)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(instance.Status.Conditions).To(HaveLen(3))
+
+			Expect(instance.Status.Conditions[0].Type).To(Equal("Ready"))
+			Expect(string(instance.Status.Conditions[0].Status)).To(Equal(string(operatorv1.ConditionTrue)))
+			Expect(instance.Status.Conditions[0].Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
+			Expect(instance.Status.Conditions[0].Message).To(Equal("All Objects are available"))
+			Expect(instance.Status.Conditions[0].ObservedGeneration).To(Equal(generation))
+
+			Expect(instance.Status.Conditions[1].Type).To(Equal("Progressing"))
+			Expect(string(instance.Status.Conditions[1].Status)).To(Equal(string(operatorv1.ConditionTrue)))
+			Expect(instance.Status.Conditions[1].Reason).To(Equal(string(operatorv1.ResourceNotReady)))
+			Expect(instance.Status.Conditions[1].Message).To(Equal("Progressing Installation.operatorv1.tigera.io"))
+			Expect(instance.Status.Conditions[1].ObservedGeneration).To(Equal(generation))
+
+			Expect(instance.Status.Conditions[2].Type).To(Equal("Degraded"))
+			Expect(string(instance.Status.Conditions[2].Status)).To(Equal(string(operatorv1.ConditionTrue)))
+			Expect(instance.Status.Conditions[2].Reason).To(Equal(string(operatorv1.ResourceUpdateError)))
+			Expect(instance.Status.Conditions[2].Message).To(Equal("Error resolving ImageSet for components"))
+			Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
+		})
+		It("should reconcile with creating new status condition and toggle Available to true & others to false", func() {
+			ts := &operatorv1.TigeraStatus{
+				ObjectMeta: metav1.ObjectMeta{Name: "authentication"},
+				Spec:       operatorv1.TigeraStatusSpec{},
+				Status: operatorv1.TigeraStatusStatus{
+					Conditions: []operatorv1.TigeraStatusCondition{
+						{
+							Type:               operatorv1.ComponentAvailable,
+							Status:             operatorv1.ConditionTrue,
+							Reason:             string(operatorv1.AllObjectsAvailable),
+							Message:            "All Objects are available",
+							ObservedGeneration: generation,
+						},
+						{
+							Type:               operatorv1.ComponentProgressing,
+							Status:             operatorv1.ConditionFalse,
+							Reason:             string(operatorv1.NotApplicable),
+							Message:            "Not Applicable",
+							ObservedGeneration: generation,
+						},
+						{
+							Type:               operatorv1.ComponentDegraded,
+							Status:             operatorv1.ConditionFalse,
+							Reason:             string(operatorv1.NotApplicable),
+							Message:            "Not Applicable",
+							ObservedGeneration: generation,
+						},
+					},
+				},
+			}
+			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag}
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
+				Name:      "authentication",
+				Namespace: "",
+			}})
+			Expect(err).ShouldNot(HaveOccurred())
+			instance, err := utils.GetAuthentication(ctx, r.client)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(instance.Status.Conditions).To(HaveLen(3))
+
+			Expect(instance.Status.Conditions[0].Type).To(Equal("Ready"))
+			Expect(string(instance.Status.Conditions[0].Status)).To(Equal(string(operatorv1.ConditionTrue)))
+			Expect(instance.Status.Conditions[0].Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
+			Expect(instance.Status.Conditions[0].Message).To(Equal("All Objects are available"))
+			Expect(instance.Status.Conditions[0].ObservedGeneration).To(Equal(generation))
+
+			Expect(instance.Status.Conditions[1].Type).To(Equal("Progressing"))
+			Expect(string(instance.Status.Conditions[1].Status)).To(Equal(string(operatorv1.ConditionFalse)))
+			Expect(instance.Status.Conditions[1].Reason).To(Equal(string(operatorv1.NotApplicable)))
+			Expect(instance.Status.Conditions[1].Message).To(Equal("Not Applicable"))
+			Expect(instance.Status.Conditions[1].ObservedGeneration).To(Equal(generation))
+
+			Expect(instance.Status.Conditions[2].Type).To(Equal("Degraded"))
+			Expect(string(instance.Status.Conditions[2].Status)).To(Equal(string(operatorv1.ConditionFalse)))
+			Expect(instance.Status.Conditions[2].Reason).To(Equal(string(operatorv1.NotApplicable)))
+			Expect(instance.Status.Conditions[2].Message).To(Equal("Not Applicable"))
+			Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
+		})
 	})
 
 	Context("OIDC connector config options", func() {
@@ -267,10 +461,12 @@ var _ = Describe("authentication controller tests", func() {
 		})
 
 		It("should wait if allow-tigera tier is unavailable", func() {
+			mockStatus.On("SetMetaData", mock.Anything).Return()
 			utils.DeleteAllowTigeraTierAndExpectWait(ctx, cli, r, mockStatus)
 		})
 
 		It("should wait if tier watch is not ready", func() {
+			mockStatus.On("SetMetaData", mock.Anything).Return()
 			r.tierWatchReady = &utils.ReadyFlag{}
 			utils.ExpectWaitForTierWatch(ctx, r, mockStatus)
 		})

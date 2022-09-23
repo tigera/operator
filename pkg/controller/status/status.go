@@ -419,7 +419,7 @@ func (m *statusManager) RemoveCertificateSigningRequests(name string) {
 
 // SetDegraded sets degraded state with the provided reason and message.
 func (m *statusManager) SetDegraded(reason operator.TigeraStatusReason, msg string, err error, log logr.Logger) {
-	log.WithValues(string(reason), msg).Error(err, string(reason))
+	log.WithValues("reason", string(reason)).Error(err, msg)
 	errormsg := ""
 	if err != nil {
 		errormsg = err.Error()
@@ -428,7 +428,7 @@ func (m *statusManager) SetDegraded(reason operator.TigeraStatusReason, msg stri
 	defer m.lock.Unlock()
 	m.degraded = true
 	m.explicitDegradedReason = string(reason)
-	m.explicitDegradedMsg = fmt.Sprintf("%s - Error: %s", msg, errormsg)
+	m.explicitDegradedMsg = fmt.Sprintf("%s: %s", msg, errormsg)
 }
 
 // ClearDegraded clears degraded state.

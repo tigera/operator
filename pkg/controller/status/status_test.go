@@ -456,7 +456,7 @@ var _ = Describe("Status reporting tests", func() {
 			sm.failing = []string{"This pod has died"}
 			Expect(sm.degradedMessage()).To(Equal("This pod has died"))
 			sm.SetDegraded("ControllerSetUsDegraded", "Controller set us degraded", nil, log)
-			Expect(sm.degradedMessage()).To(Equal("Controller set us degraded - Error: \nThis pod has died"))
+			Expect(sm.degradedMessage()).To(Equal("Controller set us degraded: \nThis pod has died"))
 		})
 
 		It("should contain all the NamespacesNames for all the resources added by multiple calls to Set<Resources>", func() {

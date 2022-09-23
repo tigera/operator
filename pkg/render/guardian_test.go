@@ -131,6 +131,14 @@ var _ = Describe("Rendering tests", func() {
 			Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
 			Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(BeTrue())
 			Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(1001))
+			Expect(*deployment.Spec.Template.Spec.Containers[0].SecurityContext.SeccompProfile).To(BeEquivalentTo(corev1.SeccompProfile{
+				Type: corev1.SeccompProfileTypeRuntimeDefault,
+			}))
+			Expect(deployment.Spec.Template.Spec.Containers[0].SecurityContext.Capabilities).To(BeEquivalentTo(
+				&corev1.Capabilities{
+					Drop: []corev1.Capability{"ALL"},
+				},
+			))
 
 			// Check the namespace.
 			ns := rtest.GetResource(resources, "tigera-guardian", "", "", "v1", "Namespace").(*corev1.Namespace)

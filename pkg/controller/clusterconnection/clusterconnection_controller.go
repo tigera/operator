@@ -192,14 +192,14 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	managementCluster, err := utils.GetManagementCluster(ctx, r.Client)
 	if err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	// Fetch the managementClusterConnection.
 	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.Client)
 	if err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceReadError, "Error querying ManagementClusterConnection", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying ManagementClusterConnection", err, reqLogger)
 		return result, err
 	} else if managementClusterConnection == nil {
 		r.status.OnCRNotFound()
@@ -225,7 +225,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	if managementClusterConnection != nil && managementCluster != nil {
 		err = fmt.Errorf("having both a ManagementCluster and a ManagementClusterConnection is not supported")
-		status.SetDegraded(r.status, operatorv1.ResourceValidationError, "", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -235,7 +235,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
 	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
 	if err := r.Client.Patch(ctx, managementClusterConnection, preDefaultPatchFrom); err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceUpdateError, err.Error(), err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, err.Error(), err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -243,13 +243,13 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(instl, r.Client)
 	if err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		return result, err
 	}
 
 	certificateManager, err := certificatemanager.Create(r.Client, instl, r.clusterDomain)
 	if err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -257,7 +257,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	tunnelSecret := &corev1.Secret{}
 	err = r.Client.Get(ctx, types.NamespacedName{Name: render.GuardianSecretName, Namespace: common.OperatorNamespace()}, tunnelSecret)
 	if err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceReadError, "Error retrieving secrets from guardian namespace", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving secrets from guardian namespace", err, reqLogger)
 		if !k8serrors.IsNotFound(err) {
 			return result, nil
 		}
@@ -268,11 +268,11 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	for _, secretName := range []string{render.PacketCaptureCertSecret, monitor.PrometheusTLSSecretName} {
 		secret, err := certificateManager.GetCertificate(r.Client, secretName, common.OperatorNamespace())
 		if err != nil {
-			status.SetDegraded(r.status, operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve %s", secretName), err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve %s", secretName), err, reqLogger)
 			return reconcile.Result{}, err
 		} else if secret == nil {
 			reqLogger.Info(fmt.Sprintf("Waiting for secret '%s' to become available", secretName))
-			status.SetDegraded(r.status, operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for secret '%s' to become available", secretName), nil, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for secret '%s' to become available", secretName), nil, reqLogger)
 			return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
 		}
 		trustedCertBundle.AddCertificates(secret)
@@ -280,7 +280,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
 	if !r.tierWatchReady.IsReady() {
-		status.SetDegraded(r.status, operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
@@ -291,7 +291,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		// License becomes available. Therefore, if we fail to query the Tier, we exclude NetworkPolicy from reconciliation
 		// and tolerate errors arising from the Tier not being created.
 		if !k8serrors.IsNotFound(err) {
-			status.SetDegraded(r.status, operatorv1.ResourceReadError, "Error querying allow-tigera tier", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying allow-tigera tier", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	} else {
@@ -304,15 +304,15 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 			license, err := utils.FetchLicenseKey(ctx, r.Client)
 			if err != nil {
 				if k8serrors.IsNotFound(err) {
-					status.SetDegraded(r.status, operatorv1.ResourceNotFound, "License not found", err, reqLogger)
+					r.status.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, reqLogger)
 					return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 				}
-				status.SetDegraded(r.status, operatorv1.ResourceReadError, "Error querying license", err, reqLogger)
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying license", err, reqLogger)
 				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 			}
 
 			if !utils.IsFeatureActive(license, common.EgressAccessControlFeature) {
-				status.SetDegraded(r.status, operatorv1.ResourceReadError, "Feature is not active - License does not support feature: egress-access-control", nil, reqLogger)
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Feature is not active - License does not support feature: egress-access-control", nil, reqLogger)
 				return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 			}
 		}
@@ -345,13 +345,13 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	if err = imageset.ApplyImageSet(ctx, r.Client, variant, components...); err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	for _, component := range components {
 		if err := ch.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
-			status.SetDegraded(r.status, operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 			return result, err
 		}
 	}

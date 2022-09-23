@@ -17,8 +17,6 @@ package logstorage
 import (
 	"context"
 
-	"github.com/tigera/operator/pkg/controller/status"
-
 	"github.com/go-logr/logr"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/dns"
@@ -50,7 +48,7 @@ func (r *ReconcileLogStorage) createEsGateway(
 	svcDNSNames = append(svcDNSNames, dns.GetServiceDNSNames(esgateway.ServiceName, render.ElasticsearchNamespace, r.clusterDomain)...)
 	gatewayKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.TigeraElasticsearchGatewaySecret, common.OperatorNamespace(), svcDNSNames)
 	if err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 		return reconcile.Result{}, false, err
 	}
 
@@ -58,27 +56,27 @@ func (r *ReconcileLogStorage) createEsGateway(
 	if !operatorv1.IsFIPSModeEnabled(install.FIPSMode) {
 		kibanaCertificate, err := certificateManager.GetCertificate(r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace())
 		if err != nil {
-			status.SetDegraded(r.status, operatorv1.ResourceReadError, "Failed to get Kibana tls certificate secret", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Kibana tls certificate secret", err, reqLogger)
 			return reconcile.Result{}, false, err
 		} else if kibanaCertificate == nil {
-			status.SetDegraded(r.status, operatorv1.ResourceNotReady, "Waiting for internal Kibana tls certificate secret to be available", nil, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for internal Kibana tls certificate secret to be available", nil, reqLogger)
 			return reconcile.Result{}, false, nil
 		}
 	}
 	esInternalCertificate, err := certificateManager.GetCertificate(r.client, render.TigeraElasticsearchInternalCertSecret, common.OperatorNamespace())
 	if err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceReadError, "Failed to get Elasticsearch tls certificate secret", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch tls certificate secret", err, reqLogger)
 		return reconcile.Result{}, false, err
 	} else if esInternalCertificate == nil {
 		reqLogger.Info("Waiting for internal Elasticsearch tls certificate secret to be available")
-		status.SetDegraded(r.status, operatorv1.ResourceNotReady, "Waiting for internal Elasticsearch tls certificate secret to be available", nil, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for internal Elasticsearch tls certificate secret to be available", nil, reqLogger)
 		return reconcile.Result{}, false, nil
 	}
 	trustedBundle := certificateManager.CreateTrustedBundle(esInternalCertificate, kibanaCertificate)
 
 	// This secret should only ever contain one key.
 	if len(esAdminUserSecret.Data) != 1 {
-		status.SetDegraded(r.status, operatorv1.ResourceValidationError, "Elasticsearch admin user secret contains too many entries", nil, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "Elasticsearch admin user secret contains too many entries", nil, reqLogger)
 		return reconcile.Result{}, false, nil
 	}
 
@@ -90,7 +88,7 @@ func (r *ReconcileLogStorage) createEsGateway(
 
 	kubeControllersGatewaySecret, kubeControllersVerificationSecret, kubeControllersSecureUserSecret, err := lscommon.CreateKubeControllersSecrets(ctx, esAdminUserSecret, esAdminUserName, r.client)
 	if err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceCreateError, "Failed to create kube-controllers secrets for Elasticsearch gateway", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create kube-controllers secrets for Elasticsearch gateway", err, reqLogger)
 		return reconcile.Result{}, false, err
 	}
 
@@ -107,7 +105,7 @@ func (r *ReconcileLogStorage) createEsGateway(
 	esGatewayComponent := esgateway.EsGateway(cfg)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, esGatewayComponent); err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, false, err
 	}
 
@@ -122,7 +120,7 @@ func (r *ReconcileLogStorage) createEsGateway(
 
 	for _, comp := range []render.Component{esGatewayComponent, certificateComponent} {
 		if err := hdler.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
-			status.SetDegraded(r.status, operatorv1.ResourceUpdateError, "Error creating / updating / deleting resource", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating / deleting resource", err, reqLogger)
 			return reconcile.Result{}, false, err
 		}
 	}

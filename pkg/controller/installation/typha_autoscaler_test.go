@@ -21,6 +21,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/mock"
 
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -249,7 +250,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		_, err := c.AppsV1().Deployments("calico-system").Create(ctx, typha, metav1.CreateOptions{})
 		Expect(err).To(BeNil())
 
-		statusManager.On("SetDegraded", operator.ResourceScalingError, "Failed to autoscale typha - not enough linux nodes to schedule typha pods on, require 3 and have 2 - Error: ")
+		statusManager.On("SetDegraded", operator.ResourceScalingError, "Failed to autoscale typha - not enough linux nodes to schedule typha pods on, require 3 and have 2", mock.Anything, mock.Anything)
 
 		// Create a few nodes
 		_ = CreateNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)

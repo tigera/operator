@@ -209,7 +209,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
-		status.SetDegraded(r.status, operatorv1.ResourceReadError, fmt.Sprintf("An error occurred when querying the APIServer resource: %s", msg), err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("An error occurred when querying the APIServer resource: %s", msg), err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	r.status.OnCRFound()
@@ -217,7 +217,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 	// Validate APIServer resource.
 	if err := validateAPIServerResource(instance); err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceValidationError, "APIServer is invalid", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "APIServer is invalid", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -242,21 +242,21 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	variant, network, err := utils.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			status.SetDegraded(r.status, operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-		status.SetDegraded(r.status, operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	if variant == "" {
-		status.SetDegraded(r.status, operatorv1.ResourceNotReady, "Waiting for Installation to be ready", nil, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Installation to be ready", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
 	ns := rmeta.APIServerNamespace(variant)
 
 	certificateManager, err := certificatemanager.Create(r.client, network, r.clusterDomain)
 	if err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -264,7 +264,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	secretName := render.ProjectCalicoApiServerTLSSecretName(network.Variant)
 	tlsSecret, err := certificateManager.GetOrCreateKeyPair(r.client, secretName, common.OperatorNamespace(), dns.GetServiceDNSNames(render.ProjectCalicoApiServerServiceName(network.Variant), rmeta.APIServerNamespace(network.Variant), r.clusterDomain))
 	if err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceCreateError, "Unable to get or create tls key pair", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to get or create tls key pair", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -272,7 +272,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(network, r.client)
 	if err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -286,19 +286,19 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	if variant == operatorv1.TigeraSecureEnterprise {
 		managementCluster, err = utils.GetManagementCluster(ctx, r.client)
 		if err != nil {
-			status.SetDegraded(r.status, operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
 		managementClusterConnection, err = utils.GetManagementClusterConnection(ctx, r.client)
 		if err != nil {
-			status.SetDegraded(r.status, operatorv1.ResourceReadError, "Error reading ManagementClusterConnection", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementClusterConnection", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
 		if managementClusterConnection != nil && managementCluster != nil {
 			err = fmt.Errorf("having both a ManagementCluster and a ManagementClusterConnection is not supported")
-			status.SetDegraded(r.status, operatorv1.ResourceValidationError, "", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceValidationError, "", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
@@ -313,7 +313,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 				}
 			}
 			if err != nil {
-				status.SetDegraded(r.status, operatorv1.ResourceCreateError, "Unable to get or create the tunnel secret", err, reqLogger)
+				r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to get or create the tunnel secret", err, reqLogger)
 				return reconcile.Result{}, err
 			}
 		}
@@ -323,7 +323,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			if errors.IsNotFound(err) {
 				amazon = nil
 			} else if err != nil {
-				status.SetDegraded(r.status, operatorv1.ResourceReadError, "Error reading AmazonCloudIntegration", err, reqLogger)
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading AmazonCloudIntegration", err, reqLogger)
 				return reconcile.Result{}, err
 			}
 		}
@@ -337,7 +337,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		if r.tierWatchReady.IsReady() {
 			if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 				if !errors.IsNotFound(err) && !meta.IsNoMatchError(err) {
-					status.SetDegraded(r.status, operatorv1.ResourceReadError, "Error querying allow-tigera tier", err, reqLogger)
+					r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying allow-tigera tier", err, reqLogger)
 					return reconcile.Result{}, err
 				}
 			} else {
@@ -348,7 +348,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 	err = utils.GetK8sServiceEndPoint(r.client)
 	if err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceReadError, "Error reading services endpoint configmap", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading services endpoint configmap", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	// Create a component handler to manage the rendered component.
@@ -374,7 +374,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 	component, err := render.APIServer(&apiServerCfg)
 	if err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceRenderingError, "Error rendering APIServer", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceRenderingError, "Error rendering APIServer", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	components := []render.Component{
@@ -400,20 +400,20 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			common.OperatorNamespace(),
 			dns.GetServiceDNSNames(render.PacketCaptureServiceName, render.PacketCaptureNamespace, r.clusterDomain))
 		if err != nil {
-			status.SetDegraded(r.status, operatorv1.ResourceReadError, "Error retrieve or creating packet capture TLS certificate", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieve or creating packet capture TLS certificate", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
 		// Fetch the Authentication spec. If present, we use to configure user authentication.
 		authenticationCR, err := utils.GetAuthentication(ctx, r.client)
 		if err != nil && !errors.IsNotFound(err) {
-			status.SetDegraded(r.status, operatorv1.ResourceReadError, "Error querying Authentication", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying Authentication", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
 		keyValidatorConfig, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.clusterDomain)
 		if err != nil {
-			status.SetDegraded(r.status, operatorv1.ResourceUpdateError, "Failed to process the authentication CR.", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to process the authentication CR.", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
@@ -421,7 +421,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		if keyValidatorConfig != nil {
 			dexSecret, err := certificateManager.GetCertificate(r.client, render.DexTLSSecretName, common.OperatorNamespace())
 			if err != nil {
-				status.SetDegraded(r.status, operatorv1.ResourceRenderingError, fmt.Sprintf("Failed to retrieve %s", render.DexTLSSecretName), err, reqLogger)
+				r.status.SetDegraded(operatorv1.ResourceRenderingError, fmt.Sprintf("Failed to retrieve %s", render.DexTLSSecretName), err, reqLogger)
 				return reconcile.Result{}, err
 			} else if dexSecret != nil {
 				certificates = append(certificates, dexSecret)
@@ -465,13 +465,13 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, components...); err != nil {
-		status.SetDegraded(r.status, operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	for _, component := range components {
 		if err := handler.CreateOrUpdateOrDelete(context.Background(), component, r.status); err != nil {
-			status.SetDegraded(r.status, operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}

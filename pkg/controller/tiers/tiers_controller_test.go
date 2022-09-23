@@ -17,13 +17,14 @@ package tiers
 import (
 	"context"
 
-	"github.com/tigera/operator/pkg/common"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/stretchr/testify/mock"
+
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -119,7 +120,7 @@ var _ = Describe("tier controller tests", func() {
 		err := c.Delete(ctx, &operatorv1.APIServer{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})
 		Expect(err).ShouldNot(HaveOccurred())
 		mockStatus = &status.MockStatus{}
-		mockStatus.On("SetDegraded", "Waiting for Tigera API server to be ready", "").Return()
+		mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Tigera API server to be ready", mock.Anything, mock.Anything).Return()
 		r = ReconcileTiers{
 			client:             c,
 			scheme:             scheme,
@@ -146,7 +147,7 @@ var _ = Describe("tier controller tests", func() {
 			tierWatchReady:     readyFlag,
 			policyWatchesReady: readyFlag,
 		}
-		mockStatus.On("SetDegraded", "License not found", "licensekeies.projectcalico.org \"default\" not found").Return()
+		mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, "License not found", "licensekeies.projectcalico.org \"default\" not found", mock.Anything).Return()
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).ShouldNot(HaveOccurred())
 		mockStatus.AssertExpectations(GinkgoT())
@@ -172,7 +173,7 @@ var _ = Describe("tier controller tests", func() {
 			tierWatchReady:     readyFlag,
 			policyWatchesReady: readyFlag,
 		}
-		mockStatus.On("SetDegraded", "Feature is not active", "License does not support feature: tiers").Return()
+		mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Feature is not active - License does not support feature: tiers", mock.Anything, mock.Anything).Return()
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).ShouldNot(HaveOccurred())
 		mockStatus.AssertExpectations(GinkgoT())

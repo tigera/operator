@@ -66,7 +66,8 @@ type ManagementClusterConnection struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec ManagementClusterConnectionSpec `json:"spec,omitempty"`
+	Spec   ManagementClusterConnectionSpec   `json:"spec,omitempty"`
+	Status ManagementClusterConnectionStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -76,6 +77,14 @@ type ManagementClusterConnectionList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []ManagementClusterConnection `json:"items"`
+}
+
+// ManagementClusterConnectionStatus defines the observed state of ManagementClusterConnection
+type ManagementClusterConnectionStatus struct {
+	// Conditions represents the latest observed set of conditions for the component. A component may be one or more of
+	// Ready, Progressing, Degraded or other customer types.
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 func init() {

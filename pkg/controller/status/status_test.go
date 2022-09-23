@@ -127,7 +127,7 @@ var _ = Describe("Status reporting tests", func() {
 			})
 			When("it is not progressing or failing but there is an explicit degraded reasons", func() {
 				It("should not be available or progressing but should be degraded", func() {
-					sm.SetDegraded("some message", "some message")
+					sm.SetDegraded("some message", "some message", nil, log)
 
 					Expect(sm.IsAvailable()).To(BeFalse())
 					Expect(sm.IsProgressing()).To(BeFalse())
@@ -447,7 +447,7 @@ var _ = Describe("Status reporting tests", func() {
 			Expect(sm.degradedReason()).To(Equal("Unknown"))
 			sm.failing = []string{"This pod has died"}
 			Expect(sm.degradedReason()).To(Equal("PodFailure"))
-			sm.SetDegraded("ControllerSetUsDegraded", "error message")
+			sm.SetDegraded("ControllerSetUsDegraded", "error message", nil, log)
 			Expect(sm.degradedReason()).To(Equal("ControllerSetUsDegraded"))
 		})
 
@@ -455,8 +455,8 @@ var _ = Describe("Status reporting tests", func() {
 			Expect(sm.degradedReason()).To(Equal("Unknown"))
 			sm.failing = []string{"This pod has died"}
 			Expect(sm.degradedMessage()).To(Equal("This pod has died"))
-			sm.SetDegraded("ControllerSetUsDegraded", "Controller set us degraded")
-			Expect(sm.degradedMessage()).To(Equal("Controller set us degraded\nThis pod has died"))
+			sm.SetDegraded("ControllerSetUsDegraded", "Controller set us degraded", nil, log)
+			Expect(sm.degradedMessage()).To(Equal("Controller set us degraded - Error: \nThis pod has died"))
 		})
 
 		It("should contain all the NamespacesNames for all the resources added by multiple calls to Set<Resources>", func() {

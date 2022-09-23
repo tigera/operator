@@ -34,17 +34,7 @@ import (
 func DeleteAllowTigeraTierAndExpectWait(ctx context.Context, c client.Client, r reconcile.Reconciler, mockStatus *status.MockStatus) {
 	err := c.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})
 	Expect(err).ShouldNot(HaveOccurred())
-	//er := &errors.StatusError{
-	//	ErrStatus: metav1.Status{
-	//		TypeMeta: metav1.TypeMeta{Kind: "", APIVersion: ""},
-	//		Status:   "Failure",
-	//		Message:  "tiers.projectcalico.org \"allow-tigera\" not found",
-	//		Reason:   "NotFound",
-	//		Code:     404,
-	//	},
-	//}
 	mockStatus.On("SetDegraded", operator.ResourceNotReady, "Waiting for allow-tigera tier to be created", "tiers.projectcalico.org \"allow-tigera\" not found", mock.Anything).Return()
-	//mockStatus.On("SetDegraded", operator.ResourceNotReady, "Waiting for allow-tigera tier to be created", mock.Anything, mock.Anything).Return()
 
 	_, err = r.Reconcile(ctx, reconcile.Request{})
 	Expect(err).ShouldNot(HaveOccurred())

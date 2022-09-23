@@ -97,7 +97,6 @@ func (m *MockStatus) SetDegraded(reason operator.TigeraStatusReason, msg string,
 	} else {
 		m.Called(reason, msg, err, log)
 	}
-
 }
 
 func (m *MockStatus) ClearDegraded() {

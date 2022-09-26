@@ -260,6 +260,18 @@ func (c *GuardianComponent) volumes() []corev1.Volume {
 }
 
 func (c *GuardianComponent) container() []corev1.Container {
+	// UID 1001 is used in the guardian Dockerfile.
+	securityContext := securitycontext.NewBaseContext(1001, 0)
+	// Build a security context for the pod that will allow the pod to be deployed. Guardian is run in a namespace with a
+	// Baseline pod security standard, which requires that the security context meet certain criteria in order for pods to
+	// be accepted by the API server
+	securityContext.Capabilities = &corev1.Capabilities{
+		Drop: []corev1.Capability{"ALL"},
+	}
+	securityContext.SeccompProfile = &corev1.SeccompProfile{
+		Type: corev1.SeccompProfileTypeRuntimeDefault,
+	}
+
 	return []corev1.Container{
 		{
 			Name:  GuardianDeploymentName,
@@ -294,8 +306,7 @@ func (c *GuardianComponent) container() []corev1.Container {
 				InitialDelaySeconds: 10,
 				PeriodSeconds:       5,
 			},
-			// UID 1001 is used in the guardian Dockerfile.
-			SecurityContext: securitycontext.NewBaseContext(1001, 0),
+			SecurityContext: securityContext,
 		},
 	}
 }

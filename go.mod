@@ -3,7 +3,7 @@ module github.com/tigera/operator
 go 1.16
 
 require (
-	github.com/aws/aws-sdk-go v1.27.0
+	github.com/aws/aws-sdk-go v1.44.106
 	github.com/cloudflare/cfssl v1.6.2
 	github.com/containernetworking/cni v1.0.1
 	github.com/elastic/cloud-on-k8s v0.0.0-20210914143041-4f367c381636

@@ -90,33 +90,44 @@ func RequiresAmazonController(cfg *rest.Config) (bool, error) {
 }
 
 func AutoDiscoverProvider(ctx context.Context, clientset kubernetes.Interface) (operatorv1.Provider, error) {
+
+	// List of detected providers, for detecting conflicts.
+	detectedProviders := []operatorv1.Provider{}
+
 	// First, try to determine the platform based on the present API groups.
 	if platform, err := autodetectFromGroup(clientset); err != nil {
 		return operatorv1.ProviderNone, fmt.Errorf("Failed to check provider based on API groups: %s", err)
-	} else if platform != operatorv1.ProviderNone {
-		// We detected a platform. Use it.
-		return platform, nil
+	} else if platform != nil {
+		// We detected platform(s). Append it to detected ones.
+		detectedProviders = append(detectedProviders, platform...)
 	}
 
 	// We failed to determine the platform based on API groups. Some platforms can be detected in other ways, though.
 	if dockeree, err := isDockerEE(ctx, clientset); err != nil {
 		return operatorv1.ProviderNone, fmt.Errorf("Failed to check if Docker EE is the provider: %s", err)
 	} else if dockeree {
-		return operatorv1.ProviderDockerEE, nil
+		detectedProviders = append(detectedProviders, operatorv1.ProviderDockerEE)
 	}
 
 	// We failed to determine the platform based on API groups. Some platforms can be detected in other ways, though.
 	if eks, err := isEKS(ctx, clientset); err != nil {
 		return operatorv1.ProviderNone, fmt.Errorf("Failed to check if EKS is the provider: %s", err)
 	} else if eks {
-		return operatorv1.ProviderEKS, nil
+		detectedProviders = append(detectedProviders, operatorv1.ProviderEKS)
+
 	}
 
 	// Attempt to detect RKE Version 2, which also cannot be done via API groups.
 	if rke2, err := isRKE2(ctx, clientset); err != nil {
 		return operatorv1.ProviderNone, fmt.Errorf("Failed to check if RKE2 is the provider: %s", err)
 	} else if rke2 {
-		return operatorv1.ProviderRKE2, nil
+		detectedProviders = append(detectedProviders, operatorv1.ProviderRKE2)
+	}
+
+	if len(detectedProviders) > 1 {
+		return operatorv1.ProviderNone, fmt.Errorf(
+			"Failed to assert provider caused by detection of more than one provider. Detected providers: %s",
+			detectedProviders)
 	}
 
 	// Couldn't detect any specific platform.
@@ -124,23 +135,26 @@ func AutoDiscoverProvider(ctx context.Context, clientset kubernetes.Interface) (
 }
 
 // autodetectFromGroup auto detects the platform based on the API groups that are present.
-func autodetectFromGroup(c kubernetes.Interface) (operatorv1.Provider, error) {
+func autodetectFromGroup(c kubernetes.Interface) ([]operatorv1.Provider, error) {
+	// List of detected providers, for detecting conflicts.
+	detectedProviders := []operatorv1.Provider{}
+
 	groups, err := c.Discovery().ServerGroups()
 	if err != nil {
-		return operatorv1.ProviderNone, err
+		return nil, err
 	}
 	for _, g := range groups.Groups {
 		if g.Name == "config.openshift.io" {
 			// Running on OpenShift.
-			return operatorv1.ProviderOpenShift, nil
+			detectedProviders = append(detectedProviders, operatorv1.ProviderOpenShift)
 		}
 
 		if g.Name == "networking.gke.io" {
 			// Running on GKE.
-			return operatorv1.ProviderGKE, nil
+			detectedProviders = append(detectedProviders, operatorv1.ProviderGKE)
 		}
 	}
-	return operatorv1.ProviderNone, nil
+	return detectedProviders, nil
 }
 
 // isDockerEE returns true if running on a Docker Enterprise cluster, and false otherwise.

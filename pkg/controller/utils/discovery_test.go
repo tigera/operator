@@ -16,8 +16,10 @@ package utils
 
 import (
 	"context"
+	"fmt"
 
 	. "github.com/onsi/ginkgo"
+	"github.com/onsi/gomega"
 	. "github.com/onsi/gomega"
 
 	corev1 "k8s.io/api/core/v1"
@@ -95,5 +97,46 @@ var _ = Describe("provider discovery", func() {
 		p, e := AutoDiscoverProvider(context.Background(), c)
 		Expect(e).To(BeNil())
 		Expect(p).To(Equal(operatorv1.ProviderRKE2))
+	})
+
+	It("should detect conflict based on presence of more than one platform indicators", func() {
+		c := fake.NewSimpleClientset(
+			&corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "master1",
+					Labels: map[string]string{
+						"node-role.kubernetes.io/master":    "",
+						"com.docker.ucp.orchestrator.swarm": "true",
+					},
+				},
+			},
+			&corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "eks-certificates-controller",
+					Namespace: "kube-system",
+				},
+			},
+			&corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "rke2",
+					Namespace: "kube-system",
+				},
+			},
+		)
+		c.Resources = []*metav1.APIResourceList{
+			{GroupVersion: "config.openshift.io/v1"},
+			{GroupVersion: "networking.gke.io/v1"},
+		}
+
+		p, e := AutoDiscoverProvider(context.Background(), c)
+		Expect(e).To(gomega.MatchError(fmt.Errorf(
+			"Failed to assert provider caused by detection of more than one. Detected providers: %s",
+			[]operatorv1.Provider{
+				operatorv1.ProviderOpenShift,
+				operatorv1.ProviderGKE,
+				operatorv1.ProviderDockerEE,
+				operatorv1.ProviderEKS,
+				operatorv1.ProviderRKE2})))
+		Expect(p).To(Equal(operatorv1.ProviderNone))
 	})
 })

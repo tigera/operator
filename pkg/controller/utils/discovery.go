@@ -124,10 +124,15 @@ func AutoDiscoverProvider(ctx context.Context, clientset kubernetes.Interface) (
 		detectedProviders = append(detectedProviders, operatorv1.ProviderRKE2)
 	}
 
+	// More than one provider was detected. Can't be sure which one is correct.
 	if len(detectedProviders) > 1 {
 		return operatorv1.ProviderNone, fmt.Errorf(
-			"Failed to assert provider caused by detection of more than one provider. Detected providers: %s",
+			"Failed to assert provider caused by detection of more than one. Detected providers: %s",
 			detectedProviders)
+	}
+	// Only one provider was detected.
+	if len(detectedProviders) == 1 {
+		return detectedProviders[0], nil
 	}
 
 	// Couldn't detect any specific platform.

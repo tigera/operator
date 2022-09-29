@@ -255,9 +255,10 @@ func (c *csiComponent) csiTemplate() corev1.PodTemplateSpec {
 		Labels: templateLabels,
 	}
 	templateSpec := corev1.PodSpec{
-		Tolerations: c.csiTolerations(),
-		Containers:  c.csiContainers(),
-		Volumes:     c.csiVolumes(),
+		Tolerations:      c.csiTolerations(),
+		Containers:       c.csiContainers(),
+		ImagePullSecrets: c.cfg.Installation.ImagePullSecrets,
+		Volumes:          c.csiVolumes(),
 	}
 	return corev1.PodTemplateSpec{
 		ObjectMeta: templateMeta,

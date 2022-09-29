@@ -15,12 +15,17 @@
 package render_test
 
 import (
+	"strings"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 var _ = Describe("CSI rendering tests", func() {
@@ -80,6 +85,23 @@ var _ = Describe("CSI rendering tests", func() {
 
 		for i, expectedRes := range expectedDelObjs {
 			rtest.ExpectResource(delObjs[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+		}
+	})
+
+	It("should propagate imagePullSecrets and registry Installation field changes to DaemonSet", func() {
+		privatePullSecret := []corev1.LocalObjectReference{
+			{
+				Name: "privatePullSecret",
+			},
+		}
+		privateRegistry := "private/registry.io/"
+		cfg.Installation.ImagePullSecrets = privatePullSecret
+		cfg.Installation.Registry = privateRegistry
+		resources, _ := render.CSI(&cfg).Objects()
+		ds := rtest.GetResource(resources, render.CSIDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		Expect(ds.Spec.Template.Spec.ImagePullSecrets).To(Equal(privatePullSecret))
+		for _, container := range ds.Spec.Template.Spec.Containers {
+			Expect(strings.HasPrefix(container.Image, privateRegistry))
 		}
 	})
 })

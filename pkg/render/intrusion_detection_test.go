@@ -673,7 +673,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		fipsEnabled := operatorv1.FIPSModeEnabled
 		cfg.Installation.FIPSMode = &fipsEnabled
 		component := render.IntrusionDetection(cfg)
-		resources, _ := component.Objects()
+		toCreate, toRemove := component.Objects()
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -723,14 +723,29 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			{name: "intrusion-detection", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
-		Expect(len(resources)).To(Equal(len(expectedResources)))
+		Expect(len(toCreate)).To(Equal(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResource(toCreate[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 
 			if expectedRes.kind == "GlobalAlertTemplate" {
-				rtest.ExpectGlobalAlertTemplateToBePopulated(resources[i])
+				rtest.ExpectGlobalAlertTemplateToBePopulated(toCreate[i])
 			}
+		}
+
+		expectedResourcesToRemove := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "anomaly-detection-api", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "Service"},
+			{name: "anomaly-detection-api", ns: "tigera-intrusion-detection", group: "apps", version: "v1", kind: "Deployment"},
+		}
+
+		for i, expectedRes := range expectedResourcesToRemove {
+			rtest.ExpectResource(toRemove[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 	})
 })

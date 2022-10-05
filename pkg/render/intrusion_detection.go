@@ -206,41 +206,46 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 
 	// AD Related deployment only for management/standalone cluster
 	// When FIPS mode is enabled, we currently disable our python based images.
-	if !c.cfg.ManagedCluster && !operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-		// Service + Deployment + RBAC for AD API
-		objs = append(objs,
-			c.adAPIAllowTigeraPolicy(),
-			c.adAPIServiceAccount(),
-			c.adAPIAccessClusterRole(),
-			c.adAPIAccessRoleBinding(),
-		)
-
+	if !c.cfg.ManagedCluster {
 		shouldConfigureADStorage := len(c.cfg.IntrusionDetection.Spec.AnomalyDetection.StorageClassName) > 0
 
-		if !shouldConfigureADStorage {
-			objsToDelete = append(objsToDelete,
-				c.adPersistentVolumeClaim(),
-			)
-		} else if shouldConfigureADStorage && c.cfg.ShouldRenderADPVC {
+		if !operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
+			// Service + Deployment + RBAC for AD API
 			objs = append(objs,
-				c.adPersistentVolumeClaim(),
+				c.adAPIAllowTigeraPolicy(),
+				c.adAPIServiceAccount(),
+				c.adAPIAccessClusterRole(),
+				c.adAPIAccessRoleBinding(),
 			)
+
+			if !shouldConfigureADStorage {
+				objsToDelete = append(objsToDelete,
+					c.adPersistentVolumeClaim(),
+				)
+			} else if shouldConfigureADStorage && c.cfg.ShouldRenderADPVC {
+				objs = append(objs,
+					c.adPersistentVolumeClaim(),
+				)
+			}
+
+			objs = append(objs,
+				c.adAPIService(),
+				c.adAPIDeployment(shouldConfigureADStorage),
+			)
+
+			// RBAC for AD Detector Pods
+			objs = append(objs,
+				c.adDetectorAllowTigeraPolicy(),
+				c.adDetectorServiceAccount(),
+				c.adDetectorSecret(),
+				c.adDetectorAccessRole(),
+				c.adDetectorRoleBinding(),
+			)
+			objs = append(objs, c.adDetectorPodTemplates()...)
+		} else {
+			objsToDelete = append(objsToDelete, c.adAPIService())
+			objsToDelete = append(objsToDelete, c.adAPIDeployment(shouldConfigureADStorage))
 		}
-
-		objs = append(objs,
-			c.adAPIService(),
-			c.adAPIDeployment(shouldConfigureADStorage),
-		)
-
-		// RBAC for AD Detector Pods
-		objs = append(objs,
-			c.adDetectorAllowTigeraPolicy(),
-			c.adDetectorServiceAccount(),
-			c.adDetectorSecret(),
-			c.adDetectorAccessRole(),
-			c.adDetectorRoleBinding(),
-		)
-		objs = append(objs, c.adDetectorPodTemplates()...)
 	}
 
 	// When FIPS mode is enabled, we currently disable our python based images.

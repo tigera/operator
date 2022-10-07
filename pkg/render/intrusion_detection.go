@@ -1029,14 +1029,14 @@ func (c *intrusionDetectionComponent) adJobsGlobalertTemplates() []client.Object
 				APIVersion: "projectcalico.org/v3",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name: adDetectorPrefixName + "generic-flows",
+				Name: adDetectorPrefixName + "generic-flow",
 			},
 			Spec: v3.GlobalAlertSpec{
 				Type:        v3.GlobalAlertTypeAnomalyDetection,
 				Description: "Excessive value anomaly in flows log",
 				Summary:     "Looks for excessive values in several fields in the flows log.",
 				Severity:    100,
-				Detector:    &v3.DetectorParams{Name: "generic_flows"},
+				Detector:    &v3.DetectorParams{Name: "generic_flow"},
 				Period:      &metav1.Duration{Duration: adDetectionJobsDefaultPeriod},
 			},
 		},

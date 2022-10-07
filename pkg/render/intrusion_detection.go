@@ -995,6 +995,23 @@ func (c *intrusionDetectionComponent) adJobsGlobalertTemplates() []client.Object
 				APIVersion: "projectcalico.org/v3",
 			},
 			ObjectMeta: metav1.ObjectMeta{
+				Name: adDetectorPrefixName + "ip-sweep",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Type:        v3.GlobalAlertTypeAnomalyDetection,
+				Description: "IP sweep detection",
+				Summary:     "Looks for pods in your cluster that are sending packets to many destinations.",
+				Severity:    100,
+				Detector:    &v3.DetectorParams{Name: "ip_sweep"},
+				Period:      &metav1.Duration{Duration: adDetectionJobsDefaultPeriod},
+			},
+		},
+		&v3.GlobalAlertTemplate{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "GlobalAlertTemplate",
+				APIVersion: "projectcalico.org/v3",
+			},
+			ObjectMeta: metav1.ObjectMeta{
 				Name: adDetectorPrefixName + "port-scan",
 			},
 			Spec: v3.GlobalAlertSpec{
@@ -1029,14 +1046,14 @@ func (c *intrusionDetectionComponent) adJobsGlobalertTemplates() []client.Object
 				APIVersion: "projectcalico.org/v3",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name: adDetectorPrefixName + "generic-flows",
+				Name: adDetectorPrefixName + "generic-flow",
 			},
 			Spec: v3.GlobalAlertSpec{
 				Type:        v3.GlobalAlertTypeAnomalyDetection,
 				Description: "Excessive value anomaly in flows log",
 				Summary:     "Looks for excessive values in several fields in the flows log.",
 				Severity:    100,
-				Detector:    &v3.DetectorParams{Name: "generic_flows"},
+				Detector:    &v3.DetectorParams{Name: "generic_flow"},
 				Period:      &metav1.Duration{Duration: adDetectionJobsDefaultPeriod},
 			},
 		},

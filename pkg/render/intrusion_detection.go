@@ -207,8 +207,6 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 	// AD Related deployment only for management/standalone cluster
 	// When FIPS mode is enabled, we currently disable our python based images.
 	if !c.cfg.ManagedCluster {
-		shouldConfigureADStorage := len(c.cfg.IntrusionDetection.Spec.AnomalyDetection.StorageClassName) > 0
-
 		if !operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
 			// Service + Deployment + RBAC for AD API
 			objs = append(objs,
@@ -217,6 +215,8 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 				c.adAPIAccessClusterRole(),
 				c.adAPIAccessRoleBinding(),
 			)
+
+			shouldConfigureADStorage := len(c.cfg.IntrusionDetection.Spec.AnomalyDetection.StorageClassName) > 0
 
 			if !shouldConfigureADStorage {
 				objsToDelete = append(objsToDelete,
@@ -244,7 +244,9 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 			objs = append(objs, c.adDetectorPodTemplates()...)
 		} else {
 			objsToDelete = append(objsToDelete, c.adAPIService())
-			objsToDelete = append(objsToDelete, c.adAPIDeployment(shouldConfigureADStorage))
+			// Always set shouldConfigureADStorage flag to false so that it won't grab the StorageClassName
+			// from IDS custom resource. Name and namespace identify the resource to be deleted.
+			objsToDelete = append(objsToDelete, c.adAPIDeployment(false))
 		}
 	}
 

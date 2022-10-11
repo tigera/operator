@@ -307,6 +307,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "threat-id" }}
+	ComponentThreatId = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 	EnterpriseComponents = []component{
 		ComponentAPIServer,
 		ComponentComplianceBenchmarker,
@@ -356,5 +362,6 @@ var (
 		ComponentImageAssuranceScanner,
 		ComponentImageAssurancePodWatcher,
 		ComponentSasha,
+		ComponentThreatId,
 	}
 )

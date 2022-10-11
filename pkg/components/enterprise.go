@@ -264,7 +264,6 @@ var (
 		Version: "v1.1.0-0.dev-214-gfa438831e2bc",
 		Image:   "tigera/threat-identification",
 	}
-
 	EnterpriseComponents = []component{
 		ComponentAPIServer,
 		ComponentComplianceBenchmarker,

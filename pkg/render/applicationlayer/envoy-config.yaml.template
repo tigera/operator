@@ -89,7 +89,7 @@ static_resources:
                           route:
                             cluster: original_dst_cluster
                 http_filters:
-                  {{if .WAFEnabled}}{{template "WAF"}}{{end}}
+                  {{if or .ALPEnabled .WAFEnabled}}{{template "WAF"}}{{end}}
                   - name: envoy.filters.http.router
                     typed_config: {}
                 codec_type: auto
@@ -114,7 +114,7 @@ static_resources:
                           route:
                             cluster: original_dst_cluster_h2c
                 http_filters:
-                  {{if .WAFEnabled}}{{template "WAF"}}{{end}}
+                  {{if or .ALPEnabled .WAFEnabled}}{{template "WAF"}}{{end}}
                   - name: envoy.filters.http.router
                     typed_config: {}
                 codec_type: auto

@@ -27,16 +27,22 @@ type ApplicationLayerSpec struct {
 	WebApplicationFirewall *WAFStatusType `json:"webApplicationFirewall,omitempty"`
 	// Specification for application layer (L7) log collection.
 	LogCollection *LogCollectionSpec `json:"logCollection,omitempty"`
+	// Application Layer Policy controls whether or not ALP enforcement is enabled for the cluster.
+	// When enabled, Services may opt-in to having ingress traffic examined by L7 DaemonSet.
+	ApplicationLayerPolicyStatus *ApplicationLayerPolicyStatusType `json:"applicationLayerPolicy,omitempty"`
 }
 
 type LogCollectionStatusType string
 type WAFStatusType string
+type ApplicationLayerPolicyStatusType string
 
 const (
-	WAFDisabled             WAFStatusType           = "Disabled"
-	WAFEnabled              WAFStatusType           = "Enabled"
-	L7LogCollectionDisabled LogCollectionStatusType = "Disabled"
-	L7LogCollectionEnabled  LogCollectionStatusType = "Enabled"
+	WAFDisabled                    WAFStatusType                    = "Disabled"
+	WAFEnabled                     WAFStatusType                    = "Enabled"
+	L7LogCollectionDisabled        LogCollectionStatusType          = "Disabled"
+	L7LogCollectionEnabled         LogCollectionStatusType          = "Enabled"
+	ApplicationLayerPolicyEnabled  ApplicationLayerPolicyStatusType = "Enabled"
+	ApplicationLayerPolicyDisabled ApplicationLayerPolicyStatusType = "Disabled"
 )
 
 type LogCollectionSpec struct {

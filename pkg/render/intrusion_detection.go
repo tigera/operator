@@ -204,6 +204,8 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 
 	var objsToDelete []client.Object
 
+	objsToDelete = append(objsToDelete, c.globalAlertTemplatesToRemove()...)
+
 	// AD Related deployment only for management/standalone cluster
 	// When FIPS mode is enabled, we currently disable our python based images.
 	if !c.cfg.ManagedCluster && !operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
@@ -1029,14 +1031,14 @@ func (c *intrusionDetectionComponent) adJobsGlobalertTemplates() []client.Object
 				APIVersion: "projectcalico.org/v3",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name: adDetectorPrefixName + "generic-flows",
+				Name: adDetectorPrefixName + "generic-flow",
 			},
 			Spec: v3.GlobalAlertSpec{
 				Type:        v3.GlobalAlertTypeAnomalyDetection,
 				Description: "Excessive value anomaly in flows log",
 				Summary:     "Looks for excessive values in several fields in the flows log.",
 				Severity:    100,
-				Detector:    &v3.DetectorParams{Name: "generic_flows"},
+				Detector:    &v3.DetectorParams{Name: "generic_flow"},
 				Period:      &metav1.Duration{Duration: adDetectionJobsDefaultPeriod},
 			},
 		},
@@ -1174,6 +1176,21 @@ func (c *intrusionDetectionComponent) adJobsGlobalertTemplates() []client.Object
 				Severity:    100,
 				Detector:    &v3.DetectorParams{Name: "process_restarts"},
 				Period:      &metav1.Duration{Duration: adDetectionJobsDefaultPeriod},
+			},
+		},
+	}
+}
+
+// globalAlertTemplatesToRemove sets the deprecated globalalerttemplates to be removed
+func (c *intrusionDetectionComponent) globalAlertTemplatesToRemove() []client.Object {
+	return []client.Object{
+		&v3.GlobalAlertTemplate{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "GlobalAlertTemplate",
+				APIVersion: "projectcalico.org/v3",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: adDetectorPrefixName + "generic-flows",
 			},
 		},
 	}

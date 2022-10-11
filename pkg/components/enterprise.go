@@ -314,5 +314,6 @@ var (
 		ComponentImageAssuranceScanner,
 		ComponentImageAssurancePodWatcher,
 		ComponentSasha,
+		ComponentThreatId,
 	}
 )

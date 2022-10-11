@@ -49,6 +49,10 @@ import (
 
 var log = logf.Log.WithName("controller_applicationlayer")
 
+const (
+	DefaultPolicySyncPrefix string = "/var/run/nodeagent"
+)
+
 // Add creates a new ApplicationLayer Controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
@@ -167,7 +171,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			reqLogger.Info("ApplicationLayer object not found")
 			// Patch tproxyMode if it's  needed after crd deletion.
-			if err = r.patchFelixTproxyMode(ctx, nil); err != nil {
+			if err = r.patchFelixConfiguration(ctx, nil); err != nil {
 				reqLogger.Error(err, "Error patching felix configuration")
 			}
 			r.status.OnCRNotFound()
@@ -232,7 +236,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	}
 
 	// Patch felix configuration if necessary.
-	err = r.patchFelixTproxyMode(ctx, applicationLayer)
+	err = r.patchFelixConfiguration(ctx, applicationLayer)
 
 	if err != nil {
 		reqLogger.Error(err, "Error patching felix configuration")
@@ -261,7 +265,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		Installation:           installation,
 		OsType:                 rmeta.OSTypeLinux,
 		WAFEnabled:             r.isWAFEnabled(&applicationLayer.Spec),
-		LogsEnabled:            r.isLogsCollectionEnabled(lcSpec),
+		LogsEnabled:            r.isLogsCollectionEnabled(&applicationLayer.Spec),
 		LogRequestsPerInterval: lcSpec.LogRequestsPerInterval,
 		LogIntervalSeconds:     lcSpec.LogIntervalSeconds,
 		ModSecurityConfigMap:   modSecurityRuleSet,
@@ -430,8 +434,14 @@ func getApplicationLayer(ctx context.Context, cli client.Client) (*operatorv1.Ap
 	return instance, nil
 }
 
-func (r *ReconcileApplicationLayer) isLogsCollectionEnabled(l7Spec *operatorv1.LogCollectionSpec) bool {
+func (r *ReconcileApplicationLayer) isLogsCollectionEnabled(applicationLayerSpec *operatorv1.ApplicationLayerSpec) bool {
+	l7Spec := applicationLayerSpec.LogCollection
 	return l7Spec != nil && l7Spec.CollectLogs != nil && *l7Spec.CollectLogs == operatorv1.L7LogCollectionEnabled
+}
+
+func (r *ReconcileApplicationLayer) isALPEnabled(applicationLayerSpec *operatorv1.ApplicationLayerSpec) bool {
+	return applicationLayerSpec.Policy != nil &&
+		applicationLayerSpec.Policy.Mode == operatorv1.PolicyEnabled
 }
 
 func (r *ReconcileApplicationLayer) isWAFEnabled(applicationLayerSpec *operatorv1.ApplicationLayerSpec) bool {
@@ -439,9 +449,27 @@ func (r *ReconcileApplicationLayer) isWAFEnabled(applicationLayerSpec *operatorv
 		*applicationLayerSpec.WebApplicationFirewall == operatorv1.WAFEnabled
 }
 
-// patchFelixTproxyMode takes all application layer specs as arguments and patches felix config.
+func (r *ReconcileApplicationLayer) tproxyMode(al *operatorv1.ApplicationLayer) crdv1.TPROXYModeOption {
+	if al == nil {
+		// application layer is disabled, most likely
+		return crdv1.TPROXYModeOptionDisabled
+	}
+
+	spec := &al.Spec
+	if r.isALPEnabled(spec) {
+		return crdv1.TPROXYModeOptionEnabledAllServices
+	}
+
+	if r.isWAFEnabled(spec) || r.isLogsCollectionEnabled(spec) {
+		return crdv1.TPROXYModeOptionEnabled
+	}
+
+	return crdv1.TPROXYModeOptionDisabled
+}
+
+// patchFelixConfiguration takes all application layer specs as arguments and patches felix config.
 // If at least one of the specs requires TPROXYMode as "Enabled" it'll be patched as "Enabled" otherwise it is "Disabled".
-func (r *ReconcileApplicationLayer) patchFelixTproxyMode(ctx context.Context, al *operatorv1.ApplicationLayer) error {
+func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context, al *operatorv1.ApplicationLayer) error {
 	// Fetch any existing default FelixConfiguration object.
 	fc := &crdv1.FelixConfiguration{}
 	err := r.client.Get(ctx, types.NamespacedName{Name: "default"}, fc)
@@ -451,21 +479,27 @@ func (r *ReconcileApplicationLayer) patchFelixTproxyMode(ctx context.Context, al
 		return err
 	}
 
-	var tproxyMode crdv1.TPROXYModeOption
+	// Ensure policySyncPathPrefix is active. If it's enabled by something else, don't degrade.
+	if fc.Spec.PolicySyncPathPrefix == "" {
+		fc.Spec.PolicySyncPathPrefix = DefaultPolicySyncPrefix
+	} else {
+		log.Info("policySync path prefix found already set", "policySyncPathPrefix", fc.Spec.PolicySyncPathPrefix)
+	}
+
+	tproxyMode := r.tproxyMode(al)
 	patchFrom := client.MergeFrom(fc.DeepCopy())
 
-	if al != nil && (r.isLogsCollectionEnabled(al.Spec.LogCollection) || r.isWAFEnabled(&al.Spec)) {
-		tproxyMode = crdv1.TPROXYModeOptionEnabled
-	} else {
-		tproxyMode = crdv1.TPROXYModeOptionDisabled
-	}
 	// If tproxy mode is already set to desired state return nil.
 	if fc.Spec.TPROXYMode != nil && *fc.Spec.TPROXYMode == tproxyMode {
 		return nil
 	}
 	fc.Spec.TPROXYMode = &tproxyMode
 
-	log.Info("Patching TPROXYMode FelixConfiguration with mode", "mode", string(tproxyMode))
+	log.Info(
+		"Patching FelixConfiguration",
+		"policySyncPathPrefix", fc.Spec.PolicySyncPathPrefix,
+		"tproxyMode", string(tproxyMode),
+	)
 
 	if err := r.client.Patch(ctx, fc, patchFrom); err != nil {
 		return err

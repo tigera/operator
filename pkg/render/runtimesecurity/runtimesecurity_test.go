@@ -81,7 +81,7 @@ var _ = Describe("Runtime Security rendering tests", func() {
 		deploy := rtest.GetResource(resources, runtimesecurity.SashaName, runtimesecurity.NameSpaceRuntimeSecurity,
 			"apps", "v1", "Deployment").(*appsv1.Deployment)
 		spec := deploy.Spec.Template.Spec
-		Expect(len(spec.Containers)).To(Equal(1))
+		Expect(len(spec.Containers)).To(Equal(2))
 	})
 
 })

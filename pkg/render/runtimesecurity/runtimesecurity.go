@@ -60,7 +60,7 @@ type Config struct {
 	ClusterDomain   string
 	// Calculated internal fields.
 	sashaImage    string
-	ThreatIdImage string
+	threatIdImage string
 }
 
 type component struct {
@@ -84,11 +84,7 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
-	}
-
-	c.config.ThreatIdImage, err = components.GetReference(components.ComponentThreatId, reg, path, prefix, is)
+	c.config.threatIdImage, err = components.GetReference(components.ComponentThreatId, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -209,7 +205,7 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 							c.config.OsType),
 						corev1.Container{
 							Name:  ThreatIdName,
-							Image: c.config.ThreatIdImage,
+							Image: c.config.threatIdImage,
 							// Env:   envVars, // Not needed for now
 							Resources: corev1.ResourceRequirements{
 								Limits: corev1.ResourceList{

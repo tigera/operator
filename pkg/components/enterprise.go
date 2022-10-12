@@ -256,8 +256,13 @@ var (
 	}
 
 	ComponentSasha = component{
-		Version: "v1.0.2",
+		Version: "v1.1.0-0.dev-214-gfa438831e2bc",
 		Image:   "tigera/sasha",
+	}
+
+	ComponentThreatId = component{
+		Version: "v1.1.0-0.dev-214-gfa438831e2bc",
+		Image:   "tigera/threat-identification",
 	}
 	EnterpriseComponents = []component{
 		ComponentAPIServer,
@@ -308,5 +313,6 @@ var (
 		ComponentImageAssuranceScanner,
 		ComponentImageAssurancePodWatcher,
 		ComponentSasha,
+		ComponentThreatId,
 	}
 )

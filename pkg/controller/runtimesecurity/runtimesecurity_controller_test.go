@@ -127,9 +127,11 @@ var _ = Describe("Runtime Security Controller Tests", func() {
 		Expect(test.GetResource(c, &deploy)).To(BeNil())
 
 		spec := deploy.Spec.Template.Spec
-		Expect(spec.Containers).To(HaveLen(1))
+		Expect(spec.Containers).To(HaveLen(2))
 		Expect(spec.Containers[0].Image).To(Equal(fmt.Sprintf("some.registry.org/%s:%s",
 			components.ComponentSasha.Image, components.ComponentSasha.Version)))
+		Expect(spec.Containers[1].Image).To(Equal(fmt.Sprintf("some.registry.org/%s:%s",
+			components.ComponentThreatId.Image, components.ComponentThreatId.Version)))
 
 	})
 

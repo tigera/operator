@@ -354,18 +354,25 @@ func updateApplicationLayerWithDefaults(al *operatorv1.ApplicationLayer) {
 
 // validateApplicationLayer validates ApplicationLayer
 func validateApplicationLayer(al *operatorv1.ApplicationLayer) error {
+	var atLeastOneFeatureDetected bool
 
-	// Just a precaution to make sure it is safe to dereference pointers below.
-	// This is already taken care of in updateApplicationLayerWithDefaults.
-	properlyConfigured := (al.Spec.LogCollection != nil &&
-		al.Spec.LogCollection.CollectLogs != nil &&
-		al.Spec.WebApplicationFirewall != nil) ||
-		al.Spec.Policy != nil
+	if *al.Spec.LogCollection.CollectLogs == operatorv1.L7LogCollectionEnabled {
+		log.Info("L7 Log Collection found enabled.")
+		atLeastOneFeatureDetected = true
+	}
 
+	if *al.Spec.WebApplicationFirewall == operatorv1.WAFEnabled {
+		log.Info("L7 WAF found enabled.")
+		atLeastOneFeatureDetected = true
+	}
+
+	if al.Spec.Policy.Mode == operatorv1.PolicyEnabled {
+		log.Info("L7 ALP found enabled")
+		atLeastOneFeatureDetected = true
+	}
 	// If ApplicationLayer spec exists then one of its features should be set.
-	if !properlyConfigured || (*al.Spec.LogCollection.CollectLogs != operatorv1.L7LogCollectionEnabled &&
-		*al.Spec.WebApplicationFirewall != operatorv1.WAFEnabled) {
-		return fmt.Errorf("at least one of webApplicationFirewall or logCollection.collectLogs must be specified in ApplicationLayer resource")
+	if !atLeastOneFeatureDetected {
+		return errors.New("at least one of webApplicationFirewall, policy.Mode or logCollection.collectLogs must be specified in ApplicationLayer resource")
 	}
 
 	return nil

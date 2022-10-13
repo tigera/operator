@@ -206,9 +206,11 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 
 	// AD Related deployment only for management/standalone cluster
 	// When FIPS mode is enabled, we currently disable our python based images.
-	if !c.cfg.ManagedCluster && !operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
+	if !c.cfg.ManagedCluster {
+		var adObjs []client.Object
+
 		// Service + Deployment + RBAC for AD API
-		objs = append(objs,
+		adObjs = append(adObjs,
 			c.adAPIAllowTigeraPolicy(),
 			c.adAPIServiceAccount(),
 			c.adAPIAccessClusterRole(),
@@ -217,36 +219,48 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 
 		shouldConfigureADStorage := len(c.cfg.IntrusionDetection.Spec.AnomalyDetection.StorageClassName) > 0
 
-		if !shouldConfigureADStorage {
-			objsToDelete = append(objsToDelete,
-				c.adPersistentVolumeClaim(),
-			)
-		} else if shouldConfigureADStorage && c.cfg.ShouldRenderADPVC {
-			objs = append(objs,
-				c.adPersistentVolumeClaim(),
-			)
+		if shouldConfigureADStorage && c.cfg.ShouldRenderADPVC {
+			adObjs = append(adObjs, c.adPersistentVolumeClaim())
 		}
 
-		objs = append(objs,
+		adObjs = append(adObjs,
 			c.adAPIService(),
 			c.adAPIDeployment(shouldConfigureADStorage),
 		)
 
 		// RBAC for AD Detector Pods
-		objs = append(objs,
+		adObjs = append(adObjs,
 			c.adDetectorAllowTigeraPolicy(),
 			c.adDetectorServiceAccount(),
 			c.adDetectorSecret(),
 			c.adDetectorAccessRole(),
 			c.adDetectorRoleBinding(),
 		)
-		objs = append(objs, c.adDetectorPodTemplates()...)
+		adObjs = append(adObjs, c.adDetectorPodTemplates()...)
+
+		if !operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
+			objs = append(objs, adObjs...)
+
+			if !shouldConfigureADStorage {
+				objsToDelete = append(objsToDelete, c.adPersistentVolumeClaim())
+			}
+		} else {
+			objsToDelete = append(objsToDelete, adObjs...)
+		}
 	}
 
 	// When FIPS mode is enabled, we currently disable our python based images.
-	if !c.cfg.ManagedCluster && !operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-		objs = append(objs, c.intrusionDetectionElasticsearchAllowTigeraPolicy())
-		objs = append(objs, c.intrusionDetectionElasticsearchJob())
+	if !c.cfg.ManagedCluster {
+		idsObjs := []client.Object{
+			c.intrusionDetectionElasticsearchAllowTigeraPolicy(),
+			c.intrusionDetectionElasticsearchJob(),
+		}
+
+		if !operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
+			objs = append(objs, idsObjs...)
+		} else {
+			objsToDelete = append(objsToDelete, idsObjs...)
+		}
 	}
 
 	if !c.cfg.Openshift {

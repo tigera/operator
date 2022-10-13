@@ -671,9 +671,18 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 
 	It("should not render anomaly detection or es-job installer when FIPS mode is enabled", func() {
 		fipsEnabled := operatorv1.FIPSModeEnabled
+		testADStorageClassName := "test-storage-class-name"
 		cfg.Installation.FIPSMode = &fipsEnabled
+		cfg.IntrusionDetection = operatorv1.IntrusionDetection{
+			Spec: operatorv1.IntrusionDetectionSpec{
+				AnomalyDetection: operatorv1.AnomalyDetectionSpec{
+					StorageClassName: testADStorageClassName,
+				},
+			},
+		}
+		cfg.ShouldRenderADPVC = true
 		component := render.IntrusionDetection(cfg)
-		resources, _ := component.Objects()
+		toCreate, toRemove := component.Objects()
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -723,14 +732,45 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			{name: "intrusion-detection", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
-		Expect(len(resources)).To(Equal(len(expectedResources)))
+		Expect(toCreate).To(HaveLen(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResource(toCreate[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 
 			if expectedRes.kind == "GlobalAlertTemplate" {
-				rtest.ExpectGlobalAlertTemplateToBePopulated(resources[i])
+				rtest.ExpectGlobalAlertTemplateToBePopulated(toCreate[i])
 			}
+		}
+
+		expectedResourcesToRemove := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "allow-tigera.anomaly-detection-api", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: "anomaly-detection-api", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "anomaly-detection-api", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "anomaly-detection-api", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-anomaly-detection", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "PersistentVolumeClaim"},
+			{name: "anomaly-detection-api", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "Service"},
+			{name: "anomaly-detection-api", ns: "tigera-intrusion-detection", group: "apps", version: "v1", kind: "Deployment"},
+			{name: "allow-tigera.anomaly-detectors", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "Secret"},
+			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+			{name: "tigera.io.detectors.training", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "PodTemplate"},
+			{name: "tigera.io.detectors.detection", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "PodTemplate"},
+			{name: "allow-tigera.intrusion-detection-elastic", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: "intrusion-detection-es-job-installer", ns: "tigera-intrusion-detection", group: "batch", version: "v1", kind: "Job"},
+		}
+
+		Expect(toRemove).To(HaveLen(len(expectedResourcesToRemove)))
+
+		for i, expectedRes := range expectedResourcesToRemove {
+			rtest.ExpectResource(toRemove[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 	})
 })

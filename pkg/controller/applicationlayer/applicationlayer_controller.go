@@ -467,6 +467,13 @@ func (r *ReconcileApplicationLayer) isWAFEnabled(applicationLayerSpec *operatorv
 		*applicationLayerSpec.WebApplicationFirewall == operatorv1.WAFEnabled
 }
 
+func (r *ReconcileApplicationLayer) polsyncPathPfx(al *operatorv1.ApplicationLayer) string {
+	if al == nil {
+		return ""
+	}
+	return DefaultPolicySyncPrefix
+}
+
 func (r *ReconcileApplicationLayer) tproxyMode(al *operatorv1.ApplicationLayer) crdv1.TPROXYModeOption {
 	if al == nil {
 		// application layer is disabled, most likely
@@ -497,21 +504,18 @@ func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context,
 		return err
 	}
 
-	// Ensure policySyncPathPrefix is active. If it's enabled by something else, don't degrade.
-	if fc.Spec.PolicySyncPathPrefix == "" {
-		fc.Spec.PolicySyncPathPrefix = DefaultPolicySyncPrefix
-	} else {
-		log.Info("policySync path prefix found already set", "policySyncPathPrefix", fc.Spec.PolicySyncPathPrefix)
-	}
-
 	tproxyMode := r.tproxyMode(al)
+	polsyncPfx := r.polsyncPathPfx(al)
 	patchFrom := client.MergeFrom(fc.DeepCopy())
 
-	// If tproxy mode is already set to desired state return nil.
-	if fc.Spec.TPROXYMode != nil && *fc.Spec.TPROXYMode == tproxyMode {
+	policySyncSet := fc.Spec.PolicySyncPathPrefix == polsyncPfx
+	tproxyModeSet := fc.Spec.TPROXYMode != nil && *fc.Spec.TPROXYMode == tproxyMode
+
+	if policySyncSet && tproxyModeSet {
 		return nil
 	}
 	fc.Spec.TPROXYMode = &tproxyMode
+	fc.Spec.PolicySyncPathPrefix = polsyncPfx
 
 	log.Info(
 		"Patching FelixConfiguration",

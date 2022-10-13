@@ -55,6 +55,20 @@ spec:
                     format: int64
                     type: integer
                 type: object
+              policy:
+                description: Specification for application layer policy
+                properties:
+                  envoyImage:
+                    description: 'This setting controls Application-Layer Policy''s
+                      per-host envoy daemonset image. Overriding this is not recommended.
+                      Allowed values are: Disabled, Per-host, or Per-pod Default:
+                      ""'
+                    type: string
+                  mode:
+                    description: 'This setting controls Application-Layer Policy mode
+                      Allowed values are: Disabled, Enabled Default: Disabled'
+                    type: string
+                type: object
               webApplicationFirewall:
                 description: WebApplicationFirewall controls whether or not ModSecurity
                   enforcement is enabled for the cluster. When enabled, Services may

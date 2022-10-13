@@ -87,11 +87,16 @@ type Config struct {
 	LogRequestsPerInterval *int64
 	LogIntervalSeconds     *int64
 
+	// Optional config for ALP
+	ALPEnabled         bool
+	EnvoyImageOverride *string
+
 	// Calculated internal fields.
-	proxyImage     string
-	collectorImage string
-	dikastesImage  string
-	envoyConfigMap *corev1.ConfigMap
+	proxyImage      string
+	collectorImage  string
+	dikastesImage   string
+	dikastesEnabled bool
+	envoyConfigMap  *corev1.ConfigMap
 }
 
 func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -109,6 +114,10 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	c.config.proxyImage, err = components.GetReference(components.ComponentEnvoyProxy, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
+	}
+
+	if c.config.EnvoyImageOverride != nil && *c.config.EnvoyImageOverride != "" {
+		c.config.proxyImage = *c.config.EnvoyImageOverride
 	}
 
 	c.config.collectorImage, err = components.GetReference(components.ComponentL7Collector, reg, path, prefix, is)
@@ -218,6 +227,16 @@ func (c *component) daemonset() *appsv1.DaemonSet {
 func (c *component) containers() []corev1.Container {
 	var containers []corev1.Container
 
+	var proxyImagePullPolicy corev1.PullPolicy = corev1.PullIfNotPresent
+	if c.config.EnvoyImageOverride != nil {
+		proxyImagePullPolicy = corev1.PullAlways
+	}
+
+	c.config.dikastesEnabled = false
+	if c.config.WAFEnabled || c.config.ALPEnabled {
+		c.config.dikastesEnabled = true
+	}
+
 	proxy := corev1.Container{
 		Name:  ProxyContainerName,
 		Image: c.config.proxyImage,
@@ -233,9 +252,11 @@ func (c *component) containers() []corev1.Container {
 			RunAsUser:  ptr.Int64ToPtr(0),
 			RunAsGroup: ptr.Int64ToPtr(0),
 		},
-		Env:          c.proxyEnv(),
-		VolumeMounts: c.proxyVolMounts(),
+		Env:             c.proxyEnv(),
+		VolumeMounts:    c.proxyVolMounts(),
+		ImagePullPolicy: proxyImagePullPolicy,
 	}
+
 	containers = append(containers, proxy)
 
 	if c.config.LogsEnabled {
@@ -249,20 +270,27 @@ func (c *component) containers() []corev1.Container {
 		containers = append(containers, collector)
 	}
 
-	if c.config.WAFEnabled {
+	if c.config.dikastesEnabled {
 		// Web Application Firewall (WAF) specific container
+
+		commandArgs := []string{
+			"/dikastes",
+			"server",
+			"--dial", "/var/run/felix/nodeagent/socket",
+			"--listen", "/var/run/dikastes/dikastes.sock",
+		}
+
+		if c.config.WAFEnabled {
+			commandArgs = append(commandArgs, "--rules", "/etc/modsecurity-ruleset")
+		}
+
 		dikastes := corev1.Container{
-			Name:  DikastesContainerName,
-			Image: c.config.dikastesImage,
-			Command: []string{
-				"/dikastes",
-				"server",
-				"--dial", "/var/run/felix/nodeagent/socket",
-				"--listen", "/var/run/dikastes/dikastes.sock",
-				"--rules", "/etc/modsecurity-ruleset",
-			},
+			Name:    DikastesContainerName,
+			Image:   c.config.dikastesImage,
+			Command: commandArgs,
 			Env: []corev1.EnvVar{
 				{Name: "LOG_LEVEL", Value: "Info"},
+				{Name: "DIKASTES_SUBSCRIPTION_TYPE", Value: "per-host-policies"},
 			},
 			VolumeMounts: []corev1.VolumeMount{
 				{Name: FelixSync, MountPath: "/var/run/felix"},

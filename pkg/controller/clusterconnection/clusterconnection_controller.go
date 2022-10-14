@@ -107,6 +107,7 @@ func newReconciler(
 		status:         statusMgr,
 		clusterDomain:  opts.ClusterDomain,
 		tierWatchReady: tierWatchReady,
+		usePSP:         opts.UsePSP,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
@@ -166,6 +167,7 @@ type ReconcileConnection struct {
 	status         status.StatusManager
 	clusterDomain  string
 	tierWatchReady *utils.ReadyFlag
+	usePSP         bool
 }
 
 // Reconcile reads that state of the cluster for a ManagementClusterConnection object and makes changes based on the
@@ -309,6 +311,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		Installation:      instl,
 		TunnelSecret:      tunnelSecret,
 		TrustedCertBundle: trustedCertBundle,
+		UsePSP:            r.usePSP,
 	}
 
 	components := []render.Component{render.Guardian(guardianCfg)}

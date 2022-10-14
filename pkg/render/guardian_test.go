@@ -34,6 +34,8 @@ import (
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -41,6 +43,7 @@ import (
 )
 
 var _ = Describe("Rendering tests", func() {
+	var cfg *render.GuardianConfiguration
 	var g render.Component
 	var resources []client.Object
 
@@ -81,7 +84,7 @@ var _ = Describe("Rendering tests", func() {
 
 	Context("Guardian component", func() {
 		renderGuardian := func(i operatorv1.InstallationSpec) {
-			cfg := createGuardianConfig(i, "127.0.0.1:1234", false)
+			cfg = createGuardianConfig(i, "127.0.0.1:1234", false)
 			g = render.Guardian(cfg)
 			Expect(g.ResolveImages(nil)).To(BeNil())
 			resources, _ = g.Objects()
@@ -158,6 +161,28 @@ var _ = Describe("Rendering tests", func() {
 			deployment := rtest.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(deployment.Spec.Template.Spec.Tolerations).Should(ContainElements(append(rmeta.TolerateCriticalAddonsAndControlPlane, t)))
 		})
+
+	})
+
+	It("should render PSP when flagged", func() {
+		cfg.Openshift = notOpenshift
+		cfg.UsePSP = true
+		component := render.Guardian(cfg)
+		resources, _ := component.Objects()
+
+		guardianPSP := rtest.GetResource(resources, render.GuardianPodSecurityPolicyName, "", "policy", "v1beta1", "PodSecurityPolicy").(*policyv1beta1.PodSecurityPolicy)
+		Expect(guardianPSP).ToNot(BeNil())
+		Expect(guardianPSP.Spec.Privileged).To(BeFalse())
+		Expect(*guardianPSP.Spec.AllowPrivilegeEscalation).To(BeFalse())
+		Expect(guardianPSP.Spec.RunAsUser.Rule).To(Equal(policyv1beta1.RunAsUserStrategyMustRunAsNonRoot))
+
+		clusterrole := rtest.GetResource(resources, render.GuardianClusterRoleName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(clusterrole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{render.GuardianPodSecurityPolicyName},
+		}))
 
 	})
 

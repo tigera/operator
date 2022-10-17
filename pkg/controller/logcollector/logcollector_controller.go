@@ -221,7 +221,8 @@ func fillDefaults(instance *operatorv1.LogCollector) []string {
 					v1.SyslogLogDNS,
 					v1.SyslogLogFlows,
 				}
-
+				// Syslog changes
+				instance.Spec.AdditionalStores.Syslog.TLS = false
 				// Include the field that was modified (in case we need to display error messages)
 				modifiedFields = append(modifiedFields, "AdditionalStores.Syslog.LogTypes")
 			}
@@ -431,7 +432,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 
 	var syslogCredential *render.SysLogCredential
 	if instance.Spec.AdditionalStores != nil {
-		if instance.Spec.AdditionalStores.Splunk != nil {
+		if instance.Spec.AdditionalStores.Syslog != nil {
 			syslogCredential, err = getSysLogCredential(r.client)
 			if err != nil {
 				log.Error(err, "Error with syslog credential secret")

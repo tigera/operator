@@ -571,14 +571,14 @@ var _ = Describe("LogCollector controller tests", func() {
 			logCollector := operatorv1.LogCollector{Spec: operatorv1.LogCollectorSpec{AdditionalStores: &operatorv1.AdditionalLogStoreSpec{
 				Syslog: &operatorv1.SyslogStoreSpec{}}}}
 			modifiedFields := fillDefaults(&logCollector)
-			expectedFields := []string{"CollectProcessPath", "AdditionalStores.Syslog.LogTypes"}
+			expectedFields := []string{"CollectProcessPath", "AdditionalStores.Syslog.LogTypes", "AdditionalStores.Syslog.Encryption"}
 			expectedLogTypes := []operatorv1.SyslogLogType{
 				operatorv1.SyslogLogAudit,
 				operatorv1.SyslogLogDNS,
 				operatorv1.SyslogLogFlows,
 			}
 
-			Expect(len(modifiedFields)).To(Equal(2))
+			Expect(len(modifiedFields)).To(Equal(3))
 			Expect(modifiedFields).To(ConsistOf(expectedFields))
 			Expect(*logCollector.Spec.CollectProcessPath).To(Equal(operatorv1.CollectProcessPathEnable))
 			Expect(logCollector.Spec.AdditionalStores.Syslog.LogTypes).To(Equal(expectedLogTypes))
@@ -590,6 +590,7 @@ var _ = Describe("LogCollector controller tests", func() {
 			processPath := operatorv1.CollectProcessPathDisable
 			logCollector.Spec.CollectProcessPath = &processPath
 			logCollector.Spec.AdditionalStores.Syslog.LogTypes = []operatorv1.SyslogLogType{operatorv1.SyslogLogAudit}
+			logCollector.Spec.AdditionalStores.Syslog.Encryption = operatorv1.EncryptionNone
 			modifiedFields := fillDefaults(&logCollector)
 			Expect(*logCollector.Spec.CollectProcessPath).To(Equal(operatorv1.CollectProcessPathDisable))
 			expectedLogTypes := []operatorv1.SyslogLogType{

@@ -73,6 +73,8 @@ const (
 	ADResourceGroup                        = "detectors.tigera.io"
 	ADDetectorsModelResourceName           = "models"
 	ADLogTypeMetaDataResourceName          = "metadata"
+	ADTempStorageVolumeName                = "tmp"
+	ADTempStorageVolumeMountPath           = "/tmp"
 
 	ADAPIObjectName          = "anomaly-detection-api"
 	ADAPIObjectPortName      = "anomaly-detection-api-https"
@@ -1587,6 +1589,10 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 		VolumeMounts: []corev1.VolumeMount{
 			c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType()),
 			c.cfg.ADAPIServerCertSecret.VolumeMount(c.SupportedOSType()),
+			{ // must match tmp volume in pod
+				Name:      ADTempStorageVolumeName,
+				MountPath: ADTempStorageVolumeMountPath,
+			},
 		},
 	}
 
@@ -1611,6 +1617,12 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 				Volumes: []corev1.Volume{
 					c.cfg.TrustedCertBundle.Volume(),
 					c.cfg.ADAPIServerCertSecret.Volume(),
+					{
+						Name: ADTempStorageVolumeName,
+						VolumeSource: corev1.VolumeSource{
+							EmptyDir: &corev1.EmptyDirVolumeSource{},
+						},
+					},
 				},
 				DNSPolicy:          corev1.DNSClusterFirst,
 				ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),

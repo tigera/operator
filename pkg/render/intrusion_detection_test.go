@@ -477,12 +477,28 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 
 		adDetectionPodtemplate := rtest.GetResource(resources, render.ADJobPodTemplateBaseName+".detection", "tigera-intrusion-detection", "", "v1", "PodTemplate").(*corev1.PodTemplate)
 		adDetectionEnvs := adDetectionPodtemplate.Template.Spec.Containers[0].Env
+		assertEnvVarlistMatch(adDetectionEnvs, expectedADEnvs)
+		adTempDetectionVolume := adDetectionPodtemplate.Template.Spec.Volumes[2]
+		adTempDetectionContainerVolumeMount := adDetectionPodtemplate.Template.Spec.Containers[0].VolumeMounts[2]
+
+		Expect(adTempDetectionVolume.VolumeSource.EmptyDir).To(Not(BeNil()))
+		Expect(adTempDetectionVolume.Name).To(Equal(render.ADTempStorageVolumeName))
+
+		Expect(adTempDetectionContainerVolumeMount.Name).To(Equal(render.ADTempStorageVolumeName))
+		Expect(adTempDetectionContainerVolumeMount.MountPath).To(Equal(render.ADTempStorageVolumeMountPath))
 
 		adTrainingPodtemplate := rtest.GetResource(resources, render.ADJobPodTemplateBaseName+".training", "tigera-intrusion-detection", "", "v1", "PodTemplate").(*corev1.PodTemplate)
 		adTrainingEnvs := adTrainingPodtemplate.Template.Spec.Containers[0].Env
-
-		assertEnvVarlistMatch(adDetectionEnvs, expectedADEnvs)
 		assertEnvVarlistMatch(adTrainingEnvs, expectedADEnvs)
+
+		adTempTrainingVolume := adTrainingPodtemplate.Template.Spec.Volumes[2]
+		adTempTrainingContainerVolumeMount := adTrainingPodtemplate.Template.Spec.Containers[0].VolumeMounts[2]
+
+		Expect(adTempTrainingVolume.VolumeSource.EmptyDir).To(Not(BeNil()))
+		Expect(adTempTrainingVolume.Name).To(Equal(render.ADTempStorageVolumeName))
+
+		Expect(adTempTrainingContainerVolumeMount.Name).To(Equal(render.ADTempStorageVolumeName))
+		Expect(adTempTrainingContainerVolumeMount.MountPath).To(Equal(render.ADTempStorageVolumeMountPath))
 	})
 
 	It("should not render intrusion-detection-es-job-installer and should disable GlobalAlert controller when cluster is managed", func() {

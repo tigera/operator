@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -128,6 +128,11 @@ type SyslogStoreSpec struct {
 	// LogTypes contains a list of types of logs to export to syslog. By default, if this field is
 	// omitted, it will be set to include all possible values.
 	LogTypes []SyslogLogType `json:"logTypes"`
+
+	// TLS defined whether the data-in-transit is encrypted.
+	// Default: false
+	// +optional
+	TLS bool `json:"tls"`
 }
 
 // SplunkStoreSpec defines configuration for exporting logs to splunk.

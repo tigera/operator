@@ -135,6 +135,10 @@ spec:
                           notice long logs being truncated. Default: 1024'
                         format: int32
                         type: integer
+                      tls:
+                        description: 'TLS defined whether the data-in-transit is encrypted.
+                          Default: false'
+                        type: boolean
                     required:
                     - endpoint
                     - logTypes

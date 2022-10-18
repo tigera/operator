@@ -21,8 +21,11 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	v1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -42,6 +45,8 @@ const (
 type CSIConfiguration struct {
 	Installation *operatorv1.InstallationSpec
 	Terminating  bool
+	Openshift    bool
+	UsePSP       bool
 }
 
 type csiComponent struct {
@@ -255,11 +260,17 @@ func (c *csiComponent) csiTemplate() corev1.PodTemplateSpec {
 		Labels: templateLabels,
 	}
 	templateSpec := corev1.PodSpec{
-		Tolerations:      c.csiTolerations(),
-		Containers:       c.csiContainers(),
-		ImagePullSecrets: c.cfg.Installation.ImagePullSecrets,
-		Volumes:          c.csiVolumes(),
+		Tolerations:        c.csiTolerations(),
+		Containers:         c.csiContainers(),
+		ImagePullSecrets:   c.cfg.Installation.ImagePullSecrets,
+		Volumes:            c.csiVolumes(),
+		ServiceAccountName: CSIDaemonSetName,
 	}
+
+	if !c.cfg.Openshift && c.cfg.UsePSP {
+		templateSpec.ServiceAccountName = CSIDaemonSetName
+	}
+
 	return corev1.PodTemplateSpec{
 		ObjectMeta: templateMeta,
 		Spec:       templateSpec,
@@ -291,6 +302,74 @@ func (c *csiComponent) csiDaemonset() *appsv1.DaemonSet {
 	}
 }
 
+func (c *csiComponent) serviceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      CSIDaemonSetName,
+			Namespace: CSIDaemonSetNamespace,
+		},
+	}
+}
+
+// podSecurityPolicy sets up a PodSecurityPolicy for CSI Driver to allow usage of privileged
+// securityContext and hostPath volume.
+func (c *csiComponent) podSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	psp := podsecuritypolicy.NewBasePolicy()
+	psp.GetObjectMeta().SetName(CSIDaemonSetName)
+	psp.Spec.Privileged = true
+	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(true)
+	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
+	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
+
+	return psp
+}
+
+func (c *csiComponent) role() *rbacv1.Role {
+	policyRules := []rbacv1.PolicyRule{}
+
+	// Allow access to the pod security policy in case this is enforced on the cluster
+	if !c.cfg.Openshift && c.cfg.UsePSP {
+		policyRules = append(policyRules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{CSIDaemonSetName},
+		})
+	}
+
+	return &rbacv1.Role{
+		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      CSIDaemonSetName,
+			Namespace: CSIDaemonSetNamespace,
+		},
+		Rules: policyRules,
+	}
+}
+
+func (c *csiComponent) roleBinding() *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      CSIDaemonSetName,
+			Namespace: CSIDaemonSetNamespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     CSIDaemonSetName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      CSIDaemonSetName,
+				Namespace: CSIDaemonSetNamespace,
+			},
+		},
+	}
+}
+
 func (c *csiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.cfg.Installation.Registry
 	path := c.cfg.Installation.ImagePath
@@ -311,6 +390,18 @@ func (c *csiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 
 	objs = append(objs, c.csiDriver())
 	objs = append(objs, c.csiDaemonset())
+
+	// create PSP and corresponding clusterrole if it allows, clusterroles are currently
+	// only for attaching the PSP to CSI's DaemonSet, do not render them if the PSPs
+	// are also not rendered
+	if !c.cfg.Openshift && c.cfg.UsePSP {
+		objs = append(objs,
+			c.serviceAccount(),
+			c.podSecurityPolicy(),
+			c.role(),
+			c.roleBinding(),
+		)
+	}
 
 	if c.cfg.Terminating || c.cfg.Installation.KubeletVolumePluginPath == "None" {
 		objsToDelete = objs

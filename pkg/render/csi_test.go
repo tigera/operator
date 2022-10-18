@@ -51,8 +51,8 @@ var _ = Describe("CSI rendering tests", func() {
 		}{
 			{name: "csi.tigera.io", ns: "", group: "storage", version: "v1", kind: "CSIDriver"},
 			{name: "csi-node-driver", ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
-			{name: render.CSIDaemonSetName, ns: render.CSIDaemonSetNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 		}
+
 		comp := render.CSI(&cfg)
 		Expect(comp.ResolveImages(nil)).To(BeNil())
 		createObjs, delObjs := comp.Objects()
@@ -76,7 +76,6 @@ var _ = Describe("CSI rendering tests", func() {
 		}{
 			{name: "csi.tigera.io", ns: "", group: "storage", version: "v1", kind: "CSIDriver"},
 			{name: "csi-node-driver", ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
-			{name: render.CSIDaemonSetName, ns: render.CSIDaemonSetNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 		}
 		comp := render.CSI(&cfg)
 		Expect(comp.ResolveImages(nil)).To(BeNil())
@@ -101,6 +100,10 @@ var _ = Describe("CSI rendering tests", func() {
 		cfg.UsePSP = true
 
 		resources, _ := render.CSI(&cfg).Objects()
+
+		serviceAccount := rtest.GetResource(resources, render.CSIDaemonSetName, render.CSIDaemonSetNamespace, "", "v1", "ServiceAccount")
+		Expect(serviceAccount).ToNot(BeNil())
+
 		psp := rtest.GetResource(resources, render.CSIDaemonSetName, "", "policy", "v1beta1", "PodSecurityPolicy").(*policyv1beta1.PodSecurityPolicy)
 		Expect(psp).ToNot(BeNil())
 		Expect(psp.Spec.Privileged).To(BeTrue())

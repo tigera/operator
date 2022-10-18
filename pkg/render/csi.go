@@ -260,11 +260,15 @@ func (c *csiComponent) csiTemplate() corev1.PodTemplateSpec {
 		Labels: templateLabels,
 	}
 	templateSpec := corev1.PodSpec{
-		Tolerations:        c.csiTolerations(),
-		Containers:         c.csiContainers(),
-		Volumes:            c.csiVolumes(),
-		ServiceAccountName: CSIDaemonSetName,
+		Tolerations: c.csiTolerations(),
+		Containers:  c.csiContainers(),
+		Volumes:     c.csiVolumes(),
 	}
+
+	if !c.cfg.Openshift && c.cfg.UsePSP {
+		templateSpec.ServiceAccountName = CSIDaemonSetName
+	}
+
 	return corev1.PodTemplateSpec{
 		ObjectMeta: templateMeta,
 		Spec:       templateSpec,
@@ -387,13 +391,13 @@ func (c *csiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 
 	objs = append(objs, c.csiDriver())
 	objs = append(objs, c.csiDaemonset())
-	objs = append(objs, c.serviceAccount())
 
 	// create PSP and corresponding clusterrole if it allows, clusterroles are currently
 	// only for attaching the PSP to CSI's DaemonSet, do not render them if not PSPs
 	// are also not rendered
 	if !c.cfg.Openshift && c.cfg.UsePSP {
 		objs = append(objs,
+			c.serviceAccount(),
 			c.podSecurityPolicy(),
 			c.clusterRole(),
 			c.clusterRoleBinding(),

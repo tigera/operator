@@ -301,7 +301,6 @@ func (c *csiComponent) csiDaemonset() *appsv1.DaemonSet {
 }
 
 func (c *csiComponent) serviceAccount() *corev1.ServiceAccount {
-
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -324,7 +323,7 @@ func (c *csiComponent) podSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 	return psp
 }
 
-func (c *csiComponent) clusterRole() *rbacv1.ClusterRole {
+func (c *csiComponent) role() *rbacv1.Role {
 	policyRules := []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{""},
@@ -334,31 +333,35 @@ func (c *csiComponent) clusterRole() *rbacv1.ClusterRole {
 	}
 
 	// Allow access to the pod security policy in case this is enforced on the cluster
-	policyRules = append(policyRules, rbacv1.PolicyRule{
-		APIGroups:     []string{"policy"},
-		Resources:     []string{"podsecuritypolicies"},
-		Verbs:         []string{"use"},
-		ResourceNames: []string{CSIDaemonSetName},
-	})
+	if !c.cfg.Openshift && c.cfg.UsePSP {
+		policyRules = append(policyRules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{CSIDaemonSetName},
+		})
+	}
 
-	return &rbacv1.ClusterRole{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+	return &rbacv1.Role{
+		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: CSIDaemonSetName,
+			Name:      CSIDaemonSetName,
+			Namespace: CSIDaemonSetNamespace,
 		},
 		Rules: policyRules,
 	}
 }
 
-func (c *csiComponent) clusterRoleBinding() *rbacv1.ClusterRoleBinding {
-	return &rbacv1.ClusterRoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+func (c *csiComponent) roleBinding() *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: CSIDaemonSetName,
+			Name:      CSIDaemonSetName,
+			Namespace: CSIDaemonSetNamespace,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
+			Kind:     "Role",
 			Name:     CSIDaemonSetName,
 		},
 		Subjects: []rbacv1.Subject{
@@ -399,8 +402,8 @@ func (c *csiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 		objs = append(objs,
 			c.serviceAccount(),
 			c.podSecurityPolicy(),
-			c.clusterRole(),
-			c.clusterRoleBinding(),
+			c.role(),
+			c.roleBinding(),
 		)
 	}
 

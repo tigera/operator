@@ -110,19 +110,19 @@ var _ = Describe("CSI rendering tests", func() {
 		Expect(*psp.Spec.AllowPrivilegeEscalation).To(BeTrue())
 		Expect(psp.Spec.RunAsUser.Rule).To(Equal(policyv1beta1.RunAsUserStrategyRunAsAny))
 
-		clusterRole := rtest.GetResource(resources, render.CSIDaemonSetName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(clusterRole).ToNot(BeNil())
-		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+		role := rtest.GetResource(resources, render.CSIDaemonSetName, render.CSIDaemonSetNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
+		Expect(role).ToNot(BeNil())
+		Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
 			Resources:     []string{"podsecuritypolicies"},
 			Verbs:         []string{"use"},
 			ResourceNames: []string{render.CSIDaemonSetName},
 		}))
 
-		clusterRoleBinding := rtest.GetResource(resources, render.CSIDaemonSetName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
-		Expect(clusterRoleBinding).ToNot(BeNil())
-		Expect(clusterRoleBinding.Subjects).To(HaveLen(1))
-		Expect(clusterRoleBinding.Subjects).To(ContainElement(
+		roleBinding := rtest.GetResource(resources, render.CSIDaemonSetName, render.CSIDaemonSetNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
+		Expect(roleBinding).ToNot(BeNil())
+		Expect(roleBinding.Subjects).To(HaveLen(1))
+		Expect(roleBinding.Subjects).To(ContainElement(
 			rbacv1.Subject{
 				Kind:      "ServiceAccount",
 				Name:      render.CSIDaemonSetName,

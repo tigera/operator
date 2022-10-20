@@ -55,6 +55,14 @@ spec:
                     format: int64
                     type: integer
                 type: object
+              policy:
+                description: Specification for application layer policy
+                properties:
+                  mode:
+                    description: 'This setting controls Application-Layer Policy mode
+                      Allowed values are: Disabled, Enabled Default: Disabled'
+                    type: string
+                type: object
               webApplicationFirewall:
                 description: WebApplicationFirewall controls whether or not ModSecurity
                   enforcement is enabled for the cluster. When enabled, Services may

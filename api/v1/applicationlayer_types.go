@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,17 +27,30 @@ type ApplicationLayerSpec struct {
 	WebApplicationFirewall *WAFStatusType `json:"webApplicationFirewall,omitempty"`
 	// Specification for application layer (L7) log collection.
 	LogCollection *LogCollectionSpec `json:"logCollection,omitempty"`
+	// Specification for application layer policy
+	Policy *PolicySpec `json:"policy,omitempty"`
 }
 
 type LogCollectionStatusType string
 type WAFStatusType string
+type PolicyStatusStype string
 
 const (
 	WAFDisabled             WAFStatusType           = "Disabled"
 	WAFEnabled              WAFStatusType           = "Enabled"
 	L7LogCollectionDisabled LogCollectionStatusType = "Disabled"
 	L7LogCollectionEnabled  LogCollectionStatusType = "Enabled"
+	PolicyEnabled           PolicyStatusStype       = "Enabled"
+	PolicyDisabled          PolicyStatusStype       = "Disabled"
 )
+
+type PolicySpec struct {
+	// This setting controls Application-Layer Policy mode
+	// Allowed values are: Disabled, Enabled
+	// +optional
+	// Default: Disabled
+	Mode PolicyStatusStype `json:"mode,omitempty"`
+}
 
 type LogCollectionSpec struct {
 

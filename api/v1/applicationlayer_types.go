@@ -50,13 +50,6 @@ type PolicySpec struct {
 	// +optional
 	// Default: Disabled
 	Mode PolicyStatusStype `json:"mode,omitempty"`
-
-	// This setting controls Application-Layer Policy's per-host envoy daemonset image.
-	// Overriding this is not recommended.
-	// Allowed values are: Disabled, Per-host, or Per-pod
-	// +optional
-	// Default: ""
-	EnvoyImageOverride string `json:"envoyImage,omitempty"`
 }
 
 type LogCollectionSpec struct {

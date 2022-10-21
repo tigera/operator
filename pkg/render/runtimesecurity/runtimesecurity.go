@@ -139,6 +139,14 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 	rsSecretOptional := false
 	numReplica := int32(1)
 
+	// The threat-id API will use this probe for liveness and readiness
+	grpcProbe := &corev1.Probe{
+		Handler: corev1.Handler{Exec: &corev1.ExecAction{
+			Command: []string{"bin/grpc_health_probe-linux-amd64", "-addr", "127.0.0.1:50051"}}},
+		PeriodSeconds:    2,
+		FailureThreshold: 6,
+	}
+
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -217,6 +225,8 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 									corev1.ResourceMemory: resource.MustParse(ResourceThreatIdDefaultMemoryRequest),
 								},
 							},
+							LivenessProbe:  grpcProbe,
+							ReadinessProbe: grpcProbe,
 						},
 					},
 					ImagePullSecrets:   secret.GetReferenceList(c.config.PullSecrets),

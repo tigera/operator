@@ -18,9 +18,6 @@ import (
 	"fmt"
 	"strings"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
@@ -31,13 +28,14 @@ import (
 	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/ptr"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -404,6 +402,11 @@ func allowTigeraAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy {
 			Destination: networkpolicy.KubeAPIServerEntityRule,
 		},
 		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.PrometheusEntityRule,
+		},
+		{
 			// Pass to subsequent tiers for further enforcement
 			Action: v3.Pass,
 		},
@@ -759,6 +762,7 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ProjectCalicoApiServerServiceName(c.cfg.Installation.Variant),
 			Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
+			Labels:    map[string]string{"k8s-app": QueryserverServiceName},
 		},
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
@@ -934,7 +938,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		},
 		VolumeMounts: volumeMounts,
 		LivenessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
+			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path:   "/version",
 					Port:   intstr.FromInt(APIServerPort),
@@ -945,7 +949,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 			PeriodSeconds:       10,
 		},
 		ReadinessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
+			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
 						"/code/filecheck",
@@ -1023,7 +1027,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		Image: c.queryServerImage,
 		Env:   env,
 		LivenessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
+			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path:   "/version",
 					Port:   intstr.FromInt(QueryServerPort),
@@ -1725,7 +1729,7 @@ func (c *apiServerComponent) uiSettingsPassthruClusterRolebinding() *rbacv1.Clus
 //
 // Calico Enterprise only
 func (c *apiServerComponent) auditPolicyConfigMap() *corev1.ConfigMap {
-	const defaultAuditPolicy = `apiVersion: audit.k8s.io/v1beta1
+	const defaultAuditPolicy = `apiVersion: audit.k8s.io/v1
 kind: Policy
 rules:
 - level: RequestResponse

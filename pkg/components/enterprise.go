@@ -18,45 +18,45 @@
 package components
 
 var (
-	EnterpriseRelease string = "v3.14.1"
+	EnterpriseRelease string = "release-calient-v3.15"
 
 	ComponentAPIServer = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/cnx-apiserver",
 	}
 
 	ComponentComplianceBenchmarker = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/compliance-benchmarker",
 	}
 
 	ComponentComplianceController = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/compliance-controller",
 	}
 
 	ComponentComplianceReporter = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/compliance-reporter",
 	}
 
 	ComponentComplianceServer = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/compliance-server",
 	}
 
 	ComponentComplianceSnapshotter = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/compliance-snapshotter",
 	}
 
 	ComponentDeepPacketInspection = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/deep-packet-inspection",
 	}
 
 	ComponentEckElasticsearch = component{
-		Version: "7.16.2",
+		Version: "7.17.5",
 	}
 
 	ComponentEckKibana = component{
@@ -64,12 +64,17 @@ var (
 	}
 
 	ComponentElasticTseeInstaller = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/intrusion-detection-job-installer",
 	}
 
 	ComponentElasticsearch = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
+		Image:   "tigera/elasticsearch",
+	}
+
+	ComponentElasticsearchFIPS = component{
+		Version: "release-calient-v3.15-fips",
 		Image:   "tigera/elasticsearch",
 	}
 
@@ -78,92 +83,92 @@ var (
 	}
 
 	ComponentElasticsearchOperator = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/eck-operator",
 	}
 
 	ComponentEsCurator = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/es-curator",
 	}
 
 	ComponentEsProxy = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/es-proxy",
 	}
 
 	ComponentESGateway = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/es-gateway",
 	}
 
 	ComponentFluentd = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/fluentd",
 	}
 
 	ComponentFluentdWindows = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/fluentd-windows",
 	}
 
 	ComponentGuardian = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/guardian",
 	}
 
 	ComponentIntrusionDetectionController = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/intrusion-detection-controller",
 	}
 
 	ComponentAnomalyDetectionJobs = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/anomaly_detection_jobs",
 	}
 
 	ComponentAnomalyDetectionAPI = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/anomaly-detection-api",
 	}
 
 	ComponentKibana = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/kibana",
 	}
 
 	ComponentManager = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/cnx-manager",
 	}
 
 	ComponentDex = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/dex",
 	}
 
 	ComponentManagerProxy = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/voltron",
 	}
 
 	ComponentPacketCapture = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/packetcapture",
 	}
 
 	ComponentL7Collector = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/l7-collector",
 	}
 
 	ComponentEnvoyProxy = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/envoy",
 	}
 
 	ComponentDikastes = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/dikastes",
 	}
 
@@ -172,12 +177,12 @@ var (
 	}
 
 	ComponentPrometheus = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/prometheus",
 	}
 
 	ComponentTigeraPrometheusService = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/prometheus-service",
 	}
 
@@ -186,52 +191,52 @@ var (
 	}
 
 	ComponentPrometheusAlertmanager = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/alertmanager",
 	}
 
 	ComponentQueryServer = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/cnx-queryserver",
 	}
 
 	ComponentTigeraKubeControllers = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/kube-controllers",
 	}
 
 	ComponentTigeraNode = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/cnx-node",
 	}
 
 	ComponentTigeraTypha = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/typha",
 	}
 
 	ComponentTigeraCNI = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/cni",
 	}
 
 	ComponentTigeraCNIFIPS = component{
-		Version: "v3.14.1-fips",
+		Version: "release-calient-v3.15-fips",
 		Image:   "tigera/cni",
 	}
 
 	ComponentCloudControllers = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/cloud-controllers",
 	}
 
 	ComponentElasticsearchMetrics = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/elasticsearch-metrics",
 	}
 
 	ComponentTigeraWindowsUpgrade = component{
-		Version: "v3.14.1",
+		Version: "release-calient-v3.15",
 		Image:   "tigera/calico-windows-upgrade",
 	}
 	// Only components that correspond directly to images should be included in this list,
@@ -246,6 +251,7 @@ var (
 		ComponentDeepPacketInspection,
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,
+		ComponentElasticsearchFIPS,
 		ComponentElasticsearchOperator,
 		ComponentEsCurator,
 		ComponentEsProxy,

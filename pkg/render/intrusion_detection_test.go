@@ -35,6 +35,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -220,6 +221,15 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal(bundle.VolumeMount(rmeta.OSTypeLinux).MountPath))
 		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal(adAPIKeyPair.VolumeMount(rmeta.OSTypeLinux).Name))
 		Expect(adAPIDeployment.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal(adAPIKeyPair.VolumeMount(rmeta.OSTypeLinux).MountPath))
+		// emptyDir is expected as the default volume
+		Expect(adAPIDeployment.Spec.Template.Spec.Volumes).To(ContainElement(
+			corev1.Volume{
+				Name: "volume-storage",
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+		))
 
 		// Check all Role for respective AD API SAs
 		detectorsSecret := rtest.GetResource(resources, "anomaly-detectors", render.IntrusionDetectionNamespace, "", "v1", "Secret").(*corev1.Secret)
@@ -276,6 +286,60 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			Name:      render.ADAPIObjectName,
 			Namespace: render.IntrusionDetectionNamespace,
 		}))
+	})
+
+	It("should render a persistentVolume claim if an AD StorageClassName is provided and an existing PVC does not exist", func() {
+		testADStorageClassName := "test-storage-class-name"
+		cfg.IntrusionDetection = operatorv1.IntrusionDetection{
+			Spec: operatorv1.IntrusionDetectionSpec{
+				AnomalyDetection: operatorv1.AnomalyDetectionSpec{
+					StorageClassName: testADStorageClassName,
+				},
+			},
+		}
+		cfg.ShouldRenderADPVC = true
+		cfg.Openshift = notOpenshift
+		cfg.ManagedCluster = false
+
+		component := render.IntrusionDetection(cfg)
+		resources, _ := component.Objects()
+
+		adAPIPVC := rtest.GetResource(resources, render.ADPersistentVolumeClaimName, render.IntrusionDetectionNamespace, "", "v1", "PersistentVolumeClaim").(*corev1.PersistentVolumeClaim)
+		Expect(*adAPIPVC.Spec.StorageClassName).To(Equal(testADStorageClassName))
+		Expect(adAPIPVC.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse(render.DefaultAnomalyDetectionPVRequestSizeGi)))
+
+		adAPIDeployment := rtest.GetResource(resources, render.ADAPIObjectName, render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(adAPIDeployment.Spec.Template.Spec.Volumes).To(ContainElement(
+			corev1.Volume{
+				Name: "volume-storage",
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+						ClaimName: testADStorageClassName,
+					},
+				},
+			},
+		))
+	})
+
+	It("should not render a persistentVolume claim if indicated that the AD StorageClassName is provided but an existing PVC already exists", func() {
+		testADStorageClassName := "test-storage-class-name"
+		cfg.IntrusionDetection = operatorv1.IntrusionDetection{
+			Spec: operatorv1.IntrusionDetectionSpec{
+				AnomalyDetection: operatorv1.AnomalyDetectionSpec{
+					StorageClassName: testADStorageClassName,
+				},
+			},
+		}
+		cfg.ShouldRenderADPVC = false
+		cfg.Openshift = notOpenshift
+		cfg.ManagedCluster = false
+
+		component := render.IntrusionDetection(cfg)
+		resources, _ := component.Objects()
+
+		adAPIPVC := rtest.GetResource(resources, render.ADPersistentVolumeClaimName, render.IntrusionDetectionNamespace, "", "v1", "PersistentVolumeClaim")
+
+		Expect(adAPIPVC).To(BeNil())
 	})
 
 	It("should render finalizers rbac resources in the IDS ClusterRole for an Openshift management/standalone cluster", func() {
@@ -607,9 +671,18 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 
 	It("should not render anomaly detection or es-job installer when FIPS mode is enabled", func() {
 		fipsEnabled := operatorv1.FIPSModeEnabled
+		testADStorageClassName := "test-storage-class-name"
 		cfg.Installation.FIPSMode = &fipsEnabled
+		cfg.IntrusionDetection = operatorv1.IntrusionDetection{
+			Spec: operatorv1.IntrusionDetectionSpec{
+				AnomalyDetection: operatorv1.AnomalyDetectionSpec{
+					StorageClassName: testADStorageClassName,
+				},
+			},
+		}
+		cfg.ShouldRenderADPVC = true
 		component := render.IntrusionDetection(cfg)
-		resources, _ := component.Objects()
+		toCreate, toRemove := component.Objects()
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -659,14 +732,45 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			{name: "intrusion-detection", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
-		Expect(len(resources)).To(Equal(len(expectedResources)))
+		Expect(toCreate).To(HaveLen(len(expectedResources)))
 
 		for i, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			rtest.ExpectResource(toCreate[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 
 			if expectedRes.kind == "GlobalAlertTemplate" {
-				rtest.ExpectGlobalAlertTemplateToBePopulated(resources[i])
+				rtest.ExpectGlobalAlertTemplateToBePopulated(toCreate[i])
 			}
+		}
+
+		expectedResourcesToRemove := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "allow-tigera.anomaly-detection-api", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: "anomaly-detection-api", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "anomaly-detection-api", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "anomaly-detection-api", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-anomaly-detection", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "PersistentVolumeClaim"},
+			{name: "anomaly-detection-api", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "Service"},
+			{name: "anomaly-detection-api", ns: "tigera-intrusion-detection", group: "apps", version: "v1", kind: "Deployment"},
+			{name: "allow-tigera.anomaly-detectors", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "Secret"},
+			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: "anomaly-detectors", ns: "tigera-intrusion-detection", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+			{name: "tigera.io.detectors.training", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "PodTemplate"},
+			{name: "tigera.io.detectors.detection", ns: "tigera-intrusion-detection", group: "", version: "v1", kind: "PodTemplate"},
+			{name: "allow-tigera.intrusion-detection-elastic", ns: "tigera-intrusion-detection", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: "intrusion-detection-es-job-installer", ns: "tigera-intrusion-detection", group: "batch", version: "v1", kind: "Job"},
+		}
+
+		Expect(toRemove).To(HaveLen(len(expectedResourcesToRemove)))
+
+		for i, expectedRes := range expectedResourcesToRemove {
+			rtest.ExpectResource(toRemove[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
 	})
 })

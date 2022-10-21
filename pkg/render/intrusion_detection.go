@@ -28,6 +28,7 @@ import (
 
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -60,14 +61,18 @@ const (
 	IntrusionDetectionControllerPolicyName = networkpolicy.TigeraComponentPolicyPrefix + IntrusionDetectionControllerName
 	IntrusionDetectionInstallerPolicyName  = networkpolicy.TigeraComponentPolicyPrefix + "intrusion-detection-elastic"
 
-	ADJobPodTemplateBaseName      = "tigera.io.detectors"
-	adDetectorPrefixName          = "tigera.io.detector."
-	adDetectorName                = "anomaly-detectors"
-	ADDetectorPolicyName          = networkpolicy.TigeraComponentPolicyPrefix + adDetectorName
-	adDetectionJobsDefaultPeriod  = 15 * time.Minute
-	ADResourceGroup               = "detectors.tigera.io"
-	ADDetectorsModelResourceName  = "models"
-	ADLogTypeMetaDataResourceName = "metadata"
+	ADPersistentVolumeClaimName            = "tigera-anomaly-detection"
+	DefaultAnomalyDetectionPVRequestSizeGi = "10Gi"
+	adAPIStorageVolumeName                 = "volume-storage"
+	adAPIVolumePath                        = "/storage"
+	ADJobPodTemplateBaseName               = "tigera.io.detectors"
+	adDetectorPrefixName                   = "tigera.io.detector."
+	adDetectorName                         = "anomaly-detectors"
+	ADDetectorPolicyName                   = networkpolicy.TigeraComponentPolicyPrefix + adDetectorName
+	adDetectionJobsDefaultPeriod           = 15 * time.Minute
+	ADResourceGroup                        = "detectors.tigera.io"
+	ADDetectorsModelResourceName           = "models"
+	ADLogTypeMetaDataResourceName          = "metadata"
 
 	ADAPIObjectName          = "anomaly-detection-api"
 	ADAPIObjectPortName      = "anomaly-detection-api-https"
@@ -97,15 +102,20 @@ func IntrusionDetection(cfg *IntrusionDetectionConfiguration) Component {
 
 // IntrusionDetectionConfiguration contains all the config information needed to render the component.
 type IntrusionDetectionConfiguration struct {
-	LogCollector          *operatorv1.LogCollector
-	ESSecrets             []*corev1.Secret
-	Installation          *operatorv1.InstallationSpec
-	ESClusterConfig       *relasticsearch.ClusterConfig
-	PullSecrets           []*corev1.Secret
-	Openshift             bool
-	ClusterDomain         string
-	ESLicenseType         ElasticsearchLicenseType
-	ManagedCluster        bool
+	IntrusionDetection operatorv1.IntrusionDetection
+	LogCollector       *operatorv1.LogCollector
+	ESSecrets          []*corev1.Secret
+	Installation       *operatorv1.InstallationSpec
+	ESClusterConfig    *relasticsearch.ClusterConfig
+	PullSecrets        []*corev1.Secret
+	Openshift          bool
+	ClusterDomain      string
+	ESLicenseType      ElasticsearchLicenseType
+	ManagedCluster     bool
+
+	// PVC fields Spec fields are immutable, set to true when an existing AD PVC
+	// is not found as to avoid update failures.
+	ShouldRenderADPVC     bool
 	HasNoLicense          bool
 	TrustedCertBundle     certificatemanagement.TrustedBundle
 	ADAPIServerCertSecret certificatemanagement.KeyPairInterface
@@ -192,36 +202,65 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(IntrusionDetectionNamespace, c.cfg.ESSecrets...)...)...)
 	objs = append(objs, c.globalAlertTemplates()...)
 
+	var objsToDelete []client.Object
+
 	// AD Related deployment only for management/standalone cluster
 	// When FIPS mode is enabled, we currently disable our python based images.
-	if !c.cfg.ManagedCluster && !operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
+	if !c.cfg.ManagedCluster {
+		var adObjs []client.Object
+
 		// Service + Deployment + RBAC for AD API
-		objs = append(objs,
+		adObjs = append(adObjs,
 			c.adAPIAllowTigeraPolicy(),
 			c.adAPIServiceAccount(),
 			c.adAPIAccessClusterRole(),
 			c.adAPIAccessRoleBinding(),
 		)
-		objs = append(objs,
+
+		shouldConfigureADStorage := len(c.cfg.IntrusionDetection.Spec.AnomalyDetection.StorageClassName) > 0
+
+		if shouldConfigureADStorage && c.cfg.ShouldRenderADPVC {
+			adObjs = append(adObjs, c.adPersistentVolumeClaim())
+		}
+
+		adObjs = append(adObjs,
 			c.adAPIService(),
-			c.adAPIDeployment(),
+			c.adAPIDeployment(shouldConfigureADStorage),
 		)
 
 		// RBAC for AD Detector Pods
-		objs = append(objs,
+		adObjs = append(adObjs,
 			c.adDetectorAllowTigeraPolicy(),
 			c.adDetectorServiceAccount(),
 			c.adDetectorSecret(),
 			c.adDetectorAccessRole(),
 			c.adDetectorRoleBinding(),
 		)
-		objs = append(objs, c.adDetectorPodTemplates()...)
+		adObjs = append(adObjs, c.adDetectorPodTemplates()...)
+
+		if !operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
+			objs = append(objs, adObjs...)
+
+			if !shouldConfigureADStorage {
+				objsToDelete = append(objsToDelete, c.adPersistentVolumeClaim())
+			}
+		} else {
+			objsToDelete = append(objsToDelete, adObjs...)
+		}
 	}
 
 	// When FIPS mode is enabled, we currently disable our python based images.
-	if !c.cfg.ManagedCluster && !operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-		objs = append(objs, c.intrusionDetectionElasticsearchAllowTigeraPolicy())
-		objs = append(objs, c.intrusionDetectionElasticsearchJob())
+	if !c.cfg.ManagedCluster {
+		idsObjs := []client.Object{
+			c.intrusionDetectionElasticsearchAllowTigeraPolicy(),
+			c.intrusionDetectionElasticsearchJob(),
+		}
+
+		if !operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
+			objs = append(objs, idsObjs...)
+		} else {
+			objsToDelete = append(objsToDelete, idsObjs...)
+		}
 	}
 
 	if !c.cfg.Openshift {
@@ -237,7 +276,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		return nil, objs
 	}
 
-	return objs, nil
+	return objs, objsToDelete
 }
 
 func (c *intrusionDetectionComponent) Ready() bool {
@@ -611,7 +650,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 		Env:   envs,
 		// Needed for permissions to write to the audit log
 		LivenessProbe: &corev1.Probe{
-			Handler: corev1.Handler{
+			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
 						"/healthz",
@@ -1283,7 +1322,7 @@ func (c *intrusionDetectionComponent) adAPIService() *corev1.Service {
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{
-				"k8s-app": ADAPIObjectName,
+				AppLabelName: ADAPIObjectName,
 			},
 			Ports: []corev1.ServicePort{
 				{
@@ -1301,9 +1340,48 @@ func (c *intrusionDetectionComponent) adAPIService() *corev1.Service {
 	}
 }
 
-func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
-	adAPIStorageVolumePath := "/storage"
-	adAPIStorageVolumeName := "volume-storage"
+func (c *intrusionDetectionComponent) adPersistentVolumeClaim() *corev1.PersistentVolumeClaim {
+	adStorageClassName := c.cfg.IntrusionDetection.Spec.AnomalyDetection.StorageClassName
+
+	adPVC := corev1.PersistentVolumeClaim{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "PersistentVolumeClaim",
+			APIVersion: "v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ADPersistentVolumeClaimName,
+			Namespace: IntrusionDetectionNamespace,
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			StorageClassName: &adStorageClassName,
+			AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: resource.MustParse(DefaultAnomalyDetectionPVRequestSizeGi),
+				},
+			},
+		},
+	}
+
+	return &adPVC
+}
+
+func (c *intrusionDetectionComponent) adAPIDeployment(configureADStorage bool) *appsv1.Deployment {
+	var adModelVolumeSource corev1.VolumeSource
+	if configureADStorage {
+		adStorageClassName := c.cfg.IntrusionDetection.Spec.AnomalyDetection.StorageClassName
+		adModelVolumeSource = corev1.VolumeSource{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+				ClaimName: adStorageClassName,
+			},
+		}
+	} else {
+		adModelVolumeSource = corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		}
+
+	}
+
 	var initContainers []corev1.Container
 	if c.cfg.ADAPIServerCertSecret.UseCertificateManagement() {
 		initContainers = append(initContainers, c.cfg.ADAPIServerCertSecret.InitContainer(IntrusionDetectionNamespace))
@@ -1313,23 +1391,16 @@ func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ADAPIObjectName,
 			Namespace: IntrusionDetectionNamespace,
-			Labels: map[string]string{
-				"k8s-app": ADAPIObjectName,
-			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &adAPIReplicas,
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
-			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": ADAPIObjectName}},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      ADAPIObjectName,
 					Namespace: IntrusionDetectionNamespace,
-					Labels: map[string]string{
-						"k8s-app": ADAPIObjectName,
-					},
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: ADAPIObjectName,
@@ -1343,10 +1414,8 @@ func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 						c.cfg.TrustedCertBundle.Volume(),
 						c.cfg.ADAPIServerCertSecret.Volume(),
 						{
-							Name: adAPIStorageVolumeName,
-							VolumeSource: corev1.VolumeSource{
-								EmptyDir: &corev1.EmptyDirVolumeSource{},
-							},
+							Name:         adAPIStorageVolumeName,
+							VolumeSource: adModelVolumeSource,
 						},
 					},
 					InitContainers: initContainers,
@@ -1356,13 +1425,13 @@ func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 							Image: c.adAPIImage,
 							Env: []corev1.EnvVar{
 								{Name: "LOG_LEVEL", Value: "info"},
-								{Name: "STORAGE_PATH", Value: adAPIStorageVolumePath},
+								{Name: "STORAGE_PATH", Value: adAPIVolumePath},
 								{Name: "TLS_KEY", Value: c.cfg.ADAPIServerCertSecret.VolumeMountKeyFilePath()},
 								{Name: "TLS_CERT", Value: c.cfg.ADAPIServerCertSecret.VolumeMountCertificateFilePath()},
 								{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 							},
 							LivenessProbe: &corev1.Probe{
-								Handler: corev1.Handler{
+								ProbeHandler: corev1.ProbeHandler{
 									HTTPGet: &corev1.HTTPGetAction{
 										Path:   "/health",
 										Port:   intstr.FromInt(adAPIPort),
@@ -1371,7 +1440,7 @@ func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 								},
 							},
 							ReadinessProbe: &corev1.Probe{
-								Handler: corev1.Handler{
+								ProbeHandler: corev1.ProbeHandler{
 									HTTPGet: &corev1.HTTPGetAction{
 										Path:   "/health",
 										Port:   intstr.FromInt(adAPIPort),
@@ -1384,7 +1453,7 @@ func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 								c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType()),
 								c.cfg.ADAPIServerCertSecret.VolumeMount(c.SupportedOSType()),
 								{
-									MountPath: adAPIStorageVolumePath,
+									MountPath: adAPIVolumePath,
 									Name:      adAPIStorageVolumeName,
 									ReadOnly:  false,
 								},
@@ -1535,7 +1604,7 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 				Name:      podTemplateName,
 				Namespace: IntrusionDetectionNamespace,
 				Labels: map[string]string{
-					"k8s-app": IntrusionDetectionControllerName,
+					AppLabelName: IntrusionDetectionControllerName,
 				},
 			},
 			Spec: corev1.PodSpec{

@@ -3244,12 +3244,12 @@ var _ = Describe("Node rendering tests", func() {
 func verifyProbesAndLifecycle(ds *appsv1.DaemonSet, isOpenshift, isEnterprise bool) {
 	// Verify readiness and liveness probes.
 	expectedReadiness := &corev1.Probe{
-		Handler:        corev1.Handler{Exec: &corev1.ExecAction{Command: []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}}},
+		ProbeHandler:   corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}}},
 		TimeoutSeconds: 5,
 		PeriodSeconds:  10,
 	}
 	expectedLiveness := &corev1.Probe{
-		Handler: corev1.Handler{
+		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
 				Host: "localhost",
 				Path: "/liveness",
@@ -3289,7 +3289,7 @@ func verifyProbesAndLifecycle(ds *appsv1.DaemonSet, isOpenshift, isEnterprise bo
 	ExpectWithOffset(1, ds.Spec.Template.Spec.Containers[0].LivenessProbe).To(Equal(expectedLiveness))
 
 	expectedLifecycle := &corev1.Lifecycle{
-		PreStop: &corev1.Handler{Exec: &corev1.ExecAction{Command: []string{"/bin/calico-node", "-shutdown"}}},
+		PreStop: &corev1.LifecycleHandler{Exec: &corev1.ExecAction{Command: []string{"/bin/calico-node", "-shutdown"}}},
 	}
 	ExpectWithOffset(1, ds.Spec.Template.Spec.Containers[0].Lifecycle).To(Equal(expectedLifecycle))
 

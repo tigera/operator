@@ -468,6 +468,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 	var curatorSecrets []*corev1.Secret
 	var esLicenseType render.ElasticsearchLicenseType
 	var applyTrial bool
+	var keyStoreSecret *corev1.Secret
 
 	if managementClusterConnection == nil {
 		flowShards := logstoragecommon.CalculateFlowShards(ls.Spec.Nodes, logstoragecommon.DefaultElasticsearchShards)
@@ -489,12 +490,25 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 			r.status.SetDegraded("Failed to get curator credentials", err.Error())
 			return reconcile.Result{}, err
 		}
-		applyTrial, err = r.applyElasticTrialSecret(ctx, install)
-		if err != nil {
-			r.status.SetDegraded("Failed to get eck trial license", err.Error())
-			return reconcile.Result{}, err
-		}
+		if operatorv1.IsFIPSModeEnabled(install.FIPSMode) {
+			applyTrial, err = r.applyElasticTrialSecret(ctx, install)
+			if err != nil {
+				r.status.SetDegraded("Failed to get eck trial license", err.Error())
+				return reconcile.Result{}, err
+			}
 
+			keyStoreSecret = &corev1.Secret{}
+			if err := r.client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchKeystoreSecret, Namespace: common.OperatorNamespace()}, keyStoreSecret); err != nil {
+				if errors.IsNotFound(err) {
+					// We need to render a new one.
+					keyStoreSecret = render.CreateElasticsearchKeystoreSecret()
+				} else {
+					log.Error(err, "failed to read the Elasticsearch keystore secret")
+					r.status.SetDegraded("Failed to read the Elasticsearch keystore secret", err.Error())
+					return reconcile.Result{}, err
+				}
+			}
+		}
 		esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger)
 		if err != nil {
 			// If ECKLicenseConfigMapName is not found, it means ECK operator is not running yet, log the information and proceed
@@ -549,6 +563,7 @@ func (r *ReconcileLogStorage) Reconcile(ctx context.Context, request reconcile.R
 		ctx,
 		certificateManager,
 		applyTrial,
+		keyStoreSecret,
 	)
 
 	if ls != nil && ls.DeletionTimestamp != nil && finalizerCleanup {

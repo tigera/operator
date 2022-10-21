@@ -21,8 +21,7 @@ import (
 	"reflect"
 	"time"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/go-logr/logr"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -30,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -38,8 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	"github.com/go-logr/logr"
-
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -50,6 +49,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/render/monitor"
@@ -143,12 +143,12 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	}
 
 	for _, secret := range []string{
+		certificatemanagement.CASecretName,
+		esmetrics.ElasticsearchMetricsServerTLSSecret,
 		monitor.PrometheusTLSSecretName,
 		render.FluentdPrometheusTLSSecretName,
 		render.NodePrometheusTLSServerSecret,
-		esmetrics.ElasticsearchMetricsServerTLSSecret,
-		render.FluentdPrometheusTLSSecretName,
-		certificatemanagement.CASecretName} {
+	} {
 		if err = utils.AddSecretsWatch(c, secret, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("monitor-controller failed to watch secret: %w", err)
 		}
@@ -259,9 +259,10 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 
 	trustedBundle := certificateManager.CreateTrustedBundle()
 	for _, certificateName := range []string{
-		render.NodePrometheusTLSServerSecret,
 		esmetrics.ElasticsearchMetricsServerTLSSecret,
-		render.FluentdPrometheusTLSSecretName} {
+		render.FluentdPrometheusTLSSecretName,
+		render.NodePrometheusTLSServerSecret,
+	} {
 		certificate, err := certificateManager.GetCertificate(r.client, certificateName, common.OperatorNamespace())
 		if err == nil {
 			trustedBundle.AddCertificates(certificate)

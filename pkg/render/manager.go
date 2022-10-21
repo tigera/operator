@@ -19,9 +19,15 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-
 	ocsv1 "github.com/openshift/api/security/v1"
+
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -33,18 +39,12 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rkibana "github.com/tigera/operator/pkg/render/common/kibana"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -70,8 +70,6 @@ const (
 	TlsSecretHashAnnotation         = "hash.operator.tigera.io/tls-secret"
 	KibanaTLSHashAnnotation         = "hash.operator.tigera.io/kibana-secrets"
 	ElasticsearchUserHashAnnotation = "hash.operator.tigera.io/elasticsearch-user"
-
-	PrometheusTLSSecretName = "calico-node-prometheus-tls"
 )
 
 // ManagementClusterConnection configuration constants
@@ -124,7 +122,8 @@ type ManagerConfiguration struct {
 	ClusterDomain           string
 	ESLicenseType           ElasticsearchLicenseType
 	Replicas                *int32
-	ComplianceFeatureActive bool
+	Compliance              *operatorv1.Compliance
+	ComplianceLicenseActive bool
 
 	// Whether or not the cluster supports pod security policies.
 	UsePSP bool
@@ -296,7 +295,7 @@ func (c *managerComponent) managerVolumes() []corev1.Volume {
 // managerProbe returns the probe for the manager container.
 func (c *managerComponent) managerProbe() *corev1.Probe {
 	return &corev1.Probe{
-		Handler: corev1.Handler{
+		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
 				Path:   "/",
 				Port:   intstr.FromInt(managerPort),
@@ -311,7 +310,7 @@ func (c *managerComponent) managerProbe() *corev1.Probe {
 // managerEsProxyProbe returns the probe for the ES proxy container.
 func (c *managerComponent) managerEsProxyProbe() *corev1.Probe {
 	return &corev1.Probe{
-		Handler: corev1.Handler{
+		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
 				Path:   "/tigera-elasticsearch/version",
 				Port:   intstr.FromInt(managerPort),
@@ -326,7 +325,7 @@ func (c *managerComponent) managerEsProxyProbe() *corev1.Probe {
 // managerProxyProbe returns the probe for the proxy container.
 func (c *managerComponent) managerProxyProbe() *corev1.Probe {
 	return &corev1.Probe{
-		Handler: corev1.Handler{
+		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
 				Path:   "/voltron/api/health",
 				Port:   intstr.FromInt(managerPort),
@@ -353,6 +352,12 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 		{Name: "ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
 		// Kibana does not have a FIPS compatible mode, therefore we disable the button in the UI.
 		{Name: "ENABLE_KIBANA", Value: strconv.FormatBool(!operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode))},
+		// Currently, we do not support anomaly detection when FIPS mode is enabled, therefore we disable the button in the UI.
+		{Name: "ENABLE_ANOMALY_DETECTION", Value: strconv.FormatBool(!operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode))},
+		// The manager supports two states of a product feature being unavailable: the product feature being feature-flagged off,
+		// and the current license not enabling the feature. The compliance flag that we set on the manager container is a feature
+		// flag, which we should set purely based on whether the compliance CR is present, ignoring the license status.
+		{Name: "ENABLE_COMPLIANCE_REPORTS", Value: strconv.FormatBool(c.cfg.Compliance != nil)},
 	}
 
 	envs = append(envs, c.managerOAuth2EnvVars()...)
@@ -431,7 +436,7 @@ func (c *managerComponent) managerProxyContainer() corev1.Container {
 		{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
 		{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
 		{Name: "VOLTRON_DEFAULT_FORWARD_SERVER", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc:9200"},
-		{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: fmt.Sprintf("%v", c.cfg.ComplianceFeatureActive)},
+		{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: strconv.FormatBool(c.cfg.Compliance != nil && c.cfg.ComplianceLicenseActive)},
 		{Name: "VOLTRON_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 	}
 

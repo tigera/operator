@@ -26,7 +26,6 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -105,11 +104,11 @@ var _ = Describe("CSI rendering tests", func() {
 		for _, container := range ds.Spec.Template.Spec.Containers {
 			Expect(strings.HasPrefix(container.Image, privateRegistry))
 		}
+	})
 
 	It("should set priority class to system-node-critical", func() {
 		resources, _ := render.CSI(&cfg).Objects()
 		ds := rtest.GetResource(resources, render.CSIDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal("system-node-critical"))
-
 	})
 })

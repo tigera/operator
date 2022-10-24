@@ -60,7 +60,7 @@ var (
 	}
 
 	ComponentEckKibana = component{
-		Version: "7.16.2",
+		Version: "7.17.5",
 	}
 
 	ComponentElasticTseeInstaller = component{

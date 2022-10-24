@@ -92,6 +92,23 @@ var _ = Describe("CSI rendering tests", func() {
 		}
 	})
 
+	It("should propagate imagePullSecrets and registry Installation field changes to DaemonSet", func() {
+		privatePullSecret := []corev1.LocalObjectReference{
+			{
+				Name: "privatePullSecret",
+			},
+		}
+		privateRegistry := "private/registry.io/"
+		cfg.Installation.ImagePullSecrets = privatePullSecret
+		cfg.Installation.Registry = privateRegistry
+		resources, _ := render.CSI(&cfg).Objects()
+		ds := rtest.GetResource(resources, render.CSIDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		Expect(ds.Spec.Template.Spec.ImagePullSecrets).To(Equal(privatePullSecret))
+		for _, container := range ds.Spec.Template.Spec.Containers {
+			Expect(strings.HasPrefix(container.Image, privateRegistry))
+		}
+	})
+
 	It("should set priority class to system-node-critical", func() {
 		resources, _ := render.CSI(&cfg).Objects()
 		ds := rtest.GetResource(resources, render.CSIDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)

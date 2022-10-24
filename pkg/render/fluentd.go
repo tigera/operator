@@ -71,13 +71,10 @@ const (
 	SplunkFluentdSecretsVolName              = "splunk-certificates"
 	SplunkFluentdDefaultCertDir              = "/etc/ssl/splunk/"
 	SplunkFluentdDefaultCertPath             = SplunkFluentdDefaultCertDir + SplunkFluentdSecretCertificateKey
-	SysLogCertificateSecretName              = "logcollector-syslog-public-certificate"
+	SysLogCertificateSecretName              = "logcollector-syslog-ca-certificate"
 	SysLogSecretCertificateKey               = "ca.pem"
 	SysLogSecretsVolName                     = "syslog-certificates"
 	SysLogDefaultCertDir                     = "/etc/fluentd/syslog/"
-	//	remoteSysLogDefaultCertPath       = remoteSysLogDefaultCertDir + remoteSysLogSecretCertificateKey
-	//remoteSysLogTokenSecretName       = "logcollector-syslog-credentials"
-	//remoteSysLogSecretTokenKey        = "token"
 
 	probeTimeoutSeconds        int32 = 5
 	probePeriodSeconds         int32 = 5
@@ -739,18 +736,13 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 					}
 				}
 			}
-			// remote syslog changes
-			if syslog.TLS && len(c.cfg.SysLogCredential.Certificate) != 0 {
-
-				// this may be not needed
-				//envs = append(envs,
-				//	corev1.EnvVar{Name: "SYSLOG_CA_FILE", Value: remoteSysLogDefaultCertPath},
-				//)
+			// Enable TLS option for syslog forwarding.
+			if syslog.Encryption == operatorv1.EncryptionTLS && len(c.cfg.SysLogCredential.Certificate) != 0 {
 				envs = append(envs,
-					corev1.EnvVar{Name: "TLS", Value: "true"},
+					corev1.EnvVar{Name: "SYSLOG_TLS", Value: "true"},
 				)
 				envs = append(envs,
-					corev1.EnvVar{Name: "SYSLOG_VERIFY_MODE", Value: "OPENSSL::SSL::VERIFY_PEER"},
+					corev1.EnvVar{Name: "SYSLOG_VERIFY_MODE", Value: "OPENSSL::SSL::VERIFY_NONE"},
 				)
 			}
 

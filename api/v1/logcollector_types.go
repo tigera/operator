@@ -45,6 +45,13 @@ const (
 	CollectProcessPathDisable CollectProcessPathOption = "Disabled"
 )
 
+type EncryptionOption string
+
+const (
+	EncryptionNone EncryptionOption = "none"
+	EncryptionTLS  EncryptionOption = "tls"
+)
+
 type AdditionalLogStoreSpec struct {
 	// If specified, enables exporting of flow, audit, and DNS logs to Amazon S3 storage.
 	// +optional
@@ -129,10 +136,12 @@ type SyslogStoreSpec struct {
 	// omitted, it will be set to include all possible values.
 	LogTypes []SyslogLogType `json:"logTypes"`
 
-	// TLS defined whether the data-in-transit is encrypted.
-	// Default: false
+	// Configuration for enabling/disabling TLS option.
+	// If tls, this feature enable tls.
+	// Default: none
 	// +optional
-	TLS bool `json:"tls"`
+	// +kubebuilder:validation:Enum=none;tls
+	Encryption EncryptionOption `json:"encryption,omitempty"`
 }
 
 // SplunkStoreSpec defines configuration for exporting logs to splunk.

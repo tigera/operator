@@ -415,6 +415,18 @@ spec:
                   Log. Possible values are Drop, LogAndDrop, Accept, LogAndAccept.
                   [Default: Drop]'
                 type: string
+              egressGatewayPollFailureCount:
+                description: EgressGatewayPollFailureCount is the minimum number of
+                  poll failures before a remote Egress Gateway is considered to have
+                  failed.
+                type: integer
+              egressGatewayPollInterval:
+                description: EgressGatewayPollInterval is the interval at which Felix
+                  will poll remote egress gateways to check their health.  Only Egress
+                  Gateways with a named "health" port will be polled in this way.  Egress
+                  Gateways that fail the health check will be taken our of use as
+                  if they have been deleted.
+                type: string
               egressIPRoutingRulePriority:
                 description: 'EgressIPRoutingRulePriority controls the priority value
                   to use for the egress IP routing rule. [Default: 100]'

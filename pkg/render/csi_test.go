@@ -29,7 +29,6 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
-	corev1 "k8s.io/api/core/v1"
 )
 
 var _ = Describe("CSI rendering tests", func() {

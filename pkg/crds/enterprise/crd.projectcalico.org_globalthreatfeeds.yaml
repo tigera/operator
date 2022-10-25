@@ -36,7 +36,23 @@ spec:
               resource.
             properties:
               content:
+                default: IPSet
                 description: Content describes the kind of data the data feed provides.
+                enum:
+                - IPSet
+                - DomainNameSet
+                type: string
+              description:
+                description: Human-readable description of the template.
+                maxLength: 256
+                type: string
+              feedType:
+                default: Custom
+                description: Distinguishes between Builtin Global Threat Feeds and
+                  Custom feed types.
+                enum:
+                - Builtin
+                - Custom
                 type: string
               globalNetworkSet:
                 properties:
@@ -45,6 +61,14 @@ spec:
                       type: string
                     type: object
                 type: object
+              mode:
+                default: Enabled
+                description: Determines whether the Global Threat Feed is Enabled
+                  or Disabled.
+                enum:
+                - Enabled
+                - Disabled
+                type: string
               pull:
                 properties:
                   http:

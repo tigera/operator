@@ -91,7 +91,7 @@ var _ = Describe("compliance rendering tests", func() {
 
 		// Should not contain any PodSecurityPolicies
 		for _, r := range resources {
-			Expect(r.GetObjectKind()).NotTo(Equal("PodSecurityPolicy"))
+			Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("PodSecurityPolicy"))
 		}
 	})
 

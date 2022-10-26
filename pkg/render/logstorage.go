@@ -331,8 +331,10 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 			if !operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
 				toCreate = append(toCreate,
 					es.kibanaClusterRoleBinding(),
-					es.kibanaClusterRole(),
-					es.kibanaPodSecurityPolicy())
+					es.kibanaClusterRole())
+				if es.cfg.UsePSP {
+					toCreate = append(toCreate, es.kibanaPodSecurityPolicy())
+				}
 			}
 		}
 

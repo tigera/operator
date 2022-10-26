@@ -216,7 +216,7 @@ func (r *ReconcileLogStorage) createLogStorage(
 		}),
 	)
 	if !operatorv1.IsFIPSModeEnabled(install.FIPSMode) {
-		components = append(components, component,
+		components = append(components,
 			rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 				Namespace:       render.KibanaNamespace,
 				ServiceAccounts: []string{render.KibanaName},

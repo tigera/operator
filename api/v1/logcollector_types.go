@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -43,6 +43,13 @@ type CollectProcessPathOption string
 const (
 	CollectProcessPathEnable  CollectProcessPathOption = "Enabled"
 	CollectProcessPathDisable CollectProcessPathOption = "Disabled"
+)
+
+type EncryptionOption string
+
+const (
+	EncryptionNone EncryptionOption = "none"
+	EncryptionTLS  EncryptionOption = "tls"
 )
 
 type AdditionalLogStoreSpec struct {
@@ -128,6 +135,13 @@ type SyslogStoreSpec struct {
 	// LogTypes contains a list of types of logs to export to syslog. By default, if this field is
 	// omitted, it will be set to include all possible values.
 	LogTypes []SyslogLogType `json:"logTypes"`
+
+	// Configuration for enabling/disabling TLS option.
+	// If tls, this feature enable tls.
+	// Default: none
+	// +optional
+	// +kubebuilder:validation:Enum=none;tls
+	Encryption EncryptionOption `json:"encryption,omitempty"`
 }
 
 // SplunkStoreSpec defines configuration for exporting logs to splunk.

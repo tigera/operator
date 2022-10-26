@@ -81,7 +81,16 @@ var _ = Describe("Runtime Security rendering tests", func() {
 		deploy := rtest.GetResource(resources, runtimesecurity.SashaName, runtimesecurity.NameSpaceRuntimeSecurity,
 			"apps", "v1", "Deployment").(*appsv1.Deployment)
 		spec := deploy.Spec.Template.Spec
-		Expect(len(spec.Containers)).To(Equal(1))
+		Expect(len(spec.Containers)).To(Equal(2))
+
+		// Basic checks for the liveness and readiness probes for the gRPC API
+		threatIdContainer := spec.Containers[1]
+		checkThreatIdProbe(threatIdContainer.LivenessProbe)
+		checkThreatIdProbe(threatIdContainer.ReadinessProbe)
 	})
 
 })
+
+func checkThreatIdProbe(probe *corev1.Probe) {
+	Expect(probe.Handler.Exec.Command).To(ContainElement("bin/grpc_health_probe-linux-amd64"))
+}

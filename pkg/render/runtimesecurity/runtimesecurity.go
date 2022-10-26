@@ -22,17 +22,22 @@ import (
 )
 
 const (
-	NameSpaceRuntimeSecurity            = "tigera-runtime-security"
-	ElasticsearchSashaJobUserSecretName = "tigera-ee-sasha-elasticsearch-access"
-	SashaName                           = "sasha"
-	ResourceSashaDefaultCPULimit        = "1"
-	ResourceSashaDefaultMemoryLimit     = "1Gi"
-	ResourceSashaDefaultCPURequest      = "100m"
-	ResourceSashaDefaultMemoryRequest   = "100Mi"
-	SashaVerifyAuthVolumeName           = "cc-client-credentials"
-	SashaVerifyAuthPath                 = "/var/run/calico-cloud/api"
-	SashaVerifyAuthFile                 = "/var/run/calico-cloud/api/clientCredentials.yaml"
-	SashaVerifyAuthURL                  = "https://sasha-verify.dev.calicocloud.io"
+	NameSpaceRuntimeSecurity             = "tigera-runtime-security"
+	ElasticsearchSashaJobUserSecretName  = "tigera-ee-sasha-elasticsearch-access"
+	SashaName                            = "sasha"
+	ResourceSashaDefaultCPULimit         = "1"
+	ResourceSashaDefaultMemoryLimit      = "1Gi"
+	ResourceSashaDefaultCPURequest       = "100m"
+	ResourceSashaDefaultMemoryRequest    = "100Mi"
+	SashaVerifyAuthVolumeName            = "cc-client-credentials"
+	SashaVerifyAuthPath                  = "/var/run/calico-cloud/api"
+	SashaVerifyAuthFile                  = "/var/run/calico-cloud/api/clientCredentials.yaml"
+	SashaVerifyAuthURL                   = "https://sasha-verify.dev.calicocloud.io"
+	ThreatIdName                         = "threat-id"
+	ResourceThreatIdDefaultCPULimit      = "1"
+	ResourceThreatIdDefaultMemoryLimit   = "1Gi"
+	ResourceThreatIdDefaultCPURequest    = "100m"
+	ResourceThreatIdDefaultMemoryRequest = "100Mi"
 )
 
 func RuntimeSecurity(
@@ -54,7 +59,8 @@ type Config struct {
 	ESSecrets       []*corev1.Secret
 	ClusterDomain   string
 	// Calculated internal fields.
-	sashaImage string
+	sashaImage    string
+	threatIdImage string
 }
 
 type component struct {
@@ -74,6 +80,11 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	var errMsgs []string
 
 	c.config.sashaImage, err = components.GetReference(components.ComponentSasha, reg, path, prefix, is)
+	if err != nil {
+		errMsgs = append(errMsgs, err.Error())
+	}
+
+	c.config.threatIdImage, err = components.GetReference(components.ComponentThreatId, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -127,6 +138,14 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 
 	rsSecretOptional := false
 	numReplica := int32(1)
+
+	// The threat-id API will use this probe for liveness and readiness
+	grpcProbe := &corev1.Probe{
+		Handler: corev1.Handler{Exec: &corev1.ExecAction{
+			Command: []string{"bin/grpc_health_probe-linux-amd64", "-addr", "127.0.0.1:50051"}}},
+		PeriodSeconds:    2,
+		FailureThreshold: 6,
+	}
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -192,6 +211,23 @@ func (c *component) sashaDeployment() *appsv1.Deployment {
 							ElasticsearchSashaJobUserSecretName,
 							c.config.ClusterDomain,
 							c.config.OsType),
+						corev1.Container{
+							Name:  ThreatIdName,
+							Image: c.config.threatIdImage,
+							// Env:   envVars, // Not needed for now
+							Resources: corev1.ResourceRequirements{
+								Limits: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse(ResourceThreatIdDefaultCPULimit),
+									corev1.ResourceMemory: resource.MustParse(ResourceThreatIdDefaultMemoryLimit),
+								},
+								Requests: corev1.ResourceList{
+									corev1.ResourceCPU:    resource.MustParse(ResourceThreatIdDefaultCPURequest),
+									corev1.ResourceMemory: resource.MustParse(ResourceThreatIdDefaultMemoryRequest),
+								},
+							},
+							LivenessProbe:  grpcProbe,
+							ReadinessProbe: grpcProbe,
+						},
 					},
 					ImagePullSecrets:   secret.GetReferenceList(c.config.PullSecrets),
 					ServiceAccountName: SashaName,

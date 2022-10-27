@@ -26,10 +26,9 @@ import (
 	"github.com/tigera/api/pkg/lib/numorstring"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 
-	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
-	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
-	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
-	"github.com/elastic/cloud-on-k8s/pkg/controller/common/annotation"
+	cmnv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
+	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
+	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
 
 	"gopkg.in/inf.v0"
 	appsv1 "k8s.io/api/apps/v1"
@@ -828,9 +827,6 @@ func (es elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ElasticsearchName,
 			Namespace: ElasticsearchNamespace,
-			Annotations: map[string]string{
-				annotation.ControllerVersionAnnotation: components.ComponentECKElasticsearchOperator.Version,
-			},
 		},
 		Spec: esv1.ElasticsearchSpec{
 			Version: components.ComponentEckElasticsearch.Version,
@@ -1065,6 +1061,17 @@ func (es elasticsearchComponent) eckOperatorClusterRole() *rbacv1.ClusterRole {
 			Verbs:     []string{"create"},
 		},
 		{
+			APIGroups: []string{"coordination.k8s.io"},
+			Resources: []string{"leases"},
+			Verbs:     []string{"create"},
+		},
+		{
+			APIGroups:     []string{"coordination.k8s.io"},
+			Resources:     []string{"leases"},
+			ResourceNames: []string{"elastic-operator-leader"},
+			Verbs:         []string{"get", "watch", "update"},
+		},
+		{
 			APIGroups: []string{""},
 			Resources: []string{"pods", "endpoints", "events", "persistentvolumeclaims", "secrets", "services", "configmaps", "serviceaccounts"},
 			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
@@ -1122,6 +1129,11 @@ func (es elasticsearchComponent) eckOperatorClusterRole() *rbacv1.ClusterRole {
 		{
 			APIGroups: []string{"associations.k8s.elastic.co"},
 			Resources: []string{"apmserverelasticsearchassociations", "apmserverelasticsearchassociations/status"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		{
+			APIGroups: []string{"autoscaling.k8s.elastic.co"},
+			Resources: []string{"elasticsearchautoscalers", "elasticsearchautoscalers/status", "elasticsearchautoscalers/finalizers"},
 			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 		},
 	}
@@ -1385,9 +1397,6 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 			Namespace: KibanaNamespace,
 			Labels: map[string]string{
 				"k8s-app": KibanaName,
-			},
-			Annotations: map[string]string{
-				annotation.ControllerVersionAnnotation: components.ComponentECKElasticsearchOperator.Version,
 			},
 		},
 		Spec: kbv1.KibanaSpec{

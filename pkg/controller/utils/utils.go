@@ -460,7 +460,7 @@ func WaitToAddResourceWatch(controller controller.Controller, c kubernetes.Inter
 		for obj := range resourcesToWatch {
 			objLog := resourcesToWatch[obj].logger
 			predicateFn := resourcesToWatch[obj].predicate
-			if ok, err := isResourceReady(c, obj.GetObjectKind().GroupVersionKind().Kind); err != nil {
+			if ok, err := isCalicoResourceReady(c, obj.GetObjectKind().GroupVersionKind().Kind); err != nil {
 				objLog.WithValues("Error", err).Info("Failed to check if resource is ready - will retry")
 			} else if !ok {
 				objLog.Info("Waiting for resource to be ready - will retry")
@@ -481,18 +481,16 @@ func WaitToAddResourceWatch(controller controller.Controller, c kubernetes.Inter
 	}
 }
 
-func isResourceReady(client kubernetes.Interface, resourceKind string) (bool, error) {
-	_, res, err := client.Discovery().ServerGroupsAndResources()
+func isCalicoResourceReady(client kubernetes.Interface, resourceKind string) (bool, error) {
+	// Only get the resources for the groupVersion we care about so that we are resilient to other
+	// apiservices being down.
+	res, err := client.Discovery().ServerResourcesForGroupVersion(v3.GroupVersionCurrent)
 	if err != nil {
 		return false, err
 	}
-	for _, group := range res {
-		if group.GroupVersion == v3.GroupVersionCurrent {
-			for _, r := range group.APIResources {
-				if r.Kind == resourceKind {
-					return true, nil
-				}
-			}
+	for _, r := range res.APIResources {
+		if resourceKind == r.Kind {
+			return true, nil
 		}
 	}
 	return false, nil

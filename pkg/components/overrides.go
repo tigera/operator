@@ -45,6 +45,9 @@ type ReplicatedPodResourceOverrides interface {
 	// GetNodeSelector returns the value used to override a DaemonSet/Deployment's nodeSelector.
 	GetNodeSelector() map[string]string
 
+	// GetTopologySpreadConstraints returns topology spread constraints to use.
+	GetTopologySpreadConstraints() []corev1.TopologySpreadConstraint
+
 	// GetTolerations returns the value used to override a DaemonSet/Deployment's tolerations.
 	GetTolerations() []corev1.Toleration
 }

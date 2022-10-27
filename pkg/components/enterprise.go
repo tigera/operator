@@ -256,12 +256,12 @@ var (
 	}
 
 	ComponentSasha = component{
-		Version: "v1.1.0",
+		Version: "v1.1.1",
 		Image:   "tigera/sasha",
 	}
 
 	ComponentThreatId = component{
-		Version: "v1.1.0",
+		Version: "v1.1.1",
 		Image:   "tigera/threat-identification",
 	}
 	EnterpriseComponents = []component{

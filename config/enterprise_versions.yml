@@ -147,7 +147,7 @@ components:
     version: v1.1.2
   sasha:
     image: tigera/sasha
-    version: v1.1.0
+    version: v1.1.1
   threat-id:
     image: tigera/threat-identification
-    version: v1.1.0
+    version: v1.1.1

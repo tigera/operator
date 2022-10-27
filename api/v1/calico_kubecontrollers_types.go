@@ -59,6 +59,12 @@ type CalicoKubeControllersDeploymentPodSpec struct {
 	// WARNING: Please note that this field will modify the default calico-kube-controllers Deployment nodeSelector.
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 
+	// TopologySpreadConstraints describes how a group of pods ought to spread across topology
+	// domains. Scheduler will schedule pods in a way which abides by the constraints.
+	// All topologySpreadConstraints are ANDed.
+	// +optional
+	TopologySpreadConstraints []v1.TopologySpreadConstraint
+
 	// Tolerations is the calico-kube-controllers pod's tolerations.
 	// If specified, this overrides any tolerations that may be set on the calico-kube-controllers Deployment.
 	// If omitted, the calico-kube-controllers Deployment will use its default value for tolerations.
@@ -158,6 +164,17 @@ func (c *CalicoKubeControllersDeployment) GetAffinity() *v1.Affinity {
 		if c.Spec.Template != nil {
 			if c.Spec.Template.Spec != nil {
 				return c.Spec.Template.Spec.Affinity
+			}
+		}
+	}
+	return nil
+}
+
+func (c *CalicoKubeControllersDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
+	if c.Spec != nil {
+		if c.Spec.Template != nil {
+			if c.Spec.Template.Spec != nil {
+				return c.Spec.Template.Spec.TopologySpreadConstraints
 			}
 		}
 	}

@@ -946,7 +946,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	Context("With APIServer Deployment overrides", func() {
-		var rr1 = corev1.ResourceRequirements{
+		rr1 := corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{
 				"cpu":     resource.MustParse("2"),
 				"memory":  resource.MustParse("300Mi"),
@@ -959,7 +959,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			},
 		}
 
-		var rr2 = corev1.ResourceRequirements{
+		rr2 := corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
 				corev1.ResourceCPU:    resource.MustParse("250m"),
 				corev1.ResourceMemory: resource.MustParse("64Mi"),
@@ -1023,6 +1023,11 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 							NodeSelector: map[string]string{
 								"custom-node-selector": "value",
 							},
+							TopologySpreadConstraints: []corev1.TopologySpreadConstraint{
+								{
+									MaxSkew: 1,
+								},
+							},
 							Affinity:    affinity,
 							Tolerations: []corev1.Toleration{toleration},
 						},
@@ -1083,6 +1088,9 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
 			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("custom-node-selector", "value"))
+
+			Expect(d.Spec.Template.Spec.TopologySpreadConstraints).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.TopologySpreadConstraints[0].MaxSkew).To(Equal(1))
 
 			Expect(d.Spec.Template.Spec.Tolerations).To(HaveLen(1))
 			Expect(d.Spec.Template.Spec.Tolerations[0]).To(Equal(toleration))
@@ -1730,7 +1738,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 	})
 
 	Context("With APIServer Deployment overrides", func() {
-		var rr1 = corev1.ResourceRequirements{
+		rr1 := corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{
 				"cpu":     resource.MustParse("2"),
 				"memory":  resource.MustParse("300Mi"),
@@ -1743,7 +1751,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			},
 		}
 
-		var rr2 = corev1.ResourceRequirements{
+		rr2 := corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
 				corev1.ResourceCPU:    resource.MustParse("250m"),
 				corev1.ResourceMemory: resource.MustParse("64Mi"),

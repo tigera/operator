@@ -18,15 +18,19 @@ The contents of this file are mostly copied, with minor modifications, from:
 https://github.com/kubernetes/kubernetes/blob/e9b96b167fbe5bb7c16824f5515501434c9e4a2e/pkg/apis/core/validation/validation.go
 */
 import (
+	"fmt"
 	"strings"
 
 	core "k8s.io/api/core/v1"
 	apimachineryvalidation "k8s.io/apimachinery/pkg/api/validation"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	unversionedvalidation "k8s.io/apimachinery/pkg/apis/meta/v1/validation"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
+
+const isNotPositiveErrorMsg string = `must be greater than zero`
 
 var validateNamespaceName = apimachineryvalidation.ValidateNamespaceName
 
@@ -336,6 +340,84 @@ func ValidateQualifiedName(value string, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 	for _, msg := range validation.IsQualifiedName(value) {
 		allErrs = append(allErrs, field.Invalid(fldPath, value, msg))
+	}
+	return allErrs
+}
+
+// ValidateTopologySpreadConstraints validates given TopologySpreadConstraints.
+func ValidateTopologySpreadConstraints(constraints []core.TopologySpreadConstraint, fldPath *field.Path) field.ErrorList {
+	allErrs := field.ErrorList{}
+
+	for i, constraint := range constraints {
+		subFldPath := fldPath.Index(i)
+		if err := ValidateMaxSkew(subFldPath.Child("maxSkew"), constraint.MaxSkew); err != nil {
+			allErrs = append(allErrs, err)
+		}
+		if err := ValidateTopologyKey(subFldPath.Child("topologyKey"), constraint.TopologyKey); err != nil {
+			allErrs = append(allErrs, err)
+		}
+		if err := ValidateWhenUnsatisfiable(subFldPath.Child("whenUnsatisfiable"), constraint.WhenUnsatisfiable); err != nil {
+			allErrs = append(allErrs, err)
+		}
+		// tuple {topologyKey, whenUnsatisfiable} denotes one kind of spread constraint
+		if err := ValidateSpreadConstraintNotRepeat(subFldPath.Child("{topologyKey, whenUnsatisfiable}"), constraint, constraints[i+1:]); err != nil {
+			allErrs = append(allErrs, err)
+		}
+		allErrs = append(allErrs, validateMinDomains(subFldPath.Child("minDomains"), constraint.MinDomains, constraint.WhenUnsatisfiable)...)
+	}
+
+	return allErrs
+}
+
+// ValidateMaxSkew tests that the argument is a valid MaxSkew.
+func ValidateMaxSkew(fldPath *field.Path, maxSkew int32) *field.Error {
+	if maxSkew <= 0 {
+		return field.Invalid(fldPath, maxSkew, isNotPositiveErrorMsg)
+	}
+	return nil
+}
+
+// ValidateTopologyKey tests that the argument is a valid TopologyKey.
+func ValidateTopologyKey(fldPath *field.Path, topologyKey string) *field.Error {
+	if len(topologyKey) == 0 {
+		return field.Required(fldPath, "can not be empty")
+	}
+	return nil
+}
+
+// ValidateWhenUnsatisfiable tests that the argument is a valid UnsatisfiableConstraintAction.
+func ValidateWhenUnsatisfiable(fldPath *field.Path, action core.UnsatisfiableConstraintAction) *field.Error {
+	supportedScheduleActions := sets.NewString(string(core.DoNotSchedule), string(core.ScheduleAnyway))
+	if !supportedScheduleActions.Has(string(action)) {
+		return field.NotSupported(fldPath, action, supportedScheduleActions.List())
+	}
+	return nil
+}
+
+// ValidateSpreadConstraintNotRepeat tests that if `constraint` duplicates with `existingConstraintPairs`
+// on TopologyKey and WhenUnsatisfiable fields.
+func ValidateSpreadConstraintNotRepeat(fldPath *field.Path, constraint core.TopologySpreadConstraint, restingConstraints []core.TopologySpreadConstraint) *field.Error {
+	for _, restingConstraint := range restingConstraints {
+		if constraint.TopologyKey == restingConstraint.TopologyKey &&
+			constraint.WhenUnsatisfiable == restingConstraint.WhenUnsatisfiable {
+			return field.Duplicate(fldPath, fmt.Sprintf("{%v, %v}", constraint.TopologyKey, constraint.WhenUnsatisfiable))
+		}
+	}
+	return nil
+}
+
+// validateMinDomains tests that the argument is a valid MinDomains.
+func validateMinDomains(fldPath *field.Path, minDomains *int32, action core.UnsatisfiableConstraintAction) field.ErrorList {
+	if minDomains == nil {
+		return nil
+	}
+	var allErrs field.ErrorList
+	if *minDomains <= 0 {
+		allErrs = append(allErrs, field.Invalid(fldPath, minDomains, isNotPositiveErrorMsg))
+	}
+	// When MinDomains is non-nil, whenUnsatisfiable must be DoNotSchedule.
+	if action != core.DoNotSchedule {
+		allErrs = append(allErrs, field.Invalid(fldPath, minDomains, fmt.Sprintf("can only use minDomains if whenUnsatisfiable=%s, not %s", string(core.DoNotSchedule), string(action))))
 	}
 	return allErrs
 }

@@ -77,6 +77,12 @@ type CalicoNodeDaemonSetPodSpec struct {
 	// +optional
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 
+	// TopologySpreadConstraints describes how a group of pods ought to spread across topology
+	// domains. Scheduler will schedule pods in a way which abides by the constraints.
+	// All topologySpreadConstraints are ANDed.
+	// +optional
+	TopologySpreadConstraints []v1.TopologySpreadConstraint
+
 	// Tolerations is the calico-node pod's tolerations.
 	// If specified, this overrides any tolerations that may be set on the calico-node DaemonSet.
 	// If omitted, the calico-node DaemonSet will use its default value for tolerations.
@@ -193,6 +199,17 @@ func (c *CalicoNodeDaemonSet) GetAffinity() *v1.Affinity {
 		if c.Spec.Template != nil {
 			if c.Spec.Template.Spec != nil {
 				return c.Spec.Template.Spec.Affinity
+			}
+		}
+	}
+	return nil
+}
+
+func (c *CalicoNodeDaemonSet) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
+	if c.Spec != nil {
+		if c.Spec.Template != nil {
+			if c.Spec.Template.Spec != nil {
+				return c.Spec.Template.Spec.TopologySpreadConstraints
 			}
 		}
 	}

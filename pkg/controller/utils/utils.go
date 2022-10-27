@@ -23,11 +23,10 @@ import (
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/kubernetes"
@@ -164,7 +163,7 @@ func AddNamespacedWatch(c controller.Controller, obj client.Object, metaMatches 
 func IsAPIServerReady(client client.Client, l logr.Logger) bool {
 	instance, msg, err := GetAPIServer(context.Background(), client)
 	if err != nil {
-		if kerrors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			l.V(3).Info("APIServer resource does not exist")
 			return false
 		}
@@ -183,7 +182,7 @@ func LogStorageExists(ctx context.Context, cli client.Client) (bool, error) {
 	instance := &operatorv1.LogStorage{}
 	err := cli.Get(ctx, DefaultTSEEInstanceKey, instance)
 	if err != nil {
-		if kerrors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return false, nil
 		}
 		return false, err
@@ -196,7 +195,7 @@ func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCol
 	logCollector := &operatorv1.LogCollector{}
 	err := cli.Get(ctx, DefaultTSEEInstanceKey, logCollector)
 	if err != nil {
-		if kerrors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return nil, nil
 		}
 		return nil, err
@@ -242,7 +241,7 @@ func ValidateCertPair(client client.Client, namespace, certPairSecretName, keyNa
 	if err != nil {
 		// If the reason for the error is not found then that is acceptable
 		// so return valid in that case.
-		statErr, ok := err.(*kerrors.StatusError)
+		statErr, ok := err.(*apierrors.StatusError)
 		if ok && statErr.ErrStatus.Reason == metav1.StatusReasonNotFound {
 			return nil, nil
 		} else {
@@ -275,7 +274,7 @@ func GetK8sServiceEndPoint(client client.Client) error {
 	}
 	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
 		// If the configmap is unavailable, do not return error
-		if !kerrors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			return fmt.Errorf("Failed to read ConfigMap %q: %s", cmName, err)
 		}
 	} else {
@@ -305,7 +304,7 @@ func GetManagementCluster(ctx context.Context, c client.Client) (*operatorv1.Man
 
 	err := c.Get(ctx, DefaultTSEEInstanceKey, managementCluster)
 	if err != nil {
-		if kerrors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return nil, nil
 		}
 		return nil, err
@@ -320,7 +319,7 @@ func GetManagementClusterConnection(ctx context.Context, c client.Client) (*oper
 
 	err := c.Get(ctx, DefaultTSEEInstanceKey, managementClusterConnection)
 	if err != nil {
-		if kerrors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return nil, nil
 		}
 		return nil, err
@@ -383,7 +382,7 @@ func GetAPIServer(ctx context.Context, client client.Client) (*operatorv1.APISer
 	instance := &operatorv1.APIServer{}
 	err := client.Get(ctx, DefaultInstanceKey, instance)
 	if err != nil {
-		if !errors.IsNotFound(err) {
+		if !apierrors.IsNotFound(err) {
 			return nil, "failed to get apiserver 'default'", err
 		}
 
@@ -460,7 +459,7 @@ func WaitToAddResourceWatch(controller controller.Controller, c kubernetes.Inter
 		for obj := range resourcesToWatch {
 			objLog := resourcesToWatch[obj].logger
 			predicateFn := resourcesToWatch[obj].predicate
-			if ok, err := isResourceReady(c, obj.GetObjectKind().GroupVersionKind().Kind); err != nil {
+			if ok, err := isCalicoResourceReady(c, obj.GetObjectKind().GroupVersionKind().Kind); err != nil {
 				objLog.WithValues("Error", err).Info("Failed to check if resource is ready - will retry")
 			} else if !ok {
 				objLog.Info("Waiting for resource to be ready - will retry")
@@ -481,18 +480,16 @@ func WaitToAddResourceWatch(controller controller.Controller, c kubernetes.Inter
 	}
 }
 
-func isResourceReady(client kubernetes.Interface, resourceKind string) (bool, error) {
-	_, res, err := client.Discovery().ServerGroupsAndResources()
+func isCalicoResourceReady(client kubernetes.Interface, resourceKind string) (bool, error) {
+	// Only get the resources for the groupVersion we care about so that we are resilient to other
+	// apiservices being down.
+	res, err := client.Discovery().ServerResourcesForGroupVersion(v3.GroupVersionCurrent)
 	if err != nil {
 		return false, err
 	}
-	for _, group := range res {
-		if group.GroupVersion == v3.GroupVersionCurrent {
-			for _, r := range group.APIResources {
-				if r.Kind == resourceKind {
-					return true, nil
-				}
-			}
+	for _, r := range res.APIResources {
+		if resourceKind == r.Kind {
+			return true, nil
 		}
 	}
 	return false, nil

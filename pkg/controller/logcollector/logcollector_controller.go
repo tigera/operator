@@ -221,8 +221,6 @@ func fillDefaults(instance *operatorv1.LogCollector) []string {
 					v1.SyslogLogDNS,
 					v1.SyslogLogFlows,
 				}
-				// Set default TLS options as None for Syslog forwarding.
-				instance.Spec.AdditionalStores.Syslog.Encryption = operatorv1.EncryptionNone
 				// Include the field that was modified (in case we need to display error messages)
 				modifiedFields = append(modifiedFields, "AdditionalStores.Syslog.LogTypes")
 			}

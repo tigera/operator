@@ -56,6 +56,7 @@ const (
 	filterHashAnnotation                     = "hash.operator.tigera.io/fluentd-filters"
 	s3CredentialHashAnnotation               = "hash.operator.tigera.io/s3-credentials"
 	splunkCredentialHashAnnotation           = "hash.operator.tigera.io/splunk-credentials"
+	sysLogCredentialHashAnnotation           = "hash.operator.tigera.io/syslog-credentials"
 	eksCloudwatchLogCredentialHashAnnotation = "hash.operator.tigera.io/eks-cloudwatch-log-credentials"
 	fluentdDefaultFlush                      = "5s"
 	ElasticsearchLogCollectorUserSecret      = "tigera-fluentd-elasticsearch-access"
@@ -70,6 +71,14 @@ const (
 	SplunkFluentdSecretsVolName              = "splunk-certificates"
 	SplunkFluentdDefaultCertDir              = "/etc/ssl/splunk/"
 	SplunkFluentdDefaultCertPath             = SplunkFluentdDefaultCertDir + SplunkFluentdSecretCertificateKey
+	SysLogCertificateSecretName              = "logcollector-syslog-ca-certificate"
+	SysLogSecretCertificateKey               = "ca.pem"
+	SysLogSecretsVolName                     = "syslog-certificates"
+	SysLogDefaultCertDir                     = "/etc/fluentd/syslog/"
+	SysLogInternetCADir                      = "/etc/pki/tls/certs/"
+	SysLogDefaultCertPath                    = SysLogDefaultCertDir + SysLogSecretCertificateKey
+	SysLogInternetCertKey                    = "ca-bundle.crt"
+	SysLogInternetCAPath                     = SysLogInternetCADir + SysLogInternetCertKey
 
 	probeTimeoutSeconds        int32 = 5
 	probePeriodSeconds         int32 = 5
@@ -114,6 +123,10 @@ type SplunkCredential struct {
 	Certificate []byte
 }
 
+type SysLogCredential struct {
+	Certificate []byte
+}
+
 func Fluentd(cfg *FluentdConfiguration) Component {
 	timeout := probeTimeoutSeconds
 	period := probePeriodSeconds
@@ -145,6 +158,7 @@ type FluentdConfiguration struct {
 	ESClusterConfig  *relasticsearch.ClusterConfig
 	S3Credential     *S3Credential
 	SplkCredential   *SplunkCredential
+	SysLogCredential *SysLogCredential
 	Filters          *FluentdFilters
 	EKSConfig        *EksCloudwatchLogConfig
 	PullSecrets      []*corev1.Secret
@@ -254,6 +268,9 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	}
 	if c.cfg.SplkCredential != nil {
 		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.splunkCredentialSecret()...)...)...)
+	}
+	if c.cfg.SysLogCredential != nil {
+		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.syslogCredentialSecret()...)...)...)
 	}
 	if c.cfg.Filters != nil {
 		objs = append(objs, c.filtersConfigMap())
@@ -369,6 +386,29 @@ func (c *fluentdComponent) splunkCredentialSecret() []*corev1.Secret {
 	return splunkSecrets
 }
 
+func (c *fluentdComponent) syslogCredentialSecret() []*corev1.Secret {
+	if c.cfg.SysLogCredential == nil {
+		return nil
+	}
+	var syslogSecrets []*corev1.Secret
+
+	if len(c.cfg.SysLogCredential.Certificate) != 0 {
+		certificate := &corev1.Secret{
+			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      SysLogCertificateSecretName,
+				Namespace: LogCollectorNamespace,
+			},
+			Data: map[string][]byte{
+				SysLogSecretCertificateKey: c.cfg.SysLogCredential.Certificate,
+			},
+		}
+		syslogSecrets = append(syslogSecrets, certificate)
+	}
+
+	return syslogSecrets
+}
+
 func (c *fluentdComponent) fluentdServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
@@ -441,6 +481,10 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 	}
 	if c.cfg.SplkCredential != nil {
 		annots[splunkCredentialHashAnnotation] = rmeta.AnnotationHash(c.cfg.SplkCredential)
+	}
+	//SysLogCredentialHashAnnotation
+	if c.cfg.SysLogCredential != nil {
+		annots[sysLogCredentialHashAnnotation] = rmeta.AnnotationHash(c.cfg.SysLogCredential)
 	}
 	if c.cfg.Filters != nil {
 		annots[filterHashAnnotation] = rmeta.AnnotationHash(c.cfg.Filters)
@@ -530,8 +574,17 @@ func (c *fluentdComponent) container() corev1.Container {
 				MountPath: c.path(SplunkFluentdDefaultCertDir),
 			})
 	}
+	// remote syslog - add volumes
+	if c.cfg.SysLogCredential != nil && len(c.cfg.SysLogCredential.Certificate) != 0 {
+		volumeMounts = append(volumeMounts,
+			corev1.VolumeMount{
+				Name:      SysLogSecretsVolName,
+				MountPath: c.path(SysLogDefaultCertDir),
+			})
+	}
 
-	volumeMounts = append(volumeMounts, c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()))
+	// To be removed after getting it reviewed by SMEs.
+	//	volumeMounts = append(volumeMounts, c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()))
 
 	if c.cfg.MetricsServerTLS != nil {
 		volumeMounts = append(volumeMounts, c.cfg.MetricsServerTLS.VolumeMount(c.SupportedOSType()))
@@ -675,6 +728,22 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 					}
 				}
 			}
+			// Enable TLS option for syslog forwarding.
+			if syslog.Encryption == operatorv1.EncryptionTLS {
+				envs = append(envs,
+					corev1.EnvVar{Name: "SYSLOG_TLS", Value: "true"},
+				)
+				if len(c.cfg.SysLogCredential.Certificate) != 0 {
+					envs = append(envs,
+						corev1.EnvVar{Name: "SYSLOG_CA_FILE", Value: SysLogDefaultCertPath},
+					)
+				} else {
+					envs = append(envs,
+						corev1.EnvVar{Name: "SYSLOG_CA_FILE", Value: SysLogInternetCAPath},
+					)
+				}
+			}
+
 		}
 		splunk := c.cfg.LogCollector.Spec.AdditionalStores.Splunk
 		if splunk != nil {
@@ -810,7 +879,6 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 				},
 			})
 	}
-
 	if c.cfg.SplkCredential != nil && len(c.cfg.SplkCredential.Certificate) != 0 {
 		volumes = append(volumes,
 			corev1.Volume{
@@ -825,6 +893,23 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 				},
 			})
 	}
+
+	// Generate Pem file from the secrets.
+	if c.cfg.SysLogCredential != nil && len(c.cfg.SysLogCredential.Certificate) != 0 {
+		volumes = append(volumes,
+			corev1.Volume{
+				Name: SysLogSecretsVolName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: SysLogCertificateSecretName,
+						Items: []corev1.KeyToPath{
+							{Key: SysLogSecretCertificateKey, Path: SysLogSecretCertificateKey},
+						},
+					},
+				},
+			})
+	}
+
 	if c.cfg.MetricsServerTLS != nil {
 		volumes = append(volumes, c.cfg.MetricsServerTLS.Volume())
 	}

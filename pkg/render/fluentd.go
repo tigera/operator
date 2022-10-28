@@ -75,10 +75,11 @@ const (
 	SysLogSecretCertificateKey               = "ca.pem"
 	SysLogSecretsVolName                     = "syslog-certificates"
 	SysLogDefaultCertDir                     = "/etc/fluentd/syslog/"
-	SysLogInternetCADir                      = "/etc/pki/tls/certs/"
 	SysLogDefaultCertPath                    = SysLogDefaultCertDir + SysLogSecretCertificateKey
+	SysLogInternetCADir                      = "/etc/pki/tls/certs/"
 	SysLogInternetCertKey                    = "ca-bundle.crt"
 	SysLogInternetCAPath                     = SysLogInternetCADir + SysLogInternetCertKey
+	TigeraCertBundleMountPath                = "/etc/fluentd/elastic/tigera-ca-bundle.crt"
 
 	probeTimeoutSeconds        int32 = 5
 	probePeriodSeconds         int32 = 5
@@ -99,6 +100,10 @@ const (
 
 	PacketCaptureAPIRole        = "packetcapture-api-role"
 	PacketCaptureAPIRoleBinding = "packetcapture-api-role-binding"
+
+	// Verification Mode for syslog forwarding.
+	SSLVERIFYNONE = "0"
+	SSLVERIFYPEER = "1"
 )
 
 var FluentdSourceEntityRule = v3.EntityRule{
@@ -405,7 +410,6 @@ func (c *fluentdComponent) syslogCredentialSecret() []*corev1.Secret {
 		}
 		syslogSecrets = append(syslogSecrets, certificate)
 	}
-
 	return syslogSecrets
 }
 
@@ -482,7 +486,6 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 	if c.cfg.SplkCredential != nil {
 		annots[splunkCredentialHashAnnotation] = rmeta.AnnotationHash(c.cfg.SplkCredential)
 	}
-	//SysLogCredentialHashAnnotation
 	if c.cfg.SysLogCredential != nil {
 		annots[sysLogCredentialHashAnnotation] = rmeta.AnnotationHash(c.cfg.SysLogCredential)
 	}
@@ -574,17 +577,14 @@ func (c *fluentdComponent) container() corev1.Container {
 				MountPath: c.path(SplunkFluentdDefaultCertDir),
 			})
 	}
-	// remote syslog - add volumes
-	if c.cfg.SysLogCredential != nil && len(c.cfg.SysLogCredential.Certificate) != 0 {
+
+	if c.cfg.SysLogCredential != nil && c.cfg.SysLogCredential.Certificate != nil && len(c.cfg.SysLogCredential.Certificate) != 0 {
 		volumeMounts = append(volumeMounts,
 			corev1.VolumeMount{
 				Name:      SysLogSecretsVolName,
 				MountPath: c.path(SysLogDefaultCertDir),
 			})
 	}
-
-	// To be removed after getting it reviewed by SMEs.
-	//	volumeMounts = append(volumeMounts, c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()))
 
 	if c.cfg.MetricsServerTLS != nil {
 		volumeMounts = append(volumeMounts, c.cfg.MetricsServerTLS.VolumeMount(c.SupportedOSType()))
@@ -728,12 +728,15 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 					}
 				}
 			}
-			// Enable TLS option for syslog forwarding.
+
 			if syslog.Encryption == operatorv1.EncryptionTLS {
 				envs = append(envs,
 					corev1.EnvVar{Name: "SYSLOG_TLS", Value: "true"},
 				)
-				if len(c.cfg.SysLogCredential.Certificate) != 0 {
+				envs = append(envs,
+					corev1.EnvVar{Name: "SYSLOG_VERIFY_MODE", Value: SSLVERIFYPEER},
+				)
+				if c.cfg.SysLogCredential.Certificate != nil && len(c.cfg.SysLogCredential.Certificate) != 0 {
 					envs = append(envs,
 						corev1.EnvVar{Name: "SYSLOG_CA_FILE", Value: SysLogDefaultCertPath},
 					)
@@ -743,7 +746,6 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 					)
 				}
 			}
-
 		}
 		splunk := c.cfg.LogCollector.Spec.AdditionalStores.Splunk
 		if splunk != nil {
@@ -801,7 +803,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 
 	if c.SupportedOSType() != rmeta.OSTypeWindows {
 		envs = append(envs,
-			corev1.EnvVar{Name: "CA_CRT_PATH", Value: c.cfg.TrustedBundle.MountPath()},
+			corev1.EnvVar{Name: "CA_CRT_PATH", Value: TigeraCertBundleMountPath},
 			corev1.EnvVar{Name: "TLS_KEY_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountKeyFilePath()},
 			corev1.EnvVar{Name: "TLS_CRT_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountCertificateFilePath()},
 		)
@@ -893,9 +895,7 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 				},
 			})
 	}
-
-	// Generate Pem file from the secrets.
-	if c.cfg.SysLogCredential != nil && len(c.cfg.SysLogCredential.Certificate) != 0 {
+	if c.cfg.SysLogCredential != nil && c.cfg.SysLogCredential.Certificate != nil && len(c.cfg.SysLogCredential.Certificate) != 0 {
 		volumes = append(volumes,
 			corev1.Volume{
 				Name: SysLogSecretsVolName,
@@ -909,7 +909,6 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 				},
 			})
 	}
-
 	if c.cfg.MetricsServerTLS != nil {
 		volumes = append(volumes, c.cfg.MetricsServerTLS.Volume())
 	}

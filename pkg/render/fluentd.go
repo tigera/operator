@@ -75,10 +75,11 @@ const (
 	SysLogSecretCertificateKey               = "ca.pem"
 	SysLogSecretsVolName                     = "syslog-certificates"
 	SysLogDefaultCertDir                     = "/etc/fluentd/syslog/"
-	SysLogInternetCADir                      = "/etc/pki/tls/certs/"
 	SysLogDefaultCertPath                    = SysLogDefaultCertDir + SysLogSecretCertificateKey
+	SysLogInternetCADir                      = "/etc/pki/tls/certs/"
 	SysLogInternetCertKey                    = "ca-bundle.crt"
 	SysLogInternetCAPath                     = SysLogInternetCADir + SysLogInternetCertKey
+	TigeraCertBundleMountPath                = "/etc/fluentd/elastic/tigera-ca-bundle.crt"
 
 	probeTimeoutSeconds        int32 = 5
 	probePeriodSeconds         int32 = 5
@@ -583,9 +584,6 @@ func (c *fluentdComponent) container() corev1.Container {
 			})
 	}
 
-	// To be removed after getting it reviewed by SMEs.
-	//	volumeMounts = append(volumeMounts, c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()))
-
 	if c.cfg.MetricsServerTLS != nil {
 		volumeMounts = append(volumeMounts, c.cfg.MetricsServerTLS.VolumeMount(c.SupportedOSType()))
 	}
@@ -801,7 +799,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 
 	if c.SupportedOSType() != rmeta.OSTypeWindows {
 		envs = append(envs,
-			corev1.EnvVar{Name: "CA_CRT_PATH", Value: c.cfg.TrustedBundle.MountPath()},
+			corev1.EnvVar{Name: "CA_CRT_PATH", Value: TigeraCertBundleMountPath},
 			corev1.EnvVar{Name: "TLS_KEY_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountKeyFilePath()},
 			corev1.EnvVar{Name: "TLS_CRT_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountCertificateFilePath()},
 		)

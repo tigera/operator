@@ -134,7 +134,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	for _, secretName := range []string{
 		render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret,
 		relasticsearch.PublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret,
-		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName, monitor.PrometheusTLSSecretName,
+		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName, render.SysLogCertificateSecretName, monitor.PrometheusTLSSecretName,
 		render.FluentdPrometheusTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
@@ -221,7 +221,6 @@ func fillDefaults(instance *operatorv1.LogCollector) []string {
 					v1.SyslogLogDNS,
 					v1.SyslogLogFlows,
 				}
-
 				// Include the field that was modified (in case we need to display error messages)
 				modifiedFields = append(modifiedFields, "AdditionalStores.Syslog.LogTypes")
 			}
@@ -429,6 +428,18 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	var syslogCredential *render.SysLogCredential
+	if instance.Spec.AdditionalStores != nil {
+		if instance.Spec.AdditionalStores.Syslog != nil {
+			syslogCredential, err = getSysLogCredential(r.client)
+			if err != nil {
+				log.Error(err, "Error with syslog credential secret")
+				r.status.SetDegraded("Error with syslog credential secret", err.Error())
+				return reconcile.Result{}, err
+			}
+		}
+	}
+
 	// Try to grab the ManagementClusterConnection CR because we need it for network policy rendering,
 	// as well as validation with respect to Syslog.logTypes.
 	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
@@ -505,6 +516,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		ESClusterConfig:  esClusterConfig,
 		S3Credential:     s3Credential,
 		SplkCredential:   splunkCredential,
+		SysLogCredential: syslogCredential,
 		Filters:          filters,
 		EKSConfig:        eksConfig,
 		PullSecrets:      pullSecrets,
@@ -551,20 +563,21 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 
 	if hasWindowsNodes {
 		fluentdCfg = &render.FluentdConfiguration{
-			LogCollector:    instance,
-			ESSecrets:       esSecrets,
-			ESClusterConfig: esClusterConfig,
-			S3Credential:    s3Credential,
-			SplkCredential:  splunkCredential,
-			Filters:         filters,
-			EKSConfig:       eksConfig,
-			PullSecrets:     pullSecrets,
-			Installation:    installation,
-			ClusterDomain:   r.clusterDomain,
-			OSType:          rmeta.OSTypeWindows,
-			TrustedBundle:   trustedBundle,
-			ManagedCluster:  managedCluster,
-			UsePSP:          r.usePSP,
+			LogCollector:     instance,
+			ESSecrets:        esSecrets,
+			ESClusterConfig:  esClusterConfig,
+			S3Credential:     s3Credential,
+			SplkCredential:   splunkCredential,
+			SysLogCredential: syslogCredential,
+			Filters:          filters,
+			EKSConfig:        eksConfig,
+			PullSecrets:      pullSecrets,
+			Installation:     installation,
+			ClusterDomain:    r.clusterDomain,
+			OSType:           rmeta.OSTypeWindows,
+			TrustedBundle:    trustedBundle,
+			ManagedCluster:   managedCluster,
+			UsePSP:           r.usePSP,
 		}
 		comp = render.Fluentd(fluentdCfg)
 
@@ -687,6 +700,34 @@ func getSplunkCredential(client client.Client) (*render.SplunkCredential, error)
 
 	return &render.SplunkCredential{
 		Token:       token,
+		Certificate: certificate,
+	}, nil
+}
+
+func getSysLogCredential(client client.Client) (*render.SysLogCredential, error) {
+	var ok bool
+	var certificate []byte
+	certificateSecret := &corev1.Secret{}
+	certificateNamespacedName := types.NamespacedName{
+		Name:      render.SysLogCertificateSecretName,
+		Namespace: common.OperatorNamespace(),
+	}
+
+	if err := client.Get(context.Background(), certificateNamespacedName, certificateSecret); err != nil {
+		if errors.IsNotFound(err) {
+			log.Info(fmt.Sprintf("Syslog certificate secret %v not provided. Assuming http protocol or trusted CA certificate.",
+				render.SysLogCertificateSecretName))
+		} else {
+
+			return nil, fmt.Errorf("Failed to read secret %q: %s", render.SysLogCertificateSecretName, err)
+		}
+	} else {
+		if certificate, ok = certificateSecret.Data[render.SysLogSecretCertificateKey]; !ok || len(certificate) == 0 {
+			return nil, fmt.Errorf("Expected secret %q to have a field named %q",
+				render.SysLogCertificateSecretName, render.SysLogSecretCertificateKey)
+		}
+	}
+	return &render.SysLogCredential{
 		Certificate: certificate,
 	}, nil
 }

@@ -717,9 +717,7 @@ func getSysLogCredential(client client.Client) (*render.SysLogCredential, error)
 		if errors.IsNotFound(err) {
 			log.Info(fmt.Sprintf("Syslog certificate secret %v not provided. Assuming http protocol or trusted CA certificate.",
 				render.SysLogCertificateSecretName))
-		} else {
-
-			return nil, fmt.Errorf("Failed to read secret %q: %s", render.SysLogCertificateSecretName, err)
+			return nil, nil
 		}
 	} else {
 		if certificate, ok = certificateSecret.Data[render.SysLogSecretCertificateKey]; !ok || len(certificate) == 0 {

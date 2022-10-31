@@ -105,6 +105,13 @@ spec:
                     description: If specified, enables exporting of flow, audit, and
                       DNS logs to syslog.
                     properties:
+                      encryption:
+                        description: 'Configuration for enabling/disabling TLS option.
+                          If TLS, this feature enable tls. Default: None'
+                        enum:
+                        - None
+                        - TLS
+                        type: string
                       endpoint:
                         description: 'Location of the syslog server. example: tcp://1.2.3.4:601'
                         type: string

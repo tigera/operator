@@ -1060,6 +1060,25 @@ func (c *intrusionDetectionComponent) adJobsGlobalertTemplates() []client.Object
 				APIVersion: "projectcalico.org/v3",
 			},
 			ObjectMeta: metav1.ObjectMeta{
+				Name: adDetectorPrefixName + "multivariable-flow",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Type:        v3.GlobalAlertTypeAnomalyDetection,
+				Description: "Multivariable flow",
+				Summary:     "Looks for excessive values in combination of all numeric fields in the flow log.",
+				Severity:    100,
+				Detector: &v3.DetectorParams{
+					Name: "multivariable_flow",
+				},
+				Period: &metav1.Duration{Duration: adDetectionJobsDefaultPeriod},
+			},
+		},
+		&v3.GlobalAlertTemplate{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "GlobalAlertTemplate",
+				APIVersion: "projectcalico.org/v3",
+			},
+			ObjectMeta: metav1.ObjectMeta{
 				Name: adDetectorPrefixName + "generic-l7",
 			},
 			Spec: v3.GlobalAlertSpec{
@@ -1085,6 +1104,23 @@ func (c *intrusionDetectionComponent) adJobsGlobalertTemplates() []client.Object
 				Summary:     "Looks for the clients that have too high latency of the DNS requests.",
 				Severity:    100,
 				Detector:    &v3.DetectorParams{Name: "dns_latency"},
+				Period:      &metav1.Duration{Duration: adDetectionJobsDefaultPeriod},
+			},
+		},
+		&v3.GlobalAlertTemplate{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "GlobalAlertTemplate",
+				APIVersion: "projectcalico.org/v3",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: adDetectorPrefixName + "dns-tunnel",
+			},
+			Spec: v3.GlobalAlertSpec{
+				Type:        v3.GlobalAlertTypeAnomalyDetection,
+				Description: "DNS tunnel",
+				Summary:     "Looks for DNS queries names in the DNS log with subdomains that can contain encoded information.",
+				Severity:    100,
+				Detector:    &v3.DetectorParams{Name: "dns_tunnel"},
 				Period:      &metav1.Duration{Duration: adDetectionJobsDefaultPeriod},
 			},
 		},

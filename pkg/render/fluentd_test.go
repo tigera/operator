@@ -448,6 +448,201 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			},
 		}))
 	})
+	It("should render with Syslog configuration with TLS", func() {
+		cfg.SysLogCredential = &render.SysLogCredential{
+			Certificate: []byte("Certificates"),
+		}
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.FluentdPolicyName, ns: render.LogCollectorNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
+			{name: "logcollector-syslog-ca-certificate", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
+			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-fluentd", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+			{name: "fluentd-node", ns: "tigera-fluentd", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
+		}
+
+		var ps int32 = 180
+		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
+			Syslog: &operatorv1.SyslogStoreSpec{
+				Endpoint:   "tcp://1.2.3.4:80",
+				Encryption: operatorv1.EncryptionTLS,
+				PacketSize: &ps,
+				LogTypes: []operatorv1.SyslogLogType{
+					operatorv1.SyslogLogDNS,
+					operatorv1.SyslogLogFlows,
+					operatorv1.SyslogLogIDSEvents,
+				},
+			},
+		}
+		component := render.Fluentd(cfg)
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+		// Should render the correct resources.
+		i := 0
+		for _, expectedRes := range expectedResources {
+			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			i++
+		}
+
+		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(4))
+
+		var volnames []string
+		for _, vol := range ds.Spec.Template.Spec.Volumes {
+			volnames = append(volnames, vol.Name)
+		}
+		Expect(volnames).To(ContainElement("syslog-certificates"))
+
+		envs := ds.Spec.Template.Spec.Containers[0].Env
+
+		expectedEnvs := []struct {
+			name       string
+			val        string
+			secretName string
+			secretKey  string
+		}{
+			{"SYSLOG_HOST", "1.2.3.4", "", ""},
+			{"SYSLOG_PORT", "80", "", ""},
+			{"SYSLOG_PROTOCOL", "tcp", "", ""},
+			{"SYSLOG_FLUSH_INTERVAL", "5s", "", ""},
+			{"SYSLOG_PACKET_SIZE", "180", "", ""},
+			{"SYSLOG_DNS_LOG", "true", "", ""},
+			{"SYSLOG_FLOW_LOG", "true", "", ""},
+			{"SYSLOG_IDS_EVENT_LOG", "true", "", ""},
+			{"SYSLOG_TLS", "true", "", ""},
+			{"SYSLOG_VERIFY_MODE", render.SSLVERIFYPEER, "", ""},
+			{"SYSLOG_CA_FILE", render.SysLogDefaultCertPath, "", ""},
+		}
+		for _, expected := range expectedEnvs {
+			if expected.val != "" {
+				Expect(envs).To(ContainElement(corev1.EnvVar{Name: expected.name, Value: expected.val}))
+			} else {
+				Expect(envs).To(ContainElement(corev1.EnvVar{
+					Name: expected.name,
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: expected.secretName},
+							Key:                  expected.secretKey,
+						},
+					},
+				}))
+			}
+		}
+		Expect(envs).To(ContainElement(corev1.EnvVar{
+			Name: "SYSLOG_HOSTNAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "spec.nodeName",
+				},
+			},
+		}))
+	})
+	It("should render with Syslog configuration with TLS and Internet CA", func() {
+		cfg.SysLogCredential = &render.SysLogCredential{}
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.FluentdPolicyName, ns: render.LogCollectorNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
+			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-fluentd", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
+			{name: "fluentd-node", ns: "tigera-fluentd", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
+		}
+
+		var ps int32 = 180
+		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
+			Syslog: &operatorv1.SyslogStoreSpec{
+				Endpoint:   "tcp://1.2.3.4:80",
+				Encryption: operatorv1.EncryptionTLS,
+				PacketSize: &ps,
+				LogTypes: []operatorv1.SyslogLogType{
+					operatorv1.SyslogLogDNS,
+					operatorv1.SyslogLogFlows,
+					operatorv1.SyslogLogIDSEvents,
+				},
+			},
+		}
+		component := render.Fluentd(cfg)
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+		// Should render the correct resources.
+		i := 0
+		for _, expectedRes := range expectedResources {
+			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			i++
+		}
+
+		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(3))
+
+		envs := ds.Spec.Template.Spec.Containers[0].Env
+
+		expectedEnvs := []struct {
+			name       string
+			val        string
+			secretName string
+			secretKey  string
+		}{
+			{"SYSLOG_HOST", "1.2.3.4", "", ""},
+			{"SYSLOG_PORT", "80", "", ""},
+			{"SYSLOG_PROTOCOL", "tcp", "", ""},
+			{"SYSLOG_FLUSH_INTERVAL", "5s", "", ""},
+			{"SYSLOG_PACKET_SIZE", "180", "", ""},
+			{"SYSLOG_DNS_LOG", "true", "", ""},
+			{"SYSLOG_FLOW_LOG", "true", "", ""},
+			{"SYSLOG_IDS_EVENT_LOG", "true", "", ""},
+			{"SYSLOG_TLS", "true", "", ""},
+			{"SYSLOG_VERIFY_MODE", render.SSLVERIFYPEER, "", ""},
+			{"SYSLOG_CA_FILE", render.SysLogInternetCAPath, "", ""},
+		}
+		for _, expected := range expectedEnvs {
+			if expected.val != "" {
+				Expect(envs).To(ContainElement(corev1.EnvVar{Name: expected.name, Value: expected.val}))
+			} else {
+				Expect(envs).To(ContainElement(corev1.EnvVar{
+					Name: expected.name,
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: expected.secretName},
+							Key:                  expected.secretKey,
+						},
+					},
+				}))
+			}
+		}
+		Expect(envs).To(ContainElement(corev1.EnvVar{
+			Name: "SYSLOG_HOSTNAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "spec.nodeName",
+				},
+			},
+		}))
+	})
 
 	It("should render with splunk configuration with ca", func() {
 		cfg.SplkCredential = &render.SplunkCredential{

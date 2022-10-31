@@ -466,7 +466,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		expectedADEnvs := []expectedEnvVar{
 			{"ELASTIC_HOST", dns.GetServiceDNSNames(render.ESGatewayServiceName, render.ElasticsearchNamespace, cfg.ClusterDomain)[2], "", ""},
 			{"ELASTIC_PORT", strconv.Itoa(render.ElasticsearchDefaultPort), "", ""},
-			{"ELASTIC_CA", certificatemanagement.TrustedCertBundleMountPath, "", ""},
+			{"ELASTIC_CA", render.TigeraCertBundleMountPath, "", ""},
 			{"ELASTIC_USERNAME", "", render.ElasticsearchADJobUserSecret, "username"},
 			{"ELASTIC_PASSWORD", "", render.ElasticsearchADJobUserSecret, "password"},
 			{"MODEL_STORAGE_API_HOST", render.ADAPIExpectedServiceName, "", ""},

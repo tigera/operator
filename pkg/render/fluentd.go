@@ -100,6 +100,10 @@ const (
 
 	PacketCaptureAPIRole        = "packetcapture-api-role"
 	PacketCaptureAPIRoleBinding = "packetcapture-api-role-binding"
+
+	// Verification Mode for syslog forwarding.
+	SSLVERIFYNONE = "0"
+	SSLVERIFYPEER = "1"
 )
 
 var FluentdSourceEntityRule = v3.EntityRule{
@@ -730,6 +734,9 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 			if syslog.Encryption == operatorv1.EncryptionTLS {
 				envs = append(envs,
 					corev1.EnvVar{Name: "SYSLOG_TLS", Value: "true"},
+				)
+				envs = append(envs,
+					corev1.EnvVar{Name: "SYSLOG_VERIFY_MODE", Value: SSLVERIFYPEER},
 				)
 				if len(c.cfg.SysLogCredential.Certificate) != 0 {
 					envs = append(envs,

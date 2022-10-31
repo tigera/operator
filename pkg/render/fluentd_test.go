@@ -462,7 +462,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
 			{name: render.FluentdPolicyName, ns: render.LogCollectorNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
-			{name: "logcollector-syslog-certificate", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
+			{name: "logcollector-syslog-ca-certificate", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: "tigera-fluentd", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
@@ -476,7 +476,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
 			Syslog: &operatorv1.SyslogStoreSpec{
 				Endpoint:   "tcp://1.2.3.4:80",
-				Encryption: operatorv1.EncryptionEnable,
+				Encryption: operatorv1.EncryptionTLS,
 				PacketSize: &ps,
 				LogTypes: []operatorv1.SyslogLogType{
 					operatorv1.SyslogLogDNS,
@@ -523,7 +523,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{"SYSLOG_FLOW_LOG", "true", "", ""},
 			{"SYSLOG_IDS_EVENT_LOG", "true", "", ""},
 			{"SYSLOG_TLS", "true", "", ""},
-			{"SYSLOG_VERIFY_MODE", "OPENSSL::SSL::VERIFY_PEER", "", ""},
+			{"SYSLOG_VERIFY_MODE", render.SSLVERIFYPEER, "", ""},
 		}
 		for _, expected := range expectedEnvs {
 			if expected.val != "" {

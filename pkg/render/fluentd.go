@@ -738,7 +738,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 				envs = append(envs,
 					corev1.EnvVar{Name: "SYSLOG_VERIFY_MODE", Value: SSLVERIFYPEER},
 				)
-				if len(c.cfg.SysLogCredential.Certificate) != 0 {
+				if c.cfg.SysLogCredential.Certificate != nil && len(c.cfg.SysLogCredential.Certificate) != 0 {
 					envs = append(envs,
 						corev1.EnvVar{Name: "SYSLOG_CA_FILE", Value: SysLogDefaultCertPath},
 					)

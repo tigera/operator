@@ -31,7 +31,6 @@ var _ = Describe("Test overrides validation (NodeDaemonset)", func() {
 	invalidRr := corev1.ResourceRequirements{
 		Limits: corev1.ResourceList{
 			"cats": resource.MustParse("2"),
-			"dogs": resource.MustParse("300Mi"),
 		},
 	}
 

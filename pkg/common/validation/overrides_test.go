@@ -22,9 +22,10 @@ import (
 	opv1 "github.com/tigera/operator/api/v1"
 	node "github.com/tigera/operator/pkg/common/validation/calico-node"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-var _ = Describe("Test overrides validation", func() {
+var _ = Describe("Test overrides validation (NodeDaemonset)", func() {
 	var overrides *opv1.CalicoNodeDaemonSet
 
 	invalidRr := corev1.ResourceRequirements{
@@ -130,5 +131,50 @@ var _ = Describe("Test overrides validation", func() {
 		err := ValidateReplicatedPodResourceOverrides(overrides, node.ValidateCalicoNodeDaemonSetContainer, node.ValidateCalicoNodeDaemonSetInitContainer)
 		Expect(err).NotTo(BeNil())
 		Expect(err.Error()).Should(HavePrefix("spec.Template.Spec.Tolerations is invalid: spec.template.spec.tolerations[0].operator: Invalid value: \"Equal\": operator must be Exists when `key` is empty"))
+	})
+})
+
+var _ = Describe("Test overrides validation (TyphaDeployment)", func() {
+	var overrides *opv1.TyphaDeployment
+
+	BeforeEach(func() {
+		overrides = &opv1.TyphaDeployment{
+			Spec: &opv1.TyphaDeploymentSpec{
+				Template: &opv1.TyphaDeploymentPodTemplateSpec{
+					Spec: &opv1.TyphaDeploymentPodSpec{},
+				},
+			},
+		}
+	})
+
+	It("should accept a valid topology spread constraint", func() {
+		s := metav1.LabelSelector{MatchLabels: map[string]string{"brick": "mortar"}}
+		overrides.Spec.Template.Spec.TopologySpreadConstraints = []corev1.TopologySpreadConstraint{
+			{MaxSkew: 1, TopologyKey: "realm", WhenUnsatisfiable: corev1.DoNotSchedule, LabelSelector: &s},
+		}
+		err := ValidateReplicatedPodResourceOverrides(overrides, node.ValidateCalicoNodeDaemonSetContainer, node.ValidateCalicoNodeDaemonSetInitContainer)
+		Expect(err).NotTo(BeNil())
+		Expect(err.Error()).Should(HavePrefix("spec.Template.Spec.NodeSelector is invalid: spec.template.spec.nodeSelector: Invalid value: \"NoUppercaseOrSpecialCharsLike=Equals\": name part must consist of alphanumeric characters"))
+	})
+
+	It("should return an error if there are duplicate topology spread constraints", func() {
+		s := metav1.LabelSelector{MatchLabels: map[string]string{"crusty": "pizza"}}
+		overrides.Spec.Template.Spec.TopologySpreadConstraints = []corev1.TopologySpreadConstraint{
+			{MaxSkew: 1, TopologyKey: "dominion", WhenUnsatisfiable: corev1.DoNotSchedule, LabelSelector: &s},
+			{MaxSkew: 1, TopologyKey: "dominion", WhenUnsatisfiable: corev1.DoNotSchedule, LabelSelector: &s},
+		}
+		err := ValidateReplicatedPodResourceOverrides(overrides, node.ValidateCalicoNodeDaemonSetContainer, node.ValidateCalicoNodeDaemonSetInitContainer)
+		Expect(err).NotTo(BeNil())
+		Expect(err.Error()).Should(HavePrefix("spec.Template.Spec.NodeSelector is invalid: spec.template.spec.nodeSelector: Invalid value: \"NoUppercaseOrSpecialCharsLike=Equals\": name part must consist of alphanumeric characters"))
+	})
+
+	It("should return an error if there is no topology key", func() {
+		s := metav1.LabelSelector{MatchLabels: map[string]string{"tepid": "rinse"}}
+		overrides.Spec.Template.Spec.TopologySpreadConstraints = []corev1.TopologySpreadConstraint{
+			{MaxSkew: 1, WhenUnsatisfiable: corev1.DoNotSchedule, LabelSelector: &s},
+		}
+		err := ValidateReplicatedPodResourceOverrides(overrides, node.ValidateCalicoNodeDaemonSetContainer, node.ValidateCalicoNodeDaemonSetInitContainer)
+		Expect(err).NotTo(BeNil())
+		Expect(err.Error()).Should(HavePrefix("spec.Template.Spec.NodeSelector is invalid: spec.template.spec.nodeSelector: Invalid value: \"NoUppercaseOrSpecialCharsLike=Equals\": name part must consist of alphanumeric characters"))
 	})
 })

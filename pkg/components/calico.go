@@ -43,7 +43,7 @@ var (
 	}
 
 	ComponentFlexVolume = component{
-		Version: "v3.23.4",
+		Version: "v3.24.3",
 		Image:   "calico/pod2daemon-flexvol",
 	}
 

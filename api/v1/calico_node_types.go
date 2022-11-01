@@ -199,6 +199,11 @@ func (c *CalicoNodeDaemonSet) GetAffinity() *v1.Affinity {
 	return nil
 }
 
+func (c *CalicoNodeDaemonSet) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
+	// TopologySpreadConstraints aren't needed for Calico DaemonSet resources.
+	return nil
+}
+
 func (c *CalicoNodeDaemonSet) GetNodeSelector() map[string]string {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {

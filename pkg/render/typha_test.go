@@ -426,7 +426,7 @@ var _ = Describe("Typha rendering tests", func() {
 	})
 
 	Context("With typha deployment overrides", func() {
-		var rr1 = corev1.ResourceRequirements{
+		rr1 := corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{
 				"cpu":     resource.MustParse("2"),
 				"memory":  resource.MustParse("300Mi"),
@@ -438,7 +438,7 @@ var _ = Describe("Typha rendering tests", func() {
 				"storage": resource.MustParse("10Gi"),
 			},
 		}
-		var rr2 = corev1.ResourceRequirements{
+		rr2 := corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
 				corev1.ResourceCPU:    resource.MustParse("250m"),
 				corev1.ResourceMemory: resource.MustParse("64Mi"),
@@ -492,6 +492,11 @@ var _ = Describe("Typha rendering tests", func() {
 							NodeSelector: map[string]string{
 								"custom-node-selector": "value",
 							},
+							TopologySpreadConstraints: []corev1.TopologySpreadConstraint{
+								{
+									MaxSkew: 1,
+								},
+							},
 							Affinity:    affinity,
 							Tolerations: []corev1.Toleration{toleration},
 						},
@@ -536,6 +541,9 @@ var _ = Describe("Typha rendering tests", func() {
 
 			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
 			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("custom-node-selector", "value"))
+
+			Expect(d.Spec.Template.Spec.TopologySpreadConstraints).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.TopologySpreadConstraints[0].MaxSkew).To(Equal(int32(1)))
 
 			Expect(d.Spec.Template.Spec.Tolerations).To(HaveLen(1))
 			Expect(d.Spec.Template.Spec.Tolerations[0]).To(Equal(toleration))

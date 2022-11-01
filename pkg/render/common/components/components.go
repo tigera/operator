@@ -73,6 +73,9 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides com
 		r.podTemplateSpec.Spec.NodeSelector = common.MapExistsOrInitialize(r.podTemplateSpec.Spec.NodeSelector)
 		common.MergeMaps(nodeSelector, r.podTemplateSpec.Spec.NodeSelector)
 	}
+	if constraints := overrides.GetTopologySpreadConstraints(); constraints != nil {
+		r.podTemplateSpec.Spec.TopologySpreadConstraints = constraints
+	}
 	if tolerations := overrides.GetTolerations(); tolerations != nil {
 		r.podTemplateSpec.Spec.Tolerations = tolerations
 	}

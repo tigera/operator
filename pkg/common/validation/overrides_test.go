@@ -153,8 +153,7 @@ var _ = Describe("Test overrides validation (TyphaDeployment)", func() {
 			{MaxSkew: 1, TopologyKey: "realm", WhenUnsatisfiable: corev1.DoNotSchedule, LabelSelector: &s},
 		}
 		err := ValidateReplicatedPodResourceOverrides(overrides, node.ValidateCalicoNodeDaemonSetContainer, node.ValidateCalicoNodeDaemonSetInitContainer)
-		Expect(err).NotTo(BeNil())
-		Expect(err.Error()).Should(HavePrefix("spec.Template.Spec.NodeSelector is invalid: spec.template.spec.nodeSelector: Invalid value: \"NoUppercaseOrSpecialCharsLike=Equals\": name part must consist of alphanumeric characters"))
+		Expect(err).To(BeNil())
 	})
 
 	It("should return an error if there are duplicate topology spread constraints", func() {
@@ -165,7 +164,7 @@ var _ = Describe("Test overrides validation (TyphaDeployment)", func() {
 		}
 		err := ValidateReplicatedPodResourceOverrides(overrides, node.ValidateCalicoNodeDaemonSetContainer, node.ValidateCalicoNodeDaemonSetInitContainer)
 		Expect(err).NotTo(BeNil())
-		Expect(err.Error()).Should(HavePrefix("spec.Template.Spec.NodeSelector is invalid: spec.template.spec.nodeSelector: Invalid value: \"NoUppercaseOrSpecialCharsLike=Equals\": name part must consist of alphanumeric characters"))
+		Expect(err.Error()).Should(HavePrefix("spec.Template.Spec.TopologySpreadConstraints is invalid: spec.template.spec.topologySpreadConstraints[0].{topologyKey, whenUnsatisfiable}: Duplicate value: \"{dominion, DoNotSchedule}\""))
 	})
 
 	It("should return an error if there is no topology key", func() {
@@ -175,6 +174,6 @@ var _ = Describe("Test overrides validation (TyphaDeployment)", func() {
 		}
 		err := ValidateReplicatedPodResourceOverrides(overrides, node.ValidateCalicoNodeDaemonSetContainer, node.ValidateCalicoNodeDaemonSetInitContainer)
 		Expect(err).NotTo(BeNil())
-		Expect(err.Error()).Should(HavePrefix("spec.Template.Spec.NodeSelector is invalid: spec.template.spec.nodeSelector: Invalid value: \"NoUppercaseOrSpecialCharsLike=Equals\": name part must consist of alphanumeric characters"))
+		Expect(err.Error()).Should(HavePrefix("spec.Template.Spec.TopologySpreadConstraints is invalid: spec.template.spec.topologySpreadConstraints[0].topologyKey: Required value: can not be empty"))
 	})
 })

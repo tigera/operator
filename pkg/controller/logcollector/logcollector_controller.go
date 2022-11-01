@@ -221,6 +221,9 @@ func fillDefaults(instance *operatorv1.LogCollector) []string {
 					v1.SyslogLogDNS,
 					v1.SyslogLogFlows,
 				}
+				if syslog.LogTypes != nil || len(syslog.Encryption) == 0 {
+					instance.Spec.AdditionalStores.Syslog.Encryption = v1.EncryptionNone
+				}
 				// Include the field that was modified (in case we need to display error messages)
 				modifiedFields = append(modifiedFields, "AdditionalStores.Syslog.LogTypes")
 			}

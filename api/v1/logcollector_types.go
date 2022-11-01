@@ -136,8 +136,7 @@ type SyslogStoreSpec struct {
 	// omitted, it will be set to include all possible values.
 	LogTypes []SyslogLogType `json:"logTypes"`
 
-	// Configuration for enabling/disabling TLS option.
-	// If TLS, this feature enable tls.
+	// Encryption configures traffic encryption to the Syslog server.
 	// Default: None
 	// +optional
 	// +kubebuilder:validation:Enum=None;TLS

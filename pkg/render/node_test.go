@@ -3284,11 +3284,6 @@ var _ = Describe("Node rendering tests", func() {
 									NodeSelector: map[string]string{
 										"custom-node-selector": "value",
 									},
-									TopologySpreadConstraints: []corev1.TopologySpreadConstraint{
-										{
-											MaxSkew: 1,
-										},
-									},
 									Affinity:    affinity,
 									Tolerations: []corev1.Toleration{toleration},
 								},
@@ -3330,9 +3325,6 @@ var _ = Describe("Node rendering tests", func() {
 
 					Expect(ds.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
 					Expect(ds.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("custom-node-selector", "value"))
-
-					Expect(ds.Spec.Template.Spec.TopologySpreadConstraints).To(HaveLen(1))
-					Expect(ds.Spec.Template.Spec.TopologySpreadConstraints[0].MaxSkew).To(Equal(int32(1)))
 
 					Expect(ds.Spec.Template.Spec.Tolerations).To(HaveLen(1))
 					Expect(ds.Spec.Template.Spec.Tolerations[0]).To(Equal(toleration))

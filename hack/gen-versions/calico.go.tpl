@@ -98,13 +98,6 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
-{{ with index .Components "calico/windows-upgrade"}}
-	ComponentWindowsUpgrade = component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
-	}
-{{- end }}
 {{ with index .Components "calico/csi"}}
 	ComponentCalicoCSI = component{
 		Version:  "{{ .Version }}",

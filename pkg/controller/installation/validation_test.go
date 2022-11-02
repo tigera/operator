@@ -845,37 +845,4 @@ var _ = Describe("Installation validation tests", func() {
 			Expect(err).To(HaveOccurred())
 		})
 	})
-
-	Describe("validate CalicoWindowsUpgradeDaemonSet", func() {
-		It("should return nil when it is empty", func() {
-			instance.Spec.CalicoWindowsUpgradeDaemonSet = &operator.CalicoWindowsUpgradeDaemonSet{}
-			err := validateCustomResource(instance)
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("should return an error if it is invalid", func() {
-			instance.Spec.CalicoWindowsUpgradeDaemonSet = &operator.CalicoWindowsUpgradeDaemonSet{
-				Metadata: &operator.Metadata{
-					Labels: map[string]string{
-						"NoUppercaseOrSpecialCharsLike=Equals":    "b",
-						"WowNoUppercaseOrSpecialCharsLike=Equals": "b",
-					},
-					Annotations: map[string]string{
-						"AnnotNoUppercaseOrSpecialCharsLike=Equals": "bar",
-					},
-				},
-			}
-			err := validateCustomResource(instance)
-			Expect(err).To(HaveOccurred())
-
-			var invalidMinReadySeconds int32 = -1
-			instance.Spec.CalicoWindowsUpgradeDaemonSet = &operator.CalicoWindowsUpgradeDaemonSet{
-				Spec: &operator.CalicoWindowsUpgradeDaemonSetSpec{
-					MinReadySeconds: &invalidMinReadySeconds,
-				},
-			}
-			err = validateCustomResource(instance)
-			Expect(err).To(HaveOccurred())
-		})
-	})
 })

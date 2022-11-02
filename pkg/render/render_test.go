@@ -206,7 +206,6 @@ var _ = Describe("Rendering tests", func() {
 		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		Expect(componentCount(c)).To(Equal(6 + 3 + 4 + 1 + 7 + 6 + 1))
-		Expect(getAKSWindowsUpgraderComponentCount(c)).To(Equal(0))
 	})
 
 	It("should render all resources when variant is Tigera Secure", func() {
@@ -220,7 +219,6 @@ var _ = Describe("Rendering tests", func() {
 		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		Expect(componentCount(c)).To(Equal((6 + 3 + 4 + 1 + 7 + 6 + 1) + 1 + 1))
-		Expect(getAKSWindowsUpgraderComponentCount(c)).To(Equal(0))
 	})
 
 	It("should render all resources when variant is Tigera Secure and Management Cluster", func() {
@@ -294,14 +292,6 @@ var _ = Describe("Rendering tests", func() {
 		for i, expectedRes := range expectedResources {
 			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
-		Expect(getAKSWindowsUpgraderComponentCount(c)).To(Equal(0))
-	})
-
-	It("should render windows upgrader resources for AKS", func() {
-		instance.KubernetesProvider = operatorv1.ProviderAKS
-		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
-		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(getAKSWindowsUpgraderComponentCount(c)).To(Equal(2))
 	})
 
 	It("should render calico with a apparmor profile if annotation is present in installation", func() {
@@ -459,21 +449,6 @@ func componentCount(components []render.Component) int {
 		glog.Printf("Component: %s\n", reflect.TypeOf(c))
 		for i, o := range objsToCreate {
 			glog.Printf(" - %d/%d: %s/%s\n", i, len(objsToCreate), o.GetNamespace(), o.GetName())
-		}
-	}
-	return count
-}
-
-func getAKSWindowsUpgraderComponentCount(components []render.Component) int {
-	var resources []client.Object
-	for _, component := range components {
-		toCreate, _ := component.Objects()
-		resources = append(resources, toCreate...)
-	}
-	count := 0
-	for _, r := range resources {
-		if r.GetName() == common.CalicoWindowsUpgradeResourceName {
-			count += 1
 		}
 	}
 	return count

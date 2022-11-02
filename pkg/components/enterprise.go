@@ -297,12 +297,6 @@ var (
 		Registry: "",
 	}
 
-	ComponentTigeraWindowsUpgrade = component{
-		Version:  "master",
-		Image:    "tigera/calico-windows-upgrade",
-		Registry: "",
-	}
-
 	ComponentFlexVolumePrivate = component{
 		Version:  "master",
 		Image:    "tigera/pod2daemon-flexvol",
@@ -364,7 +358,6 @@ var (
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
 		ComponentLinseed,
-		ComponentTigeraWindowsUpgrade,
 		ComponentDikastes,
 		ComponentFlexVolumePrivate,
 		ComponentCSIPrivate,

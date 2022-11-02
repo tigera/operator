@@ -59,8 +59,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		nlw = NewNodeListWatch(c)
 		tlw = NewTyphaListWatch(c)
 
-		// Create the indexer and informer shared by the typhaAutoscaler and
-		// calicoWindowsUpgrader.
+		// Create the indexer and informer used by the typhaAutoscaler
 		nodeIndexInformer = cache.NewSharedIndexInformer(nlw, &corev1.Node{}, 0, cache.Indexers{})
 
 		ctx, cancel = context.WithCancel(context.Background())

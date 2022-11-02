@@ -1,4 +1,4 @@
-// Copyright (c) 2021, 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -215,29 +215,6 @@ func AssertNodesUnchanged(c kubernetes.Interface, nodes ...*v1.Node) error {
 		Expect(err).To(BeNil())
 		if !reflect.DeepEqual(node, newNode) {
 			return fmt.Errorf("expected node %q to be unchanged", node.Name)
-		}
-	}
-	return nil
-}
-
-func AssertNodesHadUpgradeTriggered(c kubernetes.Interface, nodes ...*v1.Node) error {
-	for _, node := range nodes {
-		newNode, err := c.CoreV1().Nodes().Get(context.Background(), node.Name, metav1.GetOptions{})
-		Expect(err).To(BeNil())
-
-		if _, ok := newNode.Labels[common.CalicoWindowsUpgradeLabel]; !ok {
-			return fmt.Errorf("expected node %q to have upgrade label", node.Name)
-		}
-
-		var found bool
-		for _, taint := range newNode.Spec.Taints {
-			if taint.MatchTaint(common.CalicoWindowsUpgradingTaint) {
-				found = true
-			}
-		}
-
-		if !found {
-			return fmt.Errorf("expected node %q to have upgrade taint", node.Name)
 		}
 	}
 	return nil

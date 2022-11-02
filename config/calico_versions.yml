@@ -15,8 +15,6 @@ components:
     version: master
   calico/apiserver:
     version: master
-  calico/windows-upgrade:
-    version: master
   calico/csi:
     version: master
   csi-node-driver-registrar:

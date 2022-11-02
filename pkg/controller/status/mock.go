@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -85,10 +85,6 @@ func (m *MockStatus) RemoveCronJobs(cjs ...types.NamespacedName) {
 
 func (m *MockStatus) RemoveCertificateSigningRequests(label string) {
 	m.Called(label)
-}
-
-func (m *MockStatus) SetWindowsUpgradeStatus(pending, inProgress, completed []string, err error) {
-	m.Called(pending, inProgress, completed, err)
 }
 
 func (m *MockStatus) SetDegraded(reason operator.TigeraStatusReason, msg string, err error, log logr.Logger) {

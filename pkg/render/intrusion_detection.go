@@ -1118,7 +1118,7 @@ func (c *intrusionDetectionComponent) adJobsGlobalertTemplates() []client.Object
 			Spec: v3.GlobalAlertSpec{
 				Type:        v3.GlobalAlertTypeAnomalyDetection,
 				Description: "DNS tunnel",
-				Summary:     "Looks for DNS queries names in the DNS log with subdomains that can contain encoded information.",
+				Summary:     "Looks for DNS query names in the DNS log with subdomains that can contain encoded information.",
 				Severity:    100,
 				Detector:    &v3.DetectorParams{Name: "dns_tunnel"},
 				Period:      &metav1.Duration{Duration: adDetectionJobsDefaultPeriod},

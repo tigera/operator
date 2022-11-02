@@ -787,11 +787,9 @@ func getSysLogCertificate(client client.Client) (certificatemanagement.Certifica
 		}
 		return nil, fmt.Errorf("Failed to read ConfigMap %q: %s", render.SyslogCAConfigMapName, err)
 	}
-	if cm != nil {
-		if len(cm.Data[render.SyslogCABundleName]) == 0 {
-			log.Info(fmt.Sprintf("ConfigMap %q does not have a field named %q. Assuming internet trusted CA certificate", render.SyslogCAConfigMapName, render.SyslogCABundleName))
-			return nil, nil
-		}
+	if len(cm.Data[render.SyslogCABundleName]) == 0 {
+		log.Info(fmt.Sprintf("ConfigMap %q does not have a field named %q. Assuming internet trusted CA certificate", render.SyslogCAConfigMapName, render.SyslogCABundleName))
+		return nil, nil
 	}
 	syslogCert := certificatemanagement.NewCertificate(render.SyslogCAConfigMapName, []byte(cm.Data[render.SyslogCABundleName]), nil)
 

@@ -70,6 +70,13 @@ const (
 	SplunkFluentdSecretsVolName              = "splunk-certificates"
 	SplunkFluentdDefaultCertDir              = "/etc/ssl/splunk/"
 	SplunkFluentdDefaultCertPath             = SplunkFluentdDefaultCertDir + SplunkFluentdSecretCertificateKey
+	SysLogCertificateSecretName              = "logcollector-syslog-ca-certificate"
+	SysLogInternetCADir                      = "/etc/pki/tls/certs/"
+	SysLogInternetCertKey                    = "ca-bundle.crt"
+	SysLogInternetCAPath                     = SysLogInternetCADir + SysLogInternetCertKey
+	TigeraCertBundleMountPath                = "/etc/fluentd/elastic/tigera-ca-bundle.crt"
+	SyslogCAConfigMapName                    = "syslog-ca"
+	SyslogCABundleName                       = "tls.crt"
 
 	probeTimeoutSeconds        int32 = 5
 	probePeriodSeconds         int32 = 5
@@ -90,6 +97,10 @@ const (
 
 	PacketCaptureAPIRole        = "packetcapture-api-role"
 	PacketCaptureAPIRoleBinding = "packetcapture-api-role-binding"
+
+	// Verification Mode for syslog forwarding.
+	SSLVERIFYNONE = "0"
+	SSLVERIFYPEER = "1"
 )
 
 var FluentdSourceEntityRule = v3.EntityRule{
@@ -157,6 +168,8 @@ type FluentdConfiguration struct {
 
 	// Whether or not the cluster supports pod security policies.
 	UsePSP bool
+	// Whether to use User provided certificate or not.
+	UseUserCA bool
 }
 
 type fluentdComponent struct {
@@ -531,8 +544,6 @@ func (c *fluentdComponent) container() corev1.Container {
 			})
 	}
 
-	volumeMounts = append(volumeMounts, c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()))
-
 	if c.cfg.MetricsServerTLS != nil {
 		volumeMounts = append(volumeMounts, c.cfg.MetricsServerTLS.VolumeMount(c.SupportedOSType()))
 	}
@@ -675,6 +686,24 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 					}
 				}
 			}
+
+			if syslog.Encryption == operatorv1.EncryptionTLS {
+				envs = append(envs,
+					corev1.EnvVar{Name: "SYSLOG_TLS", Value: "true"},
+				)
+				envs = append(envs,
+					corev1.EnvVar{Name: "SYSLOG_VERIFY_MODE", Value: SSLVERIFYPEER},
+				)
+				if c.cfg.UseUserCA {
+					envs = append(envs,
+						corev1.EnvVar{Name: "SYSLOG_CA_FILE", Value: TigeraCertBundleMountPath},
+					)
+				} else {
+					envs = append(envs,
+						corev1.EnvVar{Name: "SYSLOG_CA_FILE", Value: SysLogInternetCAPath},
+					)
+				}
+			}
 		}
 		splunk := c.cfg.LogCollector.Spec.AdditionalStores.Splunk
 		if splunk != nil {
@@ -732,7 +761,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 
 	if c.SupportedOSType() != rmeta.OSTypeWindows {
 		envs = append(envs,
-			corev1.EnvVar{Name: "CA_CRT_PATH", Value: c.cfg.TrustedBundle.MountPath()},
+			corev1.EnvVar{Name: "CA_CRT_PATH", Value: TigeraCertBundleMountPath},
 			corev1.EnvVar{Name: "TLS_KEY_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountKeyFilePath()},
 			corev1.EnvVar{Name: "TLS_CRT_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountCertificateFilePath()},
 		)
@@ -810,7 +839,6 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 				},
 			})
 	}
-
 	if c.cfg.SplkCredential != nil && len(c.cfg.SplkCredential.Certificate) != 0 {
 		volumes = append(volumes,
 			corev1.Volume{

@@ -50,6 +50,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/url"
 )
 
@@ -134,7 +135,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	for _, secretName := range []string{
 		render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret,
 		relasticsearch.PublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret,
-		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName, monitor.PrometheusTLSSecretName,
+		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName, render.SysLogCertificateSecretName, monitor.PrometheusTLSSecretName,
 		render.FluentdPrometheusTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
@@ -221,7 +222,9 @@ func fillDefaults(instance *operatorv1.LogCollector) []string {
 					v1.SyslogLogDNS,
 					v1.SyslogLogFlows,
 				}
-
+				if syslog.LogTypes != nil || len(syslog.Encryption) == 0 {
+					instance.Spec.AdditionalStores.Syslog.Encryption = v1.EncryptionNone
+				}
 				// Include the field that was modified (in case we need to display error messages)
 				modifiedFields = append(modifiedFields, "AdditionalStores.Syslog.LogTypes")
 			}
@@ -429,6 +432,22 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	var UseUserCA bool
+	if instance.Spec.AdditionalStores != nil {
+		if instance.Spec.AdditionalStores.Syslog != nil {
+			syslogCert, err := getSysLogCertificate(r.client)
+			if err != nil {
+				log.Error(err, "Error with syslog credential secret")
+				r.status.SetDegraded("Error with syslog credential secret", err.Error())
+				return reconcile.Result{}, err
+			}
+			if syslogCert != nil {
+				UseUserCA = true
+				trustedBundle.AddCertificates(syslogCert)
+			}
+		}
+	}
+
 	// Try to grab the ManagementClusterConnection CR because we need it for network policy rendering,
 	// as well as validation with respect to Syslog.logTypes.
 	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
@@ -515,6 +534,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		TrustedBundle:    trustedBundle,
 		ManagedCluster:   managedCluster,
 		UsePSP:           r.usePSP,
+		UseUserCA:        UseUserCA,
 	}
 	// Render the fluentd component for Linux
 	comp := render.Fluentd(fluentdCfg)
@@ -565,6 +585,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			TrustedBundle:   trustedBundle,
 			ManagedCluster:  managedCluster,
 			UsePSP:          r.usePSP,
+			UseUserCA:       UseUserCA,
 		}
 		comp = render.Fluentd(fluentdCfg)
 
@@ -752,4 +773,25 @@ func getEksCloudwatchLogConfig(client client.Client, interval int32, region, gro
 		StreamPrefix:  prefix,
 		FetchInterval: interval,
 	}, nil
+}
+func getSysLogCertificate(client client.Client) (certificatemanagement.CertificateInterface, error) {
+	cm := &corev1.ConfigMap{}
+	cmNamespacedName := types.NamespacedName{
+		Name:      render.SyslogCAConfigMapName,
+		Namespace: common.OperatorNamespace(),
+	}
+	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
+		if errors.IsNotFound(err) {
+			log.Info(fmt.Sprintf("ConfigMap %q is not found. Assuming internet trusted CA certificate", render.SyslogCAConfigMapName))
+			return nil, nil
+		}
+		return nil, fmt.Errorf("Failed to read ConfigMap %q: %s", render.SyslogCAConfigMapName, err)
+	}
+	if len(cm.Data[render.SyslogCABundleName]) == 0 {
+		log.Info(fmt.Sprintf("ConfigMap %q does not have a field named %q. Assuming internet trusted CA certificate", render.SyslogCAConfigMapName, render.SyslogCABundleName))
+		return nil, nil
+	}
+	syslogCert := certificatemanagement.NewCertificate(render.SyslogCAConfigMapName, []byte(cm.Data[render.SyslogCABundleName]), nil)
+
+	return syslogCert, nil
 }

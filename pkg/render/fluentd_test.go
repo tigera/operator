@@ -449,29 +449,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}))
 	})
 	It("should render with Syslog configuration with TLS and user's corporate CA", func() {
-		cfg.SysLogCredential = &render.SysLogCredential{
-			Certificate: []byte("Certificates"),
-		}
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: render.FluentdPolicyName, ns: render.LogCollectorNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
-			{name: "logcollector-syslog-ca-certificate", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
-			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-fluentd", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
-			{name: "fluentd-node", ns: "tigera-fluentd", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
-			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
-		}
-
+		cfg.UseUserCA = true
 		var ps int32 = 180
 		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
 			Syslog: &operatorv1.SyslogStoreSpec{
@@ -487,24 +465,16 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 		component := render.Fluentd(cfg)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(len(expectedResources)))
-
-		// Should render the correct resources.
-		i := 0
-		for _, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-			i++
-		}
 
 		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(4))
+		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(3))
 
 		var volnames []string
 		for _, vol := range ds.Spec.Template.Spec.Volumes {
 			volnames = append(volnames, vol.Name)
 		}
-		Expect(volnames).To(ContainElement("syslog-certificates"))
+		Expect(volnames).To(ContainElement("tigera-ca-bundle"))
 
 		envs := ds.Spec.Template.Spec.Containers[0].Env
 
@@ -524,7 +494,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{"SYSLOG_IDS_EVENT_LOG", "true", "", ""},
 			{"SYSLOG_TLS", "true", "", ""},
 			{"SYSLOG_VERIFY_MODE", render.SSLVERIFYPEER, "", ""},
-			{"SYSLOG_CA_FILE", render.SysLogDefaultCertPath, "", ""},
+			{"SYSLOG_CA_FILE", render.TigeraCertBundleMountPath, "", ""},
 		}
 		for _, expected := range expectedEnvs {
 			if expected.val != "" {
@@ -551,26 +521,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}))
 	})
 	It("should render with Syslog configuration with TLS and Internet CA", func() {
-		cfg.SysLogCredential = &render.SysLogCredential{}
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: render.FluentdPolicyName, ns: render.LogCollectorNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
-			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-fluentd", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
-			{name: "fluentd-node", ns: "tigera-fluentd", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
-			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
-		}
-
+		cfg.UseUserCA = false
 		var ps int32 = 180
 		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
 			Syslog: &operatorv1.SyslogStoreSpec{
@@ -586,14 +537,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 		component := render.Fluentd(cfg)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(len(expectedResources)))
-
-		// Should render the correct resources.
-		i := 0
-		for _, expectedRes := range expectedResources {
-			rtest.ExpectResource(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-			i++
-		}
 
 		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))

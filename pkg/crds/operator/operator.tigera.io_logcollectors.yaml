@@ -106,8 +106,8 @@ spec:
                       DNS logs to syslog.
                     properties:
                       encryption:
-                        description: 'Configuration for enabling/disabling TLS option.
-                          If TLS, this feature enable tls. Default: None'
+                        description: 'Encryption configures traffic encryption to
+                          the Syslog server. Default: None'
                         enum:
                         - None
                         - TLS

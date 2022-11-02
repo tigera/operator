@@ -120,9 +120,6 @@ components:
   deep-packet-inspection:
     image: tigera/deep-packet-inspection
     version: master
-  windows-upgrade:
-    image: tigera/calico-windows-upgrade
-    version: master
   flexvol:
     image: tigera/pod2daemon-flexvol
     version: master

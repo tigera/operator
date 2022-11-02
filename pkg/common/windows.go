@@ -21,22 +21,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-var (
-	// This taint is applied to nodes upgrading Calico Windows.
-	CalicoWindowsUpgradingTaint = &corev1.Taint{
-		Key:    CalicoWindowsUpgradeTaintKey,
-		Effect: corev1.TaintEffectNoSchedule,
-	}
-)
-
 const (
-	CalicoWindowsUpgradeResourceName    = "calico-windows-upgrade"
-	CalicoWindowsUpgradeVolumePath      = `c:\CalicoUpgrade`
-	CalicoWindowsUpgradeLabel           = "projectcalico.org/windows-upgrade"
-	CalicoWindowsUpgradeLabelInProgress = "in-progress"
-	CalicoVersionAnnotation             = "projectcalico.org/version"
-	CalicoVariantAnnotation             = "projectcalico.org/variant"
-	CalicoWindowsUpgradeTaintKey        = "projectcalico.org/windows-upgrade"
+	CalicoVersionAnnotation = "projectcalico.org/version"
+	CalicoVariantAnnotation = "projectcalico.org/variant"
 )
 
 // GetNodeVariantAndVersion gets the node's variant and version annotation

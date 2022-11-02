@@ -65,7 +65,6 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/controller/installation/windows"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/controller/migration/convert"
@@ -169,14 +168,13 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 
 	statusManager := status.New(mgr.GetClient(), "calico", opts.KubernetesVersion)
 
-	// The typhaAutoscaler and calicoWindowsUpgrader need a clientset.
+	// The typhaAutoscaler needs a clientset.
 	cs, err := kubernetes.NewForConfig(mgr.GetConfig())
 	if err != nil {
 		return nil, err
 	}
 
-	// Create the SharedIndexInformer used by the typhaAutoscaler and
-	// calicoWindowsUpgrader.
+	// Create the SharedIndexInformer used by the typhaAutoscaler
 	nodeListWatch := cache.NewListWatchFromClient(cs.CoreV1().RESTClient(), "nodes", "", fields.Everything())
 	nodeIndexInformer := cache.NewSharedIndexInformer(nodeListWatch, &corev1.Node{}, 0, cache.Indexers{})
 	go nodeIndexInformer.Run(opts.ShutdownContext.Done())
@@ -185,29 +183,24 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 	typhaListWatch := cache.NewListWatchFromClient(cs.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"))
 	typhaScaler := newTyphaAutoscaler(cs, nodeIndexInformer, typhaListWatch, statusManager)
 
-	// Create a Calico Windows upgrader.
-	calicoWindowsUpgrader := windows.NewCalicoWindowsUpgrader(cs, mgr.GetClient(), nodeIndexInformer, statusManager)
-
 	r := &ReconcileInstallation{
-		config:                mgr.GetConfig(),
-		client:                mgr.GetClient(),
-		scheme:                mgr.GetScheme(),
-		watches:               make(map[runtime.Object]struct{}),
-		autoDetectedProvider:  opts.DetectedProvider,
-		status:                statusManager,
-		typhaAutoscaler:       typhaScaler,
-		calicoWindowsUpgrader: calicoWindowsUpgrader,
-		namespaceMigration:    nm,
-		amazonCRDExists:       opts.AmazonCRDExists,
-		enterpriseCRDsExist:   opts.EnterpriseCRDExists,
-		clusterDomain:         opts.ClusterDomain,
-		manageCRDs:            opts.ManageCRDs,
-		usePSP:                opts.UsePSP,
-		tierWatchReady:        &utils.ReadyFlag{},
+		config:               mgr.GetConfig(),
+		client:               mgr.GetClient(),
+		scheme:               mgr.GetScheme(),
+		watches:              make(map[runtime.Object]struct{}),
+		autoDetectedProvider: opts.DetectedProvider,
+		status:               statusManager,
+		typhaAutoscaler:      typhaScaler,
+		namespaceMigration:   nm,
+		amazonCRDExists:      opts.AmazonCRDExists,
+		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
+		clusterDomain:        opts.ClusterDomain,
+		manageCRDs:           opts.ManageCRDs,
+		usePSP:               opts.UsePSP,
+		tierWatchReady:       &utils.ReadyFlag{},
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
-	r.calicoWindowsUpgrader.Start(opts.ShutdownContext)
 	return r, nil
 }
 
@@ -381,22 +374,21 @@ var _ reconcile.Reconciler = &ReconcileInstallation{}
 type ReconcileInstallation struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	config                *rest.Config
-	client                client.Client
-	scheme                *runtime.Scheme
-	watches               map[runtime.Object]struct{}
-	autoDetectedProvider  operator.Provider
-	status                status.StatusManager
-	typhaAutoscaler       *typhaAutoscaler
-	calicoWindowsUpgrader windows.CalicoWindowsUpgrader
-	namespaceMigration    migration.NamespaceMigration
-	enterpriseCRDsExist   bool
-	amazonCRDExists       bool
-	migrationChecked      bool
-	clusterDomain         string
-	manageCRDs            bool
-	usePSP                bool
-	tierWatchReady        *utils.ReadyFlag
+	config               *rest.Config
+	client               client.Client
+	scheme               *runtime.Scheme
+	watches              map[runtime.Object]struct{}
+	autoDetectedProvider operator.Provider
+	status               status.StatusManager
+	typhaAutoscaler      *typhaAutoscaler
+	namespaceMigration   migration.NamespaceMigration
+	enterpriseCRDsExist  bool
+	amazonCRDExists      bool
+	migrationChecked     bool
+	clusterDomain        string
+	manageCRDs           bool
+	usePSP               bool
+	tierWatchReady       *utils.ReadyFlag
 }
 
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
@@ -932,10 +924,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// Update calicoWindowsUpgrader with the installation it needs to
-	// process Calico Windows upgrades.
-	r.calicoWindowsUpgrader.UpdateConfig(&instance.Spec)
-
 	// now that migrated config is stored in the installation resource, we no longer need
 	// to check if a migration is needed for the lifetime of the operator.
 	r.migrationChecked = true
@@ -1455,12 +1443,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		// Auto-detection will still be used for Calico, but the operator won't know
 		// what the value is.
 		reqLogger.V(1).Info("Unable to determine MTU - no explicit config, and /var/lib/calico is not mounted")
-	}
-
-	// Check whether the calicoWindowsUpgrader is degraded. If so, requeue
-	// a reconcile.
-	if r.calicoWindowsUpgrader.IsDegraded() {
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
 	// We have successfully reconciled the Calico installation.

@@ -88,12 +88,6 @@ var (
 		Registry: "",
 	}
 
-	ComponentWindowsUpgrade = component{
-		Version:  "master",
-		Image:    "calico/windows-upgrade",
-		Registry: "",
-	}
-
 	ComponentCalicoCSI = component{
 		Version:  "master",
 		Image:    "calico/csi",
@@ -135,7 +129,6 @@ var (
 		ComponentOperatorInit,
 		ComponentCalicoAPIServer,
 		ComponentCalicoAPIServerFIPS,
-		ComponentWindowsUpgrade,
 		ComponentCalicoCSI,
 		ComponentCalicoCSIFIPS,
 		ComponentCalicoCSIRegistrar,

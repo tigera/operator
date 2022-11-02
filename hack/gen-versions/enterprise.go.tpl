@@ -343,14 +343,7 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
-{{ with index .Components "windows-upgrade" }}
-	ComponentTigeraWindowsUpgrade = component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
-	}
-{{- end }}
-{{ with index .Components "flexvol" }}
+{pkg/components/calico.go{ with index .Components "flexvol" }}
 	ComponentFlexVolumePrivate = component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
@@ -415,7 +408,6 @@ var (
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
 		ComponentLinseed,
-		ComponentTigeraWindowsUpgrade,
 		ComponentDikastes,
 		ComponentFlexVolumePrivate,
 		ComponentCSIPrivate,

@@ -135,7 +135,7 @@ func add(mgr manager.Manager, c controller.Controller) error {
 	for _, secretName := range []string{
 		render.ElasticsearchLogCollectorUserSecret, render.ElasticsearchEksLogForwarderUserSecret,
 		relasticsearch.PublicCertSecret, render.S3FluentdSecretName, render.EksLogForwarderSecret,
-		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName, render.SysLogCertificateSecretName, monitor.PrometheusTLSSecretName,
+		render.SplunkFluentdTokenSecretName, render.SplunkFluentdCertificateSecretName, monitor.PrometheusTLSSecretName,
 		render.FluentdPrometheusTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
@@ -432,17 +432,17 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	var UseUserCA bool
+	var useUserCA bool
 	if instance.Spec.AdditionalStores != nil {
 		if instance.Spec.AdditionalStores.Syslog != nil {
 			syslogCert, err := getSysLogCertificate(r.client)
 			if err != nil {
-				log.Error(err, "Error with syslog credential secret")
-				r.status.SetDegraded("Error with syslog credential secret", err.Error())
+				log.Error(err, "Error loading Syslog certificate")
+				r.status.SetDegraded("Error loading Syslog certificate", err.Error())
 				return reconcile.Result{}, err
 			}
 			if syslogCert != nil {
-				UseUserCA = true
+				useUserCA = true
 				trustedBundle.AddCertificates(syslogCert)
 			}
 		}
@@ -534,7 +534,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		TrustedBundle:    trustedBundle,
 		ManagedCluster:   managedCluster,
 		UsePSP:           r.usePSP,
-		UseUserCA:        UseUserCA,
+		UseUserCA:        useUserCA,
 	}
 	// Render the fluentd component for Linux
 	comp := render.Fluentd(fluentdCfg)
@@ -585,7 +585,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			TrustedBundle:   trustedBundle,
 			ManagedCluster:  managedCluster,
 			UsePSP:          r.usePSP,
-			UseUserCA:       UseUserCA,
+			UseUserCA:       useUserCA,
 		}
 		comp = render.Fluentd(fluentdCfg)
 

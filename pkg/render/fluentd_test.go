@@ -448,6 +448,144 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			},
 		}))
 	})
+	It("should render with Syslog configuration with TLS and user's corporate CA", func() {
+		cfg.UseUserCA = true
+		var ps int32 = 180
+		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
+			Syslog: &operatorv1.SyslogStoreSpec{
+				Endpoint:   "tcp://1.2.3.4:80",
+				Encryption: operatorv1.EncryptionTLS,
+				PacketSize: &ps,
+				LogTypes: []operatorv1.SyslogLogType{
+					operatorv1.SyslogLogDNS,
+					operatorv1.SyslogLogFlows,
+					operatorv1.SyslogLogIDSEvents,
+				},
+			},
+		}
+		component := render.Fluentd(cfg)
+		resources, _ := component.Objects()
+
+		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(3))
+
+		var volnames []string
+		for _, vol := range ds.Spec.Template.Spec.Volumes {
+			volnames = append(volnames, vol.Name)
+		}
+		Expect(volnames).To(ContainElement("tigera-ca-bundle"))
+
+		envs := ds.Spec.Template.Spec.Containers[0].Env
+
+		expectedEnvs := []struct {
+			name       string
+			val        string
+			secretName string
+			secretKey  string
+		}{
+			{"SYSLOG_HOST", "1.2.3.4", "", ""},
+			{"SYSLOG_PORT", "80", "", ""},
+			{"SYSLOG_PROTOCOL", "tcp", "", ""},
+			{"SYSLOG_FLUSH_INTERVAL", "5s", "", ""},
+			{"SYSLOG_PACKET_SIZE", "180", "", ""},
+			{"SYSLOG_DNS_LOG", "true", "", ""},
+			{"SYSLOG_FLOW_LOG", "true", "", ""},
+			{"SYSLOG_IDS_EVENT_LOG", "true", "", ""},
+			{"SYSLOG_TLS", "true", "", ""},
+			{"SYSLOG_VERIFY_MODE", render.SSLVERIFYPEER, "", ""},
+			{"SYSLOG_CA_FILE", render.TigeraCertBundleMountPath, "", ""},
+		}
+		for _, expected := range expectedEnvs {
+			if expected.val != "" {
+				Expect(envs).To(ContainElement(corev1.EnvVar{Name: expected.name, Value: expected.val}))
+			} else {
+				Expect(envs).To(ContainElement(corev1.EnvVar{
+					Name: expected.name,
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: expected.secretName},
+							Key:                  expected.secretKey,
+						},
+					},
+				}))
+			}
+		}
+		Expect(envs).To(ContainElement(corev1.EnvVar{
+			Name: "SYSLOG_HOSTNAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "spec.nodeName",
+				},
+			},
+		}))
+	})
+	It("should render with Syslog configuration with TLS and Internet CA", func() {
+		cfg.UseUserCA = false
+		var ps int32 = 180
+		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
+			Syslog: &operatorv1.SyslogStoreSpec{
+				Endpoint:   "tcp://1.2.3.4:80",
+				Encryption: operatorv1.EncryptionTLS,
+				PacketSize: &ps,
+				LogTypes: []operatorv1.SyslogLogType{
+					operatorv1.SyslogLogDNS,
+					operatorv1.SyslogLogFlows,
+					operatorv1.SyslogLogIDSEvents,
+				},
+			},
+		}
+		component := render.Fluentd(cfg)
+		resources, _ := component.Objects()
+
+		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(3))
+
+		envs := ds.Spec.Template.Spec.Containers[0].Env
+
+		expectedEnvs := []struct {
+			name       string
+			val        string
+			secretName string
+			secretKey  string
+		}{
+			{"SYSLOG_HOST", "1.2.3.4", "", ""},
+			{"SYSLOG_PORT", "80", "", ""},
+			{"SYSLOG_PROTOCOL", "tcp", "", ""},
+			{"SYSLOG_FLUSH_INTERVAL", "5s", "", ""},
+			{"SYSLOG_PACKET_SIZE", "180", "", ""},
+			{"SYSLOG_DNS_LOG", "true", "", ""},
+			{"SYSLOG_FLOW_LOG", "true", "", ""},
+			{"SYSLOG_IDS_EVENT_LOG", "true", "", ""},
+			{"SYSLOG_TLS", "true", "", ""},
+			{"SYSLOG_VERIFY_MODE", render.SSLVERIFYPEER, "", ""},
+			{"SYSLOG_CA_FILE", render.SysLogInternetCAPath, "", ""},
+		}
+		for _, expected := range expectedEnvs {
+			if expected.val != "" {
+				Expect(envs).To(ContainElement(corev1.EnvVar{Name: expected.name, Value: expected.val}))
+			} else {
+				Expect(envs).To(ContainElement(corev1.EnvVar{
+					Name: expected.name,
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: expected.secretName},
+							Key:                  expected.secretKey,
+						},
+					},
+				}))
+			}
+		}
+		Expect(envs).To(ContainElement(corev1.EnvVar{
+			Name: "SYSLOG_HOSTNAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "spec.nodeName",
+				},
+			},
+		}))
+	})
 
 	It("should render with splunk configuration with ca", func() {
 		cfg.SplkCredential = &render.SplunkCredential{

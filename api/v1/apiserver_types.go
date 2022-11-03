@@ -41,7 +41,7 @@ type APIServerStatus struct {
 // +kubebuilder:subresource:status
 
 // APIServer installs the Tigera API server and related resources. At most one instance
-// of this resource is supported. It must be named "tigera-secure".
+// of this resource is supported. It must be named "default" or "tigera-secure".
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
 type APIServer struct {

@@ -21,6 +21,7 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/testutils"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -197,9 +198,9 @@ var _ = Describe("Elasticsearch metrics", func() {
 											},
 										},
 									},
-									{Name: "ELASTIC_CA", Value: render.TigeraCertBundleMountPath},
-									{Name: "ES_CA_CERT", Value: render.TigeraCertBundleMountPath},
-									{Name: "ES_CURATOR_BACKEND_CERT", Value: render.TigeraCertBundleMountPath},
+									{Name: "ELASTIC_CA", Value: certificatemanagement.TrustedCertBundleMountPath},
+									{Name: "ES_CA_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
+									{Name: "ES_CURATOR_BACKEND_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
 								},
 								VolumeMounts: []corev1.VolumeMount{
 									cfg.ServerTLS.VolumeMount(meta.OSTypeLinux),

@@ -449,7 +449,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}))
 	})
 	It("should render with Syslog configuration with TLS and user's corporate CA", func() {
-		cfg.UseUserCA = true
+		cfg.UseUserCertificate = true
 		var ps int32 = 180
 		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
 			Syslog: &operatorv1.SyslogStoreSpec{
@@ -493,7 +493,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{"SYSLOG_FLOW_LOG", "true", "", ""},
 			{"SYSLOG_IDS_EVENT_LOG", "true", "", ""},
 			{"SYSLOG_TLS", "true", "", ""},
-			{"SYSLOG_VERIFY_MODE", render.SSLVERIFYPEER, "", ""},
+			{"SYSLOG_VERIFY_MODE", "1", "", ""},
 			{"SYSLOG_CA_FILE", render.TigeraCertBundleMountPath, "", ""},
 		}
 		for _, expected := range expectedEnvs {
@@ -521,7 +521,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}))
 	})
 	It("should render with Syslog configuration with TLS and Internet CA", func() {
-		cfg.UseUserCA = false
+		cfg.UseUserCertificate = false
 		var ps int32 = 180
 		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
 			Syslog: &operatorv1.SyslogStoreSpec{
@@ -559,7 +559,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{"SYSLOG_FLOW_LOG", "true", "", ""},
 			{"SYSLOG_IDS_EVENT_LOG", "true", "", ""},
 			{"SYSLOG_TLS", "true", "", ""},
-			{"SYSLOG_VERIFY_MODE", render.SSLVERIFYPEER, "", ""},
+			{"SYSLOG_VERIFY_MODE", "1", "", ""},
 			{"SYSLOG_CA_FILE", render.SysLogInternetCAPath, "", ""},
 		}
 		for _, expected := range expectedEnvs {

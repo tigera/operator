@@ -91,9 +91,9 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				},
 			},
 		},
-		{Name: "ELASTIC_CA", Value: render.TigeraCertBundleMountPath},
-		{Name: "ES_CA_CERT", Value: render.TigeraCertBundleMountPath},
-		{Name: "ES_CURATOR_BACKEND_CERT", Value: render.TigeraCertBundleMountPath},
+		{Name: "ELASTIC_CA", Value: certificatemanagement.TrustedCertBundleMountPath},
+		{Name: "ES_CA_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
+		{Name: "ES_CURATOR_BACKEND_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
 	}
 	expectedPolicyForUnmanaged := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/kubecontrollers.json")
 	expectedPolicyForUnmanagedOCP := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/kubecontrollers_ocp.json")

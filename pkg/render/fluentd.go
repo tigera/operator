@@ -553,6 +553,15 @@ func (c *fluentdComponent) container() corev1.Container {
 		isPrivileged = true
 	}
 
+	// Update ES tigera-ca-bundle path for fluentd.
+	certpath := fluentdCertPath(c.SupportedOSType())
+	envs = append(envs,
+		corev1.EnvVar{Name: "IS_FLUENTD_ELASTIC_CA", Value: "true"},
+		corev1.EnvVar{Name: "ELASTIC_CA", Value: certpath},
+		corev1.EnvVar{Name: "ES_CA_CERT", Value: certpath},
+		corev1.EnvVar{Name: "ES_CURATOR_BACKEND_CERT", Value: certpath},
+	)
+
 	return relasticsearch.ContainerDecorateENVVars(corev1.Container{
 		Name:            "fluentd",
 		Image:           c.image,
@@ -765,7 +774,6 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		corev1.EnvVar{Name: "TLS_KEY_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountKeyFilePath()},
 		corev1.EnvVar{Name: "TLS_CRT_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountCertificateFilePath()},
 	)
-
 	return envs
 }
 
@@ -944,6 +952,7 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 		eksCloudwatchLogCredentialHashAnnotation: rmeta.AnnotationHash(c.cfg.EKSConfig),
 	}
 
+	certpath := fluentdCertPath(c.SupportedOSType())
 	envVars := []corev1.EnvVar{
 		// Meta flags.
 		{Name: "LOG_LEVEL", Value: "info"},
@@ -959,6 +968,11 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 		{Name: "AWS_REGION", Value: c.cfg.EKSConfig.AwsRegion},
 		{Name: "AWS_ACCESS_KEY_ID", ValueFrom: secret.GetEnvVarSource(EksLogForwarderSecret, EksLogForwarderAwsId, false)},
 		{Name: "AWS_SECRET_ACCESS_KEY", ValueFrom: secret.GetEnvVarSource(EksLogForwarderSecret, EksLogForwarderAwsKey, false)},
+		// Update ES tigera-ca-bundle path for fluentd.
+		{Name: "IS_FLUENTD_ELASTIC_CA", Value: "true"},
+		{Name: "ELASTIC_CA", Value: certpath},
+		{Name: "ES_CA_CERT", Value: certpath},
+		{Name: "ES_CURATOR_BACKEND_CERT", Value: certpath},
 	}
 
 	var eksLogForwarderReplicas int32 = 1

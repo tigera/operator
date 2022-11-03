@@ -28,8 +28,6 @@ import (
 const (
 	elasticsearchSecretsAnnotation   = "hash.operator.tigera.io/elasticsearch-secrets"
 	elasticsearchConfigMapAnnotation = "hash.operator.tigera.io/elasticsearch-configmap"
-	TigeraCertBundleMountPathWindows = "c:/etc/fluentd/elastic/tigera-ca-bundle.crt"
-	TigeraCertBundleMountPath        = "/etc/fluentd/elastic/tigera-ca-bundle.crt"
 )
 
 type Annotatable interface {
@@ -46,9 +44,9 @@ func elasticCertDir(osType rmeta.OSType) string {
 
 func elasticCertPath(osType rmeta.OSType) string {
 	if osType == rmeta.OSTypeWindows {
-		return TigeraCertBundleMountPathWindows
+		return certificatemanagement.TrustedCertBundleMountPathWindows
 	}
-	return TigeraCertBundleMountPath
+	return certificatemanagement.TrustedCertBundleMountPath
 }
 
 func DecorateAnnotations(obj Annotatable, config *ClusterConfig, secrets []*corev1.Secret) Annotatable {
@@ -102,12 +100,17 @@ func ContainerDecorateENVVars(
 			Name:      "ELASTIC_PASSWORD",
 			ValueFrom: secret.GetEnvVarSource(esUserSecretName, "password", false),
 		},
-		{Name: "ELASTIC_CA", Value: certPath},
-		{Name: "ES_CA_CERT", Value: certPath},
-		{Name: "ES_CURATOR_BACKEND_CERT", Value: certPath},
 	}
-
 	c.Env = append(c.Env, envVars...)
+
+	// Fluentd uses diff path for tigera-ca-bundle.
+	if !contains(c.Env, "IS_FLUENTD_ELASTIC_CA") {
+		c.Env = append(c.Env,
+			corev1.EnvVar{Name: "ELASTIC_CA", Value: certPath},
+			corev1.EnvVar{Name: "ES_CA_CERT", Value: certPath},
+			corev1.EnvVar{Name: "ES_CURATOR_BACKEND_CERT", Value: certPath},
+		)
+	}
 	return c
 }
 
@@ -117,4 +120,13 @@ func DefaultVolumeMount(osType rmeta.OSType) corev1.VolumeMount {
 		Name:      certificatemanagement.TrustedCertConfigMapName,
 		MountPath: certPath,
 	}
+}
+
+func contains(envVars []corev1.EnvVar, str string) bool {
+	for _, v := range envVars {
+		if v.Name == str {
+			return true
+		}
+	}
+	return false
 }

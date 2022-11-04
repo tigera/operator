@@ -1585,11 +1585,6 @@ func (c *intrusionDetectionComponent) adDetectorPodTemplates() []client.Object {
 }
 
 func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateName string) corev1.PodTemplate {
-	privileged := false
-	if c.cfg.Openshift {
-		privileged = true
-	}
-
 	envVars := []corev1.EnvVar{
 		{
 			Name:  "MODEL_STORAGE_API_HOST",
@@ -1617,7 +1612,7 @@ func (c *intrusionDetectionComponent) getBaseADDetectorsPodTemplate(podTemplateN
 		Name:  "adjobs",
 		Image: c.adDetectorsImage,
 		SecurityContext: &corev1.SecurityContext{
-			Privileged: &privileged,
+			Privileged: ptr.BoolToPtr(false),
 		},
 		Env: envVars,
 		VolumeMounts: []corev1.VolumeMount{

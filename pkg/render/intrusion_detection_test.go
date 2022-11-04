@@ -480,9 +480,11 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		}
 
 		adDetectionPodtemplate := rtest.GetResource(resources, render.ADJobPodTemplateBaseName+".detection", "tigera-intrusion-detection", "", "v1", "PodTemplate").(*corev1.PodTemplate)
+		Expect(*adDetectionPodtemplate.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
 		adDetectionEnvs := adDetectionPodtemplate.Template.Spec.Containers[0].Env
 
 		adTrainingPodtemplate := rtest.GetResource(resources, render.ADJobPodTemplateBaseName+".training", "tigera-intrusion-detection", "", "v1", "PodTemplate").(*corev1.PodTemplate)
+		Expect(*adTrainingPodtemplate.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
 		adTrainingEnvs := adTrainingPodtemplate.Template.Spec.Containers[0].Env
 
 		assertEnvVarlistMatch(adDetectionEnvs, expectedADEnvs)

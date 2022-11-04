@@ -28,8 +28,6 @@ import (
 const (
 	elasticsearchSecretsAnnotation   = "hash.operator.tigera.io/elasticsearch-secrets"
 	elasticsearchConfigMapAnnotation = "hash.operator.tigera.io/elasticsearch-configmap"
-	TigeraCertBundleMountPathWindows = "c:/etc/fluentd/elastic/tigera-ca-bundle.crt"
-	TigeraCertBundleMountPath        = "/etc/fluentd/elastic/tigera-ca-bundle.crt"
 )
 
 type Annotatable interface {
@@ -46,9 +44,9 @@ func elasticCertDir(osType rmeta.OSType) string {
 
 func elasticCertPath(osType rmeta.OSType) string {
 	if osType == rmeta.OSTypeWindows {
-		return TigeraCertBundleMountPathWindows
+		return certificatemanagement.TrustedCertBundleMountPathWindows
 	}
-	return TigeraCertBundleMountPath
+	return certificatemanagement.TrustedCertBundleMountPath
 }
 
 func DecorateAnnotations(obj Annotatable, config *ClusterConfig, secrets []*corev1.Secret) Annotatable {

@@ -21,6 +21,7 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/testutils"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -155,7 +156,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 									"--es.timeout=30s", "--es.ca=$(ELASTIC_CA)", "--web.listen-address=:9081",
 									"--web.telemetry-path=/metrics", "--tls.key=/tigera-ee-elasticsearch-metrics-tls/tls.key",
 									"--tls.crt=/tigera-ee-elasticsearch-metrics-tls/tls.crt",
-									"--ca.crt=/etc/pki/tls/certs/tigera-ca-bundle.crt"},
+									"--ca.crt=/tigera-ca-bundle/tigera-ca-bundle.crt"},
 								Env: []corev1.EnvVar{
 									{Name: "FIPS_MODE_ENABLED", Value: "false"},
 									{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},
@@ -197,9 +198,9 @@ var _ = Describe("Elasticsearch metrics", func() {
 											},
 										},
 									},
-									{Name: "ELASTIC_CA", Value: render.TigeraCertBundleMountPath},
-									{Name: "ES_CA_CERT", Value: render.TigeraCertBundleMountPath},
-									{Name: "ES_CURATOR_BACKEND_CERT", Value: render.TigeraCertBundleMountPath},
+									{Name: "ELASTIC_CA", Value: certificatemanagement.TrustedCertBundleMountPath},
+									{Name: "ES_CA_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
+									{Name: "ES_CURATOR_BACKEND_CERT", Value: certificatemanagement.TrustedCertBundleMountPath},
 								},
 								VolumeMounts: []corev1.VolumeMount{
 									cfg.ServerTLS.VolumeMount(meta.OSTypeLinux),

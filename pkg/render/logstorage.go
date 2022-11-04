@@ -26,15 +26,13 @@ import (
 	"github.com/tigera/api/pkg/lib/numorstring"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 
-	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
-	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
-	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
-	"github.com/elastic/cloud-on-k8s/pkg/controller/common/annotation"
+	cmnv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
+	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
+	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
 
 	"gopkg.in/inf.v0"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
-	batchv1beta "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -331,8 +329,10 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 			if !operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
 				toCreate = append(toCreate,
 					es.kibanaClusterRoleBinding(),
-					es.kibanaClusterRole(),
-					es.kibanaPodSecurityPolicy())
+					es.kibanaClusterRole())
+				if es.cfg.UsePSP {
+					toCreate = append(toCreate, es.kibanaPodSecurityPolicy())
+				}
 			}
 		}
 
@@ -826,9 +826,6 @@ func (es elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ElasticsearchName,
 			Namespace: ElasticsearchNamespace,
-			Annotations: map[string]string{
-				annotation.ControllerVersionAnnotation: components.ComponentECKElasticsearchOperator.Version,
-			},
 		},
 		Spec: esv1.ElasticsearchSpec{
 			Version: components.ComponentEckElasticsearch.Version,
@@ -1063,6 +1060,17 @@ func (es elasticsearchComponent) eckOperatorClusterRole() *rbacv1.ClusterRole {
 			Verbs:     []string{"create"},
 		},
 		{
+			APIGroups: []string{"coordination.k8s.io"},
+			Resources: []string{"leases"},
+			Verbs:     []string{"create"},
+		},
+		{
+			APIGroups:     []string{"coordination.k8s.io"},
+			Resources:     []string{"leases"},
+			ResourceNames: []string{"elastic-operator-leader"},
+			Verbs:         []string{"get", "watch", "update"},
+		},
+		{
 			APIGroups: []string{""},
 			Resources: []string{"pods", "endpoints", "events", "persistentvolumeclaims", "secrets", "services", "configmaps", "serviceaccounts"},
 			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
@@ -1120,6 +1128,11 @@ func (es elasticsearchComponent) eckOperatorClusterRole() *rbacv1.ClusterRole {
 		{
 			APIGroups: []string{"associations.k8s.elastic.co"},
 			Resources: []string{"apmserverelasticsearchassociations", "apmserverelasticsearchassociations/status"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		{
+			APIGroups: []string{"autoscaling.k8s.elastic.co"},
+			Resources: []string{"elasticsearchautoscalers", "elasticsearchautoscalers/status", "elasticsearchautoscalers/finalizers"},
 			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 		},
 	}
@@ -1384,9 +1397,6 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 			Labels: map[string]string{
 				"k8s-app": KibanaName,
 			},
-			Annotations: map[string]string{
-				annotation.ControllerVersionAnnotation: components.ComponentECKElasticsearchOperator.Version,
-			},
 		},
 		Spec: kbv1.KibanaSpec{
 			Version: components.ComponentEckKibana.Version,
@@ -1403,6 +1413,10 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 				},
 			},
 			ElasticsearchRef: cmnv1.ObjectSelector{
+				Name:      ElasticsearchName,
+				Namespace: ElasticsearchNamespace,
+			},
+			EnterpriseSearchRef: cmnv1.ObjectSelector{
 				Name:      ElasticsearchName,
 				Namespace: ElasticsearchNamespace,
 			},
@@ -1457,7 +1471,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 	return kibana
 }
 
-func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
+func (es elasticsearchComponent) curatorCronJob() *batchv1.CronJob {
 	f := false
 	t := true
 	elasticCuratorLivenessProbe := &corev1.Probe{
@@ -1476,7 +1490,7 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
 
 	const schedule = "@hourly"
 
-	return &batchv1beta.CronJob{
+	return &batchv1.CronJob{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "CronJob",
 			APIVersion: "batch/v1",
@@ -1485,9 +1499,9 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
 			Name:      EsCuratorName,
 			Namespace: ElasticsearchNamespace,
 		},
-		Spec: batchv1beta.CronJobSpec{
+		Spec: batchv1.CronJobSpec{
 			Schedule: schedule,
-			JobTemplate: batchv1beta.JobTemplateSpec{
+			JobTemplate: batchv1.JobTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: EsCuratorName,
 					Labels: map[string]string{

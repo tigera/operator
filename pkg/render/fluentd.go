@@ -768,12 +768,13 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		corev1.EnvVar{Name: "ELASTIC_BGP_INDEX_SHARDS", Value: strconv.Itoa(c.cfg.ESClusterConfig.Shards())},
 	)
 
-	bundleMountPath := fluentdCertPath(c.SupportedOSType())
-	envs = append(envs,
-		corev1.EnvVar{Name: "CA_CRT_PATH", Value: bundleMountPath},
-		corev1.EnvVar{Name: "TLS_KEY_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountKeyFilePath()},
-		corev1.EnvVar{Name: "TLS_CRT_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountCertificateFilePath()},
-	)
+	if c.SupportedOSType() != rmeta.OSTypeWindows {
+		envs = append(envs,
+			corev1.EnvVar{Name: "CA_CRT_PATH", Value: TigeraCertBundleMountPath},
+			corev1.EnvVar{Name: "TLS_KEY_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountKeyFilePath()},
+			corev1.EnvVar{Name: "TLS_CRT_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountCertificateFilePath()},
+		)
+	}
 	return envs
 }
 

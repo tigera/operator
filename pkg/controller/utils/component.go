@@ -27,7 +27,6 @@ import (
 	"github.com/go-logr/logr"
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
-	batchv1beta "k8s.io/api/batch/v1beta1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -218,7 +217,7 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 			daemonSets = append(daemonSets, key)
 		case *apps.StatefulSet:
 			statefulsets = append(statefulsets, key)
-		case *batchv1beta.CronJob:
+		case *batchv1.CronJob:
 			cronJobs = append(cronJobs, key)
 		}
 
@@ -248,7 +247,7 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 				status.RemoveDaemonsets(key)
 			case *apps.StatefulSet:
 				status.RemoveStatefulSets(key)
-			case *batchv1beta.CronJob:
+			case *batchv1.CronJob:
 				status.RemoveCronJobs(key)
 			}
 		}
@@ -423,7 +422,7 @@ func modifyPodSpec(obj client.Object, f func(*v1.PodSpec)) {
 		f(&x.Spec.Template.Spec)
 	case *apps.StatefulSet:
 		f(&x.Spec.Template.Spec)
-	case *batchv1beta.CronJob:
+	case *batchv1.CronJob:
 		f(&x.Spec.JobTemplate.Spec.Template.Spec)
 	case *batchv1.Job:
 		f(&x.Spec.Template.Spec)

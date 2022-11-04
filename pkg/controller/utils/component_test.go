@@ -24,7 +24,6 @@ import (
 
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
-	batchv1beta "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -81,7 +80,6 @@ var _ = Describe("Component handler tests", func() {
 
 		Expect(v1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(apps.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-		Expect(batchv1beta.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
 		c = fake.NewClientBuilder().WithScheme(scheme).Build()
@@ -602,7 +600,7 @@ var _ = Describe("Component handler tests", func() {
 			nodeSelectors = x.Spec.Template.Spec.NodeSelector
 		case *apps.StatefulSet:
 			nodeSelectors = x.Spec.Template.Spec.NodeSelector
-		case *batchv1beta.CronJob:
+		case *batchv1.CronJob:
 			nodeSelectors = x.Spec.JobTemplate.Spec.Template.Spec.NodeSelector
 		case *batchv1.Job:
 			nodeSelectors = x.Spec.Template.Spec.NodeSelector
@@ -794,10 +792,10 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: rmeta.OSTypeLinux,
-					objs: []client.Object{&batchv1beta.CronJob{
+					objs: []client.Object{&batchv1.CronJob{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-cronjob"},
-						Spec: batchv1beta.CronJobSpec{
-							JobTemplate: batchv1beta.JobTemplateSpec{
+						Spec: batchv1.CronJobSpec{
+							JobTemplate: batchv1.JobTemplateSpec{
 								Spec: batchv1.JobSpec{
 									Template: v1.PodTemplateSpec{
 										Spec: v1.PodSpec{
@@ -808,7 +806,7 @@ var _ = Describe("Component handler tests", func() {
 							},
 						}},
 					},
-				}, client.ObjectKey{Name: "test-cronjob"}, &batchv1beta.CronJob{},
+				}, client.ObjectKey{Name: "test-cronjob"}, &batchv1.CronJob{},
 				map[string]string{
 					"kubernetes.io/os": "linux",
 				},
@@ -819,10 +817,10 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: rmeta.OSTypeWindows,
-					objs: []client.Object{&batchv1beta.CronJob{
+					objs: []client.Object{&batchv1.CronJob{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-cronjob"},
-						Spec: batchv1beta.CronJobSpec{
-							JobTemplate: batchv1beta.JobTemplateSpec{
+						Spec: batchv1.CronJobSpec{
+							JobTemplate: batchv1.JobTemplateSpec{
 								Spec: batchv1.JobSpec{
 									Template: v1.PodTemplateSpec{
 										Spec: v1.PodSpec{
@@ -833,7 +831,7 @@ var _ = Describe("Component handler tests", func() {
 							},
 						}},
 					},
-				}, client.ObjectKey{Name: "test-cronjob"}, &batchv1beta.CronJob{},
+				}, client.ObjectKey{Name: "test-cronjob"}, &batchv1.CronJob{},
 				map[string]string{
 					"kubernetes.io/os": "windows",
 				},

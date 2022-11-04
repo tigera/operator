@@ -74,6 +74,7 @@ const (
 	SysLogInternetCertKey                    = "ca-bundle.crt"
 	SysLogInternetCAPath                     = SysLogInternetCADir + SysLogInternetCertKey
 	TigeraCertBundleMountPath                = "/etc/fluentd/elastic/tigera-ca-bundle.crt"
+	TigeraCertBundleMountPathWindows         = "c:/etc/fluentd/elastic/tigera-ca-bundle.crt"
 	SyslogCAConfigMapName                    = "syslog-ca"
 	SyslogCABundleName                       = "tls.crt"
 
@@ -96,10 +97,6 @@ const (
 
 	PacketCaptureAPIRole        = "packetcapture-api-role"
 	PacketCaptureAPIRoleBinding = "packetcapture-api-role-binding"
-
-	// Verification Mode for syslog forwarding.
-	SSLVERIFYNONE = "0"
-	SSLVERIFYPEER = "1"
 )
 
 var FluentdSourceEntityRule = v3.EntityRule{
@@ -168,7 +165,7 @@ type FluentdConfiguration struct {
 	// Whether or not the cluster supports pod security policies.
 	UsePSP bool
 	// Whether to use User provided certificate or not.
-	UseUserCA bool
+	UseUserCertificate bool
 }
 
 type fluentdComponent struct {
@@ -190,7 +187,8 @@ func (c *fluentdComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	var err error
-	c.image, err = components.GetReference(components.ComponentFluentd, reg, path, prefix, is)
+	//c.image, err = components.GetReference(components.ComponentFluentd, reg, path, prefix, is)
+	c.image, err = "gcr.io/tigera-dev/vara/tigera/fluentd:mytag0111", nil
 	if err != nil {
 		return err
 	}
@@ -543,6 +541,8 @@ func (c *fluentdComponent) container() corev1.Container {
 			})
 	}
 
+	volumeMounts = append(volumeMounts, c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()))
+
 	if c.cfg.MetricsServerTLS != nil {
 		volumeMounts = append(volumeMounts, c.cfg.MetricsServerTLS.VolumeMount(c.SupportedOSType()))
 	}
@@ -690,10 +690,11 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 				envs = append(envs,
 					corev1.EnvVar{Name: "SYSLOG_TLS", Value: "true"},
 				)
+				// By default, we would be using the secure verification mode OpenSSL::SSL::VERIFY_PEER(1)
 				envs = append(envs,
-					corev1.EnvVar{Name: "SYSLOG_VERIFY_MODE", Value: SSLVERIFYPEER},
+					corev1.EnvVar{Name: "SYSLOG_VERIFY_MODE", Value: "1"},
 				)
-				if c.cfg.UseUserCA {
+				if c.cfg.UseUserCertificate {
 					envs = append(envs,
 						corev1.EnvVar{Name: "SYSLOG_CA_FILE", Value: TigeraCertBundleMountPath},
 					)
@@ -760,12 +761,11 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 
 	if c.SupportedOSType() != rmeta.OSTypeWindows {
 		envs = append(envs,
-			corev1.EnvVar{Name: "CA_CRT_PATH", Value: TigeraCertBundleMountPath},
+			corev1.EnvVar{Name: "CA_CRT_PATH", Value: c.cfg.TrustedBundle.MountPath()},
 			corev1.EnvVar{Name: "TLS_KEY_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountKeyFilePath()},
 			corev1.EnvVar{Name: "TLS_CRT_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountCertificateFilePath()},
 		)
 	}
-
 	return envs
 }
 

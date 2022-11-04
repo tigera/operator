@@ -222,11 +222,11 @@ func fillDefaults(instance *operatorv1.LogCollector) []string {
 					v1.SyslogLogDNS,
 					v1.SyslogLogFlows,
 				}
-				if syslog.LogTypes != nil || len(syslog.Encryption) == 0 {
-					instance.Spec.AdditionalStores.Syslog.Encryption = v1.EncryptionNone
-				}
 				// Include the field that was modified (in case we need to display error messages)
 				modifiedFields = append(modifiedFields, "AdditionalStores.Syslog.LogTypes")
+			}
+			if len(syslog.Encryption) == 0 {
+				instance.Spec.AdditionalStores.Syslog.Encryption = v1.EncryptionNone
 			}
 		}
 	}
@@ -432,9 +432,9 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	var useUserCA bool
+	var useUserCertificate bool
 	if instance.Spec.AdditionalStores != nil {
-		if instance.Spec.AdditionalStores.Syslog != nil {
+		if instance.Spec.AdditionalStores.Syslog != nil && instance.Spec.AdditionalStores.Syslog.Encryption == v1.EncryptionTLS {
 			syslogCert, err := getSysLogCertificate(r.client)
 			if err != nil {
 				log.Error(err, "Error loading Syslog certificate")
@@ -442,7 +442,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 				return reconcile.Result{}, err
 			}
 			if syslogCert != nil {
-				useUserCA = true
+				useUserCertificate = true
 				trustedBundle.AddCertificates(syslogCert)
 			}
 		}
@@ -519,22 +519,22 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	fluentdCfg := &render.FluentdConfiguration{
-		LogCollector:     instance,
-		ESSecrets:        esSecrets,
-		ESClusterConfig:  esClusterConfig,
-		S3Credential:     s3Credential,
-		SplkCredential:   splunkCredential,
-		Filters:          filters,
-		EKSConfig:        eksConfig,
-		PullSecrets:      pullSecrets,
-		Installation:     installation,
-		ClusterDomain:    r.clusterDomain,
-		OSType:           rmeta.OSTypeLinux,
-		MetricsServerTLS: fluentdPrometheusTLS,
-		TrustedBundle:    trustedBundle,
-		ManagedCluster:   managedCluster,
-		UsePSP:           r.usePSP,
-		UseUserCA:        useUserCA,
+		LogCollector:       instance,
+		ESSecrets:          esSecrets,
+		ESClusterConfig:    esClusterConfig,
+		S3Credential:       s3Credential,
+		SplkCredential:     splunkCredential,
+		Filters:            filters,
+		EKSConfig:          eksConfig,
+		PullSecrets:        pullSecrets,
+		Installation:       installation,
+		ClusterDomain:      r.clusterDomain,
+		OSType:             rmeta.OSTypeLinux,
+		MetricsServerTLS:   fluentdPrometheusTLS,
+		TrustedBundle:      trustedBundle,
+		ManagedCluster:     managedCluster,
+		UsePSP:             r.usePSP,
+		UseUserCertificate: useUserCertificate,
 	}
 	// Render the fluentd component for Linux
 	comp := render.Fluentd(fluentdCfg)
@@ -571,21 +571,21 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 
 	if hasWindowsNodes {
 		fluentdCfg = &render.FluentdConfiguration{
-			LogCollector:    instance,
-			ESSecrets:       esSecrets,
-			ESClusterConfig: esClusterConfig,
-			S3Credential:    s3Credential,
-			SplkCredential:  splunkCredential,
-			Filters:         filters,
-			EKSConfig:       eksConfig,
-			PullSecrets:     pullSecrets,
-			Installation:    installation,
-			ClusterDomain:   r.clusterDomain,
-			OSType:          rmeta.OSTypeWindows,
-			TrustedBundle:   trustedBundle,
-			ManagedCluster:  managedCluster,
-			UsePSP:          r.usePSP,
-			UseUserCA:       useUserCA,
+			LogCollector:       instance,
+			ESSecrets:          esSecrets,
+			ESClusterConfig:    esClusterConfig,
+			S3Credential:       s3Credential,
+			SplkCredential:     splunkCredential,
+			Filters:            filters,
+			EKSConfig:          eksConfig,
+			PullSecrets:        pullSecrets,
+			Installation:       installation,
+			ClusterDomain:      r.clusterDomain,
+			OSType:             rmeta.OSTypeWindows,
+			TrustedBundle:      trustedBundle,
+			ManagedCluster:     managedCluster,
+			UsePSP:             r.usePSP,
+			UseUserCertificate: useUserCertificate,
 		}
 		comp = render.Fluentd(fluentdCfg)
 
@@ -782,13 +782,13 @@ func getSysLogCertificate(client client.Client) (certificatemanagement.Certifica
 	}
 	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
 		if errors.IsNotFound(err) {
-			log.Info(fmt.Sprintf("ConfigMap %q is not found. Assuming internet trusted CA certificate", render.SyslogCAConfigMapName))
+			log.Info(fmt.Sprintf("ConfigMap %q is not found,assuming syslog's certificate is signed by publicly trusted CA", render.SyslogCAConfigMapName))
 			return nil, nil
 		}
 		return nil, fmt.Errorf("Failed to read ConfigMap %q: %s", render.SyslogCAConfigMapName, err)
 	}
 	if len(cm.Data[render.SyslogCABundleName]) == 0 {
-		log.Info(fmt.Sprintf("ConfigMap %q does not have a field named %q. Assuming internet trusted CA certificate", render.SyslogCAConfigMapName, render.SyslogCABundleName))
+		log.Info(fmt.Sprintf("ConfigMap %q does not have a field named %q, ,assuming syslog's certificate is signed by publicly trusted CA", render.SyslogCAConfigMapName, render.SyslogCABundleName))
 		return nil, nil
 	}
 	syslogCert := certificatemanagement.NewCertificate(render.SyslogCAConfigMapName, []byte(cm.Data[render.SyslogCABundleName]), nil)

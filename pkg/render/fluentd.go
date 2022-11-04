@@ -73,8 +73,6 @@ const (
 	SysLogInternetCADir                      = "/etc/pki/tls/certs/"
 	SysLogInternetCertKey                    = "ca-bundle.crt"
 	SysLogInternetCAPath                     = SysLogInternetCADir + SysLogInternetCertKey
-	TigeraCertBundleMountPath                = "/etc/fluentd/elastic/tigera-ca-bundle.crt"
-	TigeraCertBundleMountPathWindows         = "c:/etc/fluentd/elastic/tigera-ca-bundle.crt"
 	SyslogCAConfigMapName                    = "syslog-ca"
 	SyslogCABundleName                       = "tls.crt"
 
@@ -187,8 +185,7 @@ func (c *fluentdComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	var err error
-	//c.image, err = components.GetReference(components.ComponentFluentd, reg, path, prefix, is)
-	c.image, err = "gcr.io/tigera-dev/vara/tigera/fluentd:mytag0111", nil
+	c.image, err = components.GetReference(components.ComponentFluentd, reg, path, prefix, is)
 	if err != nil {
 		return err
 	}
@@ -696,7 +693,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 				)
 				if c.cfg.UseUserCertificate {
 					envs = append(envs,
-						corev1.EnvVar{Name: "SYSLOG_CA_FILE", Value: TigeraCertBundleMountPath},
+						corev1.EnvVar{Name: "SYSLOG_CA_FILE", Value: c.cfg.TrustedBundle.MountPath()},
 					)
 				} else {
 					envs = append(envs,

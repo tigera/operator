@@ -121,7 +121,7 @@ var (
 	}
 
 	ComponentAnomalyDetectionJobs = component{
-		Version: "v3.14.2-0",
+		Version: "v3.14.3",
 		Image:   "tigera/anomaly_detection_jobs",
 	}
 

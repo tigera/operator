@@ -494,7 +494,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{"SYSLOG_IDS_EVENT_LOG", "true", "", ""},
 			{"SYSLOG_TLS", "true", "", ""},
 			{"SYSLOG_VERIFY_MODE", "1", "", ""},
-			{"SYSLOG_CA_FILE", render.TigeraCertBundleMountPath, "", ""},
+			{"SYSLOG_CA_FILE", cfg.TrustedBundle.MountPath(), "", ""},
 		}
 		for _, expected := range expectedEnvs {
 			if expected.val != "" {

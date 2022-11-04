@@ -161,6 +161,11 @@ func (c *CalicoWindowsUpgradeDaemonSet) GetAffinity() *v1.Affinity {
 	return nil
 }
 
+func (c *CalicoWindowsUpgradeDaemonSet) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
+	// TopologySpreadConstraints aren't needed for Calico DaemonSet resources.
+	return nil
+}
+
 func (c *CalicoWindowsUpgradeDaemonSet) GetNodeSelector() map[string]string {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {

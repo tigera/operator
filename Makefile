@@ -141,6 +141,8 @@ CONTAINERIZED= mkdir -p .go-pkg-cache $(GOMOD_CACHE) && \
 		--net=host \
 		$(EXTRA_DOCKER_ARGS)
 
+DOCKER_RUN := $(CONTAINERIZED) $(CALICO_BUILD)
+
 BUILD_IMAGE?=tigera/operator
 BUILD_INIT_IMAGE?=tigera/operator-init
 
@@ -652,9 +654,10 @@ deploy: manifests kustomize
 
 # Generate manifests e.g. CRD
 # Can also generate RBAC and webhooks but that is not enabled currently
-manifests: controller-gen
-	$(CONTROLLER_GEN) $(CRD_OPTIONS) paths="./api/..." output:crd:artifacts:config=config/crd/bases
-	for x in $$(find config/crd/bases/*); do sed -i -e '/creationTimestamp: null/d' $$x; done
+manifests:
+	$(DOCKER_RUN) sh -c "\
+		controller-gen $(CRD_OPTIONS) paths="./api/..." output:crd:artifacts:config=config/crd/bases \
+		for x in $$(find config/crd/bases/*); do sed -i -e '/creationTimestamp: null/d' $$x; done"
 
 # Run go fmt against code
 fmt:
@@ -669,8 +672,8 @@ vet: register
 	go vet ./...'
 
 # Generate code
-generate: $(BINDIR)/controller-gen
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+generate:
+	$(DOCKER_RUN) sh -c 'controller-gen object:headerFile="hack/boilerplate.go.txt" paths="./..."'
 
 GO_GET_CONTAINER=docker run --rm \
 		-v $(CURDIR)/$(BINDIR):/go/bin:rw \
@@ -680,19 +683,6 @@ GO_GET_CONTAINER=docker run --rm \
 		$(EXTRA_DOCKER_ARGS) \
 		$(CALICO_BUILD)
 
-# download controller-gen if necessary
-CONTROLLER_GEN=$(BINDIR)/controller-gen
-controller-gen: $(BINDIR)/controller-gen
-$(BINDIR)/controller-gen:
-	mkdir -p $(BINDIR)
-	$(GO_GET_CONTAINER) \
-		sh -c '$(GIT_CONFIG_SSH) \
-		set -e ;\
-		CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
-		cd $$CONTROLLER_GEN_TMP_DIR ;\
-		go mod init tmp ;\
-		go get sigs.k8s.io/controller-tools/cmd/controller-gen@v0.3.0'
-
 KUSTOMIZE=$(BINDIR)/kustomize
 # download kustomize if necessary
 $(BINDIR)/kustomize:
@@ -700,8 +690,8 @@ $(BINDIR)/kustomize:
 	$(GO_GET_CONTAINER) \
 		sh -c '$(GIT_CONFIG_SSH) \
 		set -e ;\
-		CONTROLLER_GEN_TMP_DIR=$$(mktemp -d) ;\
-		cd $$CONTROLLER_GEN_TMP_DIR ;\
+		TMP_DIR=$$(mktemp -d) ;\
+		cd $$TMP_DIR ;\
 		go mod init tmp ;\
 		go get sigs.k8s.io/kustomize/kustomize/v3@v3.5.4 '
 

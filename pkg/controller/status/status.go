@@ -27,7 +27,6 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
-	batch "k8s.io/api/batch/v1beta1"
 	certV1 "k8s.io/api/certificates/v1"
 	certV1beta1 "k8s.io/api/certificates/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -46,12 +45,12 @@ var log = logf.Log.WithName("status_manager")
 // a TigeraStatus API object. The status manager uses the following conditions/states to represent the
 // component's current status:
 //
-// - Available: The component is successfully running. All pods launched by the component are healthy.
-//              An upgrade may or may not be occurring.
-// - Progressing: A state change is occurring. It may be that the component is being installed for the
-//                first time, or being upgraded to a new configuration or version.
-// - Degraded: The component is not running the desired state and is not progressing towards it. Either the
-//             component has not been installed, has been updated with invalid configuration, or has crashed.
+//   - Available: The component is successfully running. All pods launched by the component are healthy.
+//     An upgrade may or may not be occurring.
+//   - Progressing: A state change is occurring. It may be that the component is being installed for the
+//     first time, or being upgraded to a new configuration or version.
+//   - Degraded: The component is not running the desired state and is not progressing towards it. Either the
+//     component has not been installed, has been updated with invalid configuration, or has crashed.
 //
 // Each of these states can be set independently of each other. For example, a component can be both available and
 // degraded if it is running successfully but a configuration change has resulted in a configuration that cannot
@@ -616,7 +615,7 @@ func (m *statusManager) syncState() {
 	}
 
 	for _, depnn := range m.cronjobs {
-		cj := &batch.CronJob{}
+		cj := &batchv1.CronJob{}
 		if err := m.client.Get(context.TODO(), depnn, cj); err != nil {
 			log.WithValues("reason", err).Info("Failed to query cronjobs")
 			continue
@@ -1011,7 +1010,7 @@ func hasPendingCSRUsingCertV1beta1(ctx context.Context, cli client.Client, label
 	return false, nil
 }
 
-//UpdateStatusCondition updates CR's status conditions from tigerastatus conditions.
+// UpdateStatusCondition updates CR's status conditions from tigerastatus conditions.
 func UpdateStatusCondition(statuscondition []metav1.Condition, conditions []operator.TigeraStatusCondition) []metav1.Condition {
 	if statuscondition == nil {
 		statuscondition = []metav1.Condition{}

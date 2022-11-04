@@ -33,7 +33,6 @@ import (
 	"gopkg.in/inf.v0"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
-	batchv1beta "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -1468,7 +1467,7 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 	return kibana
 }
 
-func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
+func (es elasticsearchComponent) curatorCronJob() *batchv1.CronJob {
 	f := false
 	t := true
 	elasticCuratorLivenessProbe := &corev1.Probe{
@@ -1487,7 +1486,7 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
 
 	const schedule = "@hourly"
 
-	return &batchv1beta.CronJob{
+	return &batchv1.CronJob{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "CronJob",
 			APIVersion: "batch/v1",
@@ -1496,9 +1495,9 @@ func (es elasticsearchComponent) curatorCronJob() *batchv1beta.CronJob {
 			Name:      EsCuratorName,
 			Namespace: ElasticsearchNamespace,
 		},
-		Spec: batchv1beta.CronJobSpec{
+		Spec: batchv1.CronJobSpec{
 			Schedule: schedule,
-			JobTemplate: batchv1beta.JobTemplateSpec{
+			JobTemplate: batchv1.JobTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: EsCuratorName,
 					Labels: map[string]string{

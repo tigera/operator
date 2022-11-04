@@ -70,6 +70,15 @@ const (
 	SplunkFluentdSecretsVolName              = "splunk-certificates"
 	SplunkFluentdDefaultCertDir              = "/etc/ssl/splunk/"
 	SplunkFluentdDefaultCertPath             = SplunkFluentdDefaultCertDir + SplunkFluentdSecretCertificateKey
+	SysLogInternetCADir                      = "/etc/pki/tls/certs/"
+	SysLogInternetCertKey                    = "ca-bundle.crt"
+	SysLogInternetCAPath                     = SysLogInternetCADir + SysLogInternetCertKey
+	TigeraCertBundleMountPath                = "/etc/fluentd/elastic/tigera-ca-bundle.crt"
+	TigeraCertBundleMountPathWindows         = "c:/etc/fluentd/elastic/tigera-ca-bundle.crt"
+	TigeraCertVolumeMountPath                = "/etc/fluentd/elastic/"
+	TigeraCertVolumeMountPathWindows         = "c:/etc/fluentd/elastic/"
+	SyslogCAConfigMapName                    = "syslog-ca"
+	SyslogCABundleName                       = "tls.crt"
 
 	probeTimeoutSeconds        int32 = 5
 	probePeriodSeconds         int32 = 5
@@ -157,6 +166,8 @@ type FluentdConfiguration struct {
 
 	// Whether or not the cluster supports pod security policies.
 	UsePSP bool
+	// Whether to use User provided certificate or not.
+	UseUserCertificate bool
 }
 
 type fluentdComponent struct {
@@ -499,10 +510,11 @@ func (c *fluentdComponent) tolerations() []corev1.Toleration {
 // container creates the fluentd container.
 func (c *fluentdComponent) container() corev1.Container {
 	// Determine environment to pass to the CNI init container.
+	mountPath := fluentdCertDir(c.SupportedOSType())
 	envs := c.envvars()
 	volumeMounts := []corev1.VolumeMount{
 		{MountPath: c.path("/var/log/calico"), Name: "var-log-calico"},
-		{MountPath: c.path("/etc/fluentd/elastic"), Name: certificatemanagement.TrustedCertConfigMapName},
+		{MountPath: c.path(mountPath), Name: certificatemanagement.TrustedCertConfigMapName},
 	}
 	if c.cfg.Filters != nil {
 		if c.cfg.Filters.Flow != "" {
@@ -531,8 +543,6 @@ func (c *fluentdComponent) container() corev1.Container {
 			})
 	}
 
-	volumeMounts = append(volumeMounts, c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()))
-
 	if c.cfg.MetricsServerTLS != nil {
 		volumeMounts = append(volumeMounts, c.cfg.MetricsServerTLS.VolumeMount(c.SupportedOSType()))
 	}
@@ -542,6 +552,15 @@ func (c *fluentdComponent) container() corev1.Container {
 	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
 		isPrivileged = true
 	}
+
+	// Update ES tigera-ca-bundle path for fluentd.
+	certpath := fluentdCertPath(c.SupportedOSType())
+	envs = append(envs,
+		corev1.EnvVar{Name: "IS_FLUENTD_ELASTIC_CA", Value: "true"},
+		corev1.EnvVar{Name: "ELASTIC_CA", Value: certpath},
+		corev1.EnvVar{Name: "ES_CA_CERT", Value: certpath},
+		corev1.EnvVar{Name: "ES_CURATOR_BACKEND_CERT", Value: certpath},
+	)
 
 	return relasticsearch.ContainerDecorateENVVars(corev1.Container{
 		Name:            "fluentd",
@@ -675,6 +694,25 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 					}
 				}
 			}
+
+			if syslog.Encryption == operatorv1.EncryptionTLS {
+				envs = append(envs,
+					corev1.EnvVar{Name: "SYSLOG_TLS", Value: "true"},
+				)
+				// By default, we would be using the secure verification mode OpenSSL::SSL::VERIFY_PEER(1)
+				envs = append(envs,
+					corev1.EnvVar{Name: "SYSLOG_VERIFY_MODE", Value: "1"},
+				)
+				if c.cfg.UseUserCertificate {
+					envs = append(envs,
+						corev1.EnvVar{Name: "SYSLOG_CA_FILE", Value: TigeraCertBundleMountPath},
+					)
+				} else {
+					envs = append(envs,
+						corev1.EnvVar{Name: "SYSLOG_CA_FILE", Value: SysLogInternetCAPath},
+					)
+				}
+			}
 		}
 		splunk := c.cfg.LogCollector.Spec.AdditionalStores.Splunk
 		if splunk != nil {
@@ -732,12 +770,11 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 
 	if c.SupportedOSType() != rmeta.OSTypeWindows {
 		envs = append(envs,
-			corev1.EnvVar{Name: "CA_CRT_PATH", Value: c.cfg.TrustedBundle.MountPath()},
+			corev1.EnvVar{Name: "CA_CRT_PATH", Value: TigeraCertBundleMountPath},
 			corev1.EnvVar{Name: "TLS_KEY_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountKeyFilePath()},
 			corev1.EnvVar{Name: "TLS_CRT_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountCertificateFilePath()},
 		)
 	}
-
 	return envs
 }
 
@@ -810,7 +847,6 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 				},
 			})
 	}
-
 	if c.cfg.SplkCredential != nil && len(c.cfg.SplkCredential.Certificate) != 0 {
 		volumes = append(volumes,
 			corev1.Volume{
@@ -917,6 +953,7 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 		eksCloudwatchLogCredentialHashAnnotation: rmeta.AnnotationHash(c.cfg.EKSConfig),
 	}
 
+	certpath := fluentdCertPath(c.SupportedOSType())
 	envVars := []corev1.EnvVar{
 		// Meta flags.
 		{Name: "LOG_LEVEL", Value: "info"},
@@ -932,6 +969,11 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 		{Name: "AWS_REGION", Value: c.cfg.EKSConfig.AwsRegion},
 		{Name: "AWS_ACCESS_KEY_ID", ValueFrom: secret.GetEnvVarSource(EksLogForwarderSecret, EksLogForwarderAwsId, false)},
 		{Name: "AWS_SECRET_ACCESS_KEY", ValueFrom: secret.GetEnvVarSource(EksLogForwarderSecret, EksLogForwarderAwsKey, false)},
+		// Update ES tigera-ca-bundle path for fluentd.
+		{Name: "IS_FLUENTD_ELASTIC_CA", Value: "true"},
+		{Name: "ELASTIC_CA", Value: certpath},
+		{Name: "ES_CA_CERT", Value: certpath},
+		{Name: "ES_CURATOR_BACKEND_CERT", Value: certpath},
 	}
 
 	var eksLogForwarderReplicas int32 = 1
@@ -1126,4 +1168,17 @@ func (c *fluentdComponent) allowTigeraPolicy() *v3.NetworkPolicy {
 			Egress: egressRules,
 		},
 	}
+}
+func fluentdCertDir(osType rmeta.OSType) string {
+	if osType == rmeta.OSTypeWindows {
+		return TigeraCertVolumeMountPathWindows
+	}
+	return TigeraCertVolumeMountPath
+}
+
+func fluentdCertPath(osType rmeta.OSType) string {
+	if osType == rmeta.OSTypeWindows {
+		return TigeraCertBundleMountPathWindows
+	}
+	return TigeraCertBundleMountPath
 }

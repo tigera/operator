@@ -25,12 +25,12 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/render/testutils"
 
-	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
-	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
+	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
+	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	appsv1 "k8s.io/api/apps/v1"
-	batchv1beta "k8s.io/api/batch/v1beta1"
+	batchv1 "k8s.io/api/batch/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -182,7 +182,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 				// Should not contain any PodSecurityPolicies
 				for _, r := range resources {
-					Expect(r.GetObjectKind()).NotTo(Equal("PodSecurityPolicy"))
+					Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("PodSecurityPolicy"))
 				}
 			})
 
@@ -482,7 +482,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{render.EsCuratorName, "", &rbacv1.ClusterRole{}, nil},
 					{render.EsCuratorName, "", &rbacv1.ClusterRoleBinding{}, nil},
 					{render.EsCuratorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
-					{render.EsCuratorName, render.ElasticsearchNamespace, &batchv1beta.CronJob{}, nil},
+					{render.EsCuratorName, render.ElasticsearchNamespace, &batchv1.CronJob{}, nil},
 					{render.EsManagerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
 					{render.EsManagerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
 				}
@@ -491,7 +491,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				component := render.LogStorage(cfg)
 				createResources, deleteResources := component.Objects()
 
-				cronjob, ok := rtest.GetResource(createResources, "elastic-curator", "tigera-elasticsearch", "batch", "v1", "CronJob").(*batchv1beta.CronJob)
+				cronjob, ok := rtest.GetResource(createResources, "elastic-curator", "tigera-elasticsearch", "batch", "v1", "CronJob").(*batchv1.CronJob)
 				Expect(ok).To(BeTrue())
 
 				Expect(cronjob.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Env).To(ContainElements([]corev1.EnvVar{
@@ -717,7 +717,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			compareResources(createResources, expectedCreateResources)
 			compareResources(deleteResources, []resourceTestObj{
 				{render.KibanaName, render.KibanaNamespace, &kbv1.Kibana{}, nil},
-				{render.EsCuratorName, render.ElasticsearchNamespace, &batchv1beta.CronJob{}, nil},
+				{render.EsCuratorName, render.ElasticsearchNamespace, &batchv1.CronJob{}, nil},
 			})
 
 			es := getElasticsearch(createResources)

@@ -28,7 +28,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/elastic/cloud-on-k8s/pkg/utils/stringsutil"
+	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 	"github.com/go-logr/logr"
 	configv1 "github.com/openshift/api/config/v1"
 

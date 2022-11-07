@@ -123,7 +123,7 @@ components:
     image: tigera/eck-operator
     version: master
   eck-elasticsearch-operator:
-    version: 1.8.0
+    version: 2.5.0
   l7-collector:
     image: tigera/l7-collector
     version: master

@@ -70,11 +70,10 @@ const (
 	SplunkFluentdSecretsVolName              = "splunk-certificates"
 	SplunkFluentdDefaultCertDir              = "/etc/ssl/splunk/"
 	SplunkFluentdDefaultCertPath             = SplunkFluentdDefaultCertDir + SplunkFluentdSecretCertificateKey
-	SysLogInternetCADir                      = "/etc/pki/tls/certs/"
-	SysLogInternetCertKey                    = "ca-bundle.crt"
-	SysLogInternetCAPath                     = SysLogInternetCADir + SysLogInternetCertKey
+	SysLogPublicCADir                        = "/etc/pki/tls/certs/"
+	SysLogPublicCertKey                      = "ca-bundle.crt"
+	SysLogPublicCAPath                       = SysLogPublicCADir + SysLogPublicCertKey
 	SyslogCAConfigMapName                    = "syslog-ca"
-	SyslogCABundleName                       = "tls.crt"
 
 	probeTimeoutSeconds        int32 = 5
 	probePeriodSeconds         int32 = 5
@@ -163,7 +162,7 @@ type FluentdConfiguration struct {
 	// Whether or not the cluster supports pod security policies.
 	UsePSP bool
 	// Whether to use User provided certificate or not.
-	UseUserCertificate bool
+	UseSyslogCertificate bool
 }
 
 type fluentdComponent struct {
@@ -691,13 +690,13 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 				envs = append(envs,
 					corev1.EnvVar{Name: "SYSLOG_VERIFY_MODE", Value: "1"},
 				)
-				if c.cfg.UseUserCertificate {
+				if c.cfg.UseSyslogCertificate {
 					envs = append(envs,
 						corev1.EnvVar{Name: "SYSLOG_CA_FILE", Value: c.cfg.TrustedBundle.MountPath()},
 					)
 				} else {
 					envs = append(envs,
-						corev1.EnvVar{Name: "SYSLOG_CA_FILE", Value: SysLogInternetCAPath},
+						corev1.EnvVar{Name: "SYSLOG_CA_FILE", Value: SysLogPublicCAPath},
 					)
 				}
 			}

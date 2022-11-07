@@ -1434,6 +1434,11 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_VXLANMTUV6", Value: vxlanMtuV6})
 			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_WIREGUARDMTUV6", Value: wireguardMtuV6})
 		}
+	} else if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.NodeAddressAutodetectionV6 != nil {
+		// if v6Method is empty string and v6 autodetection is not nil then the user is setting
+		// the v6 Address on nodes manually and want to use IPv6.
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "IP6", Value: "none"})
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_IPV6SUPPORT", Value: "true"})
 	} else {
 		// IPv6 Auto-detection is disabled.
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "IP6", Value: "none"})

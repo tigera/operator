@@ -156,7 +156,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 									"--es.timeout=30s", "--es.ca=$(ELASTIC_CA)", "--web.listen-address=:9081",
 									"--web.telemetry-path=/metrics", "--tls.key=/tigera-ee-elasticsearch-metrics-tls/tls.key",
 									"--tls.crt=/tigera-ee-elasticsearch-metrics-tls/tls.crt",
-									"--ca.crt=/etc/pki/tls/certs/tigera-ca-bundle.crt"},
+									"--ca.crt=/tigera-ca-bundle/tigera-ca-bundle.crt"},
 								Env: []corev1.EnvVar{
 									{Name: "FIPS_MODE_ENABLED", Value: "false"},
 									{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},

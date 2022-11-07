@@ -70,6 +70,10 @@ const (
 	SplunkFluentdSecretsVolName              = "splunk-certificates"
 	SplunkFluentdDefaultCertDir              = "/etc/ssl/splunk/"
 	SplunkFluentdDefaultCertPath             = SplunkFluentdDefaultCertDir + SplunkFluentdSecretCertificateKey
+	SysLogPublicCADir                        = "/etc/pki/tls/certs/"
+	SysLogPublicCertKey                      = "ca-bundle.crt"
+	SysLogPublicCAPath                       = SysLogPublicCADir + SysLogPublicCertKey
+	SyslogCAConfigMapName                    = "syslog-ca"
 
 	probeTimeoutSeconds        int32 = 5
 	probePeriodSeconds         int32 = 5
@@ -157,6 +161,8 @@ type FluentdConfiguration struct {
 
 	// Whether or not the cluster supports pod security policies.
 	UsePSP bool
+	// Whether to use User provided certificate or not.
+	UseSyslogCertificate bool
 }
 
 type fluentdComponent struct {
@@ -675,6 +681,25 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 					}
 				}
 			}
+
+			if syslog.Encryption == operatorv1.EncryptionTLS {
+				envs = append(envs,
+					corev1.EnvVar{Name: "SYSLOG_TLS", Value: "true"},
+				)
+				// By default, we would be using the secure verification mode OpenSSL::SSL::VERIFY_PEER(1)
+				envs = append(envs,
+					corev1.EnvVar{Name: "SYSLOG_VERIFY_MODE", Value: "1"},
+				)
+				if c.cfg.UseSyslogCertificate {
+					envs = append(envs,
+						corev1.EnvVar{Name: "SYSLOG_CA_FILE", Value: c.cfg.TrustedBundle.MountPath()},
+					)
+				} else {
+					envs = append(envs,
+						corev1.EnvVar{Name: "SYSLOG_CA_FILE", Value: SysLogPublicCAPath},
+					)
+				}
+			}
 		}
 		splunk := c.cfg.LogCollector.Spec.AdditionalStores.Splunk
 		if splunk != nil {
@@ -737,7 +762,6 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 			corev1.EnvVar{Name: "TLS_CRT_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountCertificateFilePath()},
 		)
 	}
-
 	return envs
 }
 
@@ -810,7 +834,6 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 				},
 			})
 	}
-
 	if c.cfg.SplkCredential != nil && len(c.cfg.SplkCredential.Certificate) != 0 {
 		volumes = append(volumes,
 			corev1.Volume{

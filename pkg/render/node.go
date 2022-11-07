@@ -1426,6 +1426,14 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		if v4Method == "" && bgpEnabled(c.cfg.Installation) {
 			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_ROUTER_ID", Value: "hash"})
 		}
+
+		// Set IPv6 VXLAN and Wireguard MTU
+		if mtu != nil {
+			vxlanMtuV6 := strconv.Itoa(int(*mtu))
+			wireguardMtuV6 := strconv.Itoa(int(*mtu))
+			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_VXLANMTUV6", Value: vxlanMtuV6})
+			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_WIREGUARDMTUV6", Value: wireguardMtuV6})
+		}
 	} else {
 		// IPv6 Auto-detection is disabled.
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "IP6", Value: "none"})
@@ -1479,6 +1487,11 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 			// We also need to configure a non-default trusted DNS server, since there's no kube-dns.
 			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"})
+		}
+	case operatorv1.ProviderRKE2:
+		// For RKE2, configure a non-default trusted DNS server, as the DNS service is not named "kube-dns".
+		if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:kube-system/rke2-coredns-rke2-coredns"})
 		}
 	// For AKS/AzureVNET and EKS/VPCCNI, we must explicitly ask felix to add host IP's to wireguard ifaces
 	case operatorv1.ProviderAKS:

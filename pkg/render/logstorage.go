@@ -604,6 +604,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 
 	// For OpenShift, set the user to run as non-root specifically. This prevents issues with the elasticsearch
 	// image which requires that root users have permissions to run CHROOT which is not given in OpenShift.
+	// TODO: Consider removing for ES >= 8.0.0. See https://github.com/elastic/cloud-on-k8s/issues/2791 for considerations.
 	if es.cfg.Provider == operatorv1.ProviderOpenShift {
 		esContainer.SecurityContext = &corev1.SecurityContext{
 			RunAsUser: ptr.Int64ToPtr(1000),

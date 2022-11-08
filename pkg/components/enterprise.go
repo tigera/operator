@@ -79,7 +79,7 @@ var (
 	}
 
 	ComponentECKElasticsearchOperator = component{
-		Version: "1.8.0",
+		Version: "2.5.0",
 	}
 
 	ComponentElasticsearchOperator = component{

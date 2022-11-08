@@ -25,13 +25,13 @@ import (
 
 	"github.com/stretchr/testify/mock"
 
-	cmnv1 "github.com/elastic/cloud-on-k8s/pkg/apis/common/v1"
-	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
-	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
+	cmnv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
+	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
+	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
 
 	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
-	batchv1beta "k8s.io/api/batch/v1beta1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
@@ -108,7 +108,7 @@ var _ = Describe("LogStorage controller", func() {
 		Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-		Expect(batchv1beta.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(admissionv1beta1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
 		ctx = context.Background()
@@ -473,7 +473,7 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(result).Should(Equal(reconcile.Result{}))
 
 					By("confirming curator job is created")
-					Expect(cli.Get(ctx, curatorObjKey, &batchv1beta.CronJob{})).ShouldNot(HaveOccurred())
+					Expect(cli.Get(ctx, curatorObjKey, &batchv1.CronJob{})).ShouldNot(HaveOccurred())
 
 					mockStatus.AssertExpectations(GinkgoT())
 				})
@@ -585,7 +585,7 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(result).Should(Equal(reconcile.Result{}))
 
 					By("confirming curator job is created")
-					Expect(cli.Get(ctx, curatorObjKey, &batchv1beta.CronJob{})).ShouldNot(HaveOccurred())
+					Expect(cli.Get(ctx, curatorObjKey, &batchv1.CronJob{})).ShouldNot(HaveOccurred())
 
 					By("confirming logstorage is degraded if ConfigMap is not available")
 					mockStatus.On("SetDegraded", "Failed to get oidc user Secret and ConfigMap", "configmaps \"tigera-known-oidc-users\" not found").Return()
@@ -1108,11 +1108,11 @@ var _ = Describe("LogStorage controller", func() {
 						Expect(err).ShouldNot(HaveOccurred())
 
 						By("confirming curator job is created")
-						Expect(cli.Get(ctx, curatorObjKey, &batchv1beta.CronJob{})).ShouldNot(HaveOccurred())
+						Expect(cli.Get(ctx, curatorObjKey, &batchv1.CronJob{})).ShouldNot(HaveOccurred())
 
 						mockStatus.AssertExpectations(GinkgoT())
 
-						cj := batchv1beta.CronJob{
+						cj := batchv1.CronJob{
 							TypeMeta: metav1.TypeMeta{Kind: "CronJob", APIVersion: "v1"},
 							ObjectMeta: metav1.ObjectMeta{
 								Name:      render.EsCuratorName,
@@ -1231,11 +1231,11 @@ var _ = Describe("LogStorage controller", func() {
 						Expect(err).ShouldNot(HaveOccurred())
 
 						By("confirming curator job is created")
-						Expect(cli.Get(ctx, curatorObjKey, &batchv1beta.CronJob{})).ShouldNot(HaveOccurred())
+						Expect(cli.Get(ctx, curatorObjKey, &batchv1.CronJob{})).ShouldNot(HaveOccurred())
 
 						mockStatus.AssertExpectations(GinkgoT())
 
-						cj := batchv1beta.CronJob{
+						cj := batchv1.CronJob{
 							TypeMeta: metav1.TypeMeta{Kind: "CronJob", APIVersion: "v1"},
 							ObjectMeta: metav1.ObjectMeta{
 								Name:      render.EsCuratorName,

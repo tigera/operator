@@ -478,46 +478,18 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 		envs := ds.Spec.Template.Spec.Containers[0].Env
 
-		expectedEnvs := []struct {
-			name       string
-			val        string
-			secretName string
-			secretKey  string
-		}{
-			{"SYSLOG_HOST", "1.2.3.4", "", ""},
-			{"SYSLOG_PORT", "80", "", ""},
-			{"SYSLOG_PROTOCOL", "tcp", "", ""},
-			{"SYSLOG_FLUSH_INTERVAL", "5s", "", ""},
-			{"SYSLOG_PACKET_SIZE", "180", "", ""},
-			{"SYSLOG_DNS_LOG", "true", "", ""},
-			{"SYSLOG_FLOW_LOG", "true", "", ""},
-			{"SYSLOG_IDS_EVENT_LOG", "true", "", ""},
-			{"SYSLOG_TLS", "true", "", ""},
-			{"SYSLOG_VERIFY_MODE", "1", "", ""},
-			{"SYSLOG_CA_FILE", cfg.TrustedBundle.MountPath(), "", ""},
-		}
-		for _, expected := range expectedEnvs {
-			if expected.val != "" {
-				Expect(envs).To(ContainElement(corev1.EnvVar{Name: expected.name, Value: expected.val}))
-			} else {
-				Expect(envs).To(ContainElement(corev1.EnvVar{
-					Name: expected.name,
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: expected.secretName},
-							Key:                  expected.secretKey,
-						},
-					},
-				}))
-			}
-		}
-		Expect(envs).To(ContainElement(corev1.EnvVar{
-			Name: "SYSLOG_HOSTNAME",
-			ValueFrom: &corev1.EnvVarSource{
-				FieldRef: &corev1.ObjectFieldSelector{
-					FieldPath: "spec.nodeName",
-				},
-			},
+		Expect(envs).To(ContainElements([]corev1.EnvVar{
+			{Name: "SYSLOG_HOST", Value: "1.2.3.4", ValueFrom: nil},
+			{Name: "SYSLOG_PORT", Value: "80", ValueFrom: nil},
+			{Name: "SYSLOG_PROTOCOL", Value: "tcp", ValueFrom: nil},
+			{Name: "SYSLOG_FLUSH_INTERVAL", Value: "5s", ValueFrom: nil},
+			{Name: "SYSLOG_PACKET_SIZE", Value: "180", ValueFrom: nil},
+			{Name: "SYSLOG_DNS_LOG", Value: "true", ValueFrom: nil},
+			{Name: "SYSLOG_FLOW_LOG", Value: "true", ValueFrom: nil},
+			{Name: "SYSLOG_IDS_EVENT_LOG", Value: "true", ValueFrom: nil},
+			{Name: "SYSLOG_TLS", Value: "true", ValueFrom: nil},
+			{Name: "SYSLOG_VERIFY_MODE", Value: "1", ValueFrom: nil},
+			{Name: "SYSLOG_CA_FILE", Value: cfg.TrustedBundle.MountPath(), ValueFrom: nil},
 		}))
 	})
 	It("should render with Syslog configuration with TLS and Internet CA", func() {
@@ -544,46 +516,18 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 		envs := ds.Spec.Template.Spec.Containers[0].Env
 
-		expectedEnvs := []struct {
-			name       string
-			val        string
-			secretName string
-			secretKey  string
-		}{
-			{"SYSLOG_HOST", "1.2.3.4", "", ""},
-			{"SYSLOG_PORT", "80", "", ""},
-			{"SYSLOG_PROTOCOL", "tcp", "", ""},
-			{"SYSLOG_FLUSH_INTERVAL", "5s", "", ""},
-			{"SYSLOG_PACKET_SIZE", "180", "", ""},
-			{"SYSLOG_DNS_LOG", "true", "", ""},
-			{"SYSLOG_FLOW_LOG", "true", "", ""},
-			{"SYSLOG_IDS_EVENT_LOG", "true", "", ""},
-			{"SYSLOG_TLS", "true", "", ""},
-			{"SYSLOG_VERIFY_MODE", "1", "", ""},
-			{"SYSLOG_CA_FILE", render.SysLogPublicCAPath, "", ""},
-		}
-		for _, expected := range expectedEnvs {
-			if expected.val != "" {
-				Expect(envs).To(ContainElement(corev1.EnvVar{Name: expected.name, Value: expected.val}))
-			} else {
-				Expect(envs).To(ContainElement(corev1.EnvVar{
-					Name: expected.name,
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: expected.secretName},
-							Key:                  expected.secretKey,
-						},
-					},
-				}))
-			}
-		}
-		Expect(envs).To(ContainElement(corev1.EnvVar{
-			Name: "SYSLOG_HOSTNAME",
-			ValueFrom: &corev1.EnvVarSource{
-				FieldRef: &corev1.ObjectFieldSelector{
-					FieldPath: "spec.nodeName",
-				},
-			},
+		Expect(envs).To(ContainElements([]corev1.EnvVar{
+			{Name: "SYSLOG_HOST", Value: "1.2.3.4", ValueFrom: nil},
+			{Name: "SYSLOG_PORT", Value: "80", ValueFrom: nil},
+			{Name: "SYSLOG_PROTOCOL", Value: "tcp", ValueFrom: nil},
+			{Name: "SYSLOG_FLUSH_INTERVAL", Value: "5s", ValueFrom: nil},
+			{Name: "SYSLOG_PACKET_SIZE", Value: "180", ValueFrom: nil},
+			{Name: "SYSLOG_DNS_LOG", Value: "true", ValueFrom: nil},
+			{Name: "SYSLOG_FLOW_LOG", Value: "true", ValueFrom: nil},
+			{Name: "SYSLOG_IDS_EVENT_LOG", Value: "true", ValueFrom: nil},
+			{Name: "SYSLOG_TLS", Value: "true", ValueFrom: nil},
+			{Name: "SYSLOG_VERIFY_MODE", Value: "1", ValueFrom: nil},
+			{Name: "SYSLOG_CA_FILE", Value: render.SysLogPublicCAPath, ValueFrom: nil},
 		}))
 	})
 

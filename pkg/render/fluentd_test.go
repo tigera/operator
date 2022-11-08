@@ -448,6 +448,88 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			},
 		}))
 	})
+	It("should render with Syslog configuration with TLS and user's corporate CA", func() {
+		cfg.UseSyslogCertificate = true
+		var ps int32 = 180
+		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
+			Syslog: &operatorv1.SyslogStoreSpec{
+				Endpoint:   "tcp://1.2.3.4:80",
+				Encryption: operatorv1.EncryptionTLS,
+				PacketSize: &ps,
+				LogTypes: []operatorv1.SyslogLogType{
+					operatorv1.SyslogLogDNS,
+					operatorv1.SyslogLogFlows,
+					operatorv1.SyslogLogIDSEvents,
+				},
+			},
+		}
+		component := render.Fluentd(cfg)
+		resources, _ := component.Objects()
+
+		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(3))
+
+		var volnames []string
+		for _, vol := range ds.Spec.Template.Spec.Volumes {
+			volnames = append(volnames, vol.Name)
+		}
+		Expect(volnames).To(ContainElement("tigera-ca-bundle"))
+
+		envs := ds.Spec.Template.Spec.Containers[0].Env
+
+		Expect(envs).To(ContainElements([]corev1.EnvVar{
+			{Name: "SYSLOG_HOST", Value: "1.2.3.4", ValueFrom: nil},
+			{Name: "SYSLOG_PORT", Value: "80", ValueFrom: nil},
+			{Name: "SYSLOG_PROTOCOL", Value: "tcp", ValueFrom: nil},
+			{Name: "SYSLOG_FLUSH_INTERVAL", Value: "5s", ValueFrom: nil},
+			{Name: "SYSLOG_PACKET_SIZE", Value: "180", ValueFrom: nil},
+			{Name: "SYSLOG_DNS_LOG", Value: "true", ValueFrom: nil},
+			{Name: "SYSLOG_FLOW_LOG", Value: "true", ValueFrom: nil},
+			{Name: "SYSLOG_IDS_EVENT_LOG", Value: "true", ValueFrom: nil},
+			{Name: "SYSLOG_TLS", Value: "true", ValueFrom: nil},
+			{Name: "SYSLOG_VERIFY_MODE", Value: "1", ValueFrom: nil},
+			{Name: "SYSLOG_CA_FILE", Value: cfg.TrustedBundle.MountPath(), ValueFrom: nil},
+		}))
+	})
+	It("should render with Syslog configuration with TLS and Internet CA", func() {
+		cfg.UseSyslogCertificate = false
+		var ps int32 = 180
+		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
+			Syslog: &operatorv1.SyslogStoreSpec{
+				Endpoint:   "tcp://1.2.3.4:80",
+				Encryption: operatorv1.EncryptionTLS,
+				PacketSize: &ps,
+				LogTypes: []operatorv1.SyslogLogType{
+					operatorv1.SyslogLogDNS,
+					operatorv1.SyslogLogFlows,
+					operatorv1.SyslogLogIDSEvents,
+				},
+			},
+		}
+		component := render.Fluentd(cfg)
+		resources, _ := component.Objects()
+
+		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(3))
+
+		envs := ds.Spec.Template.Spec.Containers[0].Env
+
+		Expect(envs).To(ContainElements([]corev1.EnvVar{
+			{Name: "SYSLOG_HOST", Value: "1.2.3.4", ValueFrom: nil},
+			{Name: "SYSLOG_PORT", Value: "80", ValueFrom: nil},
+			{Name: "SYSLOG_PROTOCOL", Value: "tcp", ValueFrom: nil},
+			{Name: "SYSLOG_FLUSH_INTERVAL", Value: "5s", ValueFrom: nil},
+			{Name: "SYSLOG_PACKET_SIZE", Value: "180", ValueFrom: nil},
+			{Name: "SYSLOG_DNS_LOG", Value: "true", ValueFrom: nil},
+			{Name: "SYSLOG_FLOW_LOG", Value: "true", ValueFrom: nil},
+			{Name: "SYSLOG_IDS_EVENT_LOG", Value: "true", ValueFrom: nil},
+			{Name: "SYSLOG_TLS", Value: "true", ValueFrom: nil},
+			{Name: "SYSLOG_VERIFY_MODE", Value: "1", ValueFrom: nil},
+			{Name: "SYSLOG_CA_FILE", Value: render.SysLogPublicCAPath, ValueFrom: nil},
+		}))
+	})
 
 	It("should render with splunk configuration with ca", func() {
 		cfg.SplkCredential = &render.SplunkCredential{

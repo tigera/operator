@@ -23,10 +23,10 @@ const (
 	CASecretName                      = "tigera-ca-private"
 	TrustedCertConfigMapName          = "tigera-ca-bundle"
 	TrustedCertConfigMapKeyName       = "tigera-ca-bundle.crt"
-	TrustedCertVolumeMountPath        = "/tigera-ca-bundle/"
-	TrustedCertVolumeMountPathWindows = "c:/tigera-ca-bundle/"
-	TrustedCertBundleMountPath        = "/tigera-ca-bundle/tigera-ca-bundle.crt"
-	TrustedCertBundleMountPathWindows = "c:/tigera-ca-bundle/tigera-ca-bundle.crt"
+	TrustedCertVolumeMountPath        = "/etc/pki/tigera/"
+	TrustedCertVolumeMountPathWindows = "c:/etc/pki/tigera/"
+	TrustedCertBundleMountPath        = "/etc/pki/tigera/tigera-ca-bundle.crt"
+	TrustedCertBundleMountPathWindows = "c:/etc/pki/tigera/tigera-ca-bundle.crt"
 )
 
 // KeyPairInterface wraps a Secret object that contains a private key and a certificate. Whether CertificateManagement is

@@ -27,7 +27,6 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
-	batch "k8s.io/api/batch/v1beta1"
 	certV1 "k8s.io/api/certificates/v1"
 	certV1beta1 "k8s.io/api/certificates/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -616,7 +615,7 @@ func (m *statusManager) syncState() {
 	}
 
 	for _, depnn := range m.cronjobs {
-		cj := &batch.CronJob{}
+		cj := &batchv1.CronJob{}
 		if err := m.client.Get(context.TODO(), depnn, cj); err != nil {
 			log.WithValues("reason", err).Info("Failed to query cronjobs")
 			continue
@@ -1011,7 +1010,7 @@ func hasPendingCSRUsingCertV1beta1(ctx context.Context, cli client.Client, label
 	return false, nil
 }
 
-//UpdateStatusCondition updates CR's status conditions from tigerastatus conditions.
+// UpdateStatusCondition updates CR's status conditions from tigerastatus conditions.
 func UpdateStatusCondition(statuscondition []metav1.Condition, conditions []operator.TigeraStatusCondition) []metav1.Condition {
 	if statuscondition == nil {
 		statuscondition = []metav1.Condition{}

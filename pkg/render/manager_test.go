@@ -144,7 +144,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: "true"},
 			{Name: "VOLTRON_QUERYSERVER_ENDPOINT", Value: "https://tigera-api.tigera-system.svc:8080"},
 			{Name: "VOLTRON_QUERYSERVER_BASE_PATH", Value: "/api/v1/namespaces/tigera-system/services/https:tigera-api:8080/proxy/"},
-			{Name: "VOLTRON_QUERYSERVER_CA_BUNDLE_PATH", Value: "/tigera-ca-bundle/tigera-ca-bundle.crt"},
+			{Name: "VOLTRON_QUERYSERVER_CA_BUNDLE_PATH", Value: "/etc/pki/tigera/tigera-ca-bundle.crt"},
 		}))
 
 		Expect(voltron.VolumeMounts).To(HaveLen(2))

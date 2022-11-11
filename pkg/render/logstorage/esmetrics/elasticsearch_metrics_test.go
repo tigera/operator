@@ -230,6 +230,15 @@ var _ = Describe("Elasticsearch metrics", func() {
 			Expect(*deploy.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
 			Expect(*deploy.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(BeTrue())
 			Expect(*deploy.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
+			Expect(*deploy.Spec.Template.Spec.Containers[0].SecurityContext.Capabilities).To(BeEquivalentTo(
+				corev1.Capabilities{
+					Drop: []corev1.Capability{"ALL"},
+				},
+			))
+			Expect(*deploy.Spec.Template.Spec.Containers[0].SecurityContext.SeccompProfile).To(BeEquivalentTo(
+				corev1.SeccompProfile{
+					Type: corev1.SeccompProfileTypeRuntimeDefault,
+				}))
 		})
 
 		It("should apply controlPlaneNodeSelector correctly", func() {

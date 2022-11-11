@@ -145,7 +145,13 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 	} else {
 		annotations[e.cfg.ServerTLS.HashAnnotationKey()] = e.cfg.ServerTLS.HashAnnotationValue()
 	}
-
+	securityContext := securitycontext.NewBaseContext(securitycontext.RunAsUserID, securitycontext.RunAsGroupID)
+	securityContext.Capabilities = &corev1.Capabilities{
+		Drop: []corev1.Capability{"ALL"},
+	}
+	securityContext.SeccompProfile = &corev1.SeccompProfile{
+		Type: corev1.SeccompProfileTypeRuntimeDefault,
+	}
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -169,7 +175,7 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 							corev1.Container{
 								Name:            ElasticsearchMetricsName,
 								Image:           e.esMetricsImage,
-								SecurityContext: securitycontext.NewBaseContext(securitycontext.RunAsUserID, securitycontext.RunAsGroupID),
+								SecurityContext: securityContext,
 								Command:         []string{"/bin/elasticsearch_exporter"},
 								Args: []string{"--es.uri=https://$(ELASTIC_USERNAME):$(ELASTIC_PASSWORD)@$(ELASTIC_HOST):$(ELASTIC_PORT)",
 									"--es.all", "--es.indices", "--es.indices_settings", "--es.shards", "--es.cluster_settings",

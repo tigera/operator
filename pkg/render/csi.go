@@ -260,11 +260,10 @@ func (c *csiComponent) csiTemplate() corev1.PodTemplateSpec {
 		Labels: templateLabels,
 	}
 	templateSpec := corev1.PodSpec{
-		Tolerations:        c.csiTolerations(),
-		Containers:         c.csiContainers(),
-		ImagePullSecrets:   c.cfg.Installation.ImagePullSecrets,
-		Volumes:            c.csiVolumes(),
-		ServiceAccountName: CSIDaemonSetName,
+		Tolerations:      c.csiTolerations(),
+		Containers:       c.csiContainers(),
+		ImagePullSecrets: c.cfg.Installation.ImagePullSecrets,
+		Volumes:          c.csiVolumes(),
 	}
 
 	if !c.cfg.Openshift && c.cfg.UsePSP {

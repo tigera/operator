@@ -150,7 +150,7 @@ var _ = Describe("CSI rendering tests", func() {
 		))
 	})
 
-	It("should not add service account when UsePSP is false or not on Openshift", func() {
+	It("should not add ServiceAccountName field when UsePSP is false or not on Openshift", func() {
 		cfg.Openshift = false
 		cfg.UsePSP = false
 

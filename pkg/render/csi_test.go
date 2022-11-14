@@ -149,4 +149,22 @@ var _ = Describe("CSI rendering tests", func() {
 			},
 		))
 	})
+
+	It("should not add ServiceAccountName field when UsePSP is false or not on Openshift", func() {
+		cfg.Openshift = false
+		cfg.UsePSP = false
+
+		resources, _ := render.CSI(&cfg).Objects()
+
+		ds := rtest.GetResource(resources, render.CSIDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		Expect(ds.Spec.Template.Spec.ServiceAccountName).To(BeEmpty())
+
+		cfg.Openshift = true
+		cfg.UsePSP = true
+
+		resources, _ = render.CSI(&cfg).Objects()
+
+		ds = rtest.GetResource(resources, render.CSIDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		Expect(ds.Spec.Template.Spec.ServiceAccountName).To(BeEmpty())
+	})
 })

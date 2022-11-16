@@ -116,10 +116,9 @@ spec:
                         description: 'Location of the syslog server. example: tcp://1.2.3.4:601'
                         type: string
                       logTypes:
-                        description: LogTypes contains a list of types of logs to
-                          export to syslog. If empty list is set, then by default
-                          the list will be updated to include log types Audit,DNS
-                          and Flows.
+                        description: 'If no values are provided, the list will be
+                          updated to include log types Audit, DNS and Flows. Default:
+                          Audit, DNS, Flows'
                         items:
                           description: SyslogLogType represents the allowable log
                             types for syslog. Allowable values are Audit, DNS, Flows

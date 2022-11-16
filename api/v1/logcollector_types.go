@@ -45,6 +45,9 @@ const (
 	CollectProcessPathDisable CollectProcessPathOption = "Disabled"
 )
 
+// EncryptionOption specifies the traffic encryption mode when connecting to a Syslog server.
+//
+// One of: None, TLS
 type EncryptionOption string
 
 const (
@@ -132,8 +135,8 @@ type SyslogStoreSpec struct {
 	// +optional
 	PacketSize *int32 `json:"packetSize,omitempty"`
 
-	// LogTypes contains a list of types of logs to export to syslog. By default, if this field is
-	// omitted, it will be set to include all possible values.
+	// If no values are provided, the list will be updated to include log types Audit, DNS and Flows.
+	// Default: Audit, DNS, Flows
 	LogTypes []SyslogLogType `json:"logTypes"`
 
 	// Encryption configures traffic encryption to the Syslog server.

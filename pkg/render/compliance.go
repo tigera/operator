@@ -18,20 +18,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-
 	ocsv1 "github.com/openshift/api/security/v1"
-
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/render/common/authentication"
-	"github.com/tigera/operator/pkg/render/common/configmap"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
-	"github.com/tigera/operator/pkg/render/common/secret"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -40,6 +27,19 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/render/common/authentication"
+	"github.com/tigera/operator/pkg/render/common/configmap"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
+	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
@@ -250,17 +250,6 @@ var (
 
 const complianceServerPort = 5443
 
-// complianceLivenssProbe is the liveness probe to use for compliance components.
-// They all use the same liveness configuration, so we just define it once here.
-var complianceLivenessProbe = &corev1.Probe{
-	ProbeHandler: corev1.ProbeHandler{
-		HTTPGet: &corev1.HTTPGetAction{
-			Path: "/liveness",
-			Port: intstr.FromInt(9099),
-		},
-	},
-}
-
 func (c *complianceComponent) complianceControllerServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
@@ -400,10 +389,18 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorate(corev1.Container{
-					Name:          ComplianceControllerName,
-					Image:         c.controllerImage,
-					Env:           envVars,
-					LivenessProbe: complianceLivenessProbe,
+					Name:  ComplianceControllerName,
+					Image: c.controllerImage,
+					Env:   envVars,
+					LivenessProbe: &corev1.Probe{
+						ProbeHandler: corev1.ProbeHandler{
+							HTTPGet: &corev1.HTTPGetAction{
+								Path: "/liveness",
+								Port: intstr.FromInt(9099),
+							},
+						},
+					},
+					SecurityContext: securitycontext.NewBaseContext(securitycontext.RunAsUserID, securitycontext.RunAsGroupID),
 					VolumeMounts: []corev1.VolumeMount{
 						c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()),
 					},
@@ -500,7 +497,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 	}
 
 	envVars := []corev1.EnvVar{
-		{Name: "LOG_LEVEL", Value: "warning"},
+		{Name: "LOG_LEVEL", Value: "info"},
 		{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: ComplianceNamespace},
 	}
 	return &corev1.PodTemplate{
@@ -528,10 +525,18 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 				Containers: []corev1.Container{
 					relasticsearch.ContainerDecorateIndexCreator(
 						relasticsearch.ContainerDecorate(corev1.Container{
-							Name:          "reporter",
-							Image:         c.reporterImage,
-							Env:           envVars,
-							LivenessProbe: complianceLivenessProbe,
+							Name:  "reporter",
+							Image: c.reporterImage,
+							Env:   envVars,
+							LivenessProbe: &corev1.Probe{
+								ProbeHandler: corev1.ProbeHandler{
+									HTTPGet: &corev1.HTTPGetAction{
+										Path: "/liveness",
+										Port: intstr.FromInt(9099),
+									},
+								},
+								PeriodSeconds: 300,
+							},
 							SecurityContext: &corev1.SecurityContext{
 								Privileged: &privileged,
 							},
@@ -722,12 +727,12 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 						PeriodSeconds:       10,
 						FailureThreshold:    5,
 					},
-					Command: []string{"/code/server"},
 					Args: []string{
 						fmt.Sprintf("-certpath=%s", c.cfg.ComplianceServerCertSecret.VolumeMountCertificateFilePath()),
 						fmt.Sprintf("-keypath=%s", c.cfg.ComplianceServerCertSecret.VolumeMountKeyFilePath()),
 					},
-					VolumeMounts: c.complianceServerVolumeMounts(),
+					SecurityContext: securitycontext.NewBaseContext(securitycontext.RunAsUserID, securitycontext.RunAsGroupID),
+					VolumeMounts:    c.complianceServerVolumeMounts(),
 				}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceServerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()),
 			},
 			Volumes: c.complianceServerVolumes(),
@@ -869,10 +874,18 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorateIndexCreator(
 					relasticsearch.ContainerDecorate(corev1.Container{
-						Name:          ComplianceSnapshotterName,
-						Image:         c.snapshotterImage,
-						Env:           envVars,
-						LivenessProbe: complianceLivenessProbe,
+						Name:  ComplianceSnapshotterName,
+						Image: c.snapshotterImage,
+						Env:   envVars,
+						LivenessProbe: &corev1.Probe{
+							ProbeHandler: corev1.ProbeHandler{
+								HTTPGet: &corev1.HTTPGetAction{
+									Path: "/liveness",
+									Port: intstr.FromInt(9099),
+								},
+							},
+						},
+						SecurityContext: securitycontext.NewBaseContext(securitycontext.RunAsUserID, securitycontext.RunAsGroupID),
 						VolumeMounts: []corev1.VolumeMount{
 							c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType()),
 						},
@@ -1025,11 +1038,19 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 			Containers: []corev1.Container{
 				relasticsearch.ContainerDecorateIndexCreator(
 					relasticsearch.ContainerDecorate(corev1.Container{
-						Name:          ComplianceBenchmarkerName,
-						Image:         c.benchmarkerImage,
-						Env:           envVars,
-						VolumeMounts:  volMounts,
-						LivenessProbe: complianceLivenessProbe,
+						Name:         ComplianceBenchmarkerName,
+						Image:        c.benchmarkerImage,
+						Env:          envVars,
+						VolumeMounts: volMounts,
+						LivenessProbe: &corev1.Probe{
+							ProbeHandler: corev1.ProbeHandler{
+								HTTPGet: &corev1.HTTPGetAction{
+									Path: "/liveness",
+									Port: intstr.FromInt(9099),
+								},
+							},
+							PeriodSeconds: 300,
+						},
 					}, c.cfg.ESClusterConfig.ClusterName(), ElasticsearchComplianceBenchmarkerUserSecret, c.cfg.ClusterDomain, c.SupportedOSType()), c.cfg.ESClusterConfig.Replicas(), c.cfg.ESClusterConfig.Shards(),
 				),
 			},

@@ -40,7 +40,7 @@ replace (
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v13.3.2+incompatible // Required by OLM
 	github.com/operator-framework/operator-sdk => github.com/operator-framework/operator-sdk v1.0.1
 
-	// Scanners flag anything less than v0.3.6 as having a CVE.
-	golang.org/x/text => golang.org/x/text v0.3.7
+	// Scanners flag anything less than v0.3.8 as having a CVE.
+	golang.org/x/text => golang.org/x/text v0.4.0
 	k8s.io/apiserver => k8s.io/apiserver v0.25.3
 )

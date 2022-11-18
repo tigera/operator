@@ -656,8 +656,8 @@ deploy: manifests kustomize
 # Can also generate RBAC and webhooks but that is not enabled currently
 manifests:
 	$(DOCKER_RUN) sh -c "\
-		controller-gen $(CRD_OPTIONS) paths="./api/..." output:crd:artifacts:config=config/crd/bases \
-		for x in $$(find config/crd/bases/*); do sed -i -e '/creationTimestamp: null/d' $$x; done"
+		controller-gen $(CRD_OPTIONS) paths="./api/..." output:crd:artifacts:config=config/crd/bases"
+		for x in $$(find config/crd/bases/*); do sed -i -e '/creationTimestamp: null/d' $$x; done
 
 # Run go fmt against code
 fmt:

@@ -64,7 +64,7 @@ const (
 	ADPersistentVolumeClaimName            = "tigera-anomaly-detection"
 	DefaultAnomalyDetectionPVRequestSizeGi = "10Gi"
 	adAPIStorageVolumeName                 = "volume-storage"
-	adAPIVolumePath                        = "/storage"
+	adAPIStoragePath                       = "/storage"
 	ADJobPodTemplateBaseName               = "tigera.io.detectors"
 	adDetectorPrefixName                   = "tigera.io.detector."
 	adDetectorName                         = "anomaly-detectors"
@@ -1461,7 +1461,7 @@ func (c *intrusionDetectionComponent) adAPIDeployment(configureADStorage bool) *
 							Image: c.adAPIImage,
 							Env: []corev1.EnvVar{
 								{Name: "LOG_LEVEL", Value: "info"},
-								{Name: "STORAGE_PATH", Value: adAPIVolumePath},
+								{Name: "STORAGE_PATH", Value: "." + adAPIStoragePath},
 								{Name: "TLS_KEY", Value: c.cfg.ADAPIServerCertSecret.VolumeMountKeyFilePath()},
 								{Name: "TLS_CERT", Value: c.cfg.ADAPIServerCertSecret.VolumeMountCertificateFilePath()},
 								{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
@@ -1489,7 +1489,7 @@ func (c *intrusionDetectionComponent) adAPIDeployment(configureADStorage bool) *
 								c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType()),
 								c.cfg.ADAPIServerCertSecret.VolumeMount(c.SupportedOSType()),
 								{
-									MountPath: adAPIVolumePath,
+									MountPath: "/mnt" + adAPIStoragePath,
 									Name:      adAPIStorageVolumeName,
 									ReadOnly:  false,
 								},

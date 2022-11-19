@@ -637,8 +637,14 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 			corev1.EnvVar{Name: "IDS_ENABLE_EVENT_FORWARDING", Value: "true"},
 		)
 		volumeMounts = append(volumeMounts, syslogEventsForwardingVolumeMount())
+		// When syslog forwarding is enabled, IDS controller mounts host volume /var/log/calico
+		// and writes events to it. This host path is owned by root user and group so we have to
+		// use privileged UID/GID 0.
+		sc.RunAsGroup = ptr.Int64ToPtr(0)
+		sc.RunAsNonRoot = ptr.BoolToPtr(false)
+		sc.RunAsUser = ptr.Int64ToPtr(0)
 		// On OpenShift, if we need the volume mount to hostpath volume for syslog forwarding,
-		// then ID controller needs privileged access to write event logs to that volume
+		// then IDS controller needs privileged access to write event logs to that volume
 		if c.cfg.Openshift {
 			sc.Privileged = ptr.BoolToPtr(true)
 		}

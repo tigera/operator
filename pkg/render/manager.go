@@ -611,11 +611,6 @@ func managerClusterRole(managementCluster, managedCluster, openshift bool) *rbac
 			},
 			{
 				APIGroups: []string{""},
-				Resources: []string{"namespaces"},
-				Verbs:     []string{"get"},
-			},
-			{
-				APIGroups: []string{""},
 				Resources: []string{"serviceaccounts", "namespaces", "nodes", "events", "services", "pods"},
 				Verbs:     []string{"list"},
 			},

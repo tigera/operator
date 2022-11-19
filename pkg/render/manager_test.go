@@ -278,11 +278,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			},
 			{
 				APIGroups: []string{""},
-				Resources: []string{"namespaces"},
-				Verbs:     []string{"get"},
-			},
-			{
-				APIGroups: []string{""},
 				Resources: []string{"serviceaccounts", "namespaces", "nodes", "events", "services", "pods"},
 				Verbs:     []string{"list"},
 			},
@@ -508,11 +503,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				APIGroups: []string{"networking.k8s.io"},
 				Resources: []string{"networkpolicies"},
 				Verbs:     []string{"get", "list"},
-			},
-			{
-				APIGroups: []string{""},
-				Resources: []string{"namespaces"},
-				Verbs:     []string{"get"},
 			},
 			{
 				APIGroups: []string{""},

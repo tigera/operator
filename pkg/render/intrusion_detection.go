@@ -61,10 +61,17 @@ const (
 	IntrusionDetectionControllerPolicyName = networkpolicy.TigeraComponentPolicyPrefix + IntrusionDetectionControllerName
 	IntrusionDetectionInstallerPolicyName  = networkpolicy.TigeraComponentPolicyPrefix + "intrusion-detection-elastic"
 
+	ADAPIObjectName          = "anomaly-detection-api"
+	ADAPIObjectPortName      = "anomaly-detection-api-https"
+	ADAPITLSSecretName       = "anomaly-detection-api-tls"
+	ADAPIExpectedServiceName = "anomaly-detection-api.tigera-intrusion-detection.svc"
+	ADAPIPolicyName          = networkpolicy.TigeraComponentPolicyPrefix + ADAPIObjectName
+	adAPIPort                = 8080
+
 	ADPersistentVolumeClaimName            = "tigera-anomaly-detection"
 	DefaultAnomalyDetectionPVRequestSizeGi = "10Gi"
 	adAPIStorageVolumeName                 = "volume-storage"
-	adAPIVolumePath                        = "/storage"
+	adAPIStoragePath                       = "/var/" + ADAPIObjectName + "/storage"
 	ADJobPodTemplateBaseName               = "tigera.io.detectors"
 	adDetectorPrefixName                   = "tigera.io.detector."
 	adDetectorName                         = "anomaly-detectors"
@@ -73,13 +80,6 @@ const (
 	ADResourceGroup                        = "detectors.tigera.io"
 	ADDetectorsModelResourceName           = "models"
 	ADLogTypeMetaDataResourceName          = "metadata"
-
-	ADAPIObjectName          = "anomaly-detection-api"
-	ADAPIObjectPortName      = "anomaly-detection-api-https"
-	ADAPITLSSecretName       = "anomaly-detection-api-tls"
-	ADAPIExpectedServiceName = "anomaly-detection-api.tigera-intrusion-detection.svc"
-	ADAPIPolicyName          = networkpolicy.TigeraComponentPolicyPrefix + ADAPIObjectName
-	adAPIPort                = 8080
 )
 
 var adAPIReplicas int32 = 1
@@ -102,7 +102,7 @@ func IntrusionDetection(cfg *IntrusionDetectionConfiguration) Component {
 
 // IntrusionDetectionConfiguration contains all the config information needed to render the component.
 type IntrusionDetectionConfiguration struct {
-	IntrusionDetection operatorv1.IntrusionDetection
+	IntrusionDetection *operatorv1.IntrusionDetection
 	LogCollector       *operatorv1.LogCollector
 	ESSecrets          []*corev1.Secret
 	Installation       *operatorv1.InstallationSpec
@@ -174,9 +174,10 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 	// Configure pod security standard. If syslog forwarding is enabled, we
 	// need hostpath volumes which require a privileged PSS.
 	pss := PSSBaseline
-	if c.syslogForwardingIsEnabled() {
+	if c.syslogForwardingIsEnabled() || c.adAPIPersistentStorageEnabled() {
 		pss = PSSPrivileged
 	}
+
 	objs := []client.Object{
 		// In order to switch to a restricted policy, we need to set the following on all containers in the namespace:
 		// - securityContext.allowPrivilegeEscalation=false)
@@ -217,7 +218,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 			c.adAPIAccessRoleBinding(),
 		)
 
-		shouldConfigureADStorage := len(c.cfg.IntrusionDetection.Spec.AnomalyDetection.StorageClassName) > 0
+		shouldConfigureADStorage := c.adAPIPersistentStorageEnabled()
 
 		if shouldConfigureADStorage && c.cfg.ShouldRenderADPVC {
 			adObjs = append(adObjs, c.adPersistentVolumeClaim())
@@ -683,6 +684,10 @@ func (c *intrusionDetectionComponent) syslogForwardingIsEnabled() bool {
 		}
 	}
 	return false
+}
+
+func (c *intrusionDetectionComponent) adAPIPersistentStorageEnabled() bool {
+	return c.cfg.IntrusionDetection != nil && len(c.cfg.IntrusionDetection.Spec.AnomalyDetection.StorageClassName) > 0
 }
 
 func syslogEventsForwardingVolumeMount() corev1.VolumeMount {
@@ -1404,6 +1409,8 @@ func (c *intrusionDetectionComponent) adPersistentVolumeClaim() *corev1.Persiste
 
 func (c *intrusionDetectionComponent) adAPIDeployment(configureADStorage bool) *appsv1.Deployment {
 	var adModelVolumeSource corev1.VolumeSource
+	sc := securitycontext.NewBaseContext(securitycontext.RunAsUserID, securitycontext.RunAsGroupID)
+
 	if configureADStorage {
 		adStorageClassName := c.cfg.IntrusionDetection.Spec.AnomalyDetection.StorageClassName
 		adModelVolumeSource = corev1.VolumeSource{
@@ -1411,11 +1418,17 @@ func (c *intrusionDetectionComponent) adAPIDeployment(configureADStorage bool) *
 				ClaimName: adStorageClassName,
 			},
 		}
+
+		// When Persistent Storage is configured for AD API, it will use the host path of /var/anomaly-detection-api
+		// where it requires root privileges to write to
+		sc.RunAsGroup = ptr.Int64ToPtr(0)
+		sc.RunAsUser = ptr.Int64ToPtr(0)
+		sc.Privileged = ptr.BoolToPtr(true)
+		sc.RunAsNonRoot = ptr.BoolToPtr(true)
 	} else {
 		adModelVolumeSource = corev1.VolumeSource{
 			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		}
-
 	}
 
 	var initContainers []corev1.Container
@@ -1461,11 +1474,12 @@ func (c *intrusionDetectionComponent) adAPIDeployment(configureADStorage bool) *
 							Image: c.adAPIImage,
 							Env: []corev1.EnvVar{
 								{Name: "LOG_LEVEL", Value: "info"},
-								{Name: "STORAGE_PATH", Value: adAPIVolumePath},
+								{Name: "STORAGE_PATH", Value: adAPIStoragePath},
 								{Name: "TLS_KEY", Value: c.cfg.ADAPIServerCertSecret.VolumeMountKeyFilePath()},
 								{Name: "TLS_CERT", Value: c.cfg.ADAPIServerCertSecret.VolumeMountCertificateFilePath()},
 								{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 							},
+							SecurityContext: sc,
 							LivenessProbe: &corev1.Probe{
 								ProbeHandler: corev1.ProbeHandler{
 									HTTPGet: &corev1.HTTPGetAction{
@@ -1489,7 +1503,7 @@ func (c *intrusionDetectionComponent) adAPIDeployment(configureADStorage bool) *
 								c.cfg.TrustedCertBundle.VolumeMount(c.SupportedOSType()),
 								c.cfg.ADAPIServerCertSecret.VolumeMount(c.SupportedOSType()),
 								{
-									MountPath: adAPIVolumePath,
+									MountPath: adAPIStoragePath,
 									Name:      adAPIStorageVolumeName,
 									ReadOnly:  false,
 								},

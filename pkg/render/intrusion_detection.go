@@ -1424,6 +1424,7 @@ func (c *intrusionDetectionComponent) adAPIDeployment(configureADStorage bool) *
 		sc.RunAsGroup = ptr.Int64ToPtr(0)
 		sc.RunAsUser = ptr.Int64ToPtr(0)
 		sc.Privileged = ptr.BoolToPtr(true)
+		sc.RunAsNonRoot = ptr.BoolToPtr(true)
 	} else {
 		adModelVolumeSource = corev1.VolumeSource{
 			EmptyDir: &corev1.EmptyDirVolumeSource{},

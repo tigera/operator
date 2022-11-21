@@ -233,6 +233,13 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			},
 		))
 
+		// check non-privileged container is used
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(Equal(false))
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(Equal(false))
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(Equal(true))
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(Equal(10001))
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(Equal(10001))
+
 		// Check all Role for respective AD API SAs
 		detectorsSecret := rtest.GetResource(resources, "anomaly-detectors", render.IntrusionDetectionNamespace, "", "v1", "Secret").(*corev1.Secret)
 		Expect(detectorsSecret.Type).To(Equal(corev1.SecretTypeServiceAccountToken))
@@ -292,7 +299,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 
 	It("should render a persistentVolume claim if an AD StorageClassName is provided and an existing PVC does not exist", func() {
 		testADStorageClassName := "test-storage-class-name"
-		cfg.IntrusionDetection = operatorv1.IntrusionDetection{
+		cfg.IntrusionDetection = &operatorv1.IntrusionDetection{
 			Spec: operatorv1.IntrusionDetectionSpec{
 				AnomalyDetection: operatorv1.AnomalyDetectionSpec{
 					StorageClassName: testADStorageClassName,
@@ -321,11 +328,17 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				},
 			},
 		))
+
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(Equal(true))
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(Equal(true))
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(Equal(false))
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(Equal(0))
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(Equal(0))
 	})
 
 	It("should not render a persistentVolume claim if indicated that the AD StorageClassName is provided but an existing PVC already exists", func() {
 		testADStorageClassName := "test-storage-class-name"
-		cfg.IntrusionDetection = operatorv1.IntrusionDetection{
+		cfg.IntrusionDetection = &operatorv1.IntrusionDetection{
 			Spec: operatorv1.IntrusionDetectionSpec{
 				AnomalyDetection: operatorv1.AnomalyDetectionSpec{
 					StorageClassName: testADStorageClassName,
@@ -681,7 +694,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		fipsEnabled := operatorv1.FIPSModeEnabled
 		testADStorageClassName := "test-storage-class-name"
 		cfg.Installation.FIPSMode = &fipsEnabled
-		cfg.IntrusionDetection = operatorv1.IntrusionDetection{
+		cfg.IntrusionDetection = &operatorv1.IntrusionDetection{
 			Spec: operatorv1.IntrusionDetectionSpec{
 				AnomalyDetection: operatorv1.AnomalyDetectionSpec{
 					StorageClassName: testADStorageClassName,

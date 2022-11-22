@@ -15,6 +15,7 @@
 package kubecontrollers
 
 import (
+	"fmt"
 	"strings"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -536,7 +537,7 @@ func (c *kubeControllersComponent) controllersRoleBinding() *rbacv1.ClusterRoleB
 	}
 }
 
-// prometheusService creates a Service which exposes and endpoint on kube-controllers for
+// prometheusService creates a Service which exposes an endpoint on kube-controllers for
 // reporting Prometheus metrics.
 func (c *kubeControllersComponent) prometheusService() *corev1.Service {
 	return &corev1.Service{
@@ -544,7 +545,11 @@ func (c *kubeControllersComponent) prometheusService() *corev1.Service {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      c.kubeControllerMetricsName,
 			Namespace: common.CalicoNamespace,
-			Labels:    map[string]string{"k8s-app": c.kubeControllerName},
+			Annotations: map[string]string{
+				"prometheus.io/scrape": "true",
+				"prometheus.io/port":   fmt.Sprintf("%d", c.cfg.MetricsPort),
+			},
+			Labels: map[string]string{"k8s-app": c.kubeControllerName},
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{"k8s-app": c.kubeControllerName},

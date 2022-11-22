@@ -177,6 +177,10 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 				Namespace: render.PacketCaptureNamespace,
 			},
 		}))
+
+		// The metrics service should have the correct configuration.
+		ms := rtest.GetResource(resources, render.FluentdMetricsService, render.LogCollectorNamespace, "", "v1", "Service").(*corev1.Service)
+		Expect(ms.Spec.ClusterIP).To(Equal("None"), "metrics service should be headless to prevent kube-proxy from rendering too many iptables rules")
 	})
 
 	It("should render with a resource quota for provider GKE", func() {

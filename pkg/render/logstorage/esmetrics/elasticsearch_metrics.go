@@ -122,6 +122,11 @@ func (e *elasticsearchMetrics) metricsService() *corev1.Service {
 			},
 		},
 		Spec: corev1.ServiceSpec{
+			// Important: "None" tells Kubernetes that we want a headless service with
+			// no kube-proxy load balancer.  If we omit this then kube-proxy will render
+			// a huge set of iptables rules for this service since there's an instance
+			// on every node.
+			ClusterIP: "None",
 			Selector: map[string]string{
 				"k8s-app": ElasticsearchMetricsName,
 			},

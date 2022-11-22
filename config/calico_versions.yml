@@ -1,19 +1,21 @@
 # Components defined here are required to be kept in sync with hack/gen-versions/calico.go.tpl
-title: v3.23.2
+title: v3.23.5
 components:
   libcalico-go:
-    version: v3.23.2
+    version: v3.23.5
   typha:
-    version: v3.23.2
+    version: v3.23.5
   calico/node:
-    version: v3.23.2
+    version: v3.23.5
   calico/cni:
-    version: v3.23.2
+    version: v3.23.5
   calico/kube-controllers:
-    version: v3.23.2
+    version: v3.23.5
   flexvol:
-    version: v3.23.2
+    # The v3.23 version of this image has CVEs due to outdated Go, and rebuilding this image with the latest golang is non-trivial.
+    # The v3.24.3 version of this image is built on newer Go, and lacks CVEs. The pod2daemon-flexvol code has not changed in years.
+    version: v3.24.3
   calico/apiserver:
-    version: v3.23.2
+    version: v3.23.5
   calico/windows-upgrade:
-    version: v3.23.2
+    version: v3.23.5

@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -208,6 +208,13 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					"--enable-webhook=false",
 					"--manage-webhook-certs=false",
 				}))
+
+				kb := rtest.GetResource(createResources, "tigera-secure", "tigera-kibana", "kibana.k8s.elastic.co", "v1", "Kibana")
+				Expect(kb).NotTo(BeNil())
+				kibana := kb.(*kbv1.Kibana)
+				Expect(*kibana.Spec.PodTemplate.Spec.SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
+				Expect(*kibana.Spec.PodTemplate.Spec.SecurityContext.RunAsNonRoot).To(BeTrue())
+				Expect(*kibana.Spec.PodTemplate.Spec.SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
 			})
 			It("should render an elasticsearchComponent and delete the Elasticsearch and Kibana ExternalService", func() {
 				expectedCreateResources := []resourceTestObj{

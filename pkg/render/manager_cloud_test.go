@@ -14,6 +14,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rcimageassurance "github.com/tigera/operator/pkg/render/common/imageassurance"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 var _ = Describe("Tigera Secure Cloud Manager rendering tests", func() {
@@ -68,9 +69,11 @@ var _ = Describe("Tigera Secure Cloud Manager rendering tests", func() {
 		Expect(esProxy.Env).Should(ContainElements(
 			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "tenant_id.clusterTestName"},
 		))
-		Expect(len(esProxy.VolumeMounts)).To(Equal(1))
-		Expect(esProxy.VolumeMounts[0].Name).To(Equal("elastic-ca-cert-volume"))
-		Expect(esProxy.VolumeMounts[0].MountPath).To(Equal("/etc/ssl/elastic/"))
+		Expect(len(esProxy.VolumeMounts)).To(Equal(2))
+		Expect(esProxy.VolumeMounts[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+		Expect(esProxy.VolumeMounts[0].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
+		Expect(esProxy.VolumeMounts[1].Name).To(Equal("elastic-ca-cert-volume"))
+		Expect(esProxy.VolumeMounts[1].MountPath).To(Equal("/etc/ssl/elastic/"))
 
 		// In addition to default volumes, deployment should have extra volume for image assurance secret
 		Expect(dpSpec.Volumes).To(ContainElement(

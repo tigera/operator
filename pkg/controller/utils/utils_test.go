@@ -105,27 +105,22 @@ var _ = Describe("Tigera License polling test", func() {
 	})
 
 	It("should be able to verify that the LicenseKey is ready", func() {
-		discovery.On("ServerGroupsAndResources").Return(nil, []*metav1.APIResourceList{
-			{
-				GroupVersion: "projectcalico.org/v3",
-				APIResources: []metav1.APIResource{
-					{Kind: "LicenseKey"},
-				},
-			},
+		discovery.On("ServerResourcesForGroupVersion", v3.GroupVersionCurrent).Return(&metav1.APIResourceList{
+			APIResources: []metav1.APIResource{{
+				Kind: "LicenseKey",
+			}},
 		})
-		Expect(isResourceReady(client, v3.KindLicenseKey)).To(BeTrue())
+		Expect(isCalicoResourceReady(client, v3.KindLicenseKey)).To(BeTrue())
 		discovery.AssertExpectations(GinkgoT())
 	})
+
 	It("should be able to verify that the LicenseKey is not ready", func() {
-		discovery.On("ServerGroupsAndResources").Return(nil, []*metav1.APIResourceList{
-			{
-				GroupVersion: "apps/v1",
-				APIResources: []metav1.APIResource{
-					{Kind: "Deployment"},
-				},
-			},
+		discovery.On("ServerResourcesForGroupVersion", v3.GroupVersionCurrent).Return(&metav1.APIResourceList{
+			APIResources: []metav1.APIResource{{
+				Kind: "Deployment",
+			}},
 		})
-		Expect(isResourceReady(client, v3.KindLicenseKey)).To(BeFalse())
+		Expect(isCalicoResourceReady(client, v3.KindLicenseKey)).To(BeFalse())
 		discovery.AssertExpectations(GinkgoT())
 	})
 })
@@ -197,7 +192,7 @@ func (m fakeClient) Discovery() discovery.DiscoveryInterface {
 	return m.discovery
 }
 
-func (m *fakeDiscovery) ServerGroupsAndResources() ([]*metav1.APIGroup, []*metav1.APIResourceList, error) {
-	args := m.Called()
-	return nil, args.Get(1).([]*metav1.APIResourceList), nil
+func (m *fakeDiscovery) ServerResourcesForGroupVersion(groupVersion string) (*metav1.APIResourceList, error) {
+	args := m.Called(groupVersion)
+	return args.Get(0).(*metav1.APIResourceList), nil
 }

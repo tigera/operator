@@ -16,8 +16,10 @@ package render_test
 
 import (
 	"fmt"
+	"strconv"
 
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -53,10 +55,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	}
 	var replicas int32 = 2
 	installation := &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas}
+	compliance := &operatorv1.Compliance{}
 	const expectedResourcesNumber = 8
 
 	It("should render all resources for a default configuration", func() {
-		resources := renderObjects(renderConfig{oidc: false, managementCluster: nil, installation: installation, complianceFeatureActive: true})
+		resources := renderObjects(renderConfig{oidc: false, managementCluster: nil, installation: installation, compliance: compliance, complianceFeatureActive: true})
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -84,33 +87,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(resources).To(HaveLen(expectedResourcesNumber))
 
 		deployment := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(len(deployment.Spec.Template.Spec.Containers)).Should(Equal(3))
-		var manager = deployment.Spec.Template.Spec.Containers[0]
-		var esProxy = deployment.Spec.Template.Spec.Containers[1]
-		var voltron = deployment.Spec.Template.Spec.Containers[2]
 
-		Expect(manager.Image).Should(Equal(components.TigeraRegistry + "tigera/cnx-manager:" + components.ComponentManager.Version))
-		Expect(esProxy.Image).Should(Equal(components.CloudRegistry + "tigera/es-proxy:tesla-" + components.ComponentEsProxy.Version))
-		Expect(voltron.Image).Should(Equal(components.TigeraRegistry + "tigera/voltron:" + components.ComponentManagerProxy.Version))
-
-		Expect(esProxy.Env).Should(ContainElements(
-			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "tenant_id.clusterTestName"},
-		))
-		Expect(len(esProxy.VolumeMounts)).To(Equal(1))
-		Expect(esProxy.VolumeMounts[0].Name).To(Equal("elastic-ca-cert-volume"))
-		Expect(esProxy.VolumeMounts[0].MountPath).To(Equal("/etc/ssl/elastic/"))
-
-		Expect(len(voltron.VolumeMounts)).To(Equal(3))
-		Expect(voltron.VolumeMounts[0].Name).To(Equal(render.ManagerTLSSecretName))
-		Expect(voltron.VolumeMounts[0].MountPath).To(Equal("/manager-tls"))
-		Expect(voltron.VolumeMounts[1].Name).To(Equal(render.KibanaPublicCertSecret))
-		Expect(voltron.VolumeMounts[1].MountPath).To(Equal("/certs/kibana"))
-		Expect(voltron.VolumeMounts[2].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
-		Expect(voltron.VolumeMounts[2].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
-
-		Expect(voltron.Env).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: "true"}))
-
-		Expect(len(deployment.Spec.Template.Spec.Volumes)).To(Equal(4))
+		// deployment
+		Expect(deployment.Spec.Template.Spec.Volumes).To(HaveLen(4))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ManagerTLSSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ManagerTLSSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[1].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
@@ -119,16 +98,102 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal(relasticsearch.PublicCertSecret))
 		Expect(deployment.Spec.Template.Spec.Volumes[3].Name).To(Equal("elastic-ca-cert-volume"))
 		Expect(deployment.Spec.Template.Spec.Volumes[3].Secret.SecretName).To(Equal(relasticsearch.PublicCertSecret))
+
+		Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(3))
+		manager := deployment.Spec.Template.Spec.Containers[0]
+		esProxy := deployment.Spec.Template.Spec.Containers[1]
+		voltron := deployment.Spec.Template.Spec.Containers[2]
+
+		Expect(manager.Image).Should(Equal(components.TigeraRegistry + "tigera/cnx-manager:" + components.ComponentManager.Version))
+		Expect(esProxy.Image).Should(Equal(components.CloudRegistry + "tigera/es-proxy:tesla-" + components.ComponentEsProxy.Version))
+		Expect(voltron.Image).Should(Equal(components.TigeraRegistry + "tigera/voltron:" + components.ComponentManagerProxy.Version))
+
+		// manager container
+		Expect(*manager.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+		Expect(*manager.SecurityContext.Privileged).To(BeFalse())
+		Expect(*manager.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+		Expect(*manager.SecurityContext.RunAsNonRoot).To(BeTrue())
+		Expect(*manager.SecurityContext.RunAsUser).To(BeEquivalentTo(999))
+		Expect(manager.Env).Should(ContainElements(
+			corev1.EnvVar{Name: "ENABLE_COMPLIANCE_REPORTS", Value: "true"},
+		))
+
+		// es-proxy container
+		Expect(esProxy.Env).Should(ContainElements(
+			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "tenant_id.clusterTestName"},
+		))
+
+		Expect(esProxy.VolumeMounts).To(HaveLen(2))
+		Expect(esProxy.VolumeMounts).To(ConsistOf([]corev1.VolumeMount{
+			{
+				Name:      "tigera-ca-bundle",
+				MountPath: "/etc/pki/tls/certs/",
+				ReadOnly:  true,
+			},
+			{
+				Name:      "elastic-ca-cert-volume",
+				MountPath: "/etc/ssl/elastic/",
+			},
+		}))
+
+		Expect(*esProxy.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+		Expect(*esProxy.SecurityContext.Privileged).To(BeFalse())
+		Expect(*esProxy.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+		Expect(*esProxy.SecurityContext.RunAsNonRoot).To(BeTrue())
+		Expect(*esProxy.SecurityContext.RunAsUser).To(BeEquivalentTo(1001))
+
+		// voltron container
+		Expect(voltron.Env).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: "true"}))
+
+		Expect(voltron.VolumeMounts).To(HaveLen(3))
+		Expect(voltron.VolumeMounts[0].Name).To(Equal(render.ManagerTLSSecretName))
+		Expect(voltron.VolumeMounts[0].MountPath).To(Equal("/manager-tls"))
+		Expect(voltron.VolumeMounts[1].Name).To(Equal(render.KibanaPublicCertSecret))
+		Expect(voltron.VolumeMounts[1].MountPath).To(Equal("/certs/kibana"))
+		Expect(voltron.VolumeMounts[2].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+		Expect(voltron.VolumeMounts[2].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
+
+		Expect(*voltron.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+		Expect(*voltron.SecurityContext.Privileged).To(BeFalse())
+		Expect(*voltron.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+		Expect(*voltron.SecurityContext.RunAsNonRoot).To(BeTrue())
+		Expect(*voltron.SecurityContext.RunAsUser).To(BeEquivalentTo(1001))
 	})
 
-	It("should not proxy compliance if the feature is not active", func() {
-		resources := renderObjects(renderConfig{oidc: false, managementCluster: nil, installation: installation, complianceFeatureActive: false})
-		voltron := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment).Spec.Template.Spec.Containers[2]
-		Expect(voltron.Env).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: "false"}))
-	})
+	type managerComplianceExpectation struct {
+		managerFlag bool
+		voltronFlag bool
+	}
+	DescribeTable("should set container env appropriately when compliance is not fully available",
+		func(crPresent bool, licenseFeatureActive bool, scenario managerComplianceExpectation) {
+			var complianceCR *operatorv1.Compliance
+			if crPresent {
+				complianceCR = &operatorv1.Compliance{}
+			}
+
+			resources := renderObjects(renderConfig{
+				oidc:                    false,
+				managementCluster:       nil,
+				installation:            installation,
+				compliance:              complianceCR,
+				complianceFeatureActive: licenseFeatureActive,
+			})
+
+			deployment := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			manager := deployment.Spec.Template.Spec.Containers[0]
+			voltron := deployment.Spec.Template.Spec.Containers[2]
+			Expect(manager.Env).To(ContainElement(corev1.EnvVar{Name: "ENABLE_COMPLIANCE_REPORTS", Value: strconv.FormatBool(scenario.managerFlag)}))
+			Expect(voltron.Env).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: strconv.FormatBool(scenario.voltronFlag)}))
+		},
+		Entry("Both CR and license feature not present/active", false, false, managerComplianceExpectation{managerFlag: false, voltronFlag: false}),
+		Entry("CR not present, license feature active", false, true, managerComplianceExpectation{managerFlag: false, voltronFlag: false}),
+
+		// We expect the manager feature flag to be true in this case, since the CR is present. The manager will render an insufficient license state.
+		Entry("CR present, license feature not active", true, false, managerComplianceExpectation{managerFlag: true, voltronFlag: false}),
+	)
 
 	It("should ensure cnx policy recommendation support is always set to true", func() {
-		resources := renderObjects(renderConfig{oidc: false, managementCluster: nil, installation: installation})
+		resources := renderObjects(renderConfig{oidc: false, managementCluster: nil, installation: installation, compliance: compliance, complianceFeatureActive: true})
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 
 		// Should render the correct resource based on test case.
@@ -240,7 +305,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		oidcEnvVar.Value = authority
 
 		// Should render the correct resource based on test case.
-		resources := renderObjects(renderConfig{oidc: true, managementCluster: nil, installation: installation})
+		resources := renderObjects(renderConfig{oidc: true, managementCluster: nil, installation: installation, compliance: compliance, complianceFeatureActive: true})
 		Expect(len(resources)).To(Equal(expectedResourcesNumber))
 		d := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		// tigera-manager volumes/volumeMounts checks.
@@ -250,7 +315,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	})
 
 	It("should render multicluster settings properly", func() {
-		resources := renderObjects(renderConfig{oidc: false, managementCluster: &operatorv1.ManagementCluster{}, installation: installation})
+		resources := renderObjects(renderConfig{oidc: false, managementCluster: &operatorv1.ManagementCluster{}, installation: installation, compliance: compliance, complianceFeatureActive: true})
 
 		// Should render the correct resources.
 		expectedResources := []struct {
@@ -474,9 +539,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 		cert, _, _ := ca.Config.GetPEMBytes()
 		resources := renderObjects(renderConfig{
-			oidc:              false,
-			managementCluster: nil,
-			installation:      &operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{CACert: cert}, ControlPlaneReplicas: &replicas},
+			oidc:                    false,
+			managementCluster:       nil,
+			installation:            &operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{CACert: cert}, ControlPlaneReplicas: &replicas},
+			compliance:              compliance,
+			complianceFeatureActive: true,
 		})
 
 		// Should render the correct resources.
@@ -519,9 +586,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		installation.ControlPlaneReplicas = &replicas
 
 		resources := renderObjects(renderConfig{
-			oidc:              false,
-			managementCluster: nil,
-			installation:      &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas},
+			oidc:                    false,
+			managementCluster:       nil,
+			installation:            &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas},
+			compliance:              compliance,
+			complianceFeatureActive: true,
 		})
 		deploy, ok := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
@@ -533,9 +602,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		installation.ControlPlaneReplicas = &replicas
 
 		resources := renderObjects(renderConfig{
-			oidc:              false,
-			managementCluster: nil,
-			installation:      &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas},
+			oidc:                    false,
+			managementCluster:       nil,
+			installation:            &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas},
+			compliance:              compliance,
+			complianceFeatureActive: true,
 		})
 		deploy, ok := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
@@ -548,6 +619,7 @@ type renderConfig struct {
 	oidc                    bool
 	managementCluster       *operatorv1.ManagementCluster
 	installation            *operatorv1.InstallationSpec
+	compliance              *operatorv1.Compliance
 	complianceFeatureActive bool
 	imageAssuranceEnabled   bool
 }
@@ -616,7 +688,8 @@ func renderObjects(roc renderConfig) []client.Object {
 		ClusterDomain:           dns.DefaultClusterDomain,
 		ESLicenseType:           render.ElasticsearchLicenseTypeEnterpriseTrial,
 		Replicas:                roc.installation.ControlPlaneReplicas,
-		ComplianceFeatureActive: roc.complianceFeatureActive,
+		Compliance:              roc.compliance,
+		ComplianceLicenseActive: roc.complianceFeatureActive,
 		CloudResources:          cloudResources,
 	}
 	component, err := render.Manager(cfg)

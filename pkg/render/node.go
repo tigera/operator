@@ -843,12 +843,9 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 			corev1.Volume{Name: "sys-fs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
 			// Volume for the bpffs itself, used by the main node container.
 			corev1.Volume{Name: "bpffs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
-		)
-
-		if c.cfg.Installation.Variant == operatorv1.Calico {
 			// Volume used by mount-cgroupv2 init container to access root cgroup name space of node.
-			volumes = append(volumes, corev1.Volume{Name: "init-proc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc/1"}}})
-		}
+			corev1.Volume{Name: "nodeproc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc"}}},
+		)
 	}
 
 	if c.vppDataplaneEnabled() {
@@ -990,14 +987,18 @@ func (c *nodeComponent) bpffsInitContainer() corev1.Container {
 			// so that it outlives the init container.
 			MountPropagation: &bidirectional,
 		},
-	}
-
-	if c.cfg.Installation.Variant == operatorv1.Calico {
-		mounts = append(mounts, corev1.VolumeMount{
-			MountPath: "/initproc",
-			Name:      "init-proc",
+		{
+			MountPath: "/var/run/calico",
+			Name:      "var-run-calico",
+			// Bidirectional is required to ensure that the new mount we make at /var/run/calico/cgroup propagates to the host
+			// so that it outlives the init container.
+			MountPropagation: &bidirectional,
+		},
+		{
+			MountPath: "/nodeproc",
+			Name:      "nodeproc",
 			ReadOnly:  true,
-		})
+		},
 	}
 
 	return corev1.Container{

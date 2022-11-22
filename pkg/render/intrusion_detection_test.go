@@ -142,30 +142,46 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		// Should mount ManagerTLSSecret for non-managed clusters
 		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		idji := rtest.GetResource(resources, "intrusion-detection-es-job-installer", render.IntrusionDetectionNamespace, "batch", "v1", "Job").(*batchv1.Job)
+		Expect(idc.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(idc.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
 			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "tenant_id.clusterTestName"},
 		))
+		Expect(idji.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(idji.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
 			corev1.EnvVar{Name: "ELASTIC_INDEX_SUFFIX", Value: "tenant_id.clusterTestName"},
 		))
 		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
+
 		Expect(idc.Spec.Template.Spec.Volumes[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 		Expect(idc.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 
+		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
+		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
+		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(BeTrue())
+		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
+
 		clusterRole := rtest.GetResource(resources, "intrusion-detection-controller", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 
-		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"managedclusters"},
-			Verbs:     []string{"watch", "list", "get"},
-		}))
-
-		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
-			APIGroups: []string{"authentication.k8s.io"},
-			Resources: []string{"tokenreviews"},
-			Verbs:     []string{"create"},
-		}))
+		Expect(clusterRole.Rules).To(ContainElements(
+			rbacv1.PolicyRule{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs:     []string{"watch", "list", "get"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"authentication.k8s.io"},
+				Resources: []string{"tokenreviews"},
+				Verbs:     []string{"create"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"batch"},
+				Resources: []string{"cronjobs", "jobs"},
+				Verbs: []string{
+					"get", "list", "watch", "create", "update", "patch", "delete",
+				},
+			}))
 
 		// secrets are mounted
 		adAPIDeployment := rtest.GetResource(resources, render.ADAPIObjectName, render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -216,6 +232,21 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			Kind:      "ServiceAccount",
 			Name:      render.ADAPIObjectName,
 			Namespace: render.IntrusionDetectionNamespace,
+		}))
+	})
+
+	It("should render finalizers rbac resources in the IDS ClusterRole for an Openshift management/standalone cluster", func() {
+		cfg.Openshift = openshift
+		cfg.ManagedCluster = false
+		component := render.IntrusionDetection(cfg)
+		resources, _ := component.Objects()
+
+		idsControllerRole := rtest.GetResource(resources, render.IntrusionDetectionName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+
+		Expect(idsControllerRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"apps"},
+			Resources: []string{"deployments/finalizers"},
+			Verbs:     []string{"update"},
 		}))
 	})
 
@@ -303,6 +334,13 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 
 		dp := rtest.GetResource(resources, "intrusion-detection-controller", "tigera-intrusion-detection", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		envs := dp.Spec.Template.Spec.Containers[0].Env
+
+		// Validate that even with syslog configured we still have the CA configmap Volume
+		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(idc.Spec.Template.Spec.Volumes[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+		Expect(idc.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
+		Expect(idc.Spec.Template.Spec.Volumes[1].Name).To(Equal("var-log-calico"))
+		Expect(idc.Spec.Template.Spec.Volumes[1].VolumeSource.HostPath.Path).To(Equal("/var/log/calico"))
 
 		expectedEnvs := []struct {
 			name       string
@@ -401,7 +439,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		))
 
 		clusterRole := rtest.GetResource(resources, "intrusion-detection-controller", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(clusterRole.Rules).NotTo(ConsistOf([]rbacv1.PolicyRule{
+		Expect(clusterRole.Rules).NotTo(ContainElements([]rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},
@@ -409,8 +447,15 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			},
 			{
 				APIGroups: []string{"authorization.k8s.io"},
-				Resources: []string{"subjectaccessreviews"},
+				Resources: []string{"tokenreviews"},
 				Verbs:     []string{"create"},
+			},
+			{
+				APIGroups: []string{"batch"},
+				Resources: []string{"cronjobs", "jobs"},
+				Verbs: []string{
+					"get", "list", "watch", "create", "update", "patch", "delete",
+				},
 			},
 		}))
 	})

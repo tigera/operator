@@ -489,7 +489,7 @@ func WaitToAddResourceWatch(controller controller.Controller, client kubernetes.
 			duration = maxDuration
 		}
 		ticker.Reset(duration)
-		if isResourceReady(client, obj.GetObjectKind().GroupVersionKind().Kind) {
+		if isCalicoResourceReady(client, obj.GetObjectKind().GroupVersionKind().Kind) {
 			err := controller.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForObject{})
 			if err != nil {
 				log.Info("failed to watch %s resource: %v. Will retry to add watch", obj.GetObjectKind().GroupVersionKind().Kind, err)
@@ -501,18 +501,14 @@ func WaitToAddResourceWatch(controller controller.Controller, client kubernetes.
 	}
 }
 
-func isResourceReady(client kubernetes.Interface, resourceKind string) bool {
-	_, res, err := client.Discovery().ServerGroupsAndResources()
+func isCalicoResourceReady(client kubernetes.Interface, resourceKind string) bool {
+	res, err := client.Discovery().ServerResourcesForGroupVersion(v3.GroupVersionCurrent)
 	if err != nil {
 		return false
 	}
-	for _, group := range res {
-		if group.GroupVersion == v3.GroupVersionCurrent {
-			for _, r := range group.APIResources {
-				if r.Kind == resourceKind {
-					return true
-				}
-			}
+	for _, r := range res.APIResources {
+		if resourceKind == r.Kind {
+			return true
 		}
 	}
 	return false

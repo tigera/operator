@@ -87,6 +87,21 @@ func ValidateReplicatedPodResourceOverrides(overrides components.ReplicatedPodRe
 		}
 	}
 
+	if overrides, ok := overrides.(components.TerminationGracePeriodOverride); ok {
+		tgp := overrides.GetTerminationGracePeriodSeconds()
+		if tgp != nil && *tgp < 0 {
+			return fmt.Errorf("spec.Template.Spec.TerminationGracePeriodSeconds is invalid: cannot be negative")
+		}
+	}
+
+	if overrides, ok := overrides.(components.DeploymentStrategyOverride); ok {
+		if st := overrides.GetDeploymentStrategy(); st != nil {
+			if err := k8svalidation.ValidateDeploymentStrategy(st, field.NewPath("spec", "strategy")); err.ToAggregate() != nil {
+				return fmt.Errorf("spec.Strategy is invalid: %w", err.ToAggregate())
+			}
+		}
+	}
+
 	return nil
 }
 

@@ -548,7 +548,9 @@ func (c *kubeControllersComponent) prometheusService() *corev1.Service {
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{"k8s-app": c.kubeControllerName},
-			Type:     corev1.ServiceTypeClusterIP,
+			// "Headless" service; prevent kube-proxy from rendering any rules for this service
+			// (which is only intended for Prometheus to scrape).
+			ClusterIP: "None",
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "metrics-port",

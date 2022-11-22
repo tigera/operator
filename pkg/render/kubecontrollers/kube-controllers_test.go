@@ -252,6 +252,9 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		clusterRole := rtest.GetResource(resources, kubecontrollers.KubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(len(clusterRole.Rules)).To(Equal(19))
+
+		ms := rtest.GetResource(resources, kubecontrollers.KubeControllerMetrics, common.CalicoNamespace, "", "v1", "Service").(*corev1.Service)
+		Expect(ms.Spec.ClusterIP).To(Equal("None"), "metrics service should be headless")
 	})
 
 	It("should render all es-calico-kube-controllers resources for a default configuration (standalone) using TigeraSecureEnterprise when logstorage and secrets exist", func() {

@@ -102,7 +102,7 @@ func IntrusionDetection(cfg *IntrusionDetectionConfiguration) Component {
 
 // IntrusionDetectionConfiguration contains all the config information needed to render the component.
 type IntrusionDetectionConfiguration struct {
-	IntrusionDetection *operatorv1.IntrusionDetection
+	IntrusionDetection operatorv1.IntrusionDetection
 	LogCollector       *operatorv1.LogCollector
 	ESSecrets          []*corev1.Secret
 	Installation       *operatorv1.InstallationSpec
@@ -687,7 +687,7 @@ func (c *intrusionDetectionComponent) syslogForwardingIsEnabled() bool {
 }
 
 func (c *intrusionDetectionComponent) adAPIPersistentStorageEnabled() bool {
-	return c.cfg.IntrusionDetection != nil && len(c.cfg.IntrusionDetection.Spec.AnomalyDetection.StorageClassName) > 0
+	return len(c.cfg.IntrusionDetection.Spec.AnomalyDetection.StorageClassName) > 0
 }
 
 func syslogEventsForwardingVolumeMount() corev1.VolumeMount {

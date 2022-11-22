@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 )
 
@@ -48,7 +49,7 @@ type TyphaDeploymentInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-// TyphaDeploymentDeploymentPodSpec is the typha Deployment's PodSpec.
+// TyphaDeploymentPodSpec is the typha Deployment's PodSpec.
 type TyphaDeploymentPodSpec struct {
 	// InitContainers is a list of typha init containers.
 	// If specified, this overrides the specified typha Deployment init containers.
@@ -76,6 +77,17 @@ type TyphaDeploymentPodSpec struct {
 	// If omitted, the calico-typha Deployment will use its default value for nodeSelector.
 	// WARNING: Please note that this field will modify the default calico-typha Deployment nodeSelector.
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
+	// Optional duration in seconds the pod needs to terminate gracefully. May be decreased in delete request.
+	// Value must be non-negative integer. The value zero indicates stop immediately via
+	// the kill signal (no opportunity to shut down).
+	// If this value is nil, the default grace period will be used instead.
+	// The grace period is the duration in seconds after the processes running in the pod are sent
+	// a termination signal and the time when the processes are forcibly halted with a kill signal.
+	// Set this value longer than the expected cleanup time for your process.
+	// Defaults to 30 seconds.
+	// +optional
+	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty" protobuf:"varint,4,opt,name=terminationGracePeriodSeconds"`
 
 	// TopologySpreadConstraints describes how a group of pods ought to spread across topology
 	// domains. Scheduler will schedule pods in a way which abides by the constraints.
@@ -128,6 +140,11 @@ type TyphaDeploymentSpec struct {
 	// Template describes the typha Deployment pod that will be created.
 	// +optional
 	Template *TyphaDeploymentPodTemplateSpec `json:"template,omitempty"`
+
+	// The deployment strategy to use to replace existing pods with new ones.
+	// +optional
+	// +patchStrategy=retainKeys
+	Strategy *appsv1.DeploymentStrategy `json:"strategy,omitempty" patchStrategy:"retainKeys" protobuf:"bytes,4,opt,name=strategy"`
 }
 
 func (c *TyphaDeployment) GetMetadata() *Metadata {
@@ -234,6 +251,24 @@ func (c *TyphaDeployment) GetTolerations() []v1.Toleration {
 				return c.Spec.Template.Spec.Tolerations
 			}
 		}
+	}
+	return nil
+}
+
+func (c *TyphaDeployment) GetTerminationGracePeriodSeconds() *int64 {
+	if c.Spec != nil {
+		if c.Spec.Template != nil {
+			if c.Spec.Template.Spec != nil {
+				return c.Spec.Template.Spec.TerminationGracePeriodSeconds
+			}
+		}
+	}
+	return nil
+}
+
+func (c *TyphaDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
+	if c.Spec != nil {
+		return c.Spec.Strategy
 	}
 	return nil
 }

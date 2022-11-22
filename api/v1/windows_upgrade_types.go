@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 )
 
@@ -185,5 +186,13 @@ func (c *CalicoWindowsUpgradeDaemonSet) GetTolerations() []v1.Toleration {
 			}
 		}
 	}
+	return nil
+}
+
+func (c *CalicoWindowsUpgradeDaemonSet) GetTerminationGracePeriodSeconds() *int64 {
+	return nil
+}
+
+func (c *CalicoWindowsUpgradeDaemonSet) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }

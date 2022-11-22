@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -151,7 +152,7 @@ var _ = Describe("Typha rendering tests", func() {
 		dResource := rtest.GetResource(resources, "calico-typha", "calico-system", "apps", "v1", "Deployment")
 		Expect(dResource).ToNot(BeNil())
 
-		// The DaemonSet should have the correct configuration.
+		// The Deployment should have the correct configuration.
 		d := dResource.(*appsv1.Deployment)
 		paa := d.Spec.Template.Spec.Affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution
 		Expect(paa).To(ContainElement(corev1.PodAffinityTerm{
@@ -160,6 +161,16 @@ var _ = Describe("Typha rendering tests", func() {
 			},
 			Namespaces:  []string{"kube-system"},
 			TopologyKey: "kubernetes.io/hostname",
+		}))
+
+		Expect(*d.Spec.Template.Spec.TerminationGracePeriodSeconds).To(Equal(int64(300 /* our default*/)))
+		Expect(*d.Spec.ProgressDeadlineSeconds).To(Equal(int32(600 /*k8s default*/)))
+		Expect(d.Spec.Strategy).To(Equal(appsv1.DeploymentStrategy{
+			Type: appsv1.RollingUpdateDeploymentStrategyType,
+			RollingUpdate: &appsv1.RollingUpdateDeployment{
+				MaxSurge:       intOrStrPtr("100%"),
+				MaxUnavailable: intOrStrPtr("1"),
+			},
 		}))
 	})
 	It("should set TIGERA_*_SECURITY_GROUP variables when AmazonCloudIntegration is defined", func() {
@@ -470,6 +481,8 @@ var _ = Describe("Typha rendering tests", func() {
 				Value:    "bar",
 			}
 
+			termGracePeriod := int64(700)
+
 			installation.TyphaDeployment = &operatorv1.TyphaDeployment{
 				Metadata: &operatorv1.Metadata{
 					Labels:      map[string]string{"top-level": "label1"},
@@ -477,12 +490,20 @@ var _ = Describe("Typha rendering tests", func() {
 				},
 				Spec: &operatorv1.TyphaDeploymentSpec{
 					MinReadySeconds: &minReadySeconds,
+					Strategy: &appsv1.DeploymentStrategy{
+						Type: appsv1.RollingUpdateDeploymentStrategyType,
+						RollingUpdate: &appsv1.RollingUpdateDeployment{
+							MaxSurge:       intOrStrPtr("2"),
+							MaxUnavailable: intOrStrPtr("0"),
+						},
+					},
 					Template: &operatorv1.TyphaDeploymentPodTemplateSpec{
 						Metadata: &operatorv1.Metadata{
 							Labels:      map[string]string{"template-level": "label2"},
 							Annotations: map[string]string{"template-level": "annot2"},
 						},
 						Spec: &operatorv1.TyphaDeploymentPodSpec{
+							TerminationGracePeriodSeconds: &termGracePeriod,
 							Containers: []operatorv1.TyphaDeploymentContainer{
 								{
 									Name:      "calico-typha",
@@ -519,6 +540,13 @@ var _ = Describe("Typha rendering tests", func() {
 			Expect(d.Annotations["top-level"]).To(Equal("annot1"))
 
 			Expect(d.Spec.MinReadySeconds).To(Equal(minReadySeconds))
+			Expect(d.Spec.Strategy).To(Equal(appsv1.DeploymentStrategy{
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
+					MaxSurge:       intOrStrPtr("2"),
+					MaxUnavailable: intOrStrPtr("0"),
+				},
+			}))
 
 			// At runtime, the operator will also add some standard labels to the
 			// deployment such as "k8s-app=calico-typha". But the deployment object
@@ -547,6 +575,19 @@ var _ = Describe("Typha rendering tests", func() {
 
 			Expect(d.Spec.Template.Spec.Tolerations).To(HaveLen(1))
 			Expect(d.Spec.Template.Spec.Tolerations[0]).To(Equal(toleration))
+
+			Expect(*d.Spec.Template.Spec.TerminationGracePeriodSeconds).To(Equal(termGracePeriod))
+			expProgDeadline := int32(700 * 120 / 100)
+			Expect(*d.Spec.ProgressDeadlineSeconds).To(Equal(expProgDeadline))
+			found := false
+			for _, ev := range d.Spec.Template.Spec.Containers[0].Env {
+				if ev.Name == "TYPHA_SHUTDOWNTIMEOUTSECS" {
+					Expect(found).To(BeFalse(), "Typha deployment had duplicate TYPHA_SHUTDOWNTIMEOUTSECS env var")
+					Expect(ev.Value).To(Equal("700"))
+					found = true
+				}
+			}
+			Expect(found).To(BeTrue(), "Typha deployment was missing TYPHA_SHUTDOWNTIMEOUTSECS env var")
 		})
 
 		It("should override ComponentResources", func() {
@@ -646,3 +687,8 @@ var _ = Describe("Typha rendering tests", func() {
 		})
 	})
 })
+
+func intOrStrPtr(v string) *intstr.IntOrString {
+	ios := intstr.Parse(v)
+	return &ios
+}

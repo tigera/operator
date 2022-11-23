@@ -1,5 +1,5 @@
-title: v1.1.4
+title: v1.1.5
 components:
   key-cert-provisioner:
     image: tigera/key-cert-provisioner
-    version: v1.1.4
+    version: v1.1.5

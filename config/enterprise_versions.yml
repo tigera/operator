@@ -8,7 +8,7 @@ components:
     version: v3.14.3
   voltron:
     image: tigera/voltron
-    version: v3.14.3
+    version: v3.14.4-1
   cnx-apiserver:
     image: tigera/cnx-apiserver
     version: v3.14.3

@@ -666,7 +666,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 	}
 }
 
-// Determine whether this component's configuration has syslog forw rding enabled or not.
+// Determine whether this component's configuration has syslog forwarding enabled or not.
 // Look inside LogCollector spec for whether or not Syslog log type SyslogLogIDSEvents
 // exists. If it does, then we need to turn on forwarding for IDS event logs.
 func (c *intrusionDetectionComponent) syslogForwardingIsEnabled() bool {

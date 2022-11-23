@@ -45,7 +45,7 @@ components:
     image: tigera/kibana
     version: v3.15.0
   eck-elasticsearch:
-    version: 7.17.6
+    version: 7.17.7
   elasticsearch:
     image: tigera/elasticsearch
     version: v3.15.0

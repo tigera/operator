@@ -45,6 +45,12 @@ func GetKeyValidatorConfig(ctx context.Context, cli client.Client, authenticatio
 		if oidc != nil && oidc.Type == operatorv1.OIDCTypeTigera {
 			var kvcOptions []tigerakvc.Option
 
+			if cloudOption, err := getCloudKeyValidatorOption(ctx, cli); err != nil {
+				return nil, err
+			} else {
+				kvcOptions = append(kvcOptions, cloudOption)
+			}
+
 			if oidc.UsernameClaim != "" {
 				kvcOptions = append(kvcOptions, tigerakvc.WithUsernameClaim(oidc.UsernameClaim))
 			}

@@ -446,8 +446,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		if instance.Spec.AdditionalStores.Syslog != nil && instance.Spec.AdditionalStores.Syslog.Encryption == v1.EncryptionTLS {
 			syslogCert, err := getSysLogCertificate(r.client)
 			if err != nil {
-				log.Error(err, "Error loading Syslog certificate")
-				r.status.SetDegraded("Error loading Syslog certificate", err.Error())
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Error loading Syslog certificate", err, reqLogger)
 				return reconcile.Result{}, err
 			}
 			if syslogCert != nil {

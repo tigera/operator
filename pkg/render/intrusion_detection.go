@@ -1423,8 +1423,6 @@ func (c *intrusionDetectionComponent) adAPIDeployment(configureADStorage bool) *
 		// where it requires root privileges to write to
 		sc.RunAsGroup = ptr.Int64ToPtr(0)
 		sc.RunAsUser = ptr.Int64ToPtr(0)
-		sc.Privileged = ptr.BoolToPtr(true)
-		sc.AllowPrivilegeEscalation = ptr.BoolToPtr(true)
 		sc.RunAsNonRoot = ptr.BoolToPtr(false)
 	} else {
 		adModelVolumeSource = corev1.VolumeSource{

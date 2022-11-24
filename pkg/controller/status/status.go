@@ -23,6 +23,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-logr/logr"
+
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	appsv1 "k8s.io/api/apps/v1"
@@ -70,7 +72,7 @@ type StatusManager interface {
 	RemoveCronJobs(cjs ...types.NamespacedName)
 	RemoveCertificateSigningRequests(name string)
 	SetWindowsUpgradeStatus(pending, inProgress, completed []string, err error)
-	SetDegraded(reason, msg string)
+	SetDegraded(reason operator.TigeraStatusReason, msg string, err error, log logr.Logger)
 	ClearDegraded()
 	IsAvailable() bool
 	IsProgressing() bool
@@ -109,7 +111,7 @@ type statusManager struct {
 	// Track degraded state as set by external controllers.
 	degraded               bool
 	explicitDegradedMsg    string
-	explicitDegradedReason string
+	explicitDegradedReason operator.TigeraStatusReason
 	// Track degraded state set by calicoWindowsUpgrader.
 	windowsUpgradeDegradedMsg string
 
@@ -180,13 +182,13 @@ func (m *statusManager) updateStatus() {
 		// Now, use that to update the TigeraStatus object for this manager.
 		available := m.IsAvailable()
 		if m.IsAvailable() {
-			m.setAvailable(string(operator.AllObjectsAvailable), "All objects available")
+			m.setAvailable(operator.AllObjectsAvailable, "All objects available")
 		} else {
 			m.clearAvailable()
 		}
 
 		if m.IsProgressing() {
-			m.setProgressing(string(operator.ResourceNotReady), m.progressingMessage())
+			m.setProgressing(operator.ResourceNotReady, m.progressingMessage())
 		} else {
 			if available {
 				m.clearProgressingWithReason(operator.AllObjectsAvailable, "All Objects Available")
@@ -415,12 +417,17 @@ func (m *statusManager) RemoveCertificateSigningRequests(name string) {
 }
 
 // SetDegraded sets degraded state with the provided reason and message.
-func (m *statusManager) SetDegraded(reason, msg string) {
+func (m *statusManager) SetDegraded(reason operator.TigeraStatusReason, msg string, err error, log logr.Logger) {
+	log.WithValues("reason", string(reason)).Error(err, msg)
+	errormsg := ""
+	if err != nil {
+		errormsg = err.Error()
+	}
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	m.degraded = true
 	m.explicitDegradedReason = reason
-	m.explicitDegradedMsg = msg
+	m.explicitDegradedMsg = fmt.Sprintf("%s: %s", msg, errormsg)
 }
 
 // ClearDegraded clears degraded state.
@@ -803,43 +810,32 @@ func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondi
 	m.crExists = true
 }
 
-func sanitizeReason(r string) string {
-	// First replace all invalid middle characters with '_', then strip all
-	// invalid beginning characters, and then strip all invalid ending characters
-	return reasonInvalidEndCharacters.ReplaceAllString(
-		reasonInvalidStartCharacters.ReplaceAllString(
-			reasonInvalidCharacters.ReplaceAllString(r, "_"), ""), "")
-}
-
-func (m *statusManager) setAvailable(reason, msg string) {
-	reason = sanitizeReason(reason)
+func (m *statusManager) setAvailable(reason operator.TigeraStatusReason, msg string) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
 	conditions := []operator.TigeraStatusCondition{
-		{Type: operator.ComponentAvailable, Status: operator.ConditionTrue, Reason: reason, Message: msg},
+		{Type: operator.ComponentAvailable, Status: operator.ConditionTrue, Reason: string(reason), Message: msg},
 	}
 	m.set(true, conditions...)
 }
 
-func (m *statusManager) setDegraded(reason, msg string) {
-	reason = sanitizeReason(reason)
+func (m *statusManager) setDegraded(reason operator.TigeraStatusReason, msg string) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
 	conditions := []operator.TigeraStatusCondition{
-		{Type: operator.ComponentDegraded, Status: operator.ConditionTrue, Reason: reason, Message: msg},
+		{Type: operator.ComponentDegraded, Status: operator.ConditionTrue, Reason: string(reason), Message: msg},
 	}
 	m.set(true, conditions...)
 }
 
-func (m *statusManager) setProgressing(reason, msg string) {
-	reason = sanitizeReason(reason)
+func (m *statusManager) setProgressing(reason operator.TigeraStatusReason, msg string) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
 	conditions := []operator.TigeraStatusCondition{
-		{Type: operator.ComponentProgressing, Status: operator.ConditionTrue, Reason: reason, Message: msg},
+		{Type: operator.ComponentProgressing, Status: operator.ConditionTrue, Reason: string(reason), Message: msg},
 	}
 	m.set(true, conditions...)
 }
@@ -897,24 +893,24 @@ func (m *statusManager) degradedMessage() string {
 // This function should only be called if we are in a degraded state.
 // Every path should return a non-empty string that can be used in
 // the Condition Reason.
-func (m *statusManager) degradedReason() string {
+func (m *statusManager) degradedReason() operator.TigeraStatusReason {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	if m.degraded {
 		// Ensure we always have a reason that is non-empty
 		if m.explicitDegradedReason == "" {
-			return string(operator.Unknown)
+			return operator.Unknown
 		}
 		return m.explicitDegradedReason
 	}
 	// Add a reason if we have a windows upgrade degraded msg.
 	if m.windowsUpgradeDegradedMsg != "" {
-		return string(operator.UpgradeError)
+		return operator.UpgradeError
 	}
 	if len(m.failing) != 0 {
-		return string(operator.PodFailure)
+		return operator.PodFailure
 	}
-	return string(operator.Unknown)
+	return operator.Unknown
 }
 
 func (m *statusManager) clearDegradedWithReason(reason operator.TigeraStatusReason, msg string) {

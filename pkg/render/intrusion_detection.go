@@ -226,7 +226,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 
 		adObjs = append(adObjs,
 			c.adAPIService(),
-			c.adAPIDeployment(shouldConfigureADStorage),
+			c.adAPIDeployment(),
 		)
 
 		// RBAC for AD Detector Pods
@@ -1407,11 +1407,11 @@ func (c *intrusionDetectionComponent) adPersistentVolumeClaim() *corev1.Persiste
 	return &adPVC
 }
 
-func (c *intrusionDetectionComponent) adAPIDeployment(configureADStorage bool) *appsv1.Deployment {
+func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 	var adModelVolumeSource corev1.VolumeSource
 	sc := securitycontext.NewBaseContext(securitycontext.RunAsUserID, securitycontext.RunAsGroupID)
 
-	if configureADStorage {
+	if c.adAPIPersistentStorageEnabled() {
 		adStorageClassName := c.cfg.IntrusionDetection.Spec.AnomalyDetection.StorageClassName
 		adModelVolumeSource = corev1.VolumeSource{
 			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{

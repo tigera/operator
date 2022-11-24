@@ -1419,7 +1419,7 @@ func (c *intrusionDetectionComponent) adAPIDeployment(configureADStorage bool) *
 			},
 		}
 
-		// When Persistent Storage is configured for AD API, it will use the host path of /var/anomaly-detection-api
+		// When Persistent Storage is configured for AD API, it will use the host path of /mnt/anomaly-detection-api
 		// where it requires root privileges to write to
 		sc.RunAsGroup = ptr.Int64ToPtr(0)
 		sc.RunAsUser = ptr.Int64ToPtr(0)

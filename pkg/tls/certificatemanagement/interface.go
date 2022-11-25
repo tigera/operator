@@ -47,7 +47,7 @@ type KeyPairInterface interface {
 	CertificateInterface
 }
 
-// Certificate wraps the certificate. Combine this with a TrustedBundle, to mount a trusted certificate bundle to a pod.
+// CertificateInterface wraps the certificate. Combine this with a TrustedBundle, to mount a trusted certificate bundle to a pod.
 type CertificateInterface interface {
 	GetIssuer() CertificateInterface
 	GetCertificatePEM() []byte

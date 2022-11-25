@@ -488,7 +488,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 		})
 		It("should load the system certificates into the bundle", func() {
 			if runtime.GOOS != "linux" {
-				Skip("Skip for users that run tests on different systems.")
+				Skip("Skip for users that run this test outside of a container on incompatible systems.")
 			}
 			trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates()
 			Expect(err).NotTo(HaveOccurred())

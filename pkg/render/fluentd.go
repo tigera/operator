@@ -1021,6 +1021,7 @@ func trustedBundleVolume(bundle certificatemanagement.TrustedBundle) corev1.Volu
 	volume.ConfigMap.Items = []corev1.KeyToPath{
 		{Key: certificatemanagement.TrustedCertConfigMapKeyName, Path: certificatemanagement.TrustedCertConfigMapKeyName},
 		{Key: certificatemanagement.TrustedCertConfigMapKeyName, Path: SplunkFluentdSecretCertificateKey},
+		{Key: certificatemanagement.RHELRootCertificateBundleName, Path: certificatemanagement.RHELRootCertificateBundleName},
 	}
 	return volume
 }

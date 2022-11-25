@@ -25,6 +25,7 @@ import (
 )
 
 const (
+	// RHELRootCertificateBundleName is the name of the system CA bundle as present in UBI/RHEL systems.
 	RHELRootCertificateBundleName = "ca-bundle.crt"
 )
 
@@ -36,6 +37,8 @@ type trustedBundle struct {
 }
 
 // CreateTrustedBundle creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.
+// It will include:
+// - A bundle with Calico's root certificates + any user supplied certificates in /etc/pki/tls/certs/tigera-ca-bundle.crt.
 func CreateTrustedBundle(certificates ...CertificateInterface) TrustedBundle {
 	bundle, err := createTrustedBundle(false, certificates...)
 	if err != nil {
@@ -45,7 +48,9 @@ func CreateTrustedBundle(certificates ...CertificateInterface) TrustedBundle {
 }
 
 // CreateTrustedBundleWithSystemRootCertificates creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.
-// It will also include a root certificate bundle in  /etc/pki/tls/certs/ca-bundle.crt.
+// It will include:
+// - A bundle with Calico's root certificates + any user supplied certificates in /etc/pki/tls/certs/tigera-ca-bundle.crt.
+// - A system root certificate bundle in /etc/pki/tls/certs/ca-bundle.crt.
 func CreateTrustedBundleWithSystemRootCertificates(certificates ...CertificateInterface) (TrustedBundle, error) {
 	return createTrustedBundle(true, certificates...)
 }
@@ -171,11 +176,13 @@ func (c *certificate) GetIssuer() CertificateInterface {
 	return c.issuer
 }
 
-// certFiles is copied from the x509 package.
+// certFiles is copied from the x509 package, but re-ordered, since in practice this should run containerized
+// and stop at the first entry. More at: https://go.dev/src/crypto/x509/root_linux.go for the source.
+//
 // Possible certificate files; stop after finding one.
 var certFiles = []string{
-	"/etc/ssl/certs/ca-certificates.crt",                // Debian/Ubuntu/Gentoo etc.
 	"/etc/pki/tls/certs/ca-bundle.crt",                  // Fedora/RHEL 6
+	"/etc/ssl/certs/ca-certificates.crt",                // Debian/Ubuntu/Gentoo etc.
 	"/etc/ssl/ca-bundle.pem",                            // OpenSUSE
 	"/etc/pki/tls/cacert.pem",                           // OpenELEC
 	"/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem", // CentOS/RHEL 7
@@ -183,7 +190,8 @@ var certFiles = []string{
 }
 
 // getSystemCertificates returns the certificate that are installed in the operator's base image.
-// The code of this function is loosely based on x509's loadSystemRoots() func.
+// The code of this function is loosely based on x509's loadSystemRoots() func:
+// https://go.dev/src/crypto/x509/root_unix.go
 func getSystemCertificates() ([]byte, error) {
 	for _, filename := range certFiles {
 		data, err := os.ReadFile(filename)

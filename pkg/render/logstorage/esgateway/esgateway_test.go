@@ -252,7 +252,8 @@ func getTLS(installation *operatorv1.InstallationSpec) (certificatemanagement.Ke
 	esDNSNames := dns.GetServiceDNSNames(render.TigeraElasticsearchGatewaySecret, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
 	gwKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TigeraElasticsearchGatewaySecret, render.ElasticsearchNamespace, esDNSNames)
 	Expect(err).NotTo(HaveOccurred())
-	trustedBundle := certificateManager.CreateTrustedBundle(gwKeyPair)
+	trustedBundle, err := certificateManager.CreateTrustedBundle(false, gwKeyPair)
+	Expect(err).NotTo(HaveOccurred())
 	Expect(cli.Create(context.Background(), certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 	return gwKeyPair, trustedBundle
 }

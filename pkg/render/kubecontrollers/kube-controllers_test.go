@@ -123,12 +123,14 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		internalManagerTLSSecret, err = certificateManager.GetOrCreateKeyPair(cli, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
 		Expect(err).NotTo(HaveOccurred())
+		trustedBundle, err := certificateManager.CreateTrustedBundle(false)
+		Expect(err).NotTo(HaveOccurred())
 		cfg = kubecontrollers.KubeControllersConfiguration{
 			K8sServiceEp:  k8sServiceEp,
 			Installation:  instance,
 			ClusterDomain: dns.DefaultClusterDomain,
 			MetricsPort:   9094,
-			TrustedBundle: certificateManager.CreateTrustedBundle(),
+			TrustedBundle: trustedBundle,
 			UsePSP:        true,
 		}
 	})

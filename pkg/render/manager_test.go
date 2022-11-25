@@ -144,7 +144,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: "true"},
 			{Name: "VOLTRON_QUERYSERVER_ENDPOINT", Value: "https://tigera-api.tigera-system.svc:8080"},
 			{Name: "VOLTRON_QUERYSERVER_BASE_PATH", Value: "/api/v1/namespaces/tigera-system/services/https:tigera-api:8080/proxy/"},
-			{Name: "VOLTRON_QUERYSERVER_CA_BUNDLE_PATH", Value: "/etc/pki/tigera/tigera-ca-bundle.crt"},
+			{Name: "VOLTRON_QUERYSERVER_CA_BUNDLE_PATH", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 		}))
 
 		Expect(voltron.VolumeMounts).To(HaveLen(2))
@@ -562,7 +562,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
-		bundle = certificateManager.CreateTrustedBundle()
+		bundle, err = certificateManager.CreateTrustedBundle(false)
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	// renderManager passes in as few parameters as possible to render.Manager without it

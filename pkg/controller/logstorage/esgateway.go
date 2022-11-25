@@ -75,8 +75,12 @@ func (r *ReconcileLogStorage) createEsGateway(
 		r.status.SetDegraded("Waiting for internal Elasticsearch tls certificate secret to be available", "")
 		return reconcile.Result{}, false, nil
 	}
-	trustedBundle := certificateManager.CreateTrustedBundle(esInternalCertificate, kibanaCertificate)
-
+	trustedBundle, err := certificateManager.CreateTrustedBundle(false, esInternalCertificate, kibanaCertificate)
+	if err != nil {
+		reqLogger.Error(err, "Unable to create tigera-ca-bundle configmap")
+		r.status.SetDegraded("Unable to create tigera-ca-bundle configmap", err.Error())
+		return reconcile.Result{}, false, err
+	}
 	// This secret should only ever contain one key.
 	if len(esAdminUserSecret.Data) != 1 {
 		r.status.SetDegraded("Elasticsearch admin user secret contains too many entries", "")

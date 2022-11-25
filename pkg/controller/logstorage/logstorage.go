@@ -102,7 +102,12 @@ func (r *ReconcileLogStorage) createLogStorage(
 			r.status.SetDegraded("Failed to create Elasticsearch secrets", err.Error())
 			return reconcile.Result{}, false, finalizerCleanup, err
 		}
-		trustedBundle = certificateManager.CreateTrustedBundle(elasticKeyPair)
+		trustedBundle, err = certificateManager.CreateTrustedBundle(false, elasticKeyPair)
+		if err != nil {
+			reqLogger.Error(err, "Unable to create tigera-ca-bundle configmap")
+			r.status.SetDegraded("Unable to create tigera-ca-bundle configmap", err.Error())
+			return reconcile.Result{}, false, finalizerCleanup, err
+		}
 		if !operatorv1.IsFIPSModeEnabled(install.FIPSMode) {
 			kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
 			if kibanaKeyPair, err = certificateManager.GetOrCreateKeyPair(r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames); err != nil {

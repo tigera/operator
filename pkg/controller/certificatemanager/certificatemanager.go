@@ -19,6 +19,7 @@ import (
 	"context"
 	"crypto/x509"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -69,7 +70,7 @@ type CertificateManager interface {
 	// GetCertificate returns a Certificate. If the certificate is not found, nil is returned.
 	GetCertificate(cli client.Client, secretName, secretNamespace string) (certificatemanagement.CertificateInterface, error)
 	// CreateTrustedBundle creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.
-	CreateTrustedBundle(certificates ...certificatemanagement.CertificateInterface) certificatemanagement.TrustedBundle
+	CreateTrustedBundle(includeSystemBundle bool, certificates ...certificatemanagement.CertificateInterface) (certificatemanagement.TrustedBundle, error)
 	// AddToStatusManager lets the status manager monitor pending CSRs if the certificate management is enabled.
 	AddToStatusManager(manager status.StatusManager, namespace string)
 	// KeyPair Returns the CA KeyPairInterface, so it can be rendered in the operator namespace.
@@ -335,6 +336,43 @@ func HasExpectedDNSNames(secretName, secretNamespace string, cert *x509.Certific
 }
 
 // CreateTrustedBundle creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.
-func (cm *certificateManager) CreateTrustedBundle(certificates ...certificatemanagement.CertificateInterface) certificatemanagement.TrustedBundle {
-	return certificatemanagement.CreateTrustedBundle(append([]certificatemanagement.CertificateInterface{cm.keyPair}, certificates...)...)
+func (cm *certificateManager) CreateTrustedBundle(includeSystemBundle bool, certificates ...certificatemanagement.CertificateInterface) (certificatemanagement.TrustedBundle, error) {
+	if includeSystemBundle {
+		systemCertificates, err := getSystemCertificates()
+		if err != nil {
+			return nil, err
+		}
+		certificates = append(certificates, systemCertificates...)
+	}
+	return certificatemanagement.CreateTrustedBundle(append([]certificatemanagement.CertificateInterface{cm.keyPair}, certificates...)...), nil
+}
+
+// certFiles is copied from the x509 package.
+// Possible certificate files; stop after finding one.
+var certFiles = []string{
+	"/etc/ssl/certs/ca-certificates.crt",                // Debian/Ubuntu/Gentoo etc.
+	"/etc/pki/tls/certs/ca-bundle.crt",                  // Fedora/RHEL 6
+	"/etc/ssl/ca-bundle.pem",                            // OpenSUSE
+	"/etc/pki/tls/cacert.pem",                           // OpenELEC
+	"/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem", // CentOS/RHEL 7
+	"/etc/ssl/cert.pem",                                 // Alpine Linux
+}
+
+// getSystemCertificates returns the certificate that are installed in the operator's base image.
+// The code of this function is loosely based on x509's loadSystemRoots() func.
+func getSystemCertificates() ([]certificatemanagement.CertificateInterface, error) {
+	var certificates []certificatemanagement.CertificateInterface
+
+	for _, filename := range certFiles {
+		data, err := os.ReadFile(filename)
+		if err == nil {
+			certificates = append(certificates, certificatemanagement.NewCertificate(filename, data, nil))
+			break
+		}
+		if err != nil && !os.IsNotExist(err) {
+			return nil, fmt.Errorf(fmt.Sprintf("error occurred when loading system root certificate with name %s", filename), err)
+		}
+	}
+
+	return certificates, nil
 }

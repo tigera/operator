@@ -1600,7 +1600,8 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 	setLogStorageFinalizer(ls)
 
 	By("creating all the components needed for LogStorage to be available")
-	trustedBundle := certificateManager.CreateTrustedBundle()
+	trustedBundle, err := certificateManager.CreateTrustedBundle(false)
+	Expect(err).NotTo(HaveOccurred())
 	esKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TigeraElasticsearchInternalCertSecret, common.OperatorNamespace(), []string{render.TigeraElasticsearchInternalCertSecret})
 	Expect(err).NotTo(HaveOccurred())
 	esPublic, err := certificateManager.GetOrCreateKeyPair(cli, relasticsearch.PublicCertSecret, common.OperatorNamespace(), []string{render.TigeraElasticsearchInternalCertSecret})

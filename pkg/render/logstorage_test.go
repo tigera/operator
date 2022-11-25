@@ -1438,7 +1438,8 @@ func getTLS(installation *operatorv1.InstallationSpec) (certificatemanagement.Ke
 	Expect(err).NotTo(HaveOccurred())
 	kibanaKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames)
 	Expect(err).NotTo(HaveOccurred())
-	trustedBundle := certificateManager.CreateTrustedBundle(elasticsearchKeyPair, kibanaKeyPair)
+	trustedBundle, err := certificateManager.CreateTrustedBundle(false, elasticsearchKeyPair, kibanaKeyPair)
+	Expect(err).NotTo(HaveOccurred())
 	Expect(cli.Create(context.Background(), certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 	return elasticsearchKeyPair, kibanaKeyPair, trustedBundle
 }

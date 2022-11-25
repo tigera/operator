@@ -390,7 +390,12 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
-	trustedBundle := certificateManager.CreateTrustedBundle(prometheusCertificate, esgwCertificate)
+	// Fluentd needs to mount system certificates in the case where Splunk, Syslog or AWS are used.
+	trustedBundle, err := certificateManager.CreateTrustedBundle(true, prometheusCertificate, esgwCertificate)
+	if err != nil {
+		r.status.SetDegraded("Unable to create tigera-ca-bundle configmap", err.Error())
+		return reconcile.Result{}, err
+	}
 
 	certificateManager.AddToStatusManager(r.status, render.LogCollectorNamespace)
 
@@ -434,7 +439,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	var useSyslogCertificate bool
 	if instance.Spec.AdditionalStores != nil {
 		if instance.Spec.AdditionalStores.Syslog != nil && instance.Spec.AdditionalStores.Syslog.Encryption == v1.EncryptionTLS {
 			syslogCert, err := getSysLogCertificate(r.client)
@@ -444,7 +448,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 				return reconcile.Result{}, err
 			}
 			if syslogCert != nil {
-				useSyslogCertificate = true
 				trustedBundle.AddCertificates(syslogCert)
 			}
 		}
@@ -521,22 +524,21 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	fluentdCfg := &render.FluentdConfiguration{
-		LogCollector:         instance,
-		ESSecrets:            esSecrets,
-		ESClusterConfig:      esClusterConfig,
-		S3Credential:         s3Credential,
-		SplkCredential:       splunkCredential,
-		Filters:              filters,
-		EKSConfig:            eksConfig,
-		PullSecrets:          pullSecrets,
-		Installation:         installation,
-		ClusterDomain:        r.clusterDomain,
-		OSType:               rmeta.OSTypeLinux,
-		MetricsServerTLS:     fluentdPrometheusTLS,
-		TrustedBundle:        trustedBundle,
-		ManagedCluster:       managedCluster,
-		UsePSP:               r.usePSP,
-		UseSyslogCertificate: useSyslogCertificate,
+		LogCollector:     instance,
+		ESSecrets:        esSecrets,
+		ESClusterConfig:  esClusterConfig,
+		S3Credential:     s3Credential,
+		SplkCredential:   splunkCredential,
+		Filters:          filters,
+		EKSConfig:        eksConfig,
+		PullSecrets:      pullSecrets,
+		Installation:     installation,
+		ClusterDomain:    r.clusterDomain,
+		OSType:           rmeta.OSTypeLinux,
+		MetricsServerTLS: fluentdPrometheusTLS,
+		TrustedBundle:    trustedBundle,
+		ManagedCluster:   managedCluster,
+		UsePSP:           r.usePSP,
 	}
 	// Render the fluentd component for Linux
 	comp := render.Fluentd(fluentdCfg)
@@ -573,21 +575,20 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 
 	if hasWindowsNodes {
 		fluentdCfg = &render.FluentdConfiguration{
-			LogCollector:         instance,
-			ESSecrets:            esSecrets,
-			ESClusterConfig:      esClusterConfig,
-			S3Credential:         s3Credential,
-			SplkCredential:       splunkCredential,
-			Filters:              filters,
-			EKSConfig:            eksConfig,
-			PullSecrets:          pullSecrets,
-			Installation:         installation,
-			ClusterDomain:        r.clusterDomain,
-			OSType:               rmeta.OSTypeWindows,
-			TrustedBundle:        trustedBundle,
-			ManagedCluster:       managedCluster,
-			UsePSP:               r.usePSP,
-			UseSyslogCertificate: useSyslogCertificate,
+			LogCollector:    instance,
+			ESSecrets:       esSecrets,
+			ESClusterConfig: esClusterConfig,
+			S3Credential:    s3Credential,
+			SplkCredential:  splunkCredential,
+			Filters:         filters,
+			EKSConfig:       eksConfig,
+			PullSecrets:     pullSecrets,
+			Installation:    installation,
+			ClusterDomain:   r.clusterDomain,
+			OSType:          rmeta.OSTypeWindows,
+			TrustedBundle:   trustedBundle,
+			ManagedCluster:  managedCluster,
+			UsePSP:          r.usePSP,
 		}
 		comp = render.Fluentd(fluentdCfg)
 

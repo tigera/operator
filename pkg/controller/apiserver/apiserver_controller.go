@@ -419,8 +419,11 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 				certificates = append(certificates, dexSecret)
 			}
 		}
-		trustedBundle := certificateManager.CreateTrustedBundle(certificates...)
-
+		trustedBundle, err := certificateManager.CreateTrustedBundle(false, certificates...)
+		if err != nil {
+			r.status.SetDegraded("Unable to create tigera-ca-bundle configmap", err.Error())
+			return reconcile.Result{}, err
+		}
 		packetCaptureApiCfg := &render.PacketCaptureApiConfiguration{
 			PullSecrets:                 pullSecrets,
 			Openshift:                   r.provider == operatorv1.ProviderOpenShift,

@@ -1537,11 +1537,17 @@ func GetOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 		if len(configMap.Data[render.TyphaCABundleName]) == 0 {
 			errMsgs = append(errMsgs, fmt.Sprintf("ConfigMap %q does not have a field named %q", render.TyphaCAConfigMapName, render.TyphaCABundleName))
 		} else {
-			trustedBundle = certificateManager.CreateTrustedBundle(node, typha,
+			trustedBundle, err = certificateManager.CreateTrustedBundle(false, node, typha,
 				certificatemanagement.NewCertificate(render.TyphaCAConfigMapName, []byte(configMap.Data[render.TyphaCABundleName]), nil))
+			if err != nil {
+				errMsgs = append(errMsgs, fmt.Sprintf("CA for Typha is invalid: %s", err))
+			}
 		}
 	} else {
-		trustedBundle = certificateManager.CreateTrustedBundle(node, typha)
+		trustedBundle, err = certificateManager.CreateTrustedBundle(false, node, typha)
+		if err != nil {
+			errMsgs = append(errMsgs, fmt.Sprintf("CA for Typha is invalid: %s", err))
+		}
 	}
 	if len(errMsgs) != 0 {
 		return nil, fmt.Errorf(strings.Join(errMsgs, ";"))

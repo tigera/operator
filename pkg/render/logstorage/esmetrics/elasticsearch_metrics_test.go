@@ -59,7 +59,8 @@ var _ = Describe("Elasticsearch metrics", func() {
 			cli := fake.NewClientBuilder().WithScheme(scheme).Build()
 			certificateManager, err := certificatemanager.Create(cli, nil, "")
 			Expect(err).NotTo(HaveOccurred())
-			bundle := certificateManager.CreateTrustedBundle()
+			bundle, err := certificateManager.CreateTrustedBundle(false)
+			Expect(err).NotTo(HaveOccurred())
 			secret, err := certificateManager.GetOrCreateKeyPair(cli, ElasticsearchMetricsServerTLSSecret, common.OperatorNamespace(), []string{""})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -157,7 +158,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 									"--es.timeout=30s", "--es.ca=$(ELASTIC_CA)", "--web.listen-address=:9081",
 									"--web.telemetry-path=/metrics", "--tls.key=/tigera-ee-elasticsearch-metrics-tls/tls.key",
 									"--tls.crt=/tigera-ee-elasticsearch-metrics-tls/tls.crt",
-									"--ca.crt=/etc/pki/tigera/tigera-ca-bundle.crt"},
+									"--ca.crt=/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 								Env: []corev1.EnvVar{
 									{Name: "FIPS_MODE_ENABLED", Value: "false"},
 									{Name: "ELASTIC_INDEX_SUFFIX", Value: "cluster"},

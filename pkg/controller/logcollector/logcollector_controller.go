@@ -390,7 +390,12 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
-	trustedBundle := certificateManager.CreateTrustedBundle(prometheusCertificate, esgwCertificate)
+	// Fluentd needs to mount system certificates in the case where Splunk, Syslog or AWS are used.
+	trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates(prometheusCertificate, esgwCertificate)
+	if err != nil {
+		r.status.SetDegraded("Unable to create tigera-ca-bundle configmap", err.Error())
+		return reconcile.Result{}, err
+	}
 
 	certificateManager.AddToStatusManager(r.status, render.LogCollectorNamespace)
 

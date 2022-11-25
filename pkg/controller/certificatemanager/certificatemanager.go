@@ -70,6 +70,8 @@ type CertificateManager interface {
 	GetCertificate(cli client.Client, secretName, secretNamespace string) (certificatemanagement.CertificateInterface, error)
 	// CreateTrustedBundle creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.
 	CreateTrustedBundle(certificates ...certificatemanagement.CertificateInterface) certificatemanagement.TrustedBundle
+	// CreateTrustedBundleWithSystemRootCertificates creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.
+	CreateTrustedBundleWithSystemRootCertificates(certificates ...certificatemanagement.CertificateInterface) (certificatemanagement.TrustedBundle, error)
 	// AddToStatusManager lets the status manager monitor pending CSRs if the certificate management is enabled.
 	AddToStatusManager(manager status.StatusManager, namespace string)
 	// KeyPair Returns the CA KeyPairInterface, so it can be rendered in the operator namespace.
@@ -337,4 +339,9 @@ func HasExpectedDNSNames(secretName, secretNamespace string, cert *x509.Certific
 // CreateTrustedBundle creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.
 func (cm *certificateManager) CreateTrustedBundle(certificates ...certificatemanagement.CertificateInterface) certificatemanagement.TrustedBundle {
 	return certificatemanagement.CreateTrustedBundle(append([]certificatemanagement.CertificateInterface{cm.keyPair}, certificates...)...)
+}
+
+// CreateTrustedBundleWithSystemRootCertificates creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.
+func (cm *certificateManager) CreateTrustedBundleWithSystemRootCertificates(certificates ...certificatemanagement.CertificateInterface) (certificatemanagement.TrustedBundle, error) {
+	return certificatemanagement.CreateTrustedBundleWithSystemRootCertificates(append([]certificatemanagement.CertificateInterface{cm.keyPair}, certificates...)...)
 }

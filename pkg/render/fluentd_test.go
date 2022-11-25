@@ -15,6 +15,8 @@
 package render_test
 
 import (
+	"runtime"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -29,10 +31,11 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/runtime"
+	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -40,6 +43,7 @@ import (
 var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	var esConfigMap *relasticsearch.ClusterConfig
 	var cfg *render.FluentdConfiguration
+	var trustedBundleWithSystemRoot certificatemanagement.TrustedBundle
 
 	expectedFluentdPolicyForUnmanaged := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/fluentd_unmanaged.json")
 	expectedFluentdPolicyForUnmanagedOpenshift := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/fluentd_unmanaged_ocp.json")
@@ -49,12 +53,16 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
 		esConfigMap = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
-		scheme := runtime.NewScheme()
+		scheme := k8sruntime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
 		metricsSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), []string{""})
+		Expect(err).NotTo(HaveOccurred())
+		trustedBundle, err := certificateManager.CreateTrustedBundle(false)
+		Expect(err).NotTo(HaveOccurred())
+		trustedBundleWithSystemRoot, err = certificateManager.CreateTrustedBundle(true)
 		Expect(err).NotTo(HaveOccurred())
 		cfg = &render.FluentdConfiguration{
 			LogCollector:    &operatorv1.LogCollector{},
@@ -65,7 +73,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 				KubernetesProvider: operatorv1.ProviderNone,
 			},
 			MetricsServerTLS: metricsSecret,
-			TrustedBundle:    certificateManager.CreateTrustedBundle(),
+			TrustedBundle:    trustedBundle,
 			UsePSP:           true,
 		}
 	})
@@ -453,7 +461,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}))
 	})
 	It("should render with Syslog configuration with TLS and user's corporate CA", func() {
-		cfg.UseSyslogCertificate = true
 		var ps int32 = 180
 		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
 			Syslog: &operatorv1.SyslogStoreSpec{
@@ -497,7 +504,10 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}))
 	})
 	It("should render with Syslog configuration with TLS and Internet CA", func() {
-		cfg.UseSyslogCertificate = false
+		if runtime.GOOS != "linux" {
+			Skip("Skip for users that run tests on different systems.")
+		}
+		cfg.TrustedBundle = trustedBundleWithSystemRoot
 		var ps int32 = 180
 		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
 			Syslog: &operatorv1.SyslogStoreSpec{
@@ -531,7 +541,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{Name: "SYSLOG_IDS_EVENT_LOG", Value: "true", ValueFrom: nil},
 			{Name: "SYSLOG_TLS", Value: "true", ValueFrom: nil},
 			{Name: "SYSLOG_VERIFY_MODE", Value: "1", ValueFrom: nil},
-			{Name: "SYSLOG_CA_FILE", Value: render.SysLogPublicCAPath, ValueFrom: nil},
+			{Name: "SYSLOG_CA_FILE", Value: cfg.TrustedBundle.MountPath(), ValueFrom: nil},
 		}))
 	})
 

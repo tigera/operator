@@ -246,7 +246,12 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return result, err
 	}
 
-	trustedCertBundle := certificateManager.CreateTrustedBundle()
+	// If we need to trust a public CA, then we want Guardian to mount all the system certificates.
+	trustedCertBundle, err := certificateManager.CreateTrustedBundle(managementClusterConnection.Spec.TLS.CA == operatorv1.CATypePublic)
+	if err != nil {
+		r.status.SetDegraded("Unable to create tigera-ca-bundle configmap", err.Error())
+		return reconcile.Result{}, err
+	}
 	for _, secretName := range []string{render.PacketCaptureCertSecret, monitor.PrometheusTLSSecretName} {
 		secret, err := certificateManager.GetCertificate(r.Client, secretName, common.OperatorNamespace())
 		if err != nil {

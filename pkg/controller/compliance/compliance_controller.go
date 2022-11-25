@@ -351,8 +351,11 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		r.status.SetDegraded("Elasticsearch gateway certificate are not available yet, waiting until they become available", "")
 		return reconcile.Result{}, nil
 	}
-	trustedBundle := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, esgwCertificate)
-
+	trustedBundle, err := certificateManager.CreateTrustedBundle(false, managerInternalTLSSecret, esgwCertificate)
+	if err != nil {
+		r.status.SetDegraded("Unable to create tigera-ca-bundle configmap", err.Error())
+		return reconcile.Result{}, err
+	}
 	var complianceServerCertSecret certificatemanagement.KeyPairInterface
 	if managementClusterConnection == nil {
 		complianceServerCertSecret, err = certificateManager.GetOrCreateKeyPair(

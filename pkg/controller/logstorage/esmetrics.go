@@ -83,7 +83,12 @@ func (r *ReconcileLogStorage) createEsMetrics(
 		r.status.SetDegraded("Elasticsearch gateway certificate are not available yet, waiting until they become available", "")
 		return reconcile.Result{}, false, nil
 	}
-	trustedBundle := certificateManager.CreateTrustedBundle(prometheusCertificate, esgwCertificate)
+	trustedBundle, err := certificateManager.CreateTrustedBundle(false, prometheusCertificate, esgwCertificate)
+	if err != nil {
+		log.Error(err, "Unable to create tigera-ca-bundle configmap")
+		r.status.SetDegraded("Unable to create tigera-ca-bundle configmap", err.Error())
+		return reconcile.Result{}, false, err
+	}
 
 	serverTLS, err := certificateManager.GetOrCreateKeyPair(
 		r.client,

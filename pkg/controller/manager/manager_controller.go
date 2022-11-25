@@ -338,7 +338,11 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		trustedSecretNames = append(trustedSecretNames, render.DexTLSSecretName)
 	}
 
-	trustedBundle := certificateManager.CreateTrustedBundle()
+	trustedBundle, err := certificateManager.CreateTrustedBundle(false)
+	if err != nil {
+		r.status.SetDegraded("Unable to create tigera-ca-bundle configmap", err.Error())
+		return reconcile.Result{}, err
+	}
 	for _, secretName := range trustedSecretNames {
 		certificate, err := certificateManager.GetCertificate(r.client, secretName, common.OperatorNamespace())
 		if err != nil {

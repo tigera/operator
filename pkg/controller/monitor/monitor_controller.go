@@ -257,7 +257,12 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	trustedBundle := certificateManager.CreateTrustedBundle()
+	trustedBundle, err := certificateManager.CreateTrustedBundle(false)
+	if err != nil {
+		log.Error(err, "Unable to create tigera-ca-bundle configmap")
+		r.status.SetDegraded("Unable to create tigera-ca-bundle configmap", err.Error())
+		return reconcile.Result{}, err
+	}
 	for _, certificateName := range []string{
 		esmetrics.ElasticsearchMetricsServerTLSSecret,
 		render.FluentdPrometheusTLSSecretName,

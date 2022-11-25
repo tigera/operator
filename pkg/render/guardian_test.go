@@ -64,7 +64,8 @@ var _ = Describe("Rendering tests", func() {
 		cli := fake.NewClientBuilder().WithScheme(scheme).Build()
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
 		Expect(err).NotTo(HaveOccurred())
-		bundle := certificateManager.CreateTrustedBundle()
+		bundle, err := certificateManager.CreateTrustedBundle(false)
+		Expect(err).NotTo(HaveOccurred())
 
 		return &render.GuardianConfiguration{
 			URL: addr,
@@ -243,12 +244,13 @@ var _ = Describe("guardian", func() {
 			cli := fake.NewClientBuilder().WithScheme(scheme).Build()
 			certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain)
 			Expect(err).NotTo(HaveOccurred())
-
+			trustedBundle, err := certificateManager.CreateTrustedBundle(false)
+			Expect(err).NotTo(HaveOccurred())
 			cfg = &render.GuardianConfiguration{
 				PullSecrets:       []*corev1.Secret{},
 				Installation:      &operatorv1.InstallationSpec{},
 				TunnelSecret:      &corev1.Secret{},
-				TrustedCertBundle: certificateManager.CreateTrustedBundle(),
+				TrustedCertBundle: trustedBundle,
 			}
 		})
 		It("should render when disabled", func() {

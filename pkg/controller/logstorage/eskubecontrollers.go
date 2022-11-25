@@ -71,8 +71,12 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 		r.status.SetDegraded(fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err.Error())
 		return reconcile.Result{}, false, err
 	}
-	trustedBundle := certificateManager.CreateTrustedBundle(esgwCertificate)
-
+	trustedBundle, err := certificateManager.CreateTrustedBundle(false, esgwCertificate)
+	if err != nil {
+		log.Error(err, "Unable to create tigera-ca-bundle configmap")
+		r.status.SetDegraded("Unable to create tigera-ca-bundle configmap", err.Error())
+		return reconcile.Result{}, false, err
+	}
 	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:                 k8sapi.Endpoint,
 		Installation:                 install,

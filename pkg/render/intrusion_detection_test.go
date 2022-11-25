@@ -78,7 +78,8 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		secret, err := certificatemanagement.CreateSelfSignedSecret("", "", "", nil)
 		Expect(err).NotTo(HaveOccurred())
 		adAPIKeyPair = certificatemanagement.NewKeyPair(secret, []string{""}, "")
-		bundle = certificateManager.CreateTrustedBundle()
+		bundle, err = certificateManager.CreateTrustedBundle(false)
+		Expect(err).NotTo(HaveOccurred())
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
 		cfg = &render.IntrusionDetectionConfiguration{

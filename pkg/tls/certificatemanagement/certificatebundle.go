@@ -106,6 +106,9 @@ func (t *trustedBundle) HashAnnotations() map[string]string {
 	for hash, cert := range t.certificates {
 		annotations[fmt.Sprintf("hash.operator.tigera.io/%s", cert.GetName())] = hash
 	}
+	if len(t.systemCertificates) > 0 {
+		annotations["hash.operator.tigera.io/system"] = rmeta.AnnotationHash(t.systemCertificates)
+	}
 	return annotations
 }
 

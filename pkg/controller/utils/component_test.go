@@ -992,11 +992,14 @@ var _ = Describe("Component handler tests", func() {
 					objs: []client.Object{&monitoringv1.Alertmanager{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-alertmanager"},
 						Spec: monitoringv1.AlertmanagerSpec{
-							NodeSelector: map[string]string{},
+							NodeSelector: map[string]string{
+								"kubernetes.io/a": "b",
+							},
 						},
 					}},
 				}, client.ObjectKey{Name: "test-alertmanager"}, &monitoringv1.Alertmanager{},
 				map[string]string{
+					"kubernetes.io/a":  "b",
 					"kubernetes.io/os": "linux",
 				},
 			},
@@ -1009,11 +1012,14 @@ var _ = Describe("Component handler tests", func() {
 					objs: []client.Object{&monitoringv1.Prometheus{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-prometheus"},
 						Spec: monitoringv1.PrometheusSpec{
-							NodeSelector: map[string]string{},
+							NodeSelector: map[string]string{
+								"kubernetes.io/a": "b",
+							},
 						},
 					}},
 				}, client.ObjectKey{Name: "test-prometheus"}, &monitoringv1.Prometheus{},
 				map[string]string{
+					"kubernetes.io/a":  "b",
 					"kubernetes.io/os": "linux",
 				},
 			},

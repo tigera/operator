@@ -18,6 +18,7 @@ limitations under the License.
 package v1
 
 import (
+	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -284,5 +285,13 @@ func (c *APIServerDeployment) GetTolerations() []v1.Toleration {
 			}
 		}
 	}
+	return nil
+}
+
+func (c *APIServerDeployment) GetTerminationGracePeriodSeconds() *int64 {
+	return nil
+}
+
+func (c *APIServerDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }

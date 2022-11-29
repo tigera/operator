@@ -29,10 +29,11 @@ var log = logf.Log.WithName("components")
 
 // replicatedPodResource contains the overridable data for a Deployment or DaemonSet.
 type replicatedPodResource struct {
-	labels          map[string]string
-	annotations     map[string]string
-	minReadySeconds *int32
-	podTemplateSpec *corev1.PodTemplateSpec
+	labels             map[string]string
+	annotations        map[string]string
+	minReadySeconds    *int32
+	podTemplateSpec    *corev1.PodTemplateSpec
+	deploymentStrategy *appsv1.DeploymentStrategy // Deployments only
 }
 
 // applyReplicatedPodResourceOverrides takes the given replicated pod resource data and applies the overrides.
@@ -59,6 +60,12 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides com
 			r.podTemplateSpec.Annotations = common.MapExistsOrInitialize(r.podTemplateSpec.Annotations)
 			common.MergeMaps(podTemplateMetadata.Annotations, r.podTemplateSpec.Annotations)
 		}
+	}
+	if tgp := overrides.GetTerminationGracePeriodSeconds(); tgp != nil {
+		r.podTemplateSpec.Spec.TerminationGracePeriodSeconds = tgp
+	}
+	if ds := overrides.GetDeploymentStrategy(); ds != nil {
+		r.deploymentStrategy = ds
 	}
 	if initContainers := overrides.GetInitContainers(); initContainers != nil {
 		mergeContainers(r.podTemplateSpec.Spec.InitContainers, initContainers)
@@ -118,10 +125,11 @@ func ApplyDeploymentOverrides(d *appsv1.Deployment, overrides components.Replica
 
 	// Pull out the data we'll override from the DaemonSet.
 	r := &replicatedPodResource{
-		labels:          d.Labels,
-		annotations:     d.Annotations,
-		minReadySeconds: &d.Spec.MinReadySeconds,
-		podTemplateSpec: &d.Spec.Template,
+		labels:             d.Labels,
+		annotations:        d.Annotations,
+		minReadySeconds:    &d.Spec.MinReadySeconds,
+		podTemplateSpec:    &d.Spec.Template,
+		deploymentStrategy: &d.Spec.Strategy,
 	}
 	// Apply the overrides.
 	applyReplicatedPodResourceOverrides(r, overrides)
@@ -131,6 +139,7 @@ func ApplyDeploymentOverrides(d *appsv1.Deployment, overrides components.Replica
 	d.Annotations = r.annotations
 	d.Spec.MinReadySeconds = *r.minReadySeconds
 	d.Spec.Template = *r.podTemplateSpec
+	d.Spec.Strategy = *r.deploymentStrategy
 }
 
 // mergeContainers copies the ResourceRequirements from the provided containers

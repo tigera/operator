@@ -4573,6 +4573,59 @@ spec:
                         maximum: 2147483647
                         minimum: 0
                         type: integer
+                      strategy:
+                        description: The deployment strategy to use to replace existing
+                          pods with new ones.
+                        properties:
+                          rollingUpdate:
+                            description: 'Rolling update config params. Present only
+                              if DeploymentStrategyType = RollingUpdate. --- TODO:
+                              Update this to follow our convention for oneOf, whatever
+                              we decide it to be.'
+                            properties:
+                              maxSurge:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                description: 'The maximum number of pods that can
+                                  be scheduled above the desired number of pods. Value
+                                  can be an absolute number (ex: 5) or a percentage
+                                  of desired pods (ex: 10%). This can not be 0 if
+                                  MaxUnavailable is 0. Absolute number is calculated
+                                  from percentage by rounding up. Defaults to 25%.
+                                  Example: when this is set to 30%, the new ReplicaSet
+                                  can be scaled up immediately when the rolling update
+                                  starts, such that the total number of old and new
+                                  pods do not exceed 130% of desired pods. Once old
+                                  pods have been killed, new ReplicaSet can be scaled
+                                  up further, ensuring that total number of pods running
+                                  at any time during the update is at most 130% of
+                                  desired pods.'
+                                x-kubernetes-int-or-string: true
+                              maxUnavailable:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                description: 'The maximum number of pods that can
+                                  be unavailable during the update. Value can be an
+                                  absolute number (ex: 5) or a percentage of desired
+                                  pods (ex: 10%). Absolute number is calculated from
+                                  percentage by rounding down. This can not be 0 if
+                                  MaxSurge is 0. Defaults to 25%. Example: when this
+                                  is set to 30%, the old ReplicaSet can be scaled
+                                  down to 70% of desired pods immediately when the
+                                  rolling update starts. Once new pods are ready,
+                                  old ReplicaSet can be scaled down further, followed
+                                  by scaling up the new ReplicaSet, ensuring that
+                                  the total number of pods available at all times
+                                  during the update is at least 70% of desired pods.'
+                                x-kubernetes-int-or-string: true
+                            type: object
+                          type:
+                            description: Type of deployment. Can be "Recreate" or
+                              "RollingUpdate". Default is RollingUpdate.
+                            type: string
+                        type: object
                       template:
                         description: Template describes the typha Deployment pod that
                           will be created.
@@ -5759,6 +5812,21 @@ spec:
                                   WARNING: Please note that this field will modify
                                   the default calico-typha Deployment nodeSelector.'
                                 type: object
+                              terminationGracePeriodSeconds:
+                                description: Optional duration in seconds the pod
+                                  needs to terminate gracefully. May be decreased
+                                  in delete request. Value must be non-negative integer.
+                                  The value zero indicates stop immediately via the
+                                  kill signal (no opportunity to shut down). If this
+                                  value is nil, the default grace period will be used
+                                  instead. The grace period is the duration in seconds
+                                  after the processes running in the pod are sent
+                                  a termination signal and the time when the processes
+                                  are forcibly halted with a kill signal. Set this
+                                  value longer than the expected cleanup time for
+                                  your process. Defaults to 30 seconds.
+                                format: int64
+                                type: integer
                               tolerations:
                                 description: 'Tolerations is the typha pod''s tolerations.
                                   If specified, this overrides any tolerations that
@@ -10907,6 +10975,61 @@ spec:
                             maximum: 2147483647
                             minimum: 0
                             type: integer
+                          strategy:
+                            description: The deployment strategy to use to replace
+                              existing pods with new ones.
+                            properties:
+                              rollingUpdate:
+                                description: 'Rolling update config params. Present
+                                  only if DeploymentStrategyType = RollingUpdate.
+                                  --- TODO: Update this to follow our convention for
+                                  oneOf, whatever we decide it to be.'
+                                properties:
+                                  maxSurge:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    description: 'The maximum number of pods that
+                                      can be scheduled above the desired number of
+                                      pods. Value can be an absolute number (ex: 5)
+                                      or a percentage of desired pods (ex: 10%). This
+                                      can not be 0 if MaxUnavailable is 0. Absolute
+                                      number is calculated from percentage by rounding
+                                      up. Defaults to 25%. Example: when this is set
+                                      to 30%, the new ReplicaSet can be scaled up
+                                      immediately when the rolling update starts,
+                                      such that the total number of old and new pods
+                                      do not exceed 130% of desired pods. Once old
+                                      pods have been killed, new ReplicaSet can be
+                                      scaled up further, ensuring that total number
+                                      of pods running at any time during the update
+                                      is at most 130% of desired pods.'
+                                    x-kubernetes-int-or-string: true
+                                  maxUnavailable:
+                                    anyOf:
+                                    - type: integer
+                                    - type: string
+                                    description: 'The maximum number of pods that
+                                      can be unavailable during the update. Value
+                                      can be an absolute number (ex: 5) or a percentage
+                                      of desired pods (ex: 10%). Absolute number is
+                                      calculated from percentage by rounding down.
+                                      This can not be 0 if MaxSurge is 0. Defaults
+                                      to 25%. Example: when this is set to 30%, the
+                                      old ReplicaSet can be scaled down to 70% of
+                                      desired pods immediately when the rolling update
+                                      starts. Once new pods are ready, old ReplicaSet
+                                      can be scaled down further, followed by scaling
+                                      up the new ReplicaSet, ensuring that the total
+                                      number of pods available at all times during
+                                      the update is at least 70% of desired pods.'
+                                    x-kubernetes-int-or-string: true
+                                type: object
+                              type:
+                                description: Type of deployment. Can be "Recreate"
+                                  or "RollingUpdate". Default is RollingUpdate.
+                                type: string
+                            type: object
                           template:
                             description: Template describes the typha Deployment pod
                               that will be created.
@@ -12191,6 +12314,22 @@ spec:
                                       WARNING: Please note that this field will modify
                                       the default calico-typha Deployment nodeSelector.'
                                     type: object
+                                  terminationGracePeriodSeconds:
+                                    description: Optional duration in seconds the
+                                      pod needs to terminate gracefully. May be decreased
+                                      in delete request. Value must be non-negative
+                                      integer. The value zero indicates stop immediately
+                                      via the kill signal (no opportunity to shut
+                                      down). If this value is nil, the default grace
+                                      period will be used instead. The grace period
+                                      is the duration in seconds after the processes
+                                      running in the pod are sent a termination signal
+                                      and the time when the processes are forcibly
+                                      halted with a kill signal. Set this value longer
+                                      than the expected cleanup time for your process.
+                                      Defaults to 30 seconds.
+                                    format: int64
+                                    type: integer
                                   tolerations:
                                     description: 'Tolerations is the typha pod''s
                                       tolerations. If specified, this overrides any

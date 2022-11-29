@@ -382,8 +382,8 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 	}
 
 	// Verify the CalicoKubeControllersDeployment overrides, if specified, is valid.
-	if ds := instance.Spec.CalicoKubeControllersDeployment; ds != nil {
-		err := validation.ValidateReplicatedPodResourceOverrides(ds, kubecontrollers.ValidateCalicoKubeControllersDeploymentContainer, validation.NoContainersDefined)
+	if deploy := instance.Spec.CalicoKubeControllersDeployment; deploy != nil {
+		err := validation.ValidateReplicatedPodResourceOverrides(deploy, kubecontrollers.ValidateCalicoKubeControllersDeploymentContainer, validation.NoContainersDefined)
 		if err != nil {
 			return fmt.Errorf("Installation spec.CalicoKubeControllersDeployment is not valid: %w", err)
 
@@ -391,13 +391,13 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 	}
 
 	// Verify the TyphaDeployment overrides, if specified, is valid.
-	if ds := instance.Spec.TyphaDeployment; ds != nil {
-		err := validation.ValidateReplicatedPodResourceOverrides(ds, typha.ValidateTyphaDeploymentContainer, typha.ValidateTyphaDeploymentInitContainer)
+	if deploy := instance.Spec.TyphaDeployment; deploy != nil {
+		err := validation.ValidateReplicatedPodResourceOverrides(deploy, typha.ValidateTyphaDeploymentContainer, typha.ValidateTyphaDeploymentInitContainer)
 		if err != nil {
 			return fmt.Errorf("Installation spec.TyphaDeployment is not valid: %w", err)
-
 		}
 	}
+
 	// Verify the CalicoWindowsUpgradeDaemonSet overrides, if specified, is valid.
 	if ds := instance.Spec.CalicoWindowsUpgradeDaemonSet; ds != nil {
 		err := validation.ValidateReplicatedPodResourceOverrides(ds, windowsupgrade.ValidateCalicoWindowsUpgradeDaemonSetContainer, validation.NoContainersDefined)

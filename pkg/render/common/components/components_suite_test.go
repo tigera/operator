@@ -1,4 +1,4 @@
-// Copyright (c) 2021 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,25 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package ptr
+package components_test
 
 import (
-	"k8s.io/apimachinery/pkg/util/intstr"
+	"testing"
+
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
+
+	"github.com/onsi/ginkgo/reporters"
 )
 
-func BoolToPtr(b bool) *bool {
-	return &b
-}
-
-func Int64ToPtr(i int64) *int64 {
-	return &i
-}
-
-func Int32ToPtr(i int32) *int32 {
-	return &i
-}
-
-func IntOrStrPtr(v string) *intstr.IntOrString {
-	ios := intstr.Parse(v)
-	return &ios
+func TestComponents(t *testing.T) {
+	RegisterFailHandler(Fail)
+	junitReporter := reporters.NewJUnitReporter("../../../../report/components_suite.xml")
+	RunSpecsWithDefaultAndCustomReporters(t, "pkg/render/common/components Suite", []Reporter{junitReporter})
 }

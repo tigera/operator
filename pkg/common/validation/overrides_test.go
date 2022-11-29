@@ -15,9 +15,15 @@
 package validation
 
 import (
+	"fmt"
+
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	typha "github.com/tigera/operator/pkg/common/validation/typha"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	opv1 "github.com/tigera/operator/api/v1"
 	node "github.com/tigera/operator/pkg/common/validation/calico-node"
@@ -131,4 +137,118 @@ var _ = Describe("Test overrides validation", func() {
 		Expect(err).NotTo(BeNil())
 		Expect(err.Error()).Should(HavePrefix("spec.Template.Spec.Tolerations is invalid: spec.template.spec.tolerations[0].operator: Invalid value: \"Equal\": operator must be Exists when `key` is empty"))
 	})
+})
+
+var _ = Describe("Test overrides validation (TyphaDeployment)", func() {
+	var overrides *opv1.TyphaDeployment
+
+	BeforeEach(func() {
+		overrides = &opv1.TyphaDeployment{
+			Spec: &opv1.TyphaDeploymentSpec{
+				Template: &opv1.TyphaDeploymentPodTemplateSpec{
+					Spec: &opv1.TyphaDeploymentPodSpec{},
+				},
+			},
+		}
+	})
+
+	It("should accept terminationGracePeriod=0", func() {
+		tgp := int64(0)
+		overrides.Spec.Template.Spec.TerminationGracePeriodSeconds = &tgp
+		err := ValidateReplicatedPodResourceOverrides(overrides, typha.ValidateTyphaDeploymentContainer, typha.ValidateTyphaDeploymentInitContainer)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should accept terminationGracePeriod=1", func() {
+		tgp := int64(1)
+		overrides.Spec.Template.Spec.TerminationGracePeriodSeconds = &tgp
+		err := ValidateReplicatedPodResourceOverrides(overrides, typha.ValidateTyphaDeploymentContainer, typha.ValidateTyphaDeploymentInitContainer)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should reject terminationGracePeriod=-1", func() {
+		tgp := int64(-1)
+		overrides.Spec.Template.Spec.TerminationGracePeriodSeconds = &tgp
+		err := ValidateReplicatedPodResourceOverrides(overrides, typha.ValidateTyphaDeploymentContainer, typha.ValidateTyphaDeploymentInitContainer)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).Should(HavePrefix("spec.Template.Spec.TerminationGracePeriodSeconds is invalid: cannot be negative"))
+	})
+
+	intOrStr := func(v string) *intstr.IntOrString {
+		if v == "" {
+			return nil
+		}
+		ios := intstr.Parse(v)
+		return &ios
+	}
+
+	rollingUpdateEntry := func(maxUnav, maxSurge string) TableEntry {
+		return Entry(fmt.Sprintf("maxUnav=%s, maxSurge=%s", maxUnav, maxSurge), appsv1.DeploymentStrategy{
+			Type: appsv1.RollingUpdateDeploymentStrategyType,
+			RollingUpdate: &appsv1.RollingUpdateDeployment{
+				MaxUnavailable: intOrStr(maxUnav),
+				MaxSurge:       intOrStr(maxSurge),
+			},
+		})
+	}
+
+	DescribeTable(
+		"should accept valid deployment strategies",
+		func(s appsv1.DeploymentStrategy) {
+			overrides.Spec.Strategy = &s
+			err := ValidateReplicatedPodResourceOverrides(overrides, typha.ValidateTyphaDeploymentContainer, typha.ValidateTyphaDeploymentInitContainer)
+			Expect(err).NotTo(HaveOccurred())
+		},
+		rollingUpdateEntry("1", "1"),
+		rollingUpdateEntry("0", "1"),
+		rollingUpdateEntry("1", "0"),
+		rollingUpdateEntry("10%", "10%"),
+		rollingUpdateEntry("0", "100%"),
+		rollingUpdateEntry("1", "100%"),
+		rollingUpdateEntry("0", "10%"),
+		rollingUpdateEntry("10%", "0"),
+	)
+
+	DescribeTable(
+		"should reject invalid deployment strategies",
+		func(s appsv1.DeploymentStrategy, expectedErr string) {
+			overrides.Spec.Strategy = &s
+			err := ValidateReplicatedPodResourceOverrides(overrides, typha.ValidateTyphaDeploymentContainer, typha.ValidateTyphaDeploymentInitContainer)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring(expectedErr))
+		},
+		Entry("invalid type",
+			appsv1.DeploymentStrategy{
+				Type: "foo",
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
+					MaxUnavailable: intOrStr("1"),
+					MaxSurge:       intOrStr("1"),
+				},
+			},
+			"invalid: spec.strategy: Unsupported value",
+		),
+		Entry("rolling update, both zero",
+			appsv1.DeploymentStrategy{
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
+					MaxUnavailable: intOrStr("0"),
+					MaxSurge:       intOrStr("0"),
+				},
+			},
+			"may not be 0 when `maxSurge` is 0",
+		),
+		Entry("rolling update, nil treated as zeros",
+			appsv1.DeploymentStrategy{
+				Type:          appsv1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDeployment{},
+			},
+			"may not be 0 when `maxSurge` is 0",
+		),
+		Entry("rolling update, nil RollingUpdate",
+			appsv1.DeploymentStrategy{
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+			},
+			"spec.Strategy is invalid: spec.strategy.rollingUpdate: Required value: this should be defaulted and never be nil",
+		),
+	)
 })

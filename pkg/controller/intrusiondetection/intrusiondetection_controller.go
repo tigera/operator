@@ -459,9 +459,15 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
-	var esLicenseType render.ElasticsearchLicenseType
-	trustedBundle := certificateManager.CreateTrustedBundle(esgwCertificate)
+	// Intrusion detection controller sometimes needs to make requests to outside sources. Therefore, we include
+	// the system root certificate bundle.
+	trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates(esgwCertificate)
+	if err != nil {
+		r.status.SetDegraded("Unable to create tigera-ca-bundle configmap", err.Error())
+		return reconcile.Result{}, err
+	}
 
+	var esLicenseType render.ElasticsearchLicenseType
 	if !isManagedCluster {
 		if esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger); err != nil {
 			r.status.SetDegraded("Failed to get Elasticsearch license", err.Error())

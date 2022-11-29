@@ -22,6 +22,7 @@ limitations under the License.
 package v1
 
 import (
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
@@ -3005,6 +3006,11 @@ func (in *TyphaDeploymentPodSpec) DeepCopyInto(out *TyphaDeploymentPodSpec) {
 			(*out)[key] = val
 		}
 	}
+	if in.TerminationGracePeriodSeconds != nil {
+		in, out := &in.TerminationGracePeriodSeconds, &out.TerminationGracePeriodSeconds
+		*out = new(int64)
+		**out = **in
+	}
 	if in.Tolerations != nil {
 		in, out := &in.Tolerations, &out.Tolerations
 		*out = make([]corev1.Toleration, len(*in))
@@ -3060,6 +3066,11 @@ func (in *TyphaDeploymentSpec) DeepCopyInto(out *TyphaDeploymentSpec) {
 	if in.Template != nil {
 		in, out := &in.Template, &out.Template
 		*out = new(TyphaDeploymentPodTemplateSpec)
+		(*in).DeepCopyInto(*out)
+	}
+	if in.Strategy != nil {
+		in, out := &in.Strategy, &out.Strategy
+		*out = new(appsv1.DeploymentStrategy)
 		(*in).DeepCopyInto(*out)
 	}
 }

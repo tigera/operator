@@ -22,12 +22,12 @@ import (
 	"github.com/onsi/gomega/gstruct"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/ptr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -168,8 +168,8 @@ var _ = Describe("Typha rendering tests", func() {
 		Expect(d.Spec.Strategy).To(Equal(appsv1.DeploymentStrategy{
 			Type: appsv1.RollingUpdateDeploymentStrategyType,
 			RollingUpdate: &appsv1.RollingUpdateDeployment{
-				MaxSurge:       intOrStrPtr("100%"),
-				MaxUnavailable: intOrStrPtr("1"),
+				MaxSurge:       ptr.IntOrStrPtr("100%"),
+				MaxUnavailable: ptr.IntOrStrPtr("1"),
 			},
 		}))
 	})
@@ -493,8 +493,8 @@ var _ = Describe("Typha rendering tests", func() {
 					Strategy: &appsv1.DeploymentStrategy{
 						Type: appsv1.RollingUpdateDeploymentStrategyType,
 						RollingUpdate: &appsv1.RollingUpdateDeployment{
-							MaxSurge:       intOrStrPtr("2"),
-							MaxUnavailable: intOrStrPtr("0"),
+							MaxSurge:       ptr.IntOrStrPtr("2"),
+							MaxUnavailable: ptr.IntOrStrPtr("0"),
 						},
 					},
 					Template: &operatorv1.TyphaDeploymentPodTemplateSpec{
@@ -543,8 +543,8 @@ var _ = Describe("Typha rendering tests", func() {
 			Expect(d.Spec.Strategy).To(Equal(appsv1.DeploymentStrategy{
 				Type: appsv1.RollingUpdateDeploymentStrategyType,
 				RollingUpdate: &appsv1.RollingUpdateDeployment{
-					MaxSurge:       intOrStrPtr("2"),
-					MaxUnavailable: intOrStrPtr("0"),
+					MaxSurge:       ptr.IntOrStrPtr("2"),
+					MaxUnavailable: ptr.IntOrStrPtr("0"),
 				},
 			}))
 
@@ -687,8 +687,3 @@ var _ = Describe("Typha rendering tests", func() {
 		})
 	})
 })
-
-func intOrStrPtr(v string) *intstr.IntOrString {
-	ios := intstr.Parse(v)
-	return &ios
-}

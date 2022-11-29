@@ -18,9 +18,8 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/util/intstr"
-
 	v1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/ptr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -1026,7 +1025,7 @@ var _ = Describe("Common components render tests", func() {
 					Spec: &v1.TyphaDeploymentSpec{
 						Template: &v1.TyphaDeploymentPodTemplateSpec{
 							Spec: &v1.TyphaDeploymentPodSpec{
-								TerminationGracePeriodSeconds: int64Ptr(3),
+								TerminationGracePeriodSeconds: ptr.Int64ToPtr(3),
 							},
 						},
 					},
@@ -1044,8 +1043,8 @@ var _ = Describe("Common components render tests", func() {
 						Strategy: &appsv1.DeploymentStrategy{
 							Type: appsv1.RollingUpdateDeploymentStrategyType,
 							RollingUpdate: &appsv1.RollingUpdateDeployment{
-								MaxUnavailable: intOrStrPtr("0"),
-								MaxSurge:       intOrStrPtr("100%"),
+								MaxUnavailable: ptr.IntOrStrPtr("0"),
+								MaxSurge:       ptr.IntOrStrPtr("100%"),
 							},
 						},
 					},
@@ -1055,22 +1054,13 @@ var _ = Describe("Common components render tests", func() {
 				Expect(result.Spec.Strategy).To(Equal(appsv1.DeploymentStrategy{
 					Type: appsv1.RollingUpdateDeploymentStrategyType,
 					RollingUpdate: &appsv1.RollingUpdateDeployment{
-						MaxUnavailable: intOrStrPtr("0"),
-						MaxSurge:       intOrStrPtr("100%"),
+						MaxUnavailable: ptr.IntOrStrPtr("0"),
+						MaxSurge:       ptr.IntOrStrPtr("100%"),
 					},
 				}))
 			}),
 	)
 })
-
-func intOrStrPtr(v string) *intstr.IntOrString {
-	ios := intstr.Parse(v)
-	return &ios
-}
-
-func int64Ptr(n int64) *int64 {
-	return &n
-}
 
 func addContainer(cs []corev1.Container) []corev1.Container {
 	// Add another container and rename them to "not-zero1" and "not-zero2".

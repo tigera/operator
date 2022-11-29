@@ -14,6 +14,10 @@
 
 package ptr
 
+import (
+	"k8s.io/apimachinery/pkg/util/intstr"
+)
+
 func BoolToPtr(b bool) *bool {
 	return &b
 }
@@ -24,4 +28,9 @@ func Int64ToPtr(i int64) *int64 {
 
 func Int32ToPtr(i int32) *int32 {
 	return &i
+}
+
+func IntOrStrPtr(v string) *intstr.IntOrString {
+	ios := intstr.Parse(v)
+	return &ios
 }

@@ -356,7 +356,7 @@ func (c *typhaComponent) typhaDeployment() *appsv1.Deployment {
 	// Allowing 1 unavailable Typha by default ensures that we make progress in a cluster with constrained scheduling.
 	maxUnavailable := intstr.FromInt(1)
 	// Allowing 100% surge allows a complete replacement fleet of Typha instances to start during an upgrade. When
-	// combined with Typha's graceful shutdown, we get nice emergenet behavior:
+	// combined with Typha's graceful shutdown, we get nice emergent behavior:
 	// - All up-level Typhas start if there's room available.
 	// - Back-level Typhas shed load slowly over the termination grace period.
 	// - Clients that are shed end up connecting to up-level Typhas (because all the back-level Typhas are marked

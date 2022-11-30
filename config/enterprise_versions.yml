@@ -133,3 +133,6 @@ components:
   dikastes:
     image: tigera/dikastes
     version: master
+  egress-gateway:
+    image: tigera/egress-gateway
+    version: master

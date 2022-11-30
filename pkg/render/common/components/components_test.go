@@ -1040,8 +1040,7 @@ var _ = Describe("Common components render tests", func() {
 			func() *v1.TyphaDeployment {
 				return &v1.TyphaDeployment{
 					Spec: &v1.TyphaDeploymentSpec{
-						Strategy: &appsv1.DeploymentStrategy{
-							Type: appsv1.RollingUpdateDeploymentStrategyType,
+						Strategy: &v1.TyphaDeploymentStrategy{
 							RollingUpdate: &appsv1.RollingUpdateDeployment{
 								MaxUnavailable: ptr.IntOrStrPtr("0"),
 								MaxSurge:       ptr.IntOrStrPtr("100%"),

@@ -490,8 +490,7 @@ var _ = Describe("Typha rendering tests", func() {
 				},
 				Spec: &operatorv1.TyphaDeploymentSpec{
 					MinReadySeconds: &minReadySeconds,
-					Strategy: &appsv1.DeploymentStrategy{
-						Type: appsv1.RollingUpdateDeploymentStrategyType,
+					Strategy: &operatorv1.TyphaDeploymentStrategy{
 						RollingUpdate: &appsv1.RollingUpdateDeployment{
 							MaxSurge:       ptr.IntOrStrPtr("2"),
 							MaxUnavailable: ptr.IntOrStrPtr("0"),

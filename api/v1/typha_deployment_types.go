@@ -144,7 +144,17 @@ type TyphaDeploymentSpec struct {
 	// The deployment strategy to use to replace existing pods with new ones.
 	// +optional
 	// +patchStrategy=retainKeys
-	Strategy *appsv1.DeploymentStrategy `json:"strategy,omitempty" patchStrategy:"retainKeys" protobuf:"bytes,4,opt,name=strategy"`
+	Strategy *TyphaDeploymentStrategy `json:"strategy,omitempty" patchStrategy:"retainKeys" protobuf:"bytes,4,opt,name=strategy"`
+}
+
+// TyphaDeploymentStrategy describes how to replace existing pods with new ones.  Only RollingUpdate is supported
+// at this time so the Type field is not exposed.
+type TyphaDeploymentStrategy struct {
+	// Rolling update config params. Present only if DeploymentStrategyType =
+	// RollingUpdate.
+	// to be.
+	// +optional
+	RollingUpdate *appsv1.RollingUpdateDeployment `json:"rollingUpdate,omitempty" protobuf:"bytes,2,opt,name=rollingUpdate"`
 }
 
 func (c *TyphaDeployment) GetMetadata() *Metadata {
@@ -267,8 +277,11 @@ func (c *TyphaDeployment) GetTerminationGracePeriodSeconds() *int64 {
 }
 
 func (c *TyphaDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
-	if c.Spec != nil {
-		return c.Spec.Strategy
+	if c.Spec != nil && c.Spec.Strategy != nil && c.Spec.Strategy.RollingUpdate != nil {
+		return &appsv1.DeploymentStrategy{
+			Type:          appsv1.RollingUpdateDeploymentStrategyType,
+			RollingUpdate: c.Spec.Strategy.RollingUpdate,
+		}
 	}
 	return nil
 }

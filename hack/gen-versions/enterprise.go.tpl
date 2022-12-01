@@ -277,12 +277,6 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index .Components "image-assurance-api" }}
-	ComponentImageAssuranceApi = component{
-		Version: "{{ .Version }}",
-		Image:   "{{ .Image }}",
-	}
-{{- end }}
 {{ with index .Components "image-assurance-api-proxy" }}
 	ComponentImageAssuranceApiProxy = component{
 		Version: "{{ .Version }}",
@@ -357,7 +351,6 @@ var (
 		ComponentESGateway,
 		ComponentTigeraWindowsUpgrade,
 		ComponentDikastes,
-		ComponentImageAssuranceApi,
 		ComponentImageAssuranceApiProxy,
 		ComponentImageAssuranceScanner,
 		ComponentImageAssurancePodWatcher,

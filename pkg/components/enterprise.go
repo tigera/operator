@@ -136,7 +136,7 @@ var (
 	}
 
 	ComponentManager = component{
-		Version: "tesla-v3.14.3",
+		Version: "tesla-v3.14.4-1",
 		Image:   "tigera/cnx-manager",
 	}
 
@@ -235,23 +235,18 @@ var (
 		Image:   "tigera/calico-windows-upgrade",
 	}
 
-	ComponentImageAssuranceApi = component{
-		Version: "v1.1.2",
-		Image:   "tigera/image-assurance-api",
-	}
-
 	ComponentImageAssuranceApiProxy = component{
-		Version: "v1.1.2",
+		Version: "v1.2.0",
 		Image:   "tigera/image-assurance-api-proxy",
 	}
 
 	ComponentImageAssuranceScanner = component{
-		Version: "v1.1.2",
+		Version: "v1.2.0",
 		Image:   "tigera/image-assurance-scanner",
 	}
 
 	ComponentImageAssurancePodWatcher = component{
-		Version: "v1.1.2",
+		Version: "v1.2.0",
 		Image:   "tigera/image-assurance-pod-watcher",
 	}
 
@@ -308,7 +303,6 @@ var (
 		ComponentESGateway,
 		ComponentTigeraWindowsUpgrade,
 		ComponentDikastes,
-		ComponentImageAssuranceApi,
 		ComponentImageAssuranceApiProxy,
 		ComponentImageAssuranceScanner,
 		ComponentImageAssurancePodWatcher,

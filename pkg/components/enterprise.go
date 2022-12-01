@@ -236,17 +236,17 @@ var (
 	}
 
 	ComponentImageAssuranceApiProxy = component{
-		Version: "v1.2.0",
+		Version: "v1.2.1",
 		Image:   "tigera/image-assurance-api-proxy",
 	}
 
 	ComponentImageAssuranceScanner = component{
-		Version: "v1.2.0",
+		Version: "v1.2.1",
 		Image:   "tigera/image-assurance-scanner",
 	}
 
 	ComponentImageAssurancePodWatcher = component{
-		Version: "v1.2.0",
+		Version: "v1.2.1",
 		Image:   "tigera/image-assurance-pod-watcher",
 	}
 

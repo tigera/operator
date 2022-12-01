@@ -183,8 +183,7 @@ var _ = Describe("Test overrides validation (TyphaDeployment)", func() {
 	}
 
 	rollingUpdateEntry := func(maxUnav, maxSurge string) TableEntry {
-		return Entry(fmt.Sprintf("maxUnav=%s, maxSurge=%s", maxUnav, maxSurge), appsv1.DeploymentStrategy{
-			Type: appsv1.RollingUpdateDeploymentStrategyType,
+		return Entry(fmt.Sprintf("maxUnav=%s, maxSurge=%s", maxUnav, maxSurge), opv1.TyphaDeploymentStrategy{
 			RollingUpdate: &appsv1.RollingUpdateDeployment{
 				MaxUnavailable: intOrStr(maxUnav),
 				MaxSurge:       intOrStr(maxSurge),
@@ -194,7 +193,7 @@ var _ = Describe("Test overrides validation (TyphaDeployment)", func() {
 
 	DescribeTable(
 		"should accept valid deployment strategies",
-		func(s appsv1.DeploymentStrategy) {
+		func(s opv1.TyphaDeploymentStrategy) {
 			overrides.Spec.Strategy = &s
 			err := ValidateReplicatedPodResourceOverrides(overrides, typha.ValidateTyphaDeploymentContainer, typha.ValidateTyphaDeploymentInitContainer)
 			Expect(err).NotTo(HaveOccurred())
@@ -211,25 +210,14 @@ var _ = Describe("Test overrides validation (TyphaDeployment)", func() {
 
 	DescribeTable(
 		"should reject invalid deployment strategies",
-		func(s appsv1.DeploymentStrategy, expectedErr string) {
+		func(s opv1.TyphaDeploymentStrategy, expectedErr string) {
 			overrides.Spec.Strategy = &s
 			err := ValidateReplicatedPodResourceOverrides(overrides, typha.ValidateTyphaDeploymentContainer, typha.ValidateTyphaDeploymentInitContainer)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring(expectedErr))
 		},
-		Entry("invalid type",
-			appsv1.DeploymentStrategy{
-				Type: "foo",
-				RollingUpdate: &appsv1.RollingUpdateDeployment{
-					MaxUnavailable: intOrStr("1"),
-					MaxSurge:       intOrStr("1"),
-				},
-			},
-			"invalid: spec.strategy: Unsupported value",
-		),
 		Entry("rolling update, both zero",
-			appsv1.DeploymentStrategy{
-				Type: appsv1.RollingUpdateDeploymentStrategyType,
+			opv1.TyphaDeploymentStrategy{
 				RollingUpdate: &appsv1.RollingUpdateDeployment{
 					MaxUnavailable: intOrStr("0"),
 					MaxSurge:       intOrStr("0"),
@@ -238,17 +226,10 @@ var _ = Describe("Test overrides validation (TyphaDeployment)", func() {
 			"may not be 0 when `maxSurge` is 0",
 		),
 		Entry("rolling update, nil treated as zeros",
-			appsv1.DeploymentStrategy{
-				Type:          appsv1.RollingUpdateDeploymentStrategyType,
+			opv1.TyphaDeploymentStrategy{
 				RollingUpdate: &appsv1.RollingUpdateDeployment{},
 			},
 			"may not be 0 when `maxSurge` is 0",
-		),
-		Entry("rolling update, nil RollingUpdate",
-			appsv1.DeploymentStrategy{
-				Type: appsv1.RollingUpdateDeploymentStrategyType,
-			},
-			"spec.Strategy is invalid: spec.strategy.rollingUpdate: Required value: this should be defaulted and never be nil",
 		),
 	)
 

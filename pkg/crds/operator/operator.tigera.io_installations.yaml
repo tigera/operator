@@ -4578,10 +4578,8 @@ spec:
                           pods with new ones.
                         properties:
                           rollingUpdate:
-                            description: 'Rolling update config params. Present only
-                              if DeploymentStrategyType = RollingUpdate. --- TODO:
-                              Update this to follow our convention for oneOf, whatever
-                              we decide it to be.'
+                            description: Rolling update config params. Present only
+                              if DeploymentStrategyType = RollingUpdate. to be.
                             properties:
                               maxSurge:
                                 anyOf:
@@ -4621,10 +4619,6 @@ spec:
                                   during the update is at least 70% of desired pods.'
                                 x-kubernetes-int-or-string: true
                             type: object
-                          type:
-                            description: Type of deployment. Can be "Recreate" or
-                              "RollingUpdate". Default is RollingUpdate.
-                            type: string
                         type: object
                       template:
                         description: Template describes the typha Deployment pod that
@@ -10980,10 +10974,9 @@ spec:
                               existing pods with new ones.
                             properties:
                               rollingUpdate:
-                                description: 'Rolling update config params. Present
+                                description: Rolling update config params. Present
                                   only if DeploymentStrategyType = RollingUpdate.
-                                  --- TODO: Update this to follow our convention for
-                                  oneOf, whatever we decide it to be.'
+                                  to be.
                                 properties:
                                   maxSurge:
                                     anyOf:
@@ -11025,10 +11018,6 @@ spec:
                                       the update is at least 70% of desired pods.'
                                     x-kubernetes-int-or-string: true
                                 type: object
-                              type:
-                                description: Type of deployment. Can be "Recreate"
-                                  or "RollingUpdate". Default is RollingUpdate.
-                                type: string
                             type: object
                           template:
                             description: Template describes the typha Deployment pod

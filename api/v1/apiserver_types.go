@@ -36,6 +36,11 @@ type APIServerSpec struct {
 type APIServerStatus struct {
 	// State provides user-readable status.
 	State string `json:"state,omitempty"`
+
+	// Conditions represents the latest observed set of conditions for the component. A component may be one or more of
+	// Ready, Progressing, Degraded or other customer types.
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true

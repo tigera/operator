@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -80,20 +79,6 @@ type StatusManager interface {
 	ReadyToMonitor()
 	SetMetaData(meta *metav1.ObjectMeta)
 }
-
-// This regex matches any characters that are not allowed in a Status Reason.
-var reasonInvalidCharacters = regexp.MustCompile(`[^A-Za-z0-9_,:]`)
-
-// This regex matches any characters not allowed at the start of a Status Reason.
-// We use this to trim all invalid characters at the start of the Status Reason which is
-// why we use * in the regex.
-var reasonInvalidStartCharacters = regexp.MustCompile(`^[^A-Za-z]*`)
-
-// This regex matches any characters not allowed at the end of a Status Reason.
-// Also disallow _ since it doesn't add anything to the reason for us.
-// We use this to trim all invalid characters at the end of the Status Reason which is
-// why we use * in the regex.
-var reasonInvalidEndCharacters = regexp.MustCompile(`[^A-Za-z0-9]*$`)
 
 type statusManager struct {
 	client                    client.Client

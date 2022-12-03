@@ -473,7 +473,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	// the system root certificate bundle.
 	trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates(esgwCertificate)
 	if err != nil {
-		r.status.SetDegraded("Unable to create tigera-ca-bundle configmap", err.Error())
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create tigera-ca-bundle configmap", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

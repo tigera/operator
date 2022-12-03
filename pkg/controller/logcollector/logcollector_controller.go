@@ -404,7 +404,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	// Fluentd needs to mount system certificates in the case where Splunk, Syslog or AWS are used.
 	trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates(prometheusCertificate, esgwCertificate)
 	if err != nil {
-		r.status.SetDegraded("Unable to create tigera-ca-bundle configmap", err.Error())
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create tigera-ca-bundle configmap", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

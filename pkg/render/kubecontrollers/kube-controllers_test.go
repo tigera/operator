@@ -240,11 +240,11 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Name: "ENABLED_CONTROLLERS", Value: "node,service,federatedservices",
 		}))
 
-		Expect(len(dp.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(2))
+		Expect(len(dp.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
 		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(render.ManagerInternalTLSSecretName))
 		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/internal-manager-tls"))
 
-		Expect(len(dp.Spec.Template.Spec.Volumes)).To(Equal(2))
+		Expect(len(dp.Spec.Template.Spec.Volumes)).To(Equal(3))
 		Expect(dp.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ManagerInternalTLSSecretName))
 		Expect(dp.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ManagerInternalTLSSecretName))
 
@@ -301,13 +301,13 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}))
 		Expect(envs).To(ContainElements(esEnvs))
 
-		Expect(len(dp.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(2))
+		Expect(len(dp.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
 		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(render.ManagerInternalTLSSecretName))
 		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/internal-manager-tls"))
 		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
 
-		Expect(len(dp.Spec.Template.Spec.Volumes)).To(Equal(2))
+		Expect(len(dp.Spec.Template.Spec.Volumes)).To(Equal(3))
 		Expect(dp.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ManagerInternalTLSSecretName))
 		Expect(dp.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ManagerInternalTLSSecretName))
 		Expect(dp.Spec.Template.Spec.Volumes[1].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
@@ -366,11 +366,11 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Value: "node,service,federatedservices",
 		}))
 
-		Expect(len(dp.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(2))
+		Expect(len(dp.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
 		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(render.ManagerInternalTLSSecretName))
 		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/internal-manager-tls"))
 
-		Expect(len(dp.Spec.Template.Spec.Volumes)).To(Equal(2))
+		Expect(len(dp.Spec.Template.Spec.Volumes)).To(Equal(3))
 		Expect(dp.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ManagerInternalTLSSecretName))
 		Expect(dp.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ManagerInternalTLSSecretName))
 
@@ -424,13 +424,13 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Value: "authorization,elasticsearchconfiguration,managedcluster",
 		}))
 
-		Expect(len(dp.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(2))
+		Expect(len(dp.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(3))
 		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(render.ManagerInternalTLSSecretName))
 		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/internal-manager-tls"))
 		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[1].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts[1].MountPath).To(Equal(certificatemanagement.TrustedCertVolumeMountPath))
 
-		Expect(len(dp.Spec.Template.Spec.Volumes)).To(Equal(2))
+		Expect(len(dp.Spec.Template.Spec.Volumes)).To(Equal(3))
 		Expect(dp.Spec.Template.Spec.Volumes[0].Name).To(Equal(render.ManagerInternalTLSSecretName))
 		Expect(dp.Spec.Template.Spec.Volumes[0].Secret.SecretName).To(Equal(render.ManagerInternalTLSSecretName))
 		Expect(dp.Spec.Template.Spec.Volumes[1].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))

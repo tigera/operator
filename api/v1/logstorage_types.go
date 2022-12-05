@@ -66,6 +66,11 @@ type LogStorageStatus struct {
 	// KibanaHash represents the current revision and configuration of the installed Kibana dashboard. This
 	// is an opaque string which can be monitored for changes to perform actions when Kibana is modified.
 	KibanaHash string `json:"kibanaHash,omitempty"`
+
+	// Conditions represents the latest observed set of conditions for the component. A component may be one or more of
+	// Ready, Progressing, Degraded or other customer types.
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // Nodes defines the configuration for a set of identical Elasticsearch cluster nodes, each of type master, data, and ingest.

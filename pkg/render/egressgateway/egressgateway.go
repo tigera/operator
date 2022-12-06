@@ -16,7 +16,9 @@ package egressgateway
 
 import (
 	"fmt"
-	//appsv1 "k8s.io/api/apps/v1"
+
+	appsv1 "k8s.io/api/apps/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
@@ -28,7 +30,9 @@ import (
 )
 
 const (
-	EGWPortName = "health"
+	EGWPortName             = "health"
+	DefaultEGWVxlanPort int = 4790
+	DefaultEGWVxlanVNI  int = 4097
 )
 
 func EgressGateway(
@@ -50,7 +54,9 @@ type Config struct {
 	OsType       rmeta.OSType
 	EgressGW     *operatorv1.EgressGateway
 
-	egwImage string
+	egwImage          string
+	EgressGWVxlanVNI  int
+	EgressGWVxlanPort int
 }
 
 func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -75,22 +81,89 @@ func (c *component) SupportedOSType() rmeta.OSType {
 }
 
 func (c *component) Objects() ([]client.Object, []client.Object) {
-	return nil, nil
+	return []client.Object{c.egwDeployment()}, nil
 }
 
 func (c *component) Ready() bool {
 	return true
 }
 
-/*
 func (c *component) egwDeployment() *appsv1.Deployment {
+	d := appsv1.Deployment{
+		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      c.config.EgressGW.Name,
+			Namespace: c.config.EgressGW.Namespace,
+			Labels:    c.config.EgressGW.Spec.Labels,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: c.config.EgressGW.Spec.Replicas,
+			Selector: &metav1.LabelSelector{MatchLabels: c.config.EgressGW.Spec.Labels},
+			Template: *c.deploymentPodTemplate(),
+		},
+	}
+	return &d
+}
 
-}*/
+func (c *component) deploymentPodTemplate() *corev1.PodTemplateSpec {
+	var ps []corev1.LocalObjectReference
+	for _, x := range c.config.PullSecrets {
+		ps = append(ps, corev1.LocalObjectReference{Name: x.Name})
+	}
+	return &corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Annotations: c.egwBuildAnnotations(),
+			Labels:      c.config.EgressGW.Spec.Labels,
+		},
+		Spec: corev1.PodSpec{
+			ImagePullSecrets:              ps,
+			TopologySpreadConstraints:     c.egwGetTopoConstrains(),
+			NodeSelector:                  c.egwGetNodeSelector(),
+			TerminationGracePeriodSeconds: c.egwGetTerminationGracePeriod(),
+			InitContainers:                []corev1.Container{*c.egwInitContainer()},
+			Containers:                    []corev1.Container{*c.egwContainer()},
+			Volumes:                       []corev1.Volume{*c.egwVolume()},
+		},
+	}
+}
 
-func (c *component) egwInitContainer() corev1.Container {
+func (c *component) egwGetTopoConstrains() []corev1.TopologySpreadConstraint {
+	if c.config.EgressGW.Spec.Template != nil {
+		return c.config.EgressGW.Spec.Template.Spec.TopologySpreadConstraints
+	}
+	return []corev1.TopologySpreadConstraint{}
+}
+
+func (c *component) egwGetNodeSelector() map[string]string {
+	if c.config.EgressGW.Spec.Template != nil {
+		return c.config.EgressGW.Spec.Template.Spec.NodeSelector
+	}
+	return map[string]string{}
+}
+
+func (c *component) egwGetTerminationGracePeriod() *int64 {
+	var defaultTermGracePeriod int64 = 0
+	if c.config.EgressGW.Spec.Template != nil {
+		if c.config.EgressGW.Spec.Template.Spec.TerminationGracePeriod != nil {
+			return c.config.EgressGW.Spec.Template.Spec.TerminationGracePeriod
+		}
+	}
+	return &defaultTermGracePeriod
+}
+
+func (c *component) egwBuildAnnotations() map[string]string {
+	annotations := map[string]string{}
+	annotations["cni.projectcalico.org/ipv4pools"] = c.config.EgressGW.GetIPPools()
+	if c.config.EgressGW.Spec.AWS != nil && len(c.config.EgressGW.Spec.AWS.ElasticIPs) > 0 {
+		annotations["cni.projectcalico.org/awsElasticIPs"] = c.config.EgressGW.GetElasticIPs()
+	}
+	return annotations
+}
+
+func (c *component) egwInitContainer() *corev1.Container {
 	initContainerPrivileges := true
 	egressPodIp := &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"}}
-	return corev1.Container{
+	return &corev1.Container{
 		Name:            "egress-gateway-init",
 		Image:           c.config.egwImage,
 		ImagePullPolicy: corev1.PullIfNotPresent,
@@ -100,8 +173,8 @@ func (c *component) egwInitContainer() corev1.Container {
 	}
 }
 
-func (c *component) egwContainer() corev1.Container {
-	return corev1.Container{
+func (c *component) egwContainer() *corev1.Container {
+	return &corev1.Container{
 		Name:            "egress-gateway",
 		Image:           c.config.egwImage,
 		ImagePullPolicy: corev1.PullIfNotPresent,
@@ -119,7 +192,6 @@ func (c *component) egwReadinessProbe() *corev1.Probe {
 	return &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
-				Host: "localhost",
 				Path: "/readiness",
 				Port: intstr.FromInt(int(c.config.EgressGW.GetHealthPort())),
 			},
@@ -153,8 +225,8 @@ func (c *component) egwResources() corev1.ResourceRequirements {
 	return c.config.EgressGW.GetResources()
 }
 
-func (c *component) egwVolume() corev1.Volume {
-	return corev1.Volume{
+func (c *component) egwVolume() *corev1.Volume {
+	return &corev1.Volume{
 		Name:         "policysync",
 		VolumeSource: corev1.VolumeSource{CSI: &corev1.CSIVolumeSource{Driver: "csi.tigera.io"}},
 	}
@@ -173,14 +245,15 @@ func (c *component) egwEnvVars() []corev1.EnvVar {
 	return []corev1.EnvVar{
 		{Name: "HEALTH_PORT", Value: fmt.Sprintf("%d", c.config.EgressGW.GetHealthPort())},
 		{Name: "EGW_LOGSEVERITYSCREEN", Value: c.config.EgressGW.GetLogSeverity()},
-		{Name: "EGW_SOCKETPATH", Value: c.config.EgressGW.GetSocketPath()},
-		{Name: "EGW_VXLANVNI", Value: fmt.Sprintf("%d", c.config.EgressGW.GetVxlanVni())},
+		{Name: "HEALTH_TIMEOUT_DATASTORE", Value: c.config.EgressGW.GetHealthTimeoutDs()},
+		{Name: "EGW_VXLANVNI", Value: fmt.Sprintf("%d", c.config.EgressGWVxlanVNI)},
+		{Name: "EGW_VXLANPORT", Value: fmt.Sprintf("%d", c.config.EgressGWVxlanPort)},
 		{Name: "ICMP_PROBE_IPS", Value: icmpProbeIPs},
-		{Name: "ICMP_PROBE_INTERVAL", Value: fmt.Sprintf("%d", icmpInterval)},
-		{Name: "ICMP_PROBE_TIMEOUT", Value: fmt.Sprintf("%d", icmpTimeout)},
+		{Name: "ICMP_PROBE_INTERVAL", Value: icmpInterval},
+		{Name: "ICMP_PROBE_TIMEOUT", Value: icmpTimeout},
 		{Name: "HTTP_PROBE_URLS", Value: httpProbeURLs},
-		{Name: "HTTP_PROBE_INTERVAL", Value: fmt.Sprintf("%d", httpInterval)},
-		{Name: "HTTP_PROBE_TIMEOUT", Value: fmt.Sprintf("%d", httpTimeout)},
+		{Name: "HTTP_PROBE_INTERVAL", Value: httpInterval},
+		{Name: "HTTP_PROBE_TIMEOUT", Value: httpTimeout},
 		{Name: "EGRESS_POD_IP", ValueFrom: egressPodIp},
 	}
 }

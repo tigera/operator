@@ -20,6 +20,7 @@ import (
 	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -36,6 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	"github.com/go-logr/logr"
 	"k8s.io/client-go/kubernetes"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -87,7 +89,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 func add(mgr manager.Manager, c controller.Controller) error {
 	var err error
 
-	// Watch for changes to primary resource applicationlayer.
+	// Watch for changes to primary resource Egress Gateway.
 	err = c.Watch(&source.Kind{Type: &operatorv1.EgressGateway{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
@@ -101,6 +103,13 @@ func add(mgr manager.Manager, c controller.Controller) error {
 		log.V(5).Info("Failed to create network watch", "err", err)
 		return fmt.Errorf("egressgateway-controller failed to watch Tigera network resource: %v", err)
 	}
+
+	// Watch for changes to FelixConfiguration.
+	err = c.Watch(&source.Kind{Type: &crdv1.FelixConfiguration{}}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("egressGateway-controller failed to watch FelixConfiguration resource: %w", err)
+	}
+
 	return nil
 }
 
@@ -125,11 +134,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling EgressGateway")
 
-	if request.Namespace == "" {
-		return reconcile.Result{}, nil
-	}
-
-	egw, err := getEgressGateway(ctx, r.client, request.Namespace, request.Name)
+	egws, err := getEgressGateways(ctx, r.client, request)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -142,8 +147,18 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 		r.status.SetDegraded("Error querying for Egress Gateway", err.Error())
 		return reconcile.Result{}, err
 	}
-	variant, installation, err := utils.GetInstallation(ctx, r.client)
+	r.status.OnCRFound()
+	for _, egw := range egws {
+		result, err := r.reconcile(ctx, &egw, reqLogger)
+		if err != nil {
+			return result, err
+		}
+	}
+	return reconcile.Result{}, nil
+}
 
+func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.EgressGateway, reqLogger logr.Logger) (reconcile.Result, error) {
+	variant, installation, err := utils.GetInstallation(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.Error(err, "Installation not found")
@@ -161,6 +176,14 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, nil
 	}
 
+	fillDefaults(egw)
+	err = validateEgressGateway(ctx, r.client, egw)
+	if err != nil {
+		reqLogger.Error(err, fmt.Sprintf("Error validating Egress Gateway spec"))
+		r.status.SetDegraded("Error validating egress gateway", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
 
 	if err != nil {
@@ -169,12 +192,33 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, err
 	}
 
-	config := &egressgateway.Config{
-		PullSecrets:  pullSecrets,
-		Installation: installation,
-		OsType:       rmeta.OSTypeLinux,
-		EgressGW:     egw,
+	// Fetch any existing default FelixConfiguration object.
+	fc := &crdv1.FelixConfiguration{}
+	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+
+	if err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded("Unable to read FelixConfiguration", err.Error())
+		return reconcile.Result{}, err
 	}
+
+	egwVxlanPort := egressgateway.DefaultEGWVxlanPort
+	egwVxlanVNI := egressgateway.DefaultEGWVxlanVNI
+	if fc.Spec.EgressIPVXLANPort != nil {
+		egwVxlanPort = *fc.Spec.EgressIPVXLANPort
+	}
+	if fc.Spec.EgressIPVXLANVNI != nil {
+		egwVxlanVNI = *fc.Spec.EgressIPVXLANVNI
+	}
+
+	config := &egressgateway.Config{
+		PullSecrets:       pullSecrets,
+		Installation:      installation,
+		OsType:            rmeta.OSTypeLinux,
+		EgressGW:          egw,
+		EgressGWVxlanPort: egwVxlanPort,
+		EgressGWVxlanVNI:  egwVxlanVNI,
+	}
+
 	component := egressgateway.EgressGateway(config)
 	ch := utils.NewComponentHandler(log, r.client, r.scheme, egw)
 
@@ -214,4 +258,105 @@ func getEgressGateway(ctx context.Context, cli client.Client, nameSpace, name st
 	}
 
 	return instance, nil
+}
+
+// validateEgressGateway checks if the ippools specified are already present.
+func validateEgressGateway(ctx context.Context, cli client.Client, egw *operatorv1.EgressGateway) error {
+	for _, ippool := range egw.Spec.IPPools {
+		instance := &crdv1.IPPool{}
+		key := types.NamespacedName{Name: ippool}
+		err := cli.Get(ctx, key, instance)
+		if err != nil {
+			return err
+		}
+	}
+	if egw.Spec.AWS != nil {
+		if len(egw.Spec.AWS.ElasticIPs) > 0 && (*egw.Spec.AWS.NativeIP == operatorv1.NativeIPDisabled) {
+			return fmt.Errorf("NativeIP should be enabled when elastic IPs are used")
+		}
+	}
+	return nil
+}
+
+//getEgressGateways returns the egress gateways in all namespaces or in the request's namespace.
+func getEgressGateways(ctx context.Context, cli client.Client, request reconcile.Request) ([]operatorv1.EgressGateway, error) {
+	// Get all the Egress Gateways in all the namespaces.
+	if request.Namespace == "" {
+		instance := &operatorv1.EgressGatewayList{}
+		err := cli.List(ctx, instance)
+		if err != nil {
+			return []operatorv1.EgressGateway{}, err
+		}
+		return instance.Items, nil
+	}
+	// Get the requested egress gateway
+	instance, err := getEgressGateway(ctx, cli, request.Namespace, request.Name)
+	if err != nil {
+		return []operatorv1.EgressGateway{}, err
+	}
+	return []operatorv1.EgressGateway{*instance}, err
+
+}
+
+func fillDefaults(egw *operatorv1.EgressGateway) {
+	defaultLogSeverity := "info"
+	var defaultHealthPort int32 = 8080
+	defaultHealthTimeoutDS := "90s"
+	defaultIcmpTimeout := "15s"
+	defaultIcmpInterval := "5s"
+	defaultHttpTimeout := "30s"
+	defaultHttpInterval := "10s"
+	defaultAWSNativeIP := operatorv1.NativeIPDisabled
+
+	if egw.Spec.LogSeverity == nil {
+		egw.Spec.LogSeverity = &defaultLogSeverity
+	}
+
+	if egw.Spec.AWS != nil && egw.Spec.AWS.NativeIP == nil {
+		egw.Spec.AWS.NativeIP = &defaultAWSNativeIP
+	}
+
+	if egw.Spec.EgressGatewayFailureDetection == nil {
+		egw.Spec.EgressGatewayFailureDetection = &operatorv1.EgressGatewayFailureDetection{
+			HealthPort:             &defaultHealthPort,
+			HealthTimeoutDataStore: &defaultHealthTimeoutDS,
+			ICMPProbes: &operatorv1.ICMPProbes{IPs: []string{},
+				Interval: &defaultIcmpInterval, Timeout: &defaultIcmpTimeout},
+			HTTPProbes: &operatorv1.HTTPProbes{URLs: []string{},
+				Interval: &defaultHttpInterval, Timeout: &defaultHttpTimeout},
+		}
+	} else {
+		if egw.Spec.EgressGatewayFailureDetection.HealthPort == nil {
+			egw.Spec.EgressGatewayFailureDetection.HealthPort = &defaultHealthPort
+		}
+
+		if egw.Spec.EgressGatewayFailureDetection.HealthTimeoutDataStore == nil {
+			egw.Spec.EgressGatewayFailureDetection.HealthTimeoutDataStore = &defaultHealthTimeoutDS
+		}
+
+		if egw.Spec.EgressGatewayFailureDetection.ICMPProbes == nil {
+			egw.Spec.EgressGatewayFailureDetection.ICMPProbes = &operatorv1.ICMPProbes{IPs: []string{},
+				Interval: &defaultIcmpInterval,
+				Timeout:  &defaultIcmpTimeout}
+		} else {
+			if egw.Spec.EgressGatewayFailureDetection.ICMPProbes.Interval == nil {
+				egw.Spec.EgressGatewayFailureDetection.ICMPProbes.Interval = &defaultIcmpInterval
+			}
+			if egw.Spec.EgressGatewayFailureDetection.ICMPProbes.Timeout == nil {
+				egw.Spec.EgressGatewayFailureDetection.ICMPProbes.Timeout = &defaultIcmpTimeout
+			}
+		}
+		if egw.Spec.EgressGatewayFailureDetection.HTTPProbes == nil {
+			egw.Spec.EgressGatewayFailureDetection.HTTPProbes = &operatorv1.HTTPProbes{URLs: []string{},
+				Interval: &defaultHttpInterval,
+				Timeout:  &defaultHttpTimeout}
+		} else {
+			if egw.Spec.EgressGatewayFailureDetection.HTTPProbes.Interval == nil {
+				egw.Spec.EgressGatewayFailureDetection.HTTPProbes.Interval = &defaultHttpInterval
+			}
+			if egw.Spec.EgressGatewayFailureDetection.HTTPProbes.Timeout == nil {
+				egw.Spec.EgressGatewayFailureDetection.HTTPProbes.Timeout = &defaultHttpTimeout
+			}
+		}
+	}
 }

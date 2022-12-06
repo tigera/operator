@@ -17,7 +17,11 @@ limitations under the License.
 package v1
 
 import (
+	"fmt"
+	"strings"
+
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -40,19 +44,7 @@ type EgressGatewaySpec struct {
 	// Default: info
 	// +kubebuilder:validation:Enum=trace;debug;info;warn;error;fatal
 	// +optional
-	LogSeverity *string `json:"logSeverity,omitempty"`
-
-	// Socketpath defines the path to nodeagent-UDS over-which routing information is pulled
-	// Default: /var/run/nodeagent/socket
-	// +optional
-	SocketPath *string `json:"socketPath,omitempty"`
-
-	// VXLANVNI defines VNI of the VXLAN interface used for Egress Gateway.
-	// Default: 4097
-	// +optional
-	// +kubebuilder:validation:Minimum=0
-	// +kubebuilder:validation:Maximum=16777215
-	VXLANVNI *int32 `json:"vxlanvni,omitempty"`
+	LogSeverity *string `json:"logSeverity"`
 
 	// Template describes the EGW Deployment pod that will be created.
 	// +optional
@@ -61,12 +53,6 @@ type EgressGatewaySpec struct {
 	// EgressGatewayFailureDetection defines the failure detection configuration options for Egress Gateway.
 	// +optional
 	EgressGatewayFailureDetection *EgressGatewayFailureDetection `json:"egressGatewayFailureDetection,omitempty"`
-
-	// AWSMode defines if EgressGateway is to be deployed in AWS.
-	// Default: Disabled
-	// +kubebuilder:validation:Enum=Enabled;Disabled
-	// +optional
-	AWSMode *AWSMode `json:"awsMode,omitempty"`
 
 	// AWS defines the additional configuration options for Egress Gateways on AWS.
 	// Should be specified if AWSMode is enabled.
@@ -86,7 +72,7 @@ type EgressGatewayDeploymentPodSpec struct {
 	// TerminationGracePeriod defines the termination grace period of the Egress Gateway pods in seconds.
 	// When not specified, it takes the default value of 30s defined by kubernetes.
 	// +optional
-	TerminationGracePeriod *int32 `json:"terminationGracePeriod,omitempty"`
+	TerminationGracePeriod *int64 `json:"terminationGracePeriod,omitempty"`
 
 	// TopologySpreadConstraints defines how the Egress Gateway pods should be spread across different AZs.
 	// +optional
@@ -105,11 +91,11 @@ type EgressGatewayDeploymentPodTemplateSpec struct {
 	Spec *EgressGatewayDeploymentPodSpec `json:"spec,omitempty"`
 }
 
-type AWSMode string
+type NativeIP string
 
 const (
-	AWSModeEnabled  AWSMode = "Enabled"
-	AWSModeDisabled AWSMode = "Disabled"
+	NativeIPEnabled  NativeIP = "Enabled"
+	NativeIPDisabled NativeIP = "Disabled"
 )
 
 // EgressGatewayFailureDetection defines the configuration for Egress Gateway failure detection.
@@ -120,6 +106,11 @@ type EgressGatewayFailureDetection struct {
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=65535
 	HealthPort *int32 `json:"healthPort,omitempty"`
+
+	// HealthTimeoutDataStore defines how long Egress Gateway waits before reporting its not ready.
+	// Default: 90s
+	// +optional
+	HealthTimeoutDataStore *string `json:"healthTimeoutDataStore,omitempty"`
 
 	// ICMPProbes defines the ICMP probe configuration options for Egress Gateway.
 	// +optional
@@ -137,14 +128,14 @@ type ICMPProbes struct {
 	IPs []string `json:"ips,omitempty"`
 
 	// Interval defines the interval of ICMP probes. Used when IPs is non-empty.
-	// Default: 5
+	// Default: 5s
 	// +optional
-	Interval *int32 `json:"interval"`
+	Interval *string `json:"interval"`
 
 	// Timeout defines the timeout value of ICMP probes. Used when IPs is non-empty.
-	// Default: 15
+	// Default: 15s
 	// +optional
-	Timeout *int32 `json:"timeout"`
+	Timeout *string `json:"timeout"`
 }
 
 // HTTPProbes defines the HTTP probe configuration for Egress Gateway.
@@ -154,25 +145,29 @@ type HTTPProbes struct {
 	URLs []string `json:"urls,omitempty"`
 
 	// Interval defines the interval of HTTP probes. Used when URLs is non-empty.
-	// Default: 10
+	// Default: 10s
 	// +optional
-	Interval *int32 `json:"interval"`
+	Interval *string `json:"interval"`
 
 	// Timeout defines the timeout value of HTTP probes. Used when URLs is non-empty.
-	// Default: 30
+	// Default: 30s
 	// +optional
-	Timeout *int32 `json:"timeout"`
+	Timeout *string `json:"timeout"`
 }
 
 // AwsEgressGateway defines the configurations for deploying EgressGateway in AWS
 type AwsEgressGateway struct {
-	// ElasticIPs defines the set of elastic IPs that can be used for Egress Gateway pods.
-	// +required
-	ElasticIPs []string `json:"elasticIPs,omitempty"`
 
-	// Resources allows customization of limit and requests such as aws-secondary-ip.
+	// NativeIP defines if EgressGateway is to use an AWS backed IPPool.
+	// Default: Disabled
+	// +kubebuilder:validation:Enum=Enabled;Disabled
 	// +optional
-	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
+	NativeIP *NativeIP `json:"nativeIP,omitempty"`
+
+	// ElasticIPs defines the set of elastic IPs that can be used for Egress Gateway pods.
+	// Should be used along NativeIP enabled.
+	// +optional
+	ElasticIPs []string `json:"elasticIPs,omitempty"`
 }
 
 // EgressGatewayStatus defines the observed state of EgressGateway
@@ -206,74 +201,62 @@ func (c *EgressGateway) GetLogSeverity() string {
 	return *c.Spec.LogSeverity
 }
 
-func (c *EgressGateway) GetSocketPath() string {
-	return *c.Spec.SocketPath
-}
-
-func (c *EgressGateway) GetVxlanVni() int32 {
-	return *c.Spec.VXLANVNI
-}
-
 func (c *EgressGateway) GetHealthPort() int32 {
-	if c.Spec.EgressGatewayFailureDetection != nil {
-		return *c.Spec.EgressGatewayFailureDetection.HealthPort
-	}
-	return 8080
+	return *c.Spec.EgressGatewayFailureDetection.HealthPort
 }
 
-func (c *EgressGateway) GetICMPProbes() (string, int32, int32) {
-	probeIPs := ""
-	var interval int32 = 5
-	var timeout int32 = 15
-	if c.Spec.EgressGatewayFailureDetection != nil {
-		if c.Spec.EgressGatewayFailureDetection.ICMPProbes != nil {
-			if c.Spec.EgressGatewayFailureDetection.ICMPProbes.Interval != nil {
-				interval = *c.Spec.EgressGatewayFailureDetection.ICMPProbes.Interval
-			}
-			if c.Spec.EgressGatewayFailureDetection.ICMPProbes.Timeout != nil {
-				timeout = *c.Spec.EgressGatewayFailureDetection.ICMPProbes.Timeout
-			}
-			for idx, ip := range c.Spec.EgressGatewayFailureDetection.ICMPProbes.IPs {
-				probeIPs = probeIPs + ip
-				if idx != len(c.Spec.EgressGatewayFailureDetection.ICMPProbes.IPs)-1 {
-					probeIPs = probeIPs + ","
-				}
-			}
-		}
-	}
-	return probeIPs, int32(interval), int32(timeout)
+func (c *EgressGateway) GetHealthTimeoutDs() string {
+	return *c.Spec.EgressGatewayFailureDetection.HealthTimeoutDataStore
 }
 
-func (c *EgressGateway) GetHTTPProbes() (string, int32, int32) {
-	probeURLs := ""
-	var interval int32 = 10
-	var timeout int32 = 30
-	if c.Spec.EgressGatewayFailureDetection != nil {
-		if c.Spec.EgressGatewayFailureDetection.HTTPProbes != nil {
-			if c.Spec.EgressGatewayFailureDetection.HTTPProbes.Interval != nil {
-				interval = *c.Spec.EgressGatewayFailureDetection.HTTPProbes.Interval
-			}
-			if c.Spec.EgressGatewayFailureDetection.HTTPProbes.Timeout != nil {
-				timeout = *c.Spec.EgressGatewayFailureDetection.HTTPProbes.Timeout
-			}
-			for idx, url := range c.Spec.EgressGatewayFailureDetection.HTTPProbes.URLs {
-				probeURLs = probeURLs + url
-				if idx != len(c.Spec.EgressGatewayFailureDetection.HTTPProbes.URLs)-1 {
-					probeURLs = probeURLs + ","
-				}
-			}
+func (c *EgressGateway) GetIPPools() string {
+	return concatString(c.Spec.IPPools)
+}
+
+func (c *EgressGateway) GetElasticIPs() string {
+	if c.Spec.AWS != nil {
+		if len(c.Spec.AWS.ElasticIPs) > 0 {
+			return concatString(c.Spec.AWS.ElasticIPs)
 		}
 	}
+	return ""
+}
+
+func (c *EgressGateway) GetICMPProbes() (string, string, string) {
+	probeIPs := strings.Join(c.Spec.EgressGatewayFailureDetection.ICMPProbes.IPs, ",")
+	interval := *c.Spec.EgressGatewayFailureDetection.ICMPProbes.Interval
+	timeout := *c.Spec.EgressGatewayFailureDetection.ICMPProbes.Timeout
+	return probeIPs, interval, timeout
+}
+
+func (c *EgressGateway) GetHTTPProbes() (string, string, string) {
+	probeURLs := strings.Join(c.Spec.EgressGatewayFailureDetection.HTTPProbes.URLs, ",")
+	interval := *c.Spec.EgressGatewayFailureDetection.HTTPProbes.Interval
+	timeout := *c.Spec.EgressGatewayFailureDetection.HTTPProbes.Timeout
 	return probeURLs, interval, timeout
 }
 
 func (c *EgressGateway) GetResources() v1.ResourceRequirements {
-	if *c.Spec.AWSMode == AWSModeEnabled {
-		if c.Spec.AWS.Resources != nil {
-			return *c.Spec.AWS.Resources
+	recommendedQuantity := resource.NewQuantity(1, resource.DecimalSI)
+	if c.Spec.AWS != nil && *c.Spec.AWS.NativeIP == NativeIPEnabled {
+		return v1.ResourceRequirements{
+			Limits:   v1.ResourceList{"projectcalico.org/aws-secondary-ipv4": *recommendedQuantity},
+			Requests: v1.ResourceList{"projectcalico.org/aws-secondary-ipv4": *recommendedQuantity},
 		}
 	}
 	return v1.ResourceRequirements{}
+}
+
+func concatString(arr []string) string {
+	ret := "["
+	for idx, str := range arr {
+		temp := fmt.Sprintf("\"%s\"", str)
+		ret = ret + temp
+		if idx != len(arr)-1 {
+			ret = ret + ","
+		}
+	}
+	return ret + "]"
 }
 
 func init() {

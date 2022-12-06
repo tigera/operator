@@ -37,49 +37,23 @@ spec:
             properties:
               aws:
                 description: AWS defines the additional configuration options for
-                  Egress Gateways on AWS.
+                  Egress Gateways on AWS. Should be specified if AWSMode is enabled.
                 properties:
                   elasticIPs:
                     description: ElasticIPs defines the set of elastic IPs that can
-                      be used for Egress Gateway pods.
+                      be used for Egress Gateway pods. Should be used along NativeIP
+                      enabled.
                     items:
                       type: string
                     type: array
-                  resources:
-                    description: Resources allows customization of limit and requests
-                      such as aws-secondary-ip.
-                    properties:
-                      limits:
-                        additionalProperties:
-                          anyOf:
-                          - type: integer
-                          - type: string
-                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                          x-kubernetes-int-or-string: true
-                        description: 'Limits describes the maximum amount of compute
-                          resources allowed. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
-                        type: object
-                      requests:
-                        additionalProperties:
-                          anyOf:
-                          - type: integer
-                          - type: string
-                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                          x-kubernetes-int-or-string: true
-                        description: 'Requests describes the minimum amount of compute
-                          resources required. If Requests is omitted for a container,
-                          it defaults to Limits if that is explicitly specified, otherwise
-                          to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
-                        type: object
-                    type: object
+                  nativeIP:
+                    description: 'NativeIP defines if EgressGateway is to use an AWS
+                      backed IPPool. Default: Disabled'
+                    enum:
+                    - Enabled
+                    - Disabled
+                    type: string
                 type: object
-              awsMode:
-                description: 'AWSMode defines if EgressGateway is to be deployed in
-                  AWS. Default: Disabled'
-                enum:
-                - Enabled
-                - Disabled
-                type: string
               egressGatewayFailureDetection:
                 description: EgressGatewayFailureDetection defines the failure detection
                   configuration options for Egress Gateway.
@@ -91,20 +65,22 @@ spec:
                     maximum: 65535
                     minimum: 0
                     type: integer
+                  healthTimeoutDataStore:
+                    description: 'HealthTimeoutDataStore defines how long Egress Gateway
+                      waits before reporting its not ready. Default: 90s'
+                    type: string
                   httpProbe:
                     description: HTTPProbes defines the HTTP probe configuration options
                       for Egress Gateway.
                     properties:
                       interval:
                         description: 'Interval defines the interval of HTTP probes.
-                          Used when URLs is non-empty. Default: 10'
-                        format: int32
-                        type: integer
+                          Used when URLs is non-empty. Default: 10s'
+                        type: string
                       timeout:
                         description: 'Timeout defines the timeout value of HTTP probes.
-                          Used when URLs is non-empty. Default: 30'
-                        format: int32
-                        type: integer
+                          Used when URLs is non-empty. Default: 30s'
+                        type: string
                       urls:
                         description: URLs defines the list of HTTP probe URLs.
                         items:
@@ -117,9 +93,8 @@ spec:
                     properties:
                       interval:
                         description: 'Interval defines the interval of ICMP probes.
-                          Used when IPs is non-empty. Default: 5'
-                        format: int32
-                        type: integer
+                          Used when IPs is non-empty. Default: 5s'
+                        type: string
                       ips:
                         description: IPs defines the list of ICMP probe IPs.
                         items:
@@ -127,9 +102,8 @@ spec:
                         type: array
                       timeout:
                         description: 'Timeout defines the timeout value of ICMP probes.
-                          Used when IPs is non-empty. Default: 15'
-                        format: int32
-                        type: integer
+                          Used when IPs is non-empty. Default: 15s'
+                        type: string
                     type: object
                 type: object
               ipPools:
@@ -160,10 +134,6 @@ spec:
                   pods will run.
                 format: int32
                 type: integer
-              socketPath:
-                description: 'Socketpath defines the path to nodeagent-UDS over-which
-                  routing information is pulled Default: /var/run/nodeagent/socket'
-                type: string
               template:
                 description: Template describes the EGW Deployment pod that will be
                   created.
@@ -1095,7 +1065,7 @@ spec:
                           grace period of the Egress Gateway pods in seconds. When
                           not specified, it takes the default value of 30s defined
                           by kubernetes.
-                        format: int32
+                        format: int64
                         type: integer
                       topologySpreadConstraints:
                         description: TopologySpreadConstraints defines how the Egress
@@ -1282,13 +1252,6 @@ spec:
                         type: array
                     type: object
                 type: object
-              vxlanvni:
-                description: 'VXLANVNI defines VNI of the VXLAN interface used for
-                  Egress Gateway. Default: 4097'
-                format: int32
-                maximum: 16777215
-                minimum: 0
-                type: integer
             required:
             - ipPools
             - labels

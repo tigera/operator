@@ -323,7 +323,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				Name: "volume-storage",
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-						ClaimName: testADStorageClassName,
+						ClaimName: render.ADPersistentVolumeClaimName,
 					},
 				},
 			},

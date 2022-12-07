@@ -1418,10 +1418,9 @@ func (c *intrusionDetectionComponent) adAPIDeployment() *appsv1.Deployment {
 	sc := securitycontext.NewBaseContext(securitycontext.RunAsUserID, securitycontext.RunAsGroupID)
 
 	if c.adAPIPersistentStorageEnabled() {
-		adStorageClassName := c.cfg.IntrusionDetection.Spec.AnomalyDetection.StorageClassName
 		adModelVolumeSource = corev1.VolumeSource{
 			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-				ClaimName: adStorageClassName,
+				ClaimName: ADPersistentVolumeClaimName,
 			},
 		}
 

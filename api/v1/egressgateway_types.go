@@ -110,7 +110,7 @@ type EgressGatewayFailureDetection struct {
 	// HealthTimeoutDataStore defines how long Egress Gateway waits before reporting its not ready.
 	// Default: 90s
 	// +optional
-	HealthTimeoutDataStore *string `json:"healthTimeoutDataStore,omitempty"`
+	HealthTimeoutDataStore *metav1.Duration `json:"healthTimeoutDataStore,omitempty"`
 
 	// ICMPProbes defines the ICMP probe configuration options for Egress Gateway.
 	// +optional
@@ -130,12 +130,12 @@ type ICMPProbes struct {
 	// Interval defines the interval of ICMP probes. Used when IPs is non-empty.
 	// Default: 5s
 	// +optional
-	Interval *string `json:"interval"`
+	Interval *metav1.Duration `json:"interval"`
 
 	// Timeout defines the timeout value of ICMP probes. Used when IPs is non-empty.
 	// Default: 15s
 	// +optional
-	Timeout *string `json:"timeout"`
+	Timeout *metav1.Duration `json:"timeout"`
 }
 
 // HTTPProbes defines the HTTP probe configuration for Egress Gateway.
@@ -147,12 +147,12 @@ type HTTPProbes struct {
 	// Interval defines the interval of HTTP probes. Used when URLs is non-empty.
 	// Default: 10s
 	// +optional
-	Interval *string `json:"interval"`
+	Interval *metav1.Duration `json:"interval"`
 
 	// Timeout defines the timeout value of HTTP probes. Used when URLs is non-empty.
 	// Default: 30s
 	// +optional
-	Timeout *string `json:"timeout"`
+	Timeout *metav1.Duration `json:"timeout"`
 }
 
 // AwsEgressGateway defines the configurations for deploying EgressGateway in AWS
@@ -174,6 +174,11 @@ type AwsEgressGateway struct {
 type EgressGatewayStatus struct {
 	// State provides user-readable status.
 	State string `json:"state,omitempty"`
+
+	// Conditions represents the latest observed set of conditions for the component. A component may be one or more of
+	// Ready, Progressing, Degraded or other customer types.
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -206,7 +211,7 @@ func (c *EgressGateway) GetHealthPort() int32 {
 }
 
 func (c *EgressGateway) GetHealthTimeoutDs() string {
-	return *c.Spec.EgressGatewayFailureDetection.HealthTimeoutDataStore
+	return c.Spec.EgressGatewayFailureDetection.HealthTimeoutDataStore.Duration.String()
 }
 
 func (c *EgressGateway) GetIPPools() string {
@@ -224,15 +229,15 @@ func (c *EgressGateway) GetElasticIPs() string {
 
 func (c *EgressGateway) GetICMPProbes() (string, string, string) {
 	probeIPs := strings.Join(c.Spec.EgressGatewayFailureDetection.ICMPProbes.IPs, ",")
-	interval := *c.Spec.EgressGatewayFailureDetection.ICMPProbes.Interval
-	timeout := *c.Spec.EgressGatewayFailureDetection.ICMPProbes.Timeout
+	interval := c.Spec.EgressGatewayFailureDetection.ICMPProbes.Interval.Duration.String()
+	timeout := c.Spec.EgressGatewayFailureDetection.ICMPProbes.Timeout.Duration.String()
 	return probeIPs, interval, timeout
 }
 
 func (c *EgressGateway) GetHTTPProbes() (string, string, string) {
 	probeURLs := strings.Join(c.Spec.EgressGatewayFailureDetection.HTTPProbes.URLs, ",")
-	interval := *c.Spec.EgressGatewayFailureDetection.HTTPProbes.Interval
-	timeout := *c.Spec.EgressGatewayFailureDetection.HTTPProbes.Timeout
+	interval := c.Spec.EgressGatewayFailureDetection.HTTPProbes.Interval.Duration.String()
+	timeout := c.Spec.EgressGatewayFailureDetection.HTTPProbes.Timeout.Duration.String()
 	return probeURLs, interval, timeout
 }
 
@@ -245,6 +250,22 @@ func (c *EgressGateway) GetResources() v1.ResourceRequirements {
 		}
 	}
 	return v1.ResourceRequirements{}
+}
+
+func (c *EgressGateway) GetTerminationGracePeriod() *int64 {
+	return c.Spec.Template.Spec.TerminationGracePeriod
+}
+
+func (c *EgressGateway) GetNodeSelector() map[string]string {
+	return c.Spec.Template.Spec.NodeSelector
+}
+
+func (c *EgressGateway) GetAffinity() *v1.Affinity {
+	return c.Spec.Template.Spec.Affinity
+}
+
+func (c *EgressGateway) GetTopoConstraints() []v1.TopologySpreadConstraint {
+	return c.Spec.Template.Spec.TopologySpreadConstraints
 }
 
 func concatString(arr []string) string {

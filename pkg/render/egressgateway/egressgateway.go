@@ -117,38 +117,15 @@ func (c *component) deploymentPodTemplate() *corev1.PodTemplateSpec {
 		},
 		Spec: corev1.PodSpec{
 			ImagePullSecrets:              ps,
-			TopologySpreadConstraints:     c.egwGetTopoConstrains(),
-			NodeSelector:                  c.egwGetNodeSelector(),
-			TerminationGracePeriodSeconds: c.egwGetTerminationGracePeriod(),
+			Affinity:                      c.config.EgressGW.GetAffinity(),
+			TopologySpreadConstraints:     c.config.EgressGW.GetTopoConstraints(),
+			NodeSelector:                  c.config.EgressGW.GetNodeSelector(),
+			TerminationGracePeriodSeconds: c.config.EgressGW.GetTerminationGracePeriod(),
 			InitContainers:                []corev1.Container{*c.egwInitContainer()},
 			Containers:                    []corev1.Container{*c.egwContainer()},
 			Volumes:                       []corev1.Volume{*c.egwVolume()},
 		},
 	}
-}
-
-func (c *component) egwGetTopoConstrains() []corev1.TopologySpreadConstraint {
-	if c.config.EgressGW.Spec.Template != nil {
-		return c.config.EgressGW.Spec.Template.Spec.TopologySpreadConstraints
-	}
-	return []corev1.TopologySpreadConstraint{}
-}
-
-func (c *component) egwGetNodeSelector() map[string]string {
-	if c.config.EgressGW.Spec.Template != nil {
-		return c.config.EgressGW.Spec.Template.Spec.NodeSelector
-	}
-	return map[string]string{}
-}
-
-func (c *component) egwGetTerminationGracePeriod() *int64 {
-	var defaultTermGracePeriod int64 = 0
-	if c.config.EgressGW.Spec.Template != nil {
-		if c.config.EgressGW.Spec.Template.Spec.TerminationGracePeriod != nil {
-			return c.config.EgressGW.Spec.Template.Spec.TerminationGracePeriod
-		}
-	}
-	return &defaultTermGracePeriod
 }
 
 func (c *component) egwBuildAnnotations() map[string]string {
@@ -162,14 +139,13 @@ func (c *component) egwBuildAnnotations() map[string]string {
 
 func (c *component) egwInitContainer() *corev1.Container {
 	initContainerPrivileges := true
-	egressPodIp := &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"}}
 	return &corev1.Container{
 		Name:            "egress-gateway-init",
 		Image:           c.config.egwImage,
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Command:         []string{"/init-gateway.sh"},
 		SecurityContext: &corev1.SecurityContext{Privileged: &initContainerPrivileges},
-		Env:             []corev1.EnvVar{{Name: "EGRESS_POD_IP", ValueFrom: egressPodIp}},
+		Env:             c.egwInitEnvVars(),
 	}
 }
 
@@ -244,16 +220,24 @@ func (c *component) egwEnvVars() []corev1.EnvVar {
 	egressPodIp := &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"}}
 	return []corev1.EnvVar{
 		{Name: "HEALTH_PORT", Value: fmt.Sprintf("%d", c.config.EgressGW.GetHealthPort())},
-		{Name: "EGW_LOGSEVERITYSCREEN", Value: c.config.EgressGW.GetLogSeverity()},
 		{Name: "HEALTH_TIMEOUT_DATASTORE", Value: c.config.EgressGW.GetHealthTimeoutDs()},
-		{Name: "EGW_VXLANVNI", Value: fmt.Sprintf("%d", c.config.EgressGWVxlanVNI)},
-		{Name: "EGW_VXLANPORT", Value: fmt.Sprintf("%d", c.config.EgressGWVxlanPort)},
 		{Name: "ICMP_PROBE_IPS", Value: icmpProbeIPs},
 		{Name: "ICMP_PROBE_INTERVAL", Value: icmpInterval},
 		{Name: "ICMP_PROBE_TIMEOUT", Value: icmpTimeout},
 		{Name: "HTTP_PROBE_URLS", Value: httpProbeURLs},
 		{Name: "HTTP_PROBE_INTERVAL", Value: httpInterval},
 		{Name: "HTTP_PROBE_TIMEOUT", Value: httpTimeout},
+		{Name: "EGRESS_POD_IP", ValueFrom: egressPodIp},
+		{Name: "EGRESS_VXLAN_VNI", Value: fmt.Sprintf("%d", c.config.EgressGWVxlanVNI)},
+		{Name: "LOG_SEVERITY", Value: c.config.EgressGW.GetLogSeverity()},
+	}
+}
+
+func (c *component) egwInitEnvVars() []corev1.EnvVar {
+	egressPodIp := &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"}}
+	return []corev1.EnvVar{
+		{Name: "EGRESS_VXLAN_VNI", Value: fmt.Sprintf("%d", c.config.EgressGWVxlanVNI)},
+		{Name: "EGRESS_VXLAN_PORT", Value: fmt.Sprintf("%d", c.config.EgressGWVxlanPort)},
 		{Name: "EGRESS_POD_IP", ValueFrom: egressPodIp},
 	}
 }

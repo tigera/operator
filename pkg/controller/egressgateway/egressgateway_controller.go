@@ -38,6 +38,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/go-logr/logr"
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -176,7 +178,7 @@ func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.
 		return reconcile.Result{}, nil
 	}
 
-	fillDefaults(egw)
+	fillDefaults(egw, installation)
 	err = validateEgressGateway(ctx, r.client, egw)
 	if err != nil {
 		reqLogger.Error(err, fmt.Sprintf("Error validating Egress Gateway spec"))
@@ -298,14 +300,14 @@ func getEgressGateways(ctx context.Context, cli client.Client, request reconcile
 
 }
 
-func fillDefaults(egw *operatorv1.EgressGateway) {
+func fillDefaults(egw *operatorv1.EgressGateway, installation *operatorv1.InstallationSpec) {
 	defaultLogSeverity := "info"
 	var defaultHealthPort int32 = 8080
-	defaultHealthTimeoutDS := "90s"
-	defaultIcmpTimeout := "15s"
-	defaultIcmpInterval := "5s"
-	defaultHttpTimeout := "30s"
-	defaultHttpInterval := "10s"
+	defaultHealthTimeoutDS := &metav1.Duration{90 * time.Second}
+	defaultIcmpTimeout := &metav1.Duration{15 * time.Second}
+	defaultIcmpInterval := &metav1.Duration{5 * time.Second}
+	defaultHttpTimeout := &metav1.Duration{30 * time.Second}
+	defaultHttpInterval := &metav1.Duration{10 * time.Second}
 	defaultAWSNativeIP := operatorv1.NativeIPDisabled
 
 	if egw.Spec.LogSeverity == nil {
@@ -319,11 +321,11 @@ func fillDefaults(egw *operatorv1.EgressGateway) {
 	if egw.Spec.EgressGatewayFailureDetection == nil {
 		egw.Spec.EgressGatewayFailureDetection = &operatorv1.EgressGatewayFailureDetection{
 			HealthPort:             &defaultHealthPort,
-			HealthTimeoutDataStore: &defaultHealthTimeoutDS,
+			HealthTimeoutDataStore: defaultHealthTimeoutDS,
 			ICMPProbes: &operatorv1.ICMPProbes{IPs: []string{},
-				Interval: &defaultIcmpInterval, Timeout: &defaultIcmpTimeout},
+				Interval: defaultIcmpInterval, Timeout: defaultIcmpTimeout},
 			HTTPProbes: &operatorv1.HTTPProbes{URLs: []string{},
-				Interval: &defaultHttpInterval, Timeout: &defaultHttpTimeout},
+				Interval: defaultHttpInterval, Timeout: defaultHttpTimeout},
 		}
 	} else {
 		if egw.Spec.EgressGatewayFailureDetection.HealthPort == nil {
@@ -331,32 +333,79 @@ func fillDefaults(egw *operatorv1.EgressGateway) {
 		}
 
 		if egw.Spec.EgressGatewayFailureDetection.HealthTimeoutDataStore == nil {
-			egw.Spec.EgressGatewayFailureDetection.HealthTimeoutDataStore = &defaultHealthTimeoutDS
+			egw.Spec.EgressGatewayFailureDetection.HealthTimeoutDataStore = defaultHealthTimeoutDS
 		}
 
 		if egw.Spec.EgressGatewayFailureDetection.ICMPProbes == nil {
 			egw.Spec.EgressGatewayFailureDetection.ICMPProbes = &operatorv1.ICMPProbes{IPs: []string{},
-				Interval: &defaultIcmpInterval,
-				Timeout:  &defaultIcmpTimeout}
+				Interval: defaultIcmpInterval,
+				Timeout:  defaultIcmpTimeout}
 		} else {
 			if egw.Spec.EgressGatewayFailureDetection.ICMPProbes.Interval == nil {
-				egw.Spec.EgressGatewayFailureDetection.ICMPProbes.Interval = &defaultIcmpInterval
+				egw.Spec.EgressGatewayFailureDetection.ICMPProbes.Interval = defaultIcmpInterval
 			}
 			if egw.Spec.EgressGatewayFailureDetection.ICMPProbes.Timeout == nil {
-				egw.Spec.EgressGatewayFailureDetection.ICMPProbes.Timeout = &defaultIcmpTimeout
+				egw.Spec.EgressGatewayFailureDetection.ICMPProbes.Timeout = defaultIcmpTimeout
 			}
 		}
 		if egw.Spec.EgressGatewayFailureDetection.HTTPProbes == nil {
 			egw.Spec.EgressGatewayFailureDetection.HTTPProbes = &operatorv1.HTTPProbes{URLs: []string{},
-				Interval: &defaultHttpInterval,
-				Timeout:  &defaultHttpTimeout}
+				Interval: defaultHttpInterval,
+				Timeout:  defaultHttpTimeout}
 		} else {
 			if egw.Spec.EgressGatewayFailureDetection.HTTPProbes.Interval == nil {
-				egw.Spec.EgressGatewayFailureDetection.HTTPProbes.Interval = &defaultHttpInterval
+				egw.Spec.EgressGatewayFailureDetection.HTTPProbes.Interval = defaultHttpInterval
 			}
 			if egw.Spec.EgressGatewayFailureDetection.HTTPProbes.Timeout == nil {
-				egw.Spec.EgressGatewayFailureDetection.HTTPProbes.Timeout = &defaultHttpTimeout
+				egw.Spec.EgressGatewayFailureDetection.HTTPProbes.Timeout = defaultHttpTimeout
 			}
+		}
+	}
+
+	// If affinity isn't specified by the user, default pod anti affinity is added so that 2 EGW pods aren't scheduled in
+	// the same node.
+
+	defAffinity := &v1.Affinity{PodAntiAffinity: &v1.PodAntiAffinity{
+		PreferredDuringSchedulingIgnoredDuringExecution: []v1.WeightedPodAffinityTerm{
+			{
+				Weight: 100,
+				PodAffinityTerm: v1.PodAffinityTerm{LabelSelector: &metav1.LabelSelector{MatchLabels: egw.Spec.Labels},
+					TopologyKey: "topology.kubernetes.io/zone",
+				},
+			},
+		},
+	},
+	}
+	switch installation.KubernetesProvider {
+	case operatorv1.ProviderAKS:
+		defAffinity.NodeAffinity = &v1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
+				NodeSelectorTerms: []v1.NodeSelectorTerm{{
+					MatchExpressions: []v1.NodeSelectorRequirement{
+						{
+							Key:      "type",
+							Operator: v1.NodeSelectorOpNotIn,
+							Values:   []string{"virtual-node"},
+						},
+						{
+							Key:      "kubernetes.azure.com/cluster",
+							Operator: v1.NodeSelectorOpExists,
+						},
+					},
+				}},
+			},
+		}
+	default:
+		defAffinity.NodeAffinity = nil
+
+	}
+	if egw.Spec.Template == nil {
+		egw.Spec.Template = &operatorv1.EgressGatewayDeploymentPodTemplateSpec{Spec: &operatorv1.EgressGatewayDeploymentPodSpec{Affinity: defAffinity}}
+	} else {
+		if egw.Spec.Template.Spec == nil {
+			egw.Spec.Template.Spec = &operatorv1.EgressGatewayDeploymentPodSpec{Affinity: defAffinity}
+		} else if egw.Spec.Template.Spec.Affinity == nil {
+			egw.Spec.Template.Spec.Affinity = defAffinity
 		}
 	}
 }

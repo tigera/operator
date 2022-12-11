@@ -627,6 +627,15 @@ func managerClusterRole(managementCluster, managedCluster, openshift bool) *rbac
 				Resources: []string{"users", "groups", "serviceaccounts"},
 				Verbs:     []string{"impersonate"},
 			},
+			// Allow query server talk to Prometheus via the manager user.
+			{
+				APIGroups: []string{""},
+				Resources: []string{"services/proxy"},
+				ResourceNames: []string{
+					"https:tigera-api:8080", "calico-node-prometheus:9090",
+				},
+				Verbs: []string{"get", "create"},
+			},
 		},
 	}
 

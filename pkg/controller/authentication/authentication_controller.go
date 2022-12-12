@@ -266,6 +266,13 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
+	// Dex needs to trust a public CA, so we mount all the system certificates.
+	trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates()
+	if err != nil {
+		r.status.SetDegraded("Unable to create tigera-ca-bundle configmap", err.Error())
+		return reconcile.Result{}, err
+	}
+
 	// Dex will be configured with the contents of this secret, such as clientID and clientSecret.
 	idpSecret, err := utils.GetIdpSecret(ctx, r.client, authentication)
 	if err != nil {
@@ -312,6 +319,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		ClusterDomain: r.clusterDomain,
 		DeleteDex:     disableDex,
 		TLSKeyPair:    tlsKeyPair,
+		TrustedBundle: trustedBundle,
 	}
 
 	// Render the desired objects from the CRD and create or update them.
@@ -332,6 +340,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(tlsKeyPair, true, true),
 			},
+			TrustedBundle: trustedBundle,
 		}),
 	}
 

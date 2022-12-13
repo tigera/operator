@@ -169,7 +169,6 @@ var _ = Describe("CSI rendering tests", func() {
 	})
 	Context("With csi-node-driver DaemonSet overrides", func() {
 		It("should handle csiNodeDriverDaemonSet overrides", func() {
-			var minReadySeconds int32 = 20
 
 			affinity := &corev1.Affinity{
 				NodeAffinity: &corev1.NodeAffinity{
@@ -222,11 +221,8 @@ var _ = Describe("CSI rendering tests", func() {
 			Expect(ds.Labels["top-level"]).To(Equal("label1"))
 			Expect(ds.Annotations).To(HaveLen(1))
 			Expect(ds.Annotations["top-level"]).To(Equal("annot1"))
-
-			Expect(ds.Spec.MinReadySeconds).To(Equal(minReadySeconds))
-
 			// At runtime, the operator will also add some standard labels to the
-			// daemonset such as "k8s-app=calico-node". But the calico-node daemonset object
+			// daemonset such as "k8s-app=csi-node-driver". But the csi-node-driver daemonset object
 			// produced by the render will have no labels so we expect just the one
 			// provided.
 			Expect(ds.Spec.Template.Labels).To(HaveLen(1))

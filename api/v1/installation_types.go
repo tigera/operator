@@ -159,6 +159,9 @@ type InstallationSpec struct {
 	// conjunction with the deprecated ComponentResources, then these overrides take precedence.
 	CalicoNodeDaemonSet *CalicoNodeDaemonSet `json:"calicoNodeDaemonSet,omitempty"`
 
+	// CSINodeDriverDaemonSet configures the csi-node-driver DaemonSet.
+	CSINodeDriverDaemonSet *CSINodeDriverDaemonSet `json:"csiNodeDriverDaemonSet,omitempty"`
+
 	// CalicoKubeControllersDeployment configures the calico-kube-controllers Deployment. If used in
 	// conjunction with the deprecated ComponentResources, then these overrides take precedence.
 	CalicoKubeControllersDeployment *CalicoKubeControllersDeployment `json:"calicoKubeControllersDeployment,omitempty"`

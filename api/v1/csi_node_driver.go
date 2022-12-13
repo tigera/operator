@@ -21,8 +21,26 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
+// CSINodeDriverDaemonSetContainer is a csi-node-driver DaemonSet container.
+type CSINodeDriverDaemonSetContainer struct {
+	// Name is an enum which identifies the csi-node-driver DaemonSet container by name.
+	// +kubebuilder:validation:Enum=csi-node-driver
+	Name string `json:"name"`
+
+	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
+	// If specified, this overrides the named csi-node-driver DaemonSet container's resources.
+	// If omitted, the csi-node-driver DaemonSet will use its default value for this container's resources.
+	// +optional
+	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
+}
+
 // CSINodeDriverDaemonSetPodSpec is the csi-node-driver DaemonSet's PodSpec.
 type CSINodeDriverDaemonSetPodSpec struct {
+	// Containers is a list of csi-node-driver containers.
+	// If specified, this overrides the specified csi-node-driver DaemonSet containers.
+	// If omitted, the csi-node-driver DaemonSet will use its default values for its containers.
+	// +optional
+	Containers []CSINodeDriverDaemonSetContainer `json:"containers,omitempty"`
 	// Affinity is a group of affinity scheduling rules for the csi-node-driver pods.
 	// If specified, this overrides any affinity that may be set on the csi-node-driver DaemonSet.
 	// If omitted, the csi-node-driver DaemonSet will use its default value for affinity.
@@ -71,6 +89,14 @@ type CSINodeDriverDaemonSet struct {
 
 // CSINodeDriverDaemonSetSpec defines configuration for the csi-node-driver DaemonSet.
 type CSINodeDriverDaemonSetSpec struct {
+	// MinReadySeconds is the minimum number of seconds for which a newly created DaemonSet pod should
+	// be ready without any of its container crashing, for it to be considered available.
+	// If specified, this overrides any minReadySeconds value that may be set on the csi-node-driver DaemonSet.
+	// If omitted, the csi-node-driver DaemonSet will use its default value for minReadySeconds.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=2147483647
+	MinReadySeconds *int32 `json:"minReadySeconds,omitempty"`
 	// Template describes the csi-node-driver DaemonSet pod that will be created.
 	// +optional
 	Template *CSINodeDriverDaemonSetPodTemplateSpec `json:"template,omitempty"`
@@ -81,6 +107,9 @@ func (c *CSINodeDriverDaemonSet) GetMetadata() *Metadata {
 }
 
 func (c *CSINodeDriverDaemonSet) GetMinReadySeconds() *int32 {
+	if c.Spec != nil {
+		return c.Spec.MinReadySeconds
+	}
 	return nil
 }
 
@@ -94,10 +123,29 @@ func (c *CSINodeDriverDaemonSet) GetPodTemplateMetadata() *Metadata {
 }
 
 func (c *CSINodeDriverDaemonSet) GetInitContainers() []v1.Container {
+	// InitContainers aren't needed for CSI Node Driver DaemonSet resources.
 	return nil
 }
 
 func (c *CSINodeDriverDaemonSet) GetContainers() []v1.Container {
+	if c.Spec != nil {
+		if c.Spec.Template != nil {
+			if c.Spec.Template.Spec != nil {
+				if c.Spec.Template.Spec.Containers != nil {
+					cs := make([]v1.Container, len(c.Spec.Template.Spec.Containers))
+					for i, v := range c.Spec.Template.Spec.Containers {
+						// Only copy and return the container if it has resources set.
+						if v.Resources == nil {
+							continue
+						}
+						c := v1.Container{Name: v.Name, Resources: *v.Resources}
+						cs[i] = c
+					}
+					return cs
+				}
+			}
+		}
+	}
 	return nil
 }
 

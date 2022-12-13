@@ -223,9 +223,9 @@ var _ = Describe("CSI rendering tests", func() {
 			Expect(ds.Annotations["top-level"]).To(Equal("annot1"))
 			// At runtime, the operator will also add some standard labels to the
 			// daemonset such as "k8s-app=csi-node-driver". But the csi-node-driver daemonset object
-			// produced by the render will have no labels so we expect just the one
+			// produced by the render will have 1 label (name) so we expect one plus the one
 			// provided.
-			Expect(ds.Spec.Template.Labels).To(HaveLen(1))
+			Expect(ds.Spec.Template.Labels).To(HaveLen(2))
 			Expect(ds.Spec.Template.Labels["template-level"]).To(Equal("label2"))
 
 			// With the default instance we expect 3 template-level annotations

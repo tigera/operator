@@ -1605,7 +1605,11 @@ func (c *nodeComponent) nodeMetricsService() *corev1.Service {
 		},
 		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{"k8s-app": CalicoNodeObjectName},
-			Type:     corev1.ServiceTypeClusterIP,
+			// Important: "None" tells Kubernetes that we want a headless service with
+			// no kube-proxy load balancer.  If we omit this then kube-proxy will render
+			// a huge set of iptables rules for this service since there's an instance
+			// on every node.
+			ClusterIP: "None",
 			Ports: []corev1.ServicePort{
 				{
 					Name:       "calico-metrics-port",

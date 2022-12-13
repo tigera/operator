@@ -497,6 +497,11 @@ func mergeTyphaDeployment(cfg, override *operatorv1.TyphaDeployment) *operatorv1
 			out.NodeSelector = override.NodeSelector
 		}
 
+		switch compareFields(out.TerminationGracePeriodSeconds, override.TerminationGracePeriodSeconds) {
+		case BOnlySet, Different:
+			out.TerminationGracePeriodSeconds = override.TerminationGracePeriodSeconds
+		}
+
 		switch compareFields(out.Tolerations, override.Tolerations) {
 		case BOnlySet, Different:
 			out.Tolerations = override.Tolerations
@@ -535,6 +540,11 @@ func mergeTyphaDeployment(cfg, override *operatorv1.TyphaDeployment) *operatorv1
 			out.Template = override.Template.DeepCopy()
 		case Different:
 			out.Template = mergeTemplateSpec(out.Template, override.Template)
+		}
+
+		switch compareFields(out.Strategy, override.Strategy) {
+		case BOnlySet, Different:
+			out.Strategy = override.Strategy.DeepCopy()
 		}
 
 		return out

@@ -18,8 +18,8 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
-
 	v1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/ptr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -555,6 +555,510 @@ var _ = Describe("Common components render tests", func() {
 				Expect(result).To(Equal(expected))
 			}),
 	)
+
+	DescribeTable("test ApplyDeploymentOverrides",
+		func(original func() appsv1.Deployment, override func() *v1.TyphaDeployment, expectations func(set appsv1.Deployment)) {
+			orig := original()
+			template := override()
+			ApplyDeploymentOverrides(&orig, template)
+			expectations(orig)
+		},
+		Entry("empty",
+			defaultedDeployment,
+			func() *v1.TyphaDeployment {
+				return &v1.TyphaDeployment{}
+			},
+			func(result appsv1.Deployment) {
+				Expect(result).To(Equal(defaultedDeployment()))
+			}),
+		Entry("empty labels and annotations",
+			defaultedDeployment,
+			func() *v1.TyphaDeployment {
+				return &v1.TyphaDeployment{
+					Metadata: &v1.Metadata{
+						Labels:      map[string]string{},
+						Annotations: nil,
+					},
+				}
+			},
+			func(result appsv1.Deployment) {
+				Expect(result).To(Equal(defaultedDeployment()))
+			}),
+		Entry("empty labels and annotations, empty spec",
+			defaultedDeployment,
+			func() *v1.TyphaDeployment {
+				return &v1.TyphaDeployment{
+					Metadata: &v1.Metadata{
+						Labels:      map[string]string{},
+						Annotations: map[string]string{},
+					},
+					Spec: &v1.TyphaDeploymentSpec{},
+				}
+			},
+			func(result appsv1.Deployment) {
+				Expect(result).To(Equal(defaultedDeployment()))
+			}),
+		Entry("labels and annotations",
+			defaultedDeployment,
+			func() *v1.TyphaDeployment {
+				return &v1.TyphaDeployment{
+					Metadata: &v1.Metadata{
+						Labels:      map[string]string{"test-label": "label1"},
+						Annotations: map[string]string{"test-annot": "annot1"},
+					},
+					Spec: nil,
+				}
+			},
+			func(result appsv1.Deployment) {
+				expected := defaultedDeployment()
+				expected.Labels["test-label"] = "label1"
+				expected.Annotations["test-annot"] = "annot1"
+				Expect(result).To(Equal(expected))
+			}),
+		Entry("labels only",
+			defaultedDeployment,
+			func() *v1.TyphaDeployment {
+				return &v1.TyphaDeployment{
+					Metadata: &v1.Metadata{
+						Labels: map[string]string{"test-label": "label1"},
+					},
+					Spec: nil,
+				}
+			},
+			func(result appsv1.Deployment) {
+				expected := defaultedDeployment()
+				expected.Labels["test-label"] = "label1"
+				Expect(result).To(Equal(expected))
+			}),
+		Entry("annotations only",
+			defaultedDeployment,
+			func() *v1.TyphaDeployment {
+				return &v1.TyphaDeployment{
+					Metadata: &v1.Metadata{
+						Annotations: map[string]string{"test-annot": "annot1"},
+					},
+					Spec: nil,
+				}
+			},
+			func(result appsv1.Deployment) {
+				expected := defaultedDeployment()
+				expected.Annotations["test-annot"] = "annot1"
+				Expect(result).To(Equal(expected))
+			}),
+		Entry("labels and annotations that are already defined",
+			defaultedDeployment,
+			func() *v1.TyphaDeployment {
+				return &v1.TyphaDeployment{
+					Metadata: &v1.Metadata{
+						// "not-zero" label and annotation keys exist in the defaulted calico node.
+						Labels: map[string]string{
+							"test-label": "label1",
+							"not-zero":   "not-zero",
+						},
+						Annotations: map[string]string{
+							"not-zero":   "not-zero",
+							"test-annot": "annot1",
+						},
+					},
+				}
+			},
+			func(result appsv1.Deployment) {
+				expected := defaultedDeployment()
+				// Only the labels and annotations that don't clobber existing keys are added.
+				expected.Labels["test-label"] = "label1"
+				expected.Annotations["test-annot"] = "annot1"
+				Expect(result).To(Equal(expected))
+			}),
+		Entry("labels that are already defined",
+			defaultedDeployment,
+			func() *v1.TyphaDeployment {
+				return &v1.TyphaDeployment{
+					Metadata: &v1.Metadata{
+						// "not-zero" label keys exist in the defaulted calico node.
+						Labels: map[string]string{
+							"test-label": "label1",
+							"not-zero":   "not-zero",
+						},
+					},
+				}
+			},
+			func(result appsv1.Deployment) {
+				expected := defaultedDeployment()
+				// Only the labels that don't clobber existing keys are added.
+				expected.Labels["test-label"] = "label1"
+				Expect(result).To(Equal(expected))
+			}),
+		Entry("annotations that are already defined",
+			defaultedDeployment,
+			func() *v1.TyphaDeployment {
+				return &v1.TyphaDeployment{
+					Metadata: &v1.Metadata{
+						// "not-zero" annotation keys exist in the defaulted calico node.
+						Annotations: map[string]string{
+							"not-zero":   "not-zero",
+							"test-annot": "annot1",
+						},
+					},
+				}
+			},
+			func(result appsv1.Deployment) {
+				expected := defaultedDeployment()
+				// Only the annotations that don't clobber existing keys are added.
+				expected.Annotations["test-annot"] = "annot1"
+				Expect(result).To(Equal(expected))
+			}),
+		Entry("minReadySeconds",
+			defaultedDeployment,
+			func() *v1.TyphaDeployment {
+				return &v1.TyphaDeployment{
+					Spec: &v1.TyphaDeploymentSpec{
+						MinReadySeconds: &three,
+					},
+				}
+			},
+			func(result appsv1.Deployment) {
+				expected := defaultedDeployment()
+				expected.Spec.MinReadySeconds = three
+				Expect(result).To(Equal(expected))
+			}),
+		Entry("pod template labels and annotations",
+			defaultedDeployment,
+			func() *v1.TyphaDeployment {
+				return &v1.TyphaDeployment{
+					Spec: &v1.TyphaDeploymentSpec{
+						Template: &v1.TyphaDeploymentPodTemplateSpec{
+							Metadata: &v1.Metadata{
+								Labels:      map[string]string{"test-pod-label": "label1"},
+								Annotations: map[string]string{"test-pod-annot": "annot1"},
+							},
+						},
+					},
+				}
+			},
+			func(result appsv1.Deployment) {
+				expected := defaultedDeployment()
+				expected.Spec.Template.Labels["test-pod-label"] = "label1"
+				expected.Spec.Template.Annotations["test-pod-annot"] = "annot1"
+				Expect(result).To(Equal(expected))
+			}),
+		Entry("pod template labels only",
+			defaultedDeployment,
+			func() *v1.TyphaDeployment {
+				return &v1.TyphaDeployment{
+					Spec: &v1.TyphaDeploymentSpec{
+						Template: &v1.TyphaDeploymentPodTemplateSpec{
+							Metadata: &v1.Metadata{
+								Labels: map[string]string{"test-pod-label": "label1"},
+							},
+						},
+					},
+				}
+			},
+			func(result appsv1.Deployment) {
+				expected := defaultedDeployment()
+				expected.Spec.Template.Labels["test-pod-label"] = "label1"
+				Expect(result).To(Equal(expected))
+			}),
+		Entry("pod template annotations only",
+			defaultedDeployment,
+			func() *v1.TyphaDeployment {
+				return &v1.TyphaDeployment{
+					Spec: &v1.TyphaDeploymentSpec{
+						Template: &v1.TyphaDeploymentPodTemplateSpec{
+							Metadata: &v1.Metadata{
+								Annotations: map[string]string{"test-pod-annot": "annot1"},
+							},
+						},
+					},
+				}
+			},
+			func(result appsv1.Deployment) {
+				expected := defaultedDeployment()
+				expected.Spec.Template.Annotations["test-pod-annot"] = "annot1"
+				Expect(result).To(Equal(expected))
+			}),
+		Entry("pod labels and annotations that are already defined",
+			defaultedDeployment,
+			func() *v1.TyphaDeployment {
+				return &v1.TyphaDeployment{
+					Spec: &v1.TyphaDeploymentSpec{
+						Template: &v1.TyphaDeploymentPodTemplateSpec{
+							Metadata: &v1.Metadata{
+								Labels: map[string]string{
+									"test-pod-label": "label1",
+									"not-zero":       "wont-work",
+								},
+								Annotations: map[string]string{
+									"not-zero":       "wont-work",
+									"test-pod-annot": "annot1",
+								},
+							},
+						},
+					},
+				}
+			},
+			func(result appsv1.Deployment) {
+				expected := defaultedDeployment()
+				expected.Spec.Template.Labels["test-pod-label"] = "label1"
+				expected.Spec.Template.Annotations["test-pod-annot"] = "annot1"
+				Expect(result).To(Equal(expected))
+			}),
+		Entry("pod labels that are already defined",
+			defaultedDeployment,
+			func() *v1.TyphaDeployment {
+				return &v1.TyphaDeployment{
+					Spec: &v1.TyphaDeploymentSpec{
+						Template: &v1.TyphaDeploymentPodTemplateSpec{
+							Metadata: &v1.Metadata{
+								Labels: map[string]string{
+									"test-pod-label": "label1",
+									"not-zero":       "wont-work",
+								},
+							},
+						},
+					},
+				}
+			},
+			func(result appsv1.Deployment) {
+				expected := defaultedDeployment()
+				expected.Spec.Template.Labels["test-pod-label"] = "label1"
+				Expect(result).To(Equal(expected))
+			}),
+		Entry("pod annotations that are already defined",
+			defaultedDeployment,
+			func() *v1.TyphaDeployment {
+				return &v1.TyphaDeployment{
+					Spec: &v1.TyphaDeploymentSpec{
+						Template: &v1.TyphaDeploymentPodTemplateSpec{
+							Metadata: &v1.Metadata{
+								Annotations: map[string]string{
+									"not-zero":       "wont-work",
+									"test-pod-annot": "annot1",
+								},
+							},
+						},
+					},
+				}
+			},
+			func(result appsv1.Deployment) {
+				expected := defaultedDeployment()
+				expected.Spec.Template.Annotations["test-pod-annot"] = "annot1"
+				Expect(result).To(Equal(expected))
+			}),
+		Entry("init containers",
+			defaultedDeployment,
+			func() *v1.TyphaDeployment {
+				return &v1.TyphaDeployment{
+					Spec: &v1.TyphaDeploymentSpec{
+						Template: &v1.TyphaDeploymentPodTemplateSpec{
+							Spec: &v1.TyphaDeploymentPodSpec{
+								InitContainers: []v1.TyphaDeploymentInitContainer{
+									{
+										Name:      "not-zero1",
+										Resources: &resources1,
+									},
+									// Invalid init container. Should be caught by CRD validation.
+									{
+										Name:      "does-not-exist",
+										Resources: &resources3,
+									},
+									{
+										Name:      "not-zero2",
+										Resources: &resources2,
+									},
+								},
+							},
+						},
+					},
+				}
+			},
+			func(result appsv1.Deployment) {
+				expected := defaultedDeployment()
+				Expect(expected.Spec.Template.Spec.InitContainers).To(HaveLen(2))
+
+				expected.Spec.Template.Spec.InitContainers[0].Resources = resources1
+				expected.Spec.Template.Spec.InitContainers[1].Resources = resources2
+				Expect(result.Spec.Template.Spec.InitContainers).To(ContainElements(expected.Spec.Template.Spec.InitContainers))
+				Expect(result).To(Equal(expected))
+			}),
+		Entry("empty init containers",
+			defaultedDeployment,
+			func() *v1.TyphaDeployment {
+				return &v1.TyphaDeployment{
+					Spec: &v1.TyphaDeploymentSpec{
+						Template: &v1.TyphaDeploymentPodTemplateSpec{
+							Spec: &v1.TyphaDeploymentPodSpec{
+								InitContainers: []v1.TyphaDeploymentInitContainer{},
+							},
+						},
+					},
+				}
+			},
+			func(result appsv1.Deployment) {
+				expected := defaultedDeployment()
+				Expect(expected.Spec.Template.Spec.InitContainers).To(HaveLen(2))
+				Expect(result.Spec.Template.Spec.InitContainers).To(ContainElements(expected.Spec.Template.Spec.InitContainers))
+				Expect(result).To(Equal(expected))
+			}),
+		Entry("containers",
+			defaultedDeployment,
+			func() *v1.TyphaDeployment {
+				return &v1.TyphaDeployment{
+					Spec: &v1.TyphaDeploymentSpec{
+						Template: &v1.TyphaDeploymentPodTemplateSpec{
+							Spec: &v1.TyphaDeploymentPodSpec{
+								Containers: []v1.TyphaDeploymentContainer{
+									// Invalid container. Should be caught by CRD validation.
+									{
+										Name:      "does-not-exist",
+										Resources: &resources3,
+									},
+									{
+										Name:      "not-zero1",
+										Resources: &resources1,
+									},
+								},
+							},
+						},
+					},
+				}
+			},
+			func(result appsv1.Deployment) {
+				expected := defaultedDeployment()
+				Expect(expected.Spec.Template.Spec.Containers).To(HaveLen(2))
+				expected.Spec.Template.Spec.Containers[0].Resources = resources1
+				Expect(result.Spec.Template.Spec.Containers).To(ContainElements(expected.Spec.Template.Spec.Containers))
+				Expect(result).To(Equal(expected))
+			}),
+		Entry("empty containers",
+			defaultedDeployment,
+			func() *v1.TyphaDeployment {
+				return &v1.TyphaDeployment{
+					Spec: &v1.TyphaDeploymentSpec{
+						Template: &v1.TyphaDeploymentPodTemplateSpec{
+							Spec: &v1.TyphaDeploymentPodSpec{
+								Containers: []v1.TyphaDeploymentContainer{},
+							},
+						},
+					},
+				}
+			},
+			func(result appsv1.Deployment) {
+				expected := defaultedDeployment()
+				Expect(expected.Spec.Template.Spec.Containers).To(HaveLen(2))
+				Expect(result.Spec.Template.Spec.Containers).To(ContainElements(expected.Spec.Template.Spec.Containers))
+				Expect(result).To(Equal(expected))
+			}),
+		Entry("empty tolerations",
+			defaultedDeployment,
+			func() *v1.TyphaDeployment {
+				return &v1.TyphaDeployment{
+					Spec: &v1.TyphaDeploymentSpec{
+						Template: &v1.TyphaDeploymentPodTemplateSpec{
+							Spec: &v1.TyphaDeploymentPodSpec{
+								Tolerations: []corev1.Toleration{},
+							},
+						},
+					},
+				}
+			},
+			func(result appsv1.Deployment) {
+				expected := defaultedDeployment()
+				expected.Spec.Template.Spec.Tolerations = []corev1.Toleration{}
+				Expect(result.Spec.Template.Spec.Tolerations).To(Equal(expected.Spec.Template.Spec.Tolerations))
+				Expect(result).To(Equal(expected))
+			}),
+		Entry("empty nodeSelector",
+			defaultedDeployment,
+			func() *v1.TyphaDeployment {
+				return &v1.TyphaDeployment{
+					Spec: &v1.TyphaDeploymentSpec{
+						Template: &v1.TyphaDeploymentPodTemplateSpec{
+							Spec: &v1.TyphaDeploymentPodSpec{
+								NodeSelector: map[string]string{},
+							},
+						},
+					},
+				}
+			},
+			func(result appsv1.Deployment) {
+				expected := defaultedDeployment()
+				Expect(result.Spec.Template.Spec.NodeSelector).To(Equal(expected.Spec.Template.Spec.NodeSelector))
+				Expect(result).To(Equal(expected))
+			}),
+
+		Entry("affinity, nodeSelector, and tolerations",
+			defaultedDeployment,
+			func() *v1.TyphaDeployment {
+				return &v1.TyphaDeployment{
+					Spec: &v1.TyphaDeploymentSpec{
+						Template: &v1.TyphaDeploymentPodTemplateSpec{
+							Spec: &v1.TyphaDeploymentPodSpec{
+								Affinity:     &affinity,
+								NodeSelector: nodeSelector,
+								Tolerations:  tolerations,
+							},
+						},
+					},
+				}
+			},
+			func(result appsv1.Deployment) {
+				expected := defaultedDeployment()
+				expected.Spec.Template.Spec.Affinity = &affinity
+				// only keys that don't already exist in the nodeSelector are added
+				for k, v := range nodeSelector {
+					if _, ok := expected.Spec.Template.Spec.NodeSelector[k]; !ok {
+						expected.Spec.Template.Spec.NodeSelector[k] = v
+					}
+				}
+				expected.Spec.Template.Spec.Tolerations = tolerations
+				Expect(result.Spec.Template.Spec.Affinity).To(Equal(expected.Spec.Template.Spec.Affinity))
+				Expect(result.Spec.Template.Spec.NodeSelector).To(Equal(expected.Spec.Template.Spec.NodeSelector))
+				Expect(result.Spec.Template.Spec.Tolerations).To(Equal(expected.Spec.Template.Spec.Tolerations))
+				Expect(result).To(Equal(expected))
+			}),
+
+		Entry("terminationGracePeriod",
+			defaultedDeployment,
+			func() *v1.TyphaDeployment {
+				return &v1.TyphaDeployment{
+					Spec: &v1.TyphaDeploymentSpec{
+						Template: &v1.TyphaDeploymentPodTemplateSpec{
+							Spec: &v1.TyphaDeploymentPodSpec{
+								TerminationGracePeriodSeconds: ptr.Int64ToPtr(3),
+							},
+						},
+					},
+				}
+			},
+			func(result appsv1.Deployment) {
+				Expect(*result.Spec.Template.Spec.TerminationGracePeriodSeconds).To(Equal(int64(3)))
+			}),
+
+		Entry("strategy",
+			defaultedDeployment,
+			func() *v1.TyphaDeployment {
+				return &v1.TyphaDeployment{
+					Spec: &v1.TyphaDeploymentSpec{
+						Strategy: &v1.TyphaDeploymentStrategy{
+							RollingUpdate: &appsv1.RollingUpdateDeployment{
+								MaxUnavailable: ptr.IntOrStrPtr("0"),
+								MaxSurge:       ptr.IntOrStrPtr("100%"),
+							},
+						},
+					},
+				}
+			},
+			func(result appsv1.Deployment) {
+				Expect(result.Spec.Strategy).To(Equal(appsv1.DeploymentStrategy{
+					Type: appsv1.RollingUpdateDeploymentStrategyType,
+					RollingUpdate: &appsv1.RollingUpdateDeployment{
+						MaxUnavailable: ptr.IntOrStrPtr("0"),
+						MaxSurge:       ptr.IntOrStrPtr("100%"),
+					},
+				}))
+			}),
+	)
 })
 
 func addContainer(cs []corev1.Container) []corev1.Container {
@@ -576,6 +1080,17 @@ func addContainer(cs []corev1.Container) []corev1.Container {
 // defaultedDaemonSet returns a DaemonSet with its fields populated.
 func defaultedDaemonSet() appsv1.DaemonSet {
 	var ds appsv1.DaemonSet
+	defaulter := test.NewNonZeroStructDefaulter()
+	Expect(defaulter.SetDefault(&ds)).ToNot(HaveOccurred())
+
+	ds.Spec.Template.Spec.Containers = addContainer(ds.Spec.Template.Spec.Containers)
+	ds.Spec.Template.Spec.InitContainers = addContainer(ds.Spec.Template.Spec.InitContainers)
+	return ds
+}
+
+// defaultedDeployment returns a Deployment with its fields populated.
+func defaultedDeployment() appsv1.Deployment {
+	var ds appsv1.Deployment
 	defaulter := test.NewNonZeroStructDefaulter()
 	Expect(defaulter.SetDefault(&ds)).ToNot(HaveOccurred())
 

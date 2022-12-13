@@ -1921,6 +1921,10 @@ var _ = Describe("Node rendering tests", func() {
 				Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
 
 				verifyProbesAndLifecycle(ds, true, true)
+
+				// The metrics service should have the correct configuration.
+				ms := rtest.GetResource(resources, "calico-node-metrics", "calico-system", "", "v1", "Service").(*corev1.Service)
+				Expect(ms.Spec.ClusterIP).To(Equal("None"), "metrics service should be headless to prevent kube-proxy from rendering too many iptables rules")
 			})
 
 			It("should render volumes and node volumemounts when bird templates are provided", func() {

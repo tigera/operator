@@ -228,12 +228,7 @@ var _ = Describe("CSI rendering tests", func() {
 			Expect(ds.Spec.Template.Labels).To(HaveLen(2))
 			Expect(ds.Spec.Template.Labels["template-level"]).To(Equal("label2"))
 
-			// With the default instance we expect 3 template-level annotations
-			// - 2 added by the operator by default
-			// - 1 added by the CSINodeDriverDaemonSet override
-			Expect(ds.Spec.Template.Annotations).To(HaveLen(3))
-			Expect(ds.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/tigera-ca-private"))
-			Expect(ds.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/cni-config"))
+			Expect(ds.Spec.Template.Annotations).To(HaveLen(1))
 			Expect(ds.Spec.Template.Annotations["template-level"]).To(Equal("annot2"))
 			Expect(ds.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
 			Expect(ds.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("custom-node-selector", "value"))

@@ -184,7 +184,7 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
-{{ with index .Components "egressgateway" }}
+{{ with index .Components "egress-gateway" }}
 	ComponentEgressGateway = component{
 		Version: "{{ .Version }}",
 		Image:   "{{ .Image }}",

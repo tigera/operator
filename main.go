@@ -23,10 +23,9 @@ import (
 	goruntime "runtime"
 	"strings"
 
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
-
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 
 	"github.com/cloudflare/cfssl/log"
 	"github.com/ghodss/yaml"
@@ -42,7 +41,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	operatorv1beta1 "github.com/tigera/operator/api/v1beta1"
 	"github.com/tigera/operator/controllers"

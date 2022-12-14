@@ -54,6 +54,11 @@ spec:
                   "None" means nothing beyond BGP's own (slow) hold timer.  "BFDIfDirectlyConnected"
                   means to use BFD when the peer is directly connected.
                 type: string
+              filters:
+                description: The ordered set of BGPFilters applied on this BGP peer.
+                items:
+                  type: string
+                type: array
               keepOriginalNextHop:
                 description: Option to keep the original nexthop field when routes
                   are sent to a BGP Peer. Setting "true" configures the selected BGP

@@ -30,9 +30,10 @@ import (
 )
 
 const (
-	EGWPortName             = "health"
-	DefaultEGWVxlanPort int = 4790
-	DefaultEGWVxlanVNI  int = 4097
+	EGWPortName               = "health"
+	DefaultEGWVxlanPort int   = 4790
+	DefaultEGWVxlanVNI  int   = 4097
+	DefaultHealthPort   int32 = 8080
 )
 
 func EgressGateway(
@@ -94,11 +95,11 @@ func (c *component) egwDeployment() *appsv1.Deployment {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      c.config.EgressGW.Name,
 			Namespace: c.config.EgressGW.Namespace,
-			Labels:    c.config.EgressGW.Spec.Labels,
+			Labels:    c.config.EgressGW.Spec.Template.Metadata.Labels,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: c.config.EgressGW.Spec.Replicas,
-			Selector: &metav1.LabelSelector{MatchLabels: c.config.EgressGW.Spec.Labels},
+			Selector: &metav1.LabelSelector{MatchLabels: c.config.EgressGW.Spec.Template.Metadata.Labels},
 			Template: *c.deploymentPodTemplate(),
 		},
 	}
@@ -113,7 +114,7 @@ func (c *component) deploymentPodTemplate() *corev1.PodTemplateSpec {
 	return &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Annotations: c.egwBuildAnnotations(),
-			Labels:      c.config.EgressGW.Spec.Labels,
+			Labels:      c.config.EgressGW.Spec.Template.Metadata.Labels,
 		},
 		Spec: corev1.PodSpec{
 			ImagePullSecrets:              ps,
@@ -169,7 +170,7 @@ func (c *component) egwReadinessProbe() *corev1.Probe {
 		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
 				Path: "/readiness",
-				Port: intstr.FromInt(int(c.config.EgressGW.GetHealthPort())),
+				Port: intstr.FromInt(int(DefaultHealthPort)),
 			},
 		},
 		InitialDelaySeconds: 3,
@@ -190,7 +191,7 @@ func (c *component) egwSecurityContext() *corev1.SecurityContext {
 func (c *component) egwPorts() []corev1.ContainerPort {
 	return []corev1.ContainerPort{
 		{
-			ContainerPort: c.config.EgressGW.GetHealthPort(),
+			ContainerPort: DefaultHealthPort,
 			Name:          EGWPortName,
 			Protocol:      corev1.ProtocolTCP,
 		},
@@ -219,8 +220,8 @@ func (c *component) egwEnvVars() []corev1.EnvVar {
 	httpProbeURLs, httpInterval, httpTimeout := c.config.EgressGW.GetHTTPProbes()
 	egressPodIp := &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"}}
 	return []corev1.EnvVar{
-		{Name: "HEALTH_PORT", Value: fmt.Sprintf("%d", c.config.EgressGW.GetHealthPort())},
 		{Name: "HEALTH_TIMEOUT_DATASTORE", Value: c.config.EgressGW.GetHealthTimeoutDs()},
+		{Name: "HEALTH_PORT", Value: fmt.Sprintf("%d", DefaultHealthPort)},
 		{Name: "ICMP_PROBE_IPS", Value: icmpProbeIPs},
 		{Name: "ICMP_PROBE_INTERVAL", Value: icmpInterval},
 		{Name: "ICMP_PROBE_TIMEOUT", Value: icmpTimeout},

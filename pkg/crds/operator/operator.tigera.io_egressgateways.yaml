@@ -37,12 +37,12 @@ spec:
             properties:
               aws:
                 description: AWS defines the additional configuration options for
-                  Egress Gateways on AWS. Should be specified if AWSMode is enabled.
+                  Egress Gateways on AWS.
                 properties:
                   elasticIPs:
                     description: ElasticIPs defines the set of elastic IPs that can
-                      be used for Egress Gateway pods. Should be used along NativeIP
-                      enabled.
+                      be used for Egress Gateway pods. NativeIP must be Enabled if
+                      elastic IPs are set.
                     items:
                       type: string
                     type: array
@@ -55,84 +55,108 @@ spec:
                     type: string
                 type: object
               egressGatewayFailureDetection:
-                description: EgressGatewayFailureDetection defines the failure detection
-                  configuration options for Egress Gateway.
+                description: EgressGatewayFailureDetection is used to configure how
+                  Egress Gateway determines readiness. If both ICMP, HTTP probes are
+                  defined, one ICMP probe and one HTTP probe should succeed for Egress
+                  Gateways to become ready. Otherwise one of ICMP or HTTP probe should
+                  succeed for Egress gateways to become ready if configured.
                 properties:
-                  healthPort:
-                    description: 'HealthPort defines the container port used for readiness
-                      probes. Default: 8080'
+                  healthTimeoutDataStoreSeconds:
+                    description: 'HealthTimeoutDataStoreSeconds defines how long Egress
+                      Gateway can fail to connect to the datastore before reporting
+                      not ready. This value must be greater than 0. Default: 90'
                     format: int32
-                    maximum: 65535
-                    minimum: 0
+                    maximum: 2147483647
+                    minimum: 1
                     type: integer
-                  healthTimeoutDataStore:
-                    description: 'HealthTimeoutDataStore defines how long Egress Gateway
-                      waits before reporting its not ready. Default: 90s'
-                    type: string
                   httpProbe:
-                    description: HTTPProbes defines the HTTP probe configuration options
-                      for Egress Gateway.
+                    description: HTTPProbes define outgoing HTTP probes that Egress
+                      Gateway will use to verify its upsteam connection. Egress Gateway
+                      will report not ready if all fail. Timeout must be greater than
+                      interval.
                     properties:
-                      interval:
-                        description: 'Interval defines the interval of HTTP probes.
-                          Used when URLs is non-empty. Default: 10s'
-                        type: string
-                      timeout:
-                        description: 'Timeout defines the timeout value of HTTP probes.
-                          Used when URLs is non-empty. Default: 30s'
-                        type: string
+                      intervalSeconds:
+                        description: 'IntervalSeconds defines the interval of HTTP
+                          probes. Used when URLs is non-empty. Default: 10'
+                        format: int32
+                        maximum: 2147483647
+                        minimum: 0
+                        type: integer
+                      timeoutSeconds:
+                        description: 'TimeoutSeconds defines the timeout value of
+                          HTTP probes. Used when URLs is non-empty. Default: 30'
+                        format: int32
+                        type: integer
                       urls:
-                        description: URLs defines the list of HTTP probe URLs.
+                        description: URLs define the list of HTTP probe URLs. Egress
+                          Gateway will probe each URL periodically.If all probes fail,
+                          Egress Gateway will report non-ready.
                         items:
                           type: string
                         type: array
                     type: object
                   icmpProbe:
-                    description: ICMPProbes defines the ICMP probe configuration options
-                      for Egress Gateway.
+                    description: ICMPProbes define outgoing ICMP probes that Egress
+                      Gateway will use to verify its upstream connection. Egress Gateway
+                      will report not ready if all fail. Timeout must be greater than
+                      interval.
                     properties:
-                      interval:
-                        description: 'Interval defines the interval of ICMP probes.
-                          Used when IPs is non-empty. Default: 5s'
-                        type: string
+                      intervalSeconds:
+                        description: 'IntervalSeconds defines the interval of ICMP
+                          probes. Used when IPs is non-empty. Default: 5'
+                        format: int32
+                        maximum: 2147483647
+                        minimum: 0
+                        type: integer
                       ips:
-                        description: IPs defines the list of ICMP probe IPs.
+                        description: IPs define the list of ICMP probe IPs. Egress
+                          Gateway will probe each IP periodically. If all probes faile,
+                          Egress Gateway will report non-ready.
                         items:
                           type: string
                         type: array
-                      timeout:
-                        description: 'Timeout defines the timeout value of ICMP probes.
-                          Used when IPs is non-empty. Default: 15s'
-                        type: string
+                      timeoutSeconds:
+                        description: 'TimeoutSeconds defines the timeout value of
+                          ICMP probes. Used when IPs is non-empty. Default: 15'
+                        format: int32
+                        maximum: 2147483647
+                        minimum: 0
+                        type: integer
                     type: object
                 type: object
               ipPools:
                 description: IPPools defines the IP Pools that the Egress Gateway
-                  pods should be using.
+                  pods should be using. Either name or CIDR must be specified. IPPools
+                  must match an existing IPPools.
                 items:
-                  type: string
+                  properties:
+                    cidr:
+                      description: CIDR is the IPPool CIDR that the Egress Gateways
+                        can use.
+                      type: string
+                    name:
+                      description: Name is the name of the IPPool that the Egress
+                        Gateways can use.
+                      type: string
+                  type: object
                 type: array
-              labels:
-                additionalProperties:
-                  type: string
-                description: Labels defines the labels on the Egress Gateway pods,
-                  which is to be used by the client pods.
-                type: object
               logSeverity:
                 description: 'LogSeverity defines the logging level of the Egress
-                  Gateway. Default: info'
+                  Gateway. Default: Info'
                 enum:
-                - trace
-                - debug
-                - info
-                - warn
-                - error
-                - fatal
+                - Trace
+                - Debug
+                - Info
+                - Warn
+                - Error
+                - Fatal
                 type: string
               replicas:
-                description: Replicas defines how many replicas of the Egress Gateway
-                  pods will run.
+                description: Replicas defines how many instances of the Egress Gateway
+                  pod will run.
                 format: int32
+                maximum: 2147483647
+                minimum: 0
                 type: integer
               template:
                 description: Template describes the EGW Deployment pod that will be
@@ -156,7 +180,9 @@ spec:
                         description: Labels is a map of string keys and values that
                           may match replicaset and service selectors. Each of these
                           key/value pairs are added to the object's labels provided
-                          the key does not already exist in the object's labels.
+                          the key does not already exist in the object's labels. If
+                          not specified will default to projectcalico.org/egw:<name>,
+                          where <name> is the name of the Egress Gateway resource.
                         type: object
                     type: object
                   spec:
@@ -1060,12 +1086,11 @@ spec:
                         description: NodeSelector gives more control over the nodes
                           where the Egress Gateway pods will run on.
                         type: object
-                      terminationGracePeriod:
-                        description: TerminationGracePeriod defines the termination
-                          grace period of the Egress Gateway pods in seconds. When
-                          not specified, it takes the default value of 30s defined
-                          by kubernetes.
+                      terminationGracePeriodSeconds:
+                        description: TerminationGracePeriodSeconds defines the termination
+                          grace period of the Egress Gateway pods in seconds.
                         format: int64
+                        minimum: 0
                         type: integer
                       topologySpreadConstraints:
                         description: TopologySpreadConstraints defines how the Egress
@@ -1254,7 +1279,6 @@ spec:
                 type: object
             required:
             - ipPools
-            - labels
             - replicas
             type: object
           status:

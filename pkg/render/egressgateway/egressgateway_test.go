@@ -15,8 +15,6 @@
 package egressgateway_test
 
 import (
-	"time"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -35,11 +33,10 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 	var installation *operatorv1.InstallationSpec
 	var egw *operatorv1.EgressGateway
 	var replicas int32 = 2
-	var healthPort int32 = 8081
-	logSeverity := "info"
-	healthTimeoutDS := &metav1.Duration{30 * time.Second}
-	interval := &metav1.Duration{20 * time.Second}
-	timeout := &metav1.Duration{40 * time.Second}
+	var healthTimeoutDS int32 = 30
+	var interval int32 = 20
+	var timeout int32 = 40
+	logSeverity := operatorv1.LogLevelInfo
 	labels := map[string]string{"egress-code": "red"}
 
 	topoConstraint := corev1.TopologySpreadConstraint{
@@ -62,11 +59,14 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		}
 		egw = &operatorv1.EgressGateway{
 			Spec: operatorv1.EgressGatewaySpec{
-				Replicas:    &replicas,
-				IPPools:     []string{"ippool-1", "ippool-2"},
-				Labels:      labels,
+				Replicas: &replicas,
+				IPPools: []operatorv1.EgressGatewayIPPool{
+					{Name: "ippool-1", CIDR: ""},
+					{Name: "ippool-2", CIDR: ""},
+				},
 				LogSeverity: &logSeverity,
 				Template: &operatorv1.EgressGatewayDeploymentPodTemplateSpec{
+					Metadata: &operatorv1.EgressGatewayMetadata{Labels: labels},
 					Spec: &operatorv1.EgressGatewayDeploymentPodSpec{
 						Affinity:     affinity,
 						NodeSelector: map[string]string{"kubernetes.io/os": "linux"},
@@ -76,10 +76,9 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 					},
 				},
 				EgressGatewayFailureDetection: &operatorv1.EgressGatewayFailureDetection{
-					HealthPort:             &healthPort,
-					HealthTimeoutDataStore: healthTimeoutDS,
-					ICMPProbes:             &operatorv1.ICMPProbes{IPs: []string{}, Timeout: timeout, Interval: interval},
-					HTTPProbes:             &operatorv1.HTTPProbes{URLs: []string{}, Timeout: timeout, Interval: interval},
+					HealthTimeoutDataStoreSeconds: &healthTimeoutDS,
+					ICMPProbes:                    &operatorv1.ICMPProbes{IPs: []string{}, TimeoutSeconds: &timeout, IntervalSeconds: &interval},
+					HTTPProbes:                    &operatorv1.HTTPProbes{URLs: []string{}, TimeoutSeconds: &timeout, IntervalSeconds: &interval},
 				},
 			},
 		}
@@ -136,14 +135,14 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			Expect(initContainer.Env).To(ContainElement(elem))
 		}
 		expectedEnvVars := []corev1.EnvVar{
+			{Name: "HEALTH_PORT", Value: "8080"},
 			{Name: "EGRESS_VXLAN_VNI", Value: "4097"},
-			{Name: "LOG_SEVERITY", Value: "info"},
+			{Name: "LOG_SEVERITY", Value: "Info"},
 			{Name: "HEALTH_TIMEOUT_DATASTORE", Value: "30s"},
 			{Name: "ICMP_PROBE_INTERVAL", Value: "20s"},
 			{Name: "ICMP_PROBE_TIMEOUT", Value: "40s"},
 			{Name: "HTTP_PROBE_INTERVAL", Value: "20s"},
 			{Name: "HTTP_PROBE_TIMEOUT", Value: "40s"},
-			{Name: "HEALTH_PORT", Value: "8081"},
 		}
 		for _, elem := range expectedEnvVars {
 			Expect(egwContainer.Env).To(ContainElement(elem))
@@ -154,7 +153,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 
 		Expect(dep.Spec.Template.ObjectMeta.Labels).To(Equal(labels))
 		expectedPort := corev1.ContainerPort{
-			ContainerPort: healthPort,
+			ContainerPort: egressgateway.DefaultHealthPort,
 			Name:          "health",
 			Protocol:      corev1.ProtocolTCP,
 		}
@@ -173,7 +172,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path: "/readiness",
-					Port: intstr.FromInt(int(healthPort)),
+					Port: intstr.FromInt(int(egressgateway.DefaultHealthPort)),
 				},
 			},
 			InitialDelaySeconds: 3,

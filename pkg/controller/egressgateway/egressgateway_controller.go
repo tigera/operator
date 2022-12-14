@@ -38,6 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/go-logr/logr"
+	"github.com/tigera/operator/pkg/components"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -136,20 +137,49 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling EgressGateway")
 
+	// Wait for right version of the calico to be installed. When upgrading EGWs, calico-node needs to be upgraded
+	// first, before proceeding with the EGW upgrade. Hence wait for the right version of calico to be installed.
+	ver, err := getCalicoVersion(ctx, r.client)
+	if err != nil || ver != components.EnterpriseRelease {
+		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+
+	// If request name and namespace is not "", getEgressGateways will just return the
+	// exact EGW resource. If the namespace is "", getEgressGateways will return all the
+	// EGW resources in all namespaces.
 	egws, err := getEgressGateways(ctx, r.client, request)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			reqLogger.Info("EgressGateway object not found")
-			r.status.OnCRNotFound()
+			// Since the EGW resource is not found, remove the deployment.
+			r.status.RemoveDeployments(types.NamespacedName{Name: request.Name, Namespace: request.Namespace})
+			// Get the cumulative Egress Gateway status. Lets say we have 2 EGW resources red and blue.
+			// Red has already degraded. When the user deletes Red, Tigerastatus should go back to available
+			// as Blue is healthy. Hence get the cumulative EGW status. If all the EGWs are ready, clear the degraded
+			// Tigerastatus. If at least one of the EGWs is unhealthy, get the degraded msg from the conditions and
+			// update the Tigerastatus.
+			egws, err := getEgressGateways(ctx, r.client, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: ""}})
+			if err != nil || len(egws) == 0 {
+				r.status.OnCRNotFound()
+			}
+			status, egw := getCumulativeEgressGatewayStatus(egws)
+			if !status {
+				r.status.SetDegraded(fmt.Sprintf("Error reconciling Egress Gateway resource. Name=%s Namespace=%s", egw.Name, egw.Namespace),
+					getDegradedMsg(egw))
+				return reconcile.Result{}, nil
+			}
+			r.status.ClearDegraded()
 			return reconcile.Result{}, nil
 		}
 		reqLogger.Error(err, "Error querying for Egress Gateway")
 		r.status.SetDegraded("Error querying for Egress Gateway", err.Error())
 		return reconcile.Result{}, err
 	}
+
 	r.status.OnCRFound()
+	// Reconcile all the EGWs
 	for _, egw := range egws {
 		result, err := r.reconcile(ctx, &egw, reqLogger)
 		if err != nil {
@@ -160,46 +190,83 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 }
 
 func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.EgressGateway, reqLogger logr.Logger) (reconcile.Result, error) {
+	// Set the condition to progressing
+	perr := setProgressing(r.client, ctx, egw, "Reconciling_EGW", fmt.Sprintf("Name = %s, Namespace = %s", egw.Name, egw.Namespace))
+	if perr != nil {
+		reqLogger.Error(perr, "Error updating status")
+	}
+	reconcileErr := "Error_reconciling_Egress_Gateway"
 	variant, installation, err := utils.GetInstallation(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.Error(err, "Installation not found")
 			r.status.SetDegraded("Installation not found", err.Error())
+			// Set the EGW resource's condition to Degraded.
+			perr := setDegraded(r.client, ctx, egw, reconcileErr,
+				fmt.Sprintf("Installation not found Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
+			if perr != nil {
+				reqLogger.Error(perr, "Error updating status")
+			}
 			return reconcile.Result{}, nil
 		}
 		reqLogger.Error(err, "Error querying installation")
 		r.status.SetDegraded("Error querying installation", err.Error())
+		perr := setDegraded(r.client, ctx, egw, reconcileErr,
+			fmt.Sprintf("Error querying installation Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
+		if perr != nil {
+			reqLogger.Error(perr, "Error updating status")
+		}
 		return reconcile.Result{}, err
 	}
 
 	if variant != operatorv1.TigeraSecureEnterprise {
 		reqLogger.Error(err, fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise))
 		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), "")
+		perr := setDegraded(r.client, ctx, egw, reconcileErr,
+			fmt.Sprintf("Waiting for network to be %s Name = %s, Namespace = %s", operatorv1.TigeraSecureEnterprise, egw.Name, egw.Namespace))
+		if perr != nil {
+			reqLogger.Error(perr, "Error updating status")
+		}
 		return reconcile.Result{}, nil
 	}
 
+	// update the EGW resource with default values.
 	fillDefaults(egw, installation)
+	// Validate the EGW resource.
 	err = validateEgressGateway(ctx, r.client, egw)
 	if err != nil {
-		reqLogger.Error(err, fmt.Sprintf("Error validating Egress Gateway spec"))
-		r.status.SetDegraded("Error validating egress gateway", err.Error())
+		reqLogger.Error(err, fmt.Sprintf("Error validating Egress Gateway Name = %s, Namespace = %s", egw.Name, egw.Namespace))
+		r.status.SetDegraded(fmt.Sprintf("Error validating egress gateway Name = %s, Namespace = %s", egw.Name, egw.Namespace), err.Error())
+		perr := setDegraded(r.client, ctx, egw, reconcileErr,
+			fmt.Sprintf("Error validating egress gateway Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
+		if perr != nil {
+			reqLogger.Error(perr, "Error updating status")
+		}
 		return reconcile.Result{}, err
 	}
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
-
 	if err != nil {
 		reqLogger.Error(err, "Error retrieving pull secrets")
 		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
+		perr := setDegraded(r.client, ctx, egw, reconcileErr,
+			fmt.Sprintf("Error retrieving pull secrets Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
+		if perr != nil {
+			reqLogger.Error(perr, "Error updating status")
+		}
 		return reconcile.Result{}, err
 	}
 
 	// Fetch any existing default FelixConfiguration object.
 	fc := &crdv1.FelixConfiguration{}
 	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, fc)
-
 	if err != nil && !errors.IsNotFound(err) {
-		r.status.SetDegraded("Unable to read FelixConfiguration", err.Error())
+		r.status.SetDegraded("Error reading FelixConfiguration", err.Error())
+		perr := setDegraded(r.client, ctx, egw, reconcileErr,
+			fmt.Sprintf("Error reading felix configuration Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
+		if perr != nil {
+			reqLogger.Error(perr, "Error updating status")
+		}
 		return reconcile.Result{}, err
 	}
 
@@ -227,25 +294,54 @@ func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
 		reqLogger.Error(err, "Error with images from ImageSet")
 		r.status.SetDegraded("Error with images from ImageSet", err.Error())
+		perr := setDegraded(r.client, ctx, egw, reconcileErr,
+			fmt.Sprintf("Error with images from ImageSet Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
+		if perr != nil {
+			reqLogger.Error(perr, "Error updating status")
+		}
 		return reconcile.Result{}, err
 	}
 
 	if err = ch.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
-		reqLogger.Error(err, "Error creating / updating resource")
-		r.status.SetDegraded("Error creating / updating resource", err.Error())
+		reqLogger.Error(err, fmt.Sprintf("Error creating / updating resource: Name = %s, Namespace = %s", egw.Name, egw.Namespace))
+		r.status.SetDegraded(fmt.Sprintf("Error creating / updating resource: Name = %s, Namespace = %s", egw.Name, egw.Namespace), err.Error())
+		perr := setDegraded(r.client, ctx, egw, reconcileErr,
+			fmt.Sprintf("Error creating / updating resource Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
+		if perr != nil {
+			reqLogger.Error(perr, "Error updating status")
+		}
 		return reconcile.Result{}, err
 	}
 
-	// Clear the degraded bit if we've reached this far.
+	// Update the status of this CR.
+	egw.Status.State = operatorv1.TigeraStatusReady
+	if err = setAvailable(r.client, ctx, egw, "Unknown", ""); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	// After the resource has been created/updated, Tigerastatus needs to be set by taking the cumulative status of the
+	// available EGW resources. Lets say we create 2 EGW resources Red, Blue. Both are degraded. Now lets create 3rd resource
+	// yellow. Though yellow is reconciled and rendered successfully, Tigerastatus should still be degraded as Red, Blue are
+	// degraded. Now lets assume Blue gets updated and gets rendered properly. In this case, Tigerastatus should still be
+	// degraded as Red is unhealthy.
+	egws, err := getEgressGateways(ctx, r.client, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: ""}})
+	if err != nil {
+		// Leave the status as it is and return
+		return reconcile.Result{}, nil
+	}
+
+	// Get the cumulative status of all Egress Gateway resources.
+	status, egw := getCumulativeEgressGatewayStatus(egws)
+	if !status {
+		r.status.SetDegraded(fmt.Sprintf("Error reconciling Egress Gateway resource. Name=%s Namespace=%s", egw.Name, egw.Namespace),
+			getDegradedMsg(egw))
+		return reconcile.Result{}, nil
+	}
+
 	r.status.ClearDegraded()
 	if !r.status.IsAvailable() {
 		// Schedule a kick to check again in the near future, hopefully by then things will be available.
 		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
-	}
-
-	egw.Status.State = operatorv1.TigeraStatusReady
-	if err = r.client.Status().Update(ctx, egw); err != nil {
-		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
 }
@@ -264,18 +360,37 @@ func getEgressGateway(ctx context.Context, cli client.Client, nameSpace, name st
 
 // validateEgressGateway checks if the ippools specified are already present.
 func validateEgressGateway(ctx context.Context, cli client.Client, egw *operatorv1.EgressGateway) error {
+	nativeIP := operatorv1.NativeIPDisabled
+	if egw.Spec.AWS != nil && egw.Spec.AWS.NativeIP != nil {
+		nativeIP = *egw.Spec.AWS.NativeIP
+	}
+
+	// Validate IPPools specified.
+	// If name is specified, check IPPool exists.
+	// If CIDR is specified, check if CIDR matches with any IPPool.
+	// If Aws.NativeIP is enabled, check if the IPPool is backed by aws-subnet ID.
 	for _, ippool := range egw.Spec.IPPools {
-		instance := &crdv1.IPPool{}
-		key := types.NamespacedName{Name: ippool}
-		err := cli.Get(ctx, key, instance)
-		if err != nil {
+		ret, err := validateIPPool(ctx, cli, ippool, nativeIP)
+		if !ret {
 			return err
 		}
 	}
+	// Check if ElasticIPs are specified only if NativeIP is enabled.
 	if egw.Spec.AWS != nil {
 		if len(egw.Spec.AWS.ElasticIPs) > 0 && (*egw.Spec.AWS.NativeIP == operatorv1.NativeIPDisabled) {
 			return fmt.Errorf("NativeIP should be enabled when elastic IPs are used")
 		}
+	}
+
+	// Check if ICMP and HTTP probe timeout is greater than interval.
+	if *egw.Spec.EgressGatewayFailureDetection.ICMPProbes.TimeoutSeconds <
+		*egw.Spec.EgressGatewayFailureDetection.ICMPProbes.IntervalSeconds {
+		return fmt.Errorf("ICMP probe timeout must be greater than interval")
+	}
+
+	if *egw.Spec.EgressGatewayFailureDetection.HTTPProbes.TimeoutSeconds <
+		*egw.Spec.EgressGatewayFailureDetection.HTTPProbes.IntervalSeconds {
+		return fmt.Errorf("HTTP probe timeout must be greater than interval")
 	}
 	return nil
 }
@@ -300,81 +415,92 @@ func getEgressGateways(ctx context.Context, cli client.Client, request reconcile
 
 }
 
+// fillDefaults sets the default values of the EGW resource.
 func fillDefaults(egw *operatorv1.EgressGateway, installation *operatorv1.InstallationSpec) {
-	defaultLogSeverity := "info"
-	var defaultHealthPort int32 = 8080
-	defaultHealthTimeoutDS := &metav1.Duration{90 * time.Second}
-	defaultIcmpTimeout := &metav1.Duration{15 * time.Second}
-	defaultIcmpInterval := &metav1.Duration{5 * time.Second}
-	defaultHttpTimeout := &metav1.Duration{30 * time.Second}
-	defaultHttpInterval := &metav1.Duration{10 * time.Second}
+	defaultLogSeverity := operatorv1.LogLevelInfo
+	var defaultHealthTimeoutDS int32 = 90
+	var defaultIcmpTimeout int32 = 15
+	var defaultIcmpInterval int32 = 5
+	var defaultHttpTimeout int32 = 30
+	var defaultHttpInterval int32 = 10
 	defaultAWSNativeIP := operatorv1.NativeIPDisabled
 
+	// Default value of LogSeverity is "Info"
 	if egw.Spec.LogSeverity == nil {
 		egw.Spec.LogSeverity = &defaultLogSeverity
 	}
 
+	// Default value of Native IP is Disabled.
 	if egw.Spec.AWS != nil && egw.Spec.AWS.NativeIP == nil {
 		egw.Spec.AWS.NativeIP = &defaultAWSNativeIP
 	}
 
+	// Set the default values for EGW failure detection spec.
 	if egw.Spec.EgressGatewayFailureDetection == nil {
 		egw.Spec.EgressGatewayFailureDetection = &operatorv1.EgressGatewayFailureDetection{
-			HealthPort:             &defaultHealthPort,
-			HealthTimeoutDataStore: defaultHealthTimeoutDS,
+			HealthTimeoutDataStoreSeconds: &defaultHealthTimeoutDS,
 			ICMPProbes: &operatorv1.ICMPProbes{IPs: []string{},
-				Interval: defaultIcmpInterval, Timeout: defaultIcmpTimeout},
+				IntervalSeconds: &defaultIcmpInterval, TimeoutSeconds: &defaultIcmpTimeout},
 			HTTPProbes: &operatorv1.HTTPProbes{URLs: []string{},
-				Interval: defaultHttpInterval, Timeout: defaultHttpTimeout},
+				IntervalSeconds: &defaultHttpInterval, TimeoutSeconds: &defaultHttpTimeout},
 		}
 	} else {
-		if egw.Spec.EgressGatewayFailureDetection.HealthPort == nil {
-			egw.Spec.EgressGatewayFailureDetection.HealthPort = &defaultHealthPort
-		}
-
-		if egw.Spec.EgressGatewayFailureDetection.HealthTimeoutDataStore == nil {
-			egw.Spec.EgressGatewayFailureDetection.HealthTimeoutDataStore = defaultHealthTimeoutDS
+		if egw.Spec.EgressGatewayFailureDetection.HealthTimeoutDataStoreSeconds == nil {
+			egw.Spec.EgressGatewayFailureDetection.HealthTimeoutDataStoreSeconds = &defaultHealthTimeoutDS
 		}
 
 		if egw.Spec.EgressGatewayFailureDetection.ICMPProbes == nil {
 			egw.Spec.EgressGatewayFailureDetection.ICMPProbes = &operatorv1.ICMPProbes{IPs: []string{},
-				Interval: defaultIcmpInterval,
-				Timeout:  defaultIcmpTimeout}
+				IntervalSeconds: &defaultIcmpInterval,
+				TimeoutSeconds:  &defaultIcmpTimeout}
 		} else {
-			if egw.Spec.EgressGatewayFailureDetection.ICMPProbes.Interval == nil {
-				egw.Spec.EgressGatewayFailureDetection.ICMPProbes.Interval = defaultIcmpInterval
+			if egw.Spec.EgressGatewayFailureDetection.ICMPProbes.IntervalSeconds == nil {
+				egw.Spec.EgressGatewayFailureDetection.ICMPProbes.IntervalSeconds = &defaultIcmpInterval
 			}
-			if egw.Spec.EgressGatewayFailureDetection.ICMPProbes.Timeout == nil {
-				egw.Spec.EgressGatewayFailureDetection.ICMPProbes.Timeout = defaultIcmpTimeout
+			if egw.Spec.EgressGatewayFailureDetection.ICMPProbes.TimeoutSeconds == nil {
+				egw.Spec.EgressGatewayFailureDetection.ICMPProbes.TimeoutSeconds = &defaultIcmpTimeout
 			}
 		}
 		if egw.Spec.EgressGatewayFailureDetection.HTTPProbes == nil {
 			egw.Spec.EgressGatewayFailureDetection.HTTPProbes = &operatorv1.HTTPProbes{URLs: []string{},
-				Interval: defaultHttpInterval,
-				Timeout:  defaultHttpTimeout}
+				IntervalSeconds: &defaultHttpInterval,
+				TimeoutSeconds:  &defaultHttpTimeout}
 		} else {
-			if egw.Spec.EgressGatewayFailureDetection.HTTPProbes.Interval == nil {
-				egw.Spec.EgressGatewayFailureDetection.HTTPProbes.Interval = defaultHttpInterval
+			if egw.Spec.EgressGatewayFailureDetection.HTTPProbes.IntervalSeconds == nil {
+				egw.Spec.EgressGatewayFailureDetection.HTTPProbes.IntervalSeconds = &defaultHttpInterval
 			}
-			if egw.Spec.EgressGatewayFailureDetection.HTTPProbes.Timeout == nil {
-				egw.Spec.EgressGatewayFailureDetection.HTTPProbes.Timeout = defaultHttpTimeout
+			if egw.Spec.EgressGatewayFailureDetection.HTTPProbes.TimeoutSeconds == nil {
+				egw.Spec.EgressGatewayFailureDetection.HTTPProbes.TimeoutSeconds = &defaultHttpTimeout
 			}
 		}
 	}
 
-	// If affinity isn't specified by the user, default pod anti affinity is added so that 2 EGW pods aren't scheduled in
-	// the same node.
+	// set the default label if not specified.
+	defLabel := map[string]string{"projectcalico.org/egw": egw.Name}
+	if egw.Spec.Template == nil {
+		egw.Spec.Template = &operatorv1.EgressGatewayDeploymentPodTemplateSpec{}
+		egw.Spec.Template.Metadata = &operatorv1.EgressGatewayMetadata{Labels: defLabel}
+	} else {
+		if egw.Spec.Template.Metadata == nil {
+			egw.Spec.Template.Metadata = &operatorv1.EgressGatewayMetadata{Labels: defLabel}
+		}
+	}
 
-	defAffinity := &v1.Affinity{PodAntiAffinity: &v1.PodAntiAffinity{
+	// If affinity isn't specified by the user, default pod anti affinity is added so that 2 EGW pods aren't scheduled in
+	// the same node. If the provider is AKS, set the node affinity so that pods don't run on virutal-nodes.
+	defAffinity := &v1.Affinity{}
+	defAffinity.PodAntiAffinity = &v1.PodAntiAffinity{
 		PreferredDuringSchedulingIgnoredDuringExecution: []v1.WeightedPodAffinityTerm{
 			{
-				Weight: 100,
-				PodAffinityTerm: v1.PodAffinityTerm{LabelSelector: &metav1.LabelSelector{MatchLabels: egw.Spec.Labels},
+				Weight: 1,
+				PodAffinityTerm: v1.PodAffinityTerm{
+					LabelSelector: &metav1.LabelSelector{
+						MatchLabels: egw.Spec.Template.Metadata.Labels,
+					},
 					TopologyKey: "topology.kubernetes.io/zone",
 				},
 			},
 		},
-	},
 	}
 	switch installation.KubernetesProvider {
 	case operatorv1.ProviderAKS:
@@ -397,15 +523,120 @@ func fillDefaults(egw *operatorv1.EgressGateway, installation *operatorv1.Instal
 		}
 	default:
 		defAffinity.NodeAffinity = nil
-
 	}
-	if egw.Spec.Template == nil {
-		egw.Spec.Template = &operatorv1.EgressGatewayDeploymentPodTemplateSpec{Spec: &operatorv1.EgressGatewayDeploymentPodSpec{Affinity: defAffinity}}
-	} else {
-		if egw.Spec.Template.Spec == nil {
-			egw.Spec.Template.Spec = &operatorv1.EgressGatewayDeploymentPodSpec{Affinity: defAffinity}
-		} else if egw.Spec.Template.Spec.Affinity == nil {
-			egw.Spec.Template.Spec.Affinity = defAffinity
+
+	if egw.Spec.Template.Spec == nil {
+		egw.Spec.Template.Spec = &operatorv1.EgressGatewayDeploymentPodSpec{Affinity: defAffinity}
+	} else if egw.Spec.Template.Spec.Affinity == nil {
+		egw.Spec.Template.Spec.Affinity = defAffinity
+	}
+}
+
+// getCalicoVersion reads the status.Version from the Installation
+func getCalicoVersion(ctx context.Context, cli client.Client) (string, error) {
+	ins := &operatorv1.Installation{}
+	err := cli.Get(ctx, types.NamespacedName{Name: "default"}, ins)
+	return ins.Status.Version, err
+}
+
+func validateIPPool(ctx context.Context, cli client.Client, ipPool operatorv1.EgressGatewayIPPool, awsNativeIP operatorv1.NativeIP) (bool, error) {
+	if ipPool.Name != "" {
+		instance := &crdv1.IPPool{}
+		key := types.NamespacedName{Name: ipPool.Name}
+		err := cli.Get(ctx, key, instance)
+		if err != nil {
+			return false, err
+		}
+		if ipPool.CIDR != "" {
+			if instance.Spec.CIDR != ipPool.CIDR {
+				return false, fmt.Errorf("IPPool CIDR does not match with name")
+			}
+		}
+		if awsNativeIP == operatorv1.NativeIPEnabled && instance.Spec.AWSSubnetID == "" {
+			return false, fmt.Errorf("AWS subnet ID must be set when NativeIP is enabled")
+		}
+		return true, nil
+	}
+	if ipPool.CIDR != "" {
+		instance := &crdv1.IPPoolList{}
+		err := cli.List(ctx, instance)
+		if err != nil {
+			return false, err
+		}
+		for _, item := range instance.Items {
+			if item.Spec.CIDR == ipPool.CIDR {
+				if awsNativeIP == operatorv1.NativeIPEnabled && item.Spec.AWSSubnetID == "" {
+					return false, fmt.Errorf("AWS subnet ID must be set when NativeIP is enabled")
+				}
+				return true, nil
+			}
 		}
 	}
+	return false, fmt.Errorf("IPPool matching CIDR = %s not present", ipPool.CIDR)
+}
+
+func getCumulativeEgressGatewayStatus(egws []operatorv1.EgressGateway) (bool, *operatorv1.EgressGateway) {
+	for _, egw := range egws {
+		if egw.Status.State != operatorv1.TigeraStatusReady {
+			return false, &egw
+		}
+	}
+	return true, nil
+}
+
+func setDegraded(cli client.Client, ctx context.Context, egw *operatorv1.EgressGateway, reason, msg string) error {
+	for _, cond := range egw.Status.Conditions {
+		if cond.Type == string(operatorv1.ComponentProgressing) || cond.Type == string(operatorv1.ComponentAvailable) {
+			cond.Status = metav1.ConditionFalse
+		}
+	}
+	return updateEgwStatusConditions(cli, ctx, egw, operatorv1.ComponentDegraded, operatorv1.ConditionTrue, reason, msg)
+}
+
+func setProgressing(cli client.Client, ctx context.Context, egw *operatorv1.EgressGateway, reason, msg string) error {
+	for _, cond := range egw.Status.Conditions {
+		if cond.Type == string(operatorv1.ComponentDegraded) || cond.Type == string(operatorv1.ComponentAvailable) {
+			cond.Status = metav1.ConditionFalse
+		}
+	}
+	return updateEgwStatusConditions(cli, ctx, egw, operatorv1.ComponentProgressing, operatorv1.ConditionTrue, reason, msg)
+}
+
+func setAvailable(cli client.Client, ctx context.Context, egw *operatorv1.EgressGateway, reason, msg string) error {
+	for _, cond := range egw.Status.Conditions {
+		if cond.Type == string(operatorv1.ComponentProgressing) || cond.Type == string(operatorv1.ComponentDegraded) {
+			cond.Status = metav1.ConditionFalse
+		}
+	}
+	return updateEgwStatusConditions(cli, ctx, egw, operatorv1.ComponentAvailable, operatorv1.ConditionTrue, reason, msg)
+}
+
+func updateEgwStatusConditions(cli client.Client, ctx context.Context, egw *operatorv1.EgressGateway, ctype operatorv1.StatusConditionType, status operatorv1.ConditionStatus, reason, msg string) error {
+	cstatus := metav1.ConditionUnknown
+	if status == operatorv1.ConditionTrue {
+		cstatus = metav1.ConditionTrue
+	} else if status == operatorv1.ConditionFalse {
+		cstatus = metav1.ConditionFalse
+	}
+	for _, cond := range egw.Status.Conditions {
+		if cond.Type == string(ctype) {
+			cond.Status = cstatus
+			cond.Reason = reason
+			cond.Message = msg
+			cond.LastTransitionTime = metav1.NewTime(time.Now())
+			return cli.Status().Update(ctx, egw)
+		}
+	}
+	condition := metav1.Condition{Type: string(ctype), Status: cstatus, Reason: reason, Message: msg, LastTransitionTime: metav1.NewTime(time.Now())}
+	egw.Status.Conditions = append(egw.Status.Conditions, condition)
+	return cli.Status().Update(ctx, egw)
+}
+
+func getDegradedMsg(egw *operatorv1.EgressGateway) string {
+	for _, cond := range egw.Status.Conditions {
+		if cond.Type == string(operatorv1.ComponentDegraded) {
+			return cond.Message
+		}
+	}
+	return ""
 }

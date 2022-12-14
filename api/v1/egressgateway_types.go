@@ -27,35 +27,37 @@ import (
 
 // EgressGatewaySpec defines the desired state of EgressGateway
 type EgressGatewaySpec struct {
-	// Replicas defines how many replicas of the Egress Gateway pods will run.
+	// Replicas defines how many instances of the Egress Gateway pod will run.
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=2147483647
 	// +required
 	Replicas *int32 `json:"replicas"`
 
 	// IPPools defines the IP Pools that the Egress Gateway pods should be using.
+	// Either name or CIDR must be specified.
+	// IPPools must match an existing IPPools.
 	// +required
-	IPPools []string `json:"ipPools"`
-
-	// Labels defines the labels on the Egress Gateway pods, which is to be used
-	// by the client pods.
-	// +required
-	Labels map[string]string `json:"labels"`
+	IPPools []EgressGatewayIPPool `json:"ipPools"`
 
 	// LogSeverity defines the logging level of the Egress Gateway.
-	// Default: info
-	// +kubebuilder:validation:Enum=trace;debug;info;warn;error;fatal
+	// Default: Info
+	// +kubebuilder:validation:Enum=Trace;Debug;Info;Warn;Error;Fatal
 	// +optional
-	LogSeverity *string `json:"logSeverity"`
+	LogSeverity *LogLevel `json:"logSeverity"`
 
 	// Template describes the EGW Deployment pod that will be created.
 	// +optional
 	Template *EgressGatewayDeploymentPodTemplateSpec `json:"template,omitempty"`
 
-	// EgressGatewayFailureDetection defines the failure detection configuration options for Egress Gateway.
+	// EgressGatewayFailureDetection is used to configure how Egress Gateway
+	// determines readiness. If both ICMP, HTTP probes are defined, one ICMP probe and one
+	// HTTP probe should succeed for Egress Gateways to become ready.
+	// Otherwise one of ICMP or HTTP probe should succeed for Egress gateways to become
+	// ready if configured.
 	// +optional
 	EgressGatewayFailureDetection *EgressGatewayFailureDetection `json:"egressGatewayFailureDetection,omitempty"`
 
 	// AWS defines the additional configuration options for Egress Gateways on AWS.
-	// Should be specified if AWSMode is enabled.
 	// +optional
 	AWS *AwsEgressGateway `json:"aws,omitempty"`
 }
@@ -69,10 +71,10 @@ type EgressGatewayDeploymentPodSpec struct {
 	// +optional
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 
-	// TerminationGracePeriod defines the termination grace period of the Egress Gateway pods in seconds.
-	// When not specified, it takes the default value of 30s defined by kubernetes.
+	// TerminationGracePeriodSeconds defines the termination grace period of the Egress Gateway pods in seconds.
 	// +optional
-	TerminationGracePeriod *int64 `json:"terminationGracePeriod,omitempty"`
+	// +kubebuilder:validation:Minimum=0
+	TerminationGracePeriodSeconds *int64 `json:"terminationGracePeriodSeconds,omitempty"`
 
 	// TopologySpreadConstraints defines how the Egress Gateway pods should be spread across different AZs.
 	// +optional
@@ -84,11 +86,38 @@ type EgressGatewayDeploymentPodTemplateSpec struct {
 	// Metadata is a subset of a Kubernetes object's metadata that is added to
 	// the pod's metadata.
 	// +optional
-	Metadata *Metadata `json:"metadata,omitempty"`
+	Metadata *EgressGatewayMetadata `json:"metadata,omitempty"`
 
 	// Spec is the EGW Deployment's PodSpec.
 	// +optional
 	Spec *EgressGatewayDeploymentPodSpec `json:"spec,omitempty"`
+}
+
+// EgressGatewayMetadata contains the standard Kubernetes labels and annotations fields.
+type EgressGatewayMetadata struct {
+	// Labels is a map of string keys and values that may match replicaset and
+	// service selectors. Each of these key/value pairs are added to the
+	// object's labels provided the key does not already exist in the object's labels.
+	// If not specified will default to projectcalico.org/egw:<name>, where <name> is
+	// the name of the Egress Gateway resource.
+	// +optional
+	Labels map[string]string `json:"labels,omitempty"`
+
+	// Annotations is a map of arbitrary non-identifying metadata. Each of these
+	// key/value pairs are added to the object's annotations provided the key does not
+	// already exist in the object's annotations.
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
+}
+
+type EgressGatewayIPPool struct {
+	// Name is the name of the IPPool that the Egress Gateways can use.
+	// +optional
+	Name string `json:"name,omitempty"`
+
+	// CIDR is the IPPool CIDR that the Egress Gateways can use.
+	// +optional
+	CIDR string `json:"cidr,omitempty"`
 }
 
 type NativeIP string
@@ -98,61 +127,83 @@ const (
 	NativeIPDisabled NativeIP = "Disabled"
 )
 
-// EgressGatewayFailureDetection defines the configuration for Egress Gateway failure detection.
+type LogLevel string
+
+const (
+	LogLevelTrace LogLevel = "Trace"
+	LogLevelInfo  LogLevel = "Info"
+	LogLevelDebug LogLevel = "Debug"
+	LogLevelWarn  LogLevel = "Warn"
+	LogLevelFatal LogLevel = "Fatal"
+	LogLevelError LogLevel = "Error"
+)
+
+// EgressGatewayFailureDetection defines the fields the needed for determining Egress Gateway
+// readiness.
 type EgressGatewayFailureDetection struct {
-	// HealthPort defines the container port used for readiness probes.
-	// Default: 8080
-	// +optional
-	// +kubebuilder:validation:Minimum=0
-	// +kubebuilder:validation:Maximum=65535
-	HealthPort *int32 `json:"healthPort,omitempty"`
 
-	// HealthTimeoutDataStore defines how long Egress Gateway waits before reporting its not ready.
-	// Default: 90s
+	// HealthTimeoutDataStoreSeconds defines how long Egress Gateway can fail to connect
+	// to the datastore before reporting not ready.
+	// This value must be greater than 0.
+	// Default: 90
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=2147483647
 	// +optional
-	HealthTimeoutDataStore *metav1.Duration `json:"healthTimeoutDataStore,omitempty"`
+	HealthTimeoutDataStoreSeconds *int32 `json:"healthTimeoutDataStoreSeconds,omitempty"`
 
-	// ICMPProbes defines the ICMP probe configuration options for Egress Gateway.
+	// ICMPProbes define outgoing ICMP probes that Egress Gateway will use to
+	// verify its upstream connection. Egress Gateway will report not ready if all
+	// fail. Timeout must be greater than interval.
 	// +optional
 	ICMPProbes *ICMPProbes `json:"icmpProbe,omitempty"`
 
-	// HTTPProbes defines the HTTP probe configuration options for Egress Gateway.
+	// HTTPProbes define outgoing HTTP probes that Egress Gateway will use to
+	// verify its upsteam connection. Egress Gateway will report not ready if all
+	// fail. Timeout must be greater than interval.
 	// +optional
 	HTTPProbes *HTTPProbes `json:"httpProbe,omitempty"`
 }
 
 // ICMPProbes defines the ICMP probe configuration for Egress Gateway.
 type ICMPProbes struct {
-	// IPs defines the list of ICMP probe IPs.
+	// IPs define the list of ICMP probe IPs. Egress Gateway will probe each IP
+	// periodically. If all probes faile, Egress Gateway will report non-ready.
 	// +optional
 	IPs []string `json:"ips,omitempty"`
 
-	// Interval defines the interval of ICMP probes. Used when IPs is non-empty.
-	// Default: 5s
+	// IntervalSeconds defines the interval of ICMP probes. Used when IPs is non-empty.
+	// Default: 5
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=2147483647
 	// +optional
-	Interval *metav1.Duration `json:"interval"`
+	IntervalSeconds *int32 `json:"intervalSeconds"`
 
-	// Timeout defines the timeout value of ICMP probes. Used when IPs is non-empty.
-	// Default: 15s
+	// TimeoutSeconds defines the timeout value of ICMP probes. Used when IPs is non-empty.
+	// Default: 15
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=2147483647
 	// +optional
-	Timeout *metav1.Duration `json:"timeout"`
+	TimeoutSeconds *int32 `json:"timeoutSeconds"`
 }
 
 // HTTPProbes defines the HTTP probe configuration for Egress Gateway.
 type HTTPProbes struct {
-	// URLs defines the list of HTTP probe URLs.
+	// URLs define the list of HTTP probe URLs. Egress Gateway will probe each URL
+	// periodically.If all probes fail, Egress Gateway will report non-ready.
 	// +optional
 	URLs []string `json:"urls,omitempty"`
 
-	// Interval defines the interval of HTTP probes. Used when URLs is non-empty.
-	// Default: 10s
+	// IntervalSeconds defines the interval of HTTP probes. Used when URLs is non-empty.
+	// Default: 10
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=2147483647
 	// +optional
-	Interval *metav1.Duration `json:"interval"`
+	IntervalSeconds *int32 `json:"intervalSeconds"`
 
-	// Timeout defines the timeout value of HTTP probes. Used when URLs is non-empty.
-	// Default: 30s
+	// TimeoutSeconds defines the timeout value of HTTP probes. Used when URLs is non-empty.
+	// Default: 30
 	// +optional
-	Timeout *metav1.Duration `json:"timeout"`
+	TimeoutSeconds *int32 `json:"timeoutSeconds"`
 }
 
 // AwsEgressGateway defines the configurations for deploying EgressGateway in AWS
@@ -165,7 +216,7 @@ type AwsEgressGateway struct {
 	NativeIP *NativeIP `json:"nativeIP,omitempty"`
 
 	// ElasticIPs defines the set of elastic IPs that can be used for Egress Gateway pods.
-	// Should be used along NativeIP enabled.
+	// NativeIP must be Enabled if elastic IPs are set.
 	// +optional
 	ElasticIPs []string `json:"elasticIPs,omitempty"`
 }
@@ -203,19 +254,23 @@ type EgressGatewayList struct {
 }
 
 func (c *EgressGateway) GetLogSeverity() string {
-	return *c.Spec.LogSeverity
-}
-
-func (c *EgressGateway) GetHealthPort() int32 {
-	return *c.Spec.EgressGatewayFailureDetection.HealthPort
+	return string(*c.Spec.LogSeverity)
 }
 
 func (c *EgressGateway) GetHealthTimeoutDs() string {
-	return c.Spec.EgressGatewayFailureDetection.HealthTimeoutDataStore.Duration.String()
+	return fmt.Sprintf("%ds", *c.Spec.EgressGatewayFailureDetection.HealthTimeoutDataStoreSeconds)
 }
 
 func (c *EgressGateway) GetIPPools() string {
-	return concatString(c.Spec.IPPools)
+	ippools := []string{}
+	for _, ippool := range c.Spec.IPPools {
+		if ippool.Name != "" {
+			ippools = append(ippools, ippool.Name)
+		} else if ippool.CIDR != "" {
+			ippools = append(ippools, ippool.CIDR)
+		}
+	}
+	return concatString(ippools)
 }
 
 func (c *EgressGateway) GetElasticIPs() string {
@@ -229,15 +284,15 @@ func (c *EgressGateway) GetElasticIPs() string {
 
 func (c *EgressGateway) GetICMPProbes() (string, string, string) {
 	probeIPs := strings.Join(c.Spec.EgressGatewayFailureDetection.ICMPProbes.IPs, ",")
-	interval := c.Spec.EgressGatewayFailureDetection.ICMPProbes.Interval.Duration.String()
-	timeout := c.Spec.EgressGatewayFailureDetection.ICMPProbes.Timeout.Duration.String()
+	interval := fmt.Sprintf("%ds", *c.Spec.EgressGatewayFailureDetection.ICMPProbes.IntervalSeconds)
+	timeout := fmt.Sprintf("%ds", *c.Spec.EgressGatewayFailureDetection.ICMPProbes.TimeoutSeconds)
 	return probeIPs, interval, timeout
 }
 
 func (c *EgressGateway) GetHTTPProbes() (string, string, string) {
 	probeURLs := strings.Join(c.Spec.EgressGatewayFailureDetection.HTTPProbes.URLs, ",")
-	interval := c.Spec.EgressGatewayFailureDetection.HTTPProbes.Interval.Duration.String()
-	timeout := c.Spec.EgressGatewayFailureDetection.HTTPProbes.Timeout.Duration.String()
+	interval := fmt.Sprintf("%ds", *c.Spec.EgressGatewayFailureDetection.HTTPProbes.IntervalSeconds)
+	timeout := fmt.Sprintf("%ds", *c.Spec.EgressGatewayFailureDetection.HTTPProbes.TimeoutSeconds)
 	return probeURLs, interval, timeout
 }
 
@@ -253,7 +308,7 @@ func (c *EgressGateway) GetResources() v1.ResourceRequirements {
 }
 
 func (c *EgressGateway) GetTerminationGracePeriod() *int64 {
-	return c.Spec.Template.Spec.TerminationGracePeriod
+	return c.Spec.Template.Spec.TerminationGracePeriodSeconds
 }
 
 func (c *EgressGateway) GetNodeSelector() map[string]string {

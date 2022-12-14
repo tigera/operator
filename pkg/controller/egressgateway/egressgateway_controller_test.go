@@ -34,6 +34,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -50,7 +51,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 	var mockStatus *status.MockStatus
 	var installation *operatorv1.Installation
 
-	Context("image reconciliation", func() {
+	Context("EGW reconciliation", func() {
 		BeforeEach(func() {
 			// The schema contains all objects that should be known to the fake client when the test runs.
 			scheme = runtime.NewScheme()
@@ -65,16 +66,16 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			installation = &operatorv1.Installation{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 				Spec: operatorv1.InstallationSpec{
-					Variant:  operatorv1.TigeraSecureEnterprise,
-					Registry: "some.registry.org/",
+					Variant:            operatorv1.TigeraSecureEnterprise,
+					KubernetesProvider: operatorv1.ProviderNone,
+					Registry:           "some.registry.org/",
 				},
 				Status: operatorv1.InstallationStatus{
 					Variant: operatorv1.TigeraSecureEnterprise,
 					Computed: &operatorv1.InstallationSpec{
 						Registry: "my-reg",
-						// The test is provider agnostic.
-						KubernetesProvider: operatorv1.ProviderNone,
 					},
+					Version: components.EnterpriseRelease,
 				},
 			}
 			mockStatus = &status.MockStatus{}
@@ -95,11 +96,23 @@ var _ = Describe("Egress Gateway controller tests", func() {
 				NATOutgoing:      true,
 				Disabled:         false,
 				DisableBGPExport: true,
+				AWSSubnetID:      "aws-subnet-1",
 			},
 			})).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, &crdv1.IPPool{ObjectMeta: metav1.ObjectMeta{Name: "ippool-2"}, Spec: crdv1.IPPoolSpec{
 				CIDR:             "1.2.4.0/24",
+				VXLANMode:        crdv1.VXLANModeAlways,
+				IPIPMode:         crdv1.IPIPModeNever,
+				NATOutgoing:      true,
+				Disabled:         false,
+				DisableBGPExport: true,
+				AWSSubnetID:      "aws-subnet-2",
+			},
+			})).NotTo(HaveOccurred())
+
+			Expect(c.Create(ctx, &crdv1.IPPool{ObjectMeta: metav1.ObjectMeta{Name: "ippool-4"}, Spec: crdv1.IPPoolSpec{
+				CIDR:             "1.2.5.0/24",
 				VXLANMode:        crdv1.VXLANModeAlways,
 				IPIPMode:         crdv1.IPIPModeNever,
 				NATOutgoing:      true,
@@ -126,14 +139,14 @@ var _ = Describe("Egress Gateway controller tests", func() {
 
 			By("applying the Egress Gateway CR with just the required fields to the fake cluster")
 			var replicas int32 = 2
-			ipPools := []string{"ippool-1", "ippool-2"}
-			labels := map[string]string{"egress-code": "red"}
 			egw := &operatorv1.EgressGateway{
 				ObjectMeta: metav1.ObjectMeta{Name: "calico-red", Namespace: "calico-egress"},
 				Spec: operatorv1.EgressGatewaySpec{
 					Replicas: &replicas,
-					IPPools:  ipPools,
-					Labels:   labels,
+					IPPools: []operatorv1.EgressGatewayIPPool{
+						{Name: "ippool-1", CIDR: ""},
+						{Name: "", CIDR: "1.2.4.0/24"},
+					},
 				},
 				Status: operatorv1.EgressGatewayStatus{
 					State: operatorv1.TigeraStatusReady,
@@ -143,6 +156,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
+			Expect(r.status.IsAvailable()).To(BeTrue())
 
 			dep := appsv1.Deployment{
 				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -161,7 +175,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			egwContainer := dep.Spec.Template.Spec.Containers[0]
 			Expect(egwContainer.Image).To(Equal(fmt.Sprintf("some.registry.org/%s:%s",
 				components.ComponentEgressGateway.Image, components.ComponentEgressGateway.Version)))
-
+			Expect(dep.Spec.Template.ObjectMeta.Labels["projectcalico.org/egw"]).To(Equal(dep.Name))
 			expectedInitEnvVar := []corev1.EnvVar{
 				{Name: "EGRESS_VXLAN_VNI", Value: "4097"},
 				{Name: "EGRESS_VXLAN_PORT", Value: "4790"},
@@ -169,7 +183,6 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			for _, elem := range expectedInitEnvVar {
 				Expect(initContainer.Env).To(ContainElement(elem))
 			}
-
 			expectedEgwEnvVar := []corev1.EnvVar{
 				{Name: "EGRESS_VXLAN_VNI", Value: "4097"},
 				{Name: "HEALTH_PORT", Value: "8080"},
@@ -177,20 +190,33 @@ var _ = Describe("Egress Gateway controller tests", func() {
 				{Name: "ICMP_PROBE_TIMEOUT", Value: "15s"},
 				{Name: "HTTP_PROBE_INTERVAL", Value: "10s"},
 				{Name: "HTTP_PROBE_TIMEOUT", Value: "30s"},
-				{Name: "LOG_SEVERITY", Value: "info"},
-				{Name: "HEALTH_TIMEOUT_DATASTORE", Value: "1m30s"},
+				{Name: "LOG_SEVERITY", Value: "Info"},
+				{Name: "HEALTH_TIMEOUT_DATASTORE", Value: "90s"},
 			}
 			for _, elem := range expectedEgwEnvVar {
 				Expect(egwContainer.Env).To(ContainElement(elem))
 			}
-
-			By("update egw with health port")
-			Expect(c.Get(ctx, types.NamespacedName{Name: "calico-red", Namespace: "calico-egress"}, egw)).NotTo(HaveOccurred())
-			var updatedHealthPort int32 = 9090
-			egw.Spec.EgressGatewayFailureDetection = &operatorv1.EgressGatewayFailureDetection{
-				HealthPort: &updatedHealthPort,
+			expectedAffinity := v1.Affinity{}
+			expectedAffinity.PodAntiAffinity = &v1.PodAntiAffinity{
+				PreferredDuringSchedulingIgnoredDuringExecution: []v1.WeightedPodAffinityTerm{
+					{
+						Weight: 1,
+						PodAffinityTerm: v1.PodAffinityTerm{
+							LabelSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{"projectcalico.org/egw": "calico-red"},
+							},
+							TopologyKey: "topology.kubernetes.io/zone",
+						},
+					},
+				},
 			}
-			logSeverity := "debug"
+			Expect(*dep.Spec.Template.Spec.Affinity).To(Equal(expectedAffinity))
+			Expect(dep.Spec.Template.ObjectMeta.Annotations["cni.projectcalico.org/ipv4pools"]).To(Equal("[\"ippool-1\",\"1.2.4.0/24\"]"))
+
+			By("update egw with log level")
+			Expect(c.Get(ctx, types.NamespacedName{Name: "calico-red", Namespace: "calico-egress"}, egw)).NotTo(HaveOccurred())
+			egw.Spec.EgressGatewayFailureDetection = &operatorv1.EgressGatewayFailureDetection{}
+			logSeverity := operatorv1.LogLevelDebug
 			egw.Spec.LogSeverity = &logSeverity
 			Expect(c.Update(ctx, egw)).NotTo(HaveOccurred())
 			_, err = r.Reconcile(ctx, reconcile.Request{})
@@ -199,13 +225,13 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			egwContainer = dep.Spec.Template.Spec.Containers[0]
 			expectedEgwEnvVar = []corev1.EnvVar{
 				{Name: "EGRESS_VXLAN_VNI", Value: "4097"},
-				{Name: "HEALTH_PORT", Value: "9090"},
+				{Name: "HEALTH_PORT", Value: "8080"},
 				{Name: "ICMP_PROBE_INTERVAL", Value: "5s"},
 				{Name: "ICMP_PROBE_TIMEOUT", Value: "15s"},
 				{Name: "HTTP_PROBE_INTERVAL", Value: "10s"},
 				{Name: "HTTP_PROBE_TIMEOUT", Value: "30s"},
-				{Name: "LOG_SEVERITY", Value: "debug"},
-				{Name: "HEALTH_TIMEOUT_DATASTORE", Value: "1m30s"},
+				{Name: "LOG_SEVERITY", Value: "Debug"},
+				{Name: "HEALTH_TIMEOUT_DATASTORE", Value: "90s"},
 			}
 			for _, elem := range expectedEgwEnvVar {
 				Expect(egwContainer.Env).To(ContainElement(elem))
@@ -229,8 +255,8 @@ var _ = Describe("Egress Gateway controller tests", func() {
 				{Name: "ICMP_PROBE_TIMEOUT", Value: "15s"},
 				{Name: "HTTP_PROBE_INTERVAL", Value: "10s"},
 				{Name: "HTTP_PROBE_TIMEOUT", Value: "30s"},
-				{Name: "LOG_SEVERITY", Value: "debug"},
-				{Name: "HEALTH_TIMEOUT_DATASTORE", Value: "1m30s"},
+				{Name: "LOG_SEVERITY", Value: "Debug"},
+				{Name: "HEALTH_TIMEOUT_DATASTORE", Value: "90s"},
 			}
 
 			for _, elem := range expectedEgwEnvVar {
@@ -250,8 +276,10 @@ var _ = Describe("Egress Gateway controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "calico-blue", Namespace: "calico-gw"},
 				Spec: operatorv1.EgressGatewaySpec{
 					Replicas: &replicas,
-					IPPools:  ipPools,
-					Labels:   labels,
+					IPPools: []operatorv1.EgressGatewayIPPool{
+						{Name: "ippool-1"},
+						{Name: "ippool-2"},
+					},
 				},
 				Status: operatorv1.EgressGatewayStatus{
 					State: operatorv1.TigeraStatusReady,
@@ -291,50 +319,222 @@ var _ = Describe("Egress Gateway controller tests", func() {
 				Expect(initContainer.Env).To(ContainElement(elem))
 				Expect(initContainer_blue.Env).To(ContainElement(elem))
 			}
-
 		})
 
 		It("Should throw an error when ippool is not present", func() {
 			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
-			mockStatus.On("SetDegraded", "Error validating egress gateway", "ippools.crd.projectcalico.org \"ippool-3\" not found").Return().Maybe()
+			mockStatus.On("SetDegraded", "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "ippools.crd.projectcalico.org \"ippool-3\" not found").Return().Maybe()
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 			var replicas int32 = 2
-			ipPools := []string{"ippool-3"}
 			labels := map[string]string{"egress-code": "red"}
 			egw := &operatorv1.EgressGateway{
 				ObjectMeta: metav1.ObjectMeta{Name: "calico-red", Namespace: "calico-egress"},
 				Spec: operatorv1.EgressGatewaySpec{
 					Replicas: &replicas,
-					IPPools:  ipPools,
-					Labels:   labels,
+					IPPools: []operatorv1.EgressGatewayIPPool{
+						{Name: "ippool-3"},
+					},
+					Template: &operatorv1.EgressGatewayDeploymentPodTemplateSpec{Metadata: &operatorv1.EgressGatewayMetadata{Labels: labels}},
 				},
 				Status: operatorv1.EgressGatewayStatus{
 					State: operatorv1.TigeraStatusReady,
 				},
 			}
 			Expect(c.Create(ctx, egw)).NotTo(HaveOccurred())
-
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).Should(HaveOccurred())
+			mockStatus.AssertExpectations(GinkgoT())
+		})
 
+		It("Should throw an error when CIDR does not match any IPPool", func() {
+			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+			mockStatus.On("SetDegraded", "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "IPPool matching CIDR = 2.2.3.0/24 not present").Return().Maybe()
+			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+			var replicas int32 = 2
+			labels := map[string]string{"egress-code": "red"}
+			egw := &operatorv1.EgressGateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-red", Namespace: "calico-egress"},
+				Spec: operatorv1.EgressGatewaySpec{
+					Replicas: &replicas,
+					IPPools: []operatorv1.EgressGatewayIPPool{
+						{Name: "", CIDR: "2.2.3.0/24"},
+					},
+					Template: &operatorv1.EgressGatewayDeploymentPodTemplateSpec{Metadata: &operatorv1.EgressGatewayMetadata{Labels: labels}},
+				},
+				Status: operatorv1.EgressGatewayStatus{
+					State: operatorv1.TigeraStatusReady,
+				},
+			}
+			Expect(c.Create(ctx, egw)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).Should(HaveOccurred())
+			mockStatus.AssertExpectations(GinkgoT())
+		})
+
+		It("Should throw an error when ippool name and CIRD do not match", func() {
+			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+			mockStatus.On("SetDegraded", "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "IPPool CIDR does not match with name").Return().Maybe()
+			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+			var replicas int32 = 2
+			labels := map[string]string{"egress-code": "red"}
+			egw := &operatorv1.EgressGateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-red", Namespace: "calico-egress"},
+				Spec: operatorv1.EgressGatewaySpec{
+					Replicas: &replicas,
+					IPPools: []operatorv1.EgressGatewayIPPool{
+						{Name: "ippool-2", CIDR: "1.2.3.0/24"},
+					},
+					Template: &operatorv1.EgressGatewayDeploymentPodTemplateSpec{Metadata: &operatorv1.EgressGatewayMetadata{Labels: labels}},
+				},
+				Status: operatorv1.EgressGatewayStatus{
+					State: operatorv1.TigeraStatusReady,
+				},
+			}
+			Expect(c.Create(ctx, egw)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).Should(HaveOccurred())
 			mockStatus.AssertExpectations(GinkgoT())
 
 		})
 
 		It("Should throw an error when elastic IPs are specified and native IP disabled", func() {
 			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
-			mockStatus.On("SetDegraded", "Error validating egress gateway", "NativeIP should be enabled when elastic IPs are used").Return().Maybe()
+			mockStatus.On("SetDegraded", "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "NativeIP should be enabled when elastic IPs are used").Return().Maybe()
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 			var replicas int32 = 2
-			ipPools := []string{"ippool-1"}
 			labels := map[string]string{"egress-code": "red"}
 			egw := &operatorv1.EgressGateway{
 				ObjectMeta: metav1.ObjectMeta{Name: "calico-red", Namespace: "calico-egress"},
 				Spec: operatorv1.EgressGatewaySpec{
 					Replicas: &replicas,
-					IPPools:  ipPools,
-					Labels:   labels,
+					IPPools: []operatorv1.EgressGatewayIPPool{
+						{Name: "ippool-1"},
+					},
 					AWS:      &operatorv1.AwsEgressGateway{ElasticIPs: []string{"5.6.7.8"}},
+					Template: &operatorv1.EgressGatewayDeploymentPodTemplateSpec{Metadata: &operatorv1.EgressGatewayMetadata{Labels: labels}},
+				},
+				Status: operatorv1.EgressGatewayStatus{
+					State: operatorv1.TigeraStatusReady,
+				},
+			}
+			Expect(c.Create(ctx, egw)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).Should(HaveOccurred())
+			mockStatus.AssertExpectations(GinkgoT())
+
+		})
+
+		It("Should throw an error when native IP is enabled and IPPool CIDR is not backed by aws subnet ID", func() {
+			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+			mockStatus.On("SetDegraded", "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "AWS subnet ID must be set when NativeIP is enabled").Return().Maybe()
+			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+			var replicas int32 = 2
+			nativeIP := operatorv1.NativeIPEnabled
+			labels := map[string]string{"egress-code": "red"}
+			egw := &operatorv1.EgressGateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-red", Namespace: "calico-egress"},
+				Spec: operatorv1.EgressGatewaySpec{
+					Replicas: &replicas,
+					IPPools: []operatorv1.EgressGatewayIPPool{
+						{Name: "", CIDR: "1.2.5.0/24"},
+					},
+					AWS:      &operatorv1.AwsEgressGateway{NativeIP: &nativeIP},
+					Template: &operatorv1.EgressGatewayDeploymentPodTemplateSpec{Metadata: &operatorv1.EgressGatewayMetadata{Labels: labels}},
+				},
+				Status: operatorv1.EgressGatewayStatus{
+					State: operatorv1.TigeraStatusReady,
+				},
+			}
+			Expect(c.Create(ctx, egw)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).Should(HaveOccurred())
+			mockStatus.AssertExpectations(GinkgoT())
+		})
+
+		It("Should throw an error when native IP is enabled and IPPool name is not backed by aws subnet ID", func() {
+			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+			mockStatus.On("SetDegraded", "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "AWS subnet ID must be set when NativeIP is enabled").Return().Maybe()
+			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+			var replicas int32 = 2
+			nativeIP := operatorv1.NativeIPEnabled
+			labels := map[string]string{"egress-code": "red"}
+			egw := &operatorv1.EgressGateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-red", Namespace: "calico-egress"},
+				Spec: operatorv1.EgressGatewaySpec{
+					Replicas: &replicas,
+					IPPools: []operatorv1.EgressGatewayIPPool{
+						{Name: "ippool-4", CIDR: ""},
+					},
+					AWS:      &operatorv1.AwsEgressGateway{NativeIP: &nativeIP},
+					Template: &operatorv1.EgressGatewayDeploymentPodTemplateSpec{Metadata: &operatorv1.EgressGatewayMetadata{Labels: labels}},
+				},
+				Status: operatorv1.EgressGatewayStatus{
+					State: operatorv1.TigeraStatusReady,
+				},
+			}
+			Expect(c.Create(ctx, egw)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).Should(HaveOccurred())
+			mockStatus.AssertExpectations(GinkgoT())
+		})
+
+		It("Should throw an error when ICMP timeout is less than ICMP interval", func() {
+			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+			mockStatus.On("SetDegraded", "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "ICMP probe timeout must be greater than interval").Return().Maybe()
+			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+			var replicas int32 = 2
+			var timeout int32 = 5
+			var interval int32 = 10
+			labels := map[string]string{"egress-code": "red"}
+			egw := &operatorv1.EgressGateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-red", Namespace: "calico-egress"},
+				Spec: operatorv1.EgressGatewaySpec{
+					Replicas: &replicas,
+					IPPools: []operatorv1.EgressGatewayIPPool{
+						{Name: "ippool-1"},
+					},
+					Template: &operatorv1.EgressGatewayDeploymentPodTemplateSpec{Metadata: &operatorv1.EgressGatewayMetadata{Labels: labels}},
+					EgressGatewayFailureDetection: &operatorv1.EgressGatewayFailureDetection{
+						ICMPProbes: &operatorv1.ICMPProbes{
+							IPs:             []string{"1.2.4.5"},
+							TimeoutSeconds:  &timeout,
+							IntervalSeconds: &interval,
+						},
+					},
+				},
+				Status: operatorv1.EgressGatewayStatus{
+					State: operatorv1.TigeraStatusReady,
+				},
+			}
+			Expect(c.Create(ctx, egw)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).Should(HaveOccurred())
+			mockStatus.AssertExpectations(GinkgoT())
+		})
+
+		It("Should throw an error when HTTP timeout is less than HTTP interval", func() {
+			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+			mockStatus.On("SetDegraded", "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "HTTP probe timeout must be greater than interval").Return().Maybe()
+			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+			var replicas int32 = 2
+			var timeout int32 = 5
+			var interval int32 = 10
+			labels := map[string]string{"egress-code": "red"}
+			egw := &operatorv1.EgressGateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-red", Namespace: "calico-egress"},
+				Spec: operatorv1.EgressGatewaySpec{
+					Replicas: &replicas,
+					IPPools: []operatorv1.EgressGatewayIPPool{
+						{Name: "ippool-1"},
+					},
+					Template: &operatorv1.EgressGatewayDeploymentPodTemplateSpec{Metadata: &operatorv1.EgressGatewayMetadata{Labels: labels}},
+					EgressGatewayFailureDetection: &operatorv1.EgressGatewayFailureDetection{
+						HTTPProbes: &operatorv1.HTTPProbes{
+							URLs:            []string{"test.com"},
+							TimeoutSeconds:  &timeout,
+							IntervalSeconds: &interval,
+						},
+					},
 				},
 				Status: operatorv1.EgressGatewayStatus{
 					State: operatorv1.TigeraStatusReady,
@@ -344,10 +544,8 @@ var _ = Describe("Egress Gateway controller tests", func() {
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).Should(HaveOccurred())
-
 			mockStatus.AssertExpectations(GinkgoT())
 
 		})
-
 	})
 })

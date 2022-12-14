@@ -45,6 +45,9 @@ const (
 	TyphaPort               int32 = 5473
 
 	TyphaContainerName = "calico-typha"
+
+	defaultTyphaTerminationGracePeriod = 300
+	shutdownTimeoutEnvVar              = "TYPHA_SHUTDOWNTIMEOUTSECS"
 )
 
 var (
@@ -346,10 +349,23 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 
 // typhaDeployment creates the typha deployment.
 func (c *typhaComponent) typhaDeployment() *appsv1.Deployment {
-	var terminationGracePeriod int64 = 0
+	// We set a fairly long grace period by default. Typha sheds load during the grace period rather than
+	// disconnecting all clients at once.
+	var terminationGracePeriod int64 = defaultTyphaTerminationGracePeriod
 	var revisionHistoryLimit int32 = 2
+	// Allowing 1 unavailable Typha by default ensures that we make progress in a cluster with constrained scheduling.
 	maxUnavailable := intstr.FromInt(1)
-	maxSurge := intstr.FromString("25%")
+	// Allowing 100% surge allows a complete replacement fleet of Typha instances to start during an upgrade. When
+	// combined with Typha's graceful shutdown, we get nice emergent behavior:
+	// - All up-level Typhas start if there's room available.
+	// - Back-level Typhas shed load slowly over the termination grace period.
+	// - Clients that are shed end up connecting to up-level Typhas (because all the back-level Typhas are marked
+	//   as terminating once all the up-level Typhas are ready).  This tends to avoid bouncing a client multiple
+	//   times during an upgrade.
+	// - If there's any sort of version skew issue where a back-level client can't understand an up-level Typha,
+	//   it'll go non-ready and Kubernetes will upgrade it.  This is rate limited by Typha's load-shedding rate,
+	//   so we shouldn't get a "thundering herd".
+	maxSurge := intstr.FromString("100%")
 
 	annotations := c.cfg.TLS.TrustedBundle.HashAnnotations()
 	annotations[c.cfg.TLS.TyphaSecret.HashAnnotationKey()] = c.cfg.TLS.TyphaSecret.HashAnnotationValue()
@@ -411,7 +427,42 @@ func (c *typhaComponent) typhaDeployment() *appsv1.Deployment {
 	if overrides := c.cfg.Installation.TyphaDeployment; overrides != nil {
 		rcomp.ApplyDeploymentOverrides(&d, overrides)
 	}
+
+	// ApplyDeploymentOverrides patches some fields that have consistency requirements elsewhere in the spec.
+	// fix up the other places.
+	c.applyPostOverrideFixUps(&d)
+
 	return &d
+}
+
+func (c *typhaComponent) applyPostOverrideFixUps(d *appsv1.Deployment) {
+	// The deployment overrides may update the termination grace period and typha needs to know what the grace
+	// period is in order to calculate its shutdown disconnection rate.  Copy that over to an env var.
+	terminationGracePeriod := *d.Spec.Template.Spec.TerminationGracePeriodSeconds
+	for _, c := range d.Spec.Template.Spec.Containers {
+		if c.Name != TyphaContainerName {
+			continue
+		}
+		for i, e := range c.Env {
+			if e.Name != shutdownTimeoutEnvVar {
+				continue
+			}
+			c.Env[i].Value = fmt.Sprint(terminationGracePeriod)
+			break
+		}
+		break
+	}
+
+	// If the termination grace period has been set to a very high value, make sure the Deployment's progress
+	// deadline takes account of that.
+	minProgressDeadline := int32(terminationGracePeriod * 120 / 100)
+	if minProgressDeadline < 600 {
+		// 600 is the Kubernetes default so let's not go below that.
+		minProgressDeadline = 600
+	}
+	if d.Spec.ProgressDeadlineSeconds == nil || *d.Spec.ProgressDeadlineSeconds < minProgressDeadline {
+		d.Spec.ProgressDeadlineSeconds = &minProgressDeadline
+	}
 }
 
 // volumes creates the typha's volumes.
@@ -476,6 +527,7 @@ func (c *typhaComponent) typhaEnvVars() []corev1.EnvVar {
 		{Name: "TYPHA_SERVERCERTFILE", Value: c.cfg.TLS.TyphaSecret.VolumeMountCertificateFilePath()},
 		{Name: "TYPHA_SERVERKEYFILE", Value: c.cfg.TLS.TyphaSecret.VolumeMountKeyFilePath()},
 		{Name: "TYPHA_FIPSMODEENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
+		{Name: shutdownTimeoutEnvVar, Value: fmt.Sprint(defaultTyphaTerminationGracePeriod)}, // May get overridden later.
 	}
 	// We need at least the CN or URISAN set, we depend on the validation
 	// done by the core_controller that the Secret will have one.

@@ -460,13 +460,19 @@ func ensureOSSchedulingRestrictions(obj client.Object, osType rmeta.OSType) {
 		// Prometheus operator types don't have a template spec which is of v1.PodSpec type.
 		// We can't add it to the podSpecs list and assign osType in the for loop below.
 		podSpec := &x.Spec
-		podSpec.NodeSelector = map[string]string{"kubernetes.io/os": string(osType)}
+		if podSpec.NodeSelector == nil {
+			podSpec.NodeSelector = make(map[string]string)
+		}
+		podSpec.NodeSelector["kubernetes.io/os"] = string(osType)
 		return
 	case *monitoringv1.Prometheus:
 		// Prometheus operator types don't have a template spec which is of v1.PodSpec type.
 		// We can't add it to the podSpecs list and assign osType in the for loop below.
 		podSpec := &x.Spec
-		podSpec.NodeSelector = map[string]string{"kubernetes.io/os": string(osType)}
+		if podSpec.NodeSelector == nil {
+			podSpec.NodeSelector = make(map[string]string)
+		}
+		podSpec.NodeSelector["kubernetes.io/os"] = string(osType)
 		return
 	}
 

@@ -233,6 +233,13 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			},
 		))
 
+		// check non-privileged container is used
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(Equal(false))
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(Equal(false))
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(Equal(true))
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(Equal(int64(10001)))
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(Equal(int64(10001)))
+
 		// Check all Role for respective AD API SAs
 		detectorsSecret := rtest.GetResource(resources, "anomaly-detectors", render.IntrusionDetectionNamespace, "", "v1", "Secret").(*corev1.Secret)
 		Expect(detectorsSecret.Type).To(Equal(corev1.SecretTypeServiceAccountToken))
@@ -316,11 +323,17 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				Name: "volume-storage",
 				VolumeSource: corev1.VolumeSource{
 					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-						ClaimName: testADStorageClassName,
+						ClaimName: render.ADPersistentVolumeClaimName,
 					},
 				},
 			},
 		))
+
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(Equal(false))
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(Equal(false))
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(Equal(false))
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(Equal(int64(0)))
+		Expect(*adAPIDeployment.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(Equal(int64(0)))
 	})
 
 	It("should not render a persistentVolume claim if indicated that the AD StorageClassName is provided but an existing PVC already exists", func() {
@@ -465,6 +478,12 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(idc.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 		Expect(idc.Spec.Template.Spec.Volumes[1].Name).To(Equal("var-log-calico"))
 		Expect(idc.Spec.Template.Spec.Volumes[1].VolumeSource.HostPath.Path).To(Equal("/var/log/calico"))
+
+		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
+		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(BeFalse())
+		Expect(*idc.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(0))
 
 		// expect AD PodTemplate EnvVars
 		expectedADEnvs := []expectedEnvVar{

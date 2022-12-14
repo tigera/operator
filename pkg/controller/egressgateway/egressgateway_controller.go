@@ -191,7 +191,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 
 func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.EgressGateway, reqLogger logr.Logger) (reconcile.Result, error) {
 	// Set the condition to progressing
-	perr := setProgressing(r.client, ctx, egw, "Reconciling_EGW", fmt.Sprintf("Name = %s, Namespace = %s", egw.Name, egw.Namespace))
+	perr := setProgressing(r.client, ctx, egw, string(operatorv1.ResourceNotReady), fmt.Sprintf("Name = %s, Namespace = %s", egw.Name, egw.Namespace))
 	if perr != nil {
 		reqLogger.Error(perr, "Error updating status")
 	}
@@ -315,7 +315,7 @@ func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.
 
 	// Update the status of this CR.
 	egw.Status.State = operatorv1.TigeraStatusReady
-	if err = setAvailable(r.client, ctx, egw, "Unknown", ""); err != nil {
+	if err = setAvailable(r.client, ctx, egw, string(operatorv1.AllObjectsAvailable), ""); err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -588,7 +588,7 @@ func setDegraded(cli client.Client, ctx context.Context, egw *operatorv1.EgressG
 	for _, cond := range egw.Status.Conditions {
 		if cond.Type == string(operatorv1.ComponentProgressing) || cond.Type == string(operatorv1.ComponentAvailable) {
 			cond.Status = metav1.ConditionFalse
-			cond.Reason = "Unknown"
+			cond.Reason = string(operatorv1.AllObjectsAvailable)
 			cond.Message = ""
 		}
 	}
@@ -599,7 +599,7 @@ func setProgressing(cli client.Client, ctx context.Context, egw *operatorv1.Egre
 	for _, cond := range egw.Status.Conditions {
 		if cond.Type == string(operatorv1.ComponentDegraded) || cond.Type == string(operatorv1.ComponentAvailable) {
 			cond.Status = metav1.ConditionFalse
-			cond.Reason = "Unknown"
+			cond.Reason = string(operatorv1.AllObjectsAvailable)
 			cond.Message = ""
 		}
 	}
@@ -610,7 +610,7 @@ func setAvailable(cli client.Client, ctx context.Context, egw *operatorv1.Egress
 	for _, cond := range egw.Status.Conditions {
 		if cond.Type == string(operatorv1.ComponentProgressing) || cond.Type == string(operatorv1.ComponentDegraded) {
 			cond.Status = metav1.ConditionFalse
-			cond.Reason = "Unknown"
+			cond.Reason = string(operatorv1.AllObjectsAvailable)
 			cond.Message = ""
 		}
 	}

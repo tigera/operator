@@ -95,7 +95,7 @@ func (r *ReconcileLogStorage) createEsKubeControllers(
 	}
 
 	if err = imageset.ResolveImages(imageSet, esKubeControllerComponents); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error resolving ImageSet for elasticsearch kube-controllers components", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "Error resolving ImageSet for elasticsearch kube-controllers components", err, reqLogger)
 		return reconcile.Result{}, false, err
 	}
 

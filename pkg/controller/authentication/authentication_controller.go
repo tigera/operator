@@ -282,7 +282,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	// Dex needs to trust a public CA, so we mount all the system certificates.
 	trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates()
 	if err != nil {
-		r.status.SetDegraded("Unable to create tigera-ca-bundle configmap", err.Error())
+		r.status.SetDegraded(oprv1.ResourceCreateError, "Unable to create tigera-ca-bundle configmap", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

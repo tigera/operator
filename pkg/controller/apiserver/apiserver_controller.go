@@ -421,7 +421,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		if keyValidatorConfig != nil {
 			dexSecret, err := certificateManager.GetCertificate(r.client, render.DexTLSSecretName, common.OperatorNamespace())
 			if err != nil {
-				r.status.SetDegraded(operatorv1.ResourceRenderingError, fmt.Sprintf("Failed to retrieve %s", render.DexTLSSecretName), err, reqLogger)
+				r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve %s", render.DexTLSSecretName), err, reqLogger)
 				return reconcile.Result{}, err
 			} else if dexSecret != nil {
 				certificates = append(certificates, dexSecret)

@@ -157,6 +157,11 @@ var (
 		Image:   "tigera/packetcapture",
 	}
 
+	ComponentEgressGateway = component{
+		Version: "master",
+		Image:   "tigera/egress-gateway",
+	}
+
 	ComponentL7Collector = component{
 		Version: "master",
 		Image:   "tigera/l7-collector",
@@ -266,6 +271,7 @@ var (
 		ComponentDex,
 		ComponentManagerProxy,
 		ComponentPacketCapture,
+		ComponentEgressGateway,
 		ComponentL7Collector,
 		ComponentEnvoyProxy,
 		ComponentPrometheus,

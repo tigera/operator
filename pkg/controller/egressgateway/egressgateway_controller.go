@@ -588,6 +588,8 @@ func setDegraded(cli client.Client, ctx context.Context, egw *operatorv1.EgressG
 	for _, cond := range egw.Status.Conditions {
 		if cond.Type == string(operatorv1.ComponentProgressing) || cond.Type == string(operatorv1.ComponentAvailable) {
 			cond.Status = metav1.ConditionFalse
+			cond.Reason = "Unknown"
+			cond.Message = ""
 		}
 	}
 	return updateEgwStatusConditions(cli, ctx, egw, operatorv1.ComponentDegraded, operatorv1.ConditionTrue, reason, msg)
@@ -597,6 +599,8 @@ func setProgressing(cli client.Client, ctx context.Context, egw *operatorv1.Egre
 	for _, cond := range egw.Status.Conditions {
 		if cond.Type == string(operatorv1.ComponentDegraded) || cond.Type == string(operatorv1.ComponentAvailable) {
 			cond.Status = metav1.ConditionFalse
+			cond.Reason = "Unknown"
+			cond.Message = ""
 		}
 	}
 	return updateEgwStatusConditions(cli, ctx, egw, operatorv1.ComponentProgressing, operatorv1.ConditionTrue, reason, msg)
@@ -606,6 +610,8 @@ func setAvailable(cli client.Client, ctx context.Context, egw *operatorv1.Egress
 	for _, cond := range egw.Status.Conditions {
 		if cond.Type == string(operatorv1.ComponentProgressing) || cond.Type == string(operatorv1.ComponentDegraded) {
 			cond.Status = metav1.ConditionFalse
+			cond.Reason = "Unknown"
+			cond.Message = ""
 		}
 	}
 	return updateEgwStatusConditions(cli, ctx, egw, operatorv1.ComponentAvailable, operatorv1.ConditionTrue, reason, msg)

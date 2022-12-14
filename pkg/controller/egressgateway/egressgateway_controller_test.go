@@ -17,6 +17,8 @@ package egressgateway
 import (
 	"context"
 	"fmt"
+	"sync"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -546,6 +548,71 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			Expect(err).Should(HaveOccurred())
 			mockStatus.AssertExpectations(GinkgoT())
 
+		})
+
+		It("should wait for correct calico version before reconciling EGW", func() {
+			mockStatus.On("AddDaemonsets", mock.Anything).Return()
+			mockStatus.On("AddDeployments", mock.Anything).Return()
+			mockStatus.On("IsAvailable").Return(true)
+			mockStatus.On("AddStatefulSets", mock.Anything).Return()
+			mockStatus.On("AddCronJobs", mock.Anything)
+			mockStatus.On("OnCRNotFound").Return()
+			mockStatus.On("ClearDegraded")
+			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+			mockStatus.On("ReadyToMonitor")
+			installation.Status.Version = "3.15"
+			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+			var replicas int32 = 2
+			var requeueInterval time.Duration = 30 * time.Second
+			var wg sync.WaitGroup
+			labels := map[string]string{"egress-code": "red"}
+			egw := &operatorv1.EgressGateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-red", Namespace: "calico-egress"},
+				Spec: operatorv1.EgressGatewaySpec{
+					Replicas: &replicas,
+					IPPools: []operatorv1.EgressGatewayIPPool{
+						{Name: "ippool-1"},
+					},
+					Template: &operatorv1.EgressGatewayDeploymentPodTemplateSpec{Metadata: &operatorv1.EgressGatewayMetadata{Labels: labels}},
+				},
+				Status: operatorv1.EgressGatewayStatus{
+					State: operatorv1.TigeraStatusReady,
+				},
+			}
+			Expect(c.Create(ctx, egw)).NotTo(HaveOccurred())
+			result, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(requeueInterval))
+			wg.Add(1)
+			go func() {
+				// wait for 50 seconds before setting the appropriate version.
+				time.Sleep(50 * time.Second)
+				defer wg.Done()
+				ins := &operatorv1.Installation{}
+				Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, ins)).NotTo(HaveOccurred())
+				ins.Status.Version = components.EnterpriseRelease
+				Expect(c.Update(ctx, ins)).NotTo(HaveOccurred())
+			}()
+			dep := appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "calico-red",
+					Namespace: "calico-egress",
+				},
+			}
+			By("ensuring the egw resources are created after correct calico version in installed")
+			Expect(test.GetResource(c, &dep)).NotTo(BeNil())
+			for {
+				result, err = r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+				if result.RequeueAfter == requeueInterval {
+					time.Sleep(requeueInterval)
+				} else {
+					break
+				}
+			}
+			Expect(test.GetResource(c, &dep)).To(BeNil())
+			wg.Wait()
 		})
 	})
 })

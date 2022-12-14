@@ -241,11 +241,9 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 				Resources: []string{
 					"bgpconfigurations",
 					"bgppeers",
-					"bgpfilters",
 					"blockaffinities",
 					"caliconodestatuses",
 					"clusterinformations",
-					"externalnetworks",
 					"felixconfigurations",
 					"globalnetworkpolicies",
 					"globalnetworksets",

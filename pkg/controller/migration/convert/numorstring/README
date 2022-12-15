@@ -1,0 +1,5 @@
+The package numorstring is copied from projectcalico/calico (the code is currently at the path api/pkg/lib/numorstring)i
+so that we can convert felix env vars which map to felixconfiguration fields of type numorstring.
+
+These files are also added to git-hooks/files-to-skip because they have been copied without modification and it is
+necessary to skip them since the Copyright notice hasn't been updated.

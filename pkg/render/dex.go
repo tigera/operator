@@ -68,6 +68,7 @@ type DexComponentConfiguration struct {
 	ClusterDomain string
 	DeleteDex     bool
 	TLSKeyPair    certificatemanagement.KeyPairInterface
+	TrustedBundle certificatemanagement.TrustedBundle
 }
 
 type dexComponent struct {
@@ -199,6 +200,9 @@ func (c *dexComponent) deployment() client.Object {
 	}
 
 	annotations := c.cfg.DexConfig.RequiredAnnotations()
+	for k, v := range c.cfg.TrustedBundle.HashAnnotations() {
+		annotations[k] = v
+	}
 	annotations[c.cfg.TLSKeyPair.HashAnnotationKey()] = c.cfg.TLSKeyPair.HashAnnotationValue()
 
 	// UID and GID 1001:1001 are used in dex Dockerfile.
@@ -256,10 +260,10 @@ func (c *dexComponent) deployment() client.Object {
 									ContainerPort: DexPort,
 								},
 							},
-							VolumeMounts: append(c.cfg.DexConfig.RequiredVolumeMounts(), c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType())),
+							VolumeMounts: append(c.cfg.DexConfig.RequiredVolumeMounts(), c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()), c.cfg.TrustedBundle.VolumeMount(c.SupportedOSType())),
 						},
 					},
-					Volumes: append(c.cfg.DexConfig.RequiredVolumes(), c.cfg.TLSKeyPair.Volume()),
+					Volumes: append(c.cfg.DexConfig.RequiredVolumes(), c.cfg.TLSKeyPair.Volume(), trustedBundleVolume(c.cfg.TrustedBundle)),
 				},
 			},
 		},

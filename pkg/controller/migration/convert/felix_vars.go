@@ -215,6 +215,13 @@ func convert(t interface{}, str string) (interface{}, error) {
 		}
 		return &ports, nil
 
+	case *numorstring.Port:
+		v, err := numorstring.PortFromString(str)
+		if err != nil {
+			return nil, err
+		}
+		return &v, nil
+
 	case *metav1.Duration:
 		d, err := time.ParseDuration(str)
 		if err != nil {

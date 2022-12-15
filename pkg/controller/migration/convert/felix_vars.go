@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tigera/operator/pkg/controller/migration/convert/numorstring"
+	"github.com/tigera/api/pkg/lib/numorstring"
 
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

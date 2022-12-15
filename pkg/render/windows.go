@@ -24,6 +24,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
@@ -153,6 +154,10 @@ func (c *windowsComponent) windowsUpgradeDaemonset() *appsv1.DaemonSet {
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": common.CalicoWindowsUpgradeResourceName}},
 			Template: *podTemplate,
 		},
+	}
+
+	if overrides := c.cfg.Installation.CalicoWindowsUpgradeDaemonSet; overrides != nil {
+		rcomp.ApplyDaemonSetOverrides(ds, overrides)
 	}
 
 	return ds

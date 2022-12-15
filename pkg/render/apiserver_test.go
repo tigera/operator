@@ -1330,6 +1330,11 @@ var (
 			},
 			Verbs: []string{"get"},
 		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"services"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
 	}
 	networkAdminPolicyRules = []rbacv1.PolicyRule{
 		{
@@ -1437,12 +1442,15 @@ var (
 			Verbs: []string{"get"},
 		},
 		{
-			APIGroups: []string{"operator.tigera.io"},
-			Resources: []string{"applicationlayers"},
-			ResourceNames: []string{
-				"tigera-secure",
-			},
-			Verbs: []string{"get", "update", "patch", "delete", "create"},
+			APIGroups:     []string{"operator.tigera.io"},
+			Resources:     []string{"applicationlayers"},
+			ResourceNames: []string{"tigera-secure"},
+			Verbs:         []string{"get", "update", "patch", "create"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"services"},
+			Verbs:     []string{"get", "list", "watch"},
 		},
 	}
 )

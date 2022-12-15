@@ -1465,6 +1465,12 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			Verbs:         []string{"*"},
 			ResourceNames: []string{"user-settings"},
 		},
+		// Allow the user to read services to configure WAF.
+		{
+			APIGroups: []string{""},
+			Resources: []string{"services"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
 	}
 
 	// Privileges for lma.tigera.io have no effect on managed clusters.
@@ -1612,7 +1618,13 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 			APIGroups:     []string{"operator.tigera.io"},
 			Resources:     []string{"applicationlayers"},
 			ResourceNames: []string{"tigera-secure"},
-			Verbs:         []string{"get", "update", "patch", "delete", "create"},
+			Verbs:         []string{"get", "update", "patch", "create"},
+		},
+		// Allow the user to read services to configure WAF.
+		{
+			APIGroups: []string{""},
+			Resources: []string{"services"},
+			Verbs:     []string{"get", "list", "watch"},
 		},
 	}
 

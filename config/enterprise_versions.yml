@@ -33,6 +33,9 @@ components:
   es-proxy:
     image: tigera/es-proxy
     version: master
+  linseed:
+    image: tigera/linseed
+    version: master
   es-gateway:
     image: tigera/es-gateway
     version: master

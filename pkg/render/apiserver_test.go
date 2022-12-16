@@ -1330,6 +1330,11 @@ var (
 			},
 			Verbs: []string{"get"},
 		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"services"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
 	}
 	networkAdminPolicyRules = []rbacv1.PolicyRule{
 		{
@@ -1435,6 +1440,17 @@ var (
 				"flows", "audit*", "l7", "events", "dns", "kibana_login", "elasticsearch_superuser",
 			},
 			Verbs: []string{"get"},
+		},
+		{
+			APIGroups:     []string{"operator.tigera.io"},
+			Resources:     []string{"applicationlayers"},
+			ResourceNames: []string{"tigera-secure"},
+			Verbs:         []string{"get", "update", "patch", "create"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"services"},
+			Verbs:     []string{"get", "list", "watch"},
 		},
 	}
 )

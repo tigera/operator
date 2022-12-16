@@ -166,15 +166,16 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 			}
 			status, egw := getCumulativeEgressGatewayStatus(egws)
 			if !status {
-				r.status.SetDegraded(fmt.Sprintf("Error reconciling Egress Gateway resource. Name=%s Namespace=%s", egw.Name, egw.Namespace),
-					getDegradedMsg(egw))
+				r.status.SetDegraded(operatorv1.ResourceCreateError,
+					fmt.Sprintf("Error reconciling Egress Gateway resource. Name=%s Namespace=%s", egw.Name, egw.Namespace),
+					fmt.Errorf("%s", getDegradedMsg(egw)), reqLogger)
 				return reconcile.Result{}, nil
 			}
 			r.status.ClearDegraded()
 			return reconcile.Result{}, nil
 		}
 		reqLogger.Error(err, "Error querying for Egress Gateway")
-		r.status.SetDegraded("Error querying for Egress Gateway", err.Error())
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying for Egress Gateway", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -203,14 +204,14 @@ func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.Error(err, "Installation not found")
-			r.status.SetDegraded("Installation not found", err.Error())
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
 			// Set the EGW resource's condition to Degraded.
 			setDegraded(r.client, ctx, egw, reconcileErr,
 				fmt.Sprintf("Installation not found Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
 			return reconcile.Result{}, nil
 		}
 		reqLogger.Error(err, "Error querying installation")
-		r.status.SetDegraded("Error querying installation", err.Error())
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
 		setDegraded(r.client, ctx, egw, reconcileErr,
 			fmt.Sprintf("Error querying installation Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
 		return reconcile.Result{}, err
@@ -218,7 +219,7 @@ func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.
 
 	if variant != operatorv1.TigeraSecureEnterprise {
 		reqLogger.Error(err, fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise))
-		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), "")
+		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), nil, reqLogger)
 		setDegraded(r.client, ctx, egw, reconcileErr,
 			fmt.Sprintf("Waiting for network to be %s Name = %s, Namespace = %s", operatorv1.TigeraSecureEnterprise, egw.Name, egw.Namespace))
 		return reconcile.Result{}, nil
@@ -230,7 +231,8 @@ func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.
 	err = validateEgressGateway(ctx, r.client, egw)
 	if err != nil {
 		reqLogger.Error(err, fmt.Sprintf("Error validating Egress Gateway Name = %s, Namespace = %s", egw.Name, egw.Namespace))
-		r.status.SetDegraded(fmt.Sprintf("Error validating egress gateway Name = %s, Namespace = %s", egw.Name, egw.Namespace), err.Error())
+		r.status.SetDegraded(operatorv1.ResourceValidationError,
+			fmt.Sprintf("Error validating egress gateway Name = %s, Namespace = %s", egw.Name, egw.Namespace), err, reqLogger)
 		setDegraded(r.client, ctx, egw, reconcileErr,
 			fmt.Sprintf("Error validating egress gateway Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
 		return reconcile.Result{}, err
@@ -239,7 +241,7 @@ func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
 	if err != nil {
 		reqLogger.Error(err, "Error retrieving pull secrets")
-		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		setDegraded(r.client, ctx, egw, reconcileErr,
 			fmt.Sprintf("Error retrieving pull secrets Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
 		return reconcile.Result{}, err
@@ -249,7 +251,7 @@ func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.
 	fc := &crdv1.FelixConfiguration{}
 	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 	if err != nil && !errors.IsNotFound(err) {
-		r.status.SetDegraded("Error reading FelixConfiguration", err.Error())
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading FelixConfiguration", err, reqLogger)
 		setDegraded(r.client, ctx, egw, reconcileErr,
 			fmt.Sprintf("Error reading felix configuration Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
 		return reconcile.Result{}, err
@@ -278,7 +280,7 @@ func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
 		reqLogger.Error(err, "Error with images from ImageSet")
-		r.status.SetDegraded("Error with images from ImageSet", err.Error())
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		setDegraded(r.client, ctx, egw, reconcileErr,
 			fmt.Sprintf("Error with images from ImageSet Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
 		return reconcile.Result{}, err
@@ -286,7 +288,8 @@ func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.
 
 	if err = ch.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 		reqLogger.Error(err, fmt.Sprintf("Error creating / updating resource: Name = %s, Namespace = %s", egw.Name, egw.Namespace))
-		r.status.SetDegraded(fmt.Sprintf("Error creating / updating resource: Name = %s, Namespace = %s", egw.Name, egw.Namespace), err.Error())
+		r.status.SetDegraded(operatorv1.ResourceUpdateError,
+			fmt.Sprintf("Error creating / updating resource: Name = %s, Namespace = %s", egw.Name, egw.Namespace), err, reqLogger)
 		setDegraded(r.client, ctx, egw, reconcileErr,
 			fmt.Sprintf("Error creating / updating resource Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
 		return reconcile.Result{}, err
@@ -310,8 +313,9 @@ func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.
 	// Get the cumulative status of all Egress Gateway resources.
 	status, degradedEGW := getCumulativeEgressGatewayStatus(egws)
 	if !status && degradedEGW != nil {
-		r.status.SetDegraded(fmt.Sprintf("Error reconciling Egress Gateway resource. Name=%s Namespace=%s", degradedEGW.Name, degradedEGW.Namespace),
-			getDegradedMsg(degradedEGW))
+		r.status.SetDegraded(operatorv1.ResourceCreateError,
+			fmt.Sprintf("Error reconciling Egress Gateway resource. Name=%s Namespace=%s", degradedEGW.Name, degradedEGW.Namespace),
+			fmt.Errorf("%s", getDegradedMsg(degradedEGW)), reqLogger)
 		return reconcile.Result{}, nil
 	}
 

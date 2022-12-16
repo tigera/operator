@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -649,5 +649,137 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(fillDefaults(instance)).NotTo(HaveOccurred())
 		err := validateCustomResource(instance)
 		Expect(err).NotTo(HaveOccurred())
+	})
+
+	Describe("validate CalicoNodeDaemonSet", func() {
+		It("should return nil when it is empty", func() {
+			instance.Spec.CalicoNodeDaemonSet = &operator.CalicoNodeDaemonSet{}
+			err := validateCustomResource(instance)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return an error if it is invalid", func() {
+			instance.Spec.CalicoNodeDaemonSet = &operator.CalicoNodeDaemonSet{
+				Metadata: &operator.Metadata{
+					Labels: map[string]string{
+						"NoUppercaseOrSpecialCharsLike=Equals":    "b",
+						"WowNoUppercaseOrSpecialCharsLike=Equals": "b",
+					},
+					Annotations: map[string]string{
+						"AnnotNoUppercaseOrSpecialCharsLike=Equals": "bar",
+					},
+				},
+			}
+			err := validateCustomResource(instance)
+			Expect(err).To(HaveOccurred())
+
+			var invalidMinReadySeconds int32 = -1
+			instance.Spec.CalicoNodeDaemonSet = &operator.CalicoNodeDaemonSet{
+				Spec: &operator.CalicoNodeDaemonSetSpec{
+					MinReadySeconds: &invalidMinReadySeconds,
+				},
+			}
+			err = validateCustomResource(instance)
+			Expect(err).To(HaveOccurred())
+		})
+	})
+
+	Describe("validate CalicoKubeControllersDeployment", func() {
+		It("should return nil when it is empty", func() {
+			instance.Spec.CalicoKubeControllersDeployment = &operator.CalicoKubeControllersDeployment{}
+			err := validateCustomResource(instance)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return an error if it is invalid", func() {
+			instance.Spec.CalicoKubeControllersDeployment = &operator.CalicoKubeControllersDeployment{
+				Metadata: &operator.Metadata{
+					Labels: map[string]string{
+						"NoUppercaseOrSpecialCharsLike=Equals":    "b",
+						"WowNoUppercaseOrSpecialCharsLike=Equals": "b",
+					},
+					Annotations: map[string]string{
+						"AnnotNoUppercaseOrSpecialCharsLike=Equals": "bar",
+					},
+				},
+			}
+			err := validateCustomResource(instance)
+			Expect(err).To(HaveOccurred())
+
+			var invalidMinReadySeconds int32 = -1
+			instance.Spec.CalicoKubeControllersDeployment = &operator.CalicoKubeControllersDeployment{
+				Spec: &operator.CalicoKubeControllersDeploymentSpec{
+					MinReadySeconds: &invalidMinReadySeconds,
+				},
+			}
+			err = validateCustomResource(instance)
+			Expect(err).To(HaveOccurred())
+		})
+	})
+
+	Describe("validate TyphaDeployment", func() {
+		It("should return nil when it is empty", func() {
+			instance.Spec.TyphaDeployment = &operator.TyphaDeployment{}
+			err := validateCustomResource(instance)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return an error if it is invalid", func() {
+			instance.Spec.TyphaDeployment = &operator.TyphaDeployment{
+				Metadata: &operator.Metadata{
+					Labels: map[string]string{
+						"NoUppercaseOrSpecialCharsLike=Equals":    "b",
+						"WowNoUppercaseOrSpecialCharsLike=Equals": "b",
+					},
+					Annotations: map[string]string{
+						"AnnotNoUppercaseOrSpecialCharsLike=Equals": "bar",
+					},
+				},
+			}
+			err := validateCustomResource(instance)
+			Expect(err).To(HaveOccurred())
+
+			var invalidMinReadySeconds int32 = -1
+			instance.Spec.TyphaDeployment = &operator.TyphaDeployment{
+				Spec: &operator.TyphaDeploymentSpec{
+					MinReadySeconds: &invalidMinReadySeconds,
+				},
+			}
+			err = validateCustomResource(instance)
+			Expect(err).To(HaveOccurred())
+		})
+	})
+
+	Describe("validate CalicoWindowsUpgradeDaemonSet", func() {
+		It("should return nil when it is empty", func() {
+			instance.Spec.CalicoWindowsUpgradeDaemonSet = &operator.CalicoWindowsUpgradeDaemonSet{}
+			err := validateCustomResource(instance)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return an error if it is invalid", func() {
+			instance.Spec.CalicoWindowsUpgradeDaemonSet = &operator.CalicoWindowsUpgradeDaemonSet{
+				Metadata: &operator.Metadata{
+					Labels: map[string]string{
+						"NoUppercaseOrSpecialCharsLike=Equals":    "b",
+						"WowNoUppercaseOrSpecialCharsLike=Equals": "b",
+					},
+					Annotations: map[string]string{
+						"AnnotNoUppercaseOrSpecialCharsLike=Equals": "bar",
+					},
+				},
+			}
+			err := validateCustomResource(instance)
+			Expect(err).To(HaveOccurred())
+
+			var invalidMinReadySeconds int32 = -1
+			instance.Spec.CalicoWindowsUpgradeDaemonSet = &operator.CalicoWindowsUpgradeDaemonSet{
+				Spec: &operator.CalicoWindowsUpgradeDaemonSetSpec{
+					MinReadySeconds: &invalidMinReadySeconds,
+				},
+			}
+			err = validateCustomResource(instance)
+			Expect(err).To(HaveOccurred())
+		})
 	})
 })

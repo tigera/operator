@@ -20,6 +20,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
+	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	appsv1 "k8s.io/api/apps/v1"
@@ -294,11 +295,17 @@ func (c *csiComponent) csiDaemonset() *appsv1.DaemonSet {
 
 	setNodeCriticalPod(&(dsSpec.Template))
 
-	return &appsv1.DaemonSet{
+	ds := appsv1.DaemonSet{
 		TypeMeta:   typeMeta,
 		ObjectMeta: dsMeta,
 		Spec:       dsSpec,
 	}
+
+	if overrides := c.cfg.Installation.CSINodeDriverDaemonSet; overrides != nil {
+		rcomp.ApplyDaemonSetOverrides(&ds, overrides)
+	}
+
+	return &ds
 }
 
 func (c *csiComponent) serviceAccount() *corev1.ServiceAccount {

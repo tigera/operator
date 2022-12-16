@@ -489,8 +489,9 @@ var _ = Describe("Typha rendering tests", func() {
 
 			d := dResource.(*appsv1.Deployment)
 
-			Expect(d.Labels).To(HaveLen(1))
+			Expect(d.Labels).To(HaveLen(2))
 			Expect(d.Labels["top-level"]).To(Equal("label1"))
+			Expect(d.Labels["k8s-app"]).To(Equal("calico-typha"))
 			Expect(d.Annotations).To(HaveLen(1))
 			Expect(d.Annotations["top-level"]).To(Equal("annot1"))
 
@@ -503,12 +504,10 @@ var _ = Describe("Typha rendering tests", func() {
 				},
 			}))
 
-			// At runtime, the operator will also add some standard labels to the
-			// deployment such as "k8s-app=calico-typha". But the deployment object
-			// produced by the render will have no labels so we expect just the one
-			// provided.
-			Expect(d.Spec.Template.Labels).To(HaveLen(1))
+			// The operator also includes a k8s-app label.
+			Expect(d.Spec.Template.Labels).To(HaveLen(2))
 			Expect(d.Spec.Template.Labels["template-level"]).To(Equal("label2"))
+			Expect(d.Spec.Template.Labels["k8s-app"]).To(Equal("calico-typha"))
 
 			// With the default instance we expect 3 template-level annotations
 			// - 2 added by the default typha render

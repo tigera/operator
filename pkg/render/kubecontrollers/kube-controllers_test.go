@@ -625,25 +625,19 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Expect(depResource).ToNot(BeNil())
 			d := depResource.(*appsv1.Deployment)
 
-			Expect(d.Labels).To(HaveLen(1))
+			Expect(d.Labels).To(HaveLen(2))
 			Expect(d.Labels["top-level"]).To(Equal("label1"))
+			Expect(d.Labels["k8s-app"]).To(Equal("calico-kube-controllers"))
 			Expect(d.Annotations).To(HaveLen(1))
 			Expect(d.Annotations["top-level"]).To(Equal("annot1"))
 
 			Expect(d.Spec.MinReadySeconds).To(Equal(minReadySeconds))
 
-			// At runtime, the operator will also add some standard labels to the
-			// deployment such as "k8s-app=calico-kube-controllers". But the calico-kube-controllers deployment object
-			// produced by the render will have no labels so we expect just the one
-			// provided.
-			Expect(d.Spec.Template.Labels).To(HaveLen(1))
+			Expect(d.Spec.Template.Labels).To(HaveLen(2))
 			Expect(d.Spec.Template.Labels["template-level"]).To(Equal("label2"))
+			Expect(d.Spec.Template.Labels["k8s-app"]).To(Equal("calico-kube-controllers"))
 
-			// With the default instance we expect 3 template-level annotations
-			// - 1 added by the operator by default because TrustedBundle was set on kubecontrollerconfiguration.
-			// - 1 added by the calicoNodeDaemonSet override
-			Expect(d.Spec.Template.Annotations).To(HaveLen(2))
-			Expect(d.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/tigera-ca-private"))
+			Expect(d.Spec.Template.Annotations).To(HaveLen(1))
 			Expect(d.Spec.Template.Annotations["template-level"]).To(Equal("annot2"))
 
 			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))

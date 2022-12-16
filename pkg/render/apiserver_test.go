@@ -956,21 +956,19 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			Expect(ok).To(BeTrue())
 
 			// API server has apiserver: true label
-			Expect(d.Labels).To(HaveLen(2))
+			Expect(d.Labels).To(HaveLen(3))
 			Expect(d.Labels["apiserver"]).To(Equal("true"))
 			Expect(d.Labels["top-level"]).To(Equal("label1"))
+			Expect(d.Labels["k8s-app"]).To(Equal("tigera-apiserver"))
 			Expect(d.Annotations).To(HaveLen(1))
 			Expect(d.Annotations["top-level"]).To(Equal("annot1"))
 
 			Expect(d.Spec.MinReadySeconds).To(Equal(minReadySeconds))
 
-			// At runtime, the operator will also add some standard labels to the
-			// deployment such as "k8s-app=calico-apiserver". But the APIServer
-			// deployment object produced by the render will have no labels so we expect just the one
-			// provided.
-			Expect(d.Spec.Template.Labels).To(HaveLen(2))
+			Expect(d.Spec.Template.Labels).To(HaveLen(3))
 			Expect(d.Spec.Template.Labels["apiserver"]).To(Equal("true"))
 			Expect(d.Spec.Template.Labels["template-level"]).To(Equal("label2"))
+			Expect(d.Spec.Template.Labels["k8s-app"]).To(Equal("tigera-apiserver"))
 
 			// With the default instance we expect 2 template-level annotations
 			// - 1 added by the operator by default
@@ -1733,21 +1731,19 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			Expect(ok).To(BeTrue())
 
 			// API server has apiserver: true label
-			Expect(d.Labels).To(HaveLen(2))
+			Expect(d.Labels).To(HaveLen(3))
 			Expect(d.Labels["apiserver"]).To(Equal("true"))
 			Expect(d.Labels["top-level"]).To(Equal("label1"))
+			Expect(d.Labels["k8s-app"]).To(Equal("calico-apiserver"))
 			Expect(d.Annotations).To(HaveLen(1))
 			Expect(d.Annotations["top-level"]).To(Equal("annot1"))
 
 			Expect(d.Spec.MinReadySeconds).To(Equal(minReadySeconds))
 
-			// At runtime, the operator will also add some standard labels to the
-			// deployment such as "k8s-app=calico-apiserver". But the APIServer
-			// deployment object produced by the render will have no labels so we expect just the one
-			// provided.
-			Expect(d.Spec.Template.Labels).To(HaveLen(2))
+			Expect(d.Spec.Template.Labels).To(HaveLen(3))
 			Expect(d.Spec.Template.Labels["apiserver"]).To(Equal("true"))
 			Expect(d.Spec.Template.Labels["template-level"]).To(Equal("label2"))
+			Expect(d.Spec.Template.Labels["k8s-app"]).To(Equal("calico-apiserver"))
 
 			// With the default instance we expect 2 template-level annotations
 			// - 1 added by the operator by default

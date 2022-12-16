@@ -3049,12 +3049,9 @@ var _ = Describe("Node rendering tests", func() {
 
 			Expect(ds.Spec.MinReadySeconds).To(Equal(minReadySeconds))
 
-			// At runtime, the operator will also add some standard labels to the
-			// daemonset such as "k8s-app=calico-node". But the calico-node daemonset object
-			// produced by the render will have no labels so we expect just the one
-			// provided.
-			Expect(ds.Spec.Template.Labels).To(HaveLen(1))
+			Expect(ds.Spec.Template.Labels).To(HaveLen(2))
 			Expect(ds.Spec.Template.Labels["template-level"]).To(Equal("label2"))
+			Expect(ds.Spec.Template.Labels["k8s-app"]).To(Equal("calico-node"))
 
 			// With the default instance we expect 3 template-level annotations
 			// - 2 added by the operator by default

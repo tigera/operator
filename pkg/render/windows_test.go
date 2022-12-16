@@ -169,12 +169,9 @@ var _ = Describe("Windows-upgrade rendering tests", func() {
 
 			Expect(d.Spec.MinReadySeconds).To(Equal(minReadySeconds))
 
-			// At runtime, the operator will also add some standard labels to the
-			// deployment such as "k8s-app=calico-windows-upgrade". But the
-			// daemonset object produced by the render will have no labels so we expect just the one
-			// provided.
-			Expect(d.Spec.Template.Labels).To(HaveLen(1))
+			Expect(d.Spec.Template.Labels).To(HaveLen(2))
 			Expect(d.Spec.Template.Labels["template-level"]).To(Equal("label2"))
+			Expect(d.Spec.Template.Labels["k8s-app"]).To(Equal("calico-windows-upgrade"))
 
 			// With the default instance we expect 1 template-level annotations
 			// - 1 added by the calicoNodeDaemonSet override

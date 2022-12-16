@@ -99,7 +99,7 @@ func (c *component) egwDeployment() *appsv1.Deployment {
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: c.config.EgressGW.Spec.Replicas,
-			Selector: &metav1.LabelSelector{MatchLabels: c.config.EgressGW.Spec.Template.Metadata.Labels},
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": c.config.EgressGW.Name}},
 			Template: *c.deploymentPodTemplate(),
 		},
 	}

@@ -190,11 +190,14 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 }
 
 func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.EgressGateway, reqLogger logr.Logger) (reconcile.Result, error) {
+
+	defer func() {
+		if err := r.client.Status().Update(ctx, egw); err != nil {
+			reqLogger.Error(err, "Error updating status")
+		}
+	}()
 	// Set the condition to progressing
-	perr := setProgressing(r.client, ctx, egw, string(operatorv1.ResourceNotReady), fmt.Sprintf("Name = %s, Namespace = %s", egw.Name, egw.Namespace))
-	if perr != nil {
-		reqLogger.Error(perr, "Error updating status")
-	}
+	setProgressing(r.client, ctx, egw, string(operatorv1.ResourceNotReady), fmt.Sprintf("Name = %s, Namespace = %s", egw.Name, egw.Namespace))
 	reconcileErr := "Error_reconciling_Egress_Gateway"
 	variant, installation, err := utils.GetInstallation(ctx, r.client)
 	if err != nil {
@@ -202,31 +205,22 @@ func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.
 			reqLogger.Error(err, "Installation not found")
 			r.status.SetDegraded("Installation not found", err.Error())
 			// Set the EGW resource's condition to Degraded.
-			perr := setDegraded(r.client, ctx, egw, reconcileErr,
+			setDegraded(r.client, ctx, egw, reconcileErr,
 				fmt.Sprintf("Installation not found Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
-			if perr != nil {
-				reqLogger.Error(perr, "Error updating status")
-			}
 			return reconcile.Result{}, nil
 		}
 		reqLogger.Error(err, "Error querying installation")
 		r.status.SetDegraded("Error querying installation", err.Error())
-		perr := setDegraded(r.client, ctx, egw, reconcileErr,
+		setDegraded(r.client, ctx, egw, reconcileErr,
 			fmt.Sprintf("Error querying installation Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
-		if perr != nil {
-			reqLogger.Error(perr, "Error updating status")
-		}
 		return reconcile.Result{}, err
 	}
 
 	if variant != operatorv1.TigeraSecureEnterprise {
 		reqLogger.Error(err, fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise))
 		r.status.SetDegraded(fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), "")
-		perr := setDegraded(r.client, ctx, egw, reconcileErr,
+		setDegraded(r.client, ctx, egw, reconcileErr,
 			fmt.Sprintf("Waiting for network to be %s Name = %s, Namespace = %s", operatorv1.TigeraSecureEnterprise, egw.Name, egw.Namespace))
-		if perr != nil {
-			reqLogger.Error(perr, "Error updating status")
-		}
 		return reconcile.Result{}, nil
 	}
 
@@ -237,11 +231,8 @@ func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.
 	if err != nil {
 		reqLogger.Error(err, fmt.Sprintf("Error validating Egress Gateway Name = %s, Namespace = %s", egw.Name, egw.Namespace))
 		r.status.SetDegraded(fmt.Sprintf("Error validating egress gateway Name = %s, Namespace = %s", egw.Name, egw.Namespace), err.Error())
-		perr := setDegraded(r.client, ctx, egw, reconcileErr,
+		setDegraded(r.client, ctx, egw, reconcileErr,
 			fmt.Sprintf("Error validating egress gateway Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
-		if perr != nil {
-			reqLogger.Error(perr, "Error updating status")
-		}
 		return reconcile.Result{}, err
 	}
 
@@ -249,11 +240,8 @@ func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.
 	if err != nil {
 		reqLogger.Error(err, "Error retrieving pull secrets")
 		r.status.SetDegraded("Error retrieving pull secrets", err.Error())
-		perr := setDegraded(r.client, ctx, egw, reconcileErr,
+		setDegraded(r.client, ctx, egw, reconcileErr,
 			fmt.Sprintf("Error retrieving pull secrets Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
-		if perr != nil {
-			reqLogger.Error(perr, "Error updating status")
-		}
 		return reconcile.Result{}, err
 	}
 
@@ -262,11 +250,8 @@ func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.
 	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded("Error reading FelixConfiguration", err.Error())
-		perr := setDegraded(r.client, ctx, egw, reconcileErr,
+		setDegraded(r.client, ctx, egw, reconcileErr,
 			fmt.Sprintf("Error reading felix configuration Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
-		if perr != nil {
-			reqLogger.Error(perr, "Error updating status")
-		}
 		return reconcile.Result{}, err
 	}
 
@@ -294,31 +279,23 @@ func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
 		reqLogger.Error(err, "Error with images from ImageSet")
 		r.status.SetDegraded("Error with images from ImageSet", err.Error())
-		perr := setDegraded(r.client, ctx, egw, reconcileErr,
+		setDegraded(r.client, ctx, egw, reconcileErr,
 			fmt.Sprintf("Error with images from ImageSet Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
-		if perr != nil {
-			reqLogger.Error(perr, "Error updating status")
-		}
 		return reconcile.Result{}, err
 	}
 
 	if err = ch.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 		reqLogger.Error(err, fmt.Sprintf("Error creating / updating resource: Name = %s, Namespace = %s", egw.Name, egw.Namespace))
 		r.status.SetDegraded(fmt.Sprintf("Error creating / updating resource: Name = %s, Namespace = %s", egw.Name, egw.Namespace), err.Error())
-		perr := setDegraded(r.client, ctx, egw, reconcileErr,
+		setDegraded(r.client, ctx, egw, reconcileErr,
 			fmt.Sprintf("Error creating / updating resource Name = %s, Namespace = %s, err = %s", egw.Name, egw.Namespace, err.Error()))
-		if perr != nil {
-			reqLogger.Error(perr, "Error updating status")
-		}
 		return reconcile.Result{}, err
 	}
+
+	setAvailable(r.client, ctx, egw, string(operatorv1.AllObjectsAvailable), "")
 
 	// Update the status of this CR.
 	egw.Status.State = operatorv1.TigeraStatusReady
-	if err = setAvailable(r.client, ctx, egw, string(operatorv1.AllObjectsAvailable), ""); err != nil {
-		return reconcile.Result{}, err
-	}
-
 	// After the resource has been created/updated, Tigerastatus needs to be set by taking the cumulative status of the
 	// available EGW resources. Lets say we create 2 EGW resources Red, Blue. Both are degraded. Now lets create 3rd resource
 	// yellow. Though yellow is reconciled and rendered successfully, Tigerastatus should still be degraded as Red, Blue are
@@ -331,10 +308,10 @@ func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.
 	}
 
 	// Get the cumulative status of all Egress Gateway resources.
-	status, egw := getCumulativeEgressGatewayStatus(egws)
-	if !status {
-		r.status.SetDegraded(fmt.Sprintf("Error reconciling Egress Gateway resource. Name=%s Namespace=%s", egw.Name, egw.Namespace),
-			getDegradedMsg(egw))
+	status, degradedEGW := getCumulativeEgressGatewayStatus(egws)
+	if !status && degradedEGW != nil {
+		r.status.SetDegraded(fmt.Sprintf("Error reconciling Egress Gateway resource. Name=%s Namespace=%s", degradedEGW.Name, degradedEGW.Namespace),
+			getDegradedMsg(degradedEGW))
 		return reconcile.Result{}, nil
 	}
 
@@ -584,58 +561,38 @@ func getCumulativeEgressGatewayStatus(egws []operatorv1.EgressGateway) (bool, *o
 	return true, nil
 }
 
-func setDegraded(cli client.Client, ctx context.Context, egw *operatorv1.EgressGateway, reason, msg string) error {
-	for _, cond := range egw.Status.Conditions {
-		if cond.Type == string(operatorv1.ComponentProgressing) || cond.Type == string(operatorv1.ComponentAvailable) {
-			cond.Status = metav1.ConditionFalse
-			cond.Reason = string(operatorv1.AllObjectsAvailable)
-			cond.Message = ""
-		}
-	}
-	return updateEgwStatusConditions(cli, ctx, egw, operatorv1.ComponentDegraded, operatorv1.ConditionTrue, reason, msg)
+func setDegraded(cli client.Client, ctx context.Context, egw *operatorv1.EgressGateway, reason, msg string) {
+	updateEgwStatusConditions(cli, ctx, egw, operatorv1.ComponentDegraded, metav1.ConditionTrue, reason, msg)
 }
 
-func setProgressing(cli client.Client, ctx context.Context, egw *operatorv1.EgressGateway, reason, msg string) error {
-	for _, cond := range egw.Status.Conditions {
-		if cond.Type == string(operatorv1.ComponentDegraded) || cond.Type == string(operatorv1.ComponentAvailable) {
-			cond.Status = metav1.ConditionFalse
-			cond.Reason = string(operatorv1.AllObjectsAvailable)
-			cond.Message = ""
-		}
-	}
-	return updateEgwStatusConditions(cli, ctx, egw, operatorv1.ComponentProgressing, operatorv1.ConditionTrue, reason, msg)
+func setProgressing(cli client.Client, ctx context.Context, egw *operatorv1.EgressGateway, reason, msg string) {
+	updateEgwStatusConditions(cli, ctx, egw, operatorv1.ComponentProgressing, metav1.ConditionTrue, reason, msg)
 }
 
-func setAvailable(cli client.Client, ctx context.Context, egw *operatorv1.EgressGateway, reason, msg string) error {
-	for _, cond := range egw.Status.Conditions {
-		if cond.Type == string(operatorv1.ComponentProgressing) || cond.Type == string(operatorv1.ComponentDegraded) {
-			cond.Status = metav1.ConditionFalse
-			cond.Reason = string(operatorv1.AllObjectsAvailable)
-			cond.Message = ""
-		}
-	}
-	return updateEgwStatusConditions(cli, ctx, egw, operatorv1.ComponentAvailable, operatorv1.ConditionTrue, reason, msg)
+func setAvailable(cli client.Client, ctx context.Context, egw *operatorv1.EgressGateway, reason, msg string) {
+	updateEgwStatusConditions(cli, ctx, egw, operatorv1.ComponentAvailable, metav1.ConditionTrue, reason, msg)
 }
 
-func updateEgwStatusConditions(cli client.Client, ctx context.Context, egw *operatorv1.EgressGateway, ctype operatorv1.StatusConditionType, status operatorv1.ConditionStatus, reason, msg string) error {
-	cstatus := metav1.ConditionUnknown
-	if status == operatorv1.ConditionTrue {
-		cstatus = metav1.ConditionTrue
-	} else if status == operatorv1.ConditionFalse {
-		cstatus = metav1.ConditionFalse
-	}
-	for _, cond := range egw.Status.Conditions {
+func updateEgwStatusConditions(cli client.Client, ctx context.Context, egw *operatorv1.EgressGateway, ctype operatorv1.StatusConditionType, status metav1.ConditionStatus, reason, msg string) {
+	found := false
+	for idx, cond := range egw.Status.Conditions {
 		if cond.Type == string(ctype) {
-			cond.Status = cstatus
+			cond.Status = status
 			cond.Reason = reason
 			cond.Message = msg
-			cond.LastTransitionTime = metav1.NewTime(time.Now())
-			return cli.Status().Update(ctx, egw)
+			found = true
+		} else {
+			cond.Status = metav1.ConditionFalse
+			cond.Reason = string(operatorv1.Unknown)
+			cond.Message = ""
 		}
+		cond.LastTransitionTime = metav1.NewTime(time.Now())
+		egw.Status.Conditions[idx] = cond
 	}
-	condition := metav1.Condition{Type: string(ctype), Status: cstatus, Reason: reason, Message: msg, LastTransitionTime: metav1.NewTime(time.Now())}
-	egw.Status.Conditions = append(egw.Status.Conditions, condition)
-	return cli.Status().Update(ctx, egw)
+	if !found {
+		condition := metav1.Condition{Type: string(ctype), Status: status, Reason: reason, Message: msg, LastTransitionTime: metav1.NewTime(time.Now())}
+		egw.Status.Conditions = append(egw.Status.Conditions, condition)
+	}
 }
 
 func getDegradedMsg(egw *operatorv1.EgressGateway) string {

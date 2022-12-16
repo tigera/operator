@@ -55,14 +55,14 @@ type resourceTestObj struct {
 	f    func(resource runtime.Object)
 }
 
-var _ = Describe("ES Gateway rendering tests", func() {
-	Context("ES Gateway deployment", func() {
+var _ = Describe("Linseed rendering tests", func() {
+	Context("Linseed deployment", func() {
 		var installation *operatorv1.InstallationSpec
 		var replicas int32
 		var cfg *Config
 		clusterDomain := "cluster.local"
-		expectedPolicy := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/es-gateway.json")
-		expectedPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/es-gateway_ocp.json")
+		expectedPolicy := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/linseed.json")
+		expectedPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/linseed_ocp.json")
 
 		BeforeEach(func() {
 			installation = &operatorv1.InstallationSpec{
@@ -77,19 +77,13 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				PullSecrets: []*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				},
-				ESGatewayKeyPair: kp,
-				TrustedBundle:    bundle,
-				KubeControllersUserSecrets: []*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersUserSecret, Namespace: common.OperatorNamespace()}},
-					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersVerificationUserSecret, Namespace: render.ElasticsearchNamespace}},
-					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersSecureUserSecret, Namespace: render.ElasticsearchNamespace}},
-				},
-				ClusterDomain:   clusterDomain,
-				EsAdminUserName: "elastic",
+				KeyPair:       kp,
+				TrustedBundle: bundle,
+				ClusterDomain: clusterDomain,
 			}
 		})
 
-		It("should render an ES Gateway deployment and all supporting resources", func() {
+		It("should render an Linseed deployment and all supporting resources", func() {
 			expectedResources := []resourceTestObj{
 				{PolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 				{kubecontrollers.ElasticsearchKubeControllersUserSecret, common.OperatorNamespace(), &corev1.Secret{}, nil},
@@ -103,13 +97,13 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				{relasticsearch.PublicCertSecret, common.OperatorNamespace(), &corev1.Secret{}, nil},
 			}
 
-			component := EsGateway(cfg)
+			component := Linseed(cfg)
 
 			createResources, _ := component.Objects()
 			compareResources(createResources, expectedResources)
 		})
 
-		It("should render an ES Gateway deployment and all supporting resources when CertificateManagement is enabled", func() {
+		It("should render an Linseed deployment and all supporting resources when CertificateManagement is enabled", func() {
 			secret, err := certificatemanagement.CreateSelfSignedSecret("", "", "", nil)
 			Expect(err).NotTo(HaveOccurred())
 			installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: secret.Data[corev1.TLSCertKey]}
@@ -126,7 +120,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				{relasticsearch.PublicCertSecret, common.OperatorNamespace(), &corev1.Secret{}, nil},
 			}
 
-			component := EsGateway(cfg)
+			component := Linseed(cfg)
 
 			createResources, _ := component.Objects()
 			compareResources(createResources, expectedResources)
@@ -136,7 +130,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 			var replicas int32 = 1
 			installation.ControlPlaneReplicas = &replicas
 
-			component := EsGateway(cfg)
+			component := Linseed(cfg)
 
 			resources, _ := component.Objects()
 			deploy, ok := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -148,7 +142,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 			var replicas int32 = 2
 			installation.ControlPlaneReplicas = &replicas
 
-			component := EsGateway(cfg)
+			component := Linseed(cfg)
 
 			resources, _ := component.Objects()
 			deploy, ok := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -160,7 +154,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 		It("should apply controlPlaneNodeSelector correctly", func() {
 			installation.ControlPlaneNodeSelector = map[string]string{"foo": "bar"}
 
-			component := EsGateway(cfg)
+			component := Linseed(cfg)
 
 			resources, _ := component.Objects()
 			d, ok := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -176,7 +170,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 			}
 
 			installation.ControlPlaneTolerations = []corev1.Toleration{t}
-			component := EsGateway(cfg)
+			component := Linseed(cfg)
 
 			resources, _ := component.Objects()
 			d, ok := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -185,7 +179,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 		})
 
 		Context("allow-tigera rendering", func() {
-			policyName := types.NamespacedName{Name: "allow-tigera.es-gateway-access", Namespace: "tigera-elasticsearch"}
+			policyName := types.NamespacedName{Name: "allow-tigera.linseed-access", Namespace: "tigera-elasticsearch"}
 
 			getExpectedPolicy := func(scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
 				if scenario.ManagedCluster {
@@ -202,14 +196,14 @@ var _ = Describe("ES Gateway rendering tests", func() {
 					} else {
 						cfg.Installation.KubernetesProvider = operatorv1.ProviderNone
 					}
-					component := EsGateway(cfg)
+					component := Linseed(cfg)
 					resources, _ := component.Objects()
 
 					policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
 					expectedPolicy := getExpectedPolicy(scenario)
 					Expect(policy).To(Equal(expectedPolicy))
 				},
-				// ES Gateway only renders in the presence of an LogStorage CR and absence of a ManagementClusterConnection CR, therefore
+				// Linseed only renders in the presence of an LogStorage CR and absence of a ManagementClusterConnection CR, therefore
 				// does not have a config option for managed clusters.
 				Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
 				Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
@@ -219,26 +213,20 @@ var _ = Describe("ES Gateway rendering tests", func() {
 			kp, bundle := getTLS(installation)
 			enabled := operatorv1.FIPSModeEnabled
 			installation.FIPSMode = &enabled
-			component := EsGateway(&Config{
+			component := Linseed(&Config{
 				Installation: installation,
 				PullSecrets: []*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				},
-				ESGatewayKeyPair: kp,
-				TrustedBundle:    bundle,
-				KubeControllersUserSecrets: []*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersUserSecret, Namespace: common.OperatorNamespace()}},
-					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersVerificationUserSecret, Namespace: render.ElasticsearchNamespace}},
-					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersSecureUserSecret, Namespace: render.ElasticsearchNamespace}},
-				},
-				ClusterDomain:   clusterDomain,
-				EsAdminUserName: "elastic",
+				KeyPair:       kp,
+				TrustedBundle: bundle,
+				ClusterDomain: clusterDomain,
 			})
 
 			resources, _ := component.Objects()
 			d, ok := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(ok).To(BeTrue())
-			Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "ES_GATEWAY_FIPS_MODE_ENABLED", Value: "true"}))
+			Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "LINSEED_FIPS_MODE_ENABLED", Value: "true"}))
 		})
 	})
 })
@@ -249,8 +237,8 @@ func getTLS(installation *operatorv1.InstallationSpec) (certificatemanagement.Ke
 	cli := fake.NewClientBuilder().WithScheme(scheme).Build()
 	certificateManager, err := certificatemanager.Create(cli, installation, dns.DefaultClusterDomain)
 	Expect(err).NotTo(HaveOccurred())
-	esDNSNames := dns.GetServiceDNSNames(render.TigeraElasticsearchGatewaySecret, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
-	gwKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TigeraElasticsearchGatewaySecret, render.ElasticsearchNamespace, esDNSNames)
+	esDNSNames := dns.GetServiceDNSNames(render.TigeraLinseedSecret, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
+	gwKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TigeraLinseedSecret, render.ElasticsearchNamespace, esDNSNames)
 	Expect(err).NotTo(HaveOccurred())
 	trustedBundle := certificateManager.CreateTrustedBundle(gwKeyPair)
 	Expect(cli.Create(context.Background(), certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())

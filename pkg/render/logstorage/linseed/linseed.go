@@ -45,7 +45,7 @@ const (
 	ServiceAccountName         = "linseed"
 	RoleName                   = "linseed"
 	ServiceName                = "linseed"
-	PolicyName                 = networkpolicy.TigeraComponentPolicyPrefix + "es-gateway-access"
+	PolicyName                 = networkpolicy.TigeraComponentPolicyPrefix + "linseed-access"
 	PortName                   = "https"
 	Port                       = 443
 	ElasticsearchHTTPSEndpoint = "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200"
@@ -310,7 +310,7 @@ func (e *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 	}...)
 
 	// Ingress needs to be allowed from all clients.
-	esgatewayIngressDestinationEntityRule := v3.EntityRule{
+	linseedIngressDestinationEntityRule := v3.EntityRule{
 		Ports: networkpolicy.Ports(Port),
 	}
 	return &v3.NetworkPolicy{
@@ -329,85 +329,85 @@ func (e *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
 					Source:      render.FluentdSourceEntityRule,
-					Destination: esgatewayIngressDestinationEntityRule,
+					Destination: linseedIngressDestinationEntityRule,
 				},
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
 					Source:      render.EKSLogForwarderEntityRule,
-					Destination: esgatewayIngressDestinationEntityRule,
+					Destination: linseedIngressDestinationEntityRule,
 				},
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
 					Source:      render.IntrusionDetectionInstallerSourceEntityRule,
-					Destination: esgatewayIngressDestinationEntityRule,
+					Destination: linseedIngressDestinationEntityRule,
 				},
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
 					Source:      render.ESCuratorSourceEntityRule,
-					Destination: esgatewayIngressDestinationEntityRule,
+					Destination: linseedIngressDestinationEntityRule,
 				},
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
 					Source:      render.ManagerSourceEntityRule,
-					Destination: esgatewayIngressDestinationEntityRule,
+					Destination: linseedIngressDestinationEntityRule,
 				},
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
 					Source:      render.ComplianceBenchmarkerSourceEntityRule,
-					Destination: esgatewayIngressDestinationEntityRule,
+					Destination: linseedIngressDestinationEntityRule,
 				},
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
 					Source:      render.ComplianceControllerSourceEntityRule,
-					Destination: esgatewayIngressDestinationEntityRule,
+					Destination: linseedIngressDestinationEntityRule,
 				},
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
 					Source:      render.ComplianceServerSourceEntityRule,
-					Destination: esgatewayIngressDestinationEntityRule,
+					Destination: linseedIngressDestinationEntityRule,
 				},
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
 					Source:      render.ComplianceSnapshotterSourceEntityRule,
-					Destination: esgatewayIngressDestinationEntityRule,
+					Destination: linseedIngressDestinationEntityRule,
 				},
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
 					Source:      render.ComplianceReporterSourceEntityRule,
-					Destination: esgatewayIngressDestinationEntityRule,
+					Destination: linseedIngressDestinationEntityRule,
 				},
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
 					Source:      render.IntrusionDetectionSourceEntityRule,
-					Destination: esgatewayIngressDestinationEntityRule,
+					Destination: linseedIngressDestinationEntityRule,
 				},
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
 					Source:      render.ECKOperatorSourceEntityRule,
-					Destination: esgatewayIngressDestinationEntityRule,
+					Destination: linseedIngressDestinationEntityRule,
 				},
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
 					Source:      esmetrics.ESMetricsSourceEntityRule,
-					Destination: esgatewayIngressDestinationEntityRule,
+					Destination: linseedIngressDestinationEntityRule,
 				},
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
 					Source:      dpi.DPISourceEntityRule,
-					Destination: esgatewayIngressDestinationEntityRule,
+					Destination: linseedIngressDestinationEntityRule,
 				},
 			},
 			Egress: egressRules,

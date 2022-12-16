@@ -325,7 +325,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 
 		It("Should throw an error when ippool is not present", func() {
 			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
-			mockStatus.On("SetDegraded", "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "ippools.crd.projectcalico.org \"ippool-3\" not found").Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "ippools.crd.projectcalico.org \"ippool-3\" not found", mock.Anything, mock.Anything).Return()
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 			var replicas int32 = 2
 			labels := map[string]string{"egress-code": "red"}
@@ -350,7 +350,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 
 		It("Should throw an error when CIDR does not match any IPPool", func() {
 			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
-			mockStatus.On("SetDegraded", "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "IPPool matching CIDR = 2.2.3.0/24 not present").Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "IPPool matching CIDR = 2.2.3.0/24 not present", mock.Anything, mock.Anything).Return()
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 			var replicas int32 = 2
 			labels := map[string]string{"egress-code": "red"}
@@ -375,7 +375,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 
 		It("Should throw an error when ippool name and CIRD do not match", func() {
 			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
-			mockStatus.On("SetDegraded", "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "IPPool CIDR does not match with name").Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "IPPool CIDR does not match with name", mock.Anything, mock.Anything).Return()
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 			var replicas int32 = 2
 			labels := map[string]string{"egress-code": "red"}
@@ -401,7 +401,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 
 		It("Should throw an error when elastic IPs are specified and native IP disabled", func() {
 			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
-			mockStatus.On("SetDegraded", "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "NativeIP should be enabled when elastic IPs are used").Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "NativeIP should be enabled when elastic IPs are used", mock.Anything, mock.Anything).Return()
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 			var replicas int32 = 2
 			labels := map[string]string{"egress-code": "red"}
@@ -428,7 +428,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 
 		It("Should throw an error when native IP is enabled and IPPool CIDR is not backed by aws subnet ID", func() {
 			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
-			mockStatus.On("SetDegraded", "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "AWS subnet ID must be set when NativeIP is enabled").Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "AWS subnet ID must be set when NativeIP is enabled", mock.Anything, mock.Anything)
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 			var replicas int32 = 2
 			nativeIP := operatorv1.NativeIPEnabled
@@ -455,7 +455,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 
 		It("Should throw an error when native IP is enabled and IPPool name is not backed by aws subnet ID", func() {
 			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
-			mockStatus.On("SetDegraded", "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "AWS subnet ID must be set when NativeIP is enabled").Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "AWS subnet ID must be set when NativeIP is enabled", mock.Anything, mock.Anything).Return()
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 			var replicas int32 = 2
 			nativeIP := operatorv1.NativeIPEnabled
@@ -482,7 +482,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 
 		It("Should throw an error when ICMP timeout is less than ICMP interval", func() {
 			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
-			mockStatus.On("SetDegraded", "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "ICMP probe timeout must be greater than interval").Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "ICMP probe timeout must be greater than interval", mock.Anything, mock.Anything).Return()
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 			var replicas int32 = 2
 			var timeout int32 = 5
@@ -516,7 +516,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 
 		It("Should throw an error when HTTP timeout is less than HTTP interval", func() {
 			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
-			mockStatus.On("SetDegraded", "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "HTTP probe timeout must be greater than interval").Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "HTTP probe timeout must be greater than interval", mock.Anything, mock.Anything).Return()
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 			var replicas int32 = 2
 			var timeout int32 = 5

@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,6 +31,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
+	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 )
@@ -42,6 +43,13 @@ const (
 	TyphaServiceAccountName       = "calico-typha"
 	AppLabelName                  = "k8s-app"
 	TyphaPort               int32 = 5473
+
+	TyphaContainerName = "calico-typha"
+
+	// Note: the grace period was backported to v1.27.  Later versions default to 300, but we set this to 0
+	// to avoid a change to the defaults in the backport.
+	defaultTyphaTerminationGracePeriod = 0
+	shutdownTimeoutEnvVar              = "TYPHA_SHUTDOWNTIMEOUTSECS"
 )
 
 var (
@@ -340,9 +348,13 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 
 // typhaDeployment creates the typha deployment.
 func (c *typhaComponent) typhaDeployment() *appsv1.Deployment {
-	var terminationGracePeriod int64 = 0
+	var terminationGracePeriod int64 = defaultTyphaTerminationGracePeriod
 	var revisionHistoryLimit int32 = 2
+	// Allowing 1 unavailable Typha by default ensures that we make progress in a cluster with constrained scheduling.
 	maxUnavailable := intstr.FromInt(1)
+	// Backport note: in later versions, we set this to 100% to maximise the benefit from Typha's termination
+	// grace period.  When backporting to v1.27 we kept the old default to avoid changing default behaviour
+	// in a patch release.
 	maxSurge := intstr.FromString("25%")
 
 	annotations := c.cfg.TLS.TrustedBundle.HashAnnotations()
@@ -410,7 +422,46 @@ func (c *typhaComponent) typhaDeployment() *appsv1.Deployment {
 	if c.cfg.MigrateNamespaces {
 		migration.SetTyphaAntiAffinity(&d)
 	}
+
+	if overrides := c.cfg.Installation.TyphaDeployment; overrides != nil {
+		rcomp.ApplyDeploymentOverrides(&d, overrides)
+	}
+
+	// ApplyDeploymentOverrides patches some fields that have consistency requirements elsewhere in the spec.
+	// fix up the other places.
+	c.applyPostOverrideFixUps(&d)
+
 	return &d
+}
+
+func (c *typhaComponent) applyPostOverrideFixUps(d *appsv1.Deployment) {
+	// The deployment overrides may update the termination grace period and typha needs to know what the grace
+	// period is in order to calculate its shutdown disconnection rate.  Copy that over to an env var.
+	terminationGracePeriod := *d.Spec.Template.Spec.TerminationGracePeriodSeconds
+	for _, c := range d.Spec.Template.Spec.Containers {
+		if c.Name != TyphaContainerName {
+			continue
+		}
+		for i, e := range c.Env {
+			if e.Name != shutdownTimeoutEnvVar {
+				continue
+			}
+			c.Env[i].Value = fmt.Sprint(terminationGracePeriod)
+			break
+		}
+		break
+	}
+
+	// If the termination grace period has been set to a very high value, make sure the Deployment's progress
+	// deadline takes account of that.
+	minProgressDeadline := int32(terminationGracePeriod * 120 / 100)
+	if minProgressDeadline < 600 {
+		// 600 is the Kubernetes default so let's not go below that.
+		minProgressDeadline = 600
+	}
+	if d.Spec.ProgressDeadlineSeconds == nil || *d.Spec.ProgressDeadlineSeconds < minProgressDeadline {
+		d.Spec.ProgressDeadlineSeconds = &minProgressDeadline
+	}
 }
 
 // volumes creates the typha's volumes.
@@ -444,7 +495,7 @@ func (c *typhaComponent) typhaContainer() corev1.Container {
 	lp, rp := c.livenessReadinessProbes()
 
 	return corev1.Container{
-		Name:           "calico-typha",
+		Name:           TyphaContainerName,
 		Image:          c.typhaImage,
 		Resources:      c.typhaResources(),
 		Env:            c.typhaEnvVars(),
@@ -474,6 +525,7 @@ func (c *typhaComponent) typhaEnvVars() []corev1.EnvVar {
 		{Name: "TYPHA_CAFILE", Value: c.cfg.TLS.TrustedBundle.MountPath()},
 		{Name: "TYPHA_SERVERCERTFILE", Value: c.cfg.TLS.TyphaSecret.VolumeMountCertificateFilePath()},
 		{Name: "TYPHA_SERVERKEYFILE", Value: c.cfg.TLS.TyphaSecret.VolumeMountKeyFilePath()},
+		{Name: shutdownTimeoutEnvVar, Value: fmt.Sprint(defaultTyphaTerminationGracePeriod)}, // May get overridden later.
 	}
 	// We need at least the CN or URISAN set, we depend on the validation
 	// done by the core_controller that the Secret will have one.

@@ -20,11 +20,15 @@ import (
 	"reflect"
 	"sync"
 
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-
 	esv1 "github.com/elastic/cloud-on-k8s/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/pkg/apis/kibana/v1"
 	"github.com/go-logr/logr"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/render"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	batchv1beta "k8s.io/api/batch/v1beta1"
@@ -35,14 +39,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
-
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-
-	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/render"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 type ComponentHandler interface {
@@ -257,16 +254,16 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 
 	// Merge annotations by reconciling the ones that components expect, but leaving everything else
 	// as-is.
-	currentAnnotations := mapExistsOrInitialize(currentMeta.GetAnnotations())
-	desiredAnnotations := mapExistsOrInitialize(desiredMeta.GetAnnotations())
-	mergedAnnotations := mergeMaps(currentAnnotations, desiredAnnotations)
+	currentAnnotations := common.MapExistsOrInitialize(currentMeta.GetAnnotations())
+	desiredAnnotations := common.MapExistsOrInitialize(desiredMeta.GetAnnotations())
+	mergedAnnotations := common.MergeMaps(currentAnnotations, desiredAnnotations)
 	desiredMeta.SetAnnotations(mergedAnnotations)
 
 	// Merge labels by reconciling the ones that components expect, but leaving everything else
 	// as-is.
-	currentLabels := mapExistsOrInitialize(currentMeta.GetLabels())
-	desiredLabels := mapExistsOrInitialize(desiredMeta.GetLabels())
-	mergedLabels := mergeMaps(currentLabels, desiredLabels)
+	currentLabels := common.MapExistsOrInitialize(currentMeta.GetLabels())
+	desiredLabels := common.MapExistsOrInitialize(desiredMeta.GetLabels())
+	mergedLabels := common.MergeMaps(currentLabels, desiredLabels)
 	desiredMeta.SetLabels(mergedLabels)
 
 	switch desired.(type) {
@@ -300,15 +297,15 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 		}
 
 		// Merge the template's labels.
-		currentLabels := mapExistsOrInitialize(cd.Spec.Template.GetObjectMeta().GetLabels())
-		desiredLabels := mapExistsOrInitialize(dd.Spec.Template.GetObjectMeta().GetLabels())
-		mergedLabels := mergeMaps(currentLabels, desiredLabels)
+		currentLabels := common.MapExistsOrInitialize(cd.Spec.Template.GetObjectMeta().GetLabels())
+		desiredLabels := common.MapExistsOrInitialize(dd.Spec.Template.GetObjectMeta().GetLabels())
+		mergedLabels := common.MergeMaps(currentLabels, desiredLabels)
 		dd.Spec.Template.SetLabels(mergedLabels)
 
 		// Merge the template's annotations.
-		currentAnnotations := mapExistsOrInitialize(cd.Spec.Template.GetObjectMeta().GetAnnotations())
-		desiredAnnotations := mapExistsOrInitialize(dd.Spec.Template.GetObjectMeta().GetAnnotations())
-		mergedAnnotations := mergeMaps(currentAnnotations, desiredAnnotations)
+		currentAnnotations := common.MapExistsOrInitialize(cd.Spec.Template.GetObjectMeta().GetAnnotations())
+		desiredAnnotations := common.MapExistsOrInitialize(dd.Spec.Template.GetObjectMeta().GetAnnotations())
+		mergedAnnotations := common.MergeMaps(currentAnnotations, desiredAnnotations)
 		dd.Spec.Template.SetAnnotations(mergedAnnotations)
 
 		return dd
@@ -317,15 +314,15 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 		dd := desired.(*apps.DaemonSet)
 
 		// Merge the template's labels.
-		currentLabels := mapExistsOrInitialize(cd.Spec.Template.GetObjectMeta().GetLabels())
-		desiredLabels := mapExistsOrInitialize(dd.Spec.Template.GetObjectMeta().GetLabels())
-		mergedLabels := mergeMaps(currentLabels, desiredLabels)
+		currentLabels := common.MapExistsOrInitialize(cd.Spec.Template.GetObjectMeta().GetLabels())
+		desiredLabels := common.MapExistsOrInitialize(dd.Spec.Template.GetObjectMeta().GetLabels())
+		mergedLabels := common.MergeMaps(currentLabels, desiredLabels)
 		dd.Spec.Template.SetLabels(mergedLabels)
 
 		// Merge the template's annotations.
-		currentAnnotations := mapExistsOrInitialize(cd.Spec.Template.GetObjectMeta().GetAnnotations())
-		desiredAnnotations := mapExistsOrInitialize(dd.Spec.Template.GetObjectMeta().GetAnnotations())
-		mergedAnnotations := mergeMaps(currentAnnotations, desiredAnnotations)
+		currentAnnotations := common.MapExistsOrInitialize(cd.Spec.Template.GetObjectMeta().GetAnnotations())
+		desiredAnnotations := common.MapExistsOrInitialize(dd.Spec.Template.GetObjectMeta().GetAnnotations())
+		mergedAnnotations := common.MergeMaps(currentAnnotations, desiredAnnotations)
 		dd.Spec.Template.SetAnnotations(mergedAnnotations)
 
 		return dd
@@ -462,25 +459,6 @@ func ensureOSSchedulingRestrictions(obj client.Object, osType rmeta.OSType) {
 		podSpec.NodeSelector["kubernetes.io/os"] = string(osType)
 	}
 	modifyPodSpec(obj, f)
-}
-
-// mergeMaps merges current and desired maps. If both current and desired maps contain the same key, the
-// desired map, i.e, the ones that the operators Components specify take preference.
-func mergeMaps(current, desired map[string]string) map[string]string {
-	for k, v := range current {
-		// Copy over annotations that should be copied.
-		if _, ok := desired[k]; !ok {
-			desired[k] = v
-		}
-	}
-	return desired
-}
-
-func mapExistsOrInitialize(m map[string]string) map[string]string {
-	if m != nil {
-		return m
-	}
-	return make(map[string]string)
 }
 
 // ReadyFlag is used to synchronize access to a boolean flag

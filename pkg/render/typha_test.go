@@ -150,12 +150,12 @@ var _ = Describe("Typha rendering tests", func() {
 			TopologyKey: "kubernetes.io/hostname",
 		}))
 
-		Expect(*d.Spec.Template.Spec.TerminationGracePeriodSeconds).To(Equal(int64(300 /* our default*/)))
+		Expect(*d.Spec.Template.Spec.TerminationGracePeriodSeconds).To(Equal(int64(0 /* our default*/)))
 		Expect(*d.Spec.ProgressDeadlineSeconds).To(Equal(int32(600 /*k8s default*/)))
 		Expect(d.Spec.Strategy).To(Equal(appsv1.DeploymentStrategy{
 			Type: appsv1.RollingUpdateDeploymentStrategyType,
 			RollingUpdate: &appsv1.RollingUpdateDeployment{
-				MaxSurge:       ptr.IntOrStrPtr("100%"),
+				MaxSurge:       ptr.IntOrStrPtr("25%"),
 				MaxUnavailable: ptr.IntOrStrPtr("1"),
 			},
 		}))

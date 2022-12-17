@@ -46,7 +46,9 @@ const (
 
 	TyphaContainerName = "calico-typha"
 
-	defaultTyphaTerminationGracePeriod = 300
+	// Note: the grace period was backported to v1.27.  Later versions default to 300, but we set this to 0
+	// to avoid a change to the defaults in the backport.
+	defaultTyphaTerminationGracePeriod = 0
 	shutdownTimeoutEnvVar              = "TYPHA_SHUTDOWNTIMEOUTSECS"
 )
 
@@ -346,23 +348,14 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 
 // typhaDeployment creates the typha deployment.
 func (c *typhaComponent) typhaDeployment() *appsv1.Deployment {
-	// We set a fairly long grace period by default. Typha sheds load during the grace period rather than
-	// disconnecting all clients at once.
 	var terminationGracePeriod int64 = defaultTyphaTerminationGracePeriod
 	var revisionHistoryLimit int32 = 2
 	// Allowing 1 unavailable Typha by default ensures that we make progress in a cluster with constrained scheduling.
 	maxUnavailable := intstr.FromInt(1)
-	// Allowing 100% surge allows a complete replacement fleet of Typha instances to start during an upgrade. When
-	// combined with Typha's graceful shutdown, we get nice emergent behavior:
-	// - All up-level Typhas start if there's room available.
-	// - Back-level Typhas shed load slowly over the termination grace period.
-	// - Clients that are shed end up connecting to up-level Typhas (because all the back-level Typhas are marked
-	//   as terminating once all the up-level Typhas are ready).  This tends to avoid bouncing a client multiple
-	//   times during an upgrade.
-	// - If there's any sort of version skew issue where a back-level client can't understand an up-level Typha,
-	//   it'll go non-ready and Kubernetes will upgrade it.  This is rate limited by Typha's load-shedding rate,
-	//   so we shouldn't get a "thundering herd".
-	maxSurge := intstr.FromString("100%")
+	// Backport note: in later versions, we set this to 100% to maximise the benefit from Typha's termination
+	// grace period.  When backporting to v1.27 we kept the old default to avoid changing default behaviour
+	// in a patch release.
+	maxSurge := intstr.FromString("25%")
 
 	annotations := c.cfg.TLS.TrustedBundle.HashAnnotations()
 	annotations[c.cfg.TLS.TyphaSecret.HashAnnotationKey()] = c.cfg.TLS.TyphaSecret.HashAnnotationValue()

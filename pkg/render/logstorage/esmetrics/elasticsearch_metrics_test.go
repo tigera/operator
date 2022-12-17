@@ -116,7 +116,8 @@ var _ = Describe("Elasticsearch metrics", func() {
 					Labels:    map[string]string{"k8s-app": ElasticsearchMetricsName},
 				},
 				Spec: corev1.ServiceSpec{
-					Selector: map[string]string{"k8s-app": ElasticsearchMetricsName},
+					ClusterIP: "None",
+					Selector:  map[string]string{"k8s-app": ElasticsearchMetricsName},
 					Ports: []corev1.ServicePort{
 						{
 							Name:       "metrics-port",

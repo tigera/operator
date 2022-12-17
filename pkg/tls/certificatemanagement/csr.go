@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2022 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@ import (
 const (
 	CSRClusterRoleName   = "tigera-csr-creator"
 	CSRCMountPath        = "/certs-share"
-	csrInitContainerName = "key-cert-provisioner"
+	CSRInitContainerName = "key-cert-provisioner"
 )
 
 // CreateCSRInitContainer creates an init container that can be added to a pod spec in order to create a CSR for its
@@ -48,7 +48,7 @@ func CreateCSRInitContainer(
 	dnsNames []string,
 	appNameLabel string) corev1.Container {
 	return corev1.Container{
-		Name:  csrInitContainerName,
+		Name:  CSRInitContainerName,
 		Image: image,
 		VolumeMounts: []corev1.VolumeMount{
 			{MountPath: CSRCMountPath, Name: mountName, ReadOnly: false},

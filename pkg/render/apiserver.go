@@ -1190,6 +1190,8 @@ func (c *apiServerComponent) tigeraCustomResourcesClusterRole() *rbacv1.ClusterR
 				"deeppacketinspections/status",
 				"uisettingsgroups",
 				"uisettings",
+				"bgpfilters",
+				"externalnetworks",
 			},
 			Verbs: []string{
 				"get",

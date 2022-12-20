@@ -213,4 +213,19 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		elasticIPAnnotation := dep.Spec.Template.ObjectMeta.Annotations["cni.projectcalico.org/awsElasticIPs"]
 		Expect(elasticIPAnnotation).To(Equal("[\"1.2.3.4\",\"5.6.7.8\"]"))
 	})
+
+	It("should create service account, clusterrole, clusterrolebinding and psp if provider is RKE2", func() {
+		component := egressgateway.EgressGateway(&egressgateway.Config{
+			PullSecrets:       nil,
+			Installation:      installation,
+			OsType:            rmeta.OSTypeLinux,
+			EgressGW:          egw,
+			EgressGWVxlanVNI:  4097,
+			EgressGWVxlanPort: 4790,
+			Provider:          operatorv1.ProviderRKE2,
+		})
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(5))
+
+	})
 })

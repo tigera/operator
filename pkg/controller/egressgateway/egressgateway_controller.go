@@ -191,12 +191,6 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 }
 
 func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.EgressGateway, reqLogger logr.Logger) (reconcile.Result, error) {
-
-	defer func() {
-		if err := r.client.Status().Update(ctx, egw); err != nil {
-			reqLogger.Error(err, "Error updating status")
-		}
-	}()
 	// Set the condition to progressing
 	setProgressing(r.client, ctx, egw, string(operatorv1.ResourceNotReady), fmt.Sprintf("Name = %s, Namespace = %s", egw.Name, egw.Namespace))
 	reconcileErr := "Error_reconciling_Egress_Gateway"
@@ -273,6 +267,7 @@ func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.
 		EgressGW:          egw,
 		EgressGWVxlanPort: egwVxlanPort,
 		EgressGWVxlanVNI:  egwVxlanVNI,
+		Provider:          installation.KubernetesProvider,
 	}
 
 	component := egressgateway.EgressGateway(config)
@@ -295,10 +290,10 @@ func (r *ReconcileEgressGateway) reconcile(ctx context.Context, egw *operatorv1.
 		return reconcile.Result{}, err
 	}
 
-	setAvailable(r.client, ctx, egw, string(operatorv1.AllObjectsAvailable), "")
-
 	// Update the status of this CR.
 	egw.Status.State = operatorv1.TigeraStatusReady
+	setAvailable(r.client, ctx, egw, string(operatorv1.AllObjectsAvailable), "All objects available")
+
 	// After the resource has been created/updated, Tigerastatus needs to be set by taking the cumulative status of the
 	// available EGW resources. Lets say we create 2 EGW resources Red, Blue. Both are degraded. Now lets create 3rd resource
 	// yellow. Though yellow is reconciled and rendered successfully, Tigerastatus should still be degraded as Red, Blue are
@@ -566,18 +561,18 @@ func getCumulativeEgressGatewayStatus(egws []operatorv1.EgressGateway) (bool, *o
 }
 
 func setDegraded(cli client.Client, ctx context.Context, egw *operatorv1.EgressGateway, reason, msg string) {
-	updateEgwStatusConditions(cli, ctx, egw, operatorv1.ComponentDegraded, metav1.ConditionTrue, reason, msg)
+	updateEgwStatusConditions(cli, ctx, egw, operatorv1.ComponentDegraded, metav1.ConditionTrue, reason, msg, true)
 }
 
 func setProgressing(cli client.Client, ctx context.Context, egw *operatorv1.EgressGateway, reason, msg string) {
-	updateEgwStatusConditions(cli, ctx, egw, operatorv1.ComponentProgressing, metav1.ConditionTrue, reason, msg)
+	updateEgwStatusConditions(cli, ctx, egw, operatorv1.ComponentProgressing, metav1.ConditionTrue, reason, msg, false)
 }
 
 func setAvailable(cli client.Client, ctx context.Context, egw *operatorv1.EgressGateway, reason, msg string) {
-	updateEgwStatusConditions(cli, ctx, egw, operatorv1.ComponentAvailable, metav1.ConditionTrue, reason, msg)
+	updateEgwStatusConditions(cli, ctx, egw, operatorv1.ComponentAvailable, metav1.ConditionTrue, reason, msg, true)
 }
 
-func updateEgwStatusConditions(cli client.Client, ctx context.Context, egw *operatorv1.EgressGateway, ctype operatorv1.StatusConditionType, status metav1.ConditionStatus, reason, msg string) {
+func updateEgwStatusConditions(cli client.Client, ctx context.Context, egw *operatorv1.EgressGateway, ctype operatorv1.StatusConditionType, status metav1.ConditionStatus, reason, msg string, updateStatus bool) {
 	found := false
 	for idx, cond := range egw.Status.Conditions {
 		if cond.Type == string(ctype) {
@@ -596,6 +591,11 @@ func updateEgwStatusConditions(cli client.Client, ctx context.Context, egw *oper
 	if !found {
 		condition := metav1.Condition{Type: string(ctype), Status: status, Reason: reason, Message: msg, LastTransitionTime: metav1.NewTime(time.Now())}
 		egw.Status.Conditions = append(egw.Status.Conditions, condition)
+	}
+	if updateStatus {
+		if err := cli.Status().Update(ctx, egw); err != nil {
+			log.WithValues("Name", egw.Name, "Namespace", egw.Namespace, "error", err).Info("Error updating status")
+		}
 	}
 }
 

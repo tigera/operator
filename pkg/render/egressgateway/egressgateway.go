@@ -20,11 +20,17 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"strings"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	corev1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -58,6 +64,7 @@ type Config struct {
 	egwImage          string
 	EgressGWVxlanVNI  int
 	EgressGWVxlanPort int
+	Provider          operatorv1.Provider
 }
 
 func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -82,7 +89,15 @@ func (c *component) SupportedOSType() rmeta.OSType {
 }
 
 func (c *component) Objects() ([]client.Object, []client.Object) {
-	return []client.Object{c.egwDeployment()}, nil
+	objects := []client.Object{}
+	objects = append(objects, c.egwDeployment())
+	if c.config.Provider == operatorv1.ProviderRKE2 {
+		objects = append(objects, c.egwPodSecurityPolicy())
+		objects = append(objects, c.egwClusterRole())
+		objects = append(objects, c.egwClusterRoleBinding())
+		objects = append(objects, c.egwServiceAccount())
+	}
+	return objects, nil
 }
 
 func (c *component) Ready() bool {
@@ -131,9 +146,9 @@ func (c *component) deploymentPodTemplate() *corev1.PodTemplateSpec {
 
 func (c *component) egwBuildAnnotations() map[string]string {
 	annotations := map[string]string{}
-	annotations["cni.projectcalico.org/ipv4pools"] = c.config.EgressGW.GetIPPools()
+	annotations["cni.projectcalico.org/ipv4pools"] = c.getIPPools()
 	if c.config.EgressGW.Spec.AWS != nil && len(c.config.EgressGW.Spec.AWS.ElasticIPs) > 0 {
-		annotations["cni.projectcalico.org/awsElasticIPs"] = c.config.EgressGW.GetElasticIPs()
+		annotations["cni.projectcalico.org/awsElasticIPs"] = c.getElasticIPs()
 	}
 	return annotations
 }
@@ -156,7 +171,7 @@ func (c *component) egwContainer() *corev1.Container {
 		Image:           c.config.egwImage,
 		ImagePullPolicy: corev1.PullIfNotPresent,
 		Env:             c.egwEnvVars(),
-		Resources:       c.egwResources(),
+		Resources:       c.getResources(),
 		VolumeMounts:    c.egwVolumeMounts(),
 		Ports:           c.egwPorts(),
 		Command:         []string{"/start-gateway.sh"},
@@ -198,10 +213,6 @@ func (c *component) egwPorts() []corev1.ContainerPort {
 	}
 }
 
-func (c *component) egwResources() corev1.ResourceRequirements {
-	return c.config.EgressGW.GetResources()
-}
-
 func (c *component) egwVolume() *corev1.Volume {
 	return &corev1.Volume{
 		Name:         "policysync",
@@ -216,11 +227,11 @@ func (c *component) egwVolumeMounts() []corev1.VolumeMount {
 }
 
 func (c *component) egwEnvVars() []corev1.EnvVar {
-	icmpProbeIPs, icmpInterval, icmpTimeout := c.config.EgressGW.GetICMPProbes()
-	httpProbeURLs, httpInterval, httpTimeout := c.config.EgressGW.GetHTTPProbes()
+	icmpProbeIPs, icmpInterval, icmpTimeout := c.getICMPProbes()
+	httpProbeURLs, httpInterval, httpTimeout := c.getHTTPProbes()
 	egressPodIp := &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"}}
 	return []corev1.EnvVar{
-		{Name: "HEALTH_TIMEOUT_DATASTORE", Value: c.config.EgressGW.GetHealthTimeoutDs()},
+		{Name: "HEALTH_TIMEOUT_DATASTORE", Value: c.getHealthTimeoutDs()},
 		{Name: "HEALTH_PORT", Value: fmt.Sprintf("%d", DefaultHealthPort)},
 		{Name: "ICMP_PROBE_IPS", Value: icmpProbeIPs},
 		{Name: "ICMP_PROBE_INTERVAL", Value: icmpInterval},
@@ -241,4 +252,149 @@ func (c *component) egwInitEnvVars() []corev1.EnvVar {
 		{Name: "EGRESS_VXLAN_PORT", Value: fmt.Sprintf("%d", c.config.EgressGWVxlanPort)},
 		{Name: "EGRESS_POD_IP", ValueFrom: egressPodIp},
 	}
+}
+
+func (c *component) egwPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
+	boolTrue := true
+	psp := podsecuritypolicy.NewBasePolicy()
+	psp.GetObjectMeta().SetName("tigera-egress-gateway")
+	psp.Spec.AllowedCapabilities = []corev1.Capability{
+		corev1.Capability("NET_ADMIN"),
+	}
+	psp.Spec.AllowPrivilegeEscalation = &boolTrue
+	psp.Spec.HostIPC = true
+	psp.Spec.HostNetwork = true
+	psp.Spec.HostPID = true
+	psp.Spec.Privileged = true
+	psp.Spec.RunAsUser = policyv1beta1.RunAsUserStrategyOptions{
+		Rule: policyv1beta1.RunAsUserStrategyRunAsAny,
+	}
+	psp.Spec.SELinux = policyv1beta1.SELinuxStrategyOptions{
+		Rule: policyv1beta1.SELinuxStrategyRunAsAny,
+	}
+	psp.Spec.SupplementalGroups = policyv1beta1.SupplementalGroupsStrategyOptions{
+		Rule: policyv1beta1.SupplementalGroupsStrategyRunAsAny,
+	}
+	psp.Spec.FSGroup = policyv1beta1.FSGroupStrategyOptions{
+		Rule: policyv1beta1.FSGroupStrategyRunAsAny,
+	}
+	psp.Spec.Volumes = []policyv1beta1.FSType{
+		policyv1beta1.CSI,
+		policyv1beta1.Projected,
+	}
+	return psp
+}
+
+func (c *component) egwClusterRole() *rbacv1.ClusterRole {
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			ResourceNames: []string{"tigera-egress-gateway"},
+			Verbs:         []string{"use"},
+		},
+	}
+	return &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-egress-gateway",
+		},
+		Rules: rules,
+	}
+}
+
+func (c *component) egwClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: c.config.EgressGW.Name,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "tigera-egress-gateway",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "tigera-egress-gateway",
+				Namespace: c.config.EgressGW.Namespace,
+			},
+		},
+	}
+}
+
+func (c *component) egwServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tigera-egress-gateway",
+			Namespace: c.config.EgressGW.Namespace,
+		},
+	}
+}
+
+func (c *component) getICMPProbes() (string, string, string) {
+	icmpProbes := c.config.EgressGW.Spec.EgressGatewayFailureDetection.ICMPProbes
+	probeIPs := strings.Join(icmpProbes.IPs, ",")
+	interval := fmt.Sprintf("%ds", *icmpProbes.IntervalSeconds)
+	timeout := fmt.Sprintf("%ds", *icmpProbes.TimeoutSeconds)
+	return probeIPs, interval, timeout
+}
+
+func (c *component) getHTTPProbes() (string, string, string) {
+	httpProbes := c.config.EgressGW.Spec.EgressGatewayFailureDetection.HTTPProbes
+	probeURLs := strings.Join(httpProbes.URLs, ",")
+	interval := fmt.Sprintf("%ds", *httpProbes.IntervalSeconds)
+	timeout := fmt.Sprintf("%ds", *httpProbes.TimeoutSeconds)
+	return probeURLs, interval, timeout
+}
+
+func (c *component) getResources() corev1.ResourceRequirements {
+	recommendedQuantity := resource.NewQuantity(1, resource.DecimalSI)
+	egw := c.config.EgressGW
+	if egw.Spec.AWS != nil && *egw.Spec.AWS.NativeIP == operatorv1.NativeIPEnabled {
+		return corev1.ResourceRequirements{
+			Limits:   corev1.ResourceList{"projectcalico.org/aws-secondary-ipv4": *recommendedQuantity},
+			Requests: corev1.ResourceList{"projectcalico.org/aws-secondary-ipv4": *recommendedQuantity},
+		}
+	}
+	return corev1.ResourceRequirements{}
+}
+
+func (c *component) getIPPools() string {
+	egw := c.config.EgressGW
+	ippools := []string{}
+	for _, ippool := range egw.Spec.IPPools {
+		if ippool.Name != "" {
+			ippools = append(ippools, ippool.Name)
+		} else if ippool.CIDR != "" {
+			ippools = append(ippools, ippool.CIDR)
+		}
+	}
+	return concatString(ippools)
+}
+
+func (c *component) getElasticIPs() string {
+	egw := c.config.EgressGW
+	if egw.Spec.AWS != nil {
+		if len(egw.Spec.AWS.ElasticIPs) > 0 {
+			return concatString(egw.Spec.AWS.ElasticIPs)
+		}
+	}
+	return ""
+}
+
+func (c *component) getHealthTimeoutDs() string {
+	egw := c.config.EgressGW
+	return fmt.Sprintf("%ds", *egw.Spec.EgressGatewayFailureDetection.HealthTimeoutDataStoreSeconds)
+}
+
+func concatString(arr []string) string {
+	ret := "["
+	for idx, str := range arr {
+		temp := fmt.Sprintf("\"%s\"", str)
+		ret = ret + temp
+		if idx != len(arr)-1 {
+			ret = ret + ","
+		}
+	}
+	return ret + "]"
 }

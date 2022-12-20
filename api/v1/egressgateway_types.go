@@ -17,11 +17,7 @@ limitations under the License.
 package v1
 
 import (
-	"fmt"
-	"strings"
-
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -257,56 +253,6 @@ func (c *EgressGateway) GetLogSeverity() string {
 	return string(*c.Spec.LogSeverity)
 }
 
-func (c *EgressGateway) GetHealthTimeoutDs() string {
-	return fmt.Sprintf("%ds", *c.Spec.EgressGatewayFailureDetection.HealthTimeoutDataStoreSeconds)
-}
-
-func (c *EgressGateway) GetIPPools() string {
-	ippools := []string{}
-	for _, ippool := range c.Spec.IPPools {
-		if ippool.Name != "" {
-			ippools = append(ippools, ippool.Name)
-		} else if ippool.CIDR != "" {
-			ippools = append(ippools, ippool.CIDR)
-		}
-	}
-	return concatString(ippools)
-}
-
-func (c *EgressGateway) GetElasticIPs() string {
-	if c.Spec.AWS != nil {
-		if len(c.Spec.AWS.ElasticIPs) > 0 {
-			return concatString(c.Spec.AWS.ElasticIPs)
-		}
-	}
-	return ""
-}
-
-func (c *EgressGateway) GetICMPProbes() (string, string, string) {
-	probeIPs := strings.Join(c.Spec.EgressGatewayFailureDetection.ICMPProbes.IPs, ",")
-	interval := fmt.Sprintf("%ds", *c.Spec.EgressGatewayFailureDetection.ICMPProbes.IntervalSeconds)
-	timeout := fmt.Sprintf("%ds", *c.Spec.EgressGatewayFailureDetection.ICMPProbes.TimeoutSeconds)
-	return probeIPs, interval, timeout
-}
-
-func (c *EgressGateway) GetHTTPProbes() (string, string, string) {
-	probeURLs := strings.Join(c.Spec.EgressGatewayFailureDetection.HTTPProbes.URLs, ",")
-	interval := fmt.Sprintf("%ds", *c.Spec.EgressGatewayFailureDetection.HTTPProbes.IntervalSeconds)
-	timeout := fmt.Sprintf("%ds", *c.Spec.EgressGatewayFailureDetection.HTTPProbes.TimeoutSeconds)
-	return probeURLs, interval, timeout
-}
-
-func (c *EgressGateway) GetResources() v1.ResourceRequirements {
-	recommendedQuantity := resource.NewQuantity(1, resource.DecimalSI)
-	if c.Spec.AWS != nil && *c.Spec.AWS.NativeIP == NativeIPEnabled {
-		return v1.ResourceRequirements{
-			Limits:   v1.ResourceList{"projectcalico.org/aws-secondary-ipv4": *recommendedQuantity},
-			Requests: v1.ResourceList{"projectcalico.org/aws-secondary-ipv4": *recommendedQuantity},
-		}
-	}
-	return v1.ResourceRequirements{}
-}
-
 func (c *EgressGateway) GetTerminationGracePeriod() *int64 {
 	return c.Spec.Template.Spec.TerminationGracePeriodSeconds
 }
@@ -321,18 +267,6 @@ func (c *EgressGateway) GetAffinity() *v1.Affinity {
 
 func (c *EgressGateway) GetTopoConstraints() []v1.TopologySpreadConstraint {
 	return c.Spec.Template.Spec.TopologySpreadConstraints
-}
-
-func concatString(arr []string) string {
-	ret := "["
-	for idx, str := range arr {
-		temp := fmt.Sprintf("\"%s\"", str)
-		ret = ret + temp
-		if idx != len(arr)-1 {
-			ret = ret + ","
-		}
-	}
-	return ret + "]"
 }
 
 func init() {

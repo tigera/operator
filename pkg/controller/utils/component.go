@@ -158,15 +158,18 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 		if mobj := mergeState(obj, cur); mobj != nil {
 			switch obj.(type) {
 			case *batchv1.Job:
-				// Jobs can't be updated, they can't only be deleted then created
+				// Jobs can't be updated, they can only be deleted then created
 				if err := c.client.Delete(ctx, obj); err != nil {
 					logCtx.WithValues("key", key).Info("Failed to delete job for recreation.")
 					return err
 				}
 
-				if err := c.client.Create(ctx, obj); err != nil {
+				// Do the Create() with the merged object so that we preserve external labels/annotations.
+				resetMetadataForCreate(mobj)
+				if err := c.client.Create(ctx, mobj); err != nil {
 					return err
 				}
+				continue
 			case *v1.Secret:
 				objSecret := obj.(*v1.Secret)
 				curSecret := cur.(*v1.Secret)
@@ -178,21 +181,38 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 						logCtx.WithValues("key", key).Info("Failed to delete secret for recreation.")
 						return err
 					}
-					obj.SetResourceVersion("")
-					if err := c.client.Create(ctx, obj); err != nil {
+
+					// Do the Create() with the merged object so that we preserve external labels/annotations.
+					resetMetadataForCreate(mobj)
+					if err := c.client.Create(ctx, mobj); err != nil {
 						return err
 					}
-				} else {
-					if err := c.client.Update(ctx, mobj); err != nil {
-						logCtx.WithValues("key", key).Info("Failed to update object.")
+					continue
+				}
+			case *v1.Service:
+				objService := obj.(*v1.Service)
+				curService := cur.(*v1.Service)
+				if objService.Spec.ClusterIP == "None" && curService.Spec.ClusterIP != "None" {
+					// We don't want this service to have a cluster IP, but it has got one already.  Need to recreate
+					// the service to remove it.
+					logCtx.WithValues("key", key).Info("Service already exists and has unwanted ClusterIP, recreating service.")
+					if err := c.client.Delete(ctx, obj); err != nil {
+						logCtx.WithValues("key", key).Error(err, "Failed to delete Service for recreation.")
 						return err
 					}
+
+					// Do the Create() with the merged object so that we preserve external labels/annotations.
+					resetMetadataForCreate(mobj)
+					if err := c.client.Create(ctx, mobj); err != nil {
+						logCtx.WithValues("key", key).Error(err, "Failed to recreate service.", "obj", obj)
+						return err
+					}
+					continue
 				}
-			default:
-				if err := c.client.Update(ctx, mobj); err != nil {
-					logCtx.WithValues("key", key).Info("Failed to update object.")
-					return err
-				}
+			}
+			if err := c.client.Update(ctx, mobj); err != nil {
+				logCtx.WithValues("key", key).Info("Failed to update object.")
+				return err
 			}
 		}
 
@@ -236,8 +256,18 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 	return nil
 }
 
+func resetMetadataForCreate(obj client.Object) {
+	obj.SetResourceVersion("")
+	obj.SetUID("")
+	obj.SetCreationTimestamp(metav1.Time{})
+}
+
 // mergeState returns the object to pass to Update given the current and desired object states.
 func mergeState(desired client.Object, current runtime.Object) client.Object {
+	// Take a copy of the desired object, so we can merge values into it without
+	// adjusting the caller's copy.
+	desired = desired.DeepCopyObject().(client.Object)
+
 	currentMeta := current.(metav1.ObjectMetaAccessor).GetObjectMeta()
 	desiredMeta := desired.(metav1.ObjectMetaAccessor).GetObjectMeta()
 
@@ -272,7 +302,10 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 		// and we need to maintain them on updates.
 		cs := current.(*v1.Service)
 		ds := desired.(*v1.Service)
-		ds.Spec.ClusterIP = cs.Spec.ClusterIP
+		if ds.Spec.ClusterIP != "None" {
+			// We want this service to keep its cluster IP.
+			ds.Spec.ClusterIP = cs.Spec.ClusterIP
+		}
 		return ds
 	case *batchv1.Job:
 		cj := current.(*batchv1.Job)

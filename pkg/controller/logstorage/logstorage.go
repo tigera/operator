@@ -333,6 +333,8 @@ func addLogStorageWatches(c controller.Controller) error {
 		return fmt.Errorf("log-storage-controller failed to watch primary resource: %w", err)
 	}
 
+	//TODO(Alina): Add watch for TenantID
+
 	for _, name := range []string{
 		render.OIDCUsersConfigMapName, render.OIDCUsersEsSecreteName,
 		render.ElasticsearchAdminUserSecret,

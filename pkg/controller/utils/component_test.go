@@ -984,6 +984,57 @@ var _ = Describe("Component handler tests", func() {
 		},
 	)
 
+	It("recreates a service if its ClusterIP is removed", func() {
+		// Simulate creation of a service by earlier version of operator that includes a ClusterIP.
+		svcWithIP := &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-service"},
+			Spec: corev1.ServiceSpec{
+				ClusterIP: "10.96.0.1",
+			},
+		}
+		fc := &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs: []client.Object{
+				svcWithIP,
+			},
+		}
+		err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Name: "my-service"}, svcWithIP)).NotTo(HaveOccurred())
+		Expect(svcWithIP.Spec.ClusterIP).To(Equal("10.96.0.1"))
+
+		// Now pretend we're the new operator version, wanting to remove the cluster IP.
+		svcNoIP := &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-service"},
+			Spec: corev1.ServiceSpec{
+				ClusterIP: "None",
+			},
+		}
+		fc = &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs: []client.Object{
+				svcNoIP,
+			},
+		}
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Name: "my-service"}, svcNoIP)).NotTo(HaveOccurred())
+		Expect(svcNoIP.Spec.ClusterIP).To(Equal("None"))
+
+		// The fake client resets the resource version to 1 on create.
+		Expect(svcNoIP.ObjectMeta.ResourceVersion).To(Equal("1"),
+			"Expected recreation of Service to reset resourceVersion to 1")
+
+		// Finally, make a normal change, this should result in an update.
+		svcNoIP.Labels = map[string]string{"foo": "bar"}
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Name: "my-service"}, svcNoIP)).NotTo(HaveOccurred())
+		Expect(svcNoIP.Labels).To(Equal(map[string]string{"foo": "bar"}))
+		Expect(svcNoIP.ObjectMeta.ResourceVersion).To(Equal("2"),
+			"Expected update to rev ResourceVersion")
+	})
+
 	It("allows you to replace a secret if the types change", func() {
 		// Please note that a fake client does not behave exactly as it would on K8s:
 		// - A secret without a type in a real cluster automatically becomes type Opaque
